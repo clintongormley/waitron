@@ -73,6 +73,20 @@ export class MemberListEditor extends LitElement {
     ReorderController.styles,
     ReorderController.tableStyles,
     css`
+      wt-row-actions a {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        border-radius: var(--wt-radius-md);
+        color: var(--wt-color-text);
+        font: inherit;
+        text-decoration: none;
+        font-weight: var(--wt-font-weight-bold);
+        width: 100%;
+        border: 1px solid transparent;
+        padding: var(--wt-space-2) var(--wt-space-4);
+      }
       :host {
         display: block;
       }
@@ -388,7 +402,7 @@ export class MemberListEditor extends LitElement {
             }}
           >
             <option value="" .selected=${this.choice === ""}>
-              ${t("members.add_placeholder")}
+              ${t(this.sectionChoices ? "members.tile_placeholder" : "members.add_placeholder")}
             </option>
             ${this.#group(t("members.products"), this.#offer.products)}
             ${this.sectionChoices ? this.#group(t("members.sections"), this.#offer.sections) : nothing}
@@ -404,7 +418,7 @@ export class MemberListEditor extends LitElement {
       ${
         this.addError
           ? html`<p class="error" id="member-add-error" data-test="add-error">
-              ${t("members.choose_first")}
+              ${t(this.sectionChoices ? "members.tile_choose_first" : "members.choose_first")}
             </p>`
           : nothing
       }`;

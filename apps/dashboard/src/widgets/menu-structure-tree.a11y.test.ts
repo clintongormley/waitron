@@ -35,14 +35,28 @@ const nodes: MenuStructureNode[] = [
   },
 ];
 
-const states = ["empty", "collapsed", "expanded", "current", "read-only expanded"] as const;
+const states = [
+  "empty",
+  "collapsed",
+  "expanded",
+  "current",
+  "read-only expanded",
+  "included expanded",
+] as const;
 
 describe.each(["light", "dark"] as const)("menu structure tree (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
     const { el, host } = await mountWidget<MenuStructureTree>(
       "dashboard-menu-structure-tree",
       {
-        nodes: state === "empty" ? [] : nodes,
+        nodes:
+          state === "empty"
+            ? []
+            : state === "included expanded"
+              ? nodes.map((node) =>
+                  node.memberId === "m-drinks" ? { ...node, includedMenuId: "drinks" } : node,
+                )
+              : nodes,
         products,
         label: "Lunch Menu",
         current: state === "current" ? ["m-drinks", "m-beer"] : [],
@@ -50,7 +64,7 @@ describe.each(["light", "dark"] as const)("menu structure tree (%s)", (theme) =>
       },
       theme,
     );
-    if (state === "expanded" || state === "read-only expanded") {
+    if (state === "expanded" || state === "read-only expanded" || state === "included expanded") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="toggle-m-drinks"]')!.click();
       await el.updateComplete;
     }

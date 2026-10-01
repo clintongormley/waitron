@@ -435,3 +435,61 @@ it("finds the section and every section holding it however deep, even round a lo
   expect(sectionsHolding(parents, "s-fav")).toEqual(["s-fav"]);
   expect(sectionsHolding(parents, "s-a").sort()).toEqual(["s-a", "s-b"]);
 });
+
+it.each(["light", "dark"] as const)(
+  "matches row controls with a themed full-size included-menu link in %s",
+  async (theme) => {
+    const { el } = await mountWidget<MemberListEditor>(
+      "dashboard-member-list-editor",
+      {
+        members: [
+          { id: "included", position: 0, ref: { kind: "section", sectionId: "drinks-root" } },
+        ],
+        nodes: [
+          {
+            memberId: "included",
+            ref: { kind: "section", sectionId: "drinks-root" },
+            internalName: "Drinks",
+            includedMenuId: "drinks",
+            children: [],
+          },
+        ],
+        label: "Lunch",
+      },
+      theme,
+    );
+    const actions =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!;
+    await actions.updateComplete;
+    actions.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    const link = actions.querySelector<HTMLAnchorElement>("a")!;
+    el.style.setProperty("--wt-color-text", "rgb(17, 93, 201)");
+    expect(link.getAttribute("href")).toBe("/manage/menus/menu/drinks/view/structure");
+    expect(getComputedStyle(link).color).toBe("rgb(17, 93, 201)");
+    const remove = actions.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button")!;
+    await remove.updateComplete;
+    const control = remove.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(link.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    expect(getComputedStyle(link).padding).toBe(getComputedStyle(control).padding);
+    expect(getComputedStyle(link).fontWeight).toBe(getComputedStyle(control).fontWeight);
+    link.focus();
+    expect(el.shadowRoot!.activeElement).toBe(link);
+    expect(getComputedStyle(link).outlineStyle).not.toBe("none");
+  },
+);
+
+it("describes both tile choices in the Home mode and products alone in structural mode", async () => {
+  const el = await mount({ sectionChoices: true });
+  expect(q(el, 'select[name="member-ref"] option[value=""]').textContent?.trim()).toBe(
+    t("members.tile_placeholder"),
+  );
+  q(el, '[data-test="add"]').click();
+  await el.updateComplete;
+  expect(q(el, '[data-test="add-error"]').textContent?.trim()).toBe(t("members.tile_choose_first"));
+  el.sectionChoices = false;
+  await el.updateComplete;
+  expect(q(el, 'select[name="member-ref"] option[value=""]').textContent?.trim()).toBe(
+    t("members.add_placeholder"),
+  );
+});

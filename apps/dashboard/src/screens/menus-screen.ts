@@ -213,6 +213,9 @@ export class MenusScreen extends LitElement {
     baseStyles,
     selectStyles,
     css`
+      .field-error {
+        color: var(--wt-color-danger);
+      }
       .required-mark {
         color: var(--wt-color-danger);
       }
@@ -220,6 +223,17 @@ export class MenusScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-1);
         max-width: var(--wt-field-max-width);
+      }
+      [data-test="included-by"] a {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2);
+        border-radius: var(--wt-radius-md);
+        color: var(--wt-color-text);
+        font: inherit;
+        text-decoration: underline;
       }
       :host {
         display: block;
@@ -426,7 +440,9 @@ export class MenusScreen extends LitElement {
   @state() private editingSection: SectionDetails | null = null;
   @state() private deletingSection: SectionDetails | null = null;
   @state() private deleteSectionError = "";
-  @state() private includingMenu = false;
+  @state() private includingMenu: ListTarget | null = null;
+  @state() private includeAttempted = false;
+  #menuFormGeneration = 0;
   @state() private includedRoot = "";
   @state() private includeError = "";
   @state() private menuDetails: SectionDetails | null = null;
@@ -618,12 +634,13 @@ export class MenusScreen extends LitElement {
    * explained; the menu itself changes only by navigation, and then the window closes without a
    * message. Says whether it closed one. */
   #closeLostList(): boolean {
-    const target = this.addingProducts ?? this.creatingSection;
+    const target = this.addingProducts ?? this.creatingSection ?? this.includingMenu;
     if (target === null || this.busy) return false;
     if (target.menuId === this.menuId && (this.structure === null || this.#holds(target)))
       return false;
     this.addingProducts = null;
     this.creatingSection = null;
+    this.includingMenu = null;
     if (target.menuId === this.menuId)
       this.memberError = t("menus.list_gone").replace("{name}", target.name);
     return true;
@@ -655,6 +672,7 @@ export class MenusScreen extends LitElement {
     this.#reportRefusedElsewhere(target, error);
     this.addingProducts = null;
     this.creatingSection = null;
+    this.includingMenu = null;
     return true;
   }
 
@@ -855,7 +873,11 @@ export class MenusScreen extends LitElement {
   }
 
   #restore(): void {
-    if (this.#url.read("dashboard") !== "menus") return;
+    if (this.#url.read("dashboard") !== "menus") {
+      this.#menuFormGeneration++;
+      this.menuForm = null;
+      return;
+    }
     this.#select(this.#url.read("menu"));
     const view = this.#url.read("view");
     this.#showView(isTab(view) ? view : TABS[0]);
@@ -864,6 +886,8 @@ export class MenusScreen extends LitElement {
 
   #select(menuId: string | null): void {
     if (menuId === this.menuId) return;
+    this.#menuFormGeneration++;
+    this.menuForm = null;
     this.menuId = menuId;
     this.path = [];
     this.structure = null;
@@ -928,17 +952,27 @@ export class MenusScreen extends LitElement {
 
   // ── Menus ────────────────────────────────────────────────────────────────────────────────────
 
+  override disconnectedCallback(): void {
+    this.#menuFormGeneration++;
+    super.disconnectedCallback();
+  }
+
   async #openMenuForm(menu: CatalogueSummary | null): Promise<void> {
+    const generation = ++this.#menuFormGeneration;
     this.menuFormErrors = {};
     this.menuDetails = null;
+    this.menuForm = null;
+    let details: SectionDetails | null = null;
     if (menu) {
       try {
-        this.menuDetails = (await this.api.getMenuStructure(menu.id)).root;
+        details = (await this.api.getMenuStructure(menu.id)).root;
       } catch {
-        this.loadError = true;
+        if (generation === this.#menuFormGeneration) this.loadError = true;
         return;
       }
     }
+    if (generation !== this.#menuFormGeneration) return;
+    this.menuDetails = details;
     this.menuForm = { id: menu?.id ?? null, name: menu?.name ?? "" };
   }
 
@@ -1167,21 +1201,30 @@ export class MenusScreen extends LitElement {
   }
 
   async #includeMenu(): Promise<void> {
-    if (!this.includedRoot || this.busy) return;
-    this.busy = true;
+    if (this.busy || !this.includingMenu || this.#closeLostList()) return;
+    this.includeAttempted = true;
     this.includeError = "";
+    if (!this.includedRoot) {
+      await this.updateComplete;
+      this.shadowRoot!.querySelector<HTMLSelectElement>('[name="included-menu"]')?.focus();
+      return;
+    }
+    const target = this.includingMenu;
+    this.busy = true;
     try {
-      await this.api.addSectionMember(this.#listId!, {
+      await this.api.addSectionMember(target.listId, {
         kind: "section",
         sectionId: this.includedRoot,
       });
     } catch (error) {
-      this.includeError = codeMessage(codeOf(error));
+      if (!this.#closeRefusedElsewhere(target, error))
+        this.includeError = codeMessage(codeOf(error));
       this.busy = false;
       return;
     }
-    this.includingMenu = false;
+    this.includingMenu = null;
     await this.#refresh();
+    this.#reportSavedToLost(target);
     this.busy = false;
   }
 
@@ -1587,6 +1630,7 @@ export class MenusScreen extends LitElement {
       }}
       @wt-cancel=${(event: Event) => {
         event.stopPropagation();
+        this.#menuFormGeneration++;
         this.menuForm = null;
       }}
     ></dashboard-section-details-form>`;
@@ -1747,7 +1791,8 @@ export class MenusScreen extends LitElement {
           variant="secondary"
           .disabled=${this.busy}
           @click=${() => {
-            this.includingMenu = true;
+            this.includingMenu = this.#here();
+            this.includeAttempted = false;
             this.includedRoot = "";
             this.includeError = "";
           }}
@@ -2047,7 +2092,7 @@ export class MenusScreen extends LitElement {
       ></dashboard-section-details-form>
       ${this.#formModal({
         test: "include",
-        open: this.includingMenu,
+        open: this.includingMenu !== null,
         heading: t("menus.include_menu"),
         body: html`<label class="include-field"
           ><span
@@ -2055,6 +2100,8 @@ export class MenusScreen extends LitElement {
             <span class="required-mark" aria-hidden="true">*</span></span
           ><select
             name="included-menu"
+            aria-invalid=${this.includeAttempted && !this.includedRoot ? "true" : "false"}
+            aria-describedby=${this.includeAttempted && !this.includedRoot ? "include-menu-error" : nothing}
             required
             .disabled=${this.busy}
             @change=${(event: Event) => {
@@ -2063,13 +2110,18 @@ export class MenusScreen extends LitElement {
           >
             <option value="" .selected=${!this.includedRoot}>${t("menus.choose_menu")}</option>
             ${(this.structure?.includable ?? []).map((menu) => html`<option value=${menu.rootSectionId} .selected=${this.includedRoot === menu.rootSectionId}>${menu.name}</option>`)}
-          </select></label
+          </select>
+          ${this.includeAttempted && !this.includedRoot ? html`<span class="field-error" id="include-menu-error">${t("menus.choose_menu_required")}</span>` : nothing}</label
         >`,
         save: "include-save",
         saveLabel: t("action.add"),
-        errors: { blocked: !this.includedRoot, bottom: this.includeError },
+        errors: {
+          blocked: this.includeAttempted && !this.includedRoot,
+          bottom:
+            this.includeAttempted && !this.includedRoot ? t("form.fix_fields") : this.includeError,
+        },
         close: () => {
-          this.includingMenu = false;
+          this.includingMenu = null;
         },
         submit: () => void this.#includeMenu(),
       })}

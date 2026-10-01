@@ -1561,7 +1561,9 @@ it("reads the menu again when a later move is out and a read lands in the order 
 it("reads the menu again when a move made after a refusal is out and a read lands in the order a move before the refusal answered", async () => {
   const live = new LiveData();
   const client = api({ liveData: live });
-  const move = client.moveSectionMember.getMockImplementation()!;
+  const move = client.moveSectionMember.getMockImplementation()! as (
+    id: string,
+  ) => Promise<MenuStructure>;
   const [burger, drinks, fav] = lunchNodes();
   client.moveSectionMember
     .mockImplementationOnce(move)
@@ -1758,7 +1760,9 @@ it("reads the menu again when a move's answer names members the menu does not sh
 it("explains a refused move, reads the menu again, and drops the moves queued behind it", async () => {
   let refuse!: (error: unknown) => void;
   const client = api();
-  const move = client.moveSectionMember.getMockImplementation()!;
+  const move = client.moveSectionMember.getMockImplementation()! as (
+    id: string,
+  ) => Promise<MenuStructure>;
   client.moveSectionMember.mockImplementationOnce(
     () => new Promise((_, reject) => (refuse = reject)),
   );
@@ -4594,3 +4598,304 @@ it("lists the menus that include this one, with their clashes", async () => {
     ["Afternoon (1 clash)", "/manage/menus/menu/afternoon/view/structure"],
   ]);
 });
+
+describe("review fix: inclusion target and validation", () => {
+  function includeApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+    const client = api(overrides);
+    const read = client.getMenuStructure.getMockImplementation()! as (
+      id: string,
+    ) => Promise<MenuStructure>;
+    client.getMenuStructure.mockImplementation(async (id: string) => ({
+      ...(await read(id)),
+      includable: [{ id: "wine", name: "Wines", rootSectionId: "wine-root" }],
+    }));
+    return client;
+  }
+  async function openInclude(el: MenusScreen, choose = true) {
+    await click(el, "include-menu");
+    const picker = inModal<HTMLSelectElement>(el, "include", '[name="included-menu"]');
+    if (choose) {
+      picker.value = "wine-root";
+      picker.dispatchEvent(new Event("change"));
+      await el.updateComplete;
+    }
+    return picker;
+  }
+  it("closes Include without a write when its original list disappears before Add", async () => {
+    const live = new LiveData();
+    const client = includeApi({ liveData: live });
+    const el = await mountLunch(client);
+    await editDrinks(el);
+    await openInclude(el);
+    await takeDrinksOff(el, client, live);
+    expect(modal(el, "include").open).toBe(false);
+    expect(client.addSectionMember).not.toHaveBeenCalled();
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.list_gone").replace("{name}", "Drinks"),
+    );
+  });
+  it.each(["success", "refusal"] as const)(
+    "keeps the original Include destination during list loss and %s",
+    async (outcome) => {
+      const live = new LiveData();
+      const adding = deferred<SectionMember>();
+      const client = includeApi({ liveData: live, addSectionMember: vi.fn(() => adding.promise) });
+      const el = await mountLunch(client);
+      await editDrinks(el);
+      await openInclude(el);
+      await click(el, "include-save");
+      await vi.waitFor(() =>
+        expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
+          kind: "section",
+          sectionId: "wine-root",
+        }),
+      );
+      await takeDrinksOff(el, client, live);
+      expect(modal(el, "include").open).toBe(true);
+      if (outcome === "success") {
+        adding.resolve(sectionMember("wine", 0, "wine-root"));
+        await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+        await vi.waitFor(() =>
+          expect(text(q(el, '[data-test="member-error"]'))).toBe(
+            t("menus.list_gone_saved").replace("{name}", "Drinks"),
+          ),
+        );
+      } else {
+        adding.reject({ code: "menu_section.not_found" });
+        await vi.waitFor(async () =>
+          expect(await bottom(el, "include")).toBe(codeMessage("menu_section.not_found")),
+        );
+        await click(el, "include-save");
+        expect(modal(el, "include").open).toBe(false);
+        expect(client.addSectionMember).toHaveBeenCalledOnce();
+      }
+    },
+  );
+  it("closes an idle Include on navigation without retargeting the selection", async () => {
+    const client = includeApi();
+    const el = await mountLunch(client);
+    await editDrinks(el);
+    await openInclude(el);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    expect(modal(el, "include").open).toBe(false);
+    expect(client.addSectionMember).not.toHaveBeenCalled();
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+  it.each(["success", "refusal"] as const)(
+    "keeps a pending Include's destination through navigation and %s",
+    async (outcome) => {
+      const adding = deferred<SectionMember>();
+      const client = includeApi({ addSectionMember: vi.fn(() => adding.promise) });
+      const el = await mountLunch(client);
+      await editDrinks(el);
+      await openInclude(el);
+      await click(el, "include-save");
+      await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
+      await visit(el, DINNER_PATH, "Dinner Menu");
+      expect(modal(el, "include").open).toBe(true);
+      if (outcome === "success") adding.resolve(sectionMember("wine", 0, "wine-root"));
+      else adding.reject({ code: "menu_section.not_found" });
+      await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+      expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
+        kind: "section",
+        sectionId: "wine-root",
+      });
+      if (outcome === "refusal")
+        expect(text(q(el, '[data-test="member-error"]'))).toBe(
+          t("menus.change_not_saved")
+            .replace("{name}", "Drinks")
+            .replace("{reason}", codeMessage("menu_section.not_found")),
+        );
+      else expect(q(el, '[data-test="member-error"]')).toBeNull();
+    },
+  );
+  it("explains an empty Include submission, focuses it, rechecks changes and resets on reopen", async () => {
+    const client = includeApi();
+    const el = await mountLunch(client);
+    const picker = await openInclude(el, false);
+    const save = inModal<HTMLElementTagNameMap["wt-button"]>(
+      el,
+      "include",
+      '[data-test="include-save"]',
+    );
+    expect(save.disabled).toBe(false);
+    expect(picker.getAttribute("aria-invalid")).not.toBe("true");
+    await click(el, "include-save");
+    expect(save.disabled).toBe(true);
+    expect(picker.getAttribute("aria-invalid")).toBe("true");
+    const error = inModal(el, "include", "#include-menu-error");
+    expect(text(error)).toBe(t("menus.choose_menu_required"));
+    expect(getComputedStyle(error).color).toBe(
+      getComputedStyle(inModal(el, "include", ".required-mark")).color,
+    );
+    expect(picker.getAttribute("aria-describedby")).toContain(error.id);
+    expect(await bottom(el, "include")).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.activeElement).toBe(picker);
+    picker.value = "wine-root";
+    picker.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(save.disabled).toBe(false);
+    expect(await bottom(el, "include")).toBe("");
+    picker.value = "";
+    picker.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(save.disabled).toBe(true);
+    await click(el, "include-cancel");
+    await openInclude(el, false);
+    expect(save.disabled).toBe(false);
+    expect(await bottom(el, "include")).toBe("");
+    expect(client.addSectionMember).not.toHaveBeenCalled();
+  });
+  it("keeps Include retryable after a request refusal", async () => {
+    const client = includeApi({
+      addSectionMember: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "menu_section.member_cycle" })
+        .mockResolvedValue(sectionMember("wine", 0, "wine-root")),
+    });
+    const el = await mountLunch(client);
+    await openInclude(el);
+    await click(el, "include-save");
+    await vi.waitFor(async () =>
+      expect(await bottom(el, "include")).toBe(codeMessage("menu_section.member_cycle")),
+    );
+    expect(
+      inModal<HTMLElementTagNameMap["wt-button"]>(el, "include", '[data-test="include-save"]')
+        .disabled,
+    ).toBe(false);
+    await click(el, "include-save");
+    await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+  });
+});
+
+describe("review fix: menu details opening", () => {
+  const details = (id: string, name: string): MenuStructure => ({
+    rootSectionId: `root-${id}`,
+    root: {
+      id: `root-${id}`,
+      internalName: name,
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    nodes: [],
+    includable: [],
+    includedBy: [],
+  });
+  async function rename(el: MenusScreen, id: string) {
+    await table(el).updateComplete;
+    table(el).shadowRoot!.querySelector<HTMLElement>(`[data-test="rename-${id}"]`)!.click();
+    await el.updateComplete;
+  }
+  it("keeps B and its draft when A's earlier rename read answers last", async () => {
+    const a = deferred<MenuStructure>();
+    const b = deferred<MenuStructure>();
+    const client = api({
+      getMenuStructure: vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise),
+    });
+    const el = await mount(client);
+    await rename(el, "menu-lunch");
+    await rename(el, "menu-dinner");
+    b.resolve(details("dinner", "Dinner Menu"));
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
+    type(inModal(el, "menu-form", '[name="internalName"]'), "Dinner draft");
+    await el.updateComplete;
+    a.resolve(details("lunch", "Lunch Menu"));
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(
+      inModal<HTMLElementTagNameMap["wt-input"]>(el, "menu-form", '[name="internalName"]').value,
+    ).toBe("Dinner draft");
+    inModal(el, "menu-form", '[data-test="save"]').click();
+    await vi.waitFor(() =>
+      expect(client.updateMenuDetails).toHaveBeenCalledWith("menu-dinner", {
+        internalName: "Dinner draft",
+        names: {},
+        image: null,
+        color: null,
+      }),
+    );
+  });
+  it.each(["answer", "failure"] as const)(
+    "ignores an obsolete rename %s after New menu",
+    async (outcome) => {
+      const pending = deferred<MenuStructure>();
+      const client = api({ getMenuStructure: vi.fn(() => pending.promise) });
+      const el = await mount(client);
+      await rename(el, "menu-lunch");
+      await click(el, "add-menu");
+      type(inModal(el, "menu-form", '[name="internalName"]'), "Brunch draft");
+      await el.updateComplete;
+      if (outcome === "answer") pending.resolve(details("lunch", "Lunch Menu"));
+      else pending.reject({ code: "server.internal" });
+      await new Promise((resolve) => setTimeout(resolve));
+      await el.updateComplete;
+      expect(
+        inModal<HTMLElementTagNameMap["wt-input"]>(el, "menu-form", '[name="internalName"]').value,
+      ).toBe("Brunch draft");
+      expect(q(el, '[data-test="load-error"]')).toBeNull();
+    },
+  );
+  it("ignores a late rename after cancellation", async () => {
+    const a = deferred<MenuStructure>();
+    const client = api({
+      getMenuStructure: vi
+        .fn()
+        .mockReturnValueOnce(a.promise)
+        .mockResolvedValue(details("dinner", "Dinner Menu")),
+    });
+    const el = await mount(client);
+    await rename(el, "menu-lunch");
+    await rename(el, "menu-dinner");
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
+    inModal(el, "menu-form", '[data-test="cancel"]').click();
+    await el.updateComplete;
+    a.resolve(details("lunch", "Lunch Menu"));
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(modal(el, "menu-form").open).toBe(false);
+  });
+  it.each(["answer", "failure"] as const)(
+    "ignores an obsolete rename %s after navigation",
+    async (outcome) => {
+      const pending = deferred<MenuStructure>();
+      const client = api();
+      client.getMenuStructure.mockReturnValueOnce(pending.promise);
+      const el = await mount(client);
+      await rename(el, "menu-lunch");
+      await inTable(el, "open-menu-dinner");
+      if (outcome === "answer") pending.resolve(details("lunch", "Lunch Menu"));
+      else pending.reject({ code: "server.internal" });
+      await new Promise((resolve) => setTimeout(resolve));
+      await el.updateComplete;
+      await click(el, "back");
+      expect(modal(el, "menu-form").open).toBe(false);
+      expect(q(el, '[data-test="load-error"]')).toBeNull();
+    },
+  );
+});
+
+it.each(["light", "dark"] as const)(
+  "review fix: gives includer links theme tokens and full hit targets in %s",
+  async (theme) => {
+    const client = api();
+    const read = client.getMenuStructure.getMockImplementation()! as (
+      id: string,
+    ) => Promise<MenuStructure>;
+    client.getMenuStructure.mockImplementation(async (id: string) => ({
+      ...(await read(id)),
+      includedBy: [{ id: "evening", name: "Evening" }],
+    }));
+    history.replaceState(null, "", LUNCH_PATH);
+    const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client }, theme);
+    await vi.waitFor(() => expect(q(el, '[data-test="included-by"] a')).not.toBeNull());
+    const link = q<HTMLAnchorElement>(el, '[data-test="included-by"] a')!;
+    el.style.setProperty("--wt-color-text", "rgb(17, 93, 201)");
+    expect(getComputedStyle(link).color).toBe("rgb(17, 93, 201)");
+    expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(link.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    link.focus();
+    expect(getComputedStyle(link).outlineStyle).not.toBe("none");
+  },
+);

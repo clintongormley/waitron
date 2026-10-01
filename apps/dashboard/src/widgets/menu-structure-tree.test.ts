@@ -247,3 +247,34 @@ it("shows an included menu with a link and keeps its entire subtree read-only", 
   );
   expect(el.shadowRoot!.querySelectorAll(".edit")).toHaveLength(0);
 });
+
+it.each(["light", "dark"] as const)(
+  "uses theme tokens and a full hit target for an included menu link in %s",
+  async (theme) => {
+    const { el } = await mountWidget<MenuStructureTree>(
+      "dashboard-menu-structure-tree",
+      {
+        nodes: [
+          {
+            memberId: "included",
+            ref: { kind: "section", sectionId: "drinks-root" },
+            internalName: "Drinks",
+            includedMenuId: "drinks",
+            children: [],
+          },
+        ],
+        label: "Lunch",
+      },
+      theme,
+    );
+    el.style.setProperty("--wt-color-text", "rgb(17, 93, 201)");
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a")!;
+    expect(link.getAttribute("href")).toBe("/manage/menus/menu/drinks/view/structure");
+    expect(getComputedStyle(link).color).toBe("rgb(17, 93, 201)");
+    expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(link.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    link.focus();
+    expect(el.shadowRoot!.activeElement).toBe(link);
+    expect(getComputedStyle(link).outlineStyle).not.toBe("none");
+  },
+);

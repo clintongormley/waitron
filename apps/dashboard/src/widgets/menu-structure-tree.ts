@@ -16,6 +16,17 @@ export class MenuStructureTree extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      a {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2);
+        border-radius: var(--wt-radius-md);
+        color: var(--wt-color-text);
+        font: inherit;
+        text-decoration: underline;
+      }
       :host {
         display: block;
       }

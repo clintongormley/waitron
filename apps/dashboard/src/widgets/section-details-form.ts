@@ -132,7 +132,10 @@ export class SectionDetailsForm extends LitElement {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
     this.attempted = true;
-    this.#dismiss(...Object.keys(this.fieldErrors));
+    this.#dismiss(
+      ...Object.keys(this.fieldErrors),
+      ...(this.refusal ? [fieldOf(this.refusal)] : []),
+    );
     if (Object.keys(this.#validate()).length > 0) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -170,8 +173,6 @@ export class SectionDetailsForm extends LitElement {
         if (this.busy && event.key === "Escape") event.preventDefault();
       }}
       @wt-close=${(event: Event) => {
-        // The dialog also reports a close it was told to make, a task later; by then the screen has
-        // closed this form and a second cancel would be about nothing.
         if (!this.busy && !this.pickerOpen && this.open) this.#emit(event, "wt-cancel", {});
         else event.stopPropagation();
       }}
@@ -248,7 +249,10 @@ export class SectionDetailsForm extends LitElement {
           data-test="cancel"
           variant="secondary"
           .disabled=${this.busy}
-          @click=${(event: Event) => this.#emit(event, "wt-cancel", {})}
+          @click=${(event: Event) => {
+            if (!this.busy && !this.pickerOpen) this.#emit(event, "wt-cancel", {});
+            else event.stopPropagation();
+          }}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
