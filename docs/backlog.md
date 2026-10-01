@@ -2775,8 +2775,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Left open, not checked:** a document job that runs out of attempts for any OTHER reason
     keeps the printer's `printer.jobs_waiting` alert up after it is reprinted, because the reprint
     makes a new job and the given-up one keeps matching (`apps/server/src/alert-sources.ts`). Found
-    while reading A163's review, not run; believed to predate A163, history not checked. No item
-    queued: the owner was asked on 2026-10-01 whether to queue one and has not answered.
+    while reading A163's review, not run; believed to predate A163, history not checked. Queued
+    as A165 (owner, 2026-10-01: "queue it"), which reproduces it on `main` first.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
