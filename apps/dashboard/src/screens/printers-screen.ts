@@ -278,11 +278,14 @@ export class PrintersScreen extends LitElement {
         display: flex;
         gap: var(--wt-space-2);
       }
+      /* A row of fields is one line of the form: in a modal it takes a field's width, so the button
+         beside a select stays beside it instead of at the modal's far edge. */
       .field-row {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-3);
         align-items: flex-end;
+        max-width: var(--wt-field-max-width);
       }
       .finder-examples {
         display: flex;

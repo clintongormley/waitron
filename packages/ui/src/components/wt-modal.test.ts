@@ -5,6 +5,13 @@ import { WtModal } from "./wt-modal.js";
 import "./wt-form-actions.js";
 import "./wt-button.js";
 import "./wt-input.js";
+import "./wt-combobox.js";
+import "./wt-price-input.js";
+import "./wt-number-stepper.js";
+import "./wt-switch.js";
+import "./wt-data-table.js";
+import type { WtDataTable } from "./wt-data-table.js";
+import { selectStyles } from "../base-styles.js";
 
 afterEach(cleanup);
 
@@ -127,6 +134,139 @@ test.each([
     }
   },
 );
+
+/** One of every shared form field, in the grid a form lays its fields out in, plus a native select
+ * field styled by `selectStyles` in a shadow root of its own, written as screens write one: a block
+ * label holding the label text, the select, a hint and an error. */
+const FIELDS = `<div style="display: grid">
+  <wt-input label="Name"></wt-input>
+  <wt-combobox label="Product"></wt-combobox>
+  <wt-price-input label="Price" unit="€"></wt-price-input>
+  <wt-number-stepper label="Guests"></wt-number-stepper>
+  <wt-switch label="Active"></wt-switch>
+  <div data-select></div>
+</div>`;
+
+type TableRow = { id: string; name: string };
+
+const SELECT_FIELD = `<style>
+    .field { display: block; }
+  </style>
+  <label class="field"
+    >Precision<span class="required">*</span>
+    <select name="precision"><option>0</option></select>
+    <p class="field-help">How many decimal places a quantity in this unit may carry.</p>
+    <p class="field-error">Choose a supported precision for this unit before saving.</p>
+  </label>`;
+
+/** The fields above, and the native select field's label, select, hint and error inside its own
+ * shadow root. */
+async function fieldsIn(root: ParentNode): Promise<HTMLElement[]> {
+  const holder = root.querySelector<HTMLElement>("[data-select]")!;
+  const shadow = holder.attachShadow({ mode: "open" });
+  shadow.adoptedStyleSheets = [selectStyles.styleSheet!];
+  shadow.innerHTML = SELECT_FIELD;
+  const fields = [
+    ...root.querySelectorAll<HTMLElement>(
+      "wt-input, wt-combobox, wt-price-input, wt-number-stepper, wt-switch",
+    ),
+  ];
+  for (const field of fields) await (field as WtModal).updateComplete;
+  return [
+    ...fields,
+    ...shadow.querySelectorAll<HTMLElement>("label, select, .field-help, .field-error"),
+  ];
+}
+
+/** The bottom of the native select field's label text, and the top of its select. */
+function selectBelowText(modal: WtModal): { textBottom: number; selectTop: number } {
+  const shadow = modal.querySelector<HTMLElement>("[data-select]")!.shadowRoot!;
+  const label = shadow.querySelector("label")!;
+  const range = document.createRange();
+  range.selectNodeContents(label.firstChild!);
+  return {
+    textBottom: range.getBoundingClientRect().bottom,
+    selectTop: shadow.querySelector("select")!.getBoundingClientRect().top,
+  };
+}
+
+/** A modal holding every form field, a wide block, a table and a footer row carrying a message. */
+async function openForm(): Promise<{ modal: WtModal; fields: HTMLElement[] }> {
+  const modal = await openModal(`${FIELDS}
+    <div data-wide style="height: 1px"></div>
+    <wt-data-table aria-label="Rows"></wt-data-table>`);
+  const table = modal.querySelector<WtDataTable<TableRow>>("wt-data-table")!;
+  table.columns = [{ key: "name", label: "Name", cell: (row) => row.name }];
+  table.rows = [{ id: "a", name: "Ada" }];
+  table.rowKey = (row) => row.id;
+  await table.updateComplete;
+  const actions = modal.querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
+  actions.error = "Correct the highlighted fields to continue.";
+  await modal.updateComplete;
+  return { modal, fields: await fieldsIn(modal) };
+}
+
+/** The width the modal's body gives its content: the body less its inline padding. */
+function contentWidth(modal: WtModal): number {
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const style = getComputedStyle(body);
+  return body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+}
+
+test("holds every form field and the form's message to the standard form width on a wide window", async () => {
+  await page.viewport(1280, 900);
+  const { modal, fields } = await openForm();
+  const form = px("var(--wt-form-max-width)");
+  expect(contentWidth(modal)).toBeGreaterThan(form);
+  for (const field of fields) {
+    expect(field.getBoundingClientRect().width, field.localName).toBeCloseTo(form, 0);
+  }
+  const message = modal.shadowRoot!.querySelector<HTMLElement>(".body > [data-error]")!;
+  expect(message.getBoundingClientRect().width).toBeCloseTo(form, 0);
+});
+
+test("keeps a native select on its own line below its label text on a wide window", async () => {
+  await page.viewport(1280, 900);
+  const { modal } = await openForm();
+  const { textBottom, selectTop } = selectBelowText(modal);
+  expect(selectTop).toBeGreaterThanOrEqual(textBottom);
+});
+
+test("leaves wide content, and the footer's actions, the modal's full width on a wide window", async () => {
+  await page.viewport(1280, 900);
+  const { modal } = await openForm();
+  const width = contentWidth(modal);
+  expect(modal.querySelector<HTMLElement>("[data-wide]")!.getBoundingClientRect().width).toBe(
+    width,
+  );
+  expect(modal.querySelector("wt-data-table")!.getBoundingClientRect().width).toBe(width);
+  expect(modal.querySelector("wt-form-actions")!.getBoundingClientRect().width).toBe(width);
+});
+
+test("gives a field the body's whole width on a 390px-wide phone", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { modal, fields } = await openForm();
+    const width = contentWidth(modal);
+    expect(width).toBeLessThan(px("var(--wt-form-max-width)"));
+    for (const field of fields) {
+      expect(field.getBoundingClientRect().width, field.localName).toBeCloseTo(width, 0);
+    }
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("leaves a field outside a modal as wide as its container", async () => {
+  await page.viewport(1280, 900);
+  await mount(FIELDS);
+  host.style.width = "1000px";
+  const fields = await fieldsIn(host);
+  expect(px("var(--wt-form-max-width)")).toBeLessThan(1000);
+  for (const field of fields) {
+    expect(field.getBoundingClientRect().width, field.localName).toBe(1000);
+  }
+});
 
 test("scrolls long content while both footer actions stay visible and stationary", async () => {
   await page.viewport(390, 600);

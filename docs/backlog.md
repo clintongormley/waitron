@@ -5696,7 +5696,9 @@ ongoing overhaul listed at the top of Track A.
   shares a line with something else, the screen places the message itself: the dashboard's sign-in
   steps show it above the list of other ways to sign in and the buttons (`formMessage`, now exported
   from `@waitron/ui`), and the Add printer dialog's address check lets its button row take the
-  panel's full width while it has a message. A dialog with more than one action row in its footer
+  panel's full width while it has a message. _(2026-10-01, C105: in a `wt-modal` the form's message,
+  and the Printers screen's rows of fields including the Add printer address check, now stop at
+  `--wt-form-max-width`; see the C105 entry.)_ A dialog with more than one action row in its footer
   shows every row's message, joined; a dialog opened with a footer row's message already present
   scrolls it into view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
   message scrolled into view when it appears. None of these scrolls happens when the message changes
@@ -5721,6 +5723,32 @@ ongoing overhaul listed at the top of Track A.
   dialog's footer would keep its message in the footer; none does today.
   Not looked at on screen after the review fixes: the screenshots (56, light and dark, 1280 and 390,
   EN and ES for the sign-in steps and the passkey dialog) were taken before them, on 05974c855.
+
+- **A form in a modal stops at one standard width instead of running edge to edge (C105, owner
+  2026-09-30) — DONE (2026-10-01).** On a wide window the printer calibration wizard's selects and
+  its "Print block" button ran the whole width of the modal. The owner chose one standard form width
+  inside the one standard modal, rather than a narrow and a wide modal. `--wt-form-max-width`
+  (36rem, 576px at the default text size) is that width: `wt-modal` hands it to its body, and every
+  shared field (`wt-input`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`, `wt-switch`, a
+  native select styled by `selectStyles` together with a label that wraps it) and the form's message
+  line stop at it, as do the fields the profile, venue operations and content-languages screens style
+  themselves, the adjustments reasons screen's role fields, whose label sits outside the select, and
+  the section member list's add row and its error. Tables, previews and other wide content keep the
+  modal's full width, the footer buttons do not move, and at 390px wide nothing changes. The
+  Printers screen's row of fields takes the same width, so "Print block" stays beside its select.
+  Fields on pages and in a `wt-dialog` outside a modal are unchanged.
+  `docs/developers/design-system.md` → "Structure" records the standard. Left open: a
+  `wt-disclosure`'s heading row (the calibration wizard's "Advanced text settings") and a screen's
+  own paragraphs still run the modal's full width; the product editor's description `<textarea>`,
+  which the screen styles itself, is not capped; the content-languages editor's rows of enabled
+  languages still put each Remove button at the modal's far edge (left for C111, which rewrites that
+  screen); a native select labelled by a separate `<label for>` keeps that label, and an error
+  outside it, at the modal's full width unless its screen caps the element wrapping them (the
+  adjustments reasons screen does; no other one was found in a modal); an inline label around a
+  select is not capped, so its select would sit beside the label text (none was found in a modal);
+  and forms built in `wt-dialog` rather than `wt-modal` (the ingredient form, the till's party name
+  dialog, among others) are held only by the dialog's own 768px limit — whether they should follow
+  the modal's form width is the owner's call.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now

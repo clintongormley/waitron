@@ -43,6 +43,8 @@ test("defines the structural contract", () => {
     "--wt-modal-max-width",
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
+    "--wt-form-max-width",
+    "--wt-field-max-width",
     "--wt-cell-name-max-width",
     "--wt-stepper-field-width",
     "--wt-stepper-field-width-wide",
@@ -63,6 +65,27 @@ test("the standard modal is 64rem wide, and a dialog keeps its own 48rem", () =>
   expect(token(el, "--wt-modal-max-width")).toBe("64rem");
   el.style.setProperty("--wt-modal-max-width", "10rem");
   expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
+});
+
+test("a modal's form is 36rem wide, and a field outside a modal has no cap", () => {
+  const el = mount();
+  expect(token(el, "--wt-form-max-width")).toBe("36rem");
+  expect(token(el, "--wt-field-max-width")).toBe("none");
+});
+
+test("a modal's form is narrower than the modal, and wider than a phone", () => {
+  // Wider than a 390px phone, so a phone's modal gives its fields its whole width as before; narrower
+  // than the standard modal, or capping a field in one would change nothing.
+  const el = mount();
+  const probe = document.createElement("div");
+  probe.style.position = "fixed";
+  el.appendChild(probe);
+  const px = (length: string) => {
+    probe.style.width = length;
+    return probe.getBoundingClientRect().width;
+  };
+  expect(px("var(--wt-form-max-width)")).toBeGreaterThan(390);
+  expect(px("var(--wt-form-max-width)")).toBeLessThan(px("var(--wt-modal-max-width)"));
 });
 
 test("a name cell may grow wider than the controls that sit beside it", () => {

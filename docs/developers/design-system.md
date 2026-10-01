@@ -142,7 +142,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-font-family-mono` (text read or copied character by character, such as a key or a log line),
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
-`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-cell-name-max-width`,
+`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
+`--wt-field-max-width`, `--wt-cell-name-max-width`,
 `--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`
 
@@ -170,6 +171,65 @@ through a token. `wt-modal` is at most `64rem` (1024px) wide; `wt-dialog` and `w
 read their own token and are at most `48rem` (768px). Some add and edit forms are built in
 `wt-dialog` rather than `wt-modal` (the ingredient form is one), so they are held to 768px too. Overriding `--wt-modal-max-width` therefore resizes `wt-modal` alone; to resize a
 dialog, set `--wt-dialog-max-width` (the till's device chooser does).
+
+`--wt-form-max-width` (`36rem`, 576px at the default text size) is the one standard width of a form
+inside a `wt-modal` (owner, 2026-09-30, C105): a field there grows no wider than it, however wide the
+modal is. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
+`--wt-field-max-width` as its `max-width` — `wt-input`, `wt-combobox`, `wt-price-input`,
+`wt-number-stepper`, `wt-switch`, a native `<select>` styled by `selectStyles` and a `<label>` that
+contains one (`label:has(select)`, in the same stylesheet), and the line that shows a form's message
+(`formMessageStyles`, so both the message a dialog shows at the end of its body and the one a
+`wt-form-actions` placed in the body shows above its buttons). `--wt-field-max-width` is `none` at
+the theme root. It narrows nothing else: a table, a preview, a `wt-disclosure`, a screen's own
+paragraphs and the footer's buttons keep the modal's full width. There is one standard modal size;
+a screen does not set its own form width.
+
+What the cap covers of a field's label, hint and error depends on how the field is written:
+
+- The five custom elements: the label, hint and error are inside the element, so the cap holds them.
+- A native select inside a block, grid or flex `<label>` (the Units form's Precision field is one):
+  the label holds the label text, the select, and any hint or error written inside it, and all of
+  them stop at the form width. The select is still `width: 100%` of that label, so it stays on its
+  own line below the text.
+- Not covered by `selectStyles`, measured 2026-10-01 with a temporary test in a `wt-modal` at
+  1280px (form width 576px, body 974px): a select labelled by a separate `<label for>` keeps that
+  label, and an error written outside it, at the body's width (label 974px, select 576px, error
+  974px) unless its screen caps the element wrapping them, as the adjustments reasons screen does
+  (below); and an inline `<label>` ignores `max-width`, so the 576px select fits on its text's line
+  (the select's top 187px, the text's bottom 215px). The select labels in the modals read for C105
+  are block, grid or flex; no inline one was found, but nothing checks for one.
+
+Outside a `wt-modal`, `--wt-field-max-width` is the theme root's `none`, so a field on a page, or in a `wt-dialog`
+that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
+inside a modal's body inherits the cap. Page forms are bounded by their screen's own column instead
+(the setup wizard's raised column, and the `max-width` of screens such as backup, receipt and sign-in),
+so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
+still takes the body's whole width.
+
+A screen that styles its own native controls, or writes a field's label outside its select, reads
+the same variable on the element that wraps each field, so the label text, the control and the
+field's error stop together: the profile screen's `.select-field` (the Language label, select and
+error in the edit details modal), the adjustments reasons screen's `.select-field` (each role
+select with its `<label for>` and error, in the reason editor), every `label` in the venue operations
+screen's editor modals (each holds one field's text and control, and its error when it has one), and the
+content-languages editor's two select labels and their `.error` lines. A screen whose own layout
+makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
+beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print block"
+button, and the section member list's `.add` row does, for its Add button, along with that row's
+`.error` line (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
+the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
+cases in `packages/ui/src/components/wt-modal.test.ts` (every shared field, a native select
+field's label, select, hint and error, and the message at 1280px; the select below its label text
+at 1280px; wide content and the footer row at full width; each field at the
+body's width at 390px; each field at its container's width outside a modal); the calibration case in
+`apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
+`apps/dashboard/src/screens/profile-screen.test.ts`,
+`apps/dashboard/src/widgets/content-languages.test.ts`,
+`apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
+`packages/adjustments/src/dashboard/reasons-screen.test.ts` and
+`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that
+does not read `--wt-field-max-width` is seen by none of them, and neither is a screen-styled native
+control such as the product editor's description `<textarea>`.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
@@ -265,7 +325,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot. The message of a `wt-form-actions` placed directly in the `footer` slot shows at the end of the body instead, every such row's message joined, and is scrolled into view when it changes and when the dialog opens; a `wt-form-actions` in the body keeps its own message, which the dialog scrolls into view when it changes. Neither is scrolled to when it changes from an `input` event inside the dialog until a zero-delay timer the dialog then sets has run | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors`. Retiring: a form no longer shows a summary (see Forms); no product form uses it any more; it is deleted once its remaining users, listed in `docs/backlog.md`, are gone | — |
-| `wt-form-actions` | `error` (the form's one message about a failed submission: shown on its own line above the buttons, full width and aligned to the start, announced as an alert, painted `--wt-color-danger`); `showError` (property only, default `true`; `wt-dialog` turns it off for each row directly in its footer and shows the message itself); `cancel`, `secondary`, and default slots. The same module exports `formMessage(message)` and `formMessageStyles`, which draw that message for a screen that has to place it itself; a shadow root using `formMessage` includes `formMessageStyles` | `wt-form-error` — `detail: { message: string }` (whenever `error` changes) |
+| `wt-form-actions` | `error` (the form's one message about a failed submission: shown on its own line above the buttons, full width (in a `wt-modal`, no wider than `--wt-form-max-width`) and aligned to the start, announced as an alert, painted `--wt-color-danger`); `showError` (property only, default `true`; `wt-dialog` turns it off for each row directly in its footer and shows the message itself); `cancel`, `secondary`, and default slots. The same module exports `formMessage(message)` and `formMessageStyles`, which draw that message for a screen that has to place it itself; a shadow root using `formMessage` includes `formMessageStyles` | `wt-form-error` — `detail: { message: string }` (whenever `error` changes) |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
@@ -414,7 +474,8 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.
 
-Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`64rem`) bounded by the
+Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
+above). Its width is `--wt-modal-max-width` (`64rem`) bounded by the
 viewport minus its side margins, and it fills the viewport height with 24px top and bottom margins.
 Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
 (`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
@@ -671,8 +732,8 @@ it stays on the bottom left (the sign-in code step is an exception; see the logi
 secondary action that belongs beside the primary action goes in the `secondary` slot. The row's
 message runs from the form's left edge only when the row is the form's full width. Where the row
 shares a line with something else, show the message with `formMessage` directly before that line,
-as the sign-in steps do, or let the row take the full width while it has a message, as the Add
-printer dialog's address check does.
+as the sign-in steps do, or let the row take the full width (in a `wt-modal`, the form width) while
+it has a message, as the Add printer dialog's address check does.
 
 ```ts
 html`
@@ -1133,7 +1194,7 @@ it read as a visually different app from the wide table screens next to it; anch
 same edge and varying only the width does not. `backup-screen.ts` and `receipt-screen.ts` already
 follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
 screen positioned beside the sidebar any more; it's a modal, bounded by `--wt-modal-max-width`
-like any other. The one legitimate exception among actual screens is a full-page one with no
+like any other, and its fields stop at `--wt-form-max-width`. The one legitimate exception among actual screens is a full-page one with no
 sidebar at all, like the login screen — centering a freestanding form with nothing to anchor to is
 the normal, expected treatment there.
 
@@ -1295,7 +1356,11 @@ New primitives require an axe test covering every meaningfully distinct accessib
    ...), in both light and dark themes. Before trusting it, break the component's accessibility on
    purpose (remove an `aria-label`, unassociate a label) and confirm the test actually goes red,
    then restore the fix.
-6. Add it to the workbench and to the table above.
+6. If it's a form field, give its host `max-width: var(--wt-field-max-width)`, so it stops at the
+   form width in a `wt-modal`, and add a test that sets `--wt-field-max-width` on the `host` and
+   asserts the field's width follows it (`packages/ui-core/src/components/wt-input.test.ts` does).
+   Nothing else checks that a new field reads it.
+7. Add it to the workbench and to the table above.
 
 ## Workbench
 

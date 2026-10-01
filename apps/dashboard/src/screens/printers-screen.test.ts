@@ -419,6 +419,35 @@ describe("guided printer calibration", () => {
     },
   );
 
+  it("keeps the character step's fields, and the button beside one, within the standard form width on a wide window", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      await openPrinter(el);
+      q(el, "[data-test=calibrate-printer]")!.click();
+      await flush(el);
+      const probe = document.createElement("div");
+      probe.style.width = "var(--wt-form-max-width)";
+      el.shadowRoot!.appendChild(probe);
+      const form = probe.getBoundingClientRect().width;
+      const block = q(el, 'select[name="printer-table-block"]')!.getBoundingClientRect();
+      const button = q(el, "[data-test=print-character-tables-p1]")!.getBoundingClientRect();
+      const matching = q(el, 'select[name="printer-matching-code"]')!.getBoundingClientRect();
+      const wide = q(el, '[data-test="calibration-step-1"]')!.getBoundingClientRect();
+      expect(wide.width).toBeGreaterThan(form);
+      expect(block.width).toBeLessThan(form);
+      expect(button.right - block.left).toBeLessThanOrEqual(form);
+      expect(matching.width).toBeCloseTo(form, 0);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   async function openStepFour(api: DashboardApi): Promise<PrintersScreen> {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);

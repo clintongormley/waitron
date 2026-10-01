@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
@@ -449,6 +450,31 @@ describe("your profile", () => {
       email: "alex@example.com",
       locale: "es-ES",
     });
+  });
+  it("holds the language field to the same width as the inputs above it in the edit modal on a wide window", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mount();
+      await editDetails(el);
+      const probe = document.createElement("div");
+      probe.style.width = "var(--wt-form-max-width)";
+      el.shadowRoot!.appendChild(probe);
+      const form = probe.getBoundingClientRect().width;
+      const body = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
+      expect(body.clientWidth).toBeGreaterThan(form);
+      for (const selector of [
+        "wt-input[name=firstNames]",
+        ".select-field",
+        "select[name=locale]",
+      ]) {
+        const width = el.shadowRoot!.querySelector(selector)!.getBoundingClientRect().width;
+        expect(width, selector).toBeCloseTo(form, 0);
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
   });
   it("requires current credentials for an email change and gives each password field a reveal control", async () => {
     const { el, api, host } = await mount();

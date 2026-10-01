@@ -29,6 +29,7 @@ export class WtModal extends WtDialog {
 
       /* The body owns scrolling so the actions remain reachable on long forms. */
       .body {
+        --wt-field-max-width: var(--wt-form-max-width);
         padding-inline: var(--wt-modal-inline-padding);
         flex: 1;
         min-height: 0;

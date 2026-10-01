@@ -7,6 +7,7 @@ export const formMessageStyles = css`
   .form-message {
     display: block;
     width: 100%;
+    max-width: var(--wt-field-max-width);
     margin: 0 0 var(--wt-space-2);
     color: var(--wt-color-danger);
     font-size: var(--wt-font-size-sm);

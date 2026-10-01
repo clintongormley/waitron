@@ -14,7 +14,7 @@ test.each([
   expect(styles.cssText).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
 });
 
-test("selectStyles is the full-width form select", () => {
+test("selectStyles is the form select, full width outside a modal", () => {
   expect(selectStyles.cssText).toContain("width: 100%");
   expect(selectStyles.cssText).toContain("select");
 });

@@ -56,6 +56,23 @@ test("announces the form's message on its own line above the actions, from the l
   expect(getComputedStyle(message).textAlign).toBe("start");
 });
 
+test("holds its message to the field cap a container sets, while its actions keep the full row", async () => {
+  const el = (await mount(
+    '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  )) as WtFormActions;
+  host.style.width = "800px";
+  host.style.setProperty("--wt-field-max-width", "300px");
+  el.error = "Correct the highlighted fields to continue.";
+  await el.updateComplete;
+  const message = el
+    .shadowRoot!.querySelector<HTMLElement>("[data-error]")!
+    .getBoundingClientRect();
+  const own = el.getBoundingClientRect();
+  expect(message.left).toBe(own.left);
+  expect(message.width).toBe(300);
+  expect(el.querySelector<HTMLElement>("wt-button")!.getBoundingClientRect().right).toBe(own.right);
+});
+
 test("keeps the primary action on the right while a message shows", async () => {
   const el = (await mount(
     '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',

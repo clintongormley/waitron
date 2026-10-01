@@ -491,6 +491,33 @@ describe("the editor", () => {
     expect(modal(el)).toBeNull();
   });
 
+  it("holds both role fields, their labels and a role error to the standard form width on a wide window", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const el = await mount(fakeApi());
+      await press(el, "edit-c");
+      await choose(el, "applyRole", "manager");
+      await choose(el, "approverRole", "supervisor");
+      await press(el, "save-editor");
+      const probe = document.createElement("div");
+      probe.style.width = "var(--wt-form-max-width)";
+      el.shadowRoot!.appendChild(probe);
+      const form = probe.getBoundingClientRect().width;
+      expect(modal(el)!.shadowRoot!.querySelector(".body")!.clientWidth).toBeGreaterThan(form);
+      const parts = modal(el)!.querySelectorAll(
+        ".select-field, .select-label, .select-field select, [data-field-error=approverRole]",
+      );
+      expect(parts).toHaveLength(7);
+      for (const part of parts) {
+        expect(part.getBoundingClientRect().width, part.outerHTML).toBeCloseTo(form, 0);
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   it("opens with every field of the reason, each with a semantic name", async () => {
     const el = await mount(fakeApi());
     await press(el, "edit-c");

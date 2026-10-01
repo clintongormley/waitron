@@ -85,6 +85,7 @@ export class VenueOperationsScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-1);
         font-weight: var(--wt-font-weight-bold);
+        max-width: var(--wt-field-max-width);
       }
       input {
         min-width: 0;

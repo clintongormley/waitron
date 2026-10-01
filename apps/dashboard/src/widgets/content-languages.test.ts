@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -28,6 +28,34 @@ const disabled = (el: ContentLanguageEditor, action: string): boolean =>
   el.shadowRoot!.querySelector(`[data-test="${action}"]`)!.hasAttribute("disabled");
 
 describe("content language editor", () => {
+  it("holds both language fields and the add error to the standard form width on a wide window", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mountWidget<ContentLanguageEditor>("dashboard-content-languages", {
+        open: true,
+        config: { defaultLanguage: "en", languages: ["en"] },
+        api: { updateContentLanguages: vi.fn() },
+      });
+      click(el, "add-language");
+      await el.updateComplete;
+      const probe = document.createElement("div");
+      probe.style.width = "var(--wt-form-max-width)";
+      el.shadowRoot!.appendChild(probe);
+      const form = probe.getBoundingClientRect().width;
+      const body = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
+      expect(body.clientWidth).toBeGreaterThan(form);
+      const parts = el.shadowRoot!.querySelectorAll("label, select, #language-error");
+      expect(parts).toHaveLength(5);
+      for (const part of parts) {
+        expect(part.getBoundingClientRect().width, part.localName).toBeCloseTo(form, 0);
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   it("adds a language at runtime and protects the default from removal", async () => {
     const api = { updateContentLanguages: vi.fn().mockResolvedValue(undefined) };
     const { el } = await mountWidget<ContentLanguageEditor>("dashboard-content-languages", {

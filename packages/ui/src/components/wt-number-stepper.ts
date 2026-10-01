@@ -18,6 +18,7 @@ export class WtNumberStepper extends LitElement {
     css`
       :host {
         display: inline-grid;
+        max-width: var(--wt-field-max-width);
       }
 
       .label-row {

@@ -13,6 +13,10 @@ export class ContentLanguageEditor extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      label,
+      .error {
+        max-width: var(--wt-field-max-width);
+      }
       label {
         display: grid;
         gap: var(--wt-space-2);

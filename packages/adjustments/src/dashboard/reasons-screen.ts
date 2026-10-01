@@ -186,6 +186,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       }
       .select-field {
         display: grid;
+        max-width: var(--wt-field-max-width);
       }
       select {
         min-height: var(--wt-tap-min);

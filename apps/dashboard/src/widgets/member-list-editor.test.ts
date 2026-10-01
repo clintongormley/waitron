@@ -1,4 +1,7 @@
 import { afterEach, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import type { WtModal } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-modal.js";
 import type { SectionMember } from "@waitron/catalogue/src/section-types.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
@@ -272,6 +275,36 @@ it("explains, rather than adding, when Add is pressed with nothing chosen", asyn
   expect(select.getAttribute("aria-describedby")).toBe(error.id);
   await choose(el, "product:p-chips");
   expect(el.shadowRoot!.querySelector('[data-test="add-error"]')).toBeNull();
+});
+
+it("keeps the add row, its Add button and its error within the standard form width in a modal on a wide window", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 800);
+  try {
+    const el = await mount();
+    const modal = document.createElement("wt-modal") as WtModal;
+    el.parentElement!.appendChild(modal);
+    modal.appendChild(el);
+    modal.open = true;
+    await modal.updateComplete;
+    await el.updateComplete;
+    q(el, '[data-test="add"]').click();
+    await el.updateComplete;
+    const probe = document.createElement("div");
+    probe.style.width = "var(--wt-form-max-width)";
+    el.shadowRoot!.appendChild(probe);
+    const form = probe.getBoundingClientRect().width;
+    expect(modal.shadowRoot!.querySelector(".body")!.clientWidth).toBeGreaterThan(form);
+    const row = q(el, ".add").getBoundingClientRect();
+    expect(q(el, '[data-test="add"]').getBoundingClientRect().right - row.left).toBeLessThanOrEqual(
+      form + 0.5,
+    );
+    expect(row.width).toBeCloseTo(form, 0);
+    expect(q(el, '[data-test="add-error"]').getBoundingClientRect().width).toBeCloseTo(form, 0);
+  } finally {
+    await page.viewport(width, height);
+  }
 });
 
 it("removes a member and opens a section member, stopping the click that asked", async () => {

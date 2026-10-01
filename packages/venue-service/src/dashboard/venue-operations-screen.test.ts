@@ -202,6 +202,34 @@ describe("venue operations screen", () => {
     expect(api.createDepartment).not.toHaveBeenCalled();
   });
 
+  it("holds the department editor's fields and their errors to the standard form width on a wide window", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(model),
+      } as unknown as VenueServiceApi);
+      await selectTab(el, "departments");
+      await action(el, "new-department");
+      await action(el, "save-editor");
+      const probe = document.createElement("div");
+      probe.style.width = "var(--wt-form-max-width)";
+      el.shadowRoot!.appendChild(probe);
+      const form = probe.getBoundingClientRect().width;
+      expect(modal(el)!.shadowRoot!.querySelector(".body")!.clientWidth).toBeGreaterThan(form);
+      const parts = modal(el)!.querySelectorAll(
+        ".form label, .form input, .form select, .field-error",
+      );
+      expect(parts).toHaveLength(8);
+      for (const part of parts) {
+        expect(part.getBoundingClientRect().width, part.outerHTML).toBeCloseTo(form, 0);
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   it("uses localized weekday names", async () => {
     setLocale("es");
     const el = await mount({
