@@ -4978,12 +4978,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     lists the orders still waiting (sent, not paid; handed over, not paid; paid, not handed over)
     with Hand over and Pay. Server:
     `GET /api/orders/counter-waiting` and `GET /api/working-orders/:id/placed`. Open:
-    - **OPEN, queued as lane B item B26 (owner, 2026-10-01) — Pay is not the main action in a zone
-      that sends without payment.** The till keeps
-      "Place order" there. Making Pay the main action needs an open order's dishes sent to the
-      kitchen when it is paid in those modes, which today happens only for a pay-first order; that
-      would change the setup of "refuses a settled order that was never fired (ticket.not_fired)"
-      in `apps/server/src/working-order.pay-and-dispatch.test.ts`, so B16 left it.
+    - **DONE — Pay is the main action in a zone that sends without payment** (owner, 2026-10-01;
+      lane B item B26). At the order stage of a `ticket_then_pay` or `invoice_first` zone the till
+      shows Pay and Card first, then Place order and Hold as secondary actions. Paying an open
+      counter order there sends its unsent dishes to the kitchen in the payment's own transaction,
+      the way a pay-first order's are sent (`fireDishesAtPayment`, `apps/server/src/till-sale.ts`):
+      a dish no station can take is skipped and raised as `route.dish_not_sent`, and a later
+      course's dish is held for its course, unstamped — unlike Place order, which stamps every
+      line sent. A table bill still sends nothing at payment. A settled order with no ticket is
+      still refused at handover (`ticket.not_fired`) when its only dishes need no preparation or
+      no station could take them. Paying an invoice-first order at the order stage issues its
+      invoice then, so the till offers its original receipt.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
