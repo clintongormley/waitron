@@ -1209,6 +1209,19 @@ options list that always has a default.
   the name and the error together. Expected from the CSS in `option-list-form.ts`, not yet looked at
   on screen. **Next action:** screenshot a row carrying an error and decide whether to align by baseline.
 
+**Options tab of the Modifiers screen: two owner fixes (A168, owner 2026-10-01: "queue these
+fixes") — OPEN.** Both live in the table's columns in `apps/dashboard/src/screens/modifiers-screen.ts`,
+which the Extras tab shares, so a fix there changes both tabs unless it is limited to Options.
+
+- **Clicking a row should open the list's editor, except in the products column.** Today only the
+  row menu's Edit opens it; the table is given no `rowClick`. `wt-data-table` already supports one
+  (`rowClick` and `rowClickLabel`, used by `apps/dashboard/src/screens/units-screen.ts`). The
+  products column is the "Used by" column, whose cell (when the list is used) is a button opening
+  its own popup of the products using it; a click anywhere in that column must not open the editor,
+  and the popup must still open.
+- **Delete in the row menu is not red.** It is a `variant="ghost"` button beside Edit; the Products
+  screen's menu gives its Delete `variant="danger"` (`apps/dashboard/src/widgets/product-list.ts`).
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
