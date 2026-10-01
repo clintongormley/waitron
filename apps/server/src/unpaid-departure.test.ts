@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { Hono } from "hono";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  withTransaction,
   floorZones,
   invoiceSeries,
   partyTables,
@@ -15,7 +17,9 @@ import {
   unpaidDepartures,
   workingOrders,
 } from "@waitron/db";
-import { recordCorrection, recordVoid } from "@waitron/core";
+import { createAdjustmentReason } from "@waitron/adjustments";
+import { recordCorrection, recordSubstitution, recordVoid } from "@waitron/core";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { writeClearingWorkflow } from "@waitron/venue-service";
@@ -32,7 +36,9 @@ import {
   tabWith,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { listUnpaidDepartures } from "./unpaid-departure.js";
 import { cancelBody } from "./testing/cancel-line.js";
 import "./errors.js";
 
@@ -189,7 +195,12 @@ async function placedCounterBillMovedTo(
 }
 
 /** Records a credit note of 2.00 base (-2.42) against the bill's invoice. */
-async function creditTwoEuros(billId: string): Promise<void> {
+function creditTwoEuros(billId: string): Promise<void> {
+  return credit(billId, "2.00", "-2.42");
+}
+
+/** Records a credit note of `base` at 21% VAT, totalling `total`, against the bill's invoice. */
+async function credit(billId: string, base: string, total: string): Promise<void> {
   const [issued] = await salesOf(billId);
   await inTx(venue, async (tx) => {
     const [series] = await tx
@@ -208,16 +219,16 @@ async function creditTwoEuros(billId: string): Promise<void> {
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),
       correctsSaleId: brandSaleId(issued!.id),
-      total: "-2.42",
+      total,
       lines: [
         {
           lineNo: 1,
           name: "Descuento",
           descriptions: { [venue.cfg.locale]: "Descuento" },
           quantity: "-1",
-          unitPrice: "2.00",
+          unitPrice: base,
           vatRate: "21.00",
-          lineTotal: "-2.00",
+          lineTotal: `-${base}`,
         },
       ],
       clock: venue.clock,
@@ -225,6 +236,60 @@ async function creditTwoEuros(billId: string): Promise<void> {
     });
   });
 }
+
+/** Gives away line `lineNo` of the bill in full, under a reason anyone may apply unapproved. */
+async function giveAway(billId: string, lineNo: number): Promise<void> {
+  const reasonId = await inTx(venue, async (tx) => {
+    const [found] = venue.db.all<{ id: string }>(
+      sql`select id from adjustment_reasons where name = 'Given away in a test'`,
+    );
+    return (
+      found?.id ??
+      (
+        await createAdjustmentReason(tx, {
+          name: "Given away in a test",
+          names: {},
+          actions: ["comp"],
+          maxPercentBp: null,
+          maxAmount: null,
+          applyRole: "staff",
+          approverRole: "staff",
+          noteRequired: false,
+        })
+      ).id
+    );
+  });
+  const body = await cancelBody(venue.db, billId, lineNo);
+  const given = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/adjustments`,
+    { ...body, reasonId, action: "comp" },
+  );
+  expect(given.status).toBe(200);
+}
+
+function nextInvoiceNumbers(): { id: string; next: number }[] {
+  return venue.db.all<{ id: string; next: number }>(
+    sql`select id, next_number as next from invoice_series order by id`,
+  );
+}
+
+// First in the file: every other case records a departure, and none can be deleted.
+describe("the list before any departure", () => {
+  it("answers an empty list from one read", async () => {
+    expect(venue.db.all(sql`select id from unpaid_departures`)).toEqual([]);
+
+    const reads = await withTransaction(venue.db, async (tx) => {
+      const select = vi.spyOn(tx, "select");
+      expect(await listUnpaidDepartures(tx)).toEqual([]);
+      return select.mock.calls.length;
+    });
+
+    expect(reads).toBe(1);
+  });
+});
 
 describe("recording that a table left without paying", () => {
   it("invoices the open bill in full, leaves it unpaid, records who and why, and frees the table", async () => {
@@ -522,6 +587,139 @@ describe("bills already presented", () => {
     expect(await departuresOf(placedId)).toEqual([
       expect.objectContaining({ saleId: invoiced!.id, amount: 1800 }),
     ]);
+  });
+});
+
+describe("a bill that owes nothing", () => {
+  it("records no departure for a bill whose invoice a credit note has brought to nothing, and records the rest", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
+    await credit(placedId, "14.88", "-18.00");
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer.status).toBe(200);
+    expect(answer.json.departures).toEqual([
+      expect.objectContaining({ workingOrderId: party.tabId, amount: "30.00" }),
+    ]);
+    expect(await departuresOf(placedId)).toEqual([]);
+    expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
+    expect(registroCount(venue, placedId)).toBe(1);
+    expect((await partyState(party.partyId)).state).toBe("closed");
+  });
+
+  it("refuses a party whose only owing bill a credit note has brought to nothing, and writes nothing", async () => {
+    const party = await seatedWith(venue);
+    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
+    await credit(placedId, "14.88", "-18.00");
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.nothing_outstanding", params: { partyId: party.partyId } },
+    });
+    expect(await departuresOf(placedId)).toEqual([]);
+    expect(registroCount(venue, placedId)).toBe(1);
+    expect((await partyState(party.partyId)).state).toBe("open");
+  });
+
+  it("refuses a party whose only owing bill was given away in full, before filing its invoice", async () => {
+    const party = await seatedWith(venue, "Caña");
+    await giveAway(party.tabId, 1);
+    const counters = nextInvoiceNumbers();
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.nothing_outstanding", params: { partyId: party.partyId } },
+    });
+    await expectNothingWritten(party.partyId, party.tabId);
+    expect(await salesOf(party.tabId)).toEqual([]);
+    expect(nextInvoiceNumbers()).toEqual(counters);
+  });
+});
+
+describe("two departures at once, and a failure part-way", () => {
+  it("records a party once when two departures of it are sent together", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    const placedId = await placedCounterBillMovedTo(prepayZone, party);
+    const body = { expectedPartyRevision: revisionOf(party.partyId), reason: REASON };
+
+    const answers = await Promise.all([depart(party.partyId, body), depart(party.partyId, body)]);
+
+    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+    expect(answers.find((answer) => answer.status === 409)!.json).toMatchObject({
+      code: "party.not_open",
+    });
+    for (const billId of [party.tabId, placedId]) {
+      expect(await salesOf(billId)).toHaveLength(1);
+      expect(registroCount(venue, billId)).toBe(1);
+      expect(await departuresOf(billId)).toHaveLength(1);
+    }
+  });
+
+  it("keeps nothing when filing the second bill's invoice fails after the first was filed", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    const placedId = await placedCounterBillMovedTo(prepayZone, party);
+    let filed = 0;
+    const failing = new Proxy(venue.backend, {
+      get(target, property) {
+        if (property === "recordSale") {
+          return (...args: Parameters<FiscalBackend["recordSale"]>) => {
+            filed += 1;
+            if (filed === 2) throw new Error("the second invoice could not be filed");
+            return target.recordSale(...args);
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+      },
+    });
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: venue.db,
+        backend: failing,
+        clock: venue.clock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: venue.cfg.locale,
+        pool: venue.pool,
+      },
+      () => {},
+    );
+    const counters = nextInvoiceNumbers();
+
+    const answer = await send(
+      app,
+      supervisorCookie,
+      "POST",
+      `/api/parties/${party.partyId}/unpaid-departure`,
+      {
+        expectedPartyRevision: revisionOf(party.partyId),
+        reason: REASON,
+      },
+    );
+
+    expect(filed).toBe(2);
+    expect(answer.status).toBe(500);
+    await expectNothingWritten(party.partyId, party.tabId);
+    await expectNothingWritten(party.partyId, placedId, "placed");
+    expect(await salesOf(party.tabId)).toEqual([]);
+    expect(await salesOf(placedId)).toEqual([]);
+    expect(nextInvoiceNumbers()).toEqual(counters);
   });
 });
 
@@ -882,6 +1080,65 @@ describe("the list of unpaid departures (GET /api/unpaid-departures)", () => {
     });
 
     expect((await listed()).map((entry) => entry.workingOrderId)).not.toContain(party.tabId);
+  });
+
+  it("answers what the invoice owes now after a credit note, and keeps what was recorded", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
+    await creditTwoEuros(party.tabId);
+
+    const entry = (await listed()).find(
+      (listedEntry) => listedEntry.workingOrderId === party.tabId,
+    );
+
+    expect(entry).toMatchObject({ amount: "27.58" });
+    expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
+  });
+
+  it("leaves out a departure whose invoice a credit note has brought to nothing", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
+    expect((await listed()).map((entry) => entry.workingOrderId)).toContain(party.tabId);
+
+    await credit(party.tabId, "24.79", "-30.00");
+
+    expect((await listed()).map((entry) => entry.workingOrderId)).not.toContain(party.tabId);
+  });
+
+  it("keeps listing a departure whose invoice a full invoice has substituted, at what it owes", async () => {
+    const party = await seatedWith(venue, "Caña");
+    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
+    const [issued] = await salesOf(party.tabId);
+
+    await inTx(venue, (tx) =>
+      recordSubstitution(tx, venue.backend, {
+        tillId: venue.cfg.tillId,
+        nodeId: venue.cfg.nodeId,
+        seriesId: venue.cfg.seriesId,
+        substitutedSaleIds: [brandSaleId(issued!.id)],
+        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
+        total: "3.00",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Caña",
+            descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+            quantity: "1",
+            unitPrice: "2.48",
+            vatRate: "21.00",
+            lineTotal: "2.48",
+          },
+        ],
+        locale: venue.cfg.locale,
+        invoiceLocales: venue.cfg.invoiceLocales,
+        clock: venue.clock,
+      }),
+    );
+
+    expect((await listed()).find((entry) => entry.workingOrderId === party.tabId)).toMatchObject({
+      saleId: issued!.id,
+      amount: "3.00",
+    });
   });
 
   it("lists the newest departure first", async () => {

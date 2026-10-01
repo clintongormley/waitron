@@ -17,18 +17,18 @@ import { formatInvoiceNumber } from "@waitron/core";
 import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
 import { authorize, persons } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
-import { AppError, centsToDecimal, decimalToCents } from "@waitron/shared";
-import type { TillId } from "@waitron/shared";
+import { AppError, decimalToCents, rawCentsToDecimal } from "@waitron/shared";
+import type { Decimal, TillId } from "@waitron/shared";
 import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
-import { readIssuedSales } from "./sale-due.js";
+import { correctionsCents, readIssuedSales } from "./sale-due.js";
 import type { TillConfig } from "./till-config.js";
 import {
-  holdsUnreleasedDish,
   issueUnpaidInvoice,
   markOrderPlaced,
-  readInvoiceNumber,
+  ordersWithUnfiredDish,
+  priceForIssuance,
+  readInvoiceNumbers,
   refusePaymentInFlight,
-  unsentDishLines,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -56,11 +56,14 @@ export interface RecordedDeparture {
  *
  * An open bill is invoiced now, as an invoice-first placing invoices it, without a receipt; a
  * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
- * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill is owed,
+ * A bill owing nothing once invoiced (its credit notes cancel its invoice, or every line was given
+ * away) gets no row, though it is still invoiced, as above, beside a bill that gets one.
+ *
+ * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill would get a row,
  * `unpaid_departure.unfired_dishes` for a bill to be invoiced holding a dish the kitchen was never
  * told to make (never sent, or held), and `unpaid_departure.bill_holds_payment` for an open bill
- * holding a payment, one given back in full included. A retry after the party has
- * closed is `party.not_open`, as it is for Finish.
+ * holding a payment, one given back in full included. A retry after the party has closed is
+ * `party.not_open`, as it is for Finish.
  */
 export async function recordUnpaidDeparture(
   tx: Transaction,
@@ -87,17 +90,18 @@ export async function recordUnpaidDeparture(
   const invoiced = await readIssuedSales(tx, owingIds);
   // Every bill invoiced here, open or presented without an invoice: never invoice an unfired dish.
   const toInvoice = owing.filter((bill) => !invoiced.has(bill.workingOrderId));
-  for (const bill of toInvoice) {
-    if (
-      (await unsentDishLines(tx, bill.workingOrderId)).length > 0 ||
-      (await holdsUnreleasedDish(tx, bill.workingOrderId))
-    ) {
-      throw new AppError("unpaid_departure.unfired_dishes", {
-        workingOrderId: bill.workingOrderId,
-      });
-    }
+  const unfired = await ordersWithUnfiredDish(
+    tx,
+    toInvoice.map((bill) => bill.workingOrderId),
+  );
+  const firstUnfired = toInvoice.find((bill) => unfired.has(bill.workingOrderId));
+  if (firstUnfired !== undefined) {
+    throw new AppError("unpaid_departure.unfired_dishes", {
+      workingOrderId: firstUnfired.workingOrderId,
+    });
   }
   const open = owing.filter((bill) => bill.status === "open");
+  const openIds = new Set(open.map((bill) => bill.workingOrderId));
   const holding = open.find((bill) => bill.hasPayments);
   if (holding !== undefined) {
     throw new AppError("unpaid_departure.bill_holds_payment", {
@@ -106,59 +110,70 @@ export async function recordUnpaidDeparture(
   }
   // What is left of the in-flight check once no bill holds a payment: a card at the reader for a
   // whole bill, which marks the bill rather than writing a payment of it.
-  await refusePaymentInFlight(
-    tx,
-    open.map((bill) => bill.workingOrderId),
-  );
+  await refusePaymentInFlight(tx, [...openIds]);
 
+  // Priced before any is filed, so a departure that would record nothing files nothing.
+  const invoices = [];
   for (const bill of toInvoice) {
-    const { ticket } = await issueUnpaidInvoice(
+    invoices.push(await priceForIssuance(tx, deps.clock, cfg, bill.workingOrderId));
+  }
+  const due = new Map<string, Decimal>([
+    ...[...invoiced].map(([id, sale]) => [id, sale.amountDue] as const),
+    ...invoices.map((invoice) => [invoice.id, invoice.priced.total] as const),
+  ]);
+  const departing = owingIds.filter((id) => decimalToCents(due.get(id)!) > 0);
+  if (departing.length === 0) {
+    throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
+  }
+
+  const saleOf = new Map([...invoiced].map(([id, sale]) => [id, sale.saleId as string]));
+  for (const invoice of invoices) {
+    const { saleId } = await issueUnpaidInvoice(
       tx,
-      deps,
+      deps.backend,
       cfg,
-      bill.workingOrderId,
+      invoice,
       operator.personId,
       saleTillId,
     );
-    if (bill.status === "open") {
-      await markOrderPlaced(
-        tx,
-        deps.clock,
-        cfg,
-        bill.workingOrderId,
-        operator.personId,
-        ticket.orderLabel,
-      );
+    saleOf.set(invoice.id, saleId);
+    if (openIds.has(invoice.id)) {
+      await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId);
     }
   }
 
-  const due = await readIssuedSales(tx, owingIds);
+  const numbers = await readInvoiceNumbers(
+    tx,
+    departing.map((id) => saleOf.get(id)!),
+  );
   const recordedAt = nowIso();
-  const departures: RecordedDeparture[] = [];
-  for (const workingOrderId of owingIds) {
-    const { saleId, amountDue } = due.get(workingOrderId)!;
-    const [row] = await tx
-      .insert(unpaidDepartures)
-      .values({
+  const rows = await tx
+    .insert(unpaidDepartures)
+    .values(
+      departing.map((workingOrderId) => ({
         partyId,
         workingOrderId,
-        saleId,
-        amount: decimalToCents(amountDue),
+        saleId: saleOf.get(workingOrderId)!,
+        amount: decimalToCents(due.get(workingOrderId)!),
         reason: req.reason,
         recordedBy: operator.personId,
         authorizedBy,
         tillId: saleTillId,
         recordedAt,
-      })
-      .returning({ id: unpaidDepartures.id });
-    departures.push({
-      id: row!.id,
+      })),
+    )
+    .returning({ id: unpaidDepartures.id, workingOrderId: unpaidDepartures.workingOrderId });
+  const idOf = new Map(rows.map((row) => [row.workingOrderId, row.id]));
+  const departures = departing.map((workingOrderId): RecordedDeparture => {
+    const saleId = saleOf.get(workingOrderId)!;
+    return {
+      id: idOf.get(workingOrderId)!,
       workingOrderId,
       saleId,
-      invoiceNumber: await readInvoiceNumber(tx, saleId),
-      amount: amountDue,
-    });
-  }
+      invoiceNumber: numbers.get(saleId)!,
+      amount: due.get(workingOrderId)!,
+    };
+  });
 
   const empty = bills
     .filter((bill) => bill.status === "open" && bill.lines === 0)
@@ -184,9 +199,11 @@ export interface UnpaidDepartureView {
 }
 
 /**
- * The unpaid departures whose invoice is neither settled nor voided, newest first. An invoice a
- * full invoice has since substituted stays listed: `listOutstandingSales`
- * (packages/core/src/list-outstanding-sales.ts) likewise leaves out only the substitute.
+ * The unpaid departures whose invoice is neither settled nor voided and still owes something, newest
+ * first, each with what its invoice owes now: its total net of its credit notes, as collecting it
+ * charges ({@link readIssuedSales}). An invoice a full invoice has since substituted stays listed:
+ * `listOutstandingSales` (packages/core/src/list-outstanding-sales.ts) likewise leaves out only the
+ * substitute.
  */
 export async function listUnpaidDepartures(tx: Transaction): Promise<UnpaidDepartureView[]> {
   const recorder = alias(persons, "recorder");
@@ -200,7 +217,7 @@ export async function listUnpaidDepartures(tx: Transaction): Promise<UnpaidDepar
       saleId: unpaidDepartures.saleId,
       seriesCode: invoiceSeries.code,
       invoiceNumber: sales.invoiceNumber,
-      amount: unpaidDepartures.amount,
+      amountDue: sql<string>`cast(${sales.total} + ${correctionsCents} as text)`,
       reason: unpaidDepartures.reason,
       recordedByName: recorder.displayName,
       authorizedByName: authorizer.displayName,
@@ -214,8 +231,15 @@ export async function listUnpaidDepartures(tx: Transaction): Promise<UnpaidDepar
     .leftJoin(saleVoids, eq(saleVoids.saleId, unpaidDepartures.saleId))
     .leftJoin(recorder, eq(recorder.id, unpaidDepartures.recordedBy))
     .leftJoin(authorizer, eq(authorizer.id, unpaidDepartures.authorizedBy))
-    .where(and(isNull(saleSettlements.id), isNull(saleVoids.id)))
+    .where(
+      and(
+        isNull(saleSettlements.id),
+        isNull(saleVoids.id),
+        sql`${sales.total} + ${correctionsCents} > 0`,
+      ),
+    )
     .orderBy(desc(unpaidDepartures.recordedAt), desc(sql`${unpaidDepartures}.rowid`));
+  if (rows.length === 0) return [];
 
   const partyIds = [...new Set(rows.map((row) => row.partyId))];
   const tables = await tx
@@ -236,7 +260,7 @@ export async function listUnpaidDepartures(tx: Transaction): Promise<UnpaidDepar
     tableLabels: tablesOf.get(row.partyId)!,
     saleId: row.saleId,
     invoiceNumber: formatInvoiceNumber(row.seriesCode, row.invoiceNumber),
-    amount: centsToDecimal(row.amount),
+    amount: rawCentsToDecimal(row.amountDue),
     reason: row.reason,
     recordedByName: row.recordedByName,
     authorizedByName: row.authorizedByName,

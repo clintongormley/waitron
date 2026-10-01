@@ -10,10 +10,16 @@ import {
 import type { Decimal, SaleId } from "@waitron/shared";
 
 /**
+ * The signed sum, in whole cents, of the corrective invoices of the `sales` row a query reads.
+ * `${sales}.id` (not `${sales.id}`) renders the column table-qualified so the `sales c` subquery
+ * cannot capture a bare `"id"`.
+ */
+export const correctionsCents = sql`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)`;
+
+/**
  * The sale each named working order has already issued, with what it owes: `total + corrections`,
  * the same `due` `settleSale` re-derives, so a card charged `amountDue + tip` settles the sale
- * exactly. An order with no sale is absent. `${sales}.id` (not `${sales.id}`) renders the column
- * table-qualified so the `sales c` subquery cannot capture a bare `"id"`.
+ * exactly. An order with no sale is absent.
  */
 export async function readIssuedSales(
   tx: Transaction,
@@ -26,7 +32,7 @@ export async function readIssuedSales(
       workingOrderId: sales.workingOrderId,
       total: sales.total,
       // Cast to text for `rawCentsToDecimal`, which refuses a number.
-      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
+      corrections: sql<string>`cast(${correctionsCents} as text)`,
     })
     .from(sales)
     .where(inArray(sales.workingOrderId, [...workingOrderIds]));

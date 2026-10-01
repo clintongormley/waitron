@@ -2,7 +2,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { refusalOn, triggerRaised } from "../constraint-target.js";
+import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
@@ -166,6 +166,21 @@ describe("unpaid_departures", () => {
       inTx((tx) => tx.insert(unpaidDepartures).values(departure(bill, overrides))),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it.each([
+    ["nothing", 0],
+    ["a negative amount", -1],
+  ])("refuses a departure owing %s", async (_, amount) => {
+    const bill = await invoicedBill();
+    const error = await captureError(() =>
+      inTx((tx) => tx.insert(unpaidDepartures).values(departure(bill, { amount }))),
+    );
+    expect(checkFailed(error, "unpaid_departures_amount_ck")).toBe(true);
+    const rows = await inTx((tx) =>
+      tx.select().from(unpaidDepartures).where(eq(unpaidDepartures.workingOrderId, bill.billId)),
+    );
+    expect(rows).toEqual([]);
   });
 
   it("refuses an UPDATE and leaves the row as written", async () => {

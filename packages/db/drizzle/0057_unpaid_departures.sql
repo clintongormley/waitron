@@ -12,7 +12,8 @@ CREATE TABLE `unpaid_departures` (
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`till_id`) REFERENCES `tills`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`till_id`) REFERENCES `tills`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "unpaid_departures_amount_ck" CHECK("unpaid_departures"."amount" > 0)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `unpaid_departures_working_order_key` ON `unpaid_departures` (`working_order_id`);

@@ -5053,9 +5053,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`unpaid_departure.unfired_dishes`); staff cancel it first. The guests were never served it.
     - **OPEN — handhelds never see the list.** It sits in the counter's held-orders card, which the
       default phone and tablet layouts lack. The dashboard may be the better home.
-    - A bill that owes nothing — one already invoiced whose credit notes bring it to zero, or an
-      open bill whose every line was given away — would be recorded as a 0.00 departure, and the
-      till's dialog leaves such bills out of what it shows. Found by reading; no test reaches it.
+    - A bill that owes nothing once invoiced — one already invoiced whose credit notes bring it to
+      zero, or an open bill whose every line was given away — gets no departure row. Beside a bill
+      that does get one it is still invoiced (at 0.00, for the open bill) and the party closes;
+      when no bill would get a row the departure is refused `unpaid_departure.nothing_outstanding`
+      before any invoice is filed. `unpaid_departures` refuses an amount of zero or less
+      (`unpaid_departures_amount_ck`). The list of departures shows what each invoice owes now,
+      net of its credit notes, and leaves out one a credit note has brought to nothing; the row
+      keeps the amount owed when the party left. Cases in `apps/server/src/unpaid-departure.test.ts`
+      ("a bill that owes nothing", and the list's credit-note cases). The till's dialog leaves
+      such bills out of what it shows.
+    - **OPEN — a bill presented without an invoice keeps the label it was placed with when the
+      departure invoices it.** Every other path that invoices such a bill saves the receipt label
+      (the party's name and tables) in the update that settles it; the departure leaves the bill
+      placed, and the placed-to-placed clause of `working_orders_enforce_transition` (latest in
+      `packages/db/drizzle/0056_placed_order_handover.sql`) requires the label to stay as it is.
+      Measured 2026-10-01: saving the label on such a bill made the departure answer 500; without
+      it the bill's label stayed null while the open bill invoiced beside it was given the
+      table's. Not measured: what its invoice's reprint and the debt list then show, both of which
+      read the stored label. Fixing it needs that trigger to allow the label to change.
   - **The service plan's acceptance checks (spec §12), swept against `main` plus B17 on
     2026-10-01.** Each check has a test, is partly met with the rest already recorded in this
     backlog, or is out of scope by the plan's D13. Two gaps were not recorded before:

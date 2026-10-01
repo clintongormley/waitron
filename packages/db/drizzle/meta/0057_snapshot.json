@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c3d46206-4f67-4314-8389-7a10a7f3c0fc",
+  "id": "7c97a99c-8b65-498e-beda-f450e32a6184",
   "prevId": "8c1eca90-9413-44f3-9794-db5438ad86ef",
   "tables": {
     "locations": {
@@ -6407,7 +6407,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "unpaid_departures_amount_ck": {
+          "name": "unpaid_departures_amount_ck",
+          "value": "\"unpaid_departures\".\"amount\" > 0"
+        }
+      }
     },
     "daily_close_chain": {
       "name": "daily_close_chain",

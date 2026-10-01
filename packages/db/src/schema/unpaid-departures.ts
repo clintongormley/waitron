@@ -1,4 +1,5 @@
-import { foreignKey, unique } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import { id, label, money, newId, nowIso, table, tsString } from "./columns.js";
 import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
@@ -48,5 +49,6 @@ export const unpaidDepartures = table(
       name: "unpaid_departures_till_fk",
     }),
     unique("unpaid_departures_working_order_key").on(t.workingOrderId),
+    check("unpaid_departures_amount_ck", sql`${t.amount} > 0`),
   ],
 );

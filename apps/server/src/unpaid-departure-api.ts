@@ -1,16 +1,17 @@
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import { readRawJsonBody } from "@waitron/server-kit";
-import { invalid } from "./bill-allocation.js";
 import { asObject } from "./bill-payments-api.js";
 import { requireSaleTillId } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
-  parseDrawerOverride,
+  parseOverrideField,
+  parseReason,
   requirePartyParam,
   requireRevision,
+  type Run,
   type TillApiDeps,
 } from "./till-api.js";
 import { requireSession } from "./till-session.js";
@@ -21,35 +22,15 @@ import {
 } from "./unpaid-departure.js";
 import "./errors.js";
 
-type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Response>;
-
-const REASON_LIMIT = 500;
-
 /** The body, refused field by field as `management.request_invalid`, as a bill refund's is. */
 function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
   const expectedPartyRevision = requireRevision(
     body.expectedPartyRevision,
     "expectedPartyRevision",
   );
-  const { reason } = body;
-  if (typeof reason !== "string" || reason.trim().length === 0 || reason.length > REASON_LIMIT) {
-    throw invalid("reason");
-  }
-  if (
-    body.override !== undefined &&
-    body.override !== null &&
-    (typeof body.override !== "object" || Array.isArray(body.override))
-  ) {
-    throw invalid("override");
-  }
-  const override = parseDrawerOverride(
-    body.override as { personId?: unknown; pin?: unknown } | null | undefined,
-  );
-  return {
-    expectedPartyRevision,
-    reason: reason.trim(),
-    ...(override === undefined ? {} : { override }),
-  };
+  const reason = parseReason(body.reason);
+  const override = parseOverrideField(body.override);
+  return { expectedPartyRevision, reason, ...(override === undefined ? {} : { override }) };
 }
 
 /**

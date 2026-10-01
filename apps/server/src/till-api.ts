@@ -406,6 +406,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 export const run = createErrorBoundary(STATUS, "till.failed");
 
+export type Run = typeof run;
+
 /** A malformed id is refused with the code the route gives an absent or wrong-state order. */
 function requireUuidId(
   id: string,
@@ -436,6 +438,28 @@ export function parseDrawerOverride(
     throw new AppError("pin.invalid", {});
   }
   return { personId: raw.personId, pin: raw.pin };
+}
+
+const REASON_LIMIT = 500;
+
+/** A reason, trimmed, refused as `reason` when it is not text, is blank or is too long. */
+export function parseReason(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0 || value.length > REASON_LIMIT) {
+    throw invalid("reason");
+  }
+  return value.trim();
+}
+
+/** A body's `override`, refused as `override` when it is present and not an object. */
+export function parseOverrideField(value: unknown): { personId: string; pin: string } | undefined {
+  if (
+    value !== undefined &&
+    value !== null &&
+    (typeof value !== "object" || Array.isArray(value))
+  ) {
+    throw invalid("override");
+  }
+  return parseDrawerOverride(value as { personId?: unknown; pin?: unknown } | null | undefined);
 }
 
 /**
