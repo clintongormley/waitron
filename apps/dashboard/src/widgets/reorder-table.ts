@@ -21,17 +21,37 @@ const DRAG_CURSOR = "--reorder-drag-cursor";
  * page's own cursor back only when the last one ends. */
 const pageDrag = { count: 0, cursor: "" };
 
-function holdPageCursor(): void {
+export function holdPageCursor(): void {
   if (pageDrag.count++ > 0) return;
   pageDrag.cursor = document.body.style.cursor;
   document.body.style.cursor = "grabbing";
   document.body.style.setProperty(DRAG_CURSOR, "grabbing");
 }
 
-function releasePageCursor(): void {
+export function releasePageCursor(): void {
   if (--pageDrag.count > 0) return;
   document.body.style.cursor = pageDrag.cursor;
   document.body.style.removeProperty(DRAG_CURSOR);
+}
+
+/** Touch pointer capture keeps event targets at the press site; find the painted target instead. */
+export function pointerElementsAt(x: number, y: number): Element[] {
+  let element = document.elementFromPoint(x, y);
+  while (element?.shadowRoot) {
+    const next = element.shadowRoot.elementFromPoint(x, y);
+    if (!next || next === element) break;
+    element = next;
+  }
+  const path: Element[] = [];
+  while (element) {
+    path.push(element);
+    const parent: Node | null = element.parentNode;
+    element =
+      element.assignedSlot ??
+      element.parentElement ??
+      (parent instanceof ShadowRoot ? parent.host : null);
+  }
+  return path;
 }
 
 /** How far a transform currently draws the row from where it rests, mid-transition included. */

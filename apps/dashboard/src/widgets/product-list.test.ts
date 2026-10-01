@@ -1029,15 +1029,143 @@ it("drags a product outside the selection alone and never offers a variant as a 
   });
   const root = await tableRoot(el);
   const cell = root.querySelector<HTMLElement>('[part~="product-cell"]')!;
-  const data = new DataTransfer();
-  cell.dispatchEvent(
-    new DragEvent("dragstart", { bubbles: true, composed: true, dataTransfer: data }),
+  const offered: string[][] = [];
+  el.addEventListener("drag-items", (event) =>
+    offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
   );
-  expect(data.getData("application/x-waitron-items")).toBe('["bun"]');
+  const start = cell.getBoundingClientRect();
+  cell.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      clientX: start.x + 8,
+      clientY: start.y + 8,
+    }),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      clientX: start.x + 8,
+      clientY: start.y + 20,
+    }),
+  );
+  expect(offered).toEqual([["bun"]]);
+  cell.dispatchEvent(
+    new PointerEvent("pointercancel", { bubbles: true, composed: true, pointerId: 1 }),
+  );
   root.querySelector<HTMLElement>(".tree-toggle")!.click();
   const variant = (await tableRoot(el)).querySelector('tr[data-row-key="bun:small"]')!;
   expect(variant).not.toBeNull();
-  expect(variant.querySelector('[draggable="true"]')).toBeNull();
+  const variantName = variant.querySelector("strong")!;
+  variantName.dispatchEvent(
+    new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 2 }),
+  );
+  variantName.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, composed: true, pointerId: 2, clientY: 20 }),
+  );
+  expect(offered.filter((keys) => keys.length)).toEqual([["bun"]]);
+});
+
+it("ignores a right-button press on a product name", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [product({ id: "bun" })],
+  });
+  const cell = (await tableRoot(el)).querySelector<HTMLElement>('[part~="product-cell"]')!;
+  const offered: string[][] = [];
+  el.addEventListener("drag-items", (event) =>
+    offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 8, button: 2 }),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, composed: true, pointerId: 8, clientY: 40 }),
+  );
+  expect(offered.filter((keys) => keys.length)).toEqual([]);
+  expect(cell.closest("tr")!.part.contains("dragging")).toBe(false);
+});
+
+it("does not start the browser's native image drag from a product thumbnail", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [product({ id: "pictured", image: "abc123.webp" })],
+  });
+  const image = (await tableRoot(el)).querySelector<HTMLImageElement>('img[part="thumbnail"]')!;
+  expect(image.draggable).toBe(false);
+});
+
+it("keeps touch scrolling on the name cell and starts a drag from its grip", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [product({ id: "bun" })],
+  });
+  const cell = (await tableRoot(el)).querySelector<HTMLElement>('[part~="product-cell"]')!;
+  const offered: string[][] = [];
+  el.addEventListener("drag-items", (event) =>
+    offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+  );
+  expect(getComputedStyle(cell).touchAction).toBe("auto");
+  const grip = cell.querySelector<HTMLElement>(".drag-grip")!;
+  expect(getComputedStyle(grip).touchAction).toBe("none");
+  cell.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerType: "touch",
+      pointerId: 3,
+      isPrimary: true,
+    }),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      composed: true,
+      pointerType: "touch",
+      pointerId: 3,
+      isPrimary: true,
+      clientY: 30,
+    }),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointerup", {
+      bubbles: true,
+      composed: true,
+      pointerType: "touch",
+      pointerId: 3,
+      isPrimary: true,
+    }),
+  );
+  expect(offered.filter((keys) => keys.length)).toEqual([]);
+  grip.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerType: "touch",
+      pointerId: 4,
+      isPrimary: true,
+    }),
+  );
+  grip.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      composed: true,
+      pointerType: "touch",
+      pointerId: 4,
+      isPrimary: true,
+      clientY: 30,
+    }),
+  );
+  expect(offered.filter((keys) => keys.length)).toEqual([["bun"]]);
+  grip.dispatchEvent(
+    new PointerEvent("pointercancel", {
+      bubbles: true,
+      composed: true,
+      pointerType: "touch",
+      pointerId: 4,
+      isPrimary: true,
+    }),
+  );
 });
 
 describe("the product list at phone width", () => {
