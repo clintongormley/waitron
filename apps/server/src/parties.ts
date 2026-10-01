@@ -607,6 +607,7 @@ export async function runServiceCommand<R>(
   kind: string,
   args: Record<string, unknown>,
   run: () => Promise<R>,
+  sink?: Set<string>,
 ): Promise<R> {
   const scopeId = scope.kind === "party" ? scope.partyId : scope.workingOrderId;
   const print = fingerprint(args);
@@ -628,17 +629,20 @@ export async function runServiceCommand<R>(
     if (recorded.kind !== kind || recorded.fingerprint !== print) {
       throw new AppError("submission.id_reused", { submissionId });
     }
+    for (const id of recorded.result.madeHere ?? []) sink?.add(id);
     return recorded.result.value as R;
   }
   if (scope.kind === "party") await requireOpenParty(tx, scope.partyId);
+  const before = new Set(sink);
   const result = await run();
+  const madeHere = [...(sink ?? [])].filter((id) => !before.has(id));
   await tx.insert(serviceCommands).values({
     scopeKind: scope.kind,
     scopeId,
     submissionId,
     kind,
     fingerprint: print,
-    result: { value: result },
+    result: madeHere.length === 0 ? { value: result } : { value: result, madeHere },
   });
   return result;
 }

@@ -35,6 +35,29 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("TillApi", () => {
+  it("reports made-here items from a successful answer and ignores an answer without them", async () => {
+    const item = {
+      lineId: "line-1",
+      name: "Lager",
+      quantity: "2",
+      unitName: null,
+      soldInEach: true,
+      optionSnapshots: [],
+      extras: [],
+      note: null,
+    };
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ madeHere: [item] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const api = new TillApi("", fetchStub);
+    const received = vi.fn();
+    api.onMadeHere(received);
+    await api.getTill();
+    await api.getTill();
+    expect(received).toHaveBeenCalledExactlyOnceWith([item]);
+  });
+
   it("recordSale POSTs lines+tender+workingOrderId with credentials and returns the ticket payload", async () => {
     const ticket = {
       orderLabel: null,

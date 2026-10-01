@@ -1748,7 +1748,23 @@ export interface TabTransfer {
   quantity?: string;
 }
 
+export interface MadeHereItem {
+  lineId: string;
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  optionSnapshots: OptionSnapshot[];
+  extras: string[];
+  note: string | null;
+}
+
 export class TillApi {
+  #madeHereListener?: (items: MadeHereItem[]) => void;
+
+  onMadeHere(listener: (items: MadeHereItem[]) => void): void {
+    this.#madeHereListener = listener;
+  }
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
   #serviceZoneId?: string;
@@ -2906,6 +2922,9 @@ export class TillApi {
       throw { ...params, code, status: res.status };
     }
     const text = await res.text();
-    return (text === "" ? undefined : JSON.parse(text)) as T;
+    const answer: unknown = text === "" ? undefined : JSON.parse(text);
+    if (isRecord(answer) && Array.isArray(answer.madeHere) && answer.madeHere.length > 0)
+      this.#madeHereListener?.(answer.madeHere as MadeHereItem[]);
+    return answer as T;
   }
 }

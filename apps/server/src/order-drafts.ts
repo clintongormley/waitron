@@ -337,6 +337,7 @@ export async function submitDraft(
       });
       return { ...placed, draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id) };
     },
+    cfg.madeHereSink,
   );
 }
 

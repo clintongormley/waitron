@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -17,7 +18,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { createCourse, createStation } from "./kitchen.js";
-import { readMadeHereStations, listMadeHereStations, setMadeHereStations } from "./made-here.js";
+import {
+  readMadeHereStations,
+  listMadeHereStations,
+  setMadeHereStations,
+  readMadeHereItems,
+  madeHereAnswer,
+  madeHereSinkFor,
+} from "./made-here.js";
 import { createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -91,6 +99,45 @@ async function deviceAt(
 }
 
 describe("device made-here stations", () => {
+  it("adds committed items to JSON while retaining the cookie and leaves text untouched", async () => {
+    const venue = await setupVenue(suite.db);
+    let lineId = "";
+    await withTransaction(suite.db, async (tx) => {
+      const deviceId = await deviceAt(
+        tx,
+        venue.cfg.locationId,
+        venue.cfg.tillId,
+        venue.defaultStationId,
+      );
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const line = await rawLine(tx, orderId, venue.cafeId, 1);
+      lineId = line.id;
+      await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [line]);
+    });
+    const app = new Hono();
+    app.use("/api/*", madeHereAnswer(suite.db));
+    app.get("/api/json", (c) => {
+      madeHereSinkFor(c).add(lineId);
+      c.header("Set-Cookie", "session=test; HttpOnly");
+      return c.json({ ok: true });
+    });
+    app.get("/api/text", (c) => {
+      madeHereSinkFor(c).add(lineId);
+      c.header("Set-Cookie", "session=test; HttpOnly");
+      return c.text("ready");
+    });
+    const json = await app.request("/api/json");
+    expect(json.headers.get("set-cookie")).toBe("session=test; HttpOnly");
+    expect(await json.json()).toMatchObject({ ok: true, madeHere: [{ lineId }] });
+    const text = await app.request("/api/text");
+    expect(text.headers.get("set-cookie")).toBe("session=test; HttpOnly");
+    expect(await text.text()).toBe("ready");
+  });
+
+  it("drops an id without a committed made-here record", async () => {
+    expect(await readMadeHereItems(suite.db, new Set([randomUUID()]))).toEqual([]);
+  });
   it("makes Bar work here and prints Grill work in the same send", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {

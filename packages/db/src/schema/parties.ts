@@ -101,9 +101,8 @@ export const partyTables = table(
 export const serviceCommandScope = enumType(["party", "bill"]);
 
 /**
- * One row per service command, keyed by the submission id its device made for it, so a retry after
- * a lost reply returns the recorded result instead of acting twice (`runServiceCommand`,
- * `apps/server/src/parties.ts`).
+ * One row per service command, keyed by its device's submission id; a bill may also hold one
+ * server-written made_here row for the made-here items of a pay-first send on replay.
  *
  * `scope_id` names a party or a working order by `scope_kind`, so it carries no key.
  */
@@ -117,7 +116,7 @@ export const serviceCommands = table(
     kind: label("kind").notNull(),
     fingerprint: label("fingerprint").notNull(),
     // Wrapped, so a command that returned nothing replays as nothing rather than as null.
-    result: json<{ value?: unknown }>("result").notNull(),
+    result: json<{ value?: unknown; madeHere?: string[] }>("result").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

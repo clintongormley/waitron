@@ -263,12 +263,196 @@ beforeEach(() => {
 const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
+  localStorage.removeItem("waitron.makeNow.till-dev");
   sessionStorage.removeItem("waitron.lastMenu");
   sessionStorage.removeItem("waitron.dietFilter");
   history.replaceState(null, "", initialUrl);
 });
 
 describe("till-app session activity", () => {
+  it("keeps a made-here instruction through navigation and restores it for the same device", async () => {
+    setLocale("en-GB");
+    localStorage.removeItem("waitron.makeNow.till-dev");
+    let receive: ((items: unknown[]) => void) | undefined;
+    const { el } = await mountApp({
+      onMadeHere: vi.fn((listener) => {
+        receive = listener;
+      }),
+    });
+    await flush(el);
+    const made = {
+      lineId: "lager-1",
+      name: "Lager",
+      quantity: "2.000",
+      unitName: null,
+      soldInEach: true,
+      optionSnapshots: [],
+      extras: [],
+      note: null,
+    };
+    receive!([made, made]);
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.querySelectorAll("li"),
+    ).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
+      "2× Lager",
+    );
+    await toCounter(el);
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
+      "2× Lager",
+    );
+    expect(localStorage.getItem("waitron.makeNow.till-dev")).toContain("lager-1");
+    el.remove();
+    const reloaded = await mountApp();
+    await flush(reloaded.el);
+    expect(
+      reloaded.el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent,
+    ).toContain("2× Lager");
+    reloaded.el
+      .shadowRoot!.querySelector("till-make-now")!
+      .shadowRoot!.querySelector("button")!
+      .click();
+    await flush(reloaded.el);
+    expect(localStorage.getItem("waitron.makeNow.till-dev")).toBeNull();
+    expect(
+      reloaded.el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent,
+    ).not.toContain("2× Lager");
+  });
+
+  it("does not restore another device's instructions", async () => {
+    localStorage.setItem(
+      "waitron.makeNow.other-device",
+      JSON.stringify([
+        {
+          lineId: "other",
+          name: "Other drink",
+          quantity: "1.000",
+          unitName: null,
+          soldInEach: true,
+          optionSnapshots: [],
+          extras: [],
+          note: null,
+        },
+      ]),
+    );
+    const { el } = await mountApp();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).not.toContain(
+      "Other drink",
+    );
+    localStorage.removeItem("waitron.makeNow.other-device");
+  });
+
+  it("ignores a stored value that is not an item list", async () => {
+    localStorage.setItem("waitron.makeNow.till-dev", "{}");
+    let receive: ((items: unknown[]) => void) | undefined;
+    const { el } = await mountApp({
+      onMadeHere: vi.fn((listener) => {
+        receive = listener;
+      }),
+    });
+    await flush(el);
+    receive!([
+      {
+        lineId: "fresh",
+        name: "Lager",
+        quantity: "1.000",
+        unitName: null,
+        soldInEach: true,
+        optionSnapshots: [],
+        extras: [],
+        note: null,
+      },
+    ]);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
+      "Lager",
+    );
+  });
+
+  it("keeps Done usable when site data methods throw", async () => {
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      let receive: ((items: unknown[]) => void) | undefined;
+      const { el } = await mountApp({
+        onMadeHere: vi.fn((listener) => {
+          receive = listener;
+        }),
+      });
+      await flush(el);
+      receive!([
+        {
+          lineId: "lager",
+          name: "Lager",
+          quantity: "1.000",
+          unitName: null,
+          soldInEach: true,
+          optionSnapshots: [],
+          extras: [],
+          note: null,
+        },
+      ]);
+      await flush(el);
+      const widget = el.shadowRoot!.querySelector("till-make-now")!;
+      expect(widget.shadowRoot!.textContent).toContain("Lager");
+      widget.shadowRoot!.querySelector("button")!.click();
+      await flush(el);
+      expect(widget.shadowRoot!.textContent).not.toContain("Lager");
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  it("keeps the instruction when the localStorage global itself throws", async () => {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+    try {
+      let receive: ((items: unknown[]) => void) | undefined;
+      const { el } = await mountApp({
+        onMadeHere: vi.fn((listener) => {
+          receive = listener;
+        }),
+      });
+      await flush(el);
+      receive!([
+        {
+          lineId: "lager",
+          name: "Lager",
+          quantity: "1.000",
+          unitName: null,
+          soldInEach: true,
+          optionSnapshots: [],
+          extras: [],
+          note: null,
+        },
+      ]);
+      await flush(el);
+      const widget = el.shadowRoot!.querySelector("till-make-now")!;
+      expect(widget.shadowRoot!.textContent).toContain("Lager");
+      widget.shadowRoot!.querySelector("button")!.click();
+      await flush(el);
+      expect(widget.shadowRoot!.textContent).not.toContain("Lager");
+    } finally {
+      if (previous !== undefined) Object.defineProperty(globalThis, "localStorage", previous);
+    }
+  });
+
   it("restarts the idle countdown on a pointer or key press anywhere inside the app", async () => {
     const sa = fakeSessionActivity();
     const { el } = await mountApp({}, { sessionActivity: sa as never });
@@ -440,6 +624,36 @@ describe("till-app content languages", () => {
 });
 
 describe("till-app receipt issuance", () => {
+  it("shows Make now after a counter cash payment reports a drink", async () => {
+    let receive: ((items: unknown[]) => void) | undefined;
+    const item = {
+      lineId: "lager-pay",
+      name: "Lager",
+      quantity: "1.000",
+      unitName: null,
+      soldInEach: true,
+      optionSnapshots: [],
+      extras: [],
+      note: null,
+    };
+    const { el } = await mountApp({
+      onMadeHere: vi.fn((listener) => {
+        receive = listener;
+      }),
+      recordSale: vi.fn(async () => {
+        receive!([item]);
+        return saleResult;
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
+      "Lager",
+    );
+  });
+
   async function ticketAfterSale(tillInfo: Record<string, unknown>): Promise<TillTicketView> {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(tillInfo) });
     const c = await toCounter(el);

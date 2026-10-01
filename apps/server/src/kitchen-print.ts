@@ -78,7 +78,7 @@ function ticketName(text: Record<string, string>, locale: string): string {
  * An extras child as its dish's kitchen paper prints it: its frozen staff name — the picked
  * product's own — with ` x<n>` when the dish carries more than one of it each.
  */
-function extraLabel(name: string, quantity: Decimal, dishQuantity: Decimal): string {
+export function extraLabel(name: string, quantity: Decimal, dishQuantity: Decimal): string {
   const perDish = perDishOptionQuantity(quantity, dishQuantity);
   return perDish > 1 ? `${name} x${perDish}` : name;
 }

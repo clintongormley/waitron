@@ -530,6 +530,8 @@ export const en = {
   "table.submitted_held_one": "Held: 1 group.",
   "table.submitted_joined": "Added to a held group.",
   "table.submitted_close": "Close",
+  "make_now.title": "Make now",
+  "make_now.dismiss": "Done",
   "table.round_unconfirmed":
     "The server did not answer, so the items may have been added. Check the tab before sending them again.",
   "table.draft_changed_elsewhere": "Your order on this table was changed on another device.",
@@ -1349,6 +1351,8 @@ export const es: Record<StringKey, string> = {
   "table.submitted_held_one": "En espera: 1 grupo.",
   "table.submitted_joined": "Añadido a un grupo en espera.",
   "table.submitted_close": "Cerrar",
+  "make_now.title": "Preparar ahora",
+  "make_now.dismiss": "Hecho",
   "table.round_unconfirmed":
     "El servidor no respondió, así que los artículos pueden haberse añadido. Revisa la cuenta antes de volver a enviarlos.",
   "table.draft_changed_elsewhere": "Tu pedido de esta mesa se ha cambiado en otro dispositivo.",

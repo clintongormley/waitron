@@ -841,5 +841,6 @@ export async function applyAdjustment(
       });
       return { adjustmentIds: [id], revision: await readOrderRevision(tx, args.orderId) };
     },
+    cfg.madeHereSink,
   );
 }

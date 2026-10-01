@@ -8,6 +8,7 @@ import {
   kitchenStations,
   parties,
   printJobs,
+  serviceCommands,
   products,
   ticketItems,
   workingOrderLines,
@@ -215,7 +216,67 @@ describe("made-here route wiring", () => {
       tender: { method: "cash", amount: "3.00" },
     });
     expect(answer.status).toBe(200);
+    expect(answer.json.madeHere).toEqual([
+      expect.objectContaining({ name: "Caña", quantity: "1.000", lineId: expect.any(String) }),
+    ]);
+    expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("Caña de cerveza");
+    expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("CANA");
+    const replay = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: [{ menuItemId: counterOffer, quantity: "1" }],
+      tender: { method: "cash", amount: "3.00" },
+    });
+    expect(replay.json.madeHere).toEqual(answer.json.madeHere);
     await check();
+  });
+
+  it("does not add a made-here key or replay row when the sending device makes nothing here", async () => {
+    const id = randomUUID();
+    const answer = await send(venue.app, venue.cookie2, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: [{ menuItemId: counterOffer, quantity: "1" }],
+      tender: { method: "cash", amount: "3.00" },
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.json).not.toHaveProperty("madeHere");
+    const rows = await inTx(venue, (tx) =>
+      tx.select().from(serviceCommands).where(eq(serviceCommands.scopeId, id)),
+    );
+    expect(rows.filter((row) => row.kind === "made_here")).toEqual([]);
+  });
+
+  it("refuses a client's reserved submission id before storing made-here replay facts", async () => {
+    const id = randomUUID();
+    await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      id,
+      lines: [{ menuItemId: counterOffer, quantity: "1" }],
+    });
+    await inTx(venue, (tx) =>
+      tx.insert(serviceCommands).values({
+        scopeKind: "bill",
+        scopeId: id,
+        submissionId: "made-here:prepay",
+        kind: "order.collect",
+        fingerprint: "client",
+        result: { value: null },
+      }),
+    );
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "3.00",
+        method: "cash",
+        tendered: "3.00",
+        applied: "3.00",
+        tip: "0.00",
+      },
+    );
+    expect(answer.json.code).toBe("submission.id_reused");
   });
 
   it.each(["ticket_then_pay", "invoice_first"] as const)(
@@ -258,15 +319,48 @@ describe("made-here route wiring", () => {
       lines: [{ menuItemId: counterOffer, quantity: "1" }],
     });
     expect(answer.status).toBe(200);
+    expect(answer.json.madeHere).toEqual([
+      expect.objectContaining({ name: "Caña", quantity: "1.000" }),
+    ]);
     await check();
   });
 
   it("/api/parties/:id/groups sends the new drink from the device", async () => {
     const party = await seatedWith(venue);
     const check = await assertMadeHere(party.tabId);
+    const submissionId = randomUUID();
+    const body = {
+      submissionId,
+      expectedPartyRevision: party.revision,
+      groups: [{ lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" }],
+    };
     const answer = await send(
       venue.app,
       venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      body,
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.json.madeHere).toEqual([
+      expect.objectContaining({ name: "Caña", quantity: "1.000", lineId: expect.any(String) }),
+    ]);
+    const replay = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      body,
+    );
+    expect(replay.json.madeHere).toEqual(answer.json.madeHere);
+    await check();
+  });
+
+  it("a table Send from a device that makes no station here has no madeHere key", async () => {
+    const party = await seatedWith(venue);
+    const answer = await send(
+      venue.app,
+      venue.cookie2,
       "POST",
       `/api/parties/${party.partyId}/groups`,
       {
@@ -278,7 +372,7 @@ describe("made-here route wiring", () => {
       },
     );
     expect(answer.status).toBe(200);
-    await check();
+    expect(answer.json).not.toHaveProperty("madeHere");
   });
 
   it("/api/parties/:id/drafts/:did/submit sends the draft from the device", async () => {
@@ -310,6 +404,9 @@ describe("made-here route wiring", () => {
       },
     );
     expect(answer.status).toBe(200);
+    expect(answer.json.madeHere).toEqual([
+      expect.objectContaining({ name: "Caña", quantity: "1.000" }),
+    ]);
     await check();
   });
 
@@ -395,7 +492,7 @@ describe("made-here route wiring", () => {
     });
     expect(parked.status).toBe(200);
     const check = await assertMadeHere(id);
-    const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    const payment = {
       submissionId: randomUUID(),
       kind: "contribution",
       amount: "3.00",
@@ -403,9 +500,96 @@ describe("made-here route wiring", () => {
       tendered: "3.00",
       applied: "3.00",
       tip: "0.00",
-    });
+    };
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      payment,
+    );
     expect(paid.status).toBe(200);
+    expect(paid.json.madeHere).toEqual([
+      expect.objectContaining({ name: "Caña", lineId: expect.any(String) }),
+    ]);
+    const replay = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      payment,
+    );
+    expect(replay.json.madeHere).toEqual(paid.json.madeHere);
     await check();
+  });
+
+  it("replays a pay-first send when an adjustment completes a partly paid bill", async () => {
+    const { orderId, lineId } = await parkedLager();
+    const reasonId = await inTx(
+      venue,
+      async (tx) =>
+        (
+          await createAdjustmentReason(tx, {
+            name: `Finish ${randomUUID()}`,
+            names: { "es-ES": "Descuento" },
+            actions: ["discount_amount"],
+            maxPercentBp: null,
+            maxAmount: decimal("3.00"),
+            applyRole: "staff",
+            approverRole: "staff",
+            noteRequired: false,
+          })
+        ).id,
+    );
+    const part = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${orderId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "2.00",
+        method: "cash",
+        tendered: "2.00",
+        applied: "2.00",
+        tip: "0.00",
+      },
+    );
+    expect(part.status).toBe(200);
+    expect(part.json).not.toHaveProperty("madeHere");
+    const [order] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, orderId)),
+    );
+    const body = {
+      submissionId: randomUUID(),
+      expectedRevision: order!.revision,
+      lineId,
+      reasonId,
+      action: "discount_amount",
+      amount: "1.00",
+      note: null,
+    };
+    const first = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${orderId}/adjustments`,
+      body,
+    );
+    expect(first.status).toBe(200);
+    expect(first.json.madeHere).toEqual([expect.objectContaining({ name: "Caña", lineId })]);
+    const replay = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${orderId}/adjustments`,
+      body,
+    );
+    expect(replay.json.madeHere).toEqual(first.json.madeHere);
   });
 
   it("the background payment loop has no device and prints the drink", async () => {

@@ -1309,6 +1309,10 @@ export async function fireLines(
     throw error;
   }
 
+  for (const row of inserted) {
+    if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
+  }
+
   // Only newly fired items not made here print. Outbox inserts on this transaction: no hardware I/O
   // blocks the fire.
   const firedItems = inserted
@@ -2378,7 +2382,6 @@ async function changeServed(
   args: PartyCommandArgs,
   kind: "line.served" | "line.unserved",
 ): Promise<{ revision: number }> {
-  void cfg;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -2418,6 +2421,7 @@ async function changeServed(
       await writeServed(tx, changes);
       return { revision };
     },
+    cfg.madeHereSink,
   );
 }
 
@@ -2433,7 +2437,6 @@ export async function markGroupServed(
   groupId: string,
   args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
-  void cfg;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -2457,6 +2460,7 @@ export async function markGroupServed(
       );
       return { revision };
     },
+    cfg.madeHereSink,
   );
 }
 
@@ -4848,6 +4852,7 @@ export function handOverOrder(
     "order.collect",
     { workingOrderId: id },
     () => handOver(tx, cfg, id),
+    cfg.madeHereSink,
   );
 }
 

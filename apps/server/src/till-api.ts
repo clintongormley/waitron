@@ -37,6 +37,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
+import { madeHereAnswer, madeHereSinkFor } from "./made-here.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
   collectOrder,
@@ -821,7 +822,7 @@ async function sendingCfg(
   device?: DeviceBinding | null,
 ): Promise<TillConfig> {
   const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  return resolved === null ? deps.cfg : { ...deps.cfg, sendingDeviceId: resolved.deviceId };
+  return { ...deps.cfg, sendingDeviceId: resolved?.deviceId, madeHereSink: madeHereSinkFor(c) };
 }
 
 /**
@@ -831,6 +832,7 @@ async function sendingCfg(
  * handheld restriction because they write the deferred-settlement or amendment workflow.
  */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+  app.use("/api/*", madeHereAnswer(deps.db));
   // Built once per mount so its in-memory state persists across requests.
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
@@ -1149,6 +1151,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         tillId: await requireSaleTillId(deps, c, device),
         allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
         sendingDeviceId: device?.deviceId,
+        madeHereSink: madeHereSinkFor(c),
       };
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
@@ -1192,6 +1195,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...deps.cfg,
         tillId: await requireSaleTillId(deps, c, device),
         sendingDeviceId: device?.deviceId,
+        madeHereSink: madeHereSinkFor(c),
       };
 
       const { provider, reader } = await resolveCardCollector(
