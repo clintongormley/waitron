@@ -75,6 +75,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     drawerTillId: null,
     drawerOwnerTillId: null,
+    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -94,6 +95,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     drawerTillId: null,
     drawerOwnerTillId: null,
+    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -113,6 +115,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     drawerTillId: null,
     drawerOwnerTillId: null,
+    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -723,6 +726,125 @@ describe("guided printer calibration", () => {
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();
     expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+  });
+
+  describe("the till whose drawer this is", () => {
+    // A till at another location, which the server would refuse as the drawer's owner.
+    const drawerTills: Till[] = [
+      ...tills,
+      { id: "t3", label: "Terraza 1", locationId: "loc-2", receiptPrinterId: null },
+    ];
+    // The owner is the SECOND till at the printer's location, so a dropdown showing its first
+    // option, or its first till, fails.
+    const ownedByCaja2: Printer = {
+      ...printers[0]!,
+      hasCashDrawer: true,
+      drawerTillId: "t2",
+      drawerOwnerTillId: "t2",
+    };
+    const ownerSelect = (el: PrintersScreen) =>
+      q(el, 'select[name="drawerTillId"]') as HTMLSelectElement | null;
+
+    // Fails if the dropdown is shown without a drawer, lists every till rather than the printer's
+    // location's, or marks the saved owner with a `.value` binding alone instead of `.selected`.
+    it("is offered only while a drawer is attached, lists the printer's location's tills and shows the saved one", async () => {
+      const api = stubApi({
+        listPrinters: vi.fn().mockResolvedValue([ownedByCaja2]),
+        listTills: vi.fn().mockResolvedValue(drawerTills),
+      });
+      const el = await openStepThree(api);
+      const select = ownerSelect(el)!;
+      expect(select.checkVisibility()).toBe(true);
+      expect(Array.from(select.options).map((option) => option.textContent!.trim())).toEqual([
+        t("printers.drawer_owner_default"),
+        "Caja 1",
+        "Caja 2",
+      ]);
+      expect(select.value).toBe("t2");
+      expect(select.selectedOptions[0]!.textContent!.trim()).toBe("Caja 2");
+      expect(text(el, '[data-test="calibration-step-3"]')).toContain(t("printers.drawer_opens_at"));
+      toggleSwitch(el, '[name="printer-cash-drawer"]', false);
+      await flush(el);
+      expect(ownerSelect(el)).toBeNull();
+      toggleSwitch(el, '[name="printer-cash-drawer"]', true);
+      await flush(el);
+      expect(ownerSelect(el)!.value).toBe("t2");
+    });
+
+    // Fails if the dropdown is rendered whether or not the drawer box is ticked.
+    it("is not offered for a printer without a drawer until the box is ticked", async () => {
+      const api = stubApi({ listTills: vi.fn().mockResolvedValue(drawerTills) });
+      const el = await openStepThree(api);
+      expect(ownerSelect(el)).toBeNull();
+      toggleSwitch(el, '[name="printer-cash-drawer"]', true);
+      await flush(el);
+      expect(ownerSelect(el)!.value).toBe("");
+      expect(ownerSelect(el)!.selectedOptions[0]!.textContent!.trim()).toBe(
+        t("printers.drawer_owner_default"),
+      );
+    });
+
+    // Fails if a save does not send the chosen till, or sends the first option as "" rather than
+    // null.
+    it.each([
+      ["t1", "t1"],
+      ["", null],
+    ] as const)("saves the choice %j as drawerTillId %j", async (choice, sent) => {
+      const api = stubApi({
+        listPrinters: vi.fn().mockResolvedValue([ownedByCaja2]),
+        listTills: vi.fn().mockResolvedValue(drawerTills),
+      });
+      const el = await openStepThree(api);
+      await chooseOption(el, "drawerTillId", choice);
+      q(el, "[data-test=save-printer-p1]")!.click();
+      await flush(el);
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { drawerTillId: sent });
+    });
+
+    // Fails if a save sends the owner whether or not it changed.
+    it("does not send an unchanged owner", async () => {
+      const api = stubApi({
+        listPrinters: vi.fn().mockResolvedValue([ownedByCaja2]),
+        listTills: vi.fn().mockResolvedValue(drawerTills),
+      });
+      const el = await openStepThree(api);
+      await chooseOption(el, "drawerTillId", "t1");
+      await chooseOption(el, "drawerTillId", "t2");
+      q(el, "[data-test=save-printer-p1]")!.click();
+      await flush(el);
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+      expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+    });
+
+    // Fails if a refusal naming drawerTillId goes to the bottom message as the code's own sentence
+    // instead of under the dropdown, or if it disables Save.
+    it("shows a refused owner under its dropdown until it is changed", async () => {
+      const api = stubApi({
+        listPrinters: vi.fn().mockResolvedValue([ownedByCaja2]),
+        listTills: vi.fn().mockResolvedValue(drawerTills),
+        updatePrinter: vi.fn().mockRejectedValueOnce({
+          code: "management.request_invalid",
+          params: { field: "drawerTillId" },
+        }),
+      });
+      const el = await openStepThree(api);
+      await chooseOption(el, "drawerTillId", "t1");
+      q(el, "[data-test=save-printer-p1]")!.click();
+      await flush(el);
+      const select = ownerSelect(el)!;
+      expect(q(el, "[data-test=edit-printer-modal]")).not.toBeNull();
+      expect(select.getAttribute("aria-invalid")).toBe("true");
+      const message = q(el, "[data-test=drawer-till-error]")!;
+      expect(message.textContent!.trim()).toBe(t("printers.drawer_till_invalid"));
+      expect(select.getAttribute("aria-describedby")).toBe(message.id);
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(t("form.fix_fields"));
+      expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(select));
+      await chooseOption(el, "drawerTillId", "t2");
+      expect(q(el, "[data-test=drawer-till-error]")).toBeNull();
+      expect(ownerSelect(el)!.getAttribute("aria-invalid")).toBe("false");
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe("");
+    });
   });
 
   it("preserves connection edits when finishing calibration from the editor", async () => {
@@ -2608,6 +2730,7 @@ describe("printers-screen", () => {
       hasCashDrawer: false,
       drawerTillId: null,
       drawerOwnerTillId: null,
+      locationId: "loc-1",
       pendingJobs: 0,
       lastPrintAt: null,
       lastPrintAgentId: null,
@@ -2650,6 +2773,7 @@ describe("printers-screen", () => {
       hasCashDrawer: false,
       drawerTillId: null,
       drawerOwnerTillId: null,
+      locationId: "loc-1",
       pendingJobs: 0,
       lastPrintAt: null,
       lastPrintAgentId: null,
@@ -3356,6 +3480,36 @@ it("shows the saved drawer independently of register assignment and the deliveri
   expect(text(el, "[data-test=printer-registers]")).toBe(t("printers.no"));
   expect(text(el, "[data-test=printer-status]")).toContain("2026-09-26 14:00");
 });
+
+// Fails if the status page names the till from drawerTillId (null here) rather than the owner the
+// server resolved, or shows no line when nobody owns the drawer, or shows one for a printer without
+// a drawer.
+it.each([
+  ["t1", "Caja 1"],
+  [null, "printers.drawer_no_owner"],
+] as const)(
+  "shows the till the drawer opens at (%j) on the printer's status",
+  async (owner, shown) => {
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([
+        { ...printers[0]!, hasCashDrawer: true, drawerTillId: null, drawerOwnerTillId: owner },
+        { ...printers[1]!, active: true },
+      ]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=printer-drawer-owner]")).toBe(owner === null ? t(shown) : shown);
+    q(el, "[data-test=back-to-printers]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-row-p2]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=printer-status]")).not.toBeNull();
+    expect(q(el, "[data-test=printer-drawer-owner]")).toBeNull();
+  },
+);
 
 it("reopens printer status from its URL and reflects a saved drawer choice", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");

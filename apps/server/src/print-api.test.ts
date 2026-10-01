@@ -1688,6 +1688,14 @@ describe("the register that owns a printer's drawer", () => {
     });
   });
 
+  it("lists each printer's location, so a screen can offer only that location's registers", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.95", 9100, "Located drawer");
+    const response = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+    const row = ((await response.json()) as Record<string, unknown>[]).find((r) => r.id === id)!;
+    expect(row.locationId).toBe(locationId);
+  });
+
   it("names the owner when the printer is created", async () => {
     const app = mountApp();
     const owner = await register(locationId);

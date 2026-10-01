@@ -53,6 +53,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     drawerTillId: null,
     drawerOwnerTillId: null,
+    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -72,6 +73,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     drawerTillId: null,
     drawerOwnerTillId: null,
+    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -91,6 +93,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     drawerTillId: null,
     drawerOwnerTillId: null,
+    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -434,6 +437,65 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     await expectNoA11yViolations(host);
   });
+
+  it.each([390, 1280])(
+    "renders the drawer's till, chosen and refused, accessibly inside the dialog at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      try {
+        const { el, host } = await mountWidget<PrintersScreen>(
+          "dashboard-printers-screen",
+          {
+            api: stubApi(false, {
+              listPrinters: vi.fn().mockResolvedValue([
+                {
+                  ...printers[0]!,
+                  hasCashDrawer: true,
+                  drawerTillId: "t2",
+                  drawerOwnerTillId: "t2",
+                },
+              ]),
+              updatePrinter: vi.fn().mockRejectedValue({
+                code: "management.request_invalid",
+                params: { field: "drawerTillId" },
+              }),
+            }),
+          },
+          theme,
+        );
+        await flush(el);
+        await openPrinter(el);
+        q(el, "[data-test=calibrate-printer]")!.click();
+        await flush(el);
+        for (let step = 1; step < 3; step++) {
+          q(el, "[data-test=calibration-next]")!.click();
+          await flush(el);
+        }
+        const select = q(el, 'select[name="drawerTillId"]') as HTMLSelectElement;
+        expect(select.value).toBe("t2");
+        const inside = () => {
+          const dialog = q(el, '[data-test="edit-printer-modal"]')!
+            .shadowRoot!.querySelector("dialog")!
+            .getBoundingClientRect();
+          const field = select.getBoundingClientRect();
+          expect(field.width).toBeGreaterThan(0);
+          expect(field.right).toBeLessThan(dialog.right);
+          expect(field.left).toBeGreaterThanOrEqual(dialog.left);
+        };
+        inside();
+        await expectNoA11yViolations(host);
+        await chooseOption(el, "drawerTillId", "t1");
+        q(el, "[data-test=save-printer-p1]")!.click();
+        await flush(el);
+        expect(select.getAttribute("aria-invalid")).toBe("true");
+        expect(q(el, "[data-test=drawer-till-error]")).not.toBeNull();
+        inside();
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("keeps setup forms inside desktop and phone dialogs", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(

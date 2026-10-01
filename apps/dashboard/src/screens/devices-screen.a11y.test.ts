@@ -123,6 +123,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     drawerTillId: null,
     drawerOwnerTillId: null,
+    locationId: "loc-1",
     active: true,
   },
 ];

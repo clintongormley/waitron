@@ -137,6 +137,7 @@ interface EditablePrinter {
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
+  drawerTillId: string | null;
   /** The settings as saved, so a save sends only the ones that changed. */
   saved: {
     name: string;
@@ -146,6 +147,7 @@ interface EditablePrinter {
     paperWidth: PrintPaperWidth;
     resolution: PrintResolution;
     hasCashDrawer: boolean;
+    drawerTillId: string | null;
   };
   active: boolean;
 }
@@ -355,6 +357,11 @@ export class PrintersScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-1);
       }
+      .field-error {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
       .probe-panel {
         margin-bottom: var(--wt-space-4);
         padding: var(--wt-space-3);
@@ -495,6 +502,8 @@ export class PrintersScreen extends LitElement {
   @state() private testingDrawer = false;
   @state() private drawerTestSent = false;
   @state() private drawerOutcome = "";
+  /** The last save was refused for the till chosen as the drawer's owner. */
+  @state() private drawerTillRefused = false;
   @state() private printingTest = false;
   @state() private printingSample = false;
   @state() private rulerNumber = "";
@@ -1449,6 +1458,8 @@ export class PrintersScreen extends LitElement {
     if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
+    if (row.drawerTillId !== row.saved.drawerTillId) patch.drawerTillId = row.drawerTillId;
+    this.drawerTillRefused = false;
     await this.#submit(async () => {
       // Cleared before the request, so leaving the screen while it is in flight does not switch
       // off a printer being saved; a failed save puts it back for the wizard's close.
@@ -1458,6 +1469,14 @@ export class PrintersScreen extends LitElement {
         if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
       } catch (error) {
         if (readding) this.#readdingId = id;
+        if (
+          codeOf(error) === "management.request_invalid" &&
+          refusedField(error) === "drawerTillId"
+        ) {
+          this.drawerTillRefused = true;
+          this.#focusFirstInvalid("[data-test=edit-printer-modal]");
+          return;
+        }
         throw error;
       }
       await this.#closeModal("edit-printer-modal");
@@ -1890,12 +1909,13 @@ export class PrintersScreen extends LitElement {
     });
   }
 
-  #openPrinter(p: Printer, event?: Event): void {
+  #openPrinter(p: Omit<Printer, "locationId">, event?: Event): void {
     if (event) this.#rememberEditTrigger(event);
     this.#closeTest();
     this.calibrationStep = 0;
     this.drawerTestSent = false;
     this.drawerOutcome = "";
+    this.drawerTillRefused = false;
     this.formAttempted = false;
     this.errorKey = null;
     this.rulerNumber = "";
@@ -1911,6 +1931,7 @@ export class PrintersScreen extends LitElement {
       paperWidth: p.paperWidth,
       resolution: p.resolution,
       hasCashDrawer: p.hasCashDrawer,
+      drawerTillId: p.drawerTillId,
       saved: {
         name: p.name,
         host: p.host ?? "",
@@ -1919,6 +1940,7 @@ export class PrintersScreen extends LitElement {
         paperWidth: p.paperWidth,
         resolution: p.resolution,
         hasCashDrawer: p.hasCashDrawer,
+        drawerTillId: p.drawerTillId,
       },
     };
   }
@@ -2065,6 +2087,7 @@ export class PrintersScreen extends LitElement {
               ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
               ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
               ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
+              ${p.hasCashDrawer ? field(t("printers.drawer_opens_at"), p.drawerOwnerTillId === null ? t("printers.drawer_no_owner") : (this.tills.find(({ id }) => id === p.drawerOwnerTillId)?.label ?? "—"), "printer-drawer-owner") : nothing}
               ${field(t("printers.cash_register"), registers.join(", ") || t("printers.no"), "printer-registers")}
             </dl></wt-card
           >
@@ -2395,13 +2418,14 @@ export class PrintersScreen extends LitElement {
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
     const settingDots = textGrid(p.paperWidth, p.resolution).widthDots;
     const fieldInvalid = PRINTER_FIELDS.some((key) => errors[key] !== undefined);
+    const drawerTillRefused = this.drawerTillRefused && p.hasCashDrawer;
     const bottom = bottomMessage(
       refusal(this.errorKey),
       refusal(this.testError),
       ...Object.entries(errors)
         .filter(([key]) => !PRINTER_FIELDS.includes(key))
         .map(([, message]) => message),
-      fieldInvalid ? t("form.fix_fields") : null,
+      fieldInvalid || drawerTillRefused ? t("form.fix_fields") : null,
     );
     const field = (key: "name" | "host" | "port", label: string, required = false) =>
       html`<wt-input
@@ -2580,6 +2604,7 @@ export class PrintersScreen extends LitElement {
               this.drawerTestSent = false;
             }}
           ></wt-switch>
+          ${p.hasCashDrawer ? this.#renderDrawerTill(p, drawerTillRefused) : nothing}
           ${
             p.hasCashDrawer
               ? html`
@@ -2660,6 +2685,44 @@ export class PrintersScreen extends LitElement {
         }
       </wt-form-actions>
     </wt-modal>`;
+  }
+
+  /** The register whose till opens this printer's drawer, from those at the printer's location. */
+  #renderDrawerTill(p: EditablePrinter, refused: boolean): TemplateResult {
+    const locationId = this.printers.find(({ id }) => id === p.id)?.locationId;
+    const registers = this.tills.filter((till) => till.locationId === locationId);
+    return html`<div class="setting-field">
+      <label class="setting-field"
+        >${t("printers.drawer_opens_at")}
+        <select
+          name="drawerTillId"
+          aria-invalid=${refused ? "true" : "false"}
+          aria-describedby=${refused ? "drawer-till-error" : nothing}
+          @change=${(e: Event) => {
+            const value = (e.target as HTMLSelectElement).value;
+            this.drawerTillRefused = false;
+            this.#editPrinter(p.id, { drawerTillId: value === "" ? null : value });
+          }}
+        >
+          <option value="" .selected=${p.drawerTillId === null}>
+            ${t("printers.drawer_owner_default")}
+          </option>
+          ${registers.map(
+            (till) =>
+              html`<option value=${till.id} .selected=${p.drawerTillId === till.id}>
+                ${till.label}
+              </option>`,
+          )}
+        </select>
+      </label>
+      ${
+        refused
+          ? html`<p class="field-error" id="drawer-till-error" data-test="drawer-till-error">
+              ${t("printers.drawer_till_invalid")}
+            </p>`
+          : nothing
+      }
+    </div>`;
   }
 
   #discoveredLabel(device: DiscoveredPrinter): string {

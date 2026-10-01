@@ -110,6 +110,7 @@ export interface UpdatePrinterInput {
 
 export interface PrinterRow {
   id: string;
+  locationId: string;
   name: string;
   transport: PrintTransport;
   host: string | null;
@@ -181,6 +182,7 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
   return tx
     .select({
       id: printers.id,
+      locationId: printers.locationId,
       name: printers.name,
       transport: printers.transport,
       host: printers.host,

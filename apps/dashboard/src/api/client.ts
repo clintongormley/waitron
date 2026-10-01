@@ -760,6 +760,7 @@ export interface Printer {
   pendingJobs: number;
   lastPrintAt: string | null;
   id: string;
+  locationId: string;
   name: string;
   transport: PrintTransport;
   host: string | null;
