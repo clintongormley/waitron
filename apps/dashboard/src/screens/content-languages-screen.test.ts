@@ -960,6 +960,35 @@ describe("missing translations", () => {
     expect(asked).toEqual(["prod-1"]);
   });
 
+  it("opens a variant's own editor inside the dashboard, and leaves every other kind's link to the browser", async () => {
+    const variant: TranslationGap = {
+      kind: "variant",
+      id: "var-1",
+      name: "STAFF Small",
+      reason: "partial",
+      parent: { id: "prod-1", name: "STAFF Pan" },
+    };
+    const list: TranslationGap = {
+      kind: "option_list",
+      id: "list-1",
+      name: "STAFF Doneness",
+      reason: "partial",
+    };
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [variant, list], en: [] })),
+    );
+    const asked: string[] = [];
+    el.addEventListener("wt-edit-product", (event) =>
+      asked.push((event as CustomEvent<{ productId: string }>).detail.productId),
+    );
+    const byHref = Object.fromEntries(
+      (await links(el, "ca")).map((link) => [link.getAttribute("href"), link]),
+    );
+    expect(clickPrevented(byHref["/manage/catalogue/product/var-1"]!, {})).toBe(true);
+    expect(clickPrevented(byHref["/manage/modifiers/view/options/list/list-1"]!, {})).toBe(false);
+    expect(asked).toEqual(["var-1"]);
+  });
+
   it("leaves a click with Ctrl or Cmd held to the browser, to open the editor in a new tab", async () => {
     const el = await mount(
       gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
