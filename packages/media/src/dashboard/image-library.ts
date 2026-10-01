@@ -218,8 +218,12 @@ export class ImageLibrary extends LitElement {
   }
 
   async #load(passive = false): Promise<void> {
-    // Every load sends the latest typed text, so a search still waiting has nothing left to do.
-    clearTimeout(this.#searchTimer);
+    if (this.#searchTimer !== undefined) {
+      clearTimeout(this.#searchTimer);
+      this.#searchTimer = undefined;
+      // This load sends the new search text, so it opens that search's first page.
+      this.offset = 0;
+    }
     this.loadError = false;
     const query: ImageQuery = {
       search: this.search,

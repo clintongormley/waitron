@@ -318,7 +318,7 @@ it("searches once typing has paused for 250 ms, so a burst of keystrokes sends o
   const before = client.listImages.mock.calls.length;
   vi.useFakeTimers();
   try {
-    // 100 ms apart: a wait that did not restart on each keystroke would fire inside the burst.
+    // A wait timed from the first keystroke would fire at 250 ms, before the 449 ms check.
     field("image-search", "c");
     await vi.advanceTimersByTimeAsync(100);
     field("image-search", "ch");
@@ -349,6 +349,34 @@ it("changes the sort at once, with text typed but not yet searched, and does not
     expect(client.listImages).toHaveBeenCalledTimes(before + 1);
     expect(client.listImages).toHaveBeenLastCalledWith(
       expect.objectContaining({ search: "chi", sort: "name" }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.listImages).toHaveBeenCalledTimes(before + 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("starts a search still waiting from the first page when another load sends it early", async () => {
+  const client = api();
+  client.listImages.mockResolvedValue({ images: [image], total: 100 });
+  await mount(client);
+  const next = [...el.shadowRoot!.querySelectorAll<HTMLElement>("nav wt-button")].at(-1)!;
+  next.click();
+  await vi.waitFor(() =>
+    expect(client.listImages).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 24 })),
+  );
+  await el.updateComplete;
+  const before = client.listImages.mock.calls.length;
+  vi.useFakeTimers();
+  try {
+    field("image-search", "chi");
+    await vi.advanceTimersByTimeAsync(100);
+    next.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.listImages).toHaveBeenCalledTimes(before + 1);
+    expect(client.listImages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: "chi", offset: 0 }),
     );
     await vi.advanceTimersByTimeAsync(1000);
     expect(client.listImages).toHaveBeenCalledTimes(before + 1);

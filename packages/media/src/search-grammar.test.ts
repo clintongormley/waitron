@@ -7,11 +7,14 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
 /**
- * The query grammar `listImages` accepts: quoted phrases, `-` for exclusion, and `or`.
+ * The query grammar `listImages` accepts: quoted phrases, `-` for exclusion, and `or`; and while a
+ * query is still being typed, its last word matches as a prefix and a quote left open is a phrase
+ * in progress.
  *
  * The suite seeds ONCE and does not reset between tests, so the punctuation block below adds rows
  * the exclusion block cannot see: it runs after it, and every one of its cases asks only whether
- * its OWN image came back.
+ * its OWN image came back. The typing block asserts whole result lists that the shared rows would
+ * join (the punctuation block's "Pan-fried" answers `pan-fr`), so it seeds a database of its own.
  */
 const NAMES = ["Bread roll", "Bread loaf", "Roll bread", "Bread with roll", "Fish plate"];
 
@@ -113,6 +116,67 @@ describe("punctuation and degenerate queries", () => {
       );
       const result = await listImages(tx, { query, limit: 100, fallbackLanguage: "en" });
       expect(result.images.some((row) => row.id === image.id)).toBe(matched);
+    });
+  });
+});
+
+describe("a word still being typed", () => {
+  const TYPING_NAMES = [
+    "Chicken",
+    "Grilled chicken",
+    "Chicken wings",
+    "Chicken, grilled",
+    "Chi tea",
+    "Pan-fried fish",
+  ];
+  const typing = useVenueDb({
+    migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
+    resetPerTest: false,
+    setup: async (db: Database) => {
+      await withTransaction(db, async (tx) => {
+        for (const [index, name] of TYPING_NAMES.entries()) {
+          await uploadImage(
+            tx,
+            { image: await samplePreparedImage({ width: 300 + index }), names: { en: name } },
+            { fallbackLanguage: "en" },
+          );
+        }
+      });
+    },
+  });
+
+  it("holds the six names the cases below are written against", async () => {
+    const result = await withTransaction(typing.db, (tx) =>
+      listImages(tx, { fallbackLanguage: "en" }),
+    );
+    expect(result.images.map((image) => image.names.en).sort()).toEqual([...TYPING_NAMES].sort());
+  });
+
+  it.each<[string, string[]]>([
+    ["chick", ["Chicken", "Chicken wings", "Chicken, grilled", "Grilled chicken"]],
+    // A space, a closing quote or punctuation after the last word finishes it.
+    ["chick ", []],
+    ["chick,", []],
+    ['"chick"', []],
+    // Only the LAST word is a prefix.
+    ["chi wings", []],
+    ["wings chi", ["Chicken wings"]],
+    // An exclusion is always a whole word: "-chi" hides "Chi tea" and nothing that starts with chi.
+    ["-chi", ["Chicken", "Chicken wings", "Chicken, grilled", "Grilled chicken", "Pan-fried fish"]],
+    // An unclosed quote is a phrase still being typed: its words stay together and its last word
+    // is a prefix, so "Chicken, grilled" — both words, the other way round — is not found.
+    ['"grilled chi', ["Grilled chicken"]],
+    ['"grilled chi"', []],
+    ['"grill chi', []],
+    // A word with punctuation inside is a phrase of its parts, and its last part is the prefix.
+    ["pan-fr", ["Pan-fried fish"]],
+    // A last "or" is still the operator, so "chi" before it is a finished word.
+    ["chi or", ["Chi tea"]],
+  ])("answers %j with %j", async (query, expected) => {
+    await withTransaction(typing.db, async (tx) => {
+      const result = await listImages(tx, { query, limit: 100, fallbackLanguage: "en" });
+      expect(result.images.map((image) => image.names.en).sort()).toEqual(expected);
+      expect(result.total).toBe(expected.length);
     });
   });
 });

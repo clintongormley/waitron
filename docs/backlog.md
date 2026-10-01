@@ -1041,7 +1041,9 @@ rather than one, so with the same number of terms matched a whole-word match ran
 library screen waits 250 ms after the last keystroke before searching (in
 `packages/media/src/dashboard/image-library.ts`, so the image picker that the product, variant and
 section forms open waits too); the sort and direction dropdowns still search at once, carrying any
-text typed but not yet searched, and removing the screen drops a search still waiting.
+text typed but not yet searched, and removing the screen drops a search still waiting. Any load
+made while a search is still waiting — a page button or Retry included — starts from the first page.
+The server parses the query untrimmed, so the 500-character limit counts surrounding spaces too.
 
 **Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is
 resized to at most 1600 pixels on its longer side, turned upright, stripped of its metadata (GPS

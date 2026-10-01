@@ -290,7 +290,10 @@ export async function deleteImage(
   return { deleted: true, uses: [] };
 }
 
-/** One term of a parsed query: a single word, or a phrase that must appear intact. */
+/**
+ * One term of a parsed query: a single word, or a phrase whose words must appear together and in
+ * order.
+ */
 interface QueryItem {
   readonly negated: boolean;
   readonly tokens: readonly string[];
@@ -315,8 +318,8 @@ function searchTokens(value: string): string[] {
  * when ANY group does.
  *
  * The query's last word is a prefix while it is still being typed: when the query ends in a letter
- * or digit and that word is not excluded. A quote left open runs to the end of the query, so a
- * phrase being typed stays one phrase.
+ * or digit and that word is not excluded. A last word `or` is still the operator, not a prefix. A
+ * quote left open runs to the end of the query, so a phrase being typed stays one phrase.
  *
  * A non-empty query that yields no groups matches NOTHING. An EMPTY query never reaches here; its
  * caller skips the filter entirely.
@@ -341,7 +344,10 @@ function parseSearch(query: string): QueryItem[][] {
   return groups;
 }
 
-/** Does `tokens` appear intact and in order inside `field`? A single word is the length-1 case. */
+/**
+ * Does `tokens` appear intact and in order inside `field`? With `prefix`, the last may be the start
+ * of a longer word. A single word is the length-1 case.
+ */
 function fieldHolds(field: readonly string[], tokens: readonly string[], prefix: boolean): boolean {
   const last = tokens.length - 1;
   for (let start = 0; start + tokens.length <= field.length; start += 1) {
@@ -361,8 +367,9 @@ function fieldHolds(field: readonly string[], tokens: readonly string[], prefix:
  * Does any group match, and how strongly?
  *
  * `null` is "no match". The score is the number of positive terms in the best-scoring group, less
- * a half for a term found only as the start of a longer word, so a whole word ranks first. A
- * phrase is matched WITHIN one translation of the name, so it cannot straddle two.
+ * a half for a term found only as the start of a longer word, so among photos matching the same
+ * number of terms a whole word ranks first. A phrase is matched WITHIN one translation of the name,
+ * so it cannot straddle two.
  */
 function scoreSearch(
   groups: readonly QueryItem[][],
@@ -414,7 +421,7 @@ export async function listImages(
   const offset = options.offset ?? 0;
   const limit = options.limit ?? 40;
   if (
-    query.length > 500 ||
+    typed.length > 500 ||
     !["relevance", "date", "name"].includes(sort) ||
     !["asc", "desc"].includes(direction) ||
     !Number.isSafeInteger(offset) ||
