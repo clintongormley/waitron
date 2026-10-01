@@ -429,9 +429,9 @@ export type IntegratedPayDeps = TillSaleDeps & {
  *  5. `open` (RETRIEVED) → file the STORED locked lines (`priceStoredOrderForIssuance`), never a
  *     re-price of `req.lines`.
  *  Steps 4 and 5 give the kitchen the dishes it has not been given, a later course's dish held for
- *  its course, in the same transaction, for the orders `fireDishesAtPayment` names; a dish no
- *  station can take is not sent and is named in a `route.dish_not_sent` alert instead, or logged
- *  under that code if the alert is refused.
+ *  its course, in the same transaction, for the orders `fireDishesAtPayment` names; a zoned
+ *  order's dish no station can take is not sent and is named in a `route.dish_not_sent` alert
+ *  instead, or logged under that code if the alert is refused.
  *  6. A unique violation is replayed in a FRESH transaction, filing nothing. Step 1 already
  *     serialises pays in this process; the backstop stays because `sales_working_order_id_key`
  *     refuses a second sale for one working order whatever wrote it.
@@ -448,7 +448,7 @@ export async function payWorkingOrder(
     return await withTransaction(deps.db, async (tx) => {
       // Step 1; the doc comment says what serialises a concurrent pay against this read.
       const [locked] = await tx
-        .select({ status: workingOrders.status })
+        .select({ status: workingOrders.status, partyId: workingOrders.partyId })
         .from(workingOrders)
         .where(eq(workingOrders.id, req.id));
 
@@ -489,7 +489,8 @@ export async function payWorkingOrder(
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
-      const notSent = await fireDishesAtPayment(tx, cfg, req.id);
+      // A walk-up is created with no party.
+      const notSent = await fireDishesAtPayment(tx, cfg, req.id, locked?.partyId ?? null);
 
       const ticket = await fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
       if (notSent !== null) {
@@ -1191,7 +1192,7 @@ async function finalizeRecovery(
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({ status: workingOrders.status, partyId: workingOrders.partyId })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
@@ -1253,8 +1254,9 @@ async function finalizeRecovery(
     });
 
     // A placed order was fired when it was placed; an open one's unsent dishes go now, for the
-    // orders `fireDishesAtPayment` names, except a dish no station can take.
-    const notSent = locked?.status === "open" ? await fireDishesAtPayment(tx, cfg, req.id) : null;
+    // orders `fireDishesAtPayment` names, except a zoned order's dish no station can take.
+    const notSent =
+      locked?.status === "open" ? await fireDishesAtPayment(tx, cfg, req.id, locked.partyId) : null;
 
     // Settled at the ORIGINAL capture instant.
     await tx
@@ -1299,25 +1301,33 @@ async function finalizeRecovery(
 }
 
 /**
- * Fire an open order's unsent dishes at payment when its service mode is prepay, or when it is a
- * counter order (no party) in a mode that sends before payment; a party's bill in such a mode is
- * left alone. A bill moved here from a table has dishes already sent, which are not sent again. A
- * dish no station can take is not sent and does not refuse the payment; it is returned, for the
- * caller to raise `raiseDishesNotSent` once the sale exists.
+ * Fire an open order's unsent dishes at payment when its service mode (the venue's order flow for
+ * an order with none) is prepay, or when it is a counter order (no party) in a mode that sends
+ * before payment; a party's bill in such a mode is left alone. A bill moved here from a table has
+ * dishes already sent, which are not sent again. A zoned order's dish no station can take is not
+ * sent and does not refuse the payment; it is returned, for the caller to raise
+ * `raiseDishesNotSent` once the sale exists.
  */
 export async function fireDishesAtPayment(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
+  // The order's party as the caller already read it in `tx`; omitted, it is read here.
+  partyId?: string | null,
 ): Promise<DishesNotSent | null> {
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
   if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
     if (!paysAfterSending(serviceContext?.serviceMode, cfg)) return null;
-    const [order] = await tx
-      .select({ partyId: workingOrders.partyId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, workingOrderId));
-    if (order!.partyId !== null) return null;
+    const party =
+      partyId !== undefined
+        ? partyId
+        : (
+            await tx
+              .select({ partyId: workingOrders.partyId })
+              .from(workingOrders)
+              .where(eq(workingOrders.id, workingOrderId))
+          )[0]!.partyId;
+    if (party !== null) return null;
   }
   const unrouted = await fireLines(
     tx,

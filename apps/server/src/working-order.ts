@@ -4813,7 +4813,10 @@ export async function cancelPlacedOrder(
   });
 }
 
-/** Fire a settled prepay order. The unique item-per-line constraint refuses a repeated fire. */
+/**
+ * Send a settled order's lines to the kitchen through `fireLines`. The unique item-per-line
+ * constraint refuses the send if any line already has a ticket item.
+ */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
   cfg: TillConfig,

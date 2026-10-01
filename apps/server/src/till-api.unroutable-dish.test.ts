@@ -31,10 +31,11 @@ import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testin
 import { offerProducts } from "./testing/zone-offers.js";
 import { markCollected, parkOrder } from "./working-order.js";
 
-// A pay-first order is sent to the kitchen when it is paid. A dish no station can take (its route's
-// station switched off with no fallback, or no route at all) does not refuse the payment: the
-// money is taken and filed, that dish is not sent, and one `route.dish_not_sent` alert per sale
-// names it and the zone — or, if the database refuses that alert, a log line under that code does.
+// A pay-first order, or an open counter order in a zone that sends before payment, is sent to the
+// kitchen when it is paid. A zoned order's dish no station can take (its route's station switched
+// off with no fallback, or no route at all) does not refuse the payment: the money is taken and
+// filed, that dish is not sent, and one `route.dish_not_sent` alert per sale names it and the zone
+// — or, if the database refuses that alert, a log line under that code does.
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -293,7 +294,7 @@ function dishNotSent(workingOrderId: string, dishes: string, orderNumber: number
   };
 }
 
-describe("paying a pay-first order whose dish no kitchen station can take", () => {
+describe("paying a pay-first order, or an open counter order in a zone that sends before payment, whose dish no kitchen station can take", () => {
   it("sends a dish whose station is switched off to the next matching route whose station is on", async () => {
     const made = await dish("Steak");
     const closed = await station("Closed grill");

@@ -2338,6 +2338,50 @@ describe("paying a counter order never sent, in a zone that sends before payment
     expect(await kitchenJobCount(printerId)).toBe(1);
     expect(await saleCount(id)).toBe(1);
   });
+
+  it.each(["ticket_then_pay", "invoice_first"] as const)(
+    "%s: a parked order paid sends its first course and holds its later course, and the same pay sent again changes nothing",
+    async (mode) => {
+      const { cfg, cafe, agua, zoneId } = await modeVenue(mode);
+      const printerId = await kitchenPrinter(cfg);
+      const { primeros, segundos } = await withTransaction(suite.db, async (tx) => {
+        const primeros = (await createCourse(tx, cfg, { name: "Primeros", displayOrder: 1 })).id;
+        const segundos = (await createCourse(tx, cfg, { name: "Segundos", displayOrder: 2 })).id;
+        await setProductCourse(tx, cfg, cafe.id, primeros);
+        await setProductCourse(tx, cfg, agua.id, segundos);
+        return { primeros, segundos };
+      });
+      const id = randomUUID();
+      await parkOrder({ db: suite.db }, cfg, {
+        id,
+        zoneId,
+        lines: [
+          { menuItemId: cafe.menuItemId, quantity: "1" },
+          { menuItemId: agua.menuItemId, quantity: "1" },
+        ],
+      });
+      const req = { id, lines: [], tender: { method: "cash" as const, amount: "5.00" } };
+
+      const first = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req);
+
+      const sent = [
+        { lineNo: 1, lineCourse: primeros, itemCourse: primeros, fired: true, state: "queued" },
+        { lineNo: 2, lineCourse: segundos, itemCourse: segundos, fired: false, state: "queued" },
+      ];
+      expect(await tabSnapshot(id)).toEqual(sent);
+      expect(await linesSent(id)).toEqual([true, false]);
+      expect(await kitchenJobCount(printerId)).toBe(1);
+
+      const again = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req);
+
+      expect(again.invoiceNumber).toBe(first.invoiceNumber);
+      expect(await tabSnapshot(id)).toEqual(sent);
+      expect(await linesSent(id)).toEqual([true, false]);
+      expect(await kitchenJobCount(printerId)).toBe(1);
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+    },
+  );
 });
 
 describe("markCollected (the counter handover)", () => {
