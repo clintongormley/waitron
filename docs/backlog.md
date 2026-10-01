@@ -5774,6 +5774,17 @@ ongoing overhaul listed at the top of Track A.
   sections screen's internal name help, the product editor's help lines), still sits under its
   field.
 
+- **The bill discount limit's explanation sits in the text above the field, not cut off inside it
+  (C119, owner 2026-10-01) — DONE (2026-10-01).** The owner, on C104's note that only "Discoun…" /
+  "Los des…" of it showed: "Move discount text". On the adjustments reasons screen, the "Limit on a
+  bill's discounts" section now explains the limit in a paragraph under its heading, in the same
+  muted style as the page's own introduction, with the wording unchanged in English and Spanish; the
+  percentage field has no hint, so the empty box shows nothing. The field no longer carries the
+  explanation as its screen-reader description; the paragraph is the text after the section's
+  heading, inside the section that heading names. Looked at in light and dark, English and Spanish, at 390 px and in a wide frame (the
+  test harness's screenshots came out 1024 px wide), with no limit set and with 15%. The other
+  cut-off hints C104 listed stay as they are, by the owner's choice.
+
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now
   sits on its own line at the bottom of the form, above the buttons, not beside them; see the entry

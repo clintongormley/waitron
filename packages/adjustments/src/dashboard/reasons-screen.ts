@@ -572,6 +572,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #limitSection() {
     return html`<section class="limit" data-test="limit" aria-labelledby="limit-heading">
       <h2 id="limit-heading">${t("adjustments.limit.heading")}</h2>
+      <p class="intro" data-test="limit-explained">${t("adjustments.limit.explained")}</p>
       ${
         this.limitLoadError
           ? html`<p class="alert" role="alert" data-test="limit-alert">${this.limitLoadError}</p>`
@@ -593,7 +594,6 @@ export class AdjustmentReasonsScreen extends LitElement {
         unit="%"
         fixed-unit
         label=${t("adjustments.limit.field")}
-        hint=${t("adjustments.limit.hint")}
         .value=${this.#limitText()}
         .error=${error ?? ""}
         .disabled=${this.limitSaving}
