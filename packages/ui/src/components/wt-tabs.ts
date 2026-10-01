@@ -19,12 +19,32 @@ export class WtTabs extends LitElement {
         display: block;
         min-width: 0;
       }
+      .tab-row {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        border-bottom: 1px solid var(--wt-color-border);
+      }
       [role="tablist"] {
         display: flex;
+        flex: 1 1 auto;
+        min-width: 0;
         overflow-x: auto;
-        border-bottom: 1px solid var(--wt-color-border);
         gap: var(--wt-space-1);
         padding: var(--wt-space-1);
+      }
+      .tab-actions {
+        flex: 0 0 auto;
+        max-width: 60%;
+        min-width: 0;
+        overflow-x: auto;
+        padding-inline: var(--wt-space-1);
+      }
+      ::slotted([slot="actions"]) {
+        display: flex;
+        flex-wrap: nowrap;
+        width: max-content;
+        gap: var(--wt-space-2);
       }
       button {
         flex: 0 0 auto;
@@ -100,25 +120,28 @@ export class WtTabs extends LitElement {
   override render() {
     if (this.items.length === 0) return nothing;
     return html`
-      <div role="tablist" aria-label=${this.label}>
-        ${repeat(
-          this.items,
-          (item) => item.key,
-          (item, index) =>
-            html`<button
-              type="button"
-              role="tab"
-              data-key=${item.key}
-              id=${`${this.#id}-tab-${index}`}
-              aria-selected=${item.key === this.#selected}
-              aria-controls=${`${this.#id}-panel-${index}`}
-              tabindex=${item.key === this.#selected ? 0 : -1}
-              @click=${(event: MouseEvent) => this.#select(event, item.key)}
-              @keydown=${(event: KeyboardEvent) => this.#keydown(event, index)}
-            >
-              ${item.label}
-            </button>`,
-        )}
+      <div class="tab-row">
+        <div role="tablist" aria-label=${this.label}>
+          ${repeat(
+            this.items,
+            (item) => item.key,
+            (item, index) =>
+              html`<button
+                type="button"
+                role="tab"
+                data-key=${item.key}
+                id=${`${this.#id}-tab-${index}`}
+                aria-selected=${item.key === this.#selected}
+                aria-controls=${`${this.#id}-panel-${index}`}
+                tabindex=${item.key === this.#selected ? 0 : -1}
+                @click=${(event: MouseEvent) => this.#select(event, item.key)}
+                @keydown=${(event: KeyboardEvent) => this.#keydown(event, index)}
+              >
+                ${item.label}
+              </button>`,
+          )}
+        </div>
+        <div class="tab-actions"><slot name="actions"></slot></div>
       </div>
       ${repeat(
         this.items,

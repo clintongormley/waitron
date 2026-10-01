@@ -67,13 +67,6 @@ export class ModifiersScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         font-size: var(--wt-font-size-xl);
       }
-      /* The tab strip names the panel, so the Add button sits alone on its row rather than under a
-         second heading repeating the tab's own label. */
-      .tab-actions {
-        display: flex;
-        justify-content: flex-end;
-        margin-bottom: var(--wt-space-4);
-      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -540,34 +533,35 @@ export class ModifiersScreen extends LitElement {
     }`;
   }
   /** Each kind's table has its own `viewKey`, so a sort chosen on one tab is not restored on the other. */
+  #renderAdd(kind: Kind) {
+    const row = kind === "extras" ? "extra" : "option";
+    return html`<wt-button
+      data-test=${`add-${row}-list`}
+      variant="primary"
+      .disabled=${!this.locales}
+      @click=${() => this.#edit(kind, null)}
+      >${t(`${kind}.add`)}</wt-button
+    >`;
+  }
   #renderTab(kind: Kind) {
     const row = kind === "extras" ? "extra" : "option";
-    return html`<div class="tab-actions">
-        <wt-button
-          data-test=${`add-${row}-list`}
-          variant="primary"
-          .disabled=${!this.locales}
-          @click=${() => this.#edit(kind, null)}
-          >${t(`${kind}.add`)}</wt-button
-        >
-      </div>
-      <wt-data-table
-        data-test=${`${row}-lists`}
-        aria-label=${t(`${kind}.title`)}
-        searchable
-        searchLabel=${t(`${kind}.search`)}
-        noMatchesMessage=${t(`${kind}.no_matches`)}
-        viewKey=${`waitron.modifiers.${kind}.table`}
-        columnsLabel=${t("table.columns")}
-        sortKey="name"
-        sortDirection="ascending"
-        .rows=${this.#lists(kind)}
-        .columns=${this.#columns(kind)}
-        .rowKey=${(list: ModifierList) => list.id}
-        .rowClick=${kind === "options" ? (list: ModifierList) => this.#edit(kind, list) : undefined}
-        .rowClickLabel=${(list: ModifierList) => `${t("action.edit")}: ${list.name}`}
-        .emptyMessage=${t(`${kind}.empty`)}
-      ></wt-data-table>`;
+    return html`<wt-data-table
+      data-test=${`${row}-lists`}
+      aria-label=${t(`${kind}.title`)}
+      searchable
+      searchLabel=${t(`${kind}.search`)}
+      noMatchesMessage=${t(`${kind}.no_matches`)}
+      viewKey=${`waitron.modifiers.${kind}.table`}
+      columnsLabel=${t("table.columns")}
+      sortKey="name"
+      sortDirection="ascending"
+      .rows=${this.#lists(kind)}
+      .columns=${this.#columns(kind)}
+      .rowKey=${(list: ModifierList) => list.id}
+      .rowClick=${kind === "options" ? (list: ModifierList) => this.#edit(kind, list) : undefined}
+      .rowClickLabel=${(list: ModifierList) => `${t("action.edit")}: ${list.name}`}
+      .emptyMessage=${t(`${kind}.empty`)}
+    ></wt-data-table>`;
   }
   override render() {
     const editing = this.editing;
@@ -597,6 +591,7 @@ export class ModifiersScreen extends LitElement {
                 this.#url.write({ dashboard: "modifiers", view: this.tab });
               }}
             >
+              <div slot="actions">${this.#renderAdd(this.tab)}</div>
               <div slot="extras">${this.#renderTab("extras")}</div>
               <div slot="options">${this.#renderTab("options")}</div>
             </wt-tabs>`

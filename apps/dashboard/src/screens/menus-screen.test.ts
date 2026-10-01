@@ -978,6 +978,16 @@ it("edits a section in place, showing the path followed as a text breadcrumb", a
   expect(breadcrumb(el)).toBe("Lunch Menu");
 });
 
+it("keeps the current list's Add actions beside the Structure tab", async () => {
+  const el = await mountLunch(api());
+  await editDrinks(el);
+  const tabs = q(el, 'wt-tabs[data-test="menu-tabs"]')!;
+  for (const action of ["new-section", "include-menu", "open-add-products"]) {
+    expect(tabs.querySelector(`[slot="actions"] [data-test="${action}"]`)).not.toBeNull();
+    expect(tabs.querySelector(`[slot="structure"] [data-test="${action}"]`)).toBeNull();
+  }
+});
+
 it("keeps the new-section form open and explains a refused section", async () => {
   const client = api({
     createSectionIn: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),

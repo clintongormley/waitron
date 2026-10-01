@@ -356,9 +356,6 @@ export class PrintersScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-1);
       }
-      .section-action {
-        margin-top: var(--wt-space-3);
-      }
       .probe-panel {
         margin-bottom: var(--wt-space-4);
         padding: var(--wt-space-3);
@@ -1777,13 +1774,6 @@ export class PrintersScreen extends LitElement {
         .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_agents")}
       ></wt-data-table>
-      <wt-button
-        class="section-action"
-        variant="primary"
-        data-test="open-add-agent"
-        @click=${() => this.#openAgentModal()}
-        >${t("printers.add_agent")}</wt-button
-      >
     </section>`;
   }
 
@@ -2176,8 +2166,20 @@ export class PrintersScreen extends LitElement {
         .rowKey=${(p: Printer) => p.id}
         .emptyMessage=${t("printers.no_printers")}
       ></wt-data-table>
+    </section>`;
+  }
+
+  #renderTabActions(): TemplateResult {
+    return html`<div slot="actions">
       <wt-button
-        class="section-action"
+        ?hidden=${this.view !== "agents"}
+        variant="primary"
+        data-test="open-add-agent"
+        @click=${() => this.#openAgentModal()}
+        >${t("printers.add_agent")}</wt-button
+      >
+      <wt-button
+        ?hidden=${this.view !== "printers"}
         variant="primary"
         data-test="open-add-printer"
         @click=${() => {
@@ -2197,7 +2199,7 @@ export class PrintersScreen extends LitElement {
         }}
         >${t("printers.add_printer")}</wt-button
       >
-    </section>`;
+    </div>`;
   }
 
   #renderJobsSection(): TemplateResult {
@@ -3074,6 +3076,7 @@ export class PrintersScreen extends LitElement {
                   this.#url.write({ dashboard: "printers", view: this.view });
                 }}
               >
+                ${this.#renderTabActions()}
                 <div slot="queue">${this.#renderJobsSection()}</div>
                 <div slot="printers">${this.#renderPrintersSection()}</div>
                 <div slot="agents">${this.#renderAgentsSection()}</div>
