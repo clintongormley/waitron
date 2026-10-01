@@ -18,6 +18,17 @@ export async function enqueuePrintJob(
   payload: Uint8Array,
   kind: "document" | "drawer" = "document",
 ): Promise<{ jobId: string }> {
+  return insertPrintJob(tx, cfg, printerId, payload, kind, null);
+}
+
+async function insertPrintJob(
+  tx: Transaction,
+  cfg: PrintConfig,
+  printerId: string,
+  payload: Uint8Array,
+  kind: "document" | "drawer",
+  resendOf: string | null,
+): Promise<{ jobId: string }> {
   // A deactivated printer is reported as `printer.not_found`, not a code of its own.
   const [printer] = await tx
     .select({ id: printers.id })
@@ -32,6 +43,7 @@ export async function enqueuePrintJob(
       printerId,
       payload,
       kind,
+      resendOf,
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
@@ -49,10 +61,21 @@ export function canResendPrintJob(job: {
   );
 }
 
-/** Resend the opaque document to its original printer and location, preserving delivery history. */
+/**
+ * Resend the opaque document to its original printer and location, preserving delivery history. The
+ * copy names the first job of its chain, which `printJobInTrouble`
+ * (apps/server/src/print-job-trouble.ts) reads to clear a failed job once a later copy has printed.
+ */
 export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
   if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
   if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
-  return enqueuePrintJob(tx, { locationId: job.locationId }, job.printerId, job.payload);
+  return insertPrintJob(
+    tx,
+    { locationId: job.locationId },
+    job.printerId,
+    job.payload,
+    "document",
+    job.resendOf ?? job.id,
+  );
 }

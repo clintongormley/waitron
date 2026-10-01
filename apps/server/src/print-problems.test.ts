@@ -27,6 +27,7 @@ import {
   deactivatePrinter,
   enqueuePrintJob,
   MAX_DELIVERY_ATTEMPTS,
+  resendPrintJob,
   updatePrinter,
 } from "@waitron/printing";
 import {
@@ -500,6 +501,20 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     expect(await problemsOf(mesa4.partyId)).toHaveLength(1);
 
     await setJob(reprint, { status: "done" });
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
+    expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
+  });
+
+  it("clears once a resend of the failed ticket has printed, and not while the resend waits", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(job, exhausted);
+
+    const copy = await inTx(async (tx) => (await resendPrintJob(tx, job)).jobId);
+    expect(await problemsOf(mesa4.partyId)).toHaveLength(1);
+
+    await setJob(copy, { status: "done" });
     expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
   });
