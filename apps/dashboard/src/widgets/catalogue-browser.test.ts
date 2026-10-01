@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -112,6 +113,20 @@ function drag(from: Element, to: Element) {
   pointerEvent(to, "pointermove");
   pointerEvent(to, "pointerup");
 }
+function capturedTouch(from: Element, type: string, over: Element) {
+  const box = over.getBoundingClientRect();
+  from.dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      composed: true,
+      pointerId: 7,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: box.x + 8,
+      clientY: box.y + 8,
+    }),
+  );
+}
 
 it("moves a dragged product into a folder", async () => {
   const el = await mountBrowser();
@@ -125,6 +140,9 @@ it("moves a dragged product into a folder", async () => {
     Math.abs(parseFloat(cell.closest<HTMLElement>("tr")!.style.transform.slice(11))),
   ).toBeGreaterThan(5);
   expect(destination.getAttribute("part")).toContain("drop-target");
+  const draggedBox = cell.closest("tr")!.getBoundingClientRect();
+  const targetBox = destination.closest("tr")!.getBoundingClientRect();
+  expect(draggedBox.bottom <= targetBox.top || draggedBox.top >= targetBox.bottom).toBe(true);
   pointerEvent(destination, "pointerup");
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
@@ -132,6 +150,110 @@ it("moves a dragged product into a folder", async () => {
       "f",
     ),
   );
+});
+it("real pointer drag moves a product into a folder", async () => {
+  const el = await mountBrowser();
+  await userEvent.dragAndDrop(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "f",
+    ),
+  );
+});
+it("finds a folder under a captured touch pointer", async () => {
+  const el = await mountBrowser();
+  const from = await nameCell(el, "bread");
+  const grip = from.querySelector(".drag-grip")!;
+  const to = await nameCell(el, "folder:f");
+  capturedTouch(grip, "pointerdown", grip);
+  capturedTouch(grip, "pointermove", to);
+  expect(to.getAttribute("part")).toContain("drop-target");
+  capturedTouch(grip, "pointerup", to);
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "f",
+    ),
+  );
+});
+it("finds a breadcrumb under a captured touch pointer", async () => {
+  const el = await mountBrowser({ folderId: "d" });
+  const from = await nameCell(el, "cola");
+  const grip = from.querySelector(".drag-grip")!;
+  const to = el.shadowRoot!.querySelector('[data-test="crumb-0"]')!;
+  capturedTouch(grip, "pointerdown", grip);
+  capturedTouch(grip, "pointermove", to);
+  expect(to.closest("li")!.classList.contains("drop-target")).toBe(true);
+  capturedTouch(grip, "pointerup", to);
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["cola"], categoryIds: [] },
+      null,
+    ),
+  );
+});
+it("a folder click still opens it without starting a drag", async () => {
+  const el = await mountBrowser();
+  const opened = vi.fn();
+  el.addEventListener("open-folder", opened);
+  await userEvent.click(
+    (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="open-d"]')!,
+  );
+  expect(opened).toHaveBeenCalledOnce();
+  expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ folderId: "d" });
+});
+it("a small pointer movement stays a click rather than lifting the row", async () => {
+  const el = await mountBrowser();
+  const cell = await nameCell(el, "bread");
+  const box = cell.getBoundingClientRect();
+  pointerEvent(cell, "pointerdown");
+  cell.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      clientX: box.x + 9,
+      clientY: box.y + 8,
+    }),
+  );
+  expect(cell.closest("tr")!.part.contains("dragging")).toBe(false);
+  pointerEvent(cell, "pointerup");
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+it("a cancelled pointer over a valid folder does not move the product", async () => {
+  const el = await mountBrowser();
+  const from = await nameCell(el, "bread");
+  const to = await nameCell(el, "folder:f");
+  pointerEvent(from, "pointerdown");
+  pointerEvent(to, "pointermove");
+  expect(to.getAttribute("part")).toContain("drop-target");
+  pointerEvent(to, "pointercancel");
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+it("a drag ending on a folder's button does not also open it", async () => {
+  const el = await mountBrowser();
+  const opened = vi.fn();
+  el.addEventListener("open-folder", opened);
+  const button = (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
+    '[data-test="open-d"]',
+  )!;
+  const box = button.getBoundingClientRect();
+  pointerEvent(button, "pointerdown");
+  button.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      clientX: box.x + 25,
+      clientY: box.y + 8,
+    }),
+  );
+  pointerEvent(button, "pointerup");
+  button.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  expect(opened).not.toHaveBeenCalled();
 });
 it("drags the whole selected group and clears selection after moving", async () => {
   const el = await mountBrowser();
@@ -143,7 +265,7 @@ it("drags the whole selected group and clears selection after moving", async () 
     "f",
   );
 });
-it("refuses dragover and drop of a folder onto itself or its descendants but accepts a sibling", async () => {
+it("refuses a folder over itself or its descendants but highlights a sibling", async () => {
   const el = await mountBrowser({ categories: [...CATEGORIES, folder("s", "Soft drinks", null)] });
   await typeSearch(el, "drinks");
   const from = await nameCell(el, "folder:d");
@@ -157,7 +279,7 @@ it("refuses dragover and drop of a folder onto itself or its descendants but acc
   const sibling = await nameCell(el, "folder:s");
   pointerEvent(sibling, "pointermove");
   expect(sibling.getAttribute("part")).toContain("drop-target");
-  pointerEvent(from, "pointermove");
+  pointerEvent(el.shadowRoot!.querySelector(".toolbar")!, "pointermove");
   expect(sibling.getAttribute("part")).not.toContain("drop-target");
   pointerEvent(from, "pointercancel");
   pointerEvent(sibling, "pointermove");
@@ -209,7 +331,7 @@ it("refuses a dragged folder's ancestor or current breadcrumb when it is inside 
   expect(crumbs[0]!.classList.contains("drop-target")).toBe(true);
   list.dispatchEvent(
     new CustomEvent("pointer-drag-end", {
-      detail: { path: [crumbs[0]!], cancelled: true },
+      detail: { cancelled: true },
       bubbles: true,
       composed: true,
     }),

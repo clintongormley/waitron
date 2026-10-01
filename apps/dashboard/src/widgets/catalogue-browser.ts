@@ -548,7 +548,7 @@ export class CatalogueBrowser extends LitElement {
             ) ?? null;
           this.#overCrumb(target, target?.dataset.crumbDrop || null);
         }}
-        @pointer-drag-end=${(event: CustomEvent<{ path: EventTarget[]; cancelled: boolean }>) => {
+        @pointer-drag-end=${(event: CustomEvent<{ cancelled: boolean }>) => {
           event.stopPropagation();
           if (!event.detail.cancelled && this.#dropTarget)
             this.#dropCrumb(this.#dropTarget.dataset.crumbDrop || null);

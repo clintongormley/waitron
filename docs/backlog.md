@@ -1620,12 +1620,14 @@ everywhere"_.
   (`.table-wrap`, or `.wrap` in the variant table; `overflow-x: auto`), which also clips top and
   bottom.
 - **Products — DONE 2026-10-01.** The Products screen now lifts a product or folder row and follows
-  the pointer into a folder or breadcrumb. Accepted targets light up; a refused target leaves the
-  selection available for correction. The seven move and refusal cases now drive pointer events.
+  the pointer into a folder or breadcrumb. On touch, drag from the grip beside the name; touching
+  the name still scrolls the list. Accepted targets light up; a refused target leaves the selection
+  available for correction. Six move and refusal cases now dispatch pointer events; the
+  ancestor-breadcrumb case supplies the captured keys to the pointer target handler.
   The keyboard route remains **Select**, then **Move to…** with a required destination
   (`apps/dashboard/src/widgets/catalogue-browser.ts`).
 - **The canvas editor's tile drag (`apps/dashboard/src/screens/canvas-editor/canvas-grid-preview.ts`)
-  stays as it is** under the owner's choice A. A182 separately plans to retire the editor.
+  stays as it is.** The owner separately chose to leave it alone. A182 plans to retire the editor.
 
 **The extras list editor's "Add product" dropdown offered products already in the list (A181, owner
 2026-10-01: "when create extras lists, the products dropdown should remove already chosen

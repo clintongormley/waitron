@@ -10,7 +10,7 @@ import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
-import { holdPageCursor, releasePageCursor } from "./reorder-table.js";
+import { holdPageCursor, pointerElementsAt, releasePageCursor } from "./reorder-table.js";
 import {
   modifierListName,
   modifierListNames,
@@ -77,6 +77,7 @@ export class ProductList extends LitElement {
       }
       wt-data-table::part(drop-target) {
         background: var(--wt-color-surface-lifted);
+        outline: var(--wt-selected-ring);
       }
       wt-data-table::part(dragging) {
         position: relative;
@@ -85,8 +86,18 @@ export class ProductList extends LitElement {
         background: var(--wt-color-surface-lifted);
         box-shadow: var(--wt-shadow-2);
       }
-      wt-data-table::part(product-cell),
-      wt-data-table::part(folder-cell) {
+      wt-data-table::part(drag-grip) {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        vertical-align: middle;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        border-radius: var(--wt-radius-md);
+        background: transparent;
+        color: var(--wt-color-text);
         touch-action: none;
         user-select: none;
         cursor: var(--reorder-drag-cursor, grab);
@@ -146,6 +157,7 @@ export class ProductList extends LitElement {
     row: HTMLElement;
     x: number;
     y: number;
+    top: number;
     active: boolean;
   } | null = null;
 
@@ -160,7 +172,12 @@ export class ProductList extends LitElement {
     this.#dropTarget = null;
   }
   #startDrag(event: PointerEvent, key: string): void {
-    if (this.#pointerDrag) return;
+    if (this.#pointerDrag || event.button !== 0) return;
+    if (
+      event.pointerType === "touch" &&
+      !(event.currentTarget as HTMLElement).classList.contains("drag-grip")
+    )
+      return;
     const row = (event.currentTarget as HTMLElement).closest<HTMLElement>("tr[data-row-key]");
     if (!row) return;
     this.#pointerDrag = {
@@ -169,6 +186,7 @@ export class ProductList extends LitElement {
       row,
       x: event.clientX,
       y: event.clientY,
+      top: row.getBoundingClientRect().top,
       active: false,
     };
     document.addEventListener("pointermove", this.#moveDrag);
@@ -193,14 +211,12 @@ export class ProductList extends LitElement {
         }),
       );
     }
-    drag.row.style.transform = `translateY(${event.clientY - drag.y}px)`;
     this.#clearDropTarget();
-    const target = event
-      .composedPath()
-      .find(
-        (item): item is HTMLElement =>
-          item instanceof HTMLElement && item.part?.contains("folder-cell"),
-      );
+    const path = pointerElementsAt(event.clientX, event.clientY);
+    const target = path.find(
+      (item): item is HTMLElement =>
+        item instanceof HTMLElement && item.part?.contains("folder-cell"),
+    );
     const folderId = target
       ?.closest<HTMLElement>("tr[data-row-key]")
       ?.dataset.rowKey?.replace(/^folder:/, "");
@@ -208,9 +224,19 @@ export class ProductList extends LitElement {
       this.#dropTarget = target;
       target.part.add("drop-target");
     }
+    const hovered =
+      this.#dropTarget?.closest("tr") ??
+      path.find((item) => item instanceof HTMLElement && item.matches("li[data-crumb-drop]"));
+    const hoverBox = hovered?.getBoundingClientRect();
+    const below = hoverBox ? hoverBox.bottom + 8 : event.clientY - (drag.y - drag.top);
+    const top =
+      hoverBox && below + drag.row.offsetHeight > window.innerHeight
+        ? hoverBox.top - drag.row.offsetHeight - 8
+        : below;
+    drag.row.style.transform = `translateY(${top - drag.top}px)`;
     this.dispatchEvent(
       new CustomEvent("pointer-drag-move", {
-        detail: { path: event.composedPath() },
+        detail: { path },
         bubbles: true,
         composed: true,
       }),
@@ -226,6 +252,11 @@ export class ProductList extends LitElement {
     drag.row.part.remove("dragging");
     drag.row.style.removeProperty("transform");
     if (drag.active) releasePageCursor();
+    if (drag.active && event.type === "pointerup") {
+      // Pointer drags still produce a click; keep it from activating the source or destination.
+      document.addEventListener("click", this.#blockPostDragClick, true);
+      setTimeout(() => document.removeEventListener("click", this.#blockPostDragClick, true), 0);
+    }
     if (drag.active && event.type === "pointerup" && this.#dropTarget) {
       const folderId = this.#dropTarget
         .closest<HTMLElement>("tr[data-row-key]")
@@ -235,7 +266,7 @@ export class ProductList extends LitElement {
     if (drag.active) {
       this.dispatchEvent(
         new CustomEvent("pointer-drag-end", {
-          detail: { path: event.composedPath(), cancelled: event.type === "pointercancel" },
+          detail: { cancelled: event.type === "pointercancel" },
           bubbles: true,
           composed: true,
         }),
@@ -246,6 +277,11 @@ export class ProductList extends LitElement {
     this.dispatchEvent(
       new CustomEvent("drag-items", { detail: { keys: [] }, bubbles: true, composed: true }),
     );
+  };
+  readonly #blockPostDragClick = (event: MouseEvent): void => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    document.removeEventListener("click", this.#blockPostDragClick, true);
   };
   #dropFolder(folderId: string): void {
     this.dispatchEvent(
@@ -354,6 +390,15 @@ export class ProductList extends LitElement {
                 part=${ancestorOnly ? "product-cell context" : "product-cell"}
                 @pointerdown=${(event: PointerEvent) => this.#startDrag(event, product.id)}
               >
+                <button
+                  class="drag-grip"
+                  part="drag-grip"
+                  type="button"
+                  aria-label=${`${t("folders.drag")}: ${product.name}`}
+                  @pointerdown=${(event: PointerEvent) => this.#startDrag(event, product.id)}
+                >
+                  <wt-icon name="grip"></wt-icon>
+                </button>
                 ${
                   product.image === null
                     ? html`<span
@@ -541,6 +586,14 @@ export class ProductList extends LitElement {
             return html`<span
               part="folder-cell"
               @pointerdown=${(event: PointerEvent) => this.#startDrag(event, row.key)}
+              ><button
+                class="drag-grip"
+                part="drag-grip"
+                type="button"
+                aria-label=${`${t("folders.drag")}: ${folder.name}`}
+                @pointerdown=${(event: PointerEvent) => this.#startDrag(event, row.key)}
+              >
+                <wt-icon name="grip"></wt-icon></button
               ><wt-icon name="folder"></wt-icon
               ><wt-button
                 variant="ghost"
