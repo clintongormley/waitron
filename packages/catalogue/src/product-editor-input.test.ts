@@ -5,7 +5,6 @@ const unitId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const categoryId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const extrasListId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const optionsListId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const labelId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const input: ProductEditorInput = {
   name: "Coffee",
   customerName: { en: "Coffee", es: "Café" },
@@ -21,7 +20,6 @@ const input: ProductEditorInput = {
   available: false,
   vatClass: "zero",
   variants: [],
-  labelIds: [],
   primaryCategoryId: null,
   modifiers: [],
   allergens: null,
@@ -38,7 +36,6 @@ const inheriting = {
   unitId: null,
   unitPrice: null,
   vatClass: null,
-  labelIds: [],
   primaryCategoryId: null,
   allergens: null,
   dietaryDeclarations: null,
@@ -198,9 +195,6 @@ it.each([
   ["description", undefined],
   ["kitchenName", 42],
   ["image", false],
-  ["labelIds", [labelId, labelId.toUpperCase()]],
-  ["labelIds", undefined],
-  ["labelIds", ["not-an-id"]],
   ["primaryCategoryId", undefined],
   ["primaryCategoryId", "not-an-id"],
   // The retired membership list is refused, not ignored: ignoring it would report a save the
@@ -211,23 +205,22 @@ it.each([
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
-it("takes any category as the main one, with labels independent of it, lower-cased", () => {
-  expect(
-    parse({
-      ...input,
-      labelIds: [labelId.toUpperCase()],
-      primaryCategoryId: categoryId.toUpperCase(),
-    }),
-  ).toEqual({ ...input, labelIds: [labelId], primaryCategoryId: categoryId });
-  expect(parse({ ...input, labelIds: [labelId], primaryCategoryId: null })).toMatchObject({
-    labelIds: [labelId],
-    primaryCategoryId: null,
+it("takes any category as the main one, lower-cased", () => {
+  expect(parse({ ...input, primaryCategoryId: categoryId.toUpperCase() })).toEqual({
+    ...input,
+    primaryCategoryId: categoryId,
   });
+  expect(parse({ ...input, primaryCategoryId: null })).toMatchObject({ primaryCategoryId: null });
 });
-it("refuses labels of a variant's own, and takes its own main category", () => {
-  expect(() => parseVariant({ ...inheriting, labelIds: [labelId] })).toThrow(
-    expect.objectContaining({ code: "product.variant_invalid", params: { field: "labelIds" } }),
+it("refuses a body that still carries labelIds, rather than dropping them", () => {
+  expect(() => parse({ ...input, labelIds: [] })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "labelIds" } }),
   );
+  expect(() => parseVariant({ ...inheriting, labelIds: [] })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "labelIds" } }),
+  );
+});
+it("takes a variant's own main category", () => {
   expect(parseVariant({ ...inheriting, primaryCategoryId: categoryId }).primaryCategoryId).toBe(
     categoryId,
   );

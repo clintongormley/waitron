@@ -24,7 +24,7 @@ export const catalogues = table("catalogues", {
  * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */
 export const categories = table("categories", {
   id: id("id").primaryKey().$defaultFn(newId),
-  name: json<Record<string, string>>("name").notNull(),
+  name: label("name").notNull(),
   // A fired line with no product-level station falls back to this one.
   /* v8 ignore start */
   stationId: id("station_id").references(() => kitchenStations.id),

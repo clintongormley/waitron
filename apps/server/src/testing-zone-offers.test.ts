@@ -81,8 +81,8 @@ async function seedVenue(db: Database): Promise<Venue> {
   return withTransaction(db, async (tx) => {
     const carta = await createCatalogue(tx, { name: "Carta" });
     await assignCatalogueToLocation(tx, locationId, carta.id);
-    const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
-    const comida = await createCategory(tx, { name: { en: "Comida" } });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const comida = await createCategory(tx, { name: "Comida" });
     const product = (name: string, unitPrice: string, categoryId: string | null) =>
       createProduct(tx, {
         catalogueId: carta.id,

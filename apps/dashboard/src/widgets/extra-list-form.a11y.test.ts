@@ -20,7 +20,6 @@ function product(id: string, name: string, unitPrice: string): Product {
     modifiers: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
-    labelIds: [],
     primaryCategoryId: "category-1",
     name,
     customerName: { es: `${name} para el cliente` },

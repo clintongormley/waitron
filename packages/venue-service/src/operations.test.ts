@@ -276,7 +276,7 @@ describe("venue service routing", () => {
         },
       ]);
 
-      const category = await createCategory(tx, { name: { en: "Drinks" } });
+      const category = await createCategory(tx, { name: "Drinks" });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -407,7 +407,7 @@ describe("venue service routing", () => {
         },
       ]);
       const menu = await createCatalogue(tx, { name: "Drinks" });
-      const category = await createCategory(tx, { name: { en: "Cocktails" } });
+      const category = await createCategory(tx, { name: "Cocktails" });
       const negroni = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -470,7 +470,7 @@ describe("venue service routing", () => {
         },
       );
       const menu = await createCatalogue(tx, { name: "Deli takeaway" });
-      const category = await createCategory(tx, { name: { en: "Cold cuts" } });
+      const category = await createCategory(tx, { name: "Cold cuts" });
       const ham = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -793,7 +793,7 @@ describe("venue service routing", () => {
         getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000099"),
       ).rejects.toMatchObject({ code: "order.service_context_missing" });
 
-      const category = await createCategory(tx, { name: { en: "Packaged" } });
+      const category = await createCategory(tx, { name: "Packaged" });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -856,7 +856,7 @@ describe("venue service routing", () => {
         },
       );
       const menu = await createCatalogue(tx, { name: "Drinks" });
-      const category = await createCategory(tx, { name: { en: "Cocktails" } });
+      const category = await createCategory(tx, { name: "Cocktails" });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: category.id,
@@ -923,9 +923,7 @@ async function productWithCategory(
   name: string,
   withCategory = true,
 ): Promise<{ id: string; categoryId: string }> {
-  const category = withCategory
-    ? await createCategory(tx, { name: { en: `${name} category` } })
-    : null;
+  const category = withCategory ? await createCategory(tx, { name: `${name} category` }) : null;
   const product = await createProduct(tx, {
     catalogueId: menuId,
     categoryId: category?.id ?? null,

@@ -54,8 +54,8 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
   const { locationId } = await seedVenue(db);
   await seedLegacySellingUnits(db);
   return withTransaction(db, async (tx) => {
-    const softDrinks = (await createCategory(tx, { name: { en: "Soft drinks" } })).id;
-    const coldDrinks = (await createCategory(tx, { name: { en: "Cold drinks" } })).id;
+    const softDrinks = (await createCategory(tx, { name: "Soft drinks" })).id;
+    const coldDrinks = (await createCategory(tx, { name: "Cold drinks" })).id;
     const lunch = await createCatalogue(tx, { name: "Lunch Menu" });
     const dinner = await createCatalogue(tx, { name: "Dinner Menu" });
     const make = async (name: string, unitPrice: string, image: string | null = null) =>

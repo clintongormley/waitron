@@ -140,7 +140,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
   };
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
-    const platos = await createCategory(tx, { name: { [LOCALE]: "Platos" } });
+    const platos = await createCategory(tx, { name: "Platos" });
     for (const product of MENU) {
       await createProduct(tx, {
         catalogueId: cat.id,

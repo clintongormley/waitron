@@ -8,6 +8,7 @@
  * (https://www.apache.org/licenses/LICENSE-2.0), published at https://fonts.google.com/icons.
  */
 export const DASHBOARD_ICONS: Record<string, string> = {
+  folder: "M1 3h5l2 2h7v8H1Z",
   hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",

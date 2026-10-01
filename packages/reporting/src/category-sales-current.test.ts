@@ -5,16 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleLineClassification } from "@waitron/shared";
 import { seedVenue, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
-import {
-  at,
-  chain,
-  classified,
-  CUTOVER,
-  labelRows,
-  rows,
-  sellLines,
-  TZ,
-} from "../test/category-fixtures.js";
+import { at, chain, classified, CUTOVER, rows, sellLines, TZ } from "../test/category-fixtures.js";
 import type { LineSpec } from "../test/category-fixtures.js";
 import { computeCategorySales } from "./category-sales.js";
 import type { CategoryReport, CategorySalesInput } from "./category-sales.js";
@@ -35,7 +26,6 @@ function sell(day: string, lines: LineSpec[]) {
 const TODAY: Record<string, SaleLineClassification> = {
   "p-negroni": classified(
     chain(["cat-drinks", "Drinks"], ["cat-spirits", "Spirits"], ["cat-cocktails", "Cocktails"]),
-    [{ id: "lab-happy", name: "Two for one" }],
   ),
   "p-cola": classified(chain(["cat-softs", "Refrescos"])),
   "p-water": classified([]),
@@ -79,7 +69,6 @@ describe("computeCategorySales in current categories", () => {
             ["cat-alcoholic", "Alcoholic drinks"],
             ["cat-cocktails", "Cocktails"],
           ),
-          [{ id: "lab-happy", name: "Happy hour" }],
         ),
       },
     ]);
@@ -113,7 +102,6 @@ describe("computeCategorySales in current categories", () => {
       "Drinks > Spirits > Cocktails: 33.00/30.00 33.00/30.00/2",
       "Refrescos: 3.30/3.00 3.30/3.00/1",
     ]);
-    expect(labelRows(report)).toEqual(["Two for one [lab-happy]: 33.00/30.00"]);
   });
 
   it("puts a line with no product, or a product that no longer exists, under Not recorded with no children", async () => {

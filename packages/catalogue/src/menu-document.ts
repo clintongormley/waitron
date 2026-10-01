@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
-import { AppError, FALLBACK_LOCALE, resolveContentText } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import { readContentLanguages } from "./content-languages.js";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { menuItemExtraItems } from "./schema/extras.js";
@@ -342,7 +341,7 @@ interface LiveProductRow {
   active: boolean;
   available: boolean;
   courseId: string | null;
-  category: Record<string, string> | null;
+  category: string | null;
 }
 
 /** The current rows behind some published offers. */
@@ -490,11 +489,6 @@ export async function applyLiveFields(
     ]),
   );
   const rows = await readLiveRows(tx, [...offersOf.values()].flat());
-  const { defaultLanguage } = await readContentLanguages(tx, FALLBACK_LOCALE);
-  const categoryOf = (row: LiveProductRow) =>
-    row.category === null
-      ? null
-      : resolveContentText(row.category, defaultLanguage, defaultLanguage);
 
   for (const [menuId, offers] of offersOf)
     live.set(
@@ -507,7 +501,7 @@ export async function applyLiveFields(
             ...offer,
             available: sellable(dish),
             courseId: dish.courseId,
-            category: categoryOf(dish),
+            category: dish.category,
             variants: offer.variants.flatMap((variant) => {
               const row = rows.products.get(variant.id);
               return row === undefined
@@ -517,7 +511,7 @@ export async function applyLiveFields(
                       ...variant,
                       available: sellable(row) && variant.offered,
                       courseId: row.courseId,
-                      category: categoryOf(row),
+                      category: row.category,
                     },
                   ];
             }),

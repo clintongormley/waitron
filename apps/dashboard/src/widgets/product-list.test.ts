@@ -77,7 +77,6 @@ function product(
     modifiers: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
-    labelIds: [],
     primaryCategoryId: "category-1",
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
@@ -106,7 +105,6 @@ function product(
         unitPrice: variant.unitPrice ?? base.unitPrice,
         vatClass: base.vatClass,
         primaryCategoryId: base.primaryCategoryId,
-        labelIds: base.labelIds,
       },
     })),
   };
@@ -150,7 +148,6 @@ describe("product-list", () => {
       ]),
     ).toEqual([
       ["reporting-category", true],
-      ["labels", true],
       ["price", true],
       ["modifiers", true],
       ["ordering", true],
@@ -162,14 +159,14 @@ describe("product-list", () => {
         th.textContent!.replace(/[▲▼]/g, "").trim(),
       );
     const before = headerLabels();
-    expect(before).toContain(t("labels.field"));
-    const box = root.querySelector<HTMLInputElement>('input[data-column="labels"]')!;
+    expect(before).toContain(t("editor.modifiers"));
+    const box = root.querySelector<HTMLInputElement>('input[data-column="modifiers"]')!;
     box.checked = false;
     box.dispatchEvent(new Event("change"));
     await table.updateComplete;
-    expect(headerLabels()).toEqual(before.filter((text) => text !== t("labels.field")));
+    expect(headerLabels()).toEqual(before.filter((text) => text !== t("editor.modifiers")));
     expect(JSON.parse(localStorage.getItem("waitron.products.table:columns")!)).toEqual({
-      labels: false,
+      modifiers: false,
     });
   });
 
@@ -311,69 +308,6 @@ describe("product-list", () => {
     },
   );
 
-  // A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
-  it.each([
-    { locale: "es-ES", term: "12,00", want: ["twelve"] },
-    { locale: "es-ES", term: "12,00 €", want: ["twelve"] },
-    { locale: "en-GB", term: "€12.00", want: ["twelve"] },
-    { locale: "es-ES", term: "12.00", want: ["twelve"] },
-    { locale: "es-ES", term: "7,50", want: ["sized"] },
-    { locale: "es-ES", term: "7.50", want: ["sized"] },
-  ])(
-    "finds a product in $locale by the price as shown, or as its raw amount: $term",
-    async ({ locale, term, want }) => {
-      setLocale(locale);
-      try {
-        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-          products: [
-            product({ id: "twelve", name: "Tortilla", unitPrice: "12.00" }),
-            product({ id: "other", name: "Pan", unitPrice: "8.50" }),
-            product({
-              id: "sized",
-              name: "Café",
-              variants: [
-                { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
-                { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
-              ],
-            }),
-          ],
-        });
-        const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        const root = await tableRoot(el);
-        const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-        search.value = term;
-        search.dispatchEvent(new Event("input", { bubbles: true }));
-        await table.updateComplete;
-        expect(rowKeys(root)).toEqual(want);
-      } finally {
-        setLocale("es-ES");
-      }
-    },
-  );
-
-  it("finds a middle variant's price on the variant, not on its product's range", async () => {
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({
-          id: "sized",
-          name: "Café",
-          variants: [
-            { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
-            { ...bunVariant, id: "mid", name: "Mediano", unitPrice: "5.50" },
-            { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
-          ],
-        }),
-      ],
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = "5.50";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["sized", "sized:mid"]);
-  });
-
   it("prices a variant with no price of its own at its product's price", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -407,13 +341,11 @@ describe("product-list", () => {
   // options list this product does NOT hold, so a column printing the loaded set instead of the
   // attachments names it; and the cell is asserted whole with `toBe`, so resolving the `extras` ref
   // against the options lists — which also reaches "Punto" — loses "Salsas".
-  it("shows the main category, the labels by name, attached modifier list names, and no VAT column", async () => {
+  it("shows the main category, attached modifier list names, and no VAT or labels column", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
           primaryCategoryId: "reporting",
-          // Sorted by id, as the server sends them; the cell lists them by name.
-          labelIds: ["l-a", "l-b"],
           modifiers: [
             { kind: "extras", id: "ex-1" },
             { kind: "options", id: "opt-1" },
@@ -421,12 +353,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "reporting", name: { es: "Comida" }, image: null, color: null, parentId: null },
-        { id: "seasonal", name: { es: "Temporada" }, image: null, color: null, parentId: null },
-      ],
-      labels: [
-        { id: "l-b", name: "Temporada" },
-        { id: "l-a", name: "Terraza" },
+        { id: "reporting", name: "Comida", parentId: null },
+        { id: "seasonal", name: "Temporada", parentId: null },
       ],
       extraLists: [{ id: "ex-1", name: "Salsas" }],
       optionLists: [
@@ -438,13 +366,11 @@ describe("product-list", () => {
     const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
     expect(headers.some((header) => header.startsWith(t("product.name")))).toBe(true);
     expect(headers).toContain(t("editor.main_category"));
-    expect(headers).toContain(t("labels.field"));
     expect(headers).toContain(t("editor.modifiers"));
     expect(headers).not.toContain(t("product.vat"));
+    expect(headers).not.toContain("Etiquetas");
+    expect(root.querySelector('input[data-column="labels"]')).toBeNull();
     expect(cellUnder(root, "prod-1", t("editor.main_category")).textContent!.trim()).toBe("Comida");
-    expect(cellUnder(root, "prod-1", t("labels.field")).textContent!.trim()).toBe(
-      "Temporada, Terraza",
-    );
     expect(cellUnder(root, "prod-1", t("editor.modifiers")).textContent!.trim()).toBe(
       "Salsas, Punto de la carne",
     );
@@ -472,22 +398,20 @@ describe("product-list", () => {
     expect(cell.textContent).not.toContain("Punto");
   });
 
-  it("shows a visible placeholder instead of blank cells for unresolved category, label and modifier ids", async () => {
+  it("shows a visible placeholder instead of blank cells for unresolved category and modifier ids", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
           primaryCategoryId: "missing-category",
-          labelIds: ["missing-label"],
           modifiers: [{ kind: "options", id: "missing-list" }],
         }),
       ],
       categories: [],
-      labels: [],
       extraLists: [],
       optionLists: [],
     });
     const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
-    expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(3);
+    expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(2);
   });
 
   // Names differ from their ids and sort in the ids' order, so the rows read the same either way.
@@ -601,7 +525,7 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["dish"]);
   });
 
-  it("leaves a variant row's ordering cell muted and out of the search", async () => {
+  it("leaves a variant row's ordering cell muted", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "dish", ordering: "public" }),
@@ -615,14 +539,9 @@ describe("product-list", () => {
     const cell = cellUnder(root, "bun:small", t("product.ordering"));
     expect(cell.querySelector("[data-test=ordering-badge]")).toBeNull();
     expect(cell.textContent!.trim()).toBe("—");
-    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = t("product.ordering_not_sold_separately");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["bun"]);
   });
 
-  it("is searchable and expands a parent product to its variant rows", async () => {
+  it("expands a parent product to its variant rows", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -654,7 +573,7 @@ describe("product-list", () => {
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    expect(table.searchable).toBe(true);
+    expect(table.searchable).toBe(false);
     expect(table.rowParent).toBeDefined();
     const root = await tableRoot(el);
     expect(root.querySelectorAll("tbody tr")).toHaveLength(1);
@@ -667,51 +586,6 @@ describe("product-list", () => {
     );
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("Taza pequeña");
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("SM");
-  });
-
-  it("shows a matching variant and its product while branches are initially collapsed", async () => {
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({
-          id: "coffee",
-          name: "Coffee",
-          variants: [
-            {
-              id: "small",
-              name: "Small",
-              customerName: { es: "Taza pequeña" },
-              kitchenName: "SM",
-              image: null,
-              unitPrice: "2.00",
-              available: true,
-              active: true,
-            },
-            {
-              id: "large",
-              name: "Large",
-              customerName: { es: "Taza grande" },
-              kitchenName: "LG",
-              image: null,
-              unitPrice: "3.00",
-              available: true,
-              active: true,
-            },
-          ],
-        }),
-      ],
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = "Small";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await table.updateComplete;
-    const rows = [...root.querySelectorAll("tbody tr")];
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.textContent).toContain("Coffee");
-    expect(rows[1]!.textContent).toContain("Small");
-    expect(rows[1]!.textContent).not.toContain("Taza pequeña");
-    expect(rows[1]!.textContent).not.toContain("SM");
   });
 
   it("shows an active/inactive badge carrying text, not colour alone", async () => {
@@ -860,7 +734,7 @@ describe("product-list", () => {
 
   // Every field differs between Wine 175 and its product, and its three names differ from one
   // another, so a row reading the product's values or the wrong name fails.
-  it("shows a variant's own name, its effective price and main category, and its parent's labels", async () => {
+  it("shows a variant's own name, its effective price and main category", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -869,7 +743,6 @@ describe("product-list", () => {
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: "food",
-          labelIds: ["l-ter"],
           variants: [
             {
               ...bunVariant,
@@ -882,17 +755,15 @@ describe("product-list", () => {
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "drinks",
-                labelIds: ["l-ter"],
               },
             },
           ],
         }),
       ],
       categories: [
-        { id: "food", name: { es: "Comida" }, image: null, color: null, parentId: null },
-        { id: "drinks", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
+        { id: "food", name: "Comida", parentId: null },
+        { id: "drinks", name: "Bebidas", parentId: null },
       ],
-      labels: [{ id: "l-ter", name: "Terraza" }],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
@@ -905,8 +776,6 @@ describe("product-list", () => {
     );
     expect(cell(t("editor.main_category")).textContent!.trim()).toBe("Bebidas");
     expect(cellUnder(root, "wine", t("editor.main_category")).textContent!.trim()).toBe("Comida");
-    expect(cell(t("labels.field")).textContent!.trim()).toBe("Terraza");
-    expect(cellUnder(root, "wine", t("labels.field")).textContent!.trim()).toBe("Terraza");
   });
 
   it("notes a variant's VAT under its price only where it differs from its product's", async () => {
@@ -928,7 +797,6 @@ describe("product-list", () => {
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "category-1",
-                labelIds: [],
               },
             },
             {
@@ -1151,6 +1019,25 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products: [] });
     expect((await tableRoot(el)).querySelectorAll("tbody tr").length).toBe(0);
   });
+});
+
+it("drags a product outside the selection alone and never offers a variant as a drag source", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [product({ id: "bun", variants: [bunVariant] })],
+    selecting: true,
+    selected: ["folder:other"],
+  });
+  const root = await tableRoot(el);
+  const cell = root.querySelector<HTMLElement>('[part~="product-cell"]')!;
+  const data = new DataTransfer();
+  cell.dispatchEvent(
+    new DragEvent("dragstart", { bubbles: true, composed: true, dataTransfer: data }),
+  );
+  expect(data.getData("application/x-waitron-items")).toBe('["bun"]');
+  root.querySelector<HTMLElement>(".tree-toggle")!.click();
+  const variant = (await tableRoot(el)).querySelector('tr[data-row-key="bun:small"]')!;
+  expect(variant).not.toBeNull();
+  expect(variant.querySelector('[draggable="true"]')).toBeNull();
 });
 
 describe("the product list at phone width", () => {

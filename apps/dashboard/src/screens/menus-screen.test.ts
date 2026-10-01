@@ -56,7 +56,6 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     modifiers: [],
     catalogueId: "cat-1",
     categoryId: null,
-    labelIds: [],
     primaryCategoryId: null,
     name,
     customerName: { es: `${name} para clientes`, en: `${name} for guests` },
@@ -89,9 +88,9 @@ const products: Product[] = [
 ];
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
-  { id: "c-beer", name: { es: "Cerveza" }, image: null, color: null, parentId: "c-drinks" },
-  { id: "c-mains", name: { es: "Principales" }, image: null, color: null, parentId: null },
+  { id: "c-drinks", name: "Bebidas", parentId: null },
+  { id: "c-beer", name: "Cerveza", parentId: "c-drinks" },
+  { id: "c-mains", name: "Principales", parentId: null },
 ];
 
 const menus: CatalogueSummary[] = [
@@ -261,7 +260,6 @@ function variantProducts(): Product[] {
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
       primaryCategoryId: "c-drinks",
-      labelIds: [],
     },
   });
   return products.map((each) =>

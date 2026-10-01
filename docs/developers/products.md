@@ -202,8 +202,9 @@ name reaches no order or receipt surface at all — a pick becomes its own line 
 PRODUCT's names, and nothing copies the list's name onto it. A library section's customer names
 (`sections.names`, kind `library_section`) are optional too, and only a partly filled map is
 reported. Only library sections are read: a menu's own lists in `sections` are left out. The other
-kinds the query reports — `category` and `unit` —
-have no optional customer-facing name to fall back from and stay required. An options list contributes two of the report's kinds and not one, both
+kind the query reports, `unit`, has no optional customer-facing name to fall back from and stays
+required. A category is not in the report: its name is one plain internal name, not a set of
+translations. An options list contributes two of the report's kinds and not one, both
 of them in the optional group: the list's own name (`option_list`) and each of its labels
 (`option_label`), each with its own table. An extras list contributes one kind, `extra_list`, and no
 second one: each of its items names a product and carries no name of its own, so `extra_list_items`
@@ -224,8 +225,8 @@ tax rate, station, course, description, image, pricing unit and allergen and die
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
 `packages/catalogue/src/variant-fallback.ts`), and so is its main reporting category. Its unit is
-its parent's while it stores none of its own (`unitOwnerJoin`, same file). Its labels, and its
-extras and options lists, are always its parent's (`labelOwnerJoin`, same file, for the labels). Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
+its parent's while it stores none of its own (`unitOwnerJoin`, same file). Its extras and options
+lists are always its parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
 kitchen name falls back to the variant's own staff name (_The three names_, above).
 
 A variant's published allergens stay blank, and so read as its parent's, until it sets allergens of
@@ -419,7 +420,7 @@ migration, whose hash changed although the count did not", `packages/provisionin
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
-collapsed. Top to bottom: Name, Category and labels, Available, Standalone ordering (absent on a
+collapsed. Top to bottom: Name, Category, Available, Standalone ordering (absent on a
 variant's page), ▸ Kitchen, ▸ Descriptors,
 ▸ Nutritional info, Price (and the variants table, if there are variants), Modifiers, then Cancel and
 Save. An Inactive product's editor also opens with a line saying so, and offers Restore beside
@@ -436,11 +437,10 @@ validation error opens itself and cannot be collapsed until the error is fixed �
 `wt-disclosure`'s `has-error`, described in
 [the design system](design-system.md).
 
-The main category and the labels are chosen in the editor itself, through the two field templates
-in `apps/dashboard/src/widgets/classification-fields.ts`: a single-choice main-category picker and a
-labels picker. The Categories screen uses the same main-category picker when it moves a product. A
-variant shows its parent's main category as "Same as …" and its parent's labels as a note, because
-it carries no labels of its own. See [Product categories](product-categories.md).
+The main category is chosen in the editor itself, through the single-choice picker in
+`apps/dashboard/src/widgets/classification-fields.ts`.
+A variant shows its parent's main category as "Same as …". See
+[Product categories](product-categories.md).
 
 ## One save, one transaction
 
@@ -451,7 +451,7 @@ product can be routed as you create it.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
-main reporting category), `labelIds`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
+main reporting category; a body carrying the retired `labelIds` is refused), `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
 dietary declarations, the two required state flags `active` and `available` (below), the required
 `ordering` (a body carrying the retired `soldAlone` is refused), and `variants`

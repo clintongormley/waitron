@@ -68,7 +68,7 @@ const period: SalesPeriodDto = {
 const direct = (gross: string, net: string, lines: number) => ({ gross, net, lines });
 
 // Every row kind the table draws: a parent with a Directly-in row, a leaf, Uncategorised, and Not
-// recorded with its own row and a free-text child; labels; and the incomplete note.
+// recorded with its own row and a free-text child; and the incomplete note.
 const categories: CategorySalesDto = {
   mode: "at_time_of_sale",
   tree: [
@@ -125,7 +125,6 @@ const categories: CategorySalesDto = {
       ],
     },
   ],
-  labels: [{ id: "l-happy", name: "Hora feliz Casa", gross: "8.00", net: "7.00" }],
   gross: "24.00",
   net: "25.70",
   grossComplete: false,
@@ -180,7 +179,7 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     await expectNoA11yViolations(host);
   });
 
-  it("renders the category report, its labels, the incomplete note and a sent print accessibly", async () => {
+  it("renders the category report, the incomplete note and a sent print accessibly", async () => {
     const { el, host } = await mountWidget<SalesScreen>(
       "dashboard-sales-screen",
       { api: stubApi() },
@@ -190,7 +189,6 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=print-categories]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=gross-incomplete]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=label-table]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=print-status]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });

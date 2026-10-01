@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, currentContentLanguages, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
@@ -24,7 +24,7 @@ import "./image-upload.js";
 import "./variant-form.js";
 import "./variant-table.js";
 import { categoryPath } from "./category-form.js";
-import { categoryField, labelsField, labelsText } from "./classification-fields.js";
+import { categoryField } from "./classification-fields.js";
 import {
   nonBlankNames,
   optionalTextFields,
@@ -35,7 +35,7 @@ import {
 } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
-import type { CategorySummary, DashboardApi, Label } from "../api/client.js";
+import type { CategorySummary, DashboardApi } from "../api/client.js";
 import type { ProductModifierRef } from "@waitron/catalogue/src/product-types.js";
 import type {
   EditorVariant,
@@ -98,7 +98,6 @@ const SERVER_FIELDS: Record<string, string> = {
   unitPrice: "unit-price",
   vatClass: "tax",
   primaryCategoryId: "primary",
-  labelIds: "labels",
   active: "active",
   ordering: "ordering",
   stationId: "product-station",
@@ -161,7 +160,6 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   unitPrice: "unit-price",
   vatClass: "tax",
   primaryCategoryId: "primary",
-  labelIds: "labels",
   modifiers: "modifier",
   ordering: "ordering",
   stationId: "product-station",
@@ -182,7 +180,6 @@ function emptyDraft(): ProductEditorDraft {
     ordering: "public",
     vatClass: "general",
     variants: [],
-    labelIds: [],
     primaryCategoryId: null,
     modifiers: [],
     allergens: null,
@@ -367,10 +364,10 @@ export class ProductEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) childOpen = false;
   @property({ attribute: false }) locales: string[] = [];
+  @property({ attribute: false }) newCategoryId: string | null = null;
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) labels: Label[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
@@ -425,7 +422,9 @@ export class ProductEditor extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("value") || (changed.has("open") && this.open)) {
-      this.draft = this.value ? structuredClone(this.value) : emptyDraft();
+      this.draft = this.value
+        ? structuredClone(this.value)
+        : { ...emptyDraft(), primaryCategoryId: this.newCategoryId };
       this.generation++;
       this.imageOpen = false;
       this.attempted = false;
@@ -529,7 +528,7 @@ export class ProductEditor extends LitElement {
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
-    if (this.inherited === null) keys.push("labels", "ordering", "modifier");
+    if (this.inherited === null) keys.push("ordering", "modifier");
     return new Set(keys);
   }
   private dismiss(...keys: string[]): void {
@@ -628,9 +627,7 @@ export class ProductEditor extends LitElement {
   }
   private categoryLabel(id: string) {
     const category = this.categories.find((category) => category.id === id);
-    return category
-      ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
-      : t("editor.missing_choice");
+    return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
   }
   private text(value: LocalizedText) {
     return resolveContentText(value, this.language, this.language);
@@ -782,9 +779,8 @@ export class ProductEditor extends LitElement {
     this.change("variants", variants);
   }
 
-  /** The main category and the labels. A variant's empty main category reads as its parent's, which
-   * the combobox names as its empty choice, like a select's "Same as" option. A variant has no labels
-   * of its own, so its page shows the parent's as a hint. */
+  /** The main category. A variant's empty main category reads as its parent's, which the combobox
+   * names as its empty choice, like a select's "Same as" option. */
   private renderCategories() {
     const parent = this.inherited;
     const parentCategory = parent?.primaryCategoryId
@@ -796,7 +792,6 @@ export class ProductEditor extends LitElement {
         name: "primary",
         label: t("editor.main_category"),
         categories: this.categories,
-        languages: currentContentLanguages(),
         value: this.draft.primaryCategoryId,
         noneLabel: parent ? this.sameAs(parentCategory) : t("categories.uncategorised"),
         error: this.error("primary"),
@@ -812,22 +807,6 @@ export class ProductEditor extends LitElement {
           >${t("editor.add_category")}</wt-button
         >
       </div>
-      ${
-        parent
-          ? this.hint(
-              "labels-hint",
-              `${t("labels.field")}: ${this.sameAs(
-                labelsText(parent.labelIds, this.labels, t("editor.missing_choice")),
-              )}`,
-            )
-          : labelsField({
-              labels: this.labels,
-              value: this.draft.labelIds,
-              error: this.error("labels"),
-              disabled: this.suspended,
-              change: (ids) => this.change("labelIds", ids),
-            })
-      }
     </div>`;
   }
 

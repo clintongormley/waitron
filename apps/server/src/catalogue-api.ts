@@ -6,25 +6,19 @@ import { AppError, FALLBACK_LOCALE, decimal, type Decimal } from "@waitron/share
 import { products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
+  moveCatalogueItems,
+  deleteCatalogueItems,
+  summariseFolders,
+  type CatalogueSelection,
+  type FolderContents,
   catalogueExists,
   readContentLanguages,
   writeContentLanguages,
   validateContentTranslations,
   createCatalogue,
-  addProductsToCategory,
-  categoryDependants,
   createCategory,
   readCategory,
   updateCategory,
-  deleteCategory,
-  setMainReportingCategory,
-  listCategoryProducts,
-  listLabels,
-  createLabel,
-  renameLabel,
-  deleteLabel,
-  readProductLabels,
-  setProductLabels,
   listSections,
   listMembers,
   readSection,
@@ -52,7 +46,6 @@ import {
   type SectionInput,
   type SectionPatch,
   type CategoryInput,
-  type CategoryReassignment,
   createProduct,
   listCatalogues,
   listCataloguesForLocation,
@@ -127,52 +120,20 @@ export interface CatalogueApiDeps {
  */
 const CATALOGUE_WRITE_PERMISSION: Permission = "person.manage";
 
-/** A label body's `name`, shape only: `createLabel`/`renameLabel` trim it and refuse a blank. */
-async function requireLabelName(c: Context): Promise<string> {
-  const body = await readJsonBody<{ name?: unknown }>(c);
-  if (typeof body.name !== "string")
-    throw new AppError("management.request_invalid", { field: "name" });
-  return body.name;
-}
-
 function nullOrUuid(value: unknown, field: string): string | null {
   if (value !== null && (typeof value !== "string" || !isUuid(value)))
     throw new AppError("management.request_invalid", { field });
   return value;
 }
 
-async function requireTopLevelProduct(tx: Transaction, productId: string): Promise<void> {
-  const [row] = await tx
-    .select({ id: products.id })
-    .from(products)
-    .where(productWithId(productId, "top-level"));
-  if (!row) throw new AppError("product.not_found", { productId });
-}
-
 function categoryInput(body: Record<string, unknown>, creating: boolean): Partial<CategoryInput> {
   const result: Partial<CategoryInput> = {};
   if (creating || body.name !== undefined) {
-    if (
-      !body.name ||
-      typeof body.name !== "object" ||
-      Array.isArray(body.name) ||
-      Object.values(body.name).some((value) => typeof value !== "string")
-    )
+    if (typeof body.name !== "string")
       throw new AppError("management.request_invalid", { field: "name" });
-    result.name = body.name as Record<string, string>;
+    result.name = body.name;
   }
   if (body.parentId !== undefined) result.parentId = nullOrUuid(body.parentId, "parentId");
-  if (body.image !== undefined) {
-    if (body.image !== null && typeof body.image !== "string")
-      throw new AppError("management.request_invalid", { field: "image" });
-    result.image = body.image as string | null;
-  }
-  // Shape screen only — `createCategory`/`updateCategory` own the `#rrggbb` format check.
-  if (body.color !== undefined) {
-    if (body.color !== null && typeof body.color !== "string")
-      throw new AppError("management.request_invalid", { field: "color" });
-    result.color = body.color as string | null;
-  }
   return result;
 }
 
@@ -221,6 +182,19 @@ function idList(value: unknown, field: string, kind: string): string[] {
   return value.map((entry: string) => requireUuidParam(entry, kind));
 }
 
+function selectionBody(body: Record<string, unknown>): CatalogueSelection {
+  const ids = (field: "productIds" | "categoryIds", kind: string): string[] => {
+    const list = idList(body[field], field, kind);
+    if (new Set(list).size !== list.length)
+      throw new AppError("management.request_invalid", { field });
+    return list;
+  };
+  return {
+    productIds: ids("productIds", "ProductId"),
+    categoryIds: ids("categoryIds", "CategoryId"),
+  };
+}
+
 /** A position or index, shape only: the section writes refuse a negative or fractional one. */
 function numberField(value: unknown, field: string): number {
   if (typeof value !== "number") throw new AppError("management.request_invalid", { field });
@@ -241,11 +215,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.decimal_overflow": 400,
   "catalogue.not_found": 404,
   "category.not_found": 404,
-  "category.color_invalid": 400,
-  "category.reassign_invalid": 400,
-  "label.invalid": 400,
-  "label.not_found": 404,
-  "label.name_taken": 409,
+  "category.invalid": 400,
+  "category.parent_cycle": 409,
   "menu_item.not_found": 404,
   // A menu offer asked for a variant, which follows its parent onto the menu instead.
   "menu_item.variant_not_allowed": 400,
@@ -287,6 +258,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "catalogue.failed");
+const runFolder = createErrorBoundary(
+  { ...STATUS, "category.parent_cycle": 409 },
+  "catalogue.failed",
+);
 
 /**
  * Nothing below this screen objects to a malformed id — every id column is plain `text`, so the
@@ -1072,10 +1047,38 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = categoryInput(body, true) as CategoryInput;
-      const created = await gated(sessionId, (tx) =>
-        createCategory(tx, input, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
+      const created = await gated(sessionId, (tx) => createCategory(tx, input));
       return c.json(created, 201);
+    }),
+  );
+
+  app.post("/management-api/folders/move", (c) =>
+    runFolder(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const selection = selectionBody(body);
+      const to = nullOrUuid(body.to, "to");
+      await gated(session, (tx) => moveCatalogueItems(tx, selection, to));
+      return c.body(null, 204);
+    }),
+  );
+  app.post("/management-api/folders/delete", (c) =>
+    runFolder(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const selection = selectionBody(body);
+      if (body.contents !== "move_up" && body.contents !== "delete")
+        throw new AppError("management.request_invalid", { field: "contents" });
+      const contents: FolderContents = body.contents;
+      await gated(session, (tx) => deleteCatalogueItems(tx, selection, contents));
+      return c.body(null, 204);
+    }),
+  );
+  app.get("/management-api/folders/summary", (c) =>
+    runFolder(c, log, async () => {
+      const session = requireManagementSession(c);
+      const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "CategoryId"));
+      return c.json(await gated(session, (tx) => summariseFolders(tx, ids)));
     }),
   );
 
@@ -1091,58 +1094,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
       const input = categoryInput(await readJsonBody<Record<string, unknown>>(c), false);
-      return c.json(
-        await gated(session, (tx) =>
-          updateCategory(tx, id, input, deps.venueLocale ?? FALLBACK_LOCALE),
-        ),
-      );
-    }),
-  );
-  // An optional body says where the products and subcategories go; an absent key, or no body at
-  // all, takes `deleteCategory`'s default.
-  app.delete("/management-api/categories/:id", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      const body = await readJsonBody<Record<string, unknown>>(c);
-      const reassign: CategoryReassignment = {};
-      for (const field of ["productsTo", "childrenTo"] as const) {
-        if (body[field] !== undefined) reassign[field] = nullOrUuid(body[field], field);
-      }
-      await gated(session, (tx) => deleteCategory(tx, id, reassign));
-      return c.body(null, 204);
-    }),
-  );
-  // What deleting this category would touch — the preview the dashboard's delete confirmation reads.
-  app.get("/management-api/categories/:id/dependants", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      return c.json(await gated(session, (tx) => categoryDependants(tx, id)));
-    }),
-  );
-  app.get("/management-api/categories/:id/products", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      const includeDescendants = c.req.query("descendants") === "1";
-      return c.json(
-        await gated(session, (tx) => listCategoryProducts(tx, id, { includeDescendants })),
-      );
-    }),
-  );
-  // The body screen checks SHAPE only; whether each id names a product, and whether the selection
-  // repeats one, is `addProductsToCategory`'s `category.membership_invalid`.
-  app.post("/management-api/categories/:id/products", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      const body = await readJsonBody<{ productIds?: unknown }>(c);
-      if (!Array.isArray(body.productIds) || body.productIds.some((v) => typeof v !== "string"))
-        throw new AppError("management.request_invalid", { field: "productIds" });
-      const productIds = body.productIds.map((pid) => requireUuidParam(pid as string, "ProductId"));
-      await gated(session, (tx) => addProductsToCategory(tx, id, productIds));
-      return c.body(null, 204);
+      return c.json(await gated(session, (tx) => updateCategory(tx, id, input)));
     }),
   );
   app.get("/management-api/products", (c) =>
@@ -1151,81 +1103,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json(await gated(session, (tx) => listProducts(tx)));
     }),
   );
-  // A variant's id answers as an unknown id here: `setMainReportingCategory`'s default scope finds
-  // only a product with no parent.
-  app.put("/management-api/products/:id/categories", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "ProductId");
-      const body = await readJsonBody<{ primaryCategoryId?: unknown }>(c);
-      const categoryId = nullOrUuid(body.primaryCategoryId, "primaryCategoryId");
-      return c.json(await gated(session, (tx) => setMainReportingCategory(tx, id, categoryId)));
-    }),
-  );
-
-  app.get("/management-api/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      return c.json(await gated(session, (tx) => listLabels(tx)));
-    }),
-  );
-  app.post("/management-api/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const name = await requireLabelName(c);
-      return c.json(await gated(session, (tx) => createLabel(tx, name)), 201);
-    }),
-  );
-  app.patch("/management-api/labels/:id", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "LabelId");
-      const name = await requireLabelName(c);
-      return c.json(await gated(session, (tx) => renameLabel(tx, id, name)));
-    }),
-  );
-  app.delete("/management-api/labels/:id", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "LabelId");
-      await gated(session, (tx) => deleteLabel(tx, id));
-      return c.body(null, 204);
-    }),
-  );
-  // A variant's id answers as an unknown id on both; the editor carries a variant's inherited
-  // labels.
-  app.get("/management-api/products/:id/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "ProductId");
-      return c.json(
-        await gated(session, async (tx) => {
-          await requireTopLevelProduct(tx, id);
-          return { labelIds: await readProductLabels(tx, id) };
-        }),
-      );
-    }),
-  );
-  app.put("/management-api/products/:id/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "ProductId");
-      const body = await readJsonBody<{ labelIds?: unknown }>(c);
-      if (
-        !Array.isArray(body.labelIds) ||
-        body.labelIds.some((labelId) => typeof labelId !== "string" || !isUuid(labelId))
-      )
-        throw new AppError("management.request_invalid", { field: "labelIds" });
-      const labelIds = body.labelIds as string[];
-      return c.json(
-        await gated(session, async (tx) => {
-          await requireTopLevelProduct(tx, id);
-          return { labelIds: await setProductLabels(tx, id, labelIds) };
-        }),
-      );
-    }),
-  );
-
   app.get("/management-api/catalogues/:id/products", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

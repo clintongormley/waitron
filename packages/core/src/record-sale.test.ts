@@ -1180,9 +1180,8 @@ describe("recordSale — what each line sold and how it was classified", () => {
       { id: "cat-alcoholic", name: "Alcoholic drinks" },
       { id: "cat-cocktails", name: "Cocktails" },
     ],
-    labels: [{ id: "label-happy-hour", name: "Happy hour drinks" }],
   };
-  const lemon = { reporting: [{ id: "cat-extras", name: "Extras" }], labels: [] };
+  const lemon = { reporting: [{ id: "cat-extras", name: "Extras" }] };
 
   /** The default two lines as a dish and an extras pick, with every pre-existing column set, so a
    * column the new fields disturbed cannot hide behind a null on both sides. */
@@ -1284,7 +1283,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
 
     const mutation = await captureError(async () =>
       suite.db.execute(
-        sql`update sale_lines set classification = '{"reporting":[],"labels":[]}' where sale_id = ${saleId}`,
+        sql`update sale_lines set classification = '{"reporting":[]}' where sale_id = ${saleId}`,
       ),
     );
 

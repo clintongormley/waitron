@@ -22,8 +22,8 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * under a kept name passes. It reads a check's name out of the built schema's `CREATE TABLE` TEXT.
  * And it says nothing about indexes that are not unique.
  *
- * THREE KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)`,
- * `category_details(image)` and `sections(image)`, all referencing `media_images`. `packages/media`
+ * TWO KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)` and
+ * `sections(image)`, both referencing `media_images`. `packages/media`
  * depends on `@waitron/catalogue` and `@waitron/db`, so neither owning package may depend on media
  * to name the column: that dependency would close a loop `scripts/workspace-cycles.test.ts` refuses, and that
  * guard reads each `package.json`, not source imports.
@@ -149,8 +149,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["print_jobs", ["printer_id"], "printers"],
   ["print_jobs", ["resend_of"], "print_jobs"],
   ["printers", ["location_id"], "locations"],
-  ["product_labels", ["label_id"], "labels"],
-  ["product_labels", ["product_id"], "products"],
   ["product_modifiers", ["extra_list_id"], "extra_lists"],
   ["product_modifiers", ["option_list_id"], "option_lists"],
   ["product_modifiers", ["product_id"], "products"],
@@ -263,7 +261,6 @@ const EXPECTED_UNIQUE_INDEXES = [
   "kitchen_print_jobs_job_order_station_key",
   "kitchen_stations_default_key",
   "kitchen_stations_name_key",
-  "labels_name_uq",
   "management_account_actions_token_hash_uq",
   "management_sessions_token_hash_uq",
   "media_images_filename_key",

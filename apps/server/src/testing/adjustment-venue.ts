@@ -326,7 +326,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     );
     await attachPrinterToStation(tx, { stationId: station!.id, printerId: printer.id });
     const cat = await createCatalogue(tx, { name: "Carta" });
-    const platos = await createCategory(tx, { name: { [LOCALE]: "Platos" } });
+    const platos = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {

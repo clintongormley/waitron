@@ -81,7 +81,7 @@ async function fixture(): Promise<Fixture> {
   const { menuId, categoryId, managerSessionId, staffSessionId } = await db.transaction(
     async (tx) => {
       const menu = await createCatalogue(tx, { name: "Drinks" });
-      const category = await createCategory(tx, { name: { en: "Cocktails" } });
+      const category = await createCategory(tx, { name: "Cocktails" });
       const [manager] = await tx
         .insert(persons)
         .values({
@@ -462,9 +462,7 @@ describe("venue service management routes", () => {
         noPreparation: true,
       })
     ).json()) as { id: string };
-    const secondCategory = await db.transaction((tx) =>
-      createCategory(tx, { name: { en: "Other" } }),
-    );
+    const secondCategory = await db.transaction((tx) => createCategory(tx, { name: "Other" }));
     const route = (await (
       await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
         categoryId: secondCategory.id,

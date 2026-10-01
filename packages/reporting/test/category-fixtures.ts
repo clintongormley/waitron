@@ -1,6 +1,6 @@
 import type { Database } from "@waitron/db";
 import type { SaleId, SaleLineClassification } from "@waitron/shared";
-import type { CategoryReport, CategoryTotal } from "../src/category-sales.js";
+import type { CategoryTotal } from "../src/category-sales.js";
 import { seedSale } from "./fixtures.js";
 import type { SeededVenue } from "./fixtures.js";
 
@@ -17,11 +17,8 @@ export function chain(...entries: [string, string][]): SaleLineClassification["r
   return entries.map(([id, name]) => ({ id, name }));
 }
 
-export function classified(
-  reporting: SaleLineClassification["reporting"],
-  labels: SaleLineClassification["labels"] = [],
-): SaleLineClassification {
-  return { reporting, labels };
+export function classified(reporting: SaleLineClassification["reporting"]): SaleLineClassification {
+  return { reporting };
 }
 
 export interface LineSpec {
@@ -103,9 +100,4 @@ export function rows(tree: CategoryTotal[], above: string[] = []): Row[] {
       ...rows(node.children, path),
     ];
   });
-}
-
-/** The label totals as `name: gross/net`, in the report's order. */
-export function labelRows(report: CategoryReport): string[] {
-  return report.labels.map((l) => `${l.name} [${l.id}]: ${l.gross}/${l.net}`);
 }

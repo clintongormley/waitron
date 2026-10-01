@@ -164,8 +164,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   const cfg = tillConfigFromVenue(venue);
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
-    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const comida = await createCategory(tx, { name: "Comida" });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: comida.id,
@@ -733,7 +733,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const cfg = tillConfigFromVenue(venue);
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+      const bebidas = await createCategory(tx, { name: "Bebidas" });
       const product = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
@@ -925,7 +925,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
+      const comida = await createCategory(tx, { name: "Comida" });
       const dish = (
         name: string,
         unitPrice: string,

@@ -53,7 +53,7 @@ async function fixture(): Promise<Fixture> {
   return app(async (tx) => {
     const lunch = await createCatalogue(tx, { name: "Lunch menu" });
     const dinner = await createCatalogue(tx, { name: "Dinner menu" });
-    const category = await createCategory(tx, { name: { en: "Beverages" } });
+    const category = await createCategory(tx, { name: "Beverages" });
     // Three different names per product, so a read of the wrong one cannot pass by accident.
     const make = async (name: string) =>
       (

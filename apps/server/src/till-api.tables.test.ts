@@ -78,7 +78,7 @@ const suite = useVenueDb({
     // Through the catalogue verbs, so the active/assignment filters are real.
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const bebidas = await createCategory(tx, { name: "Bebidas" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,

@@ -350,7 +350,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
           .returning({ id: devices.id });
         const offer = await withTransaction(seeding.venue, async (tx) => {
           const catalogue = await createCatalogue(tx, { name: "Carta" });
-          const drinks = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+          const drinks = await createCategory(tx, { name: "Bebidas" });
           const water = await createProduct(tx, {
             catalogueId: catalogue.id,
             categoryId: drinks.id,

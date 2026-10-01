@@ -125,7 +125,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   const cfg = tillConfigFromVenue(venue);
   const { available, counter, tables } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,

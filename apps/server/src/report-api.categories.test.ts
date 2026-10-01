@@ -22,9 +22,7 @@ import {
   contentLanguages,
   createCatalogue,
   createCategory,
-  createLabel,
   createProduct,
-  setProductLabels,
 } from "@waitron/catalogue";
 import {
   IDENTITY_MIGRATIONS,
@@ -77,7 +75,6 @@ const ids = {
   ice: "",
   bread: "",
   loopProduct: "",
-  happyHour: "",
 };
 
 const recorded = {
@@ -207,18 +204,10 @@ const suite = useVenueDb({
       .values({ id: 1, defaultLanguage: "es", languages: ["es", "en"] });
     await withTransaction(db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
-      const drinks = await createCategory(tx, { name: { es: "Bebidas", en: "Drinks" } }, "es");
-      const softs = await createCategory(
-        tx,
-        { name: { es: "Refrescos", en: "Softs" }, parentId: drinks.id },
-        "es",
-      );
-      const loopA = await createCategory(tx, { name: { es: "Bucle A", en: "Loop A" } }, "es");
-      const loopB = await createCategory(
-        tx,
-        { name: { es: "Bucle B", en: "Loop B" }, parentId: loopA.id },
-        "es",
-      );
+      const drinks = await createCategory(tx, { name: "Bebidas" });
+      const softs = await createCategory(tx, { name: "Refrescos", parentId: drinks.id });
+      const loopA = await createCategory(tx, { name: "Bucle A" });
+      const loopB = await createCategory(tx, { name: "Bucle B", parentId: loopA.id });
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
@@ -237,9 +226,6 @@ const suite = useVenueDb({
       ids.ice = await product("Ice", null);
       ids.bread = await product("Bread", null);
       ids.loopProduct = await product("Loop product", loopB.id);
-      const happyHour = await createLabel(tx, "Happy hour");
-      ids.happyHour = happyHour.id;
-      await setProductLabels(tx, ids.cola, [happyHour.id]);
       // A loop in today's tree, which a snapshot check refuses. Written directly: the catalogue's
       // own writers refuse it.
       await tx.execute(
@@ -251,7 +237,7 @@ const suite = useVenueDb({
     await seedSale(db, "2026-06-10T12:00:00Z", [
       {
         productId: ids.water,
-        classification: { reporting: [{ id: ids.drinks, name: recorded.drinks }], labels: [] },
+        classification: { reporting: [{ id: ids.drinks, name: recorded.drinks }] },
         net: "2.00",
         gross: "2.20",
         rate: "10.00",
@@ -264,7 +250,6 @@ const suite = useVenueDb({
             { id: ids.drinks, name: recorded.drinks },
             { id: ids.softs, name: recorded.softs },
           ],
-          labels: [{ id: ids.happyHour, name: "Happy hour (as sold)" }],
         },
         net: "3.00",
         gross: "3.63",
@@ -273,14 +258,14 @@ const suite = useVenueDb({
       {
         parentLineId: colaLine,
         productId: ids.ice,
-        classification: { reporting: [], labels: [] },
+        classification: { reporting: [] },
         net: "0.50",
         gross: "0.55",
         rate: "10.00",
       },
       {
         productId: ids.bread,
-        classification: { reporting: [], labels: [] },
+        classification: { reporting: [] },
         net: "1.00",
         gross: "1.10",
         rate: "10.00",
@@ -290,7 +275,7 @@ const suite = useVenueDb({
     await seedSale(db, "2026-06-12T12:00:00Z", [
       {
         productId: ids.loopProduct,
-        classification: { reporting: [], labels: [] },
+        classification: { reporting: [] },
         net: "1.00",
         gross: "1.21",
         rate: "21.00",
@@ -394,9 +379,7 @@ describe("GET /management-api/reports/categories", () => {
       "  Soft drinks (as sold): 3.63/3.00 (1)",
       "(uncategorised): 1.65/1.50 (2)",
     ]);
-    expect(body.labels).toEqual([
-      { id: ids.happyHour, name: "Happy hour (as sold)", gross: "3.63", net: "3.00" },
-    ]);
+    expect(body).not.toHaveProperty("labels");
     expect(body).toMatchObject({
       gross: "7.48",
       net: "6.50",
@@ -415,7 +398,6 @@ describe("GET /management-api/reports/categories", () => {
       "  Refrescos: 3.63/3.00 (1)",
       "(uncategorised): 1.65/1.50 (2)",
     ]);
-    expect(body.labels.map((l) => l.name)).toEqual(["Happy hour"]);
   });
 
   it("counts an extra under its dish when asked to, in either mode", async () => {

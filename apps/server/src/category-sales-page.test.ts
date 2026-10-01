@@ -89,10 +89,6 @@ function sampleReport(overrides: Partial<CategoryReport> = {}): CategoryReport {
         ],
       }),
     ],
-    labels: [
-      { id: "l1", name: "Happy hour", gross: decimal("3.30"), net: decimal("3.00") },
-      { id: "l2", name: "Alcoholic", gross: decimal("2.20"), net: decimal("2.00") },
-    ],
     gross: decimal("17.71"),
     net: decimal("23.00"),
     grossComplete: false,
@@ -166,17 +162,13 @@ describe("formatCategorySalesPage", () => {
     expect(drinks.indexOf("€5.50") + "€5.50".length).toBe(tapas.indexOf("€11.00") + 6);
   });
 
-  it("sizes the columns by the widest figure on the page, the total and the labels included", () => {
+  it("sizes the columns by the widest figure on the page, the total included", () => {
     const lines = page({
-      report: sampleReport({
-        gross: decimal("1234.56"),
-        labels: [{ id: "l", name: "Late", gross: decimal("1.00"), net: decimal("98765.43") }],
-      }),
+      report: sampleReport({ gross: decimal("1234.56"), net: decimal("98765.43") }),
     });
     const grossEnd = (line: string, amount: string) => line.indexOf(amount) + amount.length;
     const drinks = lineFor(lines, "Drinks");
     expect(grossEnd(lineFor(lines, "Total"), "€1,234.56")).toBe(grossEnd(drinks, "€5.50"));
-    expect(grossEnd(lineFor(lines, "Late"), "€1.00")).toBe(grossEnd(drinks, "€5.50"));
   });
 
   it("prints a Directly-in row before a parent's children only when the parent has children and direct lines", () => {
@@ -209,27 +201,14 @@ describe("formatCategorySalesPage", () => {
     expect(es.join("\n")).not.toContain("Directamente en No registrada");
   });
 
-  it("prints the totals and the labels, saying label totals overlap", () => {
+  it("prints the total and no label section, in English and in Spanish", () => {
     const lines = page();
     expect(lineFor(lines, "Total")).toMatch(/^Total +€17\.71 +€23\.00$/);
-    const labels = lines.indexOf("Labels");
-    expect(labels).toBeGreaterThan(lines.indexOf(lineFor(lines, "Total")));
-    expect(lines.slice(labels).join(" ")).toContain(
-      "Label totals overlap: a line counts in every label it carries, and a label can cut across categories.",
-    );
-    expect(lineFor(lines, "Happy hour")).toMatch(/^Happy hour +€3\.30 +€3\.00$/);
-    expect(lineFor(lines, "Alcoholic")).toMatch(/^Alcoholic +€2\.20 +€2\.00$/);
-    const es = page({ locale: "es-ES" });
-    expect(es).toContain("Etiquetas");
-    expect(es.join(" ")).toContain(
-      "Los totales por etiqueta se solapan: una línea cuenta en cada etiqueta que lleva, y una etiqueta puede abarcar varias categorías.",
-    );
-  });
-
-  it("prints no label section when the period carried no labels", () => {
-    const lines = page({ report: sampleReport({ labels: [] }) });
     expect(lines).not.toContain("Labels");
     expect(lines.join(" ")).not.toContain("overlap");
+    const es = page({ locale: "es-ES" });
+    expect(es).not.toContain("Etiquetas");
+    expect(es.join(" ")).not.toContain("solapan");
   });
 
   it("says the gross total is incomplete, with the count, only when it is", () => {
@@ -265,7 +244,6 @@ describe("formatCategorySalesPage", () => {
       });
     const report = sampleReport({
       tree: [deep(0)],
-      labels: [{ id: "l", name: long, gross: decimal("123456.78"), net: decimal("-1.00") }],
       gross: decimal("123456.78"),
       net: decimal("-102030.40"),
     });

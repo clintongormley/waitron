@@ -191,7 +191,14 @@ slices, each with its own plan and pull request:
    split off to another station.
 
 Slice 3 needs slice 1. Slice 2 is independent of both. Several entries below are overtaken by this
-design, and each carries a dated note. Slice 1's plan is being built (campaign lane D, PF1).
+design, and each carries a dated note. **Slice 1 is implemented** in [#968](https://github.com/clintongormley/waitron/pull/968),
+following the [approved plan](superpowers/plans/2026-09-30-product-folders-slice-1.md).
+Products and folders can be browsed, selected, moved, deleted and dragged together; labels,
+category presentation fields and the Categories screen are retired. Eleven task reviews and
+whole-branch review are complete. Every development venue needs `wa-wt reset demo <name>`.
+The owner confirmed on 2026-10-01 that deleting only empty folders remains immediate, including
+any routing rules attached to them. Confirmation is shown when selected folders contain products
+or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
@@ -1022,10 +1029,14 @@ What it left open:
 - **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
   till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
   has decided whether or how one should. _2026-09-30: decided — categories lose their colour and
-  image ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §2.1)._
+  image ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §2.1). Closed
+  2026-09-30: both columns are dropped from `category_details` (product-folders slice 1, Task 5), so
+  there is no colour left to show._
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
+  _2026-10-01: this route is retired by product-folders slice 1; folder deletion uses the bulk
+  selection summary and delete operations described in [Product categories](developers/product-categories.md)._
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
   screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
@@ -1033,6 +1044,7 @@ What it left open:
 **Categories screen rebuilt — LANDED #353 (2026-09-14).** `/manage/categories` became a table
 switchable between a tree and a flat list with a name filter, a per-category colour swatch and a
 per-category products window with bulk add; what it left open is recorded in the #340 list above.
+_2026-10-01: product-folders slice 1 retires this screen; folders are managed on Products._
 
 **Category management reworked — LANDED #362 (2026-09-14).** The category screens share one layout
 with searchable `wt-combobox` pickers, and the shared `wt-data-table` gained opt-in search,
@@ -1528,6 +1540,8 @@ What Task 11 left open:
   the modal.
 - **DONE (lane C's C23): the Categories screen places a refused save through
   `categoryRefusalErrors`.**
+  _2026-10-01: product-folders slice 1 retires the screen; the folder form retains
+  `categoryRefusalErrors`._
 - **DONE (lane C's C24): with no colour chosen, the colour field's Custom square reads as
   empty.**
 - **DONE (lane C's C25): with a custom colour chosen, the colour field's Custom square is ringed
@@ -4264,9 +4278,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     The same keydown guard is on other dashboard forms. The tests of six of them press a real Escape
     during a save and pass with the dialog still open: "keeps the editor open when Escape is pressed
     during a save" (`apps/dashboard/src/widgets/category-form.test.ts`), "saves once and stays open
-    against Escape while a save is in flight" (`apps/dashboard/src/screens/labels-panel.test.ts`),
+    against Escape while a save is in flight" (`apps/dashboard/src/screens/labels-panel.test.ts`,
+    deleted with product labels on 2026-09-30),
     the three "keeps the … open against Escape" cases in
-    `apps/dashboard/src/screens/categories-screen.test.ts`, "holds the draft open and unchanged
+    `apps/dashboard/src/screens/categories-screen.test.ts` (retired by product-folders slice 1
+    on 2026-10-01), "holds the draft open and unchanged
     while a save is in flight" (`apps/dashboard/src/widgets/content-languages.test.ts`), "ignores
     Escape while a save is in flight and honours it once the save has settled"
     (`packages/media/src/dashboard/image-library.test.ts`) and "stays open on Escape while a save is
@@ -5794,8 +5810,7 @@ ongoing overhaul listed at the top of Track A.
   no chooser: its one column beside the buttons holds the address, the machine id, the role and, on
   its own row, "this server" together, so there is nothing to offer unless that cell is split into
   separate columns — **DECIDED (owner, 2026-09-29): leave it**, unsplit and with no chooser; (3)
-  `apps/dashboard/src/widgets/category-manager.ts` renders a table that no screen mounts (only its
-  own tests do), and was left alone; (4) nothing checks that a NEW dashboard table offers the
+  the unused category-manager widget and its tests are removed by the product-folders slice; (4) nothing checks that a NEW dashboard table offers the
   chooser; (5) where a screen keeps its search and filters outside the table (staff, card readers)
   or the table has none (alerts, venue operations), the Columns button sits alone on a row above the
   table rather than beside those controls — seen in real Chromium at 1280 px; moving a screen's own
@@ -5958,7 +5973,8 @@ ongoing overhaul listed at the top of Track A.
   form's buttons, because it also reports a refused Turn off, when no form is open; the cloud
   services screen (`apps/dashboard/src/screens/cloud-services-screen.ts`) has no form, only buttons,
   and shows a refusal as a plain alert; the delete confirmations in
-  `apps/dashboard/src/screens/labels-panel.ts` and `apps/dashboard/src/screens/sections-screen.ts`
+  `apps/dashboard/src/screens/labels-panel.ts` (deleted with product labels on 2026-09-30) and
+  `apps/dashboard/src/screens/sections-screen.ts`
   keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
   because each member change is saved at once, not on a submit. Outside `apps/dashboard`, the image
@@ -6275,6 +6291,9 @@ ongoing overhaul listed at the top of Track A.
   rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`)
   _(2026-10-01, C97: done — `#dialogMessage` is gone and the delete dialog passes its message to its
   footer `wt-form-actions`)_;
+  _(2026-10-01, product-folders slice 1: the Categories screen and these tests are retired.
+  Bulk folder deletion's warning and refusal checks live in
+  `apps/dashboard/src/widgets/catalogue-browser.test.ts`.)_
   (14) on the Cloud restore screen a `setup.request_invalid` naming `oldBoxGone` or `pointId` (the
   server raises both, through the Cloud restore route's `invalidRequest` calls in
   `apps/server/src/setup-api.ts`) shows "Cloud recovery is unavailable. Check the connection or
@@ -6583,7 +6602,7 @@ ongoing overhaul listed at the top of Track A.
   each file genuinely needs its own range — and convert the siblings as they are next touched.
 - **`wt-combobox`** (#351): a searchable dropdown in `packages/ui` — pick one option or several
   (`multiple`), and optionally offer to add what was typed when nothing matches. The category form's
-  parent picker (#362) and the product's main-category and labels pickers
+  parent picker (#362) and the product's main-category picker
   (`apps/dashboard/src/widgets/classification-fields.ts`) use it. Left out on purpose, per its
   design: searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
@@ -6651,13 +6670,11 @@ ongoing overhaul listed at the top of Track A.
   chose, which probably means setup asking; do it when there is a second region or country to be wrong
   about. The hard-code is in `packages/catalogue/src/provisioning.ts` and names this entry. Receipt
   languages are a separate setting and already follow the province.
-- **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
-  the Products overhaul. Decide how a
-  product's labels (menus spec §10.5; category memberships are gone since 2026-09-25) select one or
-  more preparation/printing destinations, how matching rules combine and how duplicate output is
-  prevented. Keep reporting attribution separate so one
-  sale is counted once. The overhaul retains the current routing path; its reporting-category
-  choice does not settle this later routing design.
+- **Folder-driven routing to multiple printers/destinations** (owner, 2026-09-30): the
+  [approved routing design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)
+  replaces the former label-driven proposal. Prep stations claim folders, with ordered exceptions
+  and fallbacks; slice 3 remains unbuilt. Slice 1 retains the current direct-category routing until
+  that slice lands. Reporting attribution stays separate so one sale is counted once.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; department hours and calendar exceptions; workforce
   assignments; immutable department attribution and reporting; batched readiness and offer queries;
@@ -8736,6 +8753,8 @@ reading unless marked run:
   variant form stays OPEN, for lane B's B13 reason above. _(2026-09-30: B13 is done on
   `feat/service-standalone-ordering` and did not touch the variant form, so its fix no longer waits
   on B13.)_
+  _2026-10-01: product-folders slice 1 retires the Categories-screen caller. The folder form is
+  now mounted by `apps/dashboard/src/widgets/catalogue-browser.ts`; C74's close guard remains._
 - Pressing Escape in the Unit form opened from the product editor on the Catalogue screen
   (`apps/dashboard/src/screens/catalogue-screen.ts` mounts it at about line 711) also closes the
   product editor behind it; in the same test the Unit form sent exactly one cancel. Measured

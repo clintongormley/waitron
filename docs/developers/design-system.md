@@ -126,8 +126,9 @@ in `packages/ui-core/src/tokens/colors.test.ts` holds both.
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
 
-A user-chosen data colour (a category's colour, so far) is the one deliberate exception to "no
-hex, no hardcoded chrome": `wt-lozenge` fills its background with that colour directly and computes
+A user-chosen data colour is the one deliberate exception to "no hex, no hardcoded chrome" (no
+screen passes `wt-lozenge` one today: categories, its first user, lost their colour on 2026-09-30):
+`wt-lozenge` fills its background with that colour directly and computes
 black or white text for contrast, because the label still carries the meaning and the colour is
 never the only signal. This is a different idiom from the one the floor plan and service statuses
 already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
@@ -329,7 +330,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
-| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden; and `pinned` — `"end"` — which, set on the last column, keeps it at the trailing edge of the table's box while the others scroll sideways), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `rowToggleLabel` (`(row, expanded) => string` — names each row's toggle in place of the two fixed labels), `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
+| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden; and `pinned` — `"end"` — which, set on the last column, keeps it at the trailing edge of the table's box while the others scroll sideways), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `rowToggleLabel` (`(row, expanded) => string` — names each row's toggle in place of the two fixed labels), `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `rowSelectable` (`(row) => boolean` — leaves a row without a checkbox, for example a variant that moves with its product), `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-filter-change` — `detail: { filters: Record<string, string> }` (reports a filter you change, not one restored from storage); `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 | `wt-language-footer` | `active` (the code of the page's language; the parent sets it and the component never changes it), `loadLocales` (property; `() => Promise<{ code, label }[]>`, called on the first open and again after a failed load; defaults to `SUPPORTED_LOCALES`; one load at a time; while it is pending, a second press, Escape, or a press or focus outside cancels the opening, and a further press asks for it again). A page footer in the page's flow, never fixed, holding a `wt-button` named with the active language (from the loaded list, then `SUPPORTED_LOCALES`, then the bare code) whose menu of `menuitemradio` options opens upwards over what is above it. Opening focuses the checked option (or the first); ArrowDown and ArrowUp move between options and wrap, Home and End reach the ends; Escape closes it and returns focus to the trigger, and goes no further only when it closed the menu; a press or focus outside closes it without moving focus; `data-test` hooks `lang-trigger` and `lang-<code>` | `wt-locale-selected` — `detail: { code: string }`; a pick closes the menu and returns focus to the trigger |
 
@@ -397,8 +398,8 @@ button, check it by hand — and `scripts/pinned-actions-column.test.ts`. In a t
 the cell does not (the pinned-click cases in `wt-data-table.test.ts`).
 
 Supply `rowParent` — a `(row) => string | null` returning the parent row's own key, or `null` for a
-top-level row — to switch the same table into tree mode, as the categories screen does for its
-hierarchy. A row whose declared parent key isn't present among the current rows floats to the top
+top-level row — to switch the same table into tree mode, as the Products screen does for its
+variants. A row whose declared parent key isn't present among the current rows floats to the top
 level rather than disappearing. Each row that has children gets its own expand/collapse toggle
 (`collapseLabel`/`expandLabel` give it a localized accessible name, or `rowToggleLabel` one naming its own row); collapsed state lives inside the
 component, not the caller. The table renders `role="treegrid"` with `aria-level`/`aria-expanded` on
@@ -571,6 +572,22 @@ different things at different scales: hamburger opens the whole app's navigation
 kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
 or the nav toggle looking like just another row's overflow menu.
+
+### Selection mode
+
+When you need to act on several rows together, give the list a **Select** button. Show
+checkboxes only while selecting, with an action bar for the selected count, actions and
+**Cancel**. Clear the selection when you navigate, search or change a table filter, so an
+action cannot apply to rows you have just hidden. Cancel clears the selection and exits
+selection mode, restoring the ordinary toolbar. It does not cancel a Delete you have
+already requested.
+
+For example, selecting Drinks and Bread shows **2 selected** and lets you move both in one
+step. Confirm destructive actions in a `wt-modal` with a `danger` button. Keep a refused
+action open and show its message at the bottom of the form, so you can correct the choice.
+For folder deletion, read what every selected folder contains before enabling Delete.
+Empty folders are deleted without asking; otherwise offer moving their contents up as the
+default, reversible choice.
 
 ### Accessible, clickable labels (`wt-input`, `wt-switch`, `wt-combobox`)
 
@@ -798,9 +815,7 @@ record's own value applies and its blank languages show no placeholder hint.
   "fall back": offering both would read as one thing and save as another.
 - **A single-choice `wt-combobox`** (the product editor's main category): its first option has an
   empty value and reads "Same as &lt;fallback value&gt;", and so does its placeholder, which is what
-  it shows while the stored value is null; like a `<select>`, it has no separate hint line. A
-  variant's labels are not a field at all — it carries only its parent's — so they are shown as a
-  hint line alone.
+  it shows while the stored value is null; like a `<select>`, it has no separate hint line.
 - **Any other control** (the allergen and dietary picker, an image): a muted
   hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
   goes away once the record sets its own. An image shows the fallback picture itself under the hint
@@ -818,7 +833,7 @@ A form that shows everything an entity can carry becomes one long stack of cards
 somebody actually changes most days get lost in it. Fold the optional detail away instead: keep the
 frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is the pattern's first home —
-Name, Category and labels, Available, Standalone ordering, Price and Modifiers stay on screen; Kitchen, Descriptors and
+Name, Category, Available, Standalone ordering, Price and Modifiers stay on screen; Kitchen, Descriptors and
 Nutritional info fold.
 
 Three rules make the fold safe rather than merely tidy.
@@ -1509,7 +1524,7 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
-`departments`, `zones` and `routing`, and Categories uses `categories` and `labels`. The dashboard preserves module-owned `view` segments
+`departments`, `zones` and `routing`. The dashboard preserves module-owned `view` segments
 while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,

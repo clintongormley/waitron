@@ -11,7 +11,6 @@ import {
   updateCategory,
   deleteCategory,
   setMainReportingCategory,
-  listCategoryProducts,
 } from "./categories.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 
@@ -26,8 +25,8 @@ async function fixture() {
   await seedLegacySellingUnits(fx.db);
   const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
   await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }));
-  const food = await app((tx) => createCategory(tx, { name: { en: "Food", fr: "Cuisine" } }));
-  const drinks = await app((tx) => createCategory(tx, { name: { en: "Drinks" } }));
+  const food = await app((tx) => createCategory(tx, { name: "Food" }));
+  const drinks = await app((tx) => createCategory(tx, { name: "Drinks" }));
   const menu = await app((tx) => createCatalogue(tx, { name: "Lunch" }));
   const product = await app((tx) =>
     createProduct(tx, {
@@ -42,13 +41,11 @@ async function fixture() {
   return { app, food, drinks, menu, product };
 }
 describe("category authoring", () => {
-  it("keeps translated names, and gives a product a main category with no membership", async () => {
+  it("keeps the name, and gives a product a main category with no membership", async () => {
     const { app, food, drinks, product, menu } = await fixture();
     expect(food).toEqual({
       id: food.id,
-      name: { en: "Food", fr: "Cuisine" },
-      image: null,
-      color: null,
+      name: "Food",
       parentId: null,
     });
     expect(await app((tx) => setMainReportingCategory(tx, product.id, food.id))).toEqual({
@@ -61,17 +58,29 @@ describe("category authoring", () => {
       id: product.id,
       categoryId: drinks.id,
       primaryCategoryId: drinks.id,
-      labelIds: [],
     });
     expect(listed).not.toHaveProperty("categoryIds");
-    expect(await app((tx) => listCategoryProducts(tx, food.id))).toEqual([]);
-    expect(await app((tx) => listCategoryProducts(tx, drinks.id))).toEqual([
+    expect(listed).not.toHaveProperty("labelIds");
+    expect(
+      await app((tx) =>
+        listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === food.id)),
+      ),
+    ).toEqual([]);
+    expect(
+      (await app((tx) => listProducts(tx)))
+        .filter((p) => p.primaryCategoryId === drinks.id)
+        .map(({ id, name, active, primaryCategoryId }) => ({
+          id,
+          name,
+          active,
+          primaryCategoryId,
+        })),
+    ).toEqual([
       {
         id: product.id,
         name: product.name,
         active: true,
         primaryCategoryId: drinks.id,
-        labelIds: [],
       },
     ]);
     expect(await app((tx) => setMainReportingCategory(tx, product.id, null))).toEqual({
@@ -92,18 +101,16 @@ describe("category authoring", () => {
     await expect(app((tx) => setMainReportingCategory(tx, missing, food.id))).rejects.toMatchObject(
       { code: "product.not_found", params: { productId: missing } },
     );
-    expect(await app((tx) => listCategoryProducts(tx, food.id))).toMatchObject([
-      { id: product.id, primaryCategoryId: food.id },
-    ]);
+    expect(
+      await app((tx) =>
+        listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === food.id)),
+      ),
+    ).toMatchObject([{ id: product.id, primaryCategoryId: food.id }]);
   });
   it("rejects deep cycles, and a delete moves children and products to the parent by default", async () => {
     const { app, food, drinks, product } = await fixture();
-    const child = await app((tx) =>
-      createCategory(tx, { name: { en: "Sandwiches" }, parentId: food.id }),
-    );
-    const leaf = await app((tx) =>
-      createCategory(tx, { name: { en: "Toast" }, parentId: child.id }),
-    );
+    const child = await app((tx) => createCategory(tx, { name: "Sandwiches", parentId: food.id }));
+    const leaf = await app((tx) => createCategory(tx, { name: "Toast", parentId: child.id }));
     for (const parentId of [food.id, leaf.id])
       await expect(app((tx) => updateCategory(tx, food.id, { parentId }))).rejects.toMatchObject({
         code: "category.parent_cycle",
@@ -113,9 +120,11 @@ describe("category authoring", () => {
     await app((tx) => setMainReportingCategory(tx, product.id, child.id));
     await app((tx) => deleteCategory(tx, child.id));
     expect((await app((tx) => readCategory(tx, leaf.id))).parentId).toBe(food.id);
-    expect(await app((tx) => listCategoryProducts(tx, food.id))).toMatchObject([
-      { id: product.id, primaryCategoryId: food.id },
-    ]);
+    expect(
+      await app((tx) =>
+        listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === food.id)),
+      ),
+    ).toMatchObject([{ id: product.id, primaryCategoryId: food.id }]);
     // A top-level category's products become Uncategorised and its children top-level.
     await app((tx) => deleteCategory(tx, food.id));
     expect((await app((tx) => readCategory(tx, leaf.id))).parentId).toBeNull();
@@ -132,21 +141,14 @@ describe("category authoring", () => {
       app((tx) => setMainReportingCategory(tx, product.id, crypto.randomUUID())),
     ).rejects.toMatchObject({ code: "category.not_found" });
   });
-  it("validates the default name and includes category gaps without dropping disabled translations", async () => {
-    const { app, food, drinks } = await fixture();
-    await expect(app((tx) => createCategory(tx, { name: { fr: "Pain" } }))).rejects.toMatchObject({
-      code: "content.translation_required",
-    });
-    expect(await app((tx) => listContentTranslationGaps(tx, "fr"))).toContainEqual({
-      kind: "category",
-      id: drinks.id,
-    });
-    await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] }));
-    await app((tx) => updateCategory(tx, food.id, { name: { en: "Meals", fr: "Cuisine" } }));
-    expect((await app((tx) => readCategory(tx, food.id))).name).toEqual({
-      en: "Meals",
-      fr: "Cuisine",
-    });
+  it("never reports a category name as a translation gap, so a default-language change passes", async () => {
+    const { app } = await fixture();
+    expect(
+      (await app((tx) => listContentTranslationGaps(tx, "fr"))).map((gap) => gap.kind),
+    ).not.toContain("category");
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] }),
+    );
   });
 });
 
@@ -180,28 +182,12 @@ it("updateProduct's categoryId sets the main category, with no membership coupli
     ]),
   );
   await app((tx) => updateProduct(tx, product.id, { categoryId: null }));
-  expect(await app((tx) => listCategoryProducts(tx, drinks.id))).toMatchObject([{ id: second.id }]);
+  expect(
+    await app((tx) =>
+      listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === drinks.id)),
+    ),
+  ).toMatchObject([{ id: second.id }]);
   await expect(
     app((tx) => updateProduct(tx, product.id, { categoryId: crypto.randomUUID() })),
   ).rejects.toMatchObject({ code: "category.not_found" });
-});
-
-it("rejects an image reference with a category error when media is not installed", async () => {
-  const { app, food } = await fixture();
-  await expect(
-    app((tx) =>
-      createCategory(tx, {
-        name: { en: "New" },
-        image: "missing.jpg",
-      }),
-    ),
-  ).rejects.toMatchObject({ code: "category.image_not_found" });
-  await expect(
-    app((tx) =>
-      updateCategory(tx, food.id, {
-        image: "missing.jpg",
-      }),
-    ),
-  ).rejects.toMatchObject({ code: "category.image_not_found" });
-  expect((await app((tx) => readCategory(tx, food.id))).image).toBeNull();
 });

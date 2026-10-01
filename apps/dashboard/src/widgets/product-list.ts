@@ -1,27 +1,31 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, currentContentLanguages, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
-import { categoryPath } from "./category-form.js";
-import { labelsText } from "./classification-fields.js";
+import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import {
   modifierListName,
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, Label, Product } from "../api/client.js";
+import type { CategorySummary, Product } from "../api/client.js";
 import {
   PRODUCT_ORDERINGS,
   type ProductOrdering,
 } from "@waitron/catalogue/src/product-ordering.js";
 
+type ListRow =
+  ProductRow | { kind: "folder"; key: string; parentKey: null; folder: CategorySummary };
+
 interface ProductRow {
+  kind: "product";
   key: string;
   parentKey: string | null;
   product: Product;
@@ -37,6 +41,22 @@ function rowActive({ product, variant }: ProductRow): boolean {
   return product.active && (variant?.active ?? true);
 }
 
+export function acceptsCatalogueDrop(
+  keys: string[],
+  folderId: string | null,
+  categories: CategorySummary[],
+): boolean {
+  return (
+    keys.length > 0 &&
+    (folderId === null ||
+      !keys.some(
+        (key) =>
+          key.startsWith("folder:") &&
+          categoryWithDescendants(key.slice(7), categories).has(folderId),
+      ))
+  );
+}
+
 @customElement("dashboard-product-list")
 export class ProductList extends LitElement {
   static override styles = [
@@ -44,10 +64,18 @@ export class ProductList extends LitElement {
     css`
       /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
          crossing used for their presentation. */
+      wt-data-table::part(folder-cell) {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
       /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
          would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
       wt-data-table::part(product-cell) {
         display: block;
+      }
+      wt-data-table::part(drop-target) {
+        background: var(--wt-color-surface-lifted);
       }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
@@ -86,13 +114,66 @@ export class ProductList extends LitElement {
     `,
   ];
 
+  @property({ type: Boolean }) selecting = false;
+  @property({ attribute: false }) selected: string[] = [];
+  @property({ attribute: false }) folders: CategorySummary[] = [];
+  @property({ type: Boolean }) showPath = true;
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) labels: Label[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
   #listNames: ReadonlyMap<string, string> = new Map();
+  #dragged: string[] = [];
+  #dropTarget: HTMLElement | null = null;
+
+  #clearDropTarget(): void {
+    this.#dropTarget?.part.remove("drop-target");
+    this.#dropTarget = null;
+  }
+  #startDrag(event: DragEvent, key: string): void {
+    event.stopPropagation();
+    this.#dragged = this.selected.includes(key) ? [...this.selected] : [key];
+    event.dataTransfer?.setData("application/x-waitron-items", JSON.stringify(this.#dragged));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    this.dispatchEvent(
+      new CustomEvent("drag-items", {
+        detail: { keys: this.#dragged },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  #endDrag(event: DragEvent): void {
+    event.stopPropagation();
+    this.#clearDropTarget();
+    this.#dragged = [];
+    this.dispatchEvent(
+      new CustomEvent("drag-items", { detail: { keys: [] }, bubbles: true, composed: true }),
+    );
+  }
+  #overFolder(event: DragEvent, folderId: string): void {
+    event.stopPropagation();
+    this.#clearDropTarget();
+    if (!acceptsCatalogueDrop(this.#dragged, folderId, this.categories)) return;
+    event.preventDefault();
+    this.#dropTarget = event.currentTarget as HTMLElement;
+    this.#dropTarget.part.add("drop-target");
+  }
+  #dropFolder(event: DragEvent, folderId: string): void {
+    event.stopPropagation();
+    this.#clearDropTarget();
+    if (!acceptsCatalogueDrop(this.#dragged, folderId, this.categories)) return;
+    event.preventDefault();
+    this.dispatchEvent(
+      new CustomEvent("drop-items", {
+        detail: { keys: [...this.#dragged], folderId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.#endDrag(event);
+  }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("extraLists") || changed.has("optionLists"))
@@ -114,37 +195,37 @@ export class ProductList extends LitElement {
     );
   }
 
-  #rows(): ProductRow[] {
-    return this.products.flatMap((product) => [
-      { key: product.id, parentKey: null, product, variant: null },
-      ...product.variants.map((variant) => ({
-        key: `${product.id}:${variant.id}`,
-        parentKey: product.id,
-        product,
-        variant,
+  #rows(): ListRow[] {
+    return [
+      ...this.folders.map((folder): ListRow => ({
+        kind: "folder",
+        key: `folder:${folder.id}`,
+        parentKey: null,
+        folder,
       })),
-    ]);
+      ...this.products.flatMap((product) => [
+        { kind: "product" as const, key: product.id, parentKey: null, product, variant: null },
+        ...product.variants.map((variant) => ({
+          kind: "product" as const,
+          key: `${product.id}:${variant.id}`,
+          parentKey: product.id,
+          product,
+          variant,
+        })),
+      ]),
+    ];
   }
 
   #category(id: string | null): string {
     if (id === null) return "";
     const category = this.categories.find((candidate) => candidate.id === id);
-    return category
-      ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
-      : t("editor.missing_choice");
+    return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
   }
 
-  /** A variant's row reads the values it is reported under, which the server resolves: its own
-   * main category or its parent's, and always its parent's labels. */
-  #values({ product, variant }: ProductRow): {
-    primaryCategoryId: string | null;
-    labelIds: string[];
-  } {
+  /** A variant's row reads the main category it is reported under, which the server resolves: its
+   * own or its parent's. */
+  #values({ product, variant }: ProductRow): { primaryCategoryId: string | null } {
     return variant?.effective ?? product;
-  }
-
-  #labels(row: ProductRow): string {
-    return labelsText(this.#values(row).labelIds, this.labels, t("editor.missing_choice"));
   }
 
   #modifierNames(product: Product): string {
@@ -177,7 +258,7 @@ export class ProductList extends LitElement {
     return low === high ? text : `${text}–${formatMoney(String(high), locale)}`;
   }
 
-  #columns(): DataTableColumn<ProductRow>[] {
+  #productColumns(): DataTableColumn<ProductRow>[] {
     return [
       {
         key: "name",
@@ -187,7 +268,12 @@ export class ProductList extends LitElement {
         cell: ({ product, variant }, { ancestorOnly }) =>
           variant
             ? html`<strong>${variant.name}</strong>`
-            : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
+            : html`<span
+                part=${ancestorOnly ? "product-cell context" : "product-cell"}
+                draggable="true"
+                @dragstart=${(event: DragEvent) => this.#startDrag(event, product.id)}
+                @dragend=${(event: DragEvent) => this.#endDrag(event)}
+              >
                 ${
                   product.image === null
                     ? html`<span
@@ -207,13 +293,6 @@ export class ProductList extends LitElement {
         label: t("editor.main_category"),
         cell: (row) => this.#category(this.#values(row).primaryCategoryId),
         searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
-      },
-      {
-        key: "labels",
-        choosable: "shown",
-        label: t("labels.field"),
-        cell: (row) => this.#labels(row),
-        searchValue: (row) => this.#labels(row),
       },
       {
         key: "price",
@@ -355,12 +434,106 @@ export class ProductList extends LitElement {
     ];
   }
 
+  #emitFolder(event: Event, name: string, folderId: string): void {
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent(name, { detail: { folderId }, bubbles: true, composed: true }),
+    );
+  }
+
+  #columns(): DataTableColumn<ListRow>[] {
+    return this.#productColumns()
+      .filter((column) => this.showPath || column.key !== "reporting-category")
+      .map((column) => ({
+        key: column.key,
+        label: column.label,
+        align: column.align,
+        choosable: column.choosable,
+        pinned: column.pinned,
+        cell: (row, context) => {
+          if (row.kind === "product") return column.cell(row, context);
+          const { folder } = row;
+          if (column.key === "name")
+            return html`<span
+              part="folder-cell"
+              draggable="true"
+              @dragstart=${(event: DragEvent) => this.#startDrag(event, row.key)}
+              @dragend=${(event: DragEvent) => this.#endDrag(event)}
+              @dragover=${(event: DragEvent) => this.#overFolder(event, folder.id)}
+              @dragleave=${() => this.#clearDropTarget()}
+              @drop=${(event: DragEvent) => this.#dropFolder(event, folder.id)}
+              ><wt-icon name="folder"></wt-icon
+              ><wt-button
+                variant="ghost"
+                aria-label=${t("folders.open_named").replace("{name}", folder.name)}
+                data-test=${`open-${folder.id}`}
+                @click=${(event: Event) => this.#emitFolder(event, "open-folder", folder.id)}
+                >${folder.name}</wt-button
+              ></span
+            >`;
+          if (column.key === "reporting-category") return this.#category(folder.parentId);
+          if (column.key === "actions")
+            return html`<wt-row-actions
+              align="end"
+              label=${`${t("staff.actions")}: ${folder.name}`}
+              data-test=${`actions-folder-${folder.id}`}
+              ><wt-button
+                align="start"
+                variant="secondary"
+                data-test=${`rename-${folder.id}`}
+                @click=${(event: Event) => this.#emitFolder(event, "rename-folder", folder.id)}
+                >${t("folders.rename")}</wt-button
+              ><wt-button
+                align="start"
+                variant="danger"
+                data-test=${`delete-folder-${folder.id}`}
+                @click=${(event: Event) => this.#emitFolder(event, "delete-folder", folder.id)}
+                >${t("action.delete")}</wt-button
+              ></wt-row-actions
+            >`;
+          return nothing;
+        },
+        ...(column.sortValue
+          ? {
+              sortValue: (row: ListRow) =>
+                column.key === "name"
+                  ? row.kind === "folder"
+                    ? "a" + row.folder.name
+                    : "b" + (row.variant?.name ?? row.product.name)
+                  : row.kind === "folder"
+                    ? ""
+                    : column.sortValue!(row),
+            }
+          : {}),
+        ...(column.searchValue
+          ? {
+              searchValue: (row: ListRow) =>
+                row.kind === "folder"
+                  ? column.key === "name"
+                    ? row.folder.name
+                    : column.key === "reporting-category"
+                      ? this.#category(row.folder.parentId)
+                      : ""
+                  : column.searchValue!(row),
+            }
+          : {}),
+        ...(column.filter
+          ? {
+              filter: {
+                ...column.filter,
+                value: (row: ListRow) =>
+                  row.kind === "folder"
+                    ? column.filter!.options.map((option) => option.value)
+                    : column.filter!.value(row),
+              },
+            }
+          : {}),
+      }));
+  }
+
   override render() {
     return html`<wt-data-table
       aria-label=${t("catalogue.title")}
-      searchable
-      searchLabel=${t("product.search")}
-      noMatchesMessage=${t("product.no_matches")}
       viewKey="waitron.products.table"
       columnsLabel=${t("table.columns")}
       sortKey="name"
@@ -368,10 +541,14 @@ export class ProductList extends LitElement {
       collapseLabel=${t("categories.collapse")}
       expandLabel=${t("categories.expand")}
       initiallyCollapsed
+      .selectable=${this.selecting}
+      .selected=${this.selected}
+      .rowSelectable=${(row: ListRow) => row.kind === "folder" || row.variant === null}
+      .selectionLabel=${(row: ListRow) => (row.kind === "folder" ? row.folder.name : (row.variant?.name ?? row.product.name))}
       .rows=${this.#rows()}
       .columns=${this.#columns()}
-      .rowKey=${(row: ProductRow) => row.key}
-      .rowParent=${(row: ProductRow) => row.parentKey}
+      .rowKey=${(row: ListRow) => row.key}
+      .rowParent=${(row: ListRow) => row.parentKey}
       .emptyMessage=${t("catalogue.no_products")}
     ></wt-data-table>`;
   }

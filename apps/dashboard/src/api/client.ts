@@ -266,45 +266,24 @@ export interface LocationCatalogueSummary extends CatalogueSummary {
 
 export interface CategorySummary {
   id: string;
-  name: Record<string, string>;
-  image: string | null;
-  color: string | null;
+  name: string;
   parentId: string | null;
 }
 export interface CategoryInput {
-  name: Record<string, string>;
-  image?: string | null;
-  color?: string | null;
+  name: string;
   parentId?: string | null;
 }
-export interface CategoryDependants {
-  /** Every product whose own main category is this one, variants included. */
-  products: { id: string; name: string }[];
-  children: { id: string; name: Record<string, string> }[];
-  parentId: string | null;
-  routes: { id: string; station: string | null; zone: string | null }[];
+export interface CatalogueSelection {
+  productIds: string[];
+  categoryIds: string[];
 }
-/** Where a deleted category's products and subcategories go; null is Uncategorised or the top
- * level, and an absent key takes the server's default, the deleted category's parent. */
-export interface CategoryReassignment {
-  productsTo?: string | null;
-  childrenTo?: string | null;
-}
-export interface CategoryProduct {
+export type FolderContents = "move_up" | "delete";
+export interface FolderSummary {
   id: string;
-  name: string;
-  active: boolean;
-  primaryCategoryId: string | null;
-  labelIds: string[];
+  folders: number;
+  products: number;
+  routes: number;
 }
-export interface Label {
-  id: string;
-  name: string;
-}
-export interface LabelSummary extends Label {
-  productCount: number;
-}
-
 export interface Unit {
   id: string;
   name: Record<string, string>;
@@ -965,18 +944,9 @@ export interface CategoryTotalDto {
   children: CategoryTotalDto[];
 }
 
-/** A label's totals overlap other labels' and cut across the category tree. */
-export interface LabelTotalDto {
-  id: string;
-  name: string;
-  gross: string;
-  net: string;
-}
-
 export interface CategorySalesDto {
   mode: CategoryReportMode;
   tree: CategoryTotalDto[];
-  labels: LabelTotalDto[];
   gross: string;
   net: string;
   grossComplete: boolean;
@@ -1712,6 +1682,19 @@ export class DashboardApi {
     return this.#request<CategorySummary[]>("/management-api/categories", "GET");
   }
 
+  moveCatalogueItems(selection: CatalogueSelection, to: string | null): Promise<void> {
+    return this.#request("/management-api/folders/move", "POST", { ...selection, to });
+  }
+
+  deleteCatalogueItems(selection: CatalogueSelection, contents: FolderContents): Promise<void> {
+    return this.#request("/management-api/folders/delete", "POST", { ...selection, contents });
+  }
+
+  summariseFolders(categoryIds: string[]): Promise<FolderSummary[]> {
+    const query = categoryIds.map((id) => `id=${encodeURIComponent(id)}`).join("&");
+    return this.#request(`/management-api/folders/summary?${query}`, "GET");
+  }
+
   createCategory(input: CategoryInput): Promise<CategorySummary> {
     return this.#request<CategorySummary>("/management-api/categories", "POST", input);
   }
@@ -1722,55 +1705,9 @@ export class DashboardApi {
   updateCategory(id: string, input: Partial<CategoryInput>): Promise<CategorySummary> {
     return this.#request(`/management-api/categories/${id}`, "PATCH", input);
   }
-  deleteCategory(id: string, reassign?: CategoryReassignment): Promise<void> {
-    return this.#request(`/management-api/categories/${id}`, "DELETE", reassign);
-  }
-  listCategoryProducts(
-    id: string,
-    options: { includeDescendants?: boolean } = {},
-  ): Promise<CategoryProduct[]> {
-    const query = options.includeDescendants ? "?descendants=1" : "";
-    return this.#request(`/management-api/categories/${id}/products${query}`, "GET");
-  }
-  getCategoryDependants(id: string): Promise<CategoryDependants> {
-    return this.#request(`/management-api/categories/${id}/dependants`, "GET");
-  }
-  /** Sets every listed product's main category to this one, moving it from wherever it was. */
-  addProductsToCategory(id: string, productIds: string[]): Promise<void> {
-    return this.#request(`/management-api/categories/${id}/products`, "POST", { productIds });
-  }
   listLibraryProducts(): Promise<Product[]> {
     return this.#request("/management-api/products", "GET");
   }
-  /** A null category makes the product Uncategorised. */
-  setMainCategory(
-    productId: string,
-    categoryId: string | null,
-  ): Promise<{ primaryCategoryId: string | null }> {
-    return this.#request(`/management-api/products/${productId}/categories`, "PUT", {
-      primaryCategoryId: categoryId,
-    });
-  }
-
-  listLabels(): Promise<LabelSummary[]> {
-    return this.#request("/management-api/labels", "GET");
-  }
-  createLabel(name: string): Promise<Label> {
-    return this.#request("/management-api/labels", "POST", { name });
-  }
-  renameLabel(id: string, name: string): Promise<Label> {
-    return this.#request(`/management-api/labels/${id}`, "PATCH", { name });
-  }
-  deleteLabel(id: string): Promise<void> {
-    return this.#request(`/management-api/labels/${id}`, "DELETE");
-  }
-  getProductLabels(productId: string): Promise<{ labelIds: string[] }> {
-    return this.#request(`/management-api/products/${productId}/labels`, "GET");
-  }
-  setProductLabels(productId: string, labelIds: string[]): Promise<{ labelIds: string[] }> {
-    return this.#request(`/management-api/products/${productId}/labels`, "PUT", { labelIds });
-  }
-
   listUnits(): Promise<Unit[]> {
     return this.#request<Unit[]>("/management-api/units", "GET");
   }

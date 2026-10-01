@@ -36,8 +36,6 @@ interface Strings {
   directlyIn: (name: string) => string;
   total: string;
   incomplete: (lines: number) => string;
-  labels: string;
-  overlap: string;
 }
 
 const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
@@ -55,9 +53,6 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     total: "Total",
     incomplete: (n) =>
       `Gross total incomplete: ${n} ${n === 1 ? "line" : "lines"} recorded before classification began`,
-    labels: "Labels",
-    overlap:
-      "Label totals overlap: a line counts in every label it carries, and a label can cut across categories.",
   },
   "es-ES": {
     heading: {
@@ -76,9 +71,6 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     total: "Total",
     incomplete: (n) =>
       `Total bruto incompleto: ${n} ${n === 1 ? "línea registrada" : "líneas registradas"} antes de que empezara la clasificación`,
-    labels: "Etiquetas",
-    overlap:
-      "Los totales por etiqueta se solapan: una línea cuenta en cada etiqueta que lleva, y una etiqueta puede abarcar varias categorías.",
   },
 };
 
@@ -127,15 +119,9 @@ export function formatCategorySalesPage({
     for (const child of node.children) walk(child);
   };
   for (const root of report.tree) walk(root);
-  const labelRows = report.labels.map((label) => ({
-    label: label.name,
-    depth: 0,
-    gross: label.gross,
-    net: label.net,
-  }));
   const totalRow = { label: s.total, depth: 0, gross: report.gross, net: report.net };
 
-  const all = [...rows, totalRow, ...labelRows];
+  const all = [...rows, totalRow];
   const width = Math.max(
     p(s.gross).length,
     p(s.net).length,
@@ -170,12 +156,6 @@ export function formatCategorySalesPage({
   if (!report.grossComplete) {
     b.line();
     text(s.incomplete(report.linesWithoutGross));
-  }
-  if (labelRows.length > 0) {
-    b.line();
-    text(s.labels);
-    text(s.overlap);
-    for (const r of labelRows) row(r);
   }
   return b.feedAndCut().bytes();
 }

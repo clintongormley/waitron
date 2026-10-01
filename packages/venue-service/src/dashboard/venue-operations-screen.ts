@@ -1,15 +1,12 @@
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
-import { QueryController, currentLocale } from "@waitron/dashboard-kit";
+import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { codeOf } from "@waitron/dashboard-kit";
-import { resolveEnabledContentText } from "@waitron/shared";
 import {
   baseStyles,
-  ContentLanguageController,
-  currentContentLanguages,
   focusFirstInvalid,
   selectStyles,
   submitOnEnter,
@@ -150,10 +147,6 @@ export class VenueOperationsScreen extends LitElement {
   @state() private zoneId = "";
   #opener?: HTMLElement;
 
-  constructor() {
-    super();
-    new ContentLanguageController(this);
-  }
   readonly #url = new UrlStateController(
     this,
     () => {
@@ -389,11 +382,6 @@ export class VenueOperationsScreen extends LitElement {
       ...(inherited ? [{ id: "", name: t("venue.inherit") }] : []),
       ...MODES.map((id) => ({ id, name: t(`venue.${id}`) })),
     ];
-  }
-  /** Resolve a content-translated name — a category's. A product's name is a plain staff string
-   * and is rendered directly, never through here. */
-  #name(names: Record<string, string>): string {
-    return resolveEnabledContentText(names, currentLocale(), currentContentLanguages());
   }
   #actions(label: string, actions: Action[]) {
     return html`<wt-row-actions label=${`${t("venue.actions")}: ${label}`}>
@@ -743,8 +731,7 @@ export class VenueOperationsScreen extends LitElement {
             label: t("venue.product_or_category"),
             cell: (row) =>
               row.productId === null
-                ? this.#name(model.categories.find((c) => c.id === row.categoryId)?.name ?? {}) ||
-                  row.categoryId
+                ? (model.categories.find((c) => c.id === row.categoryId)?.name ?? row.categoryId)
                 : (model.products.find((p) => p.id === row.productId)?.name ?? row.productId),
           },
           {
@@ -1038,7 +1025,7 @@ export class VenueOperationsScreen extends LitElement {
         const row = editor.row;
         return {
           heading: t(row ? "venue.edit_route" : "venue.add_route"),
-          body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${this.#name(category.name)}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${product.name}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
+          body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${category.name}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${product.name}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
           check: () => this.#required(["route-subject", "route-target"]),
           save: () => {
             const [kind, id] = this.#value("route-subject").split(":");

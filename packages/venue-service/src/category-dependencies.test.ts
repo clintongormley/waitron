@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
-  categoryDependants,
   createCatalogue,
   createCategory,
   createProduct,
@@ -10,21 +9,13 @@ import {
   deleteCategory,
   readCategory,
 } from "@waitron/catalogue";
-import {
-  CORE_MIGRATIONS,
-  floorZones,
-  kitchenStations,
-  locations,
-  tills,
-  withTransaction,
-  workingOrders,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, locations, tills, withTransaction, workingOrders } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment, createPreparationRoute } from "./operations.js";
+import { createPreparationRoute } from "./operations.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -42,7 +33,7 @@ async function venue() {
 it("deleting a category removes its preparation routes and the category", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    const category = await createCategory(tx, { name: { en: "Drinks" } });
+    const category = await createCategory(tx, { name: "Drinks" });
     await createPreparationRoute(
       tx,
       { locationId },
@@ -67,7 +58,7 @@ it("an open order keeps its copied category label after the category is deleted"
       .values({ locationId, name: "Till" })
       .returning({ id: tills.id });
     const catalogue = await createCatalogue(tx, { name: "Menu" });
-    const category = await createCategory(tx, { name: { en: "Bakery" } });
+    const category = await createCategory(tx, { name: "Bakery" });
     const unit = await createUnit(
       tx,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
@@ -108,52 +99,5 @@ it("an open order keeps its copied category label after the category is deleted"
     expect(snapshot.rows).toEqual([
       { category: "Bakery", quantity: "1000", vat_class: "reduced", line_total: "200" },
     ]);
-  });
-});
-
-it("dependants lists a category's preparation routes with station and zone names", async () => {
-  const { locationId } = await venue();
-  await withTransaction(suite.db, async (tx) => {
-    const category = await createCategory(tx, { name: { en: "Grill" } });
-    const [zone] = await tx
-      .insert(floorZones)
-      .values({ locationId, name: "Terrace" })
-      .returning({ id: floorZones.id });
-    const [station] = await tx
-      .insert(kitchenStations)
-      .values({ locationId, name: "Plancha" })
-      .returning({ id: kitchenStations.id });
-    // A route may carry a zone, and a zoned route requires the zone to be a configured service zone.
-    const department = await createDepartment(
-      tx,
-      { locationId },
-      { name: "Restaurant", defaultServiceMode: "table_tab" },
-    );
-    await configureZone(tx, { locationId }, { zoneId: zone!.id, departmentId: department.id });
-    const routeId = await createPreparationRoute(
-      tx,
-      { locationId },
-      {
-        categoryId: category.id,
-        zoneId: zone!.id,
-        target: { kind: "station", stationId: station!.id },
-      },
-    );
-    const deps = await categoryDependants(tx, category.id);
-    expect(deps.routes).toEqual([{ id: routeId, station: "Plancha", zone: "Terrace" }]);
-  });
-});
-
-it("dependants reports a no-preparation route with a null station", async () => {
-  const { locationId } = await venue();
-  await withTransaction(suite.db, async (tx) => {
-    const category = await createCategory(tx, { name: { en: "Drinks" } });
-    const routeId = await createPreparationRoute(
-      tx,
-      { locationId },
-      { categoryId: category.id, target: { kind: "no_preparation" } },
-    );
-    const deps = await categoryDependants(tx, category.id);
-    expect(deps.routes).toEqual([{ id: routeId, station: null, zone: null }]);
   });
 });

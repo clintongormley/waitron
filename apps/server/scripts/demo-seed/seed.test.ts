@@ -210,7 +210,7 @@ describe("seedDemoRestaurant", () => {
         join categories c on c.id = r.category_id
         join floor_zones z on z.id = r.zone_id
         join kitchen_stations s on s.id = r.station_id
-        where c.name->>'en' = 'Drinks'
+        where c.name = 'Drinks'
         order by z.name`);
       const published = await menuStatus(
         tx,

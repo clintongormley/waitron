@@ -2,8 +2,7 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
 /** What the product editor can create without leaving itself. */
 export type ProductChildKind = "unit" | "category" | "extras" | "options";
 interface Effects {
-  /** The row that was written. Only its `id` is read here — a kind whose row carries a plain `name`
-   * (an extras or options list) has no localized name to hand over, and needs none. */
+  /** The row that was written. Only its `id` is read here. */
   accept(kind: ProductChildKind, value: { id: string }): void;
   refresh(kind: ProductChildKind): Promise<void>;
   loadError(error: unknown): void;

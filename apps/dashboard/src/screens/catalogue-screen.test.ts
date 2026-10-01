@@ -19,7 +19,7 @@ import type {
 import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
-import type { ProductList } from "../widgets/product-list.js";
+import type { CatalogueBrowser } from "../widgets/catalogue-browser.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -30,9 +30,7 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Comida", active: true, version: 1 },
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
-const categories: CategorySummary[] = [
-  { id: "c1", name: { es: "Entrantes" }, image: null, color: null, parentId: null },
-];
+const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes", parentId: null }];
 const units: Unit[] = [
   { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
 ];
@@ -84,7 +82,6 @@ const products: Product[] = [
     modifiers: [],
     catalogueId: "cat-a",
     categoryId: "c1",
-    labelIds: [],
     primaryCategoryId: "c1",
     name: "Croquetas",
     customerName: { es: "Croquetas caseras de jamón" },
@@ -122,7 +119,6 @@ const value: ProductEditorValue = {
   ordering: "public",
   vatClass: "reduced",
   variants: [],
-  labelIds: [],
   primaryCategoryId: "c1",
   // One attachment the editor's Modifiers section shows, so the tests below can tell an unrelated
   // save carrying it back untouched from one that wipes it.
@@ -132,8 +128,6 @@ const value: ProductEditorValue = {
   stationId: null,
   courseId: null,
 };
-
-const labels = [{ id: "l1", name: "Happy hour drinks", productCount: 1 }];
 
 // Drinks is on both menus. A section's customer-facing name differs from its internal one, so the
 // Add to menus step reading the wrong one shows text the assertions refuse.
@@ -172,7 +166,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     listCategories: vi.fn().mockResolvedValue(categories),
-    listLabels: vi.fn().mockResolvedValue(labels),
     listUnits: vi.fn().mockResolvedValue(units),
     listExtraLists: vi.fn().mockResolvedValue(extraLists),
     listOptionLists: vi.fn().mockResolvedValue(optionLists),
@@ -219,8 +212,8 @@ const editor = (el: CatalogueScreen): ProductEditor =>
   el.shadowRoot!.querySelector("dashboard-product-editor")!;
 const step = (el: CatalogueScreen): AddToMenus =>
   el.shadowRoot!.querySelector("dashboard-add-to-menus")!;
-const list = (el: CatalogueScreen): ProductList =>
-  el.shadowRoot!.querySelector("dashboard-product-list")!;
+const list = (el: CatalogueScreen): CatalogueBrowser =>
+  el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
 function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
@@ -237,9 +230,6 @@ describe("catalogue-screen", () => {
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
     expect(list(el).products).toEqual(products);
-    expect(list(el).labels).toEqual(labels);
-    expect(editor(el).labels).toEqual(labels);
-    expect(el.shadowRoot!.querySelector("dashboard-category-manager")).toBeNull();
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
@@ -568,6 +558,8 @@ describe("catalogue-screen", () => {
   }
   /** A form's one message about a failed submission, or "" when it shows none. */
   async function bottomOf(form: Element): Promise<string> {
+    if (form.tagName === "DASHBOARD-CATEGORY-FORM")
+      return form.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim() ?? "";
     const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
     return (await formMessageOf(actions))?.textContent?.trim() ?? "";
   }
@@ -617,41 +609,26 @@ describe("catalogue-screen", () => {
         .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
       createCategory: vi
         .fn()
-        .mockRejectedValueOnce({ code: "category.color_invalid", params: {}, status: 400 })
         .mockRejectedValueOnce({ code: "category.parent_cycle", params: {}, status: 400 })
         .mockRejectedValueOnce({
-          code: "content.translation_required",
-          params: { language: "es" },
+          code: "category.invalid",
+          params: { field: "name" },
           status: 400,
         }),
     });
     const el = await openNested(api, "category");
     const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    const input = {
-      name: { es: "Postres", en: "" },
-      parentId: "c1",
-      image: null,
-      color: "#abcdef",
-    };
+    const input = { name: "Postres", parentId: "c1" };
     await submitNested(el, form, input);
     expect(form.open).toBe(true);
-    expect(form.shadowRoot!.querySelector("#category-color-error")?.textContent).toBe(
-      codeMessage("category.color_invalid"),
+    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
+      codeMessage("category.parent_cycle"),
     );
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
     await submitNested(el, form, input);
-    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
-      codeMessage("category.parent_cycle"),
-    );
-    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
-
-    await submitNested(el, form, input);
-    expect(errorBeside(form, "wt-input[name=category-name-es]")).toBe(
-      codeMessage("content.translation_required"),
-    );
-    expect(errorBeside(form, "wt-input[name=category-name-en]")).toBe("");
+    expect(errorBeside(form, "wt-input[name=name]")).toBe(codeMessage("category.invalid"));
     expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe("");
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
@@ -702,8 +679,6 @@ describe("catalogue-screen", () => {
     await submitNested(el, form, {
       name: { es: "Postres", en: "" },
       parentId: "c1",
-      image: null,
-      color: null,
     });
     expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
       codeMessage("category.not_found"),
@@ -859,7 +834,6 @@ describe("catalogue-screen", () => {
   // Each of these codes names the missing thing by id; the editor holds the one field that chose it.
   it.each([
     ["category.not_found", { categoryId: "c1" }, "primary"],
-    ["label.not_found", { labelId: "l1" }, "labels"],
     ["unit.not_found", { unitId: "u1" }, "unit"],
     ["station.not_found", { stationId: "s1" }, "product-station"],
     ["course.not_found", { courseId: "k1" }, "product-course"],
@@ -877,7 +851,6 @@ describe("catalogue-screen", () => {
       };
       const sent = {
         ...value,
-        labelIds: ["l1"],
         stationId: "s1",
         courseId: "k1",
         variants: [
@@ -1142,27 +1115,21 @@ describe("catalogue-screen", () => {
     expect(editor(el).currentValue.unitId).toBe("u2");
   });
 
-  it("waits for the content languages before offering the new-category form", async () => {
-    let languagesLoaded!: (value: { defaultLanguage: string; languages: string[] }) => void;
+  it("offers the new-category form, with its one name field, before the content languages load", async () => {
     const api = stubApi({
-      getContentLanguages: vi.fn().mockReturnValue(new Promise((done) => (languagesLoaded = done))),
+      getContentLanguages: vi.fn().mockReturnValue(new Promise(() => {})),
     });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     emit(editor(el), "wt-create-related", { kind: "category" });
     await el.updateComplete;
-    // No name field in a guessed language: nothing could be submitted under a language the venue
-    // may not use.
-    expect(el.shadowRoot!.querySelector("dashboard-category-form")).toBeNull();
-    languagesLoaded({ defaultLanguage: "es", languages: ["es"] });
-    await flush(el);
     const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
     expect(form.open).toBe(true);
     await form.updateComplete;
     const names = [...form.shadowRoot!.querySelectorAll("wt-input")].map((input) =>
       input.getAttribute("name"),
     );
-    expect(names).toEqual(["category-name-es"]);
+    expect(names).toEqual(["name"]);
   });
 
   it("ignores a late product response after the editor is cancelled", async () => {
@@ -1217,7 +1184,6 @@ describe("catalogue-screen", () => {
               unitPrice: "8.50",
               vatClass: "reduced",
               primaryCategoryId: "c1",
-              labelIds: [],
             },
           },
         ],
@@ -1234,7 +1200,6 @@ describe("catalogue-screen", () => {
       unitId: null,
       unitPrice: null,
       vatClass: null,
-      labelIds: [],
       primaryCategoryId: null,
       modifiers: [],
       allergens: null,
@@ -1245,7 +1210,6 @@ describe("catalogue-screen", () => {
         unitPrice: "8.50",
         vatClass: "reduced",
         unitId: "u1",
-        labelIds: [],
         primaryCategoryId: "c1",
         stationId: null,
         courseId: null,
@@ -1651,4 +1615,41 @@ describe("catalogue-screen", () => {
       expect(api.getMenuStructure).not.toHaveBeenCalled();
     });
   });
+});
+
+it("reads and writes folder paths and passes the folder to new products", async () => {
+  history.replaceState(null, "", "/manage/catalogue/folder/c1");
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  const browser = el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+  expect(browser.folderId).toBe("c1");
+  emit(browser, "open-folder", { folderId: "b" });
+  await el.updateComplete;
+  expect(location.pathname).toBe("/manage/catalogue/folder/b");
+  emit(browser, "open-folder", { folderId: "c1" });
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
+  await el.updateComplete;
+  expect(editor(el).newCategoryId).toBe("c1");
+  emit(editor(el), "wt-cancel", {});
+  await el.updateComplete;
+  emit(browser, "view-change", { view: "all" });
+  await el.updateComplete;
+  expect(location.pathname).toContain("/view/all");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
+  await el.updateComplete;
+  expect(editor(el).newCategoryId).toBeNull();
+});
+
+it("creates an unfiled product when the addressed folder no longer exists", async () => {
+  history.replaceState(null, "", "/manage/catalogue/folder/gone");
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
+  await el.updateComplete;
+  expect(editor(el).newCategoryId).toBeNull();
 });

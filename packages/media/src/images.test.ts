@@ -45,7 +45,7 @@ describe("image library", () => {
       );
       const selects = vi.spyOn(tx, "select");
       expect((await readImage(tx, image.image.id)).usageCount).toBe(0);
-      expect(selects).toHaveBeenCalledTimes(5);
+      expect(selects).toHaveBeenCalledTimes(4);
       selects.mockRestore();
     });
   });
@@ -735,53 +735,6 @@ it("sorts by the default when the requested language was disabled while retainin
     const result = await listImages(tx, { sort: "name", language: "en" });
     expect(result.images.map((image) => image.id)).toEqual([first.image.id, second.image.id]);
     expect(result.images[0]!.names.en).toBe("Zebra");
-  });
-});
-
-it("protects an image used only by a category and releases it after clearing the reference", async () => {
-  const { createCategory, updateCategory } = await import("@waitron/catalogue");
-  await seedTenant(suite.db);
-  await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(
-      tx,
-      { image: photo, names: { en: "Food" }, altText: { en: "Food on a plate" }, labels: [] },
-      {},
-    );
-    const category = await createCategory(tx, {
-      name: { en: "Food" },
-      image: image.filename,
-    });
-    const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
-      id: catalogues.id,
-    });
-    const [product] = await tx
-      .insert(products)
-      .values({
-        catalogueId: menu!.id,
-        name: "Bread",
-        pricingUnit: "each",
-        unitPrice: 2,
-        vatClass: "general",
-        image: image.filename,
-      })
-      .returning({ id: products.id });
-    const uses = [
-      {
-        kind: "product" as const,
-        id: product!.id,
-        catalogueId: menu!.id,
-        name: "Bread",
-        active: true,
-      },
-      { kind: "category" as const, id: category.id, names: category.name },
-    ];
-    expect(await listImageUsages(tx, image.id)).toEqual(uses);
-    expect((await readImage(tx, image.id)).usageCount).toBe(2);
-    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
-    await updateCategory(tx, category.id, { image: null });
-    await tx.update(products).set({ image: null }).where(eq(products.id, product!.id));
-    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
   });
 });
 

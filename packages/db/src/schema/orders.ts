@@ -174,7 +174,7 @@ export const workingOrderLines = table(
     // an order that took from it is open, and `validateExtraSelections` is what established that
     // the list existed.
     extraListId: id("extra_list_id"),
-    // The product's reporting chain and labels when the line was added; issuance copies it onto
+    // The product's reporting chain when the line was added; issuance copies it onto
     // `sale_lines.classification`.
     classification: json<SaleLineClassification>("classification"),
     // The party's group the line is released with; an extras child carries its dish's. Null on a

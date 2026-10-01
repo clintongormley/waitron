@@ -55,17 +55,13 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This category no longer exists. Refresh the list.",
     es: "Esta categoría ya no existe. Actualiza la lista.",
   },
+  "category.invalid": {
+    en: "Enter a name for the category.",
+    es: "Introduce un nombre para la categoría.",
+  },
   "category.parent_cycle": {
     en: "Choose a parent outside this category and its descendants.",
     es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
-  },
-  "category.membership_invalid": {
-    en: "Some of the chosen products cannot be moved here. Refresh the list and try again.",
-    es: "Algunos de los productos elegidos no se pueden mover aquí. Actualiza la lista e inténtalo de nuevo.",
-  },
-  "category.reassign_invalid": {
-    en: "Choose a place outside this category and its subcategories.",
-    es: "Elige un destino fuera de esta categoría y de sus subcategorías.",
   },
   "menu_section.not_found": {
     en: "This section, or the item in it, no longer exists. Refresh the list.",
@@ -110,26 +106,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "menu.changed_since_preview": {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
     es: "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",
-  },
-  "label.invalid": {
-    en: "Enter a label name, and choose each label only once.",
-    es: "Introduce un nombre de etiqueta y elige cada etiqueta una sola vez.",
-  },
-  "label.name_taken": {
-    en: "Another label already has this name.",
-    es: "Ya hay otra etiqueta con este nombre.",
-  },
-  "label.not_found": {
-    en: "This label no longer exists. Refresh the list.",
-    es: "Esta etiqueta ya no existe. Actualiza la lista.",
-  },
-  "category.image_not_found": {
-    en: "Choose an image from your image library.",
-    es: "Elige una imagen de tu biblioteca.",
-  },
-  "category.color_invalid": {
-    en: "Choose a valid colour.",
-    es: "Elige un color válido.",
   },
   "sale_classification.invalid": {
     en: "Today's categories could not be read: a product's category setup is inconsistent. The report at time of sale still works.",
@@ -177,8 +153,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Introduce el texto obligatorio en el idioma predeterminado del sitio.",
   },
   "content.default_missing": {
-    en: "Some products, categories, units, menu sections, modifiers or images need translating before this can become the default language.",
-    es: "Debes traducir algunos productos, categorías, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
+    en: "Some products, units, menu sections, modifiers or images need translating before this can become the default language.",
+    es: "Debes traducir algunos productos, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
   },
   "unit.precision_invalid": {
     en: "Choose between 0 and 3 decimal places.",

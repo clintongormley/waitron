@@ -1,6 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { FALLBACK_LOCALE, type SaleLineClassification } from "@waitron/shared";
-import { readContentLanguages } from "./content-languages.js";
+import type { SaleLineClassification } from "@waitron/shared";
 import { classifyLine, loadClassification } from "./sale-classification.js";
 
 /**
@@ -13,8 +12,6 @@ export async function currentClassifications(
   tx: Transaction,
   productIds: readonly string[],
 ): Promise<Map<string, SaleLineClassification>> {
-  // The language `priceOrderLines` (apps/server/src/working-order.ts) records a snapshot in.
-  const { defaultLanguage } = await readContentLanguages(tx, FALLBACK_LOCALE);
-  const loaded = await loadClassification(tx, productIds, defaultLanguage);
+  const loaded = await loadClassification(tx, productIds);
   return new Map([...loaded.products.keys()].map((id) => [id, classifyLine(loaded, id)]));
 }

@@ -6,8 +6,6 @@ import { assertContentTranslations, readContentLanguages } from "./content-langu
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
-import { labelIdArray, setProductLabels } from "./labels.js";
-import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { productWithId } from "./variant-fallback.js";
@@ -19,8 +17,7 @@ export type { InheritedValues, ProductEditorValue } from "./product-types.js";
 import type { VatClass } from "./vat-rates.js";
 import "./errors.js";
 
-/** The row as stored: a variant's blanks read blank here, never as its parent's. A variant stores no
- * labels, so its `labelIds` is empty and its parent's are in `inherited`. */
+/** The row as stored: a variant's blanks read blank here, never as its parent's. */
 const columns = {
   id: products.id,
   parentId: products.parentId,
@@ -40,7 +37,6 @@ const columns = {
   courseId: products.courseId,
   unitId: productUnits.unitId,
   primaryCategoryId: products.categoryId,
-  labelIds: labelIdArray,
 };
 
 /** The row as stored, and beside it the PUBLISHED allergens (the manual overlay merged with the
@@ -51,9 +47,7 @@ async function readStored(tx: Transaction, productId: string) {
     .select({ ...columns, publishedAllergens: products.allergens })
     .from(products)
     .leftJoin(productUnits, eq(productUnits.productId, products.id))
-    .leftJoin(productLabels, eq(productLabels.productId, products.id))
-    .where(eq(products.id, productId))
-    .groupBy(products.id);
+    .where(eq(products.id, productId));
   if (!row) throw new AppError("product.not_found", { productId });
   const { publishedAllergens, ...stored } = row;
   return {
@@ -80,7 +74,6 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
     unitPrice: parent.unitPrice!,
     vatClass: parent.vatClass!,
     unitId: parent.unitId,
-    labelIds: parent.labelIds,
     primaryCategoryId: parent.primaryCategoryId,
     stationId: parent.stationId,
     courseId: parent.courseId,
@@ -191,7 +184,6 @@ export async function saveProductEditor(
   // The row is known here (found above, or just created), so the scope only has to admit a variant.
   await setMainReportingCategory(tx, productId, value.primaryCategoryId, "any");
   if (!isVariant) {
-    await setProductLabels(tx, productId, value.labelIds);
     await writeProductVariants(tx, productId, value.variants, config);
     await writeProductModifiers(tx, productId, value.modifiers);
   }

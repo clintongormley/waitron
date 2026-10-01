@@ -94,7 +94,7 @@ describe("catalogue operations", () => {
   });
   it("offers one product on two menus with distinct identities and prices", async () => {
     await asTenant(async (tx) => {
-      const category = await createCategory(tx, { name: { en: "Cocktails" } });
+      const category = await createCategory(tx, { name: "Cocktails" });
       const upstairs = await createCatalogue(tx, { name: "Upstairs" });
       const downstairs = await createCatalogue(tx, { name: "Downstairs" });
       const product = await createProduct(tx, {
@@ -221,10 +221,10 @@ describe("catalogue operations", () => {
 
   it("creates and lists categories", async () => {
     await asTenant(async (tx) => {
-      const food = await createCategory(tx, { name: { en: "Food" } });
-      const drinks = await createCategory(tx, { name: { en: "Drinks" } });
+      const food = await createCategory(tx, { name: "Food" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
       const cats = await listCategories(tx);
-      expect(cats.map((c) => c.name.en).sort()).toEqual(["Drinks", "Food"]);
+      expect(cats.map((c) => c.name).sort()).toEqual(["Drinks", "Food"]);
       expect(cats.map((c) => c.id).sort()).toEqual([drinks.id, food.id].sort());
     });
   });
@@ -1213,17 +1213,17 @@ describe("catalogue operations", () => {
 
   it("renames a category", async () => {
     await asTenant(async (tx) => {
-      const food = await createCategory(tx, { name: { en: "Food" } });
-      await updateCategory(tx, food.id, { name: { en: "Fresh food" } });
+      const food = await createCategory(tx, { name: "Food" });
+      await updateCategory(tx, food.id, { name: "Fresh food" });
       const [seen] = await listCategories(tx);
-      expect(seen!.name).toEqual({ en: "Fresh food" });
+      expect(seen!.name).toBe("Fresh food");
     });
   });
 
   it("lists a location's catalogue's active products only, with the category name resolved", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
-      const food = await createCategory(tx, { name: { en: "Food" } });
+      const food = await createCategory(tx, { name: "Food" });
       const p1 = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: food.id,

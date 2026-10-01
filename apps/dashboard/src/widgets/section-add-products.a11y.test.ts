@@ -8,16 +8,12 @@ afterEach(cleanupWidgets);
 const categories: CategorySummary[] = [
   {
     id: "c-drinks",
-    name: { en: "Drinks", es: "Bebidas" },
-    image: null,
-    color: null,
+    name: "Drinks",
     parentId: null,
   },
   {
     id: "c-beer",
-    name: { en: "Beer", es: "Cerveza" },
-    image: null,
-    color: null,
+    name: "Beer",
     parentId: "c-drinks",
   },
 ];

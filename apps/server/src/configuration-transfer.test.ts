@@ -46,7 +46,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
-import { categoryDetails, labels, productLabels } from "@waitron/catalogue";
+import { categoryDetails } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
@@ -276,18 +276,10 @@ describe("configuration transfer database path", () => {
         .where(eq(products.id, "22222222-aaaa-aaaa-aaaa-222222222222"));
       await tx
         .insert(categories)
-        .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: { es: "Panadería" } });
-      await tx.insert(categoryDetails).values({
-        categoryId: "23232323-aaaa-aaaa-aaaa-232323232323",
-        image: uploaded.image.filename,
-      });
+        .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: "Panadería" });
       await tx
-        .insert(labels)
-        .values({ id: "24242424-aaaa-aaaa-aaaa-242424242424", name: "Caliente" });
-      await tx.insert(productLabels).values({
-        productId: "22222222-aaaa-aaaa-aaaa-222222222222",
-        labelId: "24242424-aaaa-aaaa-aaaa-242424242424",
-      });
+        .insert(categoryDetails)
+        .values({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" });
       await tx
         .update(products)
         .set({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" })
@@ -443,25 +435,15 @@ describe("configuration transfer database path", () => {
       expect(bytes?.bytes).toEqual(photo.bytes);
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
-      // Read through the TABLE, not the raw select below: `name` is a `json` column, and a raw
-      // select hands back the stored text.
       const named = await tx.select({ name: categories.name }).from(categories);
-      expect(named).toEqual([{ name: { es: "Panadería" } }]);
-      const category = await tx.execute<{
-        image: string;
-        primary: number;
-        labelled: string | null;
-      }>(sql`
-        select d.image,
+      expect(named).toEqual([{ name: "Panadería" }]);
+      const category = await tx.execute<{ primary: number }>(sql`
+        select
           -- The alias is quoted: primary is a keyword to this parser, so a bare "as primary" is
           -- refused with near "primary": syntax error while the quoted form returns the column.
           -- Measured on node:sqlite, Node v26.7.0, with "as member" as the control that needs no
           -- quoting.
-          p.category_id = c.id as "primary",
-          (
-            select l.name from product_labels pl join labels l on l.id = pl.label_id
-            where pl.product_id = p.id
-          ) as labelled
+          p.category_id = c.id as "primary"
         from categories c
         join category_details d on d.category_id = c.id
         cross join products p
@@ -469,13 +451,7 @@ describe("configuration transfer database path", () => {
       `);
       // 1, not `true`: an SQL expression, which the `flag` helper's boolean mapping never
       // reaches. A category that is not the product's main one would answer 0.
-      expect(category.rows).toEqual([
-        {
-          image: metadata!.filename,
-          primary: 1,
-          labelled: "Caliente",
-        },
-      ]);
+      expect(category.rows).toEqual([{ primary: 1 }]);
     });
     const sourceSales = await suite.db.execute<{ count: number }>(
       sql`select count(*) as count from sales `,

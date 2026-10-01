@@ -22,9 +22,7 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
 
-const categories: CategorySummary[] = [
-  { id: "c1", name: { es: "Entrantes" }, image: null, color: null, parentId: null },
-];
+const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes", parentId: null }];
 
 const products: Product[] = [
   {
@@ -32,7 +30,6 @@ const products: Product[] = [
     modifiers: [],
     catalogueId: "cat-a",
     categoryId: "c1",
-    labelIds: [],
     primaryCategoryId: "c1",
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
@@ -139,7 +136,7 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector("dashboard-product-list")!.dispatchEvent(
+    el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
       new CustomEvent("delete-product", {
         detail: { productId: "p1" },
         bubbles: true,

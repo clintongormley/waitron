@@ -332,7 +332,7 @@ describe("the floor's attention signals", () => {
     const kitchen = await cocina(v);
     const pulpo = await inTx(v, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Pesados" });
-      const category = await createCategory(tx, { name: { "es-ES": "Raciones" } });
+      const category = await createCategory(tx, { name: "Raciones" });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: category.id,

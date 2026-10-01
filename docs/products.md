@@ -38,19 +38,12 @@ sees, and filling in a kitchen name does not change what the diner reads.
 
 You can also add a customer-facing description and a picture, both under **Descriptors**.
 
-## Give the product a main category and labels
+## Give the product a main category
 
-Each product has one **Main category**, chosen under **Category and labels** in the product editor.
+Each product has one **Main category**, chosen under **Category** in the product editor.
 Categories form a tree, so the field shows each category's full path. Leave it empty and the product
 is Uncategorised. The main category also plays a part in choosing the kitchen station a dish goes to,
 as described below.
-
-Labels are for the groupings a single tree cannot hold, such as **Alcoholic** or **Happy hour
-drinks**, which cut across your categories and can overlap each other. A product can carry any
-number of labels, or none. A label's name is for staff and is not translated, so it reads the same
-in every language. You create, rename and delete labels on the **Labels** tab of the **Categories**
-screen, and choose a product's labels in the same editor section as its main category. Labels never
-decide where a dish is prepared.
 
 Use the product's **Kitchen station** and **Default course** fields, under **Kitchen**, for its
 preparation routing. They save with the product, so you can set them while creating it, and
@@ -90,10 +83,8 @@ allergens and the other product details. Apart from the names, each detail you l
 shows the product's value greyed out as a hint, and the variant uses the product's value. The
 description works as one value across all languages: to use the product's description, leave every
 language of the description blank. Once you write the description in one language, the variant uses
-only its own description, and the languages you left blank stay blank. A variant has no labels of
-its own: its page shows the product's labels as a hint, and it carries the product's labels. The
-page has no Modifiers or Variants section, because a variant always uses its product's extras and
-options lists.
+only its own description, and the languages you left blank stay blank. The page has no Modifiers
+or Variants section, because a variant always uses its product's extras and options lists.
 **Open** appears once the variant has been saved, and it waits while the product has unsaved
 changes, because leaving the product would lose them: save the product first.
 
@@ -107,7 +98,7 @@ product with Active variants cannot be an extra. The save is refused, and the da
 extras lists to take the product off first.
 
 The products list shows each variant under its product, with its own name, the price it sells at,
-its main category (its own, or the product's when it has none) and the product's labels. If a
+and its main category (its own, or the product's when it has none). If a
 variant's VAT differs from its product's, the list notes it under the variant's price. A variant's
 row menu offers **Remove** or **Restore** there too, and an Inactive variant is listed once you
 change the **Status** filter from **Active**.
@@ -162,9 +153,7 @@ prices and modifier answers. Later catalogue edits apply to new selections. The 
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with a custom unit, two variants, a separate kitchen name
-and direct dietary declarations. It also has two labels that overlap: **Alcoholic** on the Negroni,
-Tinto casa and Caña, and **Happy hour drinks** on Tinto casa, Caña and the cola, which shows a label
-crossing from alcoholic drinks into a soft drink. The demo menus set no price
+and direct dietary declarations. The demo menus set no price
 of their own for anything except the Negroni, at 9.00 on the Menú del Día, so everything else,
 including each coffee variant, sells at its own price. The demo sirloin carries a seeded options
 list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras list, so

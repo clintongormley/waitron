@@ -128,9 +128,9 @@ describe("the category report reconciles with the till's sales", () => {
     // prices whose VAT does not divide evenly, so a net summed some other way would drift a cent.
     const { products, managerSid } = await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Delicatessen" });
-      const drinks = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+      const drinks = await createCategory(tx, { name: "Bebidas" });
       const softs = await createCategory(tx, {
-        name: { [LOCALE]: "Refrescos" },
+        name: "Refrescos",
         parentId: drinks.id,
       });
       const product = async (

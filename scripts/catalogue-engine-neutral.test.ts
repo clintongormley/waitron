@@ -21,12 +21,10 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/** The catalogue's extras, options, labels, sections, product-modifier and sale-classification
- * files. */
+/** The catalogue's extras, options, sections, product-modifier and sale-classification files. */
 const CATALOGUE_FILES = [
   "packages/catalogue/src/schema/options.ts",
   "packages/catalogue/src/schema/extras.ts",
-  "packages/catalogue/src/schema/labels.ts",
   "packages/catalogue/src/schema/sections.ts",
   "packages/catalogue/src/section-types.ts",
   "packages/catalogue/src/section-graph.ts",
@@ -43,7 +41,6 @@ const CATALOGUE_FILES = [
   "packages/catalogue/src/schema/menu.ts",
   "packages/catalogue/src/options.ts",
   "packages/catalogue/src/extras.ts",
-  "packages/catalogue/src/labels.ts",
   "packages/catalogue/src/product-modifiers.ts",
   "packages/catalogue/src/sale-classification.ts",
 ] as const;

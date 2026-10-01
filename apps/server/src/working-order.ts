@@ -38,7 +38,6 @@ import {
   decimal,
   decimalToCents,
   decimalToThousandths,
-  FALLBACK_LOCALE,
   locationId as brandLocationId,
   partyDisplayName,
   MONEY_SCALE,
@@ -574,13 +573,9 @@ async function priceOrderLines(
   }
 
   const gross = grossBasketWithOptions(items);
-  const classification = await loadClassification(
-    tx,
-    [...new Set(lineMeta.map((meta) => meta.productId))],
-    // The language the served offer's free-text `category` is resolved in (`applyLiveFields`,
-    // menu-document.ts); it differs from `contentConfig`'s only when no content languages are saved.
-    contentLanguagesOr(savedLanguages, FALLBACK_LOCALE).defaultLanguage,
-  );
+  const classification = await loadClassification(tx, [
+    ...new Set(lineMeta.map((meta) => meta.productId)),
+  ]);
   const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
   // New lines snapshot the location's receipt languages; locked and issued lines keep their stored

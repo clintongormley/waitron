@@ -266,7 +266,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
 
   const waterOffer = await withTransaction(admin, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const drinks = await createCategory(tx, { name: { en: "Bebidas" } });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     const water = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,

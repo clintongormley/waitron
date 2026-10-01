@@ -1,13 +1,11 @@
 import { foreignKey, index, primaryKey } from "drizzle-orm/sqlite-core";
-import { categories, id, label, table } from "@waitron/db";
+import { categories, id, table } from "@waitron/db";
 
 export const categoryDetails = table(
   "category_details",
   {
     categoryId: id("category_id").notNull(),
     parentId: id("parent_id"),
-    image: label("image"),
-    color: label("color"),
   },
   (t) => [
     primaryKey({ columns: [t.categoryId] }),

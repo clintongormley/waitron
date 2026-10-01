@@ -13,7 +13,6 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
-  LabelSummary,
   LibrarySection,
   MenuStructure,
   OptionList,
@@ -44,7 +43,7 @@ import { categoryRefusalErrors } from "../widgets/category-form.js";
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
-import "../widgets/product-list.js";
+import "../widgets/catalogue-browser.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 
 /** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
@@ -96,7 +95,6 @@ export class CatalogueScreen extends LitElement {
   @state() private contentLanguages: ContentLanguages | null = null;
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
-  @state() private labels: LabelSummary[] = [];
   @state() private units: Unit[] = [];
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
@@ -151,6 +149,8 @@ export class CatalogueScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "catalogue") return;
+      this.folderId = this.#url.read("folder");
+      this.view = this.#url.read("view") === "all" ? "all" : "folders";
       this.#linkedProduct = this.#url.read("product");
       if (this.#linkedProduct === null) this.#closeEditor(false);
       else void this.#openLinkedProduct();
@@ -189,9 +189,6 @@ export class CatalogueScreen extends LitElement {
         }),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
-        }),
-        this.#queries.watch("listLabels", [], (value) => {
-          this.labels = value;
         }),
         this.#queries.watch("listUnits", [], (value) => {
           this.units = value;
@@ -249,7 +246,15 @@ export class CatalogueScreen extends LitElement {
     return this.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor") ?? null;
   }
 
+  @state() private folderId: string | null = null;
+  @state() private view: "folders" | "all" = "folders";
+  @state() private newCategoryId: string | null = null;
+
   #openCreate(): void {
+    this.newCategoryId =
+      this.view === "folders" && this.categories.some(({ id }) => id === this.folderId)
+        ? this.folderId
+        : null;
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
@@ -488,12 +493,8 @@ export class CatalogueScreen extends LitElement {
     if (this.#childRefusals?.error === error) return this.#childRefusals.errors;
     const errors: ChildRefusals = { unit: {}, category: {}, lists: {} };
     if (error !== null && this.#child.kind === "unit") errors.unit = unitRefusalErrors(error);
-    if (error !== null && this.#child.kind === "category" && this.contentLanguages)
-      errors.category = categoryRefusalErrors(
-        error,
-        this.contentLanguages.defaultLanguage,
-        this.#submittedParent,
-      );
+    if (error !== null && this.#child.kind === "category")
+      errors.category = categoryRefusalErrors(error, this.#submittedParent);
     if (error !== null && (this.#child.kind === "extras" || this.#child.kind === "options")) {
       // Keyed by the field path the server named, or `_form` when it names none.
       const params = (error as { params?: { field?: unknown } }).params ?? {};
@@ -600,10 +601,23 @@ export class CatalogueScreen extends LitElement {
       </div>
       ${
         this.catalogues.length
-          ? html`<dashboard-product-list
+          ? html`<dashboard-catalogue-browser
+              .api=${this.api}
+              .folderId=${this.folderId}
+              .view=${this.view}
+              @open-folder=${(event: CustomEvent<{ folderId: string | null }>) => {
+                event.stopPropagation();
+                this.folderId = event.detail.folderId;
+                this.view = "folders";
+                this.#url.write({ folder: this.folderId, view: null }, false);
+              }}
+              @view-change=${(event: CustomEvent<{ view: "folders" | "all" }>) => {
+                event.stopPropagation();
+                this.view = event.detail.view;
+                this.#url.write({ view: this.view === "all" ? "all" : null }, true);
+              }}
               .products=${this.products}
               .categories=${this.categories}
-              .labels=${this.labels}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
@@ -618,7 +632,7 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 void this.#restoreProduct(event.detail.productId);
               }}
-            ></dashboard-product-list>`
+            ></dashboard-catalogue-browser>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
       ${
@@ -632,10 +646,10 @@ export class CatalogueScreen extends LitElement {
         .childOpen=${this.#child.kind !== null}
         .locales=${locales}
         .value=${this.editorValue}
+        .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
         .categories=${this.categories}
-        .labels=${this.labels}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         .stations=${this.stations}
@@ -713,25 +727,17 @@ export class CatalogueScreen extends LitElement {
         @wt-submit=${this.#submitUnit}
         @wt-cancel=${() => this.#cancelChild("unit")}
       ></dashboard-unit-form>
+      <dashboard-category-form
+        .open=${this.#child.kind === "category"}
+        .busy=${this.#child.busy}
+        .categories=${this.categories}
+        .fieldErrors=${refusals.category}
+        @wt-submit=${this.#submitCategory}
+        @wt-cancel=${() => this.#cancelChild("category")}
+      ></dashboard-category-form>
       ${
-        // The form's name fields follow the content languages, so it waits for them rather than
-        // offering a field in a guessed language.
-        this.contentLanguages
-          ? html`<dashboard-category-form
-              .open=${this.#child.kind === "category"}
-              .busy=${this.#child.busy}
-              .languages=${this.contentLanguages}
-              .categories=${this.categories}
-              .api=${this.api}
-              .fieldErrors=${refusals.category}
-              @wt-submit=${this.#submitCategory}
-              @wt-cancel=${() => this.#cancelChild("category")}
-            ></dashboard-category-form>`
-          : nothing
-      }
-      ${
-        // Both list forms carry translated name fields, so like the category form they wait for the
-        // content languages rather than offering a field in a guessed language.
+        // Both list forms carry translated name fields, so they wait for the content languages
+        // rather than offering a field in a guessed language.
         this.contentLanguages
           ? html`<dashboard-extra-list-form
                 .open=${this.#child.kind === "extras"}
@@ -778,8 +784,6 @@ function missingChoiceField(
   if (code === "station.not_found" && named("stationId", submitted.stationId))
     return "product-station";
   if (code === "course.not_found" && named("courseId", submitted.courseId)) return "product-course";
-  if (code === "label.not_found" && submitted.labelIds.some((id) => named("labelId", id)))
-    return "labels";
   if (code === "product.variant_not_found") {
     const index = submitted.variants.findIndex((variant) => named("variantId", variant.id));
     if (index !== -1) return `variant-${index}-name`;

@@ -8,22 +8,10 @@ import type { MemberRef } from "./section-types.js";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "category.not_found": { categoryId: string };
+    /** A category's name is blank once trimmed. */
+    "category.invalid": { field: "name" };
     "category.parent_cycle": Record<string, never>;
-    "category.image_not_found": Record<string, never>;
-    /** A category colour is neither null nor a lower-case `#rrggbb` string. */
-    "category.color_invalid": Record<string, never>;
-    "category.membership_invalid": Record<string, never>;
-    /**
-     * A category delete names somewhere its products or subcategories cannot go: the category being
-     * deleted, or, for `childrenTo`, a category below it.
-     */
-    "category.reassign_invalid": { field: "productsTo" | "childrenTo" };
-    /** A label name is blank or not text (`field` "name"), or a label selection is not a list of
-     * distinct ids (`field` "labelIds"). */
-    "label.invalid": { field: string };
-    "label.name_taken": { name: string };
-    "label.not_found": { labelId: string };
-    /** A sale line's classification snapshot names a category or label that does not exist, holds
+    /** A sale line's classification snapshot names a category that does not exist, holds
      * an empty name, repeats a category in its chain, or ends at a category that is not the
      * product's main reporting category. */
     "sale_classification.invalid": {

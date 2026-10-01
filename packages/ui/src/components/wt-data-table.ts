@@ -335,8 +335,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: "aria-label" }) override ariaLabel = "";
   /** When set, a leading column of checkboxes (plus a select-all header box) lets the caller pick
    * rows. Selection is controlled: the caller passes `selected` and updates it on wt-selection-change.
-   * Works in both flat and tree mode — the header and every visible row (at any depth) gets a box. */
+   * Works in both flat and tree mode; rowSelectable can leave individual rows without a box. */
   @property({ type: Boolean }) selectable = false;
+  @property({ attribute: false }) rowSelectable: (row: Row) => boolean = () => true;
   @property({ attribute: false }) selected: readonly string[] = [];
   @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
   @property() selectAllLabel = "Select all";
@@ -567,9 +568,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #emitSelection(next: string[]): void {
+    const visible = this.#visibleRows();
+    const keyedRows = this.rowParent
+      ? this.#treeVisible(visible).rows
+      : this.#sortedRows(visible, this.#sortColumn(this.#shownColumns()));
+    const selectable = new Map(
+      this.rows.map((row, index) => [this.rowKey(row, index), this.rowSelectable(row)]),
+    );
+    // Rendered keys take precedence: a caller can key flat rows by their sorted, filtered position.
+    keyedRows.forEach((row, index) => {
+      selectable.set(this.rowKey(row, index), this.rowSelectable(row));
+    });
     this.dispatchEvent(
       new CustomEvent("wt-selection-change", {
-        detail: { selected: next },
+        detail: { selected: next.filter((key) => selectable.get(key) !== false) },
         bubbles: true,
         composed: true,
       }),
@@ -841,6 +853,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * where the table's own role is overridden to `treegrid` and every cell needs one. */
   #renderSelectCell(key: string, row: Row, isTree: boolean) {
     if (!this.selectable) return nothing;
+    if (!this.rowSelectable(row))
+      return html`<td class="select" role=${isTree ? "gridcell" : nothing}></td>`;
     return html`<td class="select" role=${isTree ? "gridcell" : nothing}>
       <input
         type="checkbox"
@@ -888,6 +902,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       data-filter=${column.key}
                       aria-label=${column.filter.label}
                       @change=${(event: Event) => {
+                        event.stopPropagation();
                         const next = { ...this.filterSelections };
                         const value = (event.target as HTMLSelectElement).value;
                         if (value === "" && column.filter!.initial === undefined)
@@ -895,6 +910,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         else next[column.key] = value;
                         this.filterSelections = next;
                         this.#persistView();
+                        this.dispatchEvent(
+                          new CustomEvent("wt-filter-change", {
+                            detail: { filters: { ...this.filterSelections } },
+                            bubbles: true,
+                            composed: true,
+                          }),
+                        );
                       }}
                     >
                       <option value="" .selected=${active === ""}>${column.filter.allLabel}</option>
@@ -979,7 +1001,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
       const sorted = this.#sortedRows(visible, sortColumn);
-      const visibleKeys = sorted.map((row, index) => this.rowKey(row, index));
+      const visibleKeys = sorted.flatMap((row, index) =>
+        this.rowSelectable(row) ? [this.rowKey(row, index)] : [],
+      );
       return html`
         ${this.#renderToolbar()}
         <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
@@ -1029,7 +1053,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
     const { rows: treeRows, ancestorOnly } = treeVisible!;
     const entries = this.#treeRows(treeRows, ancestorOnly, sortColumn);
-    const visibleKeys = entries.map((e) => e.key);
+    const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
     return html`
       ${this.#renderToolbar()}
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>

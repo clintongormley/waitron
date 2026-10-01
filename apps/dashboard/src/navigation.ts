@@ -5,7 +5,7 @@ export const dashboardPath: UrlPathConfig = {
   primary: "dashboard",
   children: {
     "*": { view: "view" },
-    catalogue: { view: "view", product: "product" },
+    catalogue: { view: "view", product: "product", folder: "folder" },
     menus: { menu: "menu", view: "view" },
     printers: { view: "view", printer: "printer" },
     floor: { "floor-view": "view", "floor-zone": "zone" },

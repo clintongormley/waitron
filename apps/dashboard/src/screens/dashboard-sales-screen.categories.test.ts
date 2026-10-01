@@ -124,10 +124,6 @@ const report: CategorySalesDto = {
       ],
     }),
   ],
-  labels: [
-    { id: "l-happy", name: "Hora feliz Casa", gross: "8.00", net: "7.00" },
-    { id: "l-gluten", name: "Sin gluten Casa", gross: "5.00", net: "4.50" },
-  ],
   gross: "44.00",
   net: "43.70",
   grossComplete: false,
@@ -155,7 +151,6 @@ const currentReport: CategorySalesDto = {
       direct: { gross: "0.00", net: "2.00", lines: 2 },
     }),
   ],
-  labels: [],
   gross: "4.00",
   net: "5.60",
   grossComplete: true,
@@ -376,30 +371,6 @@ describe("dashboard-sales-screen — category report", () => {
       stubApi({ getCategorySales: vi.fn().mockResolvedValue({ ...report, tree: [drinks] }) }),
     );
     expect(rows(el)[1]![0]).toBe("Directly in Bar $& Grill");
-  });
-
-  it("lists the labels under a note that their totals overlap", async () => {
-    setLocale("en");
-    const el = await mount(stubApi());
-    const labelRows = [...el.shadowRoot!.querySelectorAll("[data-test=label-row]")].map((row) =>
-      [...row.querySelectorAll("th, td")].map((cell) => cell.textContent!.trim()),
-    );
-    expect(labelRows).toEqual([
-      ["Hora feliz Casa", "€8.00", "€7.00"],
-      ["Sin gluten Casa", "€5.00", "€4.50"],
-    ]);
-    expect(q(el, "labels-overlap")!.textContent!.trim()).toBe(
-      "Label totals overlap: a line counts in every label it carries, and a label can cut across categories.",
-    );
-  });
-
-  it("shows no label section when no line carries a label", async () => {
-    const el = await mount(
-      stubApi({ getCategorySales: vi.fn().mockResolvedValue({ ...report, labels: [] }) }),
-    );
-    expect(q(el, "category-table")).not.toBeNull();
-    expect(q(el, "label-table")).toBeNull();
-    expect(q(el, "labels-overlap")).toBeNull();
   });
 
   it("says the gross total is incomplete, with the count of lines, in Spanish and English", async () => {
