@@ -30,6 +30,7 @@ import type {
 } from "./routing-types.js";
 import { routeExceptions, stationClaims } from "./schema/routing.js";
 import "./errors.js";
+import type { MakerOutcome } from "@waitron/module";
 export type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
 
 /** Shared write validation also serves callers that need to check a proposed exception. */
@@ -497,9 +498,14 @@ export async function previewRoutingChange(
         routedProductId: product.routedId,
         categoryId: product.categoryId,
       };
-      const from = chooseMaker(rules, facts, zone.id, null).route;
-      const to = chooseMaker(after, facts, zone.id, null).route;
-      if (JSON.stringify(from) !== JSON.stringify(to))
+      const previous = chooseMaker(rules, facts, zone.id, null);
+      const from = previous.route;
+      const next = chooseMaker(after, facts, zone.id, null);
+      const to = next.route;
+      if (
+        JSON.stringify(from) !== JSON.stringify(to) ||
+        previous.noReplacement !== next.noReplacement
+      )
         moves.push({
           productId: product.id,
           productName: product.name,
@@ -507,6 +513,7 @@ export async function previewRoutingChange(
           zoneName: zone.name,
           from,
           to,
+          toNoReplacement: next.noReplacement,
         });
     }
   return moves.sort(
@@ -527,17 +534,19 @@ export async function resolveMakers(
   cfg: VenueScope,
   zoneId: string | null,
   productIds: readonly string[],
-): Promise<ReadonlyMap<string, RouteTarget | null>> {
+  at: Date,
+): Promise<ReadonlyMap<string, MakerOutcome>> {
   const spellingByUuid = new Map<string, string>();
   for (const id of productIds) {
     const uuid = storedUuid(id);
     if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
   }
   const ids = [...spellingByUuid.keys()];
-  const outcomes = new Map<string, RouteTarget | null>();
+  const outcomes = new Map<string, MakerOutcome>();
   if (ids.length === 0) return outcomes;
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  const rules = await loadRoutingRules(tx, cfg, null);
+  const moment = await venueMoment(tx, cfg, at);
+  const rules = await loadRoutingRules(tx, cfg, moment?.businessDay ?? null);
   const productRows = await tx
     .select({
       id: products.id,
@@ -552,27 +561,64 @@ export async function resolveMakers(
     const product = byId.get(uuid);
     if (product === undefined)
       throw new AppError("route.subject_not_found", { subject: "product", id });
+    const choice = chooseMaker(
+      rules,
+      {
+        productId: uuid,
+        routedProductId: storedUuid(product.routedId),
+        categoryId: product.categoryId,
+      },
+      zoneId,
+      moment,
+    );
     outcomes.set(
       id,
-      chooseMaker(
-        rules,
-        {
-          productId: uuid,
-          routedProductId: storedUuid(product.routedId),
-          categoryId: product.categoryId,
-        },
-        zoneId,
-        null,
-      ).route,
+      choice.route !== null
+        ? { kind: "made", route: choice.route }
+        : choice.noReplacement
+          ? { kind: "no_replacement", stationId: choice.fallbacks[0]!.stationId }
+          : { kind: "no_station" },
     );
   }
   return outcomes;
 }
 
+export async function stationStates(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<
+  ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
+> {
+  const moment = await venueMoment(tx, cfg, at);
+  const { rules, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
+  return new Map(
+    stations.map((station) => [
+      station.id,
+      {
+        open: stationStatus(rules, station.id, moment).open,
+        isDefault: station.isDefault,
+        active: station.active,
+        name: station.name,
+      },
+    ]),
+  );
+}
+
 export async function describeMakers(
   tx: Transaction,
   cfg: VenueScope,
-): Promise<ReadonlyMap<string, { route: RouteTarget | null; variesByZone: boolean }>> {
+): Promise<
+  ReadonlyMap<
+    string,
+    {
+      route: RouteTarget | null;
+      variesByZone: boolean;
+      noReplacement: boolean;
+      unavailableStationId: string | null;
+    }
+  >
+> {
   const rules = await loadRoutingRules(tx, cfg, null);
   const rows = await tx
     .select({
@@ -584,17 +630,28 @@ export async function describeMakers(
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .where(eq(products.active, true));
-  const result = new Map<string, { route: RouteTarget | null; variesByZone: boolean }>();
+  const result = new Map<
+    string,
+    {
+      route: RouteTarget | null;
+      variesByZone: boolean;
+      noReplacement: boolean;
+      unavailableStationId: string | null;
+    }
+  >();
   for (const row of rows) {
     if (row.parentActive === false) continue;
     const ancestors = folderAncestors(rules.parentOf, row.categoryId);
+    const choice = chooseMaker(
+      rules,
+      { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
+      null,
+      null,
+    );
     result.set(row.id, {
-      route: chooseMaker(
-        rules,
-        { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
-        null,
-        null,
-      ).route,
+      route: choice.route,
+      noReplacement: choice.noReplacement,
+      unavailableStationId: choice.noReplacement ? choice.fallbacks[0]!.stationId : null,
       variesByZone: rules.exceptions.some(
         (exception) =>
           exception.zoneId !== null &&

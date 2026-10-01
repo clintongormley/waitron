@@ -135,16 +135,32 @@ describe("seedDemoRestaurant", () => {
       const upstairsStation = stations.find((station) => station.name === "Upstairs bar")!;
       const kitchen = stations.find((station) => station.name === "Kitchen")!;
 
-      expect(await resolveMakers(tx, cfg, downstairs.id, [drink.id, dish.id])).toEqual(
+      expect(
+        await resolveMakers(
+          tx,
+          cfg,
+          downstairs.id,
+          [drink.id, dish.id],
+          new Date("2026-10-02T18:30:00Z"),
+        ),
+      ).toEqual(
         new Map([
-          [drink.id, { kind: "station", stationId: downstairsStation.id }],
-          [dish.id, { kind: "station", stationId: kitchen.id }],
+          [drink.id, { kind: "made", route: { kind: "station", stationId: downstairsStation.id } }],
+          [dish.id, { kind: "made", route: { kind: "station", stationId: kitchen.id } }],
         ]),
       );
-      expect(await resolveMakers(tx, cfg, upstairs.id, [drink.id, dish.id])).toEqual(
+      expect(
+        await resolveMakers(
+          tx,
+          cfg,
+          upstairs.id,
+          [drink.id, dish.id],
+          new Date("2026-10-02T18:30:00Z"),
+        ),
+      ).toEqual(
         new Map([
-          [drink.id, { kind: "station", stationId: upstairsStation.id }],
-          [dish.id, { kind: "station", stationId: kitchen.id }],
+          [drink.id, { kind: "made", route: { kind: "station", stationId: upstairsStation.id } }],
+          [dish.id, { kind: "made", route: { kind: "station", stationId: kitchen.id } }],
         ]),
       );
 
@@ -160,9 +176,9 @@ describe("seedDemoRestaurant", () => {
       });
       await setClaim(tx, cfg, folder.id, { kind: "no_preparation" });
       for (const zone of [downstairs, upstairs]) {
-        expect(await resolveMakers(tx, cfg, zone.id, [snack.id])).toEqual(
-          new Map([[snack.id, { kind: "no_preparation" }]]),
-        );
+        expect(
+          await resolveMakers(tx, cfg, zone.id, [snack.id], new Date("2026-10-02T18:30:00Z")),
+        ).toEqual(new Map([[snack.id, { kind: "made", route: { kind: "no_preparation" } }]]));
       }
     });
   });

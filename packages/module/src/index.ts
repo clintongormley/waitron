@@ -24,6 +24,7 @@ export type {
   ZoneOffers,
   ZoneUnavailable,
   PreparationRoute,
+  MakerOutcome,
   ServiceMode,
   VenueServiceContribution,
 } from "./module.js";

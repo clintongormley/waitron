@@ -1116,8 +1116,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           const makers = await VENUE_SERVICE.describeMakers(tx, requireVenueCfg(deps));
           const stationIds = [
             ...new Set(
-              [...makers.values()].flatMap(({ route }) =>
-                route?.kind === "station" ? [route.stationId] : [],
+              [...makers.values()].flatMap(({ route, unavailableStationId }) =>
+                route?.kind === "station"
+                  ? [route.stationId]
+                  : unavailableStationId === null
+                    ? []
+                    : [unavailableStationId],
               ),
             ),
           ];
@@ -1131,16 +1135,23 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             ).map(({ id, name }) => [id, name]),
           );
           return Object.fromEntries(
-            [...makers].map(([id, { route, variesByZone }]) => [
-              id,
-              {
-                stationId: route?.kind === "station" ? route.stationId : null,
-                stationName:
-                  route?.kind === "station" ? (names.get(route.stationId) ?? null) : null,
-                noPreparation: route?.kind === "no_preparation",
-                variesByZone,
-              },
-            ]),
+            [...makers].map(
+              ([id, { route, variesByZone, noReplacement, unavailableStationId }]) => [
+                id,
+                {
+                  stationId: route?.kind === "station" ? route.stationId : null,
+                  stationName:
+                    route?.kind === "station"
+                      ? (names.get(route.stationId) ?? null)
+                      : unavailableStationId === null
+                        ? null
+                        : (names.get(unavailableStationId) ?? null),
+                  noPreparation: route?.kind === "no_preparation",
+                  noReplacement,
+                  variesByZone,
+                },
+              ],
+            ),
           );
         }),
       );

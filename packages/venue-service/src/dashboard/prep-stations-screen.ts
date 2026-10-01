@@ -969,7 +969,9 @@ export class PrepStationsScreen extends LitElement {
                           <td>${move.productName}</td>
                           <td>${move.zoneName ?? t("prep.any_zone")}</td>
                           <td>${move.from ? this.#targetName(move.from) : t("prep.no_station")}</td>
-                          <td>${move.to ? this.#targetName(move.to) : t("prep.no_station")}</td>
+                          <td>
+                            ${move.to ? this.#targetName(move.to) : t(move.toNoReplacement ? "prep.no_replacement" : "prep.no_station")}
+                          </td>
                         </tr>`,
                     )}
                   </tbody>

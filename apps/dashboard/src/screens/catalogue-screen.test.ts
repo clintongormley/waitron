@@ -224,6 +224,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
         stationId: "bar",
         stationName: "Bar",
         noPreparation: false,
+        noReplacement: false,
         variesByZone: false,
       },
     }),

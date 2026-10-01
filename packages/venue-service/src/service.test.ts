@@ -30,6 +30,7 @@ describe("VENUE_SERVICE", () => {
       "resolveNewOrderZone",
       "resolveZoneContext",
       "retargetOrderContext",
+      "stationStates",
     ]);
   });
 

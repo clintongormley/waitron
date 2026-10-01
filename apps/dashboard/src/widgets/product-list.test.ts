@@ -112,16 +112,42 @@ function product(
 }
 
 describe("product-list", () => {
+  it("names a switched-off station with no replacement instead of nowhere", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "mojito" })],
+      madeAt: {
+        mojito: {
+          stationId: null,
+          stationName: "Cocktail bar",
+          noPreparation: false,
+          noReplacement: true,
+          variesByZone: false,
+        },
+      },
+    });
+    const root = await tableRoot(el);
+    expect(cellUnder(root, "mojito", "Made at").textContent).toContain(
+      "No replacement (Cocktail bar is switched off)",
+    );
+  });
   it("shows the made-at station, zone variation, and tester link", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "lager" }), product({ id: "mojito" })],
       madeAt: {
-        lager: { stationId: "bar", stationName: "Bar", noPreparation: false, variesByZone: false },
+        lager: {
+          stationId: "bar",
+          stationName: "Bar",
+          noPreparation: false,
+          noReplacement: false,
+          variesByZone: false,
+        },
         mojito: {
           stationId: "cocktail",
           stationName: "Cocktail bar",
           noPreparation: false,
+          noReplacement: false,
           variesByZone: true,
         },
       },
@@ -1206,6 +1232,7 @@ describe("the product list at phone width", () => {
               stationId: "bar",
               stationName: "Downstairs bar",
               noPreparation: false,
+              noReplacement: false,
               variesByZone: true,
             },
           },

@@ -45,6 +45,7 @@ export interface RoutingMove {
   zoneName: string | null;
   from: RouteTarget | null;
   to: RouteTarget | null;
+  toNoReplacement: boolean;
 }
 
 export interface RoutingModel {

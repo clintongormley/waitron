@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   isUniqueViolation,
+  kitchenStations,
   locations,
   nowIso,
   orderGroupEvents,
@@ -93,6 +94,12 @@ import {
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createException, setClaim } from "@waitron/venue-service";
+import {
+  replaceStationHours,
+  setStationFallback,
+  setStationToday,
+  stationFallbacks,
+} from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
@@ -3055,7 +3062,11 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
           { menuItemId: aguaOffer.id, quantity: "1" },
         ]);
         expect(resolveRoutes).toHaveBeenCalledTimes(1);
-        expect(resolveRoutes.mock.calls[0]!.slice(2)).toEqual([zoneId, [cafeId, aguaId]]);
+        expect(resolveRoutes.mock.calls[0]!.slice(2)).toEqual([
+          zoneId,
+          [cafeId, aguaId],
+          expect.any(Date),
+        ]);
         const items = await ticketItemsFor(tx, tabId);
         expect(items).toHaveLength(3);
         const stationsOf = (productId: string) =>
@@ -3064,6 +3075,286 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         expect(stationsOf(aguaId)).toEqual([kitchen.id]);
       } finally {
         resolveRoutes.mockRestore();
+      }
+    });
+  });
+});
+
+describe("opening hours", () => {
+  it("refuses a fallback loop when both stations are closed", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, cfg.locationId));
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await tx.insert(stationFallbacks).values([
+        { stationId: upstairs.id, fallbackStationId: downstairs.id },
+        { stationId: downstairs.id, fallbackStationId: upstairs.id },
+      ]);
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const secondProduct = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [], null);
+      await insertContextlessLines(tx, orderId, [product, secondProduct]);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
+      try {
+        await setStationToday(tx, cfg, upstairs.id, "closed", new Date());
+        await setStationToday(tx, cfg, downstairs.id, "closed", new Date());
+        await expect(
+          fireLines(tx, cfg, orderId, await fireableLines(tx, orderId)),
+        ).rejects.toMatchObject({
+          code: "station.no_replacement",
+          params: { stationId: upstairs.id, productIds: [product, secondProduct] },
+        });
+        expect(await ticketItemsFor(tx, orderId)).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("routes at closing time to a fallback", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, cfg.locationId));
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await replaceStationHours(tx, cfg, upstairs.id, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-02T19:00:00Z"));
+      try {
+        const { id } = await fireContextless(tx, cfg, [product]);
+        expect((await ticketItemsFor(tx, id))[0]!.stationId).toBe(downstairs.id);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("ignores opening hours when the venue clock is unreadable", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, cfg.locationId));
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await replaceStationHours(tx, cfg, upstairs.id, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-02T20:00:00Z"));
+      try {
+        const { id } = await fireContextless(tx, cfg, [product]);
+        expect((await ticketItemsFor(tx, id))[0]!.stationId).toBe(upstairs.id);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("keeps a sent dish's station when its note changes after that station closes", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, cfg.locationId));
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-02T18:30:00Z"));
+      try {
+        await addRound(tx, cfg, tabId, [line(product)]);
+        expect((await ticketItemsFor(tx, tabId))[0]!.stationId).toBe(upstairs.id);
+        await setStationToday(tx, cfg, upstairs.id, "closed", new Date());
+        const [{ revision }] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId));
+        await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin hielo" }, revision!);
+        const [item] = await ticketItemsFor(tx, tabId);
+        expect(item!.stationId).toBe(upstairs.id);
+        expect(
+          (
+            await tx
+              .select({ note: ticketItems.note })
+              .from(ticketItems)
+              .where(eq(ticketItems.workingOrderId, tabId))
+          )[0]!.note,
+        ).toBe("Sin hielo");
+        const [parent] = await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, tabId));
+        await tx
+          .update(workingOrderLines)
+          .set({ makeAtStationId: upstairs.id })
+          .where(eq(workingOrderLines.id, parent!.id));
+        const [{ revision: nextRevision }] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId));
+        await updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, nextRevision!, OPERATOR);
+        const lines = await tx
+          .select({ id: workingOrderLines.id, makeAtStationId: workingOrderLines.makeAtStationId })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, tabId));
+        expect(lines).toHaveLength(2);
+        expect(lines.every((line) => line.makeAtStationId === upstairs.id)).toBe(true);
+        expect(
+          (await ticketItemsFor(tx, tabId)).every((item) => item.stationId === upstairs.id),
+        ).toBe(true);
+        await deactivateStation(tx, cfg, upstairs.id);
+        const [{ revision: lastRevision }] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId));
+        await expect(
+          updateOrderLine(tx, cfg, tabId, 1, { note: "Sin limón" }, lastRevision!),
+        ).rejects.toMatchObject({ code: "station.no_replacement" });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("uses one clock reading for both routing and the fire stamp", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, cfg.locationId));
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await replaceStationHours(tx, cfg, upstairs.id, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [], null);
+      await insertContextlessLines(tx, orderId, [product]);
+      const lines = await fireableLines(tx, orderId);
+      const RealDate = globalThis.Date;
+      const start = RealDate.parse("2026-10-02T18:59:59.999Z");
+      let reads = 0;
+      class MovingDate extends RealDate {
+        constructor();
+        constructor(value: string | number | Date);
+        constructor(value?: string | number | Date) {
+          super(value === undefined ? start + reads++ : value);
+        }
+        static override now() {
+          return start + reads++;
+        }
+      }
+      try {
+        globalThis.Date = MovingDate as DateConstructor;
+        await fireLines(tx, cfg, orderId, lines);
+      } finally {
+        globalThis.Date = RealDate;
+      }
+      const [item] = await ticketItemsFor(tx, orderId);
+      expect(item!.stationId).toBe(upstairs.id);
+      const [stamp] = await tx
+        .select({ firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      expect(stamp!.firedAt).toBe("2026-10-02T18:59:59.999Z");
+    });
+  });
+
+  it("refuses a closed station with no fallback before writing and honors a stored choice", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, cfg.locationId));
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [], null);
+      await insertContextlessLines(tx, orderId, [product]);
+      const lines = await fireableLines(tx, orderId);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
+      try {
+        await setStationToday(tx, cfg, upstairs.id, "closed", new Date());
+        await expect(fireLines(tx, cfg, orderId, lines)).rejects.toMatchObject({
+          code: "station.no_replacement",
+          params: { stationId: upstairs.id, productIds: [product] },
+        });
+        expect(await ticketItemsFor(tx, orderId)).toEqual([]);
+        expect(await fireLines(tx, cfg, orderId, lines, { unroutable: "skip" })).toEqual(lines);
+        const off = await createStation(tx, cfg, { name: "Off bar" });
+        await deactivateStation(tx, cfg, off.id);
+        await tx
+          .update(workingOrderLines)
+          .set({ makeAtStationId: off.id })
+          .where(eq(workingOrderLines.id, lines[0]!.id));
+        await expect(fireLines(tx, cfg, orderId, lines)).rejects.toMatchObject({
+          code: "station.no_replacement",
+        });
+        expect(await ticketItemsFor(tx, orderId)).toEqual([]);
+        const [other] = await tx
+          .insert(locations)
+          .values({ name: "Other", invoiceLocales: [LOCALE], operationDescription: "Hospitality" })
+          .returning();
+        const [foreign] = await tx
+          .insert(kitchenStations)
+          .values({ locationId: other!.id, name: "Foreign bar" })
+          .returning();
+        await tx
+          .update(workingOrderLines)
+          .set({ makeAtStationId: foreign!.id })
+          .where(eq(workingOrderLines.id, lines[0]!.id));
+        await expect(fireLines(tx, cfg, orderId, lines)).rejects.toMatchObject({
+          code: "station.no_replacement",
+        });
+        expect(await ticketItemsFor(tx, orderId)).toEqual([]);
+        await tx
+          .update(workingOrderLines)
+          .set({ makeAtStationId: upstairs.id })
+          .where(eq(workingOrderLines.id, lines[0]!.id));
+        await fireLines(tx, cfg, orderId, lines);
+        expect((await ticketItemsFor(tx, orderId))[0]!.stationId).toBe(upstairs.id);
+      } finally {
+        vi.useRealTimers();
       }
     });
   });

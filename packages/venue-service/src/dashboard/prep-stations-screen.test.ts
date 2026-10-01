@@ -1065,6 +1065,29 @@ it("shows affected products and their old and new destinations before an assignm
   expect(a.assignProduct).not.toHaveBeenCalled();
 });
 
+it("shows No replacement for a previewed dead end", async () => {
+  setLocale("en");
+  const a = api({
+    preview: vi.fn().mockResolvedValue([
+      {
+        productId: "bread",
+        productName: "Bread",
+        zoneId: null,
+        zoneName: null,
+        from: { kind: "station", stationId: "bar" },
+        to: null,
+        toNoReplacement: true,
+      },
+    ]),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("No replacement");
+});
+
 it("shows a refused preview without opening confirmation or writing an exception", async () => {
   setLocale("en");
   const a = api({

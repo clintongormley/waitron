@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -32,6 +32,7 @@ import {
   previewRoutingChange,
   removeClaim,
   resolveMakers,
+  stationStates,
   reorderExceptions,
   routingModel,
   setClaim,
@@ -41,6 +42,7 @@ import {
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { routeExceptions } from "./schema/routing.js";
+import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -135,6 +137,8 @@ describe("route explanation", () => {
       expect(makers.get(f.bread)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: false,
+        noReplacement: false,
+        unavailableStationId: null,
       });
     }));
 
@@ -160,14 +164,20 @@ describe("route explanation", () => {
       expect(makers.get(f.mojito)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: true,
+        noReplacement: false,
+        unavailableStationId: null,
       });
       expect(makers.get(f.variant)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: true,
+        noReplacement: false,
+        unavailableStationId: null,
       });
       expect(makers.get(f.bread)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: false,
+        noReplacement: false,
+        unavailableStationId: null,
       });
     }));
   it("names a matching exception, including a variant's parent product", async () =>
@@ -594,6 +604,118 @@ describe("stored preparation rules", () => {
 });
 
 describe("resolveMakers", () => {
+  it("sends a closed station's work to its fallback, and an open one's to itself", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.bar },
+      });
+    }));
+
+  it("answers no_replacement for a closed station with no fallback", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", new Date("2026-10-02T18:00:00Z"));
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "no_replacement",
+        stationId: f.terraceBar,
+      });
+    }));
+
+  it("sends a switched-off station's work to its fallback", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.bar },
+      });
+    }));
+  it("ignores hours when the venue's clock cannot be read", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.terraceBar },
+      });
+    }));
+  it("reports every station's active and open state at an instant", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      const states = await stationStates(tx, f.cfg, new Date("2026-10-02T20:00:00Z"));
+      expect(states.get(f.bar)).toEqual({ open: true, isDefault: true, active: true, name: "Bar" });
+      expect(states.get(f.terraceBar)).toEqual({
+        open: false,
+        isDefault: false,
+        active: true,
+        name: "Terrace Bar",
+      });
+      expect(states.get(f.switchedOff)).toEqual({
+        open: false,
+        isDefault: false,
+        active: false,
+        name: "Off",
+      });
+    }));
   it("keeps the database read count constant as a batch grows", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -603,22 +725,36 @@ describe("resolveMakers", () => {
       ).session;
       const prepared = vi.spyOn(session, "prepareQuery");
       try {
-        expect(await resolveMakers(tx, f.cfg, null, [f.mojito])).toEqual(
-          new Map([[f.mojito, { kind: "station", stationId: f.terraceBar }]]),
+        expect(
+          await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z")),
+        ).toEqual(
+          new Map([
+            [f.mojito, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
+          ]),
         );
         const reads = prepared.mock.calls.length;
         expect(reads).toBeGreaterThan(0);
         prepared.mockClear();
-        expect(await resolveMakers(tx, f.cfg, null, [f.mojito, f.bread, f.variant])).toEqual(
+        expect(
+          await resolveMakers(
+            tx,
+            f.cfg,
+            null,
+            [f.mojito, f.bread, f.variant],
+            new Date("2026-10-02T18:30:00Z"),
+          ),
+        ).toEqual(
           new Map([
-            [f.mojito, { kind: "station", stationId: f.terraceBar }],
-            [f.bread, { kind: "station", stationId: f.bar }],
-            [f.variant, { kind: "station", stationId: f.terraceBar }],
+            [f.mojito, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
+            [f.bread, { kind: "made", route: { kind: "station", stationId: f.bar } }],
+            [f.variant, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
           ]),
         );
         expect(prepared.mock.calls.length).toBe(reads);
         prepared.mockClear();
-        expect(await resolveMakers(tx, f.cfg, randomUUID(), [])).toEqual(new Map());
+        expect(
+          await resolveMakers(tx, f.cfg, randomUUID(), [], new Date("2026-10-02T18:30:00Z")),
+        ).toEqual(new Map());
         expect(prepared).not.toHaveBeenCalled();
       } finally {
         prepared.mockRestore();
@@ -629,23 +765,43 @@ describe("resolveMakers", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      const made = await resolveMakers(tx, f.cfg, null, [f.mojito, f.bread]);
-      expect(made.get(f.mojito)).toEqual({ kind: "station", stationId: f.terraceBar });
-      expect(made.get(f.bread)).toEqual({ kind: "station", stationId: f.bar });
+      const made = await resolveMakers(
+        tx,
+        f.cfg,
+        null,
+        [f.mojito, f.bread],
+        new Date("2026-10-02T18:30:00Z"),
+      );
+      expect(made.get(f.mojito)).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(made.get(f.bread)).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.bar },
+      });
     }));
   it("answers null for every product when the default is off and nothing matches", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      expect((await resolveMakers(tx, f.cfg, f.terrace, [f.bread])).get(f.bread)).toBeNull();
+      expect(
+        (
+          await resolveMakers(tx, f.cfg, f.terrace, [f.bread], new Date("2026-10-02T18:30:00Z"))
+        ).get(f.bread),
+      ).toEqual({ kind: "no_station" });
     }));
   it("refuses an unknown product and an unknown zone", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await expect(resolveMakers(tx, f.cfg, null, [randomUUID()])).rejects.toMatchObject({
+      await expect(
+        resolveMakers(tx, f.cfg, null, [randomUUID()], new Date("2026-10-02T18:30:00Z")),
+      ).rejects.toMatchObject({
         code: "route.subject_not_found",
       });
-      await expect(resolveMakers(tx, f.cfg, randomUUID(), [f.bread])).rejects.toMatchObject({
+      await expect(
+        resolveMakers(tx, f.cfg, randomUUID(), [f.bread], new Date("2026-10-02T18:30:00Z")),
+      ).rejects.toMatchObject({
         code: "service_zone.not_found",
       });
     }));
@@ -654,11 +810,17 @@ describe("resolveMakers", () => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       const upper = f.variant.toUpperCase();
-      expect(await resolveMakers(tx, f.cfg, null, [upper, f.variant])).toEqual(
-        new Map([[upper, { kind: "station", stationId: f.terraceBar }]]),
+      expect(
+        await resolveMakers(tx, f.cfg, null, [upper, f.variant], new Date("2026-10-02T18:30:00Z")),
+      ).toEqual(
+        new Map([[upper, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }]]),
       );
-      expect(await resolveMakers(tx, f.cfg, null, [f.variant, upper])).toEqual(
-        new Map([[f.variant, { kind: "station", stationId: f.terraceBar }]]),
+      expect(
+        await resolveMakers(tx, f.cfg, null, [f.variant, upper], new Date("2026-10-02T18:30:00Z")),
+      ).toEqual(
+        new Map([
+          [f.variant, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
+        ]),
       );
     }));
 });
@@ -754,6 +916,52 @@ describe("assigning an unfiled product from Prep stations", () => {
 });
 
 describe("routing previews", () => {
+  it("marks a preview that exposes a switched-off rule as no replacement", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      const id = await createException(tx, f.cfg, {
+        zoneId: null,
+        categoryId: f.drinks,
+        productId: null,
+        target: { kind: "station", stationId: f.bar },
+      });
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
+      expect(moves).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ productId: f.mojito, to: null, toNoReplacement: true }),
+        ]),
+      );
+    }));
+  it("reports a preview from no replacement to no default station", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const id = await createException(tx, f.cfg, {
+        zoneId: null,
+        categoryId: f.drinks,
+        productId: null,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(inArray(kitchenStations.id, [f.bar, f.terraceBar]));
+      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
+      expect(moves).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            productId: f.mojito,
+            from: null,
+            to: null,
+            toNoReplacement: false,
+          }),
+        ]),
+      );
+    }));
   it("previews an appended exception over a saved broader rule without saving it", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -800,6 +1008,7 @@ describe("routing previews", () => {
           zoneId: f.terrace,
           from: noPrep,
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         }),
       ]);
       expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
@@ -838,6 +1047,7 @@ describe("routing previews", () => {
         expect.objectContaining({
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         }),
       ]);
       expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
@@ -944,6 +1154,7 @@ describe("routing previews", () => {
           zoneName: "Terrace",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
       ]);
       expect(moves.some((m) => m.productId === f.variant && m.zoneId === f.terrace)).toBe(true);
@@ -955,6 +1166,7 @@ describe("routing previews", () => {
           zoneName: "Inside",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
         {
           productId: lager.id,
@@ -963,6 +1175,7 @@ describe("routing previews", () => {
           zoneName: "Terrace",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
       ]);
       expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
@@ -1026,6 +1239,7 @@ describe("routing previews", () => {
           zoneName: "Terrace",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
       ]);
       expect(moves.some((m) => m.zoneId === inside!.id)).toBe(false);

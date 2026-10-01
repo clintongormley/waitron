@@ -439,12 +439,13 @@ export class CatalogueBrowser extends LitElement {
         this.routing.stations.filter(({ active }) => active).map(({ id }) => id),
       ),
       defaultStationId: null,
+      timing: new Map(),
     };
     return this.categories
       .filter(
         ({ id }) =>
-          chooseMaker(rules, { productId: "", routedProductId: "", categoryId: id }, null)
-            .decidedBy === null,
+          chooseMaker(rules, { productId: "", routedProductId: "", categoryId: id }, null, null)
+            .route === null,
       )
       .map(({ id }) => id);
   }

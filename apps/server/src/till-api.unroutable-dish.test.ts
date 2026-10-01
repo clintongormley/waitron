@@ -783,7 +783,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         }),
       );
 
-    await expect(round(stranded)).rejects.toMatchObject({ code: "station.no_default" });
+    await expect(round(stranded)).rejects.toMatchObject({ code: "station.no_replacement" });
     await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
   });
 });

@@ -318,6 +318,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "ticket.already_started": 409,
   "course.not_found": 404,
   "station.no_default": 409,
+  "station.no_replacement": 409,
   "station.not_found": 404,
   "kitchen_notice.not_found": 404,
   "service_zone.not_found": 404,

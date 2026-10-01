@@ -1134,7 +1134,14 @@ const LATER = "2026-09-22T11:00:00.000Z";
 describe("working_order_lines_require_open_parent_update's sent-stamp exception", () => {
   it("reads the table's columns, so the per-column cases below are not vacuous", () => {
     expect(FROZEN_SENT_LINE_COLUMNS).toEqual(
-      expect.arrayContaining(["id", "quantity", "unit_price_gross", "served_at", "group_id"]),
+      expect.arrayContaining([
+        "id",
+        "quantity",
+        "unit_price_gross",
+        "served_at",
+        "group_id",
+        "make_at_station_id",
+      ]),
     );
   });
 

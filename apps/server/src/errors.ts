@@ -609,6 +609,7 @@ declare module "@waitron/shared" {
      * `locationId` names the misconfigured venue.
      */
     "station.no_default": { locationId: string };
+    "station.no_replacement": { stationId: string; productIds: string[] };
     /**
      * A per-line kitchen ticket-item bump is not legal from the item's current state (a skip, a
      * repeat, backwards, INTO `queued`, or an absent item). `advanceTicketItem` refuses a target the

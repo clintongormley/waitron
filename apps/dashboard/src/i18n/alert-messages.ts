@@ -181,8 +181,8 @@ export const ALERT_MESSAGES: Readonly<
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
   },
   "route.dish_not_sent": {
-    en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the kitchen. Pass them to the kitchen by hand, and switch on a default station on the Prep stations page.",
-    es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a cocina. Pásalos a cocina a mano y activa una estación predeterminada en la página de Estaciones de preparación.",
+    en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no default station switched on, leaves a dish nowhere to go.",
+    es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a cocina. Pásalos a cocina a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
   },
   "agent.silent": {
     en: "Print agent “{agent}” has gone quiet — it has not checked in for several minutes. Printing may be affected.",
