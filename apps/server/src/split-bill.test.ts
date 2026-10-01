@@ -888,10 +888,7 @@ describe("splitting a line the kitchen has", () => {
   });
 });
 
-/**
- * A check is paid straight after the split and cannot be sent (`sendLines` refuses anything but a
- * tab), so held kitchen work never goes onto one.
- */
+/** A held round has no group, so firing a group never reaches it. */
 describe("splitting held kitchen work onto a check", () => {
   it.each([
     ["whole", undefined],

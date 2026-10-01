@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
-import { orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
@@ -123,39 +123,10 @@ async function requireUntouchedPair(
 }
 
 /**
- * Refuse `tab.split_held_line` for the lowest-numbered named line whose group is held. A dish with
- * no preparation gets no ticket item, so the unfired-ticket test in `carveOffLines` cannot see it.
- */
-async function refuseHeldGroupLines(
-  tx: Transaction,
-  billId: string,
-  transfers: Transfers,
-): Promise<void> {
-  const [held] = await tx
-    .select({ lineNo: workingOrderLines.lineNo })
-    .from(workingOrderLines)
-    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(
-      and(
-        eq(workingOrderLines.workingOrderId, billId),
-        inArray(
-          workingOrderLines.lineNo,
-          transfers.map((t) => t.lineNo),
-        ),
-        eq(orderGroups.state, "held"),
-      ),
-    )
-    .orderBy(workingOrderLines.lineNo)
-    .limit(1);
-  if (held !== undefined) {
-    throw new AppError("tab.split_held_line", { tabId: billId, lineNo: held.lineNo });
-  }
-}
-
-/**
  * Put the chosen items of an open bill on a new bill of the same party, or a new counter order when
  * the bill has none. A partly paid bill may be split; the items paid for stay (`bill.line_paid`).
- * Held work is never split off (owner ruling 2026-09-26).
+ * A dish in a held group may be split off, keeping its group, and fires with it; a dish the kitchen
+ * holds outside a held group is refused `tab.split_held_line`.
  */
 export async function splitBill(
   tx: Transaction,
@@ -168,7 +139,6 @@ export async function splitBill(
   assertDistinctTransferLines(billId, transfers);
   const path = await guardPathParty(tx, billId, command);
   refuseClosedBill(billId, path.status);
-  await refuseHeldGroupLines(tx, billId, transfers);
 
   const newBillId = randomUUID();
   await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, cfg, billId), {

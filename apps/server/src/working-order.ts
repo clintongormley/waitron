@@ -2793,7 +2793,9 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * source's context onto a new order. Every transfer is validated before anything moves. A partial
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
- * the part split, and refused the same when an extra is not a whole count a dish. Returns each
+ * the part split, and refused the same when an extra is not a whole count a dish. With
+ * `refuseHeld`, a line whose ticket item is unfired is refused `tab.split_held_line` unless its group
+ * is held: firing a group fires its lines on whichever bills they are on. Returns each
  * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
  * by the row it came from, a dish before its extras.
  */
@@ -2837,9 +2839,11 @@ export async function carveOffLines(
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      groupState: orderGroups.state,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
   const sourceLines = sourceRows.map((l) => ({
@@ -2879,7 +2883,12 @@ export async function carveOffLines(
     if (line.parentLineId != null) {
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
-    if (opts.refuseHeld && line.ticketItemId !== null && line.ticketFiredAt === null) {
+    if (
+      opts.refuseHeld &&
+      line.ticketItemId !== null &&
+      line.ticketFiredAt === null &&
+      line.groupState !== "held"
+    ) {
       throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
     const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];

@@ -1752,8 +1752,7 @@ async function billOfNoParty(
 
 /**
  * The chosen items of the party's tab transferred onto a new, empty bill of the party, sent at
- * `revision` by `operatorId`. A held line can reach a second bill only this way: a split refuses
- * held work.
+ * `revision` by `operatorId`.
  */
 async function onSecondBill(
   v: Venue,
@@ -1995,26 +1994,199 @@ describe("a group split across bills of its party", () => {
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
   });
 
-  it("still refuses a routed held-group line onto a check (tab.split_held_line), writing nothing", async () => {
+  it("keeps the group and credit of a routed held-group line split onto a check, still held", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const [steak] = await linesIn(s.partyId, s.mains);
     const revision = await revisionOf(s.partyId);
 
+    const checkId = await splitToCheck(v, s, [{ lineNo: steak!.lineNo }], revision);
+
+    expect(await linesOfBill(checkId)).toMatchObject([
+      { id: steak!.id, groupId: s.mains, creditedTo: ALEX, quantity: 2000, sentAt: null },
+    ]);
+    expect(await dishTickets(s.partyId, v.productId.steak)).toEqual([
+      { workingOrderId: checkId, lineId: steak!.id, firedAt: null, quantity: 2000 },
+    ]);
+    expect(await revisionOf(s.partyId)).toBe(revision + 1);
+  });
+
+  it("fires a held-group line split onto a check once, on the check, when its group fires", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.partyId, s.mains);
+    const checkId = await splitToCheck(v, s, [{ lineNo: steak!.lineNo }]);
+    const jobsBefore = (await printed(v)).length;
+
+    await fire(v, s.partyId, s.mains);
+
+    const tickets = await dishTickets(s.partyId, v.productId.steak);
+    expect(tickets).toMatchObject([{ workingOrderId: checkId, lineId: steak!.id }]);
+    expect(tickets[0]!.firedAt).not.toBeNull();
+    expect((await linesOfBill(checkId))[0]!.sentAt).not.toBeNull();
+    expect(
+      (await linesOf(s.partyId)).filter(
+        (row) => row.workingOrderId === s.tabId && row.productId === v.productId.steak,
+      ),
+    ).toEqual([]);
+    expect(timesPrinted((await printed(v)).slice(jobsBefore), DISHES.steak.kitchen)).toBe(1);
+  });
+
+  it("fires a held group split whole onto a check on the check alone", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const mains = await linesIn(s.partyId, s.mains);
+    const checkId = await splitToCheck(
+      v,
+      s,
+      mains.map((row) => ({ lineNo: row.lineNo })),
+    );
+    expect((await linesIn(s.partyId, s.mains)).map((row) => row.workingOrderId)).toEqual([
+      checkId,
+      checkId,
+    ]);
+    const tabTicketsBefore = await ticketsOfBill(s.tabId);
+    const jobsBefore = (await printed(v)).length;
+
+    await fire(v, s.partyId, s.mains);
+
+    const fired = await linesIn(s.partyId, s.mains);
+    expect(fired.map((row) => row.workingOrderId)).toEqual([checkId, checkId]);
+    expect(fired.every((row) => row.sentAt !== null)).toBe(true);
+    expect((await ticketsOfBill(checkId)).every((ticket) => ticket.firedAt !== null)).toBe(true);
+    expect(await ticketsOfBill(s.tabId)).toEqual(tabTicketsBefore);
+    const newJobs = (await printed(v)).slice(jobsBefore);
+    expect(timesPrinted(newJobs, DISHES.steak.kitchen)).toBe(1);
+    expect(timesPrinted(newJobs, DISHES.fish.kitchen)).toBe(1);
+  });
+
+  it("splits part of a held-group line onto a check as two held rows of the group, and fires both", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.partyId, s.mains);
+
+    const checkId = await splitToCheck(v, s, [{ lineNo: steak!.lineNo, quantity: "1" }]);
+
+    const [split] = await linesOfBill(checkId);
+    expect(
+      (await linesIn(s.partyId, s.mains)).filter((row) => row.productId === v.productId.steak),
+    ).toMatchObject([
+      { id: steak!.id, workingOrderId: s.tabId, quantity: 1000, sentAt: null },
+      { id: split!.id, workingOrderId: checkId, quantity: 1000, sentAt: null },
+    ]);
+    expect(sortedByBill(await dishTickets(s.partyId, v.productId.steak), s.tabId)).toEqual([
+      { workingOrderId: s.tabId, lineId: steak!.id, firedAt: null, quantity: 1000 },
+      { workingOrderId: checkId, lineId: split!.id, firedAt: null, quantity: 1000 },
+    ]);
+
+    await fire(v, s.partyId, s.mains);
+
+    const fired = sortedByBill(await dishTickets(s.partyId, v.productId.steak), s.tabId);
+    expect(fired).toMatchObject([
+      { workingOrderId: s.tabId, lineId: steak!.id, quantity: 1000 },
+      { workingOrderId: checkId, lineId: split!.id, quantity: 1000 },
+    ]);
+    expect(fired.every((ticket) => ticket.firedAt !== null)).toBe(true);
+  });
+
+  it("refuses device A's fire after device B split the held group's line onto a check, then fires every line", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const seenByA = await revisionOf(s.partyId);
+    const [steak] = await linesIn(s.partyId, s.mains);
+    const checkId = await splitToCheck(
+      v,
+      s,
+      [{ lineNo: steak!.lineNo, quantity: "1" }],
+      seenByA,
+      MIA,
+    );
+
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () =>
-        inTx((tx) =>
-          splitBill(tx, v.cfg, s.tabId, [{ lineNo: steak!.lineNo, quantity: "1" }], {
-            expectedPartyRevision: revision,
-            operatorId: ALEX,
-          }),
-        ),
-      { code: "tab.split_held_line", params: { tabId: s.tabId, lineNo: steak!.lineNo } },
+      () => fire(v, s.partyId, s.mains, { revision: seenByA }),
+      { code: "party.out_of_date", params: { partyId: s.partyId, revision: seenByA + 1 } },
     );
+
+    await fire(v, s.partyId, s.mains);
+    const lines = await linesIn(s.partyId, s.mains);
+    expect(lines.map((row) => row.workingOrderId).sort()).toEqual(
+      [s.tabId, s.tabId, checkId].sort(),
+    );
+    expect(lines.every((row) => row.sentAt !== null)).toBe(true);
+  });
+
+  it("still refuses a recalled dish of a fired group onto a check (tab.split_held_line), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [croquettes] = await linesIn(s.partyId, s.cold);
+    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [croquettes!.lineNo]));
+
+    for (const quantity of [undefined, "1"]) {
+      await expectRefusedWithNothingWritten(
+        v,
+        s.partyId,
+        () => splitToCheck(v, s, [{ lineNo: croquettes!.lineNo, quantity }]),
+        { code: "tab.split_held_line", params: { tabId: s.tabId, lineNo: croquettes!.lineNo } },
+      );
+    }
   });
 });
+
+/** The chosen items of the party's tab split onto a new check, sent at `revision` by `operatorId`. */
+async function splitToCheck(
+  v: Venue,
+  s: Seated,
+  transfers: { lineNo: number; quantity?: string }[],
+  revision?: number,
+  operatorId = ALEX,
+): Promise<string> {
+  const expectedPartyRevision = revision ?? (await revisionOf(s.partyId));
+  const { billId } = await inTx((tx) =>
+    splitBill(tx, v.cfg, s.tabId, transfers, { expectedPartyRevision, operatorId }),
+  );
+  return billId;
+}
+
+/** The ticket items of the party's lines of this product, with the bill each is on. */
+async function dishTickets(partyId: string, productId: string) {
+  return db
+    .select({
+      workingOrderId: ticketItems.workingOrderId,
+      lineId: ticketItems.workingOrderLineId,
+      firedAt: ticketItems.firedAt,
+      quantity: ticketItems.quantity,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .where(and(eq(workingOrders.partyId, partyId), eq(workingOrderLines.productId, productId)))
+    .orderBy(ticketItems.workingOrderLineId);
+}
+
+/** The original bill's tickets first. */
+function sortedByBill<T extends { workingOrderId: string }>(
+  tickets: T[],
+  firstBillId: string,
+): T[] {
+  return [...tickets].sort(
+    (a, b) => Number(b.workingOrderId === firstBillId) - Number(a.workingOrderId === firstBillId),
+  );
+}
+
+async function ticketsOfBill(billId: string) {
+  return db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, billId))
+    .orderBy(ticketItems.id);
+}
+
+/** How many times the kitchen name appears across these printed jobs. */
+function timesPrinted(jobs: string[], kitchenName: string): number {
+  return jobs.join("\n").split(kitchenName).length - 1;
+}
 
 describe("sending lines on their own", () => {
   it("refuses to send a line of a held group (group.line_held), writing nothing", async () => {
