@@ -136,7 +136,7 @@ export function mountReceiptPreviewApi(
       const sessionId = requireManagementSession(c);
       const requested = requireReceiptParameter(c.req.queries("receipt"));
       const asked = optionalPaperWidth(c.req.queries("paperWidth"));
-      const { issuer, settings, language } = await withTransaction(deps.db, async (tx) => {
+      const { issuer, settings, language, rules } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -156,10 +156,8 @@ export function mountReceiptPreviewApi(
           issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           settings,
           language: await readReceiptLanguage(tx, deps.cfg.locationId),
+          rules: await readVenueReceiptLanguageRules(tx, { locationId: deps.cfg.locationId }),
         };
-      });
-      const rules = await readVenueReceiptLanguageRules(deps.db, {
-        locationId: deps.cfg.locationId,
       });
       const locale = optionalLanguage(c.req.queries("language"), rules.choices) ?? language.locale;
       const printer = chooseSetting(settings, asked);

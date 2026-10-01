@@ -407,6 +407,44 @@ describe("receipt language", () => {
     });
   });
 
+  it("reads and writes in one transaction per request", async () => {
+    let opened = 0;
+    const counting = new Proxy(suite.db, {
+      get(target, key) {
+        if (key === "withWriteLock")
+          return (fn: Parameters<typeof target.withWriteLock>[0]) => {
+            opened += 1;
+            return target.withWriteLock(fn);
+          };
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+      },
+    });
+    const counted = new Hono();
+    mountLocationSettingsApi(
+      counted,
+      { db: counting, cfg: venue.cfg, fiscal: realFiscal() },
+      () => {},
+    );
+    const answers = [];
+    for (const init of [
+      { headers: { cookie: venue.managerCookie } } as RequestInit,
+      {
+        method: "PUT",
+        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+        body: JSON.stringify({ language: "es-ES" }),
+      },
+    ]) {
+      opened = 0;
+      const response = await counted.request(PATH, init);
+      answers.push([response.status, opened]);
+    }
+    expect(answers).toEqual([
+      [200, 1],
+      [204, 1],
+    ]);
+  });
+
   it("requires a session and configuration permission for reads and writes", async () => {
     expect((await app().request(PATH)).status).toBe(401);
     expect((await read(venue.staffCookie)).status).toBe(403);

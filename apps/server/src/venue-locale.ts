@@ -1,6 +1,12 @@
 // No `import "./errors.js"`: this file throws no AppError code.
 import { eq } from "drizzle-orm";
-import { locations, readTenant, withTransaction, type Database } from "@waitron/db";
+import {
+  locations,
+  readTenant,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import type { ReceiptLanguageRules } from "@waitron/country";
 import {
   resolveInstalledContentLanguageRules,
@@ -14,18 +20,23 @@ import {
   type SupportedLocale,
 } from "@waitron/shared";
 
-async function readVenueGeography(
+async function geographyIn(
+  tx: Transaction,
+  locationId: string,
+): Promise<{ country: string | null; area: string | null }> {
+  const t = await readTenant(tx);
+  const [loc] = await tx
+    .select({ province: locations.province })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  return { country: t?.country ?? null, area: loc?.province ?? null };
+}
+
+function readVenueGeography(
   db: Database,
   locationId: string,
 ): Promise<{ country: string | null; area: string | null }> {
-  return withTransaction(db, async (tx) => {
-    const t = await readTenant(tx);
-    const [loc] = await tx
-      .select({ province: locations.province })
-      .from(locations)
-      .where(eq(locations.id, locationId));
-    return { country: t?.country ?? null, area: loc?.province ?? null };
-  });
+  return withTransaction(db, (tx) => geographyIn(tx, locationId));
 }
 
 /**
@@ -58,10 +69,11 @@ export async function readVenueContentLanguageRules(
   return resolveInstalledContentLanguageRules(await readVenueGeography(db, params.locationId));
 }
 
-/** The receipt languages the venue's country pack offers, and the one its region fixes, if any. */
+/** The receipt languages the venue's country pack offers, and the one its region fixes, if any,
+ * read in the caller's transaction. */
 export async function readVenueReceiptLanguageRules(
-  db: Database,
+  tx: Transaction,
   params: { locationId: string },
 ): Promise<ReceiptLanguageRules> {
-  return resolveInstalledReceiptLanguageRules(await readVenueGeography(db, params.locationId));
+  return resolveInstalledReceiptLanguageRules(await geographyIn(tx, params.locationId));
 }

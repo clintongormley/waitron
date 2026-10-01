@@ -136,22 +136,25 @@ export function mountLocationSettingsApi(
   app.get("/management-api/receipt-language", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rules = await readVenueReceiptLanguageRules(deps.db, {
-        locationId: deps.cfg.locationId,
+      const answer = await gated(sessionId, async (tx) => {
+        const rules = await readVenueReceiptLanguageRules(tx, {
+          locationId: deps.cfg.locationId,
+        });
+        const [language] = await storedLanguages(tx, deps.cfg.locationId);
+        return { language, choices: rules.choices, fixed: rules.fixed ?? null };
       });
-      const [language] = await gated(sessionId, (tx) => storedLanguages(tx, deps.cfg.locationId));
-      return c.json({ language, choices: rules.choices, fixed: rules.fixed ?? null });
+      return c.json(answer);
     }),
   );
   app.put("/management-api/receipt-language", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
-      const rules = await readVenueReceiptLanguageRules(deps.db, {
-        locationId: deps.cfg.locationId,
-      });
       await gated(sessionId, async (tx) => {
         const language = requestedLanguage(body);
+        const rules = await readVenueReceiptLanguageRules(tx, {
+          locationId: deps.cfg.locationId,
+        });
         if (!rules.choices.includes(language)) {
           throw new AppError("management.request_invalid", { field: "receiptLanguage" });
         }

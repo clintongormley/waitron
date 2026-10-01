@@ -426,6 +426,28 @@ describe("GET /management-api/receipt-preview", () => {
       expect(labelled(await at(""), "Fecha")).toBe(true);
     });
 
+    it("draws in one transaction", async () => {
+      let opened = 0;
+      const counting = new Proxy(suite.db, {
+        get(target, key) {
+          if (key === "withWriteLock")
+            return (fn: Parameters<typeof target.withWriteLock>[0]) => {
+              opened += 1;
+              return target.withWriteLock(fn);
+            };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+        },
+      });
+      const counted = new Hono();
+      mountReceiptPreviewApi(counted, { db: counting, cfg: venue.cfg }, () => {});
+      const response = await counted.request(
+        `/management-api/receipt-preview?receipt=${encodeURIComponent("{}")}&language=gl-ES`,
+        { headers: { cookie: venue.managerCookie } },
+      );
+      expect([response.status, opened]).toEqual([200, 1]);
+    });
+
     it.each([
       ["a language the pack does not offer", "&language=en-GB"],
       ["an empty language", "&language="],

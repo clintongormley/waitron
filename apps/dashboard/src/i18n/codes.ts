@@ -407,8 +407,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La región del local fija el idioma del recibo, así que no se puede elegir otro.",
   },
   "receipt.language_orders_open": {
-    en: "Some orders were taken in the current receipt language and can still change. Try again once every order is paid and sent to the kitchen and every table is finished.",
-    es: "Hay pedidos tomados en el idioma actual del recibo que aún pueden cambiar. Vuelve a intentarlo cuando todos estén cobrados y enviados a cocina y todas las mesas estén cerradas.",
+    en: "Some orders at this location are still in progress in the current receipt language, so it cannot be changed yet.",
+    es: "Algunos pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
   },
   "status.label_taken": {
     en: "A status with that name already exists",

@@ -84,8 +84,10 @@ const productId = (name: string) =>
   rows<{ id: string }>(sql`select id from products where name = ${name}`)[0]!.id;
 
 /**
- * Back to Spanish with nothing left that blocks a change: every unpaid order abandoned and every
- * party closed, written directly because a case may leave a party seated with an unpaid bill.
+ * Back to Spanish with nothing left that blocks a change, so no case depends on the ones before it:
+ * every unpaid order abandoned, every party closed, every paid line stamped sent (a case's orders
+ * are all keyed in Spanish), and the kitchen routing put back. Written directly, because a case may
+ * leave a party seated with an unpaid bill.
  */
 function reset(): void {
   venue.db.run(
@@ -96,6 +98,11 @@ function reset(): void {
   venue.db.run(
     sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
   );
+  venue.db.run(sql`update working_order_lines set sent_at = '2026-01-01T00:00:00.000Z'
+                   where sent_at is null and working_order_id in
+                     (select id from working_orders where status = 'settled')`);
+  venue.db.run(sql`delete from route_exceptions`);
+  venue.db.run(sql`update kitchen_stations set active = 1 where is_default = 1`);
 }
 
 function refusedFor(count: number) {
@@ -343,11 +350,11 @@ describe("a receipt-language change while orders are open", () => {
       venue.db.run(sql`update kitchen_stations set active = 1 where is_default = 1`);
     }
     expect(dishLines(id).map((line) => line.sent_at !== null)).toEqual([true, false]);
+    const prep = await till("POST", `/api/working-orders/${id}/prep`);
+    expect(prep).toMatchObject({ status: 409, json: { code: "ticket.already_fired" } });
+    expect(dishLines(id)[1]!.sent_at).toBeNull();
 
     expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
-    const prep = await till("POST", `/api/working-orders/${id}/prep`);
-    expect(prep.status).not.toBe(200);
-    expect(dishLines(id)[1]!.sent_at).toBeNull();
   });
 
   it("is refused while an order is placed, and accepted once it is collected", async () => {
