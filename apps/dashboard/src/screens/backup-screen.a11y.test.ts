@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
@@ -72,12 +73,6 @@ async function flush(el: BackupScreen): Promise<void> {
 
 const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-function selectValue(el: BackupScreen, sel: string, value: string): void {
-  const select = q(el, sel) as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-}
-
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (theme) => {
@@ -99,8 +94,8 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     );
     await flush(el);
     q(el, "[data-test=advanced-toggle]")!.click();
-    selectValue(el, "[data-test=days-mode]", "weekdays");
-    selectValue(el, "[data-test=time-mode]", "fixed");
+    await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
+    await chooseOption(q(el, "[data-test=time-mode]")!, "fixed");
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
@@ -170,13 +165,15 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await flush(el);
     q(el, "[data-test=edit-settings]")!.click();
     await flush(el);
-    const box = q(el, "[data-test=retain-count]") as HTMLInputElement;
-    box.value = "";
-    box.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    q(el, "[data-test=retain-count]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "" }, bubbles: true, composed: true }),
+    );
     await el.updateComplete;
     q(el, "[data-test=save-settings]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=retain-count-error]")).not.toBeNull();
+    expect((q(el, "[data-test=retain-count]") as HTMLElement & { error: string }).error).not.toBe(
+      "",
+    );
     await expectNoA11yViolations(host);
   });
 

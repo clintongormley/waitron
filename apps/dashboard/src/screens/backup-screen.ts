@@ -4,7 +4,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-number-stepper.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
@@ -25,6 +27,9 @@ function parseRetention(text: string): number | null {
   const n = Number(text);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
+
+const decreaseLabel = (label: string) => t("action.decrease").replace("{label}", label);
+const increaseLabel = (label: string) => t("action.increase").replace("{label}", label);
 
 /** Monday-first display order; `n` is the `Date.getDay()` value the server's schedule expects. */
 const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [
@@ -85,9 +90,6 @@ export class BackupScreen extends LitElement {
       .stale {
         color: var(--wt-color-danger);
       }
-      .field {
-        display: block;
-      }
       .field-label {
         display: block;
         margin-bottom: var(--wt-space-1);
@@ -97,19 +99,6 @@ export class BackupScreen extends LitElement {
       .hint {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-      select,
-      input[type="number"],
-      input[type="time"] {
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        box-sizing: border-box;
       }
       .weekdays {
         display: flex;
@@ -157,18 +146,6 @@ export class BackupScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
-      }
-      input[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-      }
-      .required {
-        margin-inline-start: var(--wt-space-1);
-        color: var(--wt-color-danger);
-      }
-      .field-error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-danger);
       }
     `,
   ];
@@ -855,14 +832,13 @@ export class BackupScreen extends LitElement {
     return html`
       ${
         this.advancedPaste
-          ? html`<label class="field">
-                <span class="field-label">${t("backup.key.paste_label")}</span>
-                <wt-input
-                  data-test="paste-key"
-                  .value=${this.pastedKey}
-                  @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPaste(e)}
-                ></wt-input>
-              </label>
+          ? html`<wt-input
+                data-test="paste-key"
+                name="recovery-key"
+                label=${t("backup.key.paste_label")}
+                .value=${this.pastedKey}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPaste(e)}
+              ></wt-input>
               <p class="hint">${t("backup.key.paste_hint")}</p>`
           : this.mintedKey
             ? html`<p class="hint">${t("backup.key.minted_note")}</p>
@@ -907,21 +883,19 @@ export class BackupScreen extends LitElement {
 
   #renderPolicy(): TemplateResult {
     return html`
-      <label class="field">
-        <span class="field-label">${t("backup.schedule.days")}</span>
-        <select
-          data-test="days-mode"
-          @change=${(e: Event) =>
-            (this.daysMode = (e.target as HTMLSelectElement).value as "daily" | "weekdays")}
-        >
-          <option value="daily" ?selected=${this.daysMode === "daily"}>
-            ${t("backup.schedule.days_daily")}
-          </option>
-          <option value="weekdays" ?selected=${this.daysMode === "weekdays"}>
-            ${t("backup.schedule.days_pick")}
-          </option>
-        </select>
-      </label>
+      <wt-combobox
+        data-test="days-mode"
+        name="days-mode"
+        search="auto"
+        label=${t("backup.schedule.days")}
+        .options=${[
+          { value: "daily", label: t("backup.schedule.days_daily") },
+          { value: "weekdays", label: t("backup.schedule.days_pick") },
+        ]}
+        .value=${this.daysMode}
+        @wt-change=${(e: CustomEvent<{ value: string }>) =>
+          (this.daysMode = e.detail.value as "daily" | "weekdays")}
+      ></wt-combobox>
       ${
         this.daysMode === "weekdays"
           ? html`<div class="weekdays">
@@ -941,32 +915,29 @@ export class BackupScreen extends LitElement {
           : nothing
       }
 
-      <label class="field">
-        <span class="field-label">${t("backup.schedule.time")}</span>
-        <select
-          data-test="time-mode"
-          @change=${(e: Event) =>
-            (this.timeMode = (e.target as HTMLSelectElement).value as "auto" | "fixed")}
-        >
-          <option value="auto" ?selected=${this.timeMode === "auto"}>
-            ${t("backup.schedule.time_auto")}
-          </option>
-          <option value="fixed" ?selected=${this.timeMode === "fixed"}>
-            ${t("backup.schedule.time_fixed")}
-          </option>
-        </select>
-      </label>
+      <wt-combobox
+        data-test="time-mode"
+        name="time-mode"
+        search="auto"
+        label=${t("backup.schedule.time")}
+        .options=${[
+          { value: "auto", label: t("backup.schedule.time_auto") },
+          { value: "fixed", label: t("backup.schedule.time_fixed") },
+        ]}
+        .value=${this.timeMode}
+        @wt-change=${(e: CustomEvent<{ value: string }>) =>
+          (this.timeMode = e.detail.value as "auto" | "fixed")}
+      ></wt-combobox>
       ${
         this.timeMode === "fixed"
-          ? html`<label class="field">
-              <span class="field-label">${t("backup.schedule.at")}</span>
-              <input
-                type="time"
-                data-test="at-time"
-                .value=${this.atTime}
-                @input=${(e: Event) => (this.atTime = (e.target as HTMLInputElement).value)}
-              />
-            </label>`
+          ? html`<wt-input
+              type="time"
+              data-test="at-time"
+              name="at-time"
+              label=${t("backup.schedule.at")}
+              .value=${this.atTime}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => (this.atTime = e.detail.value)}
+            ></wt-input>`
           : nothing
       }
       ${this.#renderRetentionBox("count")} ${this.#renderRetentionBox("days")}
@@ -985,33 +956,23 @@ export class BackupScreen extends LitElement {
   #renderRetentionBox(box: "count" | "days"): TemplateResult {
     const text = box === "count" ? this.retainCount : this.retainDays;
     const message = this.#retentionMessage(text);
-    const errorId = `retain-${box}-error`;
     return html`
-      <div class="field">
-        <label class="field">
-          <span class="field-label"
-            >${t(`backup.retention.${box}`)}<span class="required" aria-hidden="true">*</span></span
-          >
-          <input
-            type="number"
-            min="1"
-            step="1"
-            required
-            name="retention-${box}"
-            data-test="retain-${box}"
-            aria-invalid=${message === null ? "false" : "true"}
-            aria-describedby=${message === null ? nothing : errorId}
-            .value=${text}
-            @input=${(e: Event) => {
-              const value = (e.target as HTMLInputElement).value;
-              if (box === "count") this.retainCount = value;
-              else this.retainDays = value;
-              this.retentionRefused = false;
-            }}
-          />
-        </label>
-        ${message === null ? nothing : html`<p class="field-error" id=${errorId} data-test=${errorId}>${message}</p>`}
-      </div>
+      <wt-number-stepper
+        name="retention-${box}"
+        data-test="retain-${box}"
+        label=${t(`backup.retention.${box}`)}
+        required
+        .min=${1}
+        .decreaseLabel=${decreaseLabel}
+        .increaseLabel=${increaseLabel}
+        .value=${text}
+        .error=${message ?? ""}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          if (box === "count") this.retainCount = e.detail.value;
+          else this.retainDays = e.detail.value;
+          this.retentionRefused = false;
+        }}
+      ></wt-number-stepper>
     `;
   }
 
