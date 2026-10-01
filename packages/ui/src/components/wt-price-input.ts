@@ -24,7 +24,8 @@ export class WtPriceInput extends LitElement {
         max-width: var(--wt-field-max-width);
       }
 
-      /* The label sits in the amount box, so a long one stops at the unit rather than under it. */
+      /* Beside a unit button the label sits in the amount box, so a long one stops at the button
+         rather than under it; beside a fixed unit it sits in the field box and spans past it. */
       .amount-box {
         position: relative;
         display: flex;
@@ -74,7 +75,6 @@ export class WtPriceInput extends LitElement {
         align-items: center;
         padding-top: calc(var(--wt-space-3) + var(--wt-font-size-sm));
         padding-bottom: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
       }
 
       .field[data-compact] .currency,
@@ -85,7 +85,14 @@ export class WtPriceInput extends LitElement {
       .currency {
         position: absolute;
         inset-block: 0;
+        color: var(--wt-color-text-muted);
         pointer-events: none;
+      }
+
+      /* A resting label sits on the amount's line, where the sign and a fixed unit are drawn. */
+      .field[data-label="rest"]:not([data-compact]):not(:focus-within):not(:has(:autofill))
+        :is(.currency, span.unit) {
+        visibility: hidden;
       }
 
       .before .currency {
@@ -100,6 +107,11 @@ export class WtPriceInput extends LitElement {
         flex: none;
         align-self: stretch;
         padding-inline: var(--wt-space-2);
+        color: var(--wt-color-text);
+      }
+
+      .field[data-disabled] span.unit {
+        color: var(--wt-color-text-muted);
       }
 
       button.unit {
@@ -239,31 +251,31 @@ export class WtPriceInput extends LitElement {
       ...(this.fixedUnit && this.unit ? [this.unitId] : []),
     ];
     const showLabel = this.label !== "" && !this.hideLabel;
-    // The sign is drawn in an empty box too, where a resting label would sit over it.
-    const labelState = currency
-      ? "float"
-      : fieldLabelState({ value: this.value, hint: this.hint, placeholder: this.placeholder });
+    const fixed = this.fixedUnit && this.unit !== "";
+    const label = showLabel
+      ? html`<label class="field-label" for=${inputId}
+          ><span class="field-label-text">${this.label}</span>${
+            this.required
+              ? html`<span class="required" data-required aria-hidden="true">*</span>`
+              : nothing
+          }</label
+        >`
+      : nothing;
     return html`
       <div
-        class=${this.fixedUnit && this.unit ? "field fixed" : "field"}
+        class=${fixed ? "field fixed" : "field"}
         part="field"
-        data-label=${labelState}
+        data-label=${fieldLabelState({
+          value: this.value,
+          hint: this.hint,
+          placeholder: this.placeholder,
+        })}
         ?data-invalid=${invalid}
         ?data-disabled=${this.disabled}
         ?data-compact=${!showLabel}
       >
-        <span class="amount-box ${currency?.side ?? ""}"
-          >${
-            showLabel
-              ? html`<label class="field-label" for=${inputId}
-                  ><span class="field-label-text">${this.label}</span>${
-                    this.required
-                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                      : nothing
-                  }</label
-                >`
-              : nothing
-          }<input
+        ${fixed ? label : nothing}<span class="amount-box ${currency?.side ?? ""}"
+          >${fixed ? nothing : label}<input
             class="field-control"
             id=${inputId}
             part="amount"

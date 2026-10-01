@@ -138,6 +138,14 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("resting label over a hidden currency sign and fixed unit", async () => {
+    await mountThemed(
+      '<wt-price-input label="Precio" name="price" unit="kg" fixed-unit locale="es-ES"></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("focused amount", async () => {
     const el = await mountThemed(
       '<wt-price-input label="Precio" name="price" unit="kg" locale="es-ES"></wt-price-input>',
