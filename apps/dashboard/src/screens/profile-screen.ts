@@ -8,6 +8,7 @@ import {
 import { toDataURL } from "qrcode";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -184,33 +185,6 @@ export class ProfileScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
-      select {
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-        font: inherit;
-        color: var(--wt-color-text);
-        background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-      label {
-        display: grid;
-        gap: var(--wt-space-2);
-      }
-      .select-field {
-        display: grid;
-        gap: var(--wt-space-1);
-        max-width: var(--wt-field-max-width);
-      }
-      select[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-      }
-      .field-error {
-        margin: 0;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-danger);
-      }
       svg {
         width: var(--wt-font-size-lg);
         height: var(--wt-font-size-lg);
@@ -362,8 +336,8 @@ export class ProfileScreen extends LitElement {
     );
   }
 
-  #changeLocale(event: Event): void {
-    this.fields = { ...this.fields, locale: (event.target as HTMLSelectElement).value };
+  #changeLocale(event: CustomEvent<{ value: string }>): void {
+    this.fields = { ...this.fields, locale: event.detail.value };
     if ("locale" in this.requestRefused) this.requestRefused = {};
   }
   #input(
@@ -941,20 +915,18 @@ export class ProfileScreen extends LitElement {
       ${
         this.mode === "details"
           ? html`${this.#input("firstNames", "person.first_names", "text", "given-name")}${this.#input("lastNames", "person.last_names", "text", "family-name")}${this.#input("displayName", "person.display_name", "text", "nickname")}${this.#input("email", "login.email", "email", "email")}${this.#input("telephone", "person.telephone", "text", "tel", false)}
-              <div class="select-field">
-                <label
-                  >${t("profile.language")} *<select
-                    name="locale"
-                    required
-                    aria-invalid=${this.#fieldErrors.locale ? "true" : "false"}
-                    aria-describedby=${this.#fieldErrors.locale ? "locale-error" : nothing}
-                    .value=${this.fields.locale}
-                    @change=${(event: Event) => this.#changeLocale(event)}
-                  >
-                    ${this.locales.map((locale) => html`<option value=${locale.code} ?selected=${locale.code === this.fields.locale}>${locale.label}</option>`)}
-                  </select></label
-                >${this.#fieldErrors.locale ? html`<p class="field-error" id="locale-error">${this.#fieldErrors.locale}</p>` : nothing}
-              </div>`
+              <wt-combobox
+                name="locale"
+                label=${t("profile.language")}
+                required
+                search="auto"
+                searchPlaceholder=${t("categories.combobox_search")}
+                noResultsLabel=${t("categories.combobox_no_results")}
+                .options=${this.locales.map((locale) => ({ value: locale.code, label: locale.label }))}
+                .value=${this.fields.locale}
+                error=${this.#fieldErrors.locale ?? ""}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeLocale(event)}
+              ></wt-combobox>`
           : nothing
       }
       ${
