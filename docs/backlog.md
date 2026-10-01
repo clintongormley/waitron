@@ -210,13 +210,9 @@ reviewed. The branch is rebased over slice 1 and name-only photos; branch finish
 remain pending. The owner accepted a venue reset for catalogue0018's library-section deletion
 and the complete upgrade from media0004 that refuses a trigger drop in shipped media0005
 (2026-10-01). Catalogue0018 now has an authorised `RESETS` entry matching its foreign-key
-refusal; shipped SQL is unchanged. Running `pnpm exec vitest run scripts/migration-upgrade.test.ts`
-after that entry reaches catalogue0020 and refuses the copied sections with
-`NOT NULL constraint failed: __new_sections.owner_menu_id`. That newly reached step needs a
-separate decision; it has no reset entry. In an installed disposable checkout, a proposed reset
-at catalogue0020 reaches catalogue0021, which refuses restoration with
-`NOT NULL constraint failed: section_members.id`. Listing both exact refusals as proposed resets
-lets that checkout's chronological test pass; neither entry is implemented or authorised.
+refusal; shipped SQL is unchanged. The owner also authorised reset entries for catalogue0020
+and catalogue0021 (2026-10-01), matching their observed `NOT NULL` refusals. With those entries,
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` passes its chronological walk.
 The walk reaches media0005 before catalogue0018 without a media0005 refusal, so no media reset
 entry was added.
 After landing, reset each dev venue with `wa-wt reset demo <worktree-name>` and reset the
