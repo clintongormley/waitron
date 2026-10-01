@@ -5750,6 +5750,27 @@ ongoing overhaul listed at the top of Track A.
   dialog, among others) are held only by the dialog's own 768px limit — whether they should follow
   the modal's form width is the owner's call.
 
+- **A field's hint shows inside the empty field as its placeholder, not as a line under it (C104,
+  owner 2026-09-30) — DONE (2026-10-01, branch `fix/hint-as-placeholder`).** The owner, on the Pair
+  a Bluetooth device dialog's PIN field: "put the hint line in the field, not under it", and "that
+  should be a standard". The three shared fields that take a `hint` (`wt-input`, `wt-price-input`,
+  `wt-number-stepper`; no other shared field has one) now use it as the placeholder when the
+  screen sets none, so every hinted field follows without its screen changing. A placeholder the
+  screen sets wins, and the hint is then the field's screen-reader description only. The hint stays
+  in the field, hidden from sight, as that description in every case. A hint too long for the field
+  is cut with "…", but only while the field is not focused: Chromium clips a focused field's
+  placeholder at its edge with no "…". `docs/developers/design-system.md` → Forms records the
+  standard. Looked at in light and dark, English and Spanish, 1280 and 390 px wide: the PIN field,
+  the extras form's two steppers, a menu price, the adjustments limit and a reason's two limits, and
+  the till's party name and seat dialogs. Left open, the owner's call: the adjustments screen's bill
+  discount limit carries a hint of several sentences in a narrow percentage box, so only its first
+  few letters show ("Discoun…", "Los des…"); a menu price's "Leave it empty to use the product
+  price" and the extras form's "Blank means no limit" are no longer seen by anyone sighted, because
+  those fields set a placeholder of their own; and the extras form's minimum starts at 0, so its
+  "0 makes the list optional" shows only once the box is cleared. Help written as a paragraph
+  beside a field, not as its `hint` (the sections screen's internal name help, the product editor's
+  help lines), still sits under its field.
+
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now
   sits on its own line at the bottom of the form, above the buttons, not beside them; see the entry
