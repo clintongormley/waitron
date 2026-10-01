@@ -2752,6 +2752,53 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     expect((await jobs()).drawer).toEqual([]);
   });
 
+  it.each(["cash", "card"] as const)(
+    "a handheld on the register that owns the drawer prints a %s sale's receipt there and opens nothing, though its operator and profile may open a drawer",
+    async (method) => {
+      const { cfg, each, app } = await venueWithTill();
+      const printerId = await receiptPrinterFor(cfg, cfg.tillId, true);
+      await suite.db.execute(
+        sql`update printers set drawer_till_id = ${cfg.tillId} where id = ${printerId}`,
+      );
+      const [supervisor] = await suite.db
+        .insert(persons)
+        .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
+        .returning({ id: persons.id });
+      expect(permissionsForRole("supervisor")).toContain("cash.drawer");
+      const session = (await loginSession(app, cfg, supervisor!.id)).split(";")[0]!;
+      const profileId = await seedProfileFF("phone-portrait", [
+        "open-cash-drawer",
+        "print-receipt",
+      ]);
+      const handheld = await enrolDeviceForTest(suite.db, cfg, {
+        name: "Waiter phone",
+        profileId,
+        registerId: cfg.tillId,
+      });
+      const cookie = `${session}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+
+      const res = await app.request("/api/sales", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          workingOrderId: randomUUID(),
+          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+          tender: { method, amount: "5.00" },
+        }),
+      });
+      const manual = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
+
+      expect(res.status).toBe(200);
+      expect(manual.status).toBe(403);
+      expect(await manual.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
+      expect(await drawerOpenRows()).toEqual([]);
+      const printed = await jobs();
+      expect(printed.drawer).toEqual([]);
+      expect(printed.documents).toHaveLength(1);
+      expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
+    },
+  );
+
   it("a card sale at a till whose receipt printer has no drawer opens nothing, while the other till's printer has one", async () => {
     const { cfg, each, app, cookie } = await venueWithTill();
     await receiptPrinterFor(cfg, cfg.tillId, true);

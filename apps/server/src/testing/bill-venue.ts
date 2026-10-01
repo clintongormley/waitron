@@ -228,6 +228,10 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     profileId: seeded.cashOnlyProfileId,
   });
   db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
+  // Every register prints there, so the drawer opens only for the one it names: the `cookie` device's.
+  db.run(
+    sql`update printers set drawer_till_id = ${devices[0]!.tillId} where id = ${seeded.printerId}`,
+  );
 
   const card = new FakePaymentProvider(db);
   const pool: CardProviderPool = {

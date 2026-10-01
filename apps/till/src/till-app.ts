@@ -621,6 +621,11 @@ function lateChangeMessage(late: LateChange): string {
   return text.replace("{reason}", () => codeMessage(late.code ?? "server.internal"));
 }
 
+/** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
+function drawerErrorKey(code: string | undefined): StringKey {
+  return code === "drawer.not_attached" || code === "drawer.not_owner" ? code : "drawer.error";
+}
+
 /** A banner's string key, a refusal shown through its code's own message, a save refused because
  * someone took the draft over (naming them), or a change that failed after its order left the
  * screen, with a second message when something else failed since. */
@@ -2946,10 +2951,7 @@ export class TillApp extends LitElement {
       if ((error as { code?: string }).code === "authorization.not_permitted") {
         await this.#openOverrideDialog();
       } else {
-        this.errorKey =
-          (error as { code?: string }).code === "drawer.not_attached"
-            ? "drawer.not_attached"
-            : "drawer.error";
+        this.errorKey = drawerErrorKey((error as { code?: string }).code);
       }
     }
   }
@@ -2979,7 +2981,7 @@ export class TillApp extends LitElement {
         this.overrideError = code;
       } else {
         this.#closeOverrideDialog();
-        this.errorKey = code === "drawer.not_attached" ? "drawer.not_attached" : "drawer.error";
+        this.errorKey = drawerErrorKey(code);
       }
     }
   }

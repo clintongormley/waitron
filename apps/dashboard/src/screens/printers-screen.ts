@@ -1142,6 +1142,8 @@ export class PrintersScreen extends LitElement {
               paperWidth: "80mm",
               resolution: "180dpi",
               hasCashDrawer: false,
+              drawerTillId: null,
+              drawerOwnerTillId: null,
               pendingJobs: 0,
               lastPrintAt: null,
               lastPrintAgentId: null,

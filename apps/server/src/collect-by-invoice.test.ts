@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -40,6 +40,8 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    // This suite collects on the venue's own register, so that register owns the shared drawer.
+    db.run(sql`update printers set drawer_till_id = ${venue.cfg.tillId}`);
     invoiceFirstZone = (
       await inTx(venue, (tx) =>
         offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),

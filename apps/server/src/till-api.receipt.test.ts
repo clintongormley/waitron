@@ -595,6 +595,157 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   });
 });
 
+describe("POST /api/drawer/open from a till device opens only its own register's drawer", () => {
+  /** A till device allowed to open a drawer, its cookie, and the register it minted at join. */
+  async function enrolDrawerTill(cfg: TillConfig): Promise<{ cookie: string; tillId: string }> {
+    tillDeviceCounter += 1;
+    const n = tillDeviceCounter;
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({
+        name: `Drawer till profile ${n}`,
+        formFactor: "till",
+        capabilities: ["open-cash-drawer"],
+      })
+      .returning({ id: deviceProfiles.id });
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
+      name: `Drawer till ${n}`,
+      profileId: profile!.id,
+    });
+    const rows = await suite.db.execute<{ till_id: string }>(
+      sql`select till_id from devices where id = ${dev.deviceId}`,
+    );
+    return {
+      cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`,
+      tillId: rows.rows[0]!.till_id,
+    };
+  }
+
+  async function venueWithOpenPolicy() {
+    const venue = await setupVenue();
+    await setDrawerPolicy(venue.cfg, "open");
+    const app = new Hono();
+    mountTillApi(app, apiDeps(venue.cfg), noopLog);
+    const session = (await login(app, venue.cfg, venue.operatorId)).split(";")[0]!;
+    const press = (deviceCookie: string) =>
+      app.request("/api/drawer/open", {
+        method: "POST",
+        headers: { cookie: `${session}; ${deviceCookie}` },
+      });
+    return { ...venue, app, session, press };
+  }
+
+  it("opens the drawer of the pressing till's own receipt printer, and the row names that till's register", async () => {
+    const { cfg, operatorId, press } = await venueWithOpenPolicy();
+    const till = await enrolDrawerTill(cfg);
+    const printerId = await makePrinter(cfg);
+    await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
+
+    const res = await press(till.cookie);
+
+    expect(res.status).toBe(200);
+    const jobs = await printJobsFor(cfg);
+    expect(jobs.map((job) => [job.printerId, [...job.payload]])).toEqual([
+      [printerId, [...DRAWER_KICK]],
+    ]);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      {
+        reason: "manual",
+        saleId: null,
+        personId: operatorId,
+        tillId: till.tillId,
+        printerId,
+        authorizedBy: operatorId,
+        viaOverride: false,
+      },
+    ]);
+  });
+
+  it("a second till with its own drawer printer opens its own drawer, not the box-configured till's", async () => {
+    const { cfg, press } = await venueWithOpenPolicy();
+    const boxPrinter = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId: boxPrinter });
+    const till = await enrolDrawerTill(cfg);
+    const ownPrinter = await makePrinter(cfg);
+    await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId: ownPrinter });
+
+    const res = await press(till.cookie);
+
+    expect(res.status).toBe(200);
+    expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([ownPrinter]);
+    expect((await drawerOpensFor(cfg)).map((row) => [row.tillId, row.printerId])).toEqual([
+      [till.tillId, ownPrinter],
+    ]);
+  });
+
+  it("refuses drawer.not_owner, writing nothing, at a till printing to a drawer another register owns", async () => {
+    const { cfg, press } = await venueWithOpenPolicy();
+    const owner = await enrolDrawerTill(cfg);
+    const other = await enrolDrawerTill(cfg);
+    const printerId = await makePrinter(cfg);
+    for (const till of [owner, other]) {
+      await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
+    }
+    await suite.db.execute(
+      sql`update printers set drawer_till_id = ${owner.tillId} where id = ${printerId}`,
+    );
+
+    const refused = await press(other.cookie);
+
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: { code: "drawer.not_owner", params: { printerId } },
+    });
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+
+    expect((await press(owner.cookie)).status).toBe(200);
+    expect((await drawerOpensFor(cfg)).map((row) => row.tillId)).toEqual([owner.tillId]);
+  });
+
+  it("with no owner named, neither of two tills printing to one drawer printer opens it", async () => {
+    const { cfg, press } = await venueWithOpenPolicy();
+    const first = await enrolDrawerTill(cfg);
+    const second = await enrolDrawerTill(cfg);
+    const printerId = await makePrinter(cfg);
+    for (const till of [first, second]) {
+      await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
+    }
+
+    for (const till of [first, second]) {
+      const res = await press(till.cookie);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "drawer.not_owner", params: { printerId } },
+      });
+    }
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("gated: the gate runs before the ownership check — an unpermitted operator at a till that is not the owner is 403", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const session = (await login(app, cfg, operatorId)).split(";")[0]!;
+    const owner = await enrolDrawerTill(cfg);
+    const other = await enrolDrawerTill(cfg);
+    const printerId = await makePrinter(cfg);
+    await configureReceipt({ ...cfg, tillId: brandTillId(other.tillId) }, { printerId });
+    await suite.db.execute(
+      sql`update printers set drawer_till_id = ${owner.tillId} where id = ${printerId}`,
+    );
+
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { cookie: `${session}; ${other.cookie}` },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+});
+
 describe("POST /api/drawer/open — gated policy: authorize() + supervisor override", () => {
   // The body a supervisor-override open carries. `override.pin` is the AUTHORIZING supervisor's PIN,
   // never the logged-in operator's; it reaches only this authenticated request.

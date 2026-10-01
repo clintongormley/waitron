@@ -770,6 +770,10 @@ export interface Printer {
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
+  /** The register named as the drawer's owner, or null. */
+  drawerTillId: string | null;
+  /** The register whose till opens the drawer: the named one, else the one register printing here. */
+  drawerOwnerTillId: string | null;
   active: boolean;
 }
 
@@ -783,6 +787,7 @@ export interface PrinterInput {
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
+  drawerTillId?: string | null;
 }
 
 export interface PrinterAddressProbe {
@@ -835,6 +840,7 @@ export interface PrinterPatch {
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
+  drawerTillId?: string | null;
   active?: boolean;
 }
 

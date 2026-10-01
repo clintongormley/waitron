@@ -41,6 +41,8 @@ export interface CreatePrinterInput {
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   hasCashDrawer?: boolean;
+  /** The register whose till alone opens this printer's drawer; the route checks it is one. */
+  drawerTillId?: string | null;
 }
 
 /**
@@ -81,6 +83,7 @@ export async function createPrinter(
         paperWidth: input.paperWidth,
         resolution: input.resolution,
         hasCashDrawer: input.hasCashDrawer,
+        drawerTillId: input.drawerTillId,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
@@ -101,6 +104,7 @@ export interface UpdatePrinterInput {
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   hasCashDrawer?: boolean;
+  drawerTillId?: string | null;
   active?: boolean;
 }
 
@@ -116,6 +120,7 @@ export interface PrinterRow {
   paperWidth: PaperWidth;
   resolution: Resolution;
   hasCashDrawer: boolean;
+  drawerTillId: string | null;
   active: boolean;
 }
 
@@ -186,6 +191,7 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
       hasCashDrawer: printers.hasCashDrawer,
+      drawerTillId: printers.drawerTillId,
       active: printers.active,
     })
     .from(printers)

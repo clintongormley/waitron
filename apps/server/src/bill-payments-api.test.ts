@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -250,8 +250,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     sql`select till_id from devices where id = ${device.deviceId}`,
   );
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
-  // Every till, so the device's own till prints and opens its drawer whichever one it is.
+  // Every till, so the device's own till prints whichever one it is; the drawer opens only for the
+  // register it names, the device's.
   db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
+  db.run(
+    sql`update printers set drawer_till_id = ${deviceRow!.till_id} where id = ${seeded.printerId}`,
+  );
   const app = new Hono();
   mountTillApi(
     app,
@@ -3019,6 +3023,75 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
 
     expect(paid.status).toBe(200);
     expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+});
+
+describe.each([
+  ["another register is named its owner", () => venue.cfg.tillId],
+  ["no owner is named and two registers print there", () => null],
+])("a till that does not own the drawer it prints to, when %s", (_, ownerOf) => {
+  beforeEach(() => {
+    suite.db.run(
+      sql`update printers set drawer_till_id = ${ownerOf()} where id = ${venue.printerId}`,
+    );
+  });
+  afterEach(() => {
+    suite.db.run(
+      sql`update printers set drawer_till_id = ${venue.deviceTillId} where id = ${venue.printerId}`,
+    );
+  });
+
+  async function opensFor(paymentId: string) {
+    return inTx((tx) =>
+      tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
+    );
+  }
+
+  it("takes cash against a bill without opening the drawer", async () => {
+    const billId = await bill120();
+    const before = drawerJobCount();
+
+    const paid = await contribute(billId, "10.00");
+
+    expect(paid.status).toBe(200);
+    expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+
+  it("takes a hand-keyed card against a bill without opening the drawer for its slip", async () => {
+    const billId = await bill120();
+    const before = drawerJobCount();
+
+    const paid = await request("POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "40.00",
+      method: "card",
+      entry: "manual",
+      applied: "40.00",
+      tip: "0.00",
+    });
+
+    expect(paid.status).toBe(200);
+    expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+
+  it("gives cash back from a bill payment without opening the drawer", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const before = drawerJobCount();
+
+    const refunded = await refund(billId, paymentId, {
+      appliedAmount: "20.00",
+      tipAmount: "0.00",
+      reason: "Cobrado de más",
+    });
+
+    expect(refunded.status).toBe(200);
+    expect(await refundRows(paymentId)).toMatchObject([{ state: "completed" }]);
+    expect(await refundDrawerOpens(paymentId)).toEqual([]);
     expect(drawerJobCount()).toBe(before);
   });
 });

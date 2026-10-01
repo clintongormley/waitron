@@ -1776,6 +1776,7 @@ describe("till-app", () => {
   it.each([
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
+    ["drawer.not_owner", "Este cajón solo se abre desde la caja a la que pertenece."],
   ])(
     "open-drawer: %s surfaces a helpful banner and leaves the ticket open",
     async (code, message) => {
@@ -1875,6 +1876,7 @@ describe("till-app", () => {
   it.each([
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
+    ["drawer.not_owner", "Este cajón solo se abre desde la caja a la que pertenece."],
   ])(
     "%s on the override closes the dialog and surfaces a helpful banner",
     async (code, message) => {

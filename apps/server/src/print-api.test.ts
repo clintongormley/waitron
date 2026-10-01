@@ -9,6 +9,7 @@ import {
   nowIso,
   printAgents,
   printJobs,
+  tills,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1628,6 +1629,125 @@ describe("printer cash-drawer calibration", () => {
       expect(await response.json()).toMatchObject({ error: { code: "printer.not_found" } });
     }
     expect(await suite.db.select().from(printJobs).where(eq(printJobs.printerId, id))).toEqual([]);
+  });
+});
+
+describe("the register that owns a printer's drawer", () => {
+  /** A register at `at`, printing to `printerId` when given. */
+  async function register(at: string, printerId: string | null = null): Promise<string> {
+    const [till] = await suite.db
+      .insert(tills)
+      .values({ locationId: at, name: `Caja ${randomUUID()}`, receiptPrinterId: printerId })
+      .returning({ id: tills.id });
+    return till!.id;
+  }
+
+  async function drawerOwnership(app: Hono, id: string) {
+    const response = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+    const row = ((await response.json()) as Record<string, unknown>[]).find((r) => r.id === id)!;
+    return { drawerTillId: row.drawerTillId, drawerOwnerTillId: row.drawerOwnerTillId };
+  }
+
+  function patch(app: Hono, id: string, drawerTillId: unknown) {
+    return send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { drawerTillId },
+    });
+  }
+
+  it("lists the named owner and the owner it resolves to, and a manager sets and clears it", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.91", 9100, "Owned drawer");
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: null,
+      drawerOwnerTillId: null,
+    });
+
+    const first = await register(locationId, id);
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: null,
+      drawerOwnerTillId: first,
+    });
+
+    const second = await register(locationId, id);
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: null,
+      drawerOwnerTillId: null,
+    });
+
+    expect((await patch(app, id, second)).status).toBe(204);
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: second,
+      drawerOwnerTillId: second,
+    });
+
+    expect((await patch(app, id, null)).status).toBe(204);
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: null,
+      drawerOwnerTillId: null,
+    });
+  });
+
+  it("names the owner when the printer is created", async () => {
+    const app = mountApp();
+    const owner = await register(locationId);
+    const res = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Created owned",
+        transport: "network_tcp",
+        host: "10.0.0.92",
+        hasCashDrawer: true,
+        drawerTillId: owner,
+      },
+    });
+    expect(res.status).toBe(201);
+    const id = ((await res.json()) as { id: string }).id;
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: owner,
+      drawerOwnerTillId: owner,
+    });
+  });
+
+  it("refuses an owner that is not a register at the printer's location, changing nothing", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.93", 9100, "Refused owner");
+    const owner = await register(locationId);
+    expect((await patch(app, id, owner)).status).toBe(204);
+    const [elsewhere] = await suite.db
+      .insert(locations)
+      .values({
+        name: `Terraza ${randomUUID()}`,
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const away = await register(elsewhere!.id);
+    const refusal = {
+      error: { code: "management.request_invalid", params: { field: "drawerTillId" } },
+    };
+
+    for (const value of [away, randomUUID(), "caja-1", 7]) {
+      const response = await patch(app, id, value);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual(refusal);
+    }
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Created away",
+        transport: "network_tcp",
+        host: "10.0.0.94",
+        drawerTillId: away,
+      },
+    });
+    expect(created.status).toBe(400);
+    expect(await created.json()).toEqual(refusal);
+
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: owner,
+      drawerOwnerTillId: owner,
+    });
   });
 });
 

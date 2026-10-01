@@ -22,7 +22,84 @@ function printConfig(cfg: TillConfig): PrintConfig {
 /** The till's active receipt printer and the settings its receipts are laid out for. */
 export interface ReceiptPrinter extends EscSetting {
   id: string;
+  locationId: string;
   hasCashDrawer: boolean;
+  drawerTillId: string | null;
+}
+
+/** A register, with the receipt printer it names. */
+export interface PrintingRegister {
+  id: string;
+  locationId: string;
+  receiptPrinterId: string | null;
+}
+
+/**
+ * The register whose till alone may open `printer`'s drawer: the one the printer names, else the one
+ * register at its location that prints there, else none — several registers sharing a printer must
+ * name an owner before any of them opens its drawer.
+ */
+export function drawerOwnerOf(
+  printer: { id: string; locationId: string; drawerTillId: string | null },
+  registers: readonly PrintingRegister[],
+): string | null {
+  if (printer.drawerTillId !== null) return printer.drawerTillId;
+  const printingHere = registers.filter(
+    (register) =>
+      register.locationId === printer.locationId && register.receiptPrinterId === printer.id,
+  );
+  return printingHere.length === 1 ? printingHere[0]!.id : null;
+}
+
+/** Every printer's drawer owner by {@link drawerOwnerOf}, keyed by printer id. */
+export async function listDrawerOwners(tx: Transaction): Promise<Map<string, string | null>> {
+  const rows = await tx
+    .select({
+      id: printers.id,
+      locationId: printers.locationId,
+      drawerTillId: printers.drawerTillId,
+    })
+    .from(printers);
+  const registers = await tx
+    .select({
+      id: tills.id,
+      locationId: tills.locationId,
+      receiptPrinterId: tills.receiptPrinterId,
+    })
+    .from(tills);
+  return new Map(rows.map((printer) => [printer.id, drawerOwnerOf(printer, registers)]));
+}
+
+/** Whether the calling register owns its receipt printer's drawer. */
+export async function ownsDrawer(
+  tx: Transaction,
+  cfg: TillConfig,
+  printer: ReceiptPrinter,
+): Promise<boolean> {
+  const registers = await tx
+    .select({
+      id: tills.id,
+      locationId: tills.locationId,
+      receiptPrinterId: tills.receiptPrinterId,
+    })
+    .from(tills)
+    .where(eq(tills.receiptPrinterId, printer.id));
+  return drawerOwnerOf(printer, registers) === cfg.tillId;
+}
+
+/**
+ * The calling register's receipt printer when this request may open its drawer: the device may (a
+ * handheld never does), the printer has a drawer, and the register owns it. Otherwise `undefined`,
+ * and the automatic paths open nothing.
+ */
+async function drawerPrinter(
+  tx: Transaction,
+  cfg: TillConfig,
+): Promise<ReceiptPrinter | undefined> {
+  if (cfg.allowCashDrawer === false) return undefined;
+  const printer = await resolveReceiptPrinter(tx, cfg);
+  if (printer === undefined || !printer.hasCashDrawer) return undefined;
+  return (await ownsDrawer(tx, cfg, printer)) ? printer : undefined;
 }
 
 /**
@@ -37,7 +114,9 @@ export async function resolveReceiptPrinter(
   const [printer] = await tx
     .select({
       id: printers.id,
+      locationId: printers.locationId,
       hasCashDrawer: printers.hasCashDrawer,
+      drawerTillId: printers.drawerTillId,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
     })
@@ -186,9 +265,8 @@ async function enqueueBillDrawer(
   reason: "bill_payment" | "bill_refund" | "card_slip",
   authorization: { authorizedBy: string; viaOverride: boolean } | null,
 ): Promise<void> {
-  if (cfg.allowCashDrawer === false) return;
-  const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined || !printer.hasCashDrawer) return;
+  const printer = await drawerPrinter(tx, cfg);
+  if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
     tillId: cfg.tillId,
     printerId: printer.id,
@@ -239,7 +317,8 @@ export async function enqueueBillRefundDrawer(
 
 /**
  * A sale paid in cash, or by a card hand-keyed on a machine Waitron does not talk to (whose slip is
- * kept in the drawer), opens the till's attached drawer independently of document printing.
+ * kept in the drawer), opens the drawer of the till's receipt printer when its register owns that
+ * drawer ({@link drawerOwnerOf}), independently of document printing.
  */
 export async function enqueueSaleDrawer(
   tx: Transaction,
@@ -248,9 +327,9 @@ export async function enqueueSaleDrawer(
   method: "cash" | "card",
   operatorId?: string,
 ): Promise<void> {
-  if (operatorId === undefined || cfg.allowCashDrawer === false) return;
-  const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined || !printer.hasCashDrawer) return;
+  if (operatorId === undefined) return;
+  const printer = await drawerPrinter(tx, cfg);
+  if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
     tillId: cfg.tillId,
     printerId: printer.id,

@@ -51,7 +51,7 @@ import {
   printSaleReceipt,
 } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
-import { enqueueManualDrawerOpen, resolveReceiptPrinter } from "./receipt-print.js";
+import { enqueueManualDrawerOpen, ownsDrawer, resolveReceiptPrinter } from "./receipt-print.js";
 import {
   clearPlacement,
   createTable,
@@ -392,6 +392,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.inactive": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
+  "drawer.not_owner": 400,
   "adjustment_reason.not_found": 404,
   // 403, as `authorization.not_permitted` answers: the request is sound, the person may not alone.
   "adjustment.approval_required": 403,
@@ -1508,15 +1509,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Audited: records a `drawer_opens('manual')` row beside a kick-only job to the till's receipt
-  // printer. The `drawer_open_policy` gate runs before the printer lookup, so an unpermitted
-  // operator is refused whatever the printer state.
+  // Audited: records a `drawer_opens('manual')` row beside a kick-only job to the pressing till's
+  // receipt printer — the device's register, or the configured till when no device is presented. The
+  // `drawer_open_policy` gate runs before the printer lookup, so an unpermitted operator is refused
+  // whatever the printer state.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId, tillId } = await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "drawer_open", device);
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
+      const drawerCfg: TillConfig =
+        device === null
+          ? deps.cfg
+          : { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTransaction(deps.db, async (tx) => {
         const [loc] = await tx
@@ -1541,16 +1547,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 overridePinAttempts(pinThrottle, tillId),
               );
 
-        const printer = await resolveReceiptPrinter(tx, deps.cfg);
+        const printer = await resolveReceiptPrinter(tx, drawerCfg);
         if (printer === undefined) {
-          throw new AppError("drawer.no_printer", { tillId: deps.cfg.tillId });
+          throw new AppError("drawer.no_printer", { tillId: drawerCfg.tillId });
         }
         if (!printer.hasCashDrawer) {
           throw new AppError("drawer.not_attached", { printerId: printer.id });
         }
+        if (!(await ownsDrawer(tx, drawerCfg, printer))) {
+          throw new AppError("drawer.not_owner", { printerId: printer.id });
+        }
         await enqueueManualDrawerOpen(
           tx,
-          deps.cfg,
+          drawerCfg,
           printer.id,
           personId,
           authorizedBy,

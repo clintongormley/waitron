@@ -121,6 +121,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    drawerTillId: null,
+    drawerOwnerTillId: null,
     active: true,
   },
 ];
