@@ -331,10 +331,11 @@ declare module "@waitron/shared" {
      */
     "unpaid_departure.nothing_outstanding": { partyId: string };
     /**
-     * Record unpaid departure found an open bill holding a dish never sent to the kitchen, which the
-     * guests were never served; staff cancel it first.
+     * Record unpaid departure found an open bill holding a dish the kitchen was never told to make:
+     * never sent, or in a group or kitchen item still held. The guests were never served it; staff
+     * cancel it first.
      */
-    "unpaid_departure.unsent_dishes": { workingOrderId: string };
+    "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**
      * Record unpaid departure found an open bill holding a payment, one given back in full
      * included: collecting a presented bill refuses one that holds a payment (`collectOrder`,

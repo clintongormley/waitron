@@ -2271,6 +2271,27 @@ export function isReleased(
       : line.groupState !== null || line.sentAt !== null;
 }
 
+/**
+ * Whether any dish line of the order is not released work ({@link isReleased}): never sent, held in
+ * a group, or held by its kitchen item.
+ */
+export async function holdsUnreleasedDish(tx: Transaction, orderId: string): Promise<boolean> {
+  const lines = await tx
+    .select({
+      sentAt: workingOrderLines.sentAt,
+      groupState: orderGroups.state,
+      ticketItemId: ticketItems.id,
+      ticketFiredAt: ticketItems.firedAt,
+    })
+    .from(workingOrderLines)
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(eq(workingOrderLines.workingOrderId, orderId), isNull(workingOrderLines.parentLineId)),
+    );
+  return lines.some((line) => !isReleased(line));
+}
+
 /** Serving needs released work ({@link isReleased}), else `group.line_held`. */
 function refuseUnreleased(line: ServableLine): void {
   if (!isReleased(line)) {

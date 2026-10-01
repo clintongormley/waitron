@@ -33,6 +33,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { cancelBody } from "./testing/cancel-line.js";
 import "./errors.js";
 
 // Record unpaid departure (spec §8; service plan Task 17; owner's Q28 decision of 2026-10-01): the
@@ -507,9 +508,63 @@ describe("what is refused", () => {
 
     expect(answer).toMatchObject({
       status: 409,
-      json: { code: "unpaid_departure.unsent_dishes", params: { workingOrderId: billId } },
+      json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: billId } },
     });
     await expectNothingWritten(partyId, billId);
+  });
+
+  it("refuses a bill holding a dish whose group is still held, then records the rest once that dish is cancelled", async () => {
+    const party = await seatedWith(venue);
+    const ordered = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party.revision,
+        groups: [
+          {
+            lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
+            release: "fire",
+          },
+          { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
+        ],
+      },
+    );
+    expect(ordered.status).toBe(200);
+
+    const refused = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(refused).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
+    });
+    await expectNothingWritten(party.partyId, party.tabId);
+
+    const cancelled = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/adjustments`,
+      await cancelBody(venue.db, party.tabId, 2),
+    );
+    expect(cancelled.status).toBe(200);
+
+    const recorded = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(recorded.status).toBe(200);
+    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(await salesOf(party.tabId)).toEqual([
+      { id: expect.any(String), total: 3000, settledAt: null },
+    ]);
+    expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
   });
 
   it("refuses a bill holding a payment, and writes nothing", async () => {

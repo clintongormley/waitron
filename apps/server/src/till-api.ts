@@ -354,7 +354,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "party.out_of_date": 409,
   "party.bill_outstanding": 409,
   "unpaid_departure.nothing_outstanding": 409,
-  "unpaid_departure.unsent_dishes": 409,
+  "unpaid_departure.unfired_dishes": 409,
   "unpaid_departure.bill_part_paid": 409,
   "party.main_bill_stays": 409,
   "submission.id_reused": 409,

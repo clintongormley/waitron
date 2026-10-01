@@ -23,6 +23,7 @@ import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./p
 import { readIssuedSales } from "./sale-due.js";
 import type { TillConfig } from "./till-config.js";
 import {
+  holdsUnreleasedDish,
   issueUnpaidInvoice,
   markOrderPlaced,
   readInvoiceNumber,
@@ -56,7 +57,8 @@ export interface RecordedDeparture {
  * An open bill is invoiced now, as an invoice-first placing invoices it, without a receipt; a
  * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
  * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill is owed,
- * `unpaid_departure.unsent_dishes` for an open bill holding a dish never sent to the kitchen, and
+ * `unpaid_departure.unfired_dishes` for an open bill holding a dish the kitchen was never told to
+ * make (never sent, or held), and
  * `unpaid_departure.bill_part_paid` for an open bill holding a payment. A retry after the party has
  * closed is `party.not_open`, as it is for Finish.
  */
@@ -83,8 +85,13 @@ export async function recordUnpaidDeparture(
   }
   const open = owing.filter((bill) => bill.status === "open");
   for (const bill of open) {
-    if ((await unsentDishLines(tx, bill.workingOrderId)).length > 0) {
-      throw new AppError("unpaid_departure.unsent_dishes", { workingOrderId: bill.workingOrderId });
+    if (
+      (await unsentDishLines(tx, bill.workingOrderId)).length > 0 ||
+      (await holdsUnreleasedDish(tx, bill.workingOrderId))
+    ) {
+      throw new AppError("unpaid_departure.unfired_dishes", {
+        workingOrderId: bill.workingOrderId,
+      });
     }
     if (bill.hasPayments) {
       throw new AppError("unpaid_departure.bill_part_paid", {
