@@ -434,6 +434,93 @@ describe("site content languages", () => {
     });
   });
 
+  describe("required languages", () => {
+    const REQUIRED = ["ca", "es"];
+
+    it("refuses a save that leaves out a required language and writes nothing", async () => {
+      await withTransaction(suite.db, (tx) =>
+        writeContentLanguages(
+          tx,
+          { defaultLanguage: "ca", languages: ["ca", "es", "en"] },
+          "es",
+          undefined,
+          REQUIRED,
+        ),
+      );
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeContentLanguages(
+            tx,
+            { defaultLanguage: "es", languages: ["es", "en"] },
+            "es",
+            undefined,
+            REQUIRED,
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
+      await withTransaction(suite.db, async (tx) =>
+        expect(await readContentLanguages(tx, "es")).toEqual({
+          defaultLanguage: "ca",
+          languages: ["ca", "es", "en"],
+        }),
+      );
+    });
+
+    it("refuses a first save that never held the required language", async () => {
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeContentLanguages(
+            tx,
+            { defaultLanguage: "en", languages: ["en", "es-ES"] },
+            "en",
+            undefined,
+            REQUIRED,
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
+    });
+
+    it("accepts a required language sent with a region, and removing one that is not required", async () => {
+      await withTransaction(suite.db, async (tx) => {
+        await writeContentLanguages(
+          tx,
+          { defaultLanguage: "es", languages: ["es", "ca-ES", "fr"] },
+          "es",
+          undefined,
+          REQUIRED,
+        );
+        await writeContentLanguages(
+          tx,
+          { defaultLanguage: "es", languages: ["es", "ca"] },
+          "es",
+          undefined,
+          REQUIRED,
+        );
+        expect(await readContentLanguages(tx, "es")).toEqual({
+          defaultLanguage: "es",
+          languages: ["es", "ca"],
+        });
+      });
+    });
+
+    it("lets a venue with no required language remove any language but its default", async () => {
+      await withTransaction(suite.db, async (tx) => {
+        await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
+        await writeContentLanguages(
+          tx,
+          { defaultLanguage: "es", languages: ["es"] },
+          "es",
+          undefined,
+          [],
+        );
+        expect(await readContentLanguages(tx, "es")).toEqual({
+          defaultLanguage: "es",
+          languages: ["es"],
+        });
+      });
+    });
+  });
+
   it.each([
     { defaultLanguage: "en", languages: [] },
     { defaultLanguage: "en", languages: ["fr"] },

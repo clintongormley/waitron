@@ -136,6 +136,58 @@ describe("Spanish postcodes and provinces", () => {
   });
 });
 
+describe("regional content languages", () => {
+  const CATALONIA = ["08", "17", "25", "43"];
+  const VALENCIAN_COMMUNITY = ["03", "12", "46"];
+  const GALICIA = ["15", "27", "32", "36"];
+  const area = (code: string) => SPAIN.administrativeAreas.find((entry) => entry.code === code)!;
+
+  it("names Spain's official languages", () => {
+    expect(SPAIN.officialLocales).toEqual(["es-ES", "ca-ES", "gl-ES", "eu-ES"]);
+  });
+
+  it.each(CATALONIA)("requires Catalan and Spanish in %s, with Catalan the default", (code) => {
+    expect(area(code).requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
+    expect(area(code).defaultContentLocale).toBe("ca-ES");
+    expect(area(code).foreignLanguageNotice).toBeUndefined();
+  });
+
+  it.each(VALENCIAN_COMMUNITY)(
+    "requires Valencian and Spanish in %s and gives the one-foreign-language notice",
+    (code) => {
+      expect(area(code).requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
+      expect(area(code).defaultContentLocale).toBeUndefined();
+      const notice = area(code).foreignLanguageNotice!;
+      expect(notice.minimumForeign).toBe(1);
+      expect(Object.keys(notice.text).sort()).toEqual(["en", "es"]);
+      for (const text of Object.values(notice.text)) expect(text).toContain("36/2023");
+    },
+  );
+
+  it.each(GALICIA)(
+    "requires Galician and Spanish in %s and gives the two-foreign-languages notice",
+    (code) => {
+      expect(area(code).requiredContentLocales).toEqual(["gl-ES", "es-ES"]);
+      expect(area(code).defaultContentLocale).toBeUndefined();
+      const notice = area(code).foreignLanguageNotice!;
+      expect(notice.minimumForeign).toBe(2);
+      expect(Object.keys(notice.text).sort()).toEqual(["en", "es"]);
+      for (const text of Object.values(notice.text)) expect(text).toContain("108/2006");
+    },
+  );
+
+  it("requires nothing anywhere else, the Balearics, the Basque Country and Navarre included", () => {
+    const ruled = new Set([...CATALONIA, ...VALENCIAN_COMMUNITY, ...GALICIA]);
+    const others = SPAIN.administrativeAreas.filter(({ code }) => !ruled.has(code));
+    expect(others.map(({ code }) => code)).toEqual(expect.arrayContaining(["07", "48", "31"]));
+    for (const other of others) {
+      expect(other.requiredContentLocales, other.code).toBeUndefined();
+      expect(other.defaultContentLocale, other.code).toBeUndefined();
+      expect(other.foreignLanguageNotice, other.code).toBeUndefined();
+    }
+  });
+});
+
 describe("validateSpanishPhone", () => {
   it.each([
     ["612 345 678", "+34612345678", "mobile"],

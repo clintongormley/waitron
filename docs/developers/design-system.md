@@ -1155,7 +1155,8 @@ the sidebar while editing" confusion, since the page never stopped being the pag
 buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
 above for the close-event race a shared, reused modal needs to guard against. One exception (C111,
 owner 2026-09-30): Content languages' Set as default and Remove save straight away, without a modal
-(removing a language keeps its translations); its Add language still opens one.
+(removing a language keeps its translations); its Add language still opens one. A language the
+venue's region requires has no Remove and shows "Required".
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the

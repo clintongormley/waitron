@@ -3283,6 +3283,15 @@ describe("startServer — what a trading boot wires behind its management routes
     });
   }, 60_000);
 
+  it("answers the content-language rules it worked out from the venue's country at boot", async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/management-api/content-language-rules`, {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    // A Spanish venue with no province: Spain's official languages, nothing required.
+    expect(await response.json()).toEqual({ required: [], official: ["es", "ca", "gl", "eu"] });
+  }, 60_000);
+
   it("raises the backup-disabled alert from the backup supervisor's live status", async () => {
     const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
       headers: { cookie },

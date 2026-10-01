@@ -1,5 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { capitaliseFirst, type ContentLanguages } from "@waitron/shared";
+import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,10 +13,12 @@ import "./content-languages-screen.js";
 import type { ContentLanguagesScreen } from "./content-languages-screen.js";
 
 const CONFIG: ContentLanguages = { defaultLanguage: "ca", languages: ["ca", "en", "de"] };
+const NO_RULES: ContentLanguageRules = { required: [], official: [] };
 
 function api(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
     getContentLanguages: vi.fn().mockResolvedValue(CONFIG),
+    getContentLanguageRules: vi.fn().mockResolvedValue(NO_RULES),
     updateContentLanguages: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
@@ -56,6 +58,205 @@ async function mount(client: DashboardApi): Promise<ContentLanguagesScreen> {
 afterEach(() => {
   cleanupWidgets();
   setLocale("es-ES");
+});
+
+const OFFICIAL = ["es", "ca", "gl", "eu"];
+const BARCELONA: ContentLanguageRules = { required: ["ca", "es"], official: OFFICIAL };
+const MADRID: ContentLanguageRules = { required: [], official: OFFICIAL };
+const VALENCIA: ContentLanguageRules = {
+  required: ["ca", "es"],
+  official: OFFICIAL,
+  foreignLanguageNotice: {
+    minimumForeign: 1,
+    text: { en: "Offer one foreign language too.", es: "Ofrece también un idioma extranjero." },
+  },
+};
+
+const notice = (el: ContentLanguagesScreen) => q(el, "[data-test=foreign-language-notice]");
+const rowOf = (el: ContentLanguagesScreen, code: string) =>
+  rows(el).find((row) => row.querySelector(".field-value")!.textContent!.trim() === name(code))!;
+
+describe("required content languages", () => {
+  const rulesApi = (rules: ContentLanguageRules, config: ContentLanguages) =>
+    api({
+      getContentLanguages: vi.fn().mockResolvedValue(config),
+      getContentLanguageRules: vi.fn().mockResolvedValue(rules),
+    });
+
+  it("offers no Remove on a required language and labels it Required, keeping Set as default on a required one that is not the default", async () => {
+    const el = await mount(
+      rulesApi(BARCELONA, { defaultLanguage: "ca", languages: ["ca", "es", "en"] }),
+    );
+    expect(q(el, "[data-test=remove-es]")).toBeNull();
+    expect(q(el, "[data-test=remove-ca]")).toBeNull();
+    expect(q(el, "[data-test=set-default-es]")).not.toBeNull();
+    expect(q(el, "[data-test=remove-en]")).not.toBeNull();
+    expect(rowOf(el, "ca").textContent).toContain(t("content_languages.default"));
+    expect(rowOf(el, "ca").textContent).toContain(t("content_languages.required"));
+    expect(rowOf(el, "es").textContent).toContain(t("content_languages.required"));
+    expect(rowOf(el, "en").textContent).not.toContain(t("content_languages.required"));
+  });
+
+  it("names the Required label in each UI language", () => {
+    expect(en["content_languages.required"]).toBe("Required");
+    expect(es["content_languages.required"]).toBe("Obligatorio");
+  });
+
+  it("offers Remove on every language but the default where the region requires none", async () => {
+    const el = await mount(
+      rulesApi(MADRID, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
+    );
+    expect(q(el, "[data-test=remove-ca]")).not.toBeNull();
+    expect(q(el, "[data-test=remove-en]")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("content_languages.required"));
+  });
+
+  it("shows the region's foreign-language notice while too few enabled languages are foreign, in the UI language", async () => {
+    const el = await mount(rulesApi(VALENCIA, { defaultLanguage: "es", languages: ["es", "ca"] }));
+    expect(notice(el)!.textContent!.trim()).toBe("Ofrece también un idioma extranjero.");
+  });
+
+  it("shows the notice in English when the UI is in English", async () => {
+    setLocale("en-GB");
+    const el = await mount(rulesApi(VALENCIA, { defaultLanguage: "es", languages: ["es", "ca"] }));
+    expect(notice(el)!.textContent!.trim()).toBe("Offer one foreign language too.");
+  });
+
+  it("falls back to the English notice when it has no text in the UI language", async () => {
+    const rules = {
+      ...VALENCIA,
+      foreignLanguageNotice: { minimumForeign: 1, text: { en: "Offer one foreign language too." } },
+    };
+    const el = await mount(rulesApi(rules, { defaultLanguage: "es", languages: ["es", "ca"] }));
+    expect(notice(el)!.textContent!.trim()).toBe("Offer one foreign language too.");
+  });
+
+  it("shows no notice when it has no text in the UI language or in English", async () => {
+    const rules = { ...VALENCIA, foreignLanguageNotice: { minimumForeign: 1, text: {} } };
+    const el = await mount(rulesApi(rules, { defaultLanguage: "es", languages: ["es", "ca"] }));
+    expect(notice(el)).toBeNull();
+  });
+
+  it("shows no notice once enough enabled languages are foreign", async () => {
+    const el = await mount(
+      rulesApi(VALENCIA, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
+    );
+    expect(notice(el)).toBeNull();
+  });
+
+  it("shows the notice once the only foreign language is removed", async () => {
+    const el = await mount(
+      rulesApi(VALENCIA, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
+    );
+    q(el, "[data-test=remove-en]")!.click();
+    await vi.waitFor(() =>
+      expect(notice(el)?.textContent?.trim()).toBe("Ofrece también un idioma extranjero."),
+    );
+  });
+
+  it("shows no notice where the region gives none", async () => {
+    const el = await mount(rulesApi(MADRID, { defaultLanguage: "es", languages: ["es", "ca"] }));
+    expect(notice(el)).toBeNull();
+  });
+
+  it("hands the official languages to the Add language dialog", async () => {
+    const el = await mount(rulesApi(MADRID, { defaultLanguage: "es", languages: ["es"] }));
+    expect(dialog(el).official).toEqual(OFFICIAL);
+  });
+
+  it("shows a save refused for leaving out a required language once, in the card, when the server requires a language the screen's rules do not", async () => {
+    const client = api({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "ca"] }),
+      updateContentLanguages: vi
+        .fn()
+        .mockRejectedValue({ code: "content.language_required", params: { language: "ca" } }),
+    });
+    const el = await mount(client);
+    q(el, "[data-test=remove-ca]")!.click();
+    await vi.waitFor(() =>
+      expect(saveMessage(el)?.textContent).toBe(codeMessage("content.language_required")),
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-error]")).toHaveLength(1);
+    expect(shown(el)).toEqual(["Español", "Catalán"]);
+  });
+
+  it("adds every missing required language to an added one, so a list lacking two can be repaired", async () => {
+    const client = rulesApi(BARCELONA, { defaultLanguage: "en", languages: ["en"] });
+    const el = await mount(client);
+    q(el, "[data-test=add-language]")!.click();
+    await flush(el);
+    const add = dialog(el);
+    const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
+    select.value = "ca";
+    select.dispatchEvent(new Event("change"));
+    await add.updateComplete;
+    add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
+    const saved = { defaultLanguage: "en", languages: ["en", "ca", "es"] };
+    await vi.waitFor(() => expect(shown(el)).toEqual(["Inglés", "Catalán", "Español"]));
+    expect(client.updateContentLanguages).toHaveBeenCalledWith(saved);
+    expect(currentContentLanguages()).toEqual(saved);
+  });
+
+  it("adds every missing required language to a removal and to a new default", async () => {
+    const client = rulesApi(BARCELONA, { defaultLanguage: "en", languages: ["en", "fr", "es"] });
+    const el = await mount(client);
+    q(el, "[data-test=remove-fr]")!.click();
+    await vi.waitFor(() =>
+      expect(client.updateContentLanguages).toHaveBeenCalledWith({
+        defaultLanguage: "en",
+        languages: ["en", "es", "ca"],
+      }),
+    );
+
+    const other = rulesApi(BARCELONA, { defaultLanguage: "en", languages: ["en", "fr"] });
+    const second = await mount(other);
+    q(second, "[data-test=set-default-fr]")!.click();
+    await vi.waitFor(() =>
+      expect(other.updateContentLanguages).toHaveBeenCalledWith({
+        defaultLanguage: "fr",
+        languages: ["fr", "en", "ca", "es"],
+      }),
+    );
+  });
+
+  it("shows a loading status until the rules arrive", async () => {
+    const el = await mount(api({ getContentLanguageRules: vi.fn(() => new Promise(() => {})) }));
+    expect(q(el, "[role=status]")!.textContent!.trim()).toBe(t("content_languages.loading"));
+    expect(q(el, "[data-test=languages]")).toBeNull();
+  });
+
+  it("still reports a failed read of the rules when the languages arrive after it", async () => {
+    const el = await mount(
+      api({
+        getContentLanguageRules: vi.fn().mockRejectedValue(new Error("offline")),
+        getContentLanguages: vi.fn(
+          () => new Promise((resolve) => setTimeout(() => resolve(CONFIG), 50)),
+        ),
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await el.updateComplete;
+    expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(t("content_languages.load_error"));
+    expect(q(el, "[role=status]")).toBeNull();
+  });
+
+  it("reports a failed read of the rules and shows the languages once a retry succeeds", async () => {
+    const client = api({
+      getContentLanguageRules: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValue(BARCELONA),
+    });
+    const el = await mount(client);
+    expect(q(el, "[role=alert]")!.textContent!.trim()).toBe(t("content_languages.load_error"));
+    expect(q(el, "[data-test=languages]")).toBeNull();
+    q(el, "[data-test=retry]")!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")).toBeNull();
+    expect(shown(el)).toEqual(["Catalán", "Alemán", "Inglés"]);
+  });
 });
 
 describe("content languages screen", () => {

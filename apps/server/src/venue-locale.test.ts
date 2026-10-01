@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { readVenueLocale } from "./venue-locale.js";
+import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
 
 // CORE_MIGRATIONS alone: both `tenants.country` and `locations.province` live in core.
 let locationId: string;
@@ -63,6 +63,43 @@ describe("readVenueLocale", () => {
         override: undefined,
       });
       expect(got).toBe("en-GB");
+    } finally {
+      await seedTenant(suite.db);
+    }
+  });
+});
+
+describe("readVenueContentLanguageRules", () => {
+  const SPAIN_OFFICIAL = ["es", "ca", "gl", "eu"];
+
+  it("requires Catalan and Spanish for the Barcelona venue", async () => {
+    expect(await readVenueContentLanguageRules(suite.db, { locationId })).toStrictEqual({
+      required: ["ca", "es"],
+      official: SPAIN_OFFICIAL,
+    });
+  });
+
+  it("requires nothing for a Madrid venue", async () => {
+    const [madrid] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Madrid",
+        province: "Madrid",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Retail",
+      })
+      .returning({ id: locations.id });
+    expect(await readVenueContentLanguageRules(suite.db, { locationId: madrid!.id })).toStrictEqual(
+      { required: [], official: SPAIN_OFFICIAL },
+    );
+  });
+
+  it("requires nothing when there is no taxpayer row to read a country from", async () => {
+    await suite.db.execute(sql`delete from tenants`);
+    try {
+      expect(
+        await readVenueContentLanguageRules(suite.db, { locationId: randomUUID() }),
+      ).toStrictEqual({ required: [], official: [] });
     } finally {
       await seedTenant(suite.db);
     }

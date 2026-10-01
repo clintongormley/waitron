@@ -6,6 +6,20 @@ export interface ContentLanguages {
   languages: string[];
 }
 
+/** What the venue's region requires of its content languages, as language codes. */
+export interface ContentLanguageRules {
+  /** The content-languages route refuses a save that leaves one out. */
+  readonly required: readonly string[];
+  /** The country's official languages, offered first when adding a language. */
+  readonly official: readonly string[];
+  /** Shown, never enforced, while fewer than `minimumForeign` enabled languages are outside
+   * `official`. `text` is keyed by the dashboard's language code. */
+  readonly foreignLanguageNotice?: {
+    readonly minimumForeign: number;
+    readonly text: Readonly<Record<string, string>>;
+  };
+}
+
 const languageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
 
 const choicesByLocale = new Map<string, readonly { code: string; name: string }[]>();

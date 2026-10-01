@@ -160,6 +160,8 @@ const PROVINCES = [
 ] as const;
 
 const CATALAN = new Set(["03", "07", "08", "12", "17", "25", "43", "46"]);
+const CATALONIA_PROVINCES = new Set(["08", "17", "25", "43"]);
+const VALENCIAN_PROVINCES = new Set(["03", "12", "46"]);
 const GALICIAN = new Set(["15", "27", "32", "36"]);
 const BASQUE = new Set(["01", "20", "48"]);
 
@@ -170,6 +172,55 @@ function localeFor(code: string): string | undefined {
   return undefined;
 }
 
+type ContentLanguageLaw = Pick<
+  AdministrativeArea,
+  "requiredContentLocales" | "defaultContentLocale" | "foreignLanguageNotice"
+>;
+
+// Catalonia: Llei 1/1998 art. 32.3 puts "documents offering services" at least in Catalan, which
+// the Agència Catalana del Consum reads as covering the menu. STC 88/2017 upheld the Consumer Code's
+// language rule (art. 128-1.2) only on the reading that customers can also get the documents in
+// Spanish; Waitron keeps Spanish enabled for that.
+const CATALONIA: ContentLanguageLaw = {
+  requiredContentLocales: ["ca-ES", "es-ES"],
+  defaultContentLocale: "ca-ES",
+};
+
+// Decree 36/2023 arts. 9.9 and 12.4: both official languages and at least one foreign language,
+// preferably English. Art. 1.2.g exempts takeaway-only and delivery-only places; Waitron does
+// not distinguish them and keeps both languages enabled everywhere in the region.
+const VALENCIAN_COMMUNITY: ContentLanguageLaw = {
+  requiredContentLocales: ["ca-ES", "es-ES"],
+  foreignLanguageNotice: {
+    minimumForeign: 1,
+    text: {
+      en: "In the Valencian Community, a restaurant or bar must also offer its menu and price list in at least one foreign language, preferably English (Decree 36/2023, arts. 9.9 and 12.4). Places that only sell takeaway or delivery are exempt.",
+      es: "En la Comunitat Valenciana, los restaurantes y bares deben ofrecer además la carta y la lista de precios en al menos un idioma extranjero, preferentemente el inglés (Decreto 36/2023, arts. 9.9 y 12.4). Los establecimientos que solo venden para llevar o a domicilio están exentos.",
+    },
+  },
+};
+
+// Decree 108/2006 art. 27.2, and the menu rule as amended by Decree 8/2007. Arts. 1-2 limit the
+// decree to restaurants and cafeterias; Waitron does not distinguish venue types and keeps both
+// languages enabled everywhere in the region.
+const GALICIA: ContentLanguageLaw = {
+  requiredContentLocales: ["gl-ES", "es-ES"],
+  foreignLanguageNotice: {
+    minimumForeign: 2,
+    text: {
+      en: "In Galicia, a restaurant rated three forks or more must also offer its menu in at least two foreign languages (Decree 108/2006, art. 27.2, as amended by Decree 8/2007).",
+      es: "En Galicia, los restaurantes de tres tenedores o más deben ofrecer además la carta en al menos dos idiomas extranjeros (Decreto 108/2006, art. 27.2, modificado por el Decreto 8/2007).",
+    },
+  },
+};
+
+function contentLanguageLawFor(code: string): ContentLanguageLaw {
+  if (CATALONIA_PROVINCES.has(code)) return CATALONIA;
+  if (VALENCIAN_PROVINCES.has(code)) return VALENCIAN_COMMUNITY;
+  if (GALICIAN.has(code)) return GALICIA;
+  return {};
+}
+
 const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
   ([code, name, aliases]) => ({
     code,
@@ -178,6 +229,7 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
     postalPrefixes: [code],
     ...(localeFor(code) === undefined ? {} : { defaultLocale: localeFor(code) }),
     timeZone: code === "35" || code === "38" ? "Atlantic/Canary" : "Europe/Madrid",
+    ...contentLanguageLawFor(code),
   }),
 );
 
@@ -204,6 +256,7 @@ export const SPAIN: CountryPack = {
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"],
+  officialLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   moduleIds: ["workforce-es"],
   availableForVenueSetup: true,
   administrativeAreas,

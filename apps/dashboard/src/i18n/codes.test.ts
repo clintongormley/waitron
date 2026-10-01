@@ -374,3 +374,12 @@ it("has a sentence of its own for an unsupported language, in both languages", (
     "Ese idioma no está disponible. Elige otro.",
   );
 });
+
+it("says a required content language cannot be removed, in both languages", () => {
+  expect(codeMessage("content.language_required", "en")).toBe(
+    "This venue's region requires that language, so it cannot be removed.",
+  );
+  expect(codeMessage("content.language_required", "es")).toBe(
+    "La región del local exige ese idioma, así que no se puede quitar.",
+  );
+});

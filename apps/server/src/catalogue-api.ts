@@ -2,7 +2,13 @@ import { isProductOrdering, nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, FALLBACK_LOCALE, decimal, type Decimal } from "@waitron/shared";
+import {
+  AppError,
+  FALLBACK_LOCALE,
+  decimal,
+  type ContentLanguageRules,
+  type Decimal,
+} from "@waitron/shared";
 import { products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
@@ -97,6 +103,8 @@ import type { Logger } from "./logger.js";
 
 /** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface CatalogueApiDeps {
+  /** What the venue's region requires of its content languages; none when absent. */
+  contentLanguageRules?: ContentLanguageRules;
   contentTranslationGaps?: (
     tx: Transaction,
     language: string,
@@ -116,6 +124,8 @@ export interface CatalogueApiDeps {
  * until a `catalogue.manage` permission exists; realising it is a one-line swap here.
  */
 const CATALOGUE_WRITE_PERMISSION: Permission = "person.manage";
+
+const NO_CONTENT_LANGUAGE_RULES: ContentLanguageRules = { required: [], official: [] };
 
 function nullOrUuid(value: unknown, field: string): string | null {
   if (value !== null && (typeof value !== "string" || !isUuid(value)))
@@ -781,6 +791,15 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
+  app.get("/management-api/content-language-rules", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(
+        await gated(sessionId, async () => deps.contentLanguageRules ?? NO_CONTENT_LANGUAGE_RULES),
+      );
+    }),
+  );
+
   // Language choices are public content metadata; this read neither requires nor touches a session.
   app.get("/api/content-languages", (c) =>
     run(c, log, async () => {
@@ -812,6 +831,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           config,
           deps.venueLocale ?? FALLBACK_LOCALE,
           deps.contentTranslationGaps,
+          deps.contentLanguageRules?.required,
         ),
       );
       return c.body(null, 204);

@@ -128,6 +128,8 @@ it.each([
     ],
   ],
   ["getReportPrinters", [], ["printers"]],
+  // The server works the rules out once at boot, so no table change moves them.
+  ["getContentLanguageRules", [], []],
 ] as const)(
   "subscribes %s to exactly the tables its read selects from",
   async (name, args, types) => {

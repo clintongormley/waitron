@@ -154,6 +154,7 @@ export async function writeContentLanguages(
   config: ContentLanguages,
   fallbackLanguage = config.defaultLanguage,
   additionalGaps?: (tx: Transaction, language: string) => Promise<{ kind: string; id: string }[]>,
+  requiredLanguages: readonly string[] = [],
 ): Promise<void> {
   const defaultLanguage = contentLanguageCode(config.defaultLanguage);
   const languages = config.languages.map(contentLanguageCode);
@@ -164,6 +165,8 @@ export async function writeContentLanguages(
   ) {
     throw new AppError("content.languages_invalid", {});
   }
+  const missing = requiredLanguages.find((language) => !languages.includes(language));
+  if (missing !== undefined) throw new AppError("content.language_required", { language: missing });
   const previous = await readContentLanguages(tx, fallbackLanguage);
   if (previous.defaultLanguage !== defaultLanguage) {
     const gaps = [

@@ -9,13 +9,26 @@ export interface ValueValidator<Kind extends string> {
   validate(value: string): ValidationResult<Kind>;
 }
 
+/** A foreign-language requirement the venue is told about, never enforced: Waitron cannot see
+ * whether it applies. `text` is keyed by the dashboard's language code and says when it applies. */
+export interface ForeignLanguageNotice {
+  readonly minimumForeign: number;
+  readonly text: Readonly<Record<string, string>>;
+}
+
 export interface AdministrativeArea {
   readonly code: string;
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly postalPrefixes: readonly string[];
+  /** Not the content languages a venue here must keep: those are `requiredContentLocales`. */
   readonly defaultLocale?: string;
   readonly timeZone?: string;
+  /** Locales Waitron keeps enabled for a venue in this area, following its language rules. */
+  readonly requiredContentLocales?: readonly string[];
+  /** A new venue's default content language in this area. */
+  readonly defaultContentLocale?: string;
+  readonly foreignLanguageNotice?: ForeignLanguageNotice;
 }
 
 export interface FiscalModules {
@@ -35,6 +48,7 @@ export interface CountryPack {
   readonly defaultLocale: string;
   readonly defaultTimeZone: string;
   readonly invoiceLocales: readonly string[];
+  readonly officialLocales?: readonly string[];
   readonly moduleIds: readonly string[];
   /** Whether this pack has enough validated fiscal behavior to create a venue in the setup wizard. */
   readonly availableForVenueSetup: boolean;
@@ -148,4 +162,28 @@ export function resolveCountryLocale<Locale extends string>(
     availableLocales[0] ??
     input.fallback
   );
+}
+
+export interface ContentLocaleRules {
+  readonly required: readonly string[];
+  readonly official: readonly string[];
+  readonly defaultContentLocale?: string;
+  readonly foreignLanguageNotice?: ForeignLanguageNotice;
+}
+
+export function contentLanguageRules(
+  pack: CountryPack,
+  areaValue: string | null | undefined,
+): ContentLocaleRules {
+  const area = areaValue == null ? undefined : findAdministrativeArea(pack, areaValue);
+  return {
+    required: area?.requiredContentLocales ?? [],
+    official: pack.officialLocales ?? [],
+    ...(area?.defaultContentLocale === undefined
+      ? {}
+      : { defaultContentLocale: area.defaultContentLocale }),
+    ...(area?.foreignLanguageNotice === undefined
+      ? {}
+      : { foreignLanguageNotice: area.foreignLanguageNotice }),
+  };
 }

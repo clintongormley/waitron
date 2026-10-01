@@ -209,6 +209,11 @@ of them in the optional group: the list's own name (`option_list`) and each of i
 second one: each of its items names a product and carries no name of its own, so `extra_list_items`
 holds no map for the report to read.
 
+A content-language save that leaves out a language the venue's region requires is refused
+(`content.language_required`, `writeContentLanguages` in `packages/catalogue/src/content-languages.ts`),
+but nothing makes that language's text complete: the report is read only when a save changes the
+default language.
+
 ## Variants
 
 A variant is a `products` row whose `parent_id` names its parent product — "Wine 125" and

@@ -14,7 +14,8 @@
   "dependencies": {
     "@waitron/country": "workspace:*",
     "@waitron/country-es": "workspace:*",
-    "@waitron/country-gb": "workspace:*"
+    "@waitron/country-gb": "workspace:*",
+    "@waitron/shared": "workspace:*"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.11",
