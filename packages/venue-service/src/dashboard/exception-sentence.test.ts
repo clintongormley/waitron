@@ -84,3 +84,13 @@ it("takes the sentence words and structure from the translation catalogue", () =
     exceptionSentence({ ...base, zoneId: "terrace", target: { kind: "no_preparation" } }, names),
   ).toBe("All items in Terrace => No maker");
 });
+
+it("names a missing referenced station by its id so an old rule remains identifiable", () => {
+  setLocale("en");
+  expect(
+    exceptionSentence(
+      { ...base, target: { kind: "station", stationId: "retired-station" } },
+      names,
+    ),
+  ).toBe("Everything → retired-station");
+});

@@ -820,6 +820,22 @@ describe("the venue lists", () => {
     expect(column(el, "zones", 0)).toEqual(["Deli counter", "Dining room"]);
   });
 
+  it("sorts active tills by their labels", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [
+          { id: "t1", label: "Zebra till", kind: "till", active: true },
+          { id: "t2", label: "Apple till", kind: "till", active: true },
+        ],
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    expect(column(el, "tills", 0)).toEqual(["Zebra till", "Apple till"]);
+    await sortBy(el, "tills", "name");
+    expect(column(el, "tills", 0)).toEqual(["Apple till", "Zebra till"]);
+  });
+
   it("marks inactive departments, and names a zone's non-default menus", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
@@ -1646,6 +1662,9 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
     await choose(el, "separate");
     expect(api.saveKitchenTicketGrouping).toHaveBeenCalledWith("separate");
     expect(groupingSelect(el).disabled).toBe(true);
+    // A synthetic event can reach a disabled select; it must not start a second write.
+    await choose(el, "combined");
+    expect(api.saveKitchenTicketGrouping).toHaveBeenCalledTimes(1);
     finish();
     await settle(el);
     expect(api.load).toHaveBeenCalledTimes(2);
@@ -1880,6 +1899,9 @@ describe("the setting for the reminder to fire the next group", () => {
     await choose(el, "20");
     expect(api.saveReleaseReminderMinutes).toHaveBeenCalledWith(20);
     expect(reminderSelect(el).disabled).toBe(true);
+    // A synthetic event can reach a disabled select; it must not start a second write.
+    await choose(el, "5");
+    expect(api.saveReleaseReminderMinutes).toHaveBeenCalledTimes(1);
     finish();
     await settle(el);
     expect(reminderSelect(el).value).toBe("20");
