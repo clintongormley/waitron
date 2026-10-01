@@ -142,7 +142,7 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-font-family-mono` (text read or copied character by character, such as a key or a log line),
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
-`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-cell-name-max-width`,
+`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`, `--wt-cell-name-max-width`,
 `--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`
 
@@ -170,6 +170,34 @@ through a token. `wt-modal` is at most `64rem` (1024px) wide; `wt-dialog` and `w
 read their own token and are at most `48rem` (768px). Some add and edit forms are built in
 `wt-dialog` rather than `wt-modal` (the ingredient form is one), so they are held to 768px too. Overriding `--wt-modal-max-width` therefore resizes `wt-modal` alone; to resize a
 dialog, set `--wt-dialog-max-width` (the till's device chooser does).
+
+`--wt-form-max-width` (`36rem`, 576px at the default text size) is the one standard width of a form
+inside a `wt-modal` (owner, 2026-09-30, C105): a field there grows no wider than it, however wide the
+modal is. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
+`--wt-field-max-width` as its `max-width` — `wt-input`, `wt-combobox`, `wt-price-input`,
+`wt-number-stepper`, `wt-switch`, a native `<select>` styled by `selectStyles`, and the line that
+shows a form's message (`formMessageStyles`, so both the message a dialog shows at the end of its body
+and the one a `wt-form-actions` placed in the body shows above its buttons). The cap covers a field's
+own label, hint and error, which are inside it. It narrows nothing else: a table, a preview, a
+`wt-disclosure`, a screen's own paragraphs and the footer's buttons keep the modal's full width.
+There is one standard modal size; a screen does not set its own form width.
+
+Nothing outside a `wt-modal` sets `--wt-field-max-width`, so a field on a page, or in a `wt-dialog`
+that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
+inside a modal's body inherits the cap. Page forms are bounded by their screen's own column instead
+(the setup wizard's raised column, and the `max-width` of screens such as backup, receipt and sign-in),
+so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
+still takes the body's whole width.
+
+A screen whose own layout makes a row of fields grow to fill the modal reads the same variable on
+that row, so a button beside a field stays beside it: the Printers screen's `.field-row` does, for the
+calibration wizard's "Print block" button. Guards: the form-width cases in
+`packages/ui/src/components/wt-modal.test.ts` (every shared field and the message at 1280px, wide
+content and the footer row at full width, each field at the body's width at 390px, each field at its
+container's width outside a modal) and the calibration case in
+`apps/dashboard/src/screens/printers-screen.test.ts`. A new field primitive that does not read
+`--wt-field-max-width` is seen by none of them, and neither is a screen-styled native control such
+as the product editor's description `<textarea>`.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
@@ -414,7 +442,8 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.
 
-Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`64rem`) bounded by the
+Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
+above). Its width is `--wt-modal-max-width` (`64rem`) bounded by the
 viewport minus its side margins, and it fills the viewport height with 24px top and bottom margins.
 Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
 (`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
