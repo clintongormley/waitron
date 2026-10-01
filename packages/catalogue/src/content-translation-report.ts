@@ -69,8 +69,7 @@ export async function listTranslationGapReport(
   `);
   const rows = new Map<string, NamedRow>();
   for (const row of named.rows) rows.set(`${row.source}:${row.id}`, row);
-  const row = (source: string, id: string | null) =>
-    id === null ? undefined : rows.get(`${source}:${id}`);
+  const row = (source: string, id: string | null) => rows.get(`${source}:${id}`);
   const menuOf = (section: NamedRow) => row("catalogue", section.owner)!;
 
   const gap = (

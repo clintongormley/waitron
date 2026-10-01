@@ -136,10 +136,21 @@ describe("the missing-translations report", () => {
       const [small, large] = await setProductVariants(
         tx,
         parent.id,
-        [variant("STAFF Small"), variant("STAFF Large")],
+        [
+          variant("STAFF Small"),
+          variant("STAFF Large"),
+          { ...variant("STAFF Medium"), customerName: null },
+        ],
         "es",
       );
-      await setProductVariants(tx, parent.id, [small!], "es");
+      const medium = (
+        await setProductVariants(
+          tx,
+          parent.id,
+          [small!, { ...variant("STAFF Medium"), customerName: null }],
+          "es",
+        )
+      )[1]!;
       const [list] = await tx
         .insert(optionLists)
         .values({
@@ -147,6 +158,10 @@ describe("the missing-translations report", () => {
           customerName: { es: "CLIENT-ES Punto" },
           kitchenName: "K",
         })
+        .returning({ id: optionLists.id });
+      const [spice] = await tx
+        .insert(optionLists)
+        .values({ name: "STAFF Spice", kitchenName: "KITCHEN Spice" })
         .returning({ id: optionLists.id });
       const [label] = await tx
         .insert(optionLabels)
@@ -184,12 +199,20 @@ describe("the missing-translations report", () => {
         { kind: "product", id: parent.id, name: "STAFF Pan", reason: "absent" },
         {
           kind: "variant",
+          id: medium.id,
+          name: "STAFF Medium",
+          reason: "absent",
+          parent: { id: parent.id, name: "STAFF Pan" },
+        },
+        {
+          kind: "variant",
           id: small!.id,
           name: "STAFF Small",
           reason: "partial",
           parent: { id: parent.id, name: "STAFF Pan" },
         },
         { kind: "option_list", id: list!.id, name: "STAFF Doneness", reason: "partial" },
+        { kind: "option_list", id: spice!.id, name: "STAFF Spice", reason: "absent" },
         {
           kind: "option_label",
           id: label!.id,
@@ -222,6 +245,28 @@ describe("the missing-translations report", () => {
       expect((await report(tx))("es")).toEqual([
         { kind: "unit", id: unit!.id, name: "racció", reason: "partial" },
       ]);
+    });
+  });
+
+  it("lists a unit whose name has no text at all with an empty name", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, SPANISH_DEFAULT);
+      const [unit] = await tx
+        .insert(units)
+        .values({ name: {}, abbreviation: { es: "rac" }, precision: 0 })
+        .returning({ id: units.id });
+      expect((await report(tx))("es")).toEqual([
+        { kind: "unit", id: unit!.id, name: "", reason: "partial" },
+      ]);
+    });
+  });
+
+  it("orders two things with the same staff name by id", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const menu = await venue(tx);
+      const ids = [(await bread(tx, menu.id)).id, (await bread(tx, menu.id)).id];
+      expect((await report(tx))("ca").map((gap) => gap.id)).toEqual([...ids].sort());
     });
   });
 
