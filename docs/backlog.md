@@ -10081,8 +10081,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    has no tenant clause to be missing (`CLAUDE.md` §3) — but the location half is untouched and is
    NOT covered by item 3, which names a different set of verbs. All four are in
    `apps/server/src/working-order.ts` and were read on 2026-09-16 rather than inferred:
-   `markCollected` takes a `TillConfig` and discards it (`void cfg;`), then selects and updates on
-   `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
+   `markCollected` uses its `TillConfig` only to read a placed order's service mode (since B16,
+   2026-10-01), and selects and updates on `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
    only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, nor does
    `priceStoredOrder`, which calls it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`,
    which the filing sites in `till-sale.ts` and `working-order.ts` call. Named by function rather than by line, because the line numbers

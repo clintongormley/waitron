@@ -271,14 +271,15 @@ declare module "@waitron/shared" {
     /**
      * A working order this caller tried to send to prep (`sendToPrep`, the pickup mode) is not
      * `settled` (open, placed, abandoned, or absent — one code for all). A placed order enqueues its
-     * own prep at placing, so reaching here with one means the wrong path was called.
+     * own prep at placing, so reaching here with one means the wrong path was called. Also
+     * `markCollected`'s refusal of an order it may not hand over: absent, open, abandoned, a table
+     * party's bill, or placed in a mode that takes payment before sending.
      */
     "working_order.not_settled": { workingOrderId: string };
     /**
      * `markCollected` found the order ALREADY collected. Caught before the write because
      * `working_orders_enforce_transition` permits the `collected_at` stamp only from NULL, so a
-     * second stamp would surface as a raw trigger error. Not `not_settled`: a collected order is
-     * settled.
+     * second stamp would surface as a raw trigger error.
      */
     "working_order.already_collected": { workingOrderId: string };
     // `table.not_found` is declared in @waitron/db's errors.ts.
