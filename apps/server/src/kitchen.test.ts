@@ -113,6 +113,7 @@ describe("kitchen-station config", () => {
         displayOrder: 0,
         isDefault: false,
         active: true,
+        showsRestOfOrder: false,
         ...defaultThresholds,
       },
       {
@@ -121,6 +122,7 @@ describe("kitchen-station config", () => {
         displayOrder: 0,
         isDefault: false,
         active: true,
+        showsRestOfOrder: false,
         ...defaultThresholds,
       },
       {
@@ -129,6 +131,7 @@ describe("kitchen-station config", () => {
         displayOrder: 0,
         isDefault: false,
         active: true,
+        showsRestOfOrder: false,
         ...defaultThresholds,
       },
     ]);
@@ -167,6 +170,7 @@ describe("kitchen-station config", () => {
         displayOrder: 9,
         isDefault: false,
         active: true,
+        showsRestOfOrder: false,
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
