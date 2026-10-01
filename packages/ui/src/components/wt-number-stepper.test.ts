@@ -398,10 +398,10 @@ test("disabled locks the box and both buttons", async () => {
   expect(el.hasAttribute("disabled")).toBe(true);
 });
 
-test("a disabled stepper dims through the disabled-opacity token", async () => {
+test("a disabled stepper keeps its number at full opacity and dims its buttons through the disabled-opacity token", async () => {
   const el = await mount('<wt-number-stepper label="Q" value="2" disabled></wt-number-stepper>');
   host.style.setProperty("--wt-opacity-disabled", "0.3");
-  expect(getComputedStyle(parts(el).input).opacity).toBe("0.3");
+  expect(getComputedStyle(parts(el).input).opacity).toBe("1");
   expect(getComputedStyle(parts(el).plus).opacity).toBe("0.3");
 });
 
@@ -411,14 +411,16 @@ test("paints its buttons and field width from tokens", async () => {
   host.style.setProperty("--wt-stepper-field-width", "77px");
   expect(getComputedStyle(parts(el).plus).borderTopColor).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(parts(el).minus).borderTopColor).toBe("rgb(1, 2, 3)");
-  expect(getComputedStyle(parts(el).input).borderTopColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(parts(el).input).borderTopStyle).toBe("none");
   expect(getComputedStyle(parts(el).input).width).toBe("77px");
 });
 
-test("the invalid box paints its border from the danger token", async () => {
+test("the invalid box paints its bottom line and label from the danger token", async () => {
   const el = await mount('<wt-number-stepper label="Q" error="Bad"></wt-number-stepper>');
   host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
-  expect(getComputedStyle(parts(el).input).borderTopColor).toBe("rgb(13, 14, 15)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  expect(getComputedStyle(box(el)).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(parts(el).label!).color).toBe("rgb(13, 14, 15)");
 });
 
 test("the buttons and the box meet the tap target", async () => {
@@ -437,13 +439,17 @@ test("focusing the stepper focuses the number box, not the - button before it", 
   expect(el.shadowRoot!.activeElement).toBe(parts(el).input);
 });
 
-test("the buttons stand level with the number box, top and bottom", async () => {
+test("the buttons sit outside the number box, one each side, each a tap-target square centred on it", async () => {
   const el = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
-  const box = parts(el).input.getBoundingClientRect();
-  for (const button of [parts(el).minus, parts(el).plus]) {
-    const edge = button.getBoundingClientRect();
-    expect(Math.abs(edge.top - box.top)).toBeLessThan(0.5);
-    expect(Math.abs(edge.bottom - box.bottom)).toBeLessThan(0.5);
+  host.style.setProperty("--wt-tap-min", "47px");
+  const field = box(el).getBoundingClientRect();
+  const minus = parts(el).minus.getBoundingClientRect();
+  const plus = parts(el).plus.getBoundingClientRect();
+  expect(minus.right).toBeLessThanOrEqual(field.left);
+  expect(plus.left).toBeGreaterThanOrEqual(field.right);
+  for (const edge of [minus, plus]) {
+    expect([edge.width, edge.height]).toEqual([47, 47]);
+    expect(Math.abs(edge.top + edge.height / 2 - (field.top + field.height / 2))).toBeLessThan(0.5);
   }
 });
 
@@ -461,4 +467,135 @@ test("its baseline is the number's baseline, so a row aligned by baseline lines 
   const referenceTop = reference.shadowRoot!.querySelector("input")!.getBoundingClientRect().top;
   const stepperTop = parts(stepper).input.getBoundingClientRect().top;
   expect(Math.abs(referenceTop - stepperTop)).toBeLessThan(0.5);
+});
+
+// ── The filled field (A178) ──
+
+function box(el: Element): HTMLElement {
+  return el.shadowRoot!.querySelector<HTMLElement>(".field")!;
+}
+
+test("the number sits in a filled field box between the buttons, its label resting large inside it while empty", async () => {
+  const el = await mount('<wt-number-stepper label="Q"></wt-number-stepper>');
+  host.style.setProperty("--wt-field-height", "70px");
+  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
+  host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
+  host.style.setProperty("--wt-field-line-width", "1px");
+  const field = box(el);
+  const { input, label, minus, plus } = parts(el);
+  expect(field.getAttribute("part")).toBe("field");
+  expect(field.getAttribute("data-label")).toBe("rest");
+  expect(field.contains(input)).toBe(true);
+  expect(field.contains(label)).toBe(true);
+  expect(field.contains(minus)).toBe(false);
+  expect(field.contains(plus)).toBe(false);
+  expect(field.getBoundingClientRect().height).toBe(70);
+  expect(getComputedStyle(field).backgroundColor).toBe("rgb(8, 8, 8)");
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(7, 7, 7) 0px -1px 0px 0px inset");
+  expect(getComputedStyle(label!).fontSize).toBe("17px");
+});
+
+for (const [what, attrs] of [
+  ["a value", 'value="3"'],
+  ["a hint", 'hint="Optional"'],
+  ["a placeholder", 'placeholder="No limit"'],
+] as const) {
+  test(`with ${what}, the label floats small at the top of the box`, async () => {
+    const el = await mount(`<wt-number-stepper label="Q" ${attrs}></wt-number-stepper>`);
+    host.style.setProperty("--wt-font-size-sm", "11px");
+    expect(box(el).getAttribute("data-label")).toBe("float");
+    expect(getComputedStyle(parts(el).label!).fontSize).toBe("11px");
+    expect(parts(el).label!.getBoundingClientRect().top - box(el).getBoundingClientRect().top).toBe(
+      8,
+    );
+  });
+}
+
+test("a step floats the label of an empty stepper", async () => {
+  const el = await mount('<wt-number-stepper label="Q"></wt-number-stepper>');
+  expect(box(el).getAttribute("data-label")).toBe("rest");
+  parts(el).plus.click();
+  await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(box(el).getAttribute("data-label")).toBe("float");
+});
+
+test("the number paints from the field-value token, centred in the box", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
+  host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
+  expect(getComputedStyle(parts(el).input).color).toBe("rgb(31, 32, 33)");
+  expect(getComputedStyle(parts(el).input).textAlign).toBe("center");
+});
+
+test("focusing the number draws the focus line and label colour, and no focus ring on the number", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  parts(el).input.focus();
+  expect(getComputedStyle(box(el)).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(parts(el).label!).color).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(parts(el).input).outlineStyle).toBe("none");
+});
+
+test("invalid alone draws the danger line, and a valid stepper's box is unmarked", async () => {
+  const el = await mount('<wt-number-stepper label="Q" invalid></wt-number-stepper>');
+  const plain = await mount('<wt-number-stepper label="Q"></wt-number-stepper>');
+  expect(box(el).hasAttribute("data-invalid")).toBe(true);
+  expect(box(plain).hasAttribute("data-invalid")).toBe(false);
+});
+
+test("a disabled stepper's box paints its own paler fill, a dashed line and muted text", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="2" disabled></wt-number-stepper>');
+  host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  expect(box(el).hasAttribute("data-disabled")).toBe(true);
+  expect(getComputedStyle(box(el)).backgroundColor).toBe("rgb(21, 22, 23)");
+  expect(getComputedStyle(box(el), "::after").borderBottomStyle).toBe("dashed");
+  expect(getComputedStyle(parts(el).input).color).toBe("rgb(24, 25, 26)");
+});
+
+test("hide-label makes the box compact, the same height as the buttons", async () => {
+  const el = await mount('<wt-number-stepper label="Q" hide-label value="2"></wt-number-stepper>');
+  host.style.setProperty("--wt-tap-min", "47px");
+  expect(box(el).hasAttribute("data-compact")).toBe(true);
+  expect(box(el).getBoundingClientRect().height).toBe(47);
+  expect(parts(el).plus.getBoundingClientRect().height).toBe(47);
+  const labelled = await mount('<wt-number-stepper label="Q"></wt-number-stepper>');
+  expect(box(labelled).hasAttribute("data-compact")).toBe(false);
+});
+
+test("a stepper labelled with 40 characters keeps its box at --wt-stepper-field-width and its label on one line", async () => {
+  const long = "Cantidad máxima de raciones por pedido x";
+  const el = await mount(`<wt-number-stepper label="${long}" value="3"></wt-number-stepper>`);
+  host.style.setProperty("--wt-stepper-field-width", "77px");
+  const short = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
+  const text = (stepper: Element) =>
+    stepper.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+  expect(long).toHaveLength(40);
+  expect(box(el).getBoundingClientRect().width).toBe(77);
+  expect(getComputedStyle(text(el)).textOverflow).toBe("ellipsis");
+  expect(text(el).scrollWidth).toBeGreaterThan(text(el).clientWidth);
+  expect(text(el).scrollHeight).toBe(text(short).scrollHeight);
+  expect(parts(el).label!.getBoundingClientRect().right).toBeLessThanOrEqual(
+    box(el).getBoundingClientRect().right,
+  );
+});
+
+test("a required stepper keeps its star inside the box", async () => {
+  const el = await mount(
+    '<wt-number-stepper label="Cantidad máxima de raciones" required value="3"></wt-number-stepper>',
+  );
+  const star = el.shadowRoot!.querySelector("[data-required]")!.getBoundingClientRect();
+  expect(star.width).toBeGreaterThan(0);
+  expect(star.right).toBeLessThanOrEqual(box(el).getBoundingClientRect().right);
+});
+
+test("the label starts where the number's padding does, --wt-space-2 in from the box's edge", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
+  host.style.setProperty("--wt-space-2", "5px");
+  expect(parts(el).label!.getBoundingClientRect().left - box(el).getBoundingClientRect().left).toBe(
+    5,
+  );
+  expect(getComputedStyle(parts(el).input).paddingLeft).toBe("5px");
 });

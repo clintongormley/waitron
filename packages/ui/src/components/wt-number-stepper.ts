@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -15,80 +16,52 @@ export class WtNumberStepper extends LitElement {
 
   static override styles = [
     baseStyles,
+    fieldStyles,
     css`
       :host {
         display: inline-grid;
         max-width: var(--wt-field-max-width);
       }
 
-      .label-row {
-        display: flex;
-        align-items: center;
-        margin-bottom: var(--wt-space-1);
-      }
-
-      label {
-        display: block;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
       .control {
         display: grid;
         grid-template-columns: auto auto auto;
         justify-content: start;
-      }
-
-      input,
-      button {
-        min-height: var(--wt-tap-min);
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
+        align-items: center;
+        gap: var(--wt-space-1);
       }
 
       /* The only item aligned by baseline, so the element's baseline is the number's — a row
-         aligned by baseline lines the text up — while the buttons stretch level with the box. */
-      input {
+         aligned by baseline lines the text up — while the buttons centre on the box. */
+      .field {
         align-self: baseline;
+      }
+
+      .field-label {
+        inset-inline: var(--wt-space-2);
+      }
+
+      .field-control {
         width: var(--wt-stepper-field-width);
-        min-width: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-        border-inline-width: 0;
+        padding-inline: var(--wt-space-2);
         text-align: center;
-        text-overflow: ellipsis;
-      }
-
-      input::placeholder {
-        color: var(--wt-color-text-muted);
-      }
-
-      input[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-        border-inline-width: 1px;
       }
 
       button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: var(--wt-tap-min);
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
         padding: 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
         cursor: pointer;
       }
 
-      button[data-step="-1"] {
-        border-start-start-radius: var(--wt-radius-md);
-        border-end-start-radius: var(--wt-radius-md);
-      }
-
-      button[data-step="1"] {
-        border-start-end-radius: var(--wt-radius-md);
-        border-end-end-radius: var(--wt-radius-md);
-      }
-
-      input:disabled,
       button:disabled {
         ${disabledStyles}
       }
@@ -175,20 +148,8 @@ export class WtNumberStepper extends LitElement {
     const atMin = current === null || current <= this.min;
     const atMax = this.max !== null && current !== null && current >= this.max;
     const showLabel = this.label !== "" && !this.hideLabel;
+    const invalid = this.invalid || hasError;
     return html`
-      ${
-        showLabel
-          ? html`<div class="label-row">
-              <label for=${inputId}
-                >${this.label}${
-                  this.required
-                    ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                    : nothing
-                }</label
-              >
-            </div>`
-          : nothing
-      }
       <div class="control">
         <button
           type="button"
@@ -199,19 +160,44 @@ export class WtNumberStepper extends LitElement {
         >
           <wt-icon name="minus"></wt-icon>
         </button>
-        <input
-          id=${inputId}
-          name=${this.name || nothing}
-          .value=${this.value}
-          inputmode="numeric"
-          placeholder=${this.placeholder || this.hint || nothing}
-          ?required=${this.required}
-          ?disabled=${this.disabled}
-          aria-label=${this.hideLabel && this.label ? this.label : nothing}
-          aria-invalid=${this.invalid || hasError}
-          aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
-          @input=${this.onInput}
-        />
+        <div
+          class="field"
+          part="field"
+          data-label=${fieldLabelState({
+            value: this.value,
+            hint: this.hint,
+            placeholder: this.placeholder,
+          })}
+          ?data-invalid=${invalid}
+          ?data-disabled=${this.disabled}
+          ?data-compact=${!showLabel}
+        >
+          ${
+            showLabel
+              ? html`<label class="field-label" for=${inputId}
+                  ><span class="field-label-text">${this.label}</span>${
+                    this.required
+                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
+                      : nothing
+                  }</label
+                >`
+              : nothing
+          }
+          <input
+            class="field-control"
+            id=${inputId}
+            name=${this.name || nothing}
+            .value=${this.value}
+            inputmode="numeric"
+            placeholder=${this.placeholder || this.hint || nothing}
+            ?required=${this.required}
+            ?disabled=${this.disabled}
+            aria-label=${this.hideLabel && this.label ? this.label : nothing}
+            aria-invalid=${invalid}
+            aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+            @input=${this.onInput}
+          />
+        </div>
         <button
           type="button"
           data-step="1"

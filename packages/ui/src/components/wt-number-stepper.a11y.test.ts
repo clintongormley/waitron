@@ -37,9 +37,9 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
       theme,
     );
     await expectNoA11yViolations(host);
-    const input = host.querySelector("wt-number-stepper")!.shadowRoot!.querySelector("input")!;
-    const placeholder = getComputedStyle(input, "::placeholder").color;
-    const field = getComputedStyle(input).backgroundColor;
+    const root = host.querySelector("wt-number-stepper")!.shadowRoot!;
+    const placeholder = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
+    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
@@ -86,6 +86,37 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
   test("disabled", async () => {
     await mountThemed(
       '<wt-number-stepper label="Max quantity" name="q" value="2" disabled></wt-number-stepper>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("resting label in an empty box", async () => {
+    await mountThemed('<wt-number-stepper label="Máximo" name="max"></wt-number-stepper>', theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("focused number", async () => {
+    const el = await mountThemed(
+      '<wt-number-stepper label="Máximo" name="max" value="3"></wt-number-stepper>',
+      theme,
+    );
+    el.focus();
+    expect(el.shadowRoot!.activeElement).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("invalid, with no error message", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Máximo" name="max" value="0" min="1" invalid></wt-number-stepper>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("a label longer than the box", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Cantidad máxima de raciones por pedido" name="max" value="3"></wt-number-stepper>',
       theme,
     );
     await expectNoA11yViolations(host);

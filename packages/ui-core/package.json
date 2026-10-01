@@ -41,6 +41,7 @@
     "./interactive": "./src/interactive.ts",
     "./submit-on-enter": "./src/submit-on-enter.ts",
     "./base-styles": "./src/base-styles.ts",
+    "./field-styles": "./src/field-styles.ts",
     "./tokens/colors.css": "./src/tokens/colors.css",
     "./tokens/structure.css": "./src/tokens/structure.css"
   },
@@ -106,6 +107,10 @@
       "./base-styles": {
         "types": "./dist/types/base-styles.d.ts",
         "import": "./dist/base-styles.js"
+      },
+      "./field-styles": {
+        "types": "./dist/types/field-styles.d.ts",
+        "import": "./dist/field-styles.js"
       },
       "./tokens/colors.css": "./dist/tokens/colors.css",
       "./tokens/structure.css": "./dist/tokens/structure.css"

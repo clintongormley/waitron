@@ -52,9 +52,9 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
       theme,
     );
     await expectNoA11yViolations(host);
-    const input = host.querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
-    const placeholder = getComputedStyle(input, "::placeholder").color;
-    const field = getComputedStyle(input).backgroundColor;
+    const root = host.querySelector("wt-price-input")!.shadowRoot!;
+    const placeholder = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
+    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
@@ -98,7 +98,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     await expectNoA11yViolations(host);
     const shadow = host.querySelector("wt-price-input")!.shadowRoot!;
     const sign = getComputedStyle(shadow.querySelector('[part~="currency"]')!).color;
-    const field = getComputedStyle(shadow.querySelector("input")!).backgroundColor;
+    const field = getComputedStyle(shadow.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(sign, field)).toBeGreaterThanOrEqual(4.5);
   });
 
@@ -108,9 +108,9 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
       theme,
     );
     await expectNoA11yViolations(host);
-    const input = host.querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
-    const placeholder = getComputedStyle(input, "::placeholder").color;
-    const field = getComputedStyle(input).backgroundColor;
+    const root = host.querySelector("wt-price-input")!.shadowRoot!;
+    const placeholder = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
+    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
@@ -120,6 +120,48 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
       theme,
     );
     await expectNoA11yViolations(host);
+  });
+
+  test("invalid, with no error message", async () => {
+    await mountThemed(
+      '<wt-price-input label="Precio" name="price" unit="kg" value="-1" invalid></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("resting label in an empty field", async () => {
+    await mountThemed(
+      '<wt-price-input label="Precio" name="price" unit="kg"></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("focused amount", async () => {
+    const el = await mountThemed(
+      '<wt-price-input label="Precio" name="price" unit="kg" locale="es-ES"></wt-price-input>',
+      theme,
+    );
+    el.focus();
+    expect(el.shadowRoot!.activeElement).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("disabled, with a fixed unit", async () => {
+    await mountThemed(
+      '<wt-price-input label="Precio" name="price" unit="%" fixed-unit value="10" disabled></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+    const unit = host.querySelector("wt-price-input")!.shadowRoot!.querySelector(".unit")!;
+    const shadow = host.querySelector("wt-price-input")!.shadowRoot!;
+    expect(
+      contrastRatio(
+        getComputedStyle(unit).color,
+        getComputedStyle(shadow.querySelector(".field")!).backgroundColor,
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   test("disabled", async () => {
