@@ -1336,6 +1336,13 @@ each of those files equalled the one before it once `id` and
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
 does not reproduce it.
 
+One generated migration also carries hand-written SQL and is not in that list:
+`packages/media/drizzle/0005_photo_name_only.sql`. Drizzle generated its rebuild of `media_images`;
+the drop of media's eleven reference triggers and the copy of `media_image_data` aside before it,
+and the restore of the bytes and the re-creation of the triggers after it, are hand-written, so a
+regeneration must paste both parts back around the regenerated rebuild. It is kept as one file so
+no migration step leaves `media_image_data` empty.
+
 ## Drizzle picks what to apply from `max(created_at)` alone
 
 Never from a position in the journal file, so an entry whose `when` sits AT OR BELOW one the database

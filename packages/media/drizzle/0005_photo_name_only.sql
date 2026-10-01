@@ -2,11 +2,15 @@
 -- drizzle rebuilds the table, and inside the migrator's transaction that rebuild breaks two things
 -- a venue holds (`docs/developers/conventions-data.md`, the two rebuild sections):
 --
---   * the rename that ends the rebuild fails while a trigger BODY reads `media_images`, so every
---     media trigger goes first and comes back last, as `0001`–`0003` wrote them (`0001`'s header
---     says why they are triggers);
+--   * the rename that ends the rebuild fails while a trigger BODY reads `media_images` (the five on
+--     `products`, `sections` and `menu_version_images`), and `DROP TABLE` silently drops the six
+--     ON `media_images` itself, so every media trigger goes first and comes back last, as
+--     `0001`–`0003` wrote them (`0001`'s header says why they are triggers);
 --   * `DROP TABLE` deletes every `media_image_data` row through its `ON DELETE CASCADE` key, so the
 --     bytes are copied out first and put back after.
+--
+-- Drizzle generated the rebuild in the middle; everything before and after it is hand-written, and
+-- a regeneration must paste both parts back around the regenerated rebuild.
 
 DROP TRIGGER products_media_image_fk_insert;
 --> statement-breakpoint

@@ -988,22 +988,6 @@ What that leaves open:
   have no alt text and nothing ever surfaces it, which is the accessibility cost of the fix.
   **Next action:** decide whether the library should mark pictures with missing alt text, the way the
   translation-gap check marks missing names. Cheap to add; it just has not been decided.
-
-**A photo has a name and nothing else — DONE (2026-10-01, lane A's A157; owner, 2026-09-30: "y" to
-removing alt text, then "y" to removing photo labels).** No customer-facing screen shows a photo
-today, and where one will, the photo sits beside the dish's name, so its alt text belongs empty
-there; one photo can also serve several products. Photo labels were free text per photo used only
-by the library's "Filter by label" dropdown and a small search weight, and shared a word with
-product labels, which confused the owner. Removed: the `alt_text` and `labels` columns of
-`media_images` (media migration `0005_photo_name_only.sql`), their routes, the
-`GET /management-api/image-labels` route and its live query, the library's fields and filter, the
-configuration export and import of both, the demo seed and the strings. The library thumbnail's and
-the upload preview's `alt` is now the photo's name in the viewer's language. Product labels are
-untouched. The migration drops media's eleven reference triggers, copies `media_image_data` aside,
-runs drizzle's rebuild, puts the bytes back and recreates the triggers: drizzle's file as generated
-failed its rename on an upgraded database with `no such table: main.media_images`, and without the
-copy the rebuild's `DROP TABLE` emptied `media_image_data` through its cascading key
-(`packages/media/src/schema/name-only-upgrade.test.ts`).
 - **A whole screen shipped broken through the full ceremony, and the reason is worth keeping.** #339
   went through `finish-branch`, an independent review, and green CI, and the first person to open the
   screen got a 500. Every layer read code or ran tests; none opened the page. The test-shape lesson —
@@ -1014,6 +998,22 @@ copy the rebuild's `DROP TABLE` emptied `media_image_data` through its cascading
   nothing checking that it renders, so open it in the browser packages' real Chromium. **Next action:**
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
   crosses them proves less than it looks. That is a different rule and wants its own line.
+
+**A photo has a name and nothing else — DONE (2026-10-01, lane A's A157; owner, 2026-09-30: "y" to
+removing alt text, then "y" to removing photo labels).** No customer-facing screen shows a photo
+today, and where one will, the photo sits beside the dish's name, so its alt text belongs empty
+there; one photo can also serve several products. Photo labels were free text per photo used only
+by the library's "Filter by label" dropdown and a small search weight, and shared a word with
+product labels, which confused the owner. Removed: the `alt_text` and `labels` columns of
+`media_images` (media migration `0005_photo_name_only.sql`), their handling in the upload and edit routes, the
+`GET /management-api/image-labels` route and its live query, the library's fields and filter, the
+configuration export and import of both, the demo seed and the strings. The library thumbnail's and
+the upload preview's `alt` is now the photo's name in the viewer's language. Product labels are
+untouched. The migration drops media's eleven reference triggers, copies `media_image_data` aside,
+runs drizzle's rebuild, puts the bytes back and recreates the triggers: drizzle's file as generated
+failed its rename on an upgraded database with `no such table: main.media_images`, and without the
+copy the rebuild's `DROP TABLE` emptied `media_image_data` through its cascading key
+(`packages/media/src/schema/name-only-upgrade.test.ts`).
 
 **Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is
 resized to at most 1600 pixels on its longer side, turned upright, stripped of its metadata (GPS
@@ -8486,10 +8486,10 @@ approved.
   - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
     `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
     characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
-    the NUL; closing it needs a migration. ~~Configuration import refuses an image whose
-    default-language alt text is blank while an upload leaves alt text optional~~ — confirmed by
-    running it, then gone with alt text (2026-10-01, A157): an upload with no alt text exported
-    `"{}"` and the import refused it with `image.invalid_metadata`.
+    the NUL; closing it needs a migration. **DONE (2026-10-01, A157):** configuration import
+    refused an image whose default-language alt text was blank while an upload left alt text
+    optional — confirmed by running it, then gone with alt text: an upload with no alt text
+    exported `"{}"` and the import refused it with `image.invalid_metadata`.
   - Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only
     change. `reorder.test.ts`'s test names say an out-of-range move "clamps"; `reorder()` ignores
     it. #616 fixed the till's copies of "a `wt-button` forwards only `disabled`/`aria-label`",

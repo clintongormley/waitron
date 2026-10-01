@@ -869,6 +869,21 @@ it("refuses a bundle whose photo still carries alt text and labels, as it refuse
     code: "setup.request_invalid",
     params: { field: "table:media_images" },
   });
+  const invented = {
+    ...transferred,
+    tables: { ...transferred.tables, media_images: [{ ...row, caption: "Pan" }] },
+  };
+  await expect(
+    applyVenue(planVenue(venue("B77665544"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, invented, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "table:media_images" },
+  });
 });
 
 it("carries a device profile's home layout choice, remapped to the imported menu and layout", async () => {

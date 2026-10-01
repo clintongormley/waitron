@@ -372,6 +372,7 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
       names: { fr: "Baguette" },
       altText: { fr: "Une baguette" },
       labels: ["Food"],
+      extra: "ignored",
     }),
   });
   expect(edited.status).toBe(200);
@@ -388,6 +389,7 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
   stale.set("names", JSON.stringify({ fr: "Miche" }));
   stale.set("altText", JSON.stringify({ fr: "Une miche" }));
   stale.set("labels", JSON.stringify(["Food"]));
+  stale.set("extra", "ignored");
   const second = await app.request("/management-api/images", {
     method: "POST",
     headers,
@@ -397,4 +399,5 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
   const stored = ((await second.json()) as { image: Record<string, unknown> }).image;
   expect(stored).not.toHaveProperty("altText");
   expect(stored).not.toHaveProperty("labels");
+  expect(stored).not.toHaveProperty("extra");
 });

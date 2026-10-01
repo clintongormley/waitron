@@ -89,9 +89,8 @@ Editing this shared record changes the metadata wherever that photograph is reus
 The photograph stays in the library for your other products.
 
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
-product variant, category or section still uses it, deletion is blocked. You see links to those
-products, including inactive products, to those categories, and to those sections, a section
-shown by its internal name. Remove the photograph from each of them before trying deletion again. A
+product variant or section still uses it, deletion is blocked. You see links to those products,
+including inactive products, and to those sections, a section shown by its internal name. Remove the photograph from each of them before trying deletion again. A
 section's link opens its editor in **Products and menus**, **Sections**, where **Remove image**
 clears it when you save the section.
 
