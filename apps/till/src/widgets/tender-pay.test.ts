@@ -201,6 +201,28 @@ describe("till-tender-pay", () => {
     expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5" });
   });
 
+  it("confirms a total of 0.00 in cash with nothing typed, and by card", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct({ ...cafe, id: "agua", name: "Agua", unitPrice: "0.00" }, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("confirm-payment", (e) => spy((e as CustomEvent).detail));
+
+    click(el, ".pay");
+    await el.updateComplete;
+    expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(false);
+    click(el, ".confirm");
+    await el.updateComplete;
+    click(el, ".pay-card");
+    await el.updateComplete;
+    click(el, ".confirm");
+
+    expect(spy.mock.calls).toEqual([
+      [{ method: "cash", amount: "0" }],
+      [{ method: "card", amount: "0.00" }],
+    ]);
+  });
+
   it("does not emit confirm-payment for a short tender even if Confirm is force-clicked", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // total 3.00
