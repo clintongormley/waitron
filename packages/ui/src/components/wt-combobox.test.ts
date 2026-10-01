@@ -2404,3 +2404,163 @@ test("a touch tap on the label whose click arrives a task after the release stil
   expect(popup.matches(":popover-open")).toBe(false);
   expect(el.shadowRoot!.activeElement).toBe(trigger);
 });
+
+test('search="auto" dropping to the threshold while the list is open keeps it open, with the list taking the keys', async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Paper" search="auto"></wt-combobox>',
+    manyOptions(SEARCH_THRESHOLD + 1),
+  );
+  const { trigger, popup } = fieldParts(el);
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+  el.options = manyOptions(SEARCH_THRESHOLD);
+  await el.updateComplete;
+  await settle();
+  expect(el.shadowRoot!.querySelector(".search")).toBeNull();
+  expect(popup.matches(":popover-open")).toBe(true);
+  expect(el.shadowRoot!.activeElement).toBe(listbox(el));
+  expect(activeRowText(el, listbox(el))).toBe("Option 0");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, listbox(el))).toBe("Option 1");
+});
+
+test('search="auto" rising past the threshold while the list is open moves the keys to the new search box', async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Paper" search="auto"></wt-combobox>',
+    manyOptions(SEARCH_THRESHOLD),
+  );
+  const { trigger, popup } = fieldParts(el);
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(el.shadowRoot!.activeElement).toBe(listbox(el));
+  el.options = manyOptions(SEARCH_THRESHOLD + 1);
+  await el.updateComplete;
+  await settle();
+  expect(popup.matches(":popover-open")).toBe(true);
+  expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+  expect(activeRowText(el, searchBox(el))).toBe("Option 0");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, searchBox(el))).toBe("Option 1");
+});
+
+test("an option change while the list is open leaves focus on the trigger when it was there", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Paper" search="auto"></wt-combobox>',
+    manyOptions(SEARCH_THRESHOLD + 1),
+  );
+  const { trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  trigger.focus();
+  el.options = manyOptions(SEARCH_THRESHOLD);
+  await el.updateComplete;
+  await settle();
+  expect(popup.matches(":popover-open")).toBe(true);
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+/** Opens a list without a search box from the keyboard and moves to its last row. */
+async function openOnLastRow(html: string, count = 5): Promise<WtCombobox> {
+  const el = await mountWith(html, manyOptions(count));
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}{End}");
+  expect(activeRowText(el, listbox(el))).toBe(`Option ${count - 1}`);
+  return el;
+}
+
+test("a shortened option list moves the active row to the first row when the active option is gone", async () => {
+  const el = await openOnLastRow('<wt-combobox label="Paper" search="never"></wt-combobox>');
+  el.options = manyOptions(1);
+  await el.updateComplete;
+  expect(activeRowText(el, listbox(el))).toBe("Option 0");
+  await userEvent.keyboard("{Enter}");
+  expect(el.value).toBe("0");
+});
+
+test("a changed option list keeps the same option active when it is still there", async () => {
+  const el = await openOnLastRow('<wt-combobox label="Paper" search="never"></wt-combobox>');
+  el.options = manyOptions(5).slice(2);
+  await el.updateComplete;
+  expect(activeRowText(el, listbox(el))).toBe("Option 4");
+  await userEvent.keyboard("{ArrowUp}");
+  expect(activeRowText(el, listbox(el))).toBe("Option 3");
+});
+
+test("a changed option list that drops the active option moves to the chosen row", async () => {
+  const el = await openOnLastRow(
+    '<wt-combobox label="Paper" search="never" value="1"></wt-combobox>',
+  );
+  el.options = manyOptions(3);
+  await el.updateComplete;
+  expect(activeRowText(el, listbox(el))).toBe("Option 1");
+});
+
+test("an emptied option list leaves no row active", async () => {
+  const el = await openOnLastRow('<wt-combobox label="Paper" search="never"></wt-combobox>');
+  el.options = [];
+  await el.updateComplete;
+  expect(listbox(el).hasAttribute("aria-activedescendant")).toBe(false);
+});
+
+test("a changed option list leaves a list opened by a click with no row active", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Paper" search="never"></wt-combobox>',
+    manyOptions(5),
+  );
+  await userEvent.click(fieldParts(el).trigger);
+  el.options = manyOptions(3);
+  await el.updateComplete;
+  expect(listbox(el).hasAttribute("aria-activedescendant")).toBe(false);
+});
+
+test("a changed option list keeps the add row active while it is still offered", async () => {
+  const el = await mountWith('<wt-combobox label="Paper" allow-add></wt-combobox>', manyOptions(5));
+  const added = vi.fn();
+  el.addEventListener("wt-combobox-add", added);
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("Zed");
+  expect(activeRowText(el, searchBox(el))).toBe("Add 'Zed'");
+  el.options = [...manyOptions(3), { value: "zed-one", label: "Zed one" }];
+  await el.updateComplete;
+  expect(activeRowText(el, searchBox(el))).toBe("Add 'Zed'");
+  await userEvent.keyboard("{Enter}");
+  expect(added).toHaveBeenCalledOnce();
+  expect(el.value).toBe("");
+});
+
+test("a changed option list that stops offering the active add row moves to the first row", async () => {
+  const el = await mountWith('<wt-combobox label="Paper" allow-add></wt-combobox>', manyOptions(5));
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("Zed");
+  expect(activeRowText(el, searchBox(el))).toBe("Add 'Zed'");
+  el.options = [...manyOptions(3), { value: "zed", label: "Zed" }];
+  await el.updateComplete;
+  expect(activeRowText(el, searchBox(el))).toBe("Zed");
+});
+
+for (const search of ["always", "never"] as const) {
+  test(`the arrow keys on the trigger of an open list (search="${search}") move the active row and focus back into the list`, async () => {
+    const el = await mountWith(
+      `<wt-combobox label="Paper" search="${search}"></wt-combobox>`,
+      manyOptions(5),
+    );
+    const { trigger, popup } = fieldParts(el);
+    await userEvent.click(trigger);
+    trigger.focus();
+    const owner = search === "always" ? searchBox(el) : listbox(el);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(owner);
+    expect(activeRowText(el, owner)).toBe("Option 0");
+    for (const [key, row] of [
+      ["{ArrowUp}", "Option 4"],
+      ["{Home}", "Option 0"],
+      ["{End}", "Option 4"],
+    ] as const) {
+      trigger.focus();
+      await userEvent.keyboard(key);
+      expect(activeRowText(el, owner), key).toBe(row);
+      expect(el.shadowRoot!.activeElement).toBe(owner);
+    }
+  });
+}

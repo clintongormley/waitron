@@ -294,9 +294,13 @@ export class WtCombobox extends LitElement {
   }
 
   private get filteredOptions(): ComboboxOption[] {
+    return this.filter(this.options);
+  }
+
+  private filter(options: ComboboxOption[]): ComboboxOption[] {
     const query = this.searchText.trim().toLowerCase();
-    if (!query) return this.options;
-    return this.options.filter((option) => option.label.toLowerCase().includes(query));
+    if (!query) return options;
+    return options.filter((option) => option.label.toLowerCase().includes(query));
   }
 
   private get trimmedSearch(): string {
@@ -410,7 +414,7 @@ export class WtCombobox extends LitElement {
   }
 
   /** The arrows wrap at both ends; ArrowUp with no row active goes to the last row. An index left
-   * past the end by a shorter list counts as the last row. */
+   * past the end of the rows counts as the last row. */
   private async moveActive(key: NavigationKey): Promise<void> {
     const count = this.rowCount;
     const current = Math.min(this.activeIndex, count - 1);
@@ -501,8 +505,22 @@ export class WtCombobox extends LitElement {
     return this.rowCount > 0 ? 0 : -1;
   }
 
+  /** The panel's control that takes the keys: the search box, or the list when there is none. */
+  private focusPanelControl(): void {
+    (this.searchInput ?? this.listbox).focus();
+  }
+
   private onTriggerKeydown(event: KeyboardEvent): void {
-    if (this.disabled || this.popup.matches(":popover-open")) {
+    const open = this.popup.matches(":popover-open");
+    if (open && isNavigationKey(event.key)) {
+      // Focus can be back on the trigger while the list is open (onPanelFocusout allows it); the
+      // panel's control is where the rest of the keys are handled.
+      event.preventDefault();
+      this.focusPanelControl();
+      void this.moveActive(event.key);
+      return;
+    }
+    if (this.disabled || open) {
       this.onKeydown(event);
       return;
     }
@@ -538,7 +556,7 @@ export class WtCombobox extends LitElement {
     else this.activeIndex = this.rowCount > 0 ? 0 : -1;
     // Opening synchronously makes its dimensions available before the first paint.
     this.popup.showPopover();
-    (this.searchInput ?? this.listbox).focus();
+    this.focusPanelControl();
     // The search text changes the rows, so measure the re-rendered list. The await resolves on a
     // microtask, still ahead of the frame this paints.
     await this.updateComplete;
@@ -572,7 +590,31 @@ export class WtCombobox extends LitElement {
     this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
   }
 
+  /** Set while a render runs with focus in the panel. A render can swap the panel's control
+   * (`search="auto"` crossing the threshold), and the focus lost with the old one must neither close
+   * the list nor stay on a list that no longer handles keys. */
+  private keepingPanelFocus = false;
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    this.keepingPanelFocus = Boolean(this.popup?.contains(this.shadowRoot!.activeElement));
+    if (changed.has("options") && this.activeIndex >= 0) {
+      // The active row follows its option by value, and the add row stays active while it is shown;
+      // failing that, the chosen row, else the first.
+      const previous = this.filter(changed.get("options") as ComboboxOption[])[this.activeIndex];
+      const kept = previous
+        ? this.filteredOptions.findIndex((option) => option.value === previous.value)
+        : this.showAddRow
+          ? this.filteredOptions.length
+          : -1;
+      this.activeIndex = kept >= 0 ? kept : this.chosenIndex;
+    }
+  }
+
   override updated(changed: PropertyValues<this>): void {
+    if (this.keepingPanelFocus) {
+      this.keepingPanelFocus = false;
+      this.focusPanelControl();
+    }
     // Disabling only stops the trigger, so a panel already open stays on screen and usable. Closing
     // it here takes the whole interaction away at once; commitSelection and addNew refuse
     // separately, for the reason stated at commitSelection.
@@ -630,6 +672,7 @@ export class WtCombobox extends LitElement {
 
   /** Focus that leaves both the panel and the trigger closes the list, as it would a select. */
   private onPanelFocusout(event: FocusEvent): void {
+    if (this.keepingPanelFocus) return;
     const next = event.relatedTarget as Node | null;
     if (next !== null && (this.popup.contains(next) || next === this.trigger)) return;
     if (this.popup.matches(":popover-open")) this.popup.hidePopover();
