@@ -10,7 +10,11 @@ import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
-import { holdPageCursor, pointerElementsAt, releasePageCursor } from "./reorder-table.js";
+import {
+  holdPageCursor,
+  pointerElementsAt,
+  releasePageCursor,
+} from "@waitron/ui/src/reorder-table.js";
 import {
   modifierListName,
   modifierListNames,
