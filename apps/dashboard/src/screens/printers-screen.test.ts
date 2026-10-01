@@ -1,7 +1,11 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption as pickOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
@@ -352,9 +356,7 @@ function toggleSwitch(el: PrintersScreen, sel: string, checked: boolean): void {
 }
 
 async function chooseOption(el: PrintersScreen, name: string, value: string): Promise<void> {
-  const select = q(el, `select[name="${name}"]`) as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  await pickOption(q(el, `wt-combobox[name="${name}"]`)!, value);
   await flush(el);
 }
 
@@ -377,7 +379,7 @@ describe("guided printer calibration", () => {
         const progress = () => text(el, "[data-test=edit-printer-modal] p[role=status]");
         expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
         expect(text(el, "[data-test=print-ruler-p1]")).toBe(t("printers.ruler_print"));
-        expect(q(el, 'select[name="printer-ruler-number"]')?.checkVisibility()).toBe(true);
+        expect(q(el, 'wt-combobox[name="printer-ruler-number"]')?.checkVisibility()).toBe(true);
         expect(progress()).toBe(locale === "en" ? "Step 1 of 3" : "Paso 1 de 3");
         q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
@@ -405,9 +407,13 @@ describe("guided printer calibration", () => {
         .mockResolvedValue([{ ...printers[0]!, paperWidth: "58mm", resolution: "203dpi" }]),
     });
     const el = await openCalibration(api);
-    expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
-    expect((q(el, 'select[name="printer-resolution"]') as HTMLSelectElement).value).toBe("203dpi");
-    expect((q(el, 'select[name="printer-ruler-number"]') as HTMLSelectElement).value).toBe("");
+    expect((q(el, 'wt-combobox[name="printer-paper-width"]') as HTMLSelectElement).value).toBe(
+      "58mm",
+    );
+    expect((q(el, 'wt-combobox[name="printer-resolution"]') as HTMLSelectElement).value).toBe(
+      "203dpi",
+    );
+    expect((q(el, 'wt-combobox[name="printer-ruler-number"]') as HTMLSelectElement).value).toBe("");
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     q(el, "[data-test=print-sample-receipt-p1]")!.click();
@@ -423,6 +429,53 @@ describe("guided printer calibration", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
+  it("asks the width step's three questions in labelled dropdowns showing the printer's saved settings", async () => {
+    const api = stubApi({
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue([{ ...printers[0]!, paperWidth: "58mm", resolution: "203dpi" }]),
+    });
+    const el = await openCalibration(api);
+    type Combobox = HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      label: string;
+      placeholder: string;
+    };
+    const ruler = q(el, 'wt-combobox[name="printer-ruler-number"]') as Combobox;
+    const paper = q(el, 'wt-combobox[name="printer-paper-width"]') as Combobox;
+    const resolution = q(el, 'wt-combobox[name="printer-resolution"]') as Combobox;
+    expect(ruler.label).toBe(t("printers.ruler_last_number"));
+    expect(ruler.placeholder).toBe(t("printers.test_answer_choose"));
+    expect(ruler.options).toEqual([
+      { value: "", label: t("printers.test_answer_choose") },
+      { value: "360", label: "360" },
+      { value: "384", label: "384" },
+      { value: "512", label: "512" },
+      { value: "576", label: "576" },
+    ]);
+    expect(ruler.value).toBe("");
+    expect(paper.label).toBe(t("printers.paper_width"));
+    expect(paper.options).toEqual([
+      { value: "80mm", label: t("printers.paper_width_80") },
+      { value: "58mm", label: t("printers.paper_width_58") },
+    ]);
+    expect(paper.value).toBe("58mm");
+    expect(resolution.label).toBe(t("printers.resolution"));
+    expect(resolution.options).toEqual([
+      { value: "180dpi", label: t("printers.test_qr_45") },
+      { value: "203dpi", label: t("printers.test_qr_40") },
+    ]);
+    expect(resolution.value).toBe("203dpi");
+    expect(text(el, "[data-test=calibration-qr-question]")).toBe(t("printers.test_qr_help"));
+
+    await chooseOption(el, "printer-ruler-number", "512");
+    expect(paper.value).toBe("80mm");
+    expect(ruler.value).toBe("512");
+    await chooseOption(el, "printer-resolution", "180dpi");
+    expect(resolution.value).toBe("180dpi");
+  });
+
   it.each([
     ["360", "180dpi", "58mm"],
     ["384", "203dpi", "58mm"],
@@ -435,7 +488,7 @@ describe("guided printer calibration", () => {
       const el = await openCalibration(api);
       await chooseOption(el, "printer-ruler-number", rulerNumber!);
       await chooseOption(el, "printer-resolution", resolution!);
-      expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe(
+      expect((q(el, 'wt-combobox[name="printer-paper-width"]') as HTMLSelectElement).value).toBe(
         paperWidth,
       );
       expect(q(el, "[data-test=ruler-disagrees]")).toBeNull();
@@ -478,14 +531,16 @@ describe("guided printer calibration", () => {
     const el = await openCalibration(stubApi());
     await chooseOption(el, "printer-ruler-number", "360");
     await chooseOption(el, "printer-ruler-number", "");
-    expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
+    expect((q(el, 'wt-combobox[name="printer-paper-width"]') as HTMLSelectElement).value).toBe(
+      "58mm",
+    );
     expect(q(el, "[data-test=ruler-disagrees]")).toBeNull();
   });
 
   it("does not continue or save when Enter is pressed on a wizard step that has no text field", async () => {
     const api = stubApi();
     const el = await openCalibration(api);
-    q(el, 'select[name="printer-ruler-number"]')!.dispatchEvent(
+    q(el, 'wt-combobox[name="printer-ruler-number"]')!.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
     );
     await flush(el);
@@ -518,9 +573,9 @@ describe("guided printer calibration", () => {
       el.shadowRoot!.appendChild(probe);
       const form = probe.getBoundingClientRect().width;
       const button = q(el, "[data-test=print-ruler-p1]")!.getBoundingClientRect();
-      const answer = q(el, 'select[name="printer-ruler-number"]')!.getBoundingClientRect();
-      const paper = q(el, 'select[name="printer-paper-width"]')!.getBoundingClientRect();
-      const resolution = q(el, 'select[name="printer-resolution"]')!.getBoundingClientRect();
+      const answer = q(el, 'wt-combobox[name="printer-ruler-number"]')!.getBoundingClientRect();
+      const paper = q(el, 'wt-combobox[name="printer-paper-width"]')!.getBoundingClientRect();
+      const resolution = q(el, 'wt-combobox[name="printer-resolution"]')!.getBoundingClientRect();
       const wide = q(el, '[data-test="calibration-step-1"]')!.getBoundingClientRect();
       expect(wide.width).toBeGreaterThan(form);
       expect(answer.width).toBeLessThan(form);
@@ -553,7 +608,9 @@ describe("guided printer calibration", () => {
     expect((q(el, '[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
     await chooseOption(el, "printer-paper-width", "80mm");
     expect(answer.value).toBe("");
-    expect(answer.selectedOptions[0]!.textContent!.trim()).toBe(t("printers.test_answer_choose"));
+    expect(answer.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
+      t("printers.test_answer_choose"),
+    );
   });
 
   it("opens the drawer only on an explicit test and records the operator's observation", async () => {
@@ -3767,7 +3824,9 @@ describe("printer layout settings", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openPrinter(el, "p1");
-    expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("80mm");
+    expect((q(el, 'wt-combobox[name="printer-paper-width"]') as HTMLSelectElement).value).toBe(
+      "80mm",
+    );
     await chooseOption(el, "printer-paper-width", "58mm");
     await chooseOption(el, "printer-resolution", "203dpi");
     q(el, "[data-test=save-printer-p1]")!.click();
@@ -5840,8 +5899,10 @@ describe("printers-screen Bluetooth pairing", () => {
       const { el, api } = await addAgain();
       expect(api.createPrinter).not.toHaveBeenCalled();
       expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p9", { active: true });
-      expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
-      expect((q(el, 'select[name="printer-resolution"]') as HTMLSelectElement).value).toBe(
+      expect((q(el, 'wt-combobox[name="printer-paper-width"]') as HTMLSelectElement).value).toBe(
+        "58mm",
+      );
+      expect((q(el, 'wt-combobox[name="printer-resolution"]') as HTMLSelectElement).value).toBe(
         "203dpi",
       );
       expect(

@@ -5,11 +5,11 @@ import {
   submitOnEnter,
   UrlStateController,
   baseStyles,
-  selectStyles,
   type DataTableColumn,
   type WtModal,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -161,7 +161,6 @@ export const DISCOVERY_RENEW_MS = 60_000;
 export class PrintersScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -266,7 +265,7 @@ export class PrintersScreen extends LitElement {
         gap: var(--wt-space-2);
       }
       /* A row of fields is one line of the form: in a modal it takes a field's width, so the button
-         beside a select stays beside it instead of at the modal's far edge. */
+         beside a field stays beside it instead of at the modal's far edge. */
       .field-row {
         display: flex;
         flex-wrap: wrap;
@@ -2486,64 +2485,56 @@ export class PrintersScreen extends LitElement {
               @click=${() => void this.#testPrint(p.id)}
               >${t("printers.ruler_print")}</wt-button
             >
-            <label class="setting-field">
-              ${t("printers.ruler_last_number")}
-              <select
-                name="printer-ruler-number"
-                @change=${(e: Event) => {
-                  this.rulerNumber = (e.target as HTMLSelectElement).value;
-                  const setting = SETTING_WIDTHS.find(
-                    ({ widthDots }) => String(widthDots) === this.rulerNumber,
-                  );
-                  if (setting) this.#editPrinter(p.id, { paperWidth: setting.paperWidth });
-                }}
-              >
-                <option value="" .selected=${this.rulerNumber === ""}>
-                  ${t("printers.test_answer_choose")}
-                </option>
-                ${SETTING_WIDTHS.map(
-                  ({ widthDots }) =>
-                    html`<option
-                      value=${widthDots}
-                      .selected=${this.rulerNumber === String(widthDots)}
-                    >
-                      ${widthDots}
-                    </option>`,
-                )}
-              </select>
-            </label>
+            <wt-combobox
+              name="printer-ruler-number"
+              label=${t("printers.ruler_last_number")}
+              search="auto"
+              placeholder=${t("printers.test_answer_choose")}
+              .options=${[
+                { value: "", label: t("printers.test_answer_choose") },
+                ...SETTING_WIDTHS.map(({ widthDots }) => ({
+                  value: String(widthDots),
+                  label: String(widthDots),
+                })),
+              ]}
+              .value=${this.rulerNumber}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                this.rulerNumber = e.detail.value;
+                const setting = SETTING_WIDTHS.find(
+                  ({ widthDots }) => String(widthDots) === this.rulerNumber,
+                );
+                if (setting) this.#editPrinter(p.id, { paperWidth: setting.paperWidth });
+              }}
+            ></wt-combobox>
           </div>
+          <p class="hint" data-test="calibration-qr-question">${t("printers.test_qr_help")}</p>
           <div class="field-row">
-            <label class="setting-field"
-              >${t("printers.paper_width")}
-              <select
-                name="printer-paper-width"
-                .value=${p.paperWidth}
-                @change=${(e: Event) => {
-                  this.rulerNumber = "";
-                  this.#editPrinter(p.id, {
-                    paperWidth: (e.target as HTMLSelectElement).value as PrintPaperWidth,
-                  });
-                }}
-              >
-                <option value="80mm">${t("printers.paper_width_80")}</option>
-                <option value="58mm">${t("printers.paper_width_58")}</option>
-              </select>
-            </label>
-            <label class="setting-field"
-              >${t("printers.test_qr_help")}
-              <select
-                name="printer-resolution"
-                .value=${p.resolution}
-                @change=${(e: Event) =>
-                  this.#editPrinter(p.id, {
-                    resolution: (e.target as HTMLSelectElement).value as PrintResolution,
-                  })}
-              >
-                <option value="180dpi">${t("printers.test_qr_45")}</option>
-                <option value="203dpi">${t("printers.test_qr_40")}</option>
-              </select>
-            </label>
+            <wt-combobox
+              name="printer-paper-width"
+              label=${t("printers.paper_width")}
+              search="auto"
+              .options=${[
+                { value: "80mm", label: t("printers.paper_width_80") },
+                { value: "58mm", label: t("printers.paper_width_58") },
+              ]}
+              .value=${p.paperWidth}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                this.rulerNumber = "";
+                this.#editPrinter(p.id, { paperWidth: e.detail.value as PrintPaperWidth });
+              }}
+            ></wt-combobox>
+            <wt-combobox
+              name="printer-resolution"
+              label=${t("printers.resolution")}
+              search="auto"
+              .options=${[
+                { value: "180dpi", label: t("printers.test_qr_45") },
+                { value: "203dpi", label: t("printers.test_qr_40") },
+              ]}
+              .value=${p.resolution}
+              @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                this.#editPrinter(p.id, { resolution: e.detail.value as PrintResolution })}
+            ></wt-combobox>
           </div>
           ${
             this.rulerNumber !== "" && Number(this.rulerNumber) !== settingDots
