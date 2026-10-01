@@ -33,9 +33,10 @@
 
   --wt-modal-max-width: 64rem;
   --wt-dialog-max-width: min(90vw, 48rem);
-  /* How wide a field in a wt-modal may grow. wt-modal hands it to its body as --wt-field-max-width;
-     outside a modal nothing sets that, so a field there is as wide as its container. */
+  /* How wide a field in a wt-modal may grow. Fields read --wt-field-max-width, which is none here and
+     which wt-modal sets to --wt-form-max-width on its body. */
   --wt-form-max-width: 36rem;
+  --wt-field-max-width: none;
 
   /* A modal's side margin and inline padding shrink on a phone so the width goes to its content.
      Fluid rather than a breakpoint: a media query cannot read a token, and the no-hardcoded-chrome

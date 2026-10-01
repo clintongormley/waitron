@@ -40,7 +40,7 @@ export const selectStyles = css`
     background: var(--wt-color-surface);
     color: var(--wt-color-text);
     width: 100%;
-    max-width: var(--wt-field-max-width, none);
+    max-width: var(--wt-field-max-width);
   }
 
   select[aria-invalid="true"] {
@@ -50,6 +50,6 @@ export const selectStyles = css`
   /* A select capped alone fits on its label text's line; capping the block label around it too keeps
      the select below that text and holds the hint and error to the same width. */
   label:has(select) {
-    max-width: var(--wt-field-max-width, none);
+    max-width: var(--wt-field-max-width);
   }
 `;

@@ -201,7 +201,7 @@ export class ProfileScreen extends LitElement {
       .select-field {
         display: grid;
         gap: var(--wt-space-1);
-        max-width: var(--wt-field-max-width, none);
+        max-width: var(--wt-field-max-width);
       }
       select[aria-invalid="true"] {
         border-color: var(--wt-color-danger);

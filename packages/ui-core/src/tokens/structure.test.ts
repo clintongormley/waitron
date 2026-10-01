@@ -44,6 +44,7 @@ test("defines the structural contract", () => {
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
     "--wt-form-max-width",
+    "--wt-field-max-width",
     "--wt-cell-name-max-width",
     "--wt-stepper-field-width",
     "--wt-stepper-field-width-wide",
@@ -64,6 +65,12 @@ test("the standard modal is 64rem wide, and a dialog keeps its own 48rem", () =>
   expect(token(el, "--wt-modal-max-width")).toBe("64rem");
   el.style.setProperty("--wt-modal-max-width", "10rem");
   expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
+});
+
+test("a modal's form is 36rem wide, and a field outside a modal has no cap", () => {
+  const el = mount();
+  expect(token(el, "--wt-form-max-width")).toBe("36rem");
+  expect(token(el, "--wt-field-max-width")).toBe("none");
 });
 
 test("a modal's form is narrower than the modal, and wider than a phone", () => {

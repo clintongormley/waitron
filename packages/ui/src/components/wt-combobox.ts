@@ -18,7 +18,7 @@ export class WtCombobox extends LitElement {
     css`
       :host {
         display: block;
-        max-width: var(--wt-field-max-width, none);
+        max-width: var(--wt-field-max-width);
       }
 
       .label-row {

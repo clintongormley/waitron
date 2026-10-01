@@ -15,7 +15,7 @@ export class ContentLanguageEditor extends LitElement {
     css`
       label,
       .error {
-        max-width: var(--wt-field-max-width, none);
+        max-width: var(--wt-field-max-width);
       }
       label {
         display: grid;

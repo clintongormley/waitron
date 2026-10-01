@@ -142,7 +142,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-font-family-mono` (text read or copied character by character, such as a key or a log line),
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
-`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`, `--wt-cell-name-max-width`,
+`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`, `--wt-field-max-width`,
+`--wt-cell-name-max-width`,
 `--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`
 

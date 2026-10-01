@@ -285,7 +285,7 @@ export class PrintersScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-3);
         align-items: flex-end;
-        max-width: var(--wt-field-max-width, none);
+        max-width: var(--wt-field-max-width);
       }
       .finder-examples {
         display: flex;
