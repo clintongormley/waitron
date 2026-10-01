@@ -23,6 +23,7 @@ export type { WtSpinnerSize } from "./components/wt-spinner.js";
 export { WtCard } from "./components/wt-card.js";
 export { WtDisclosure } from "./components/wt-disclosure.js";
 export { WtInput } from "./components/wt-input.js";
+export { WtTextarea } from "./components/wt-textarea.js";
 export { WtPriceInput } from "./components/wt-price-input.js";
 export { WtNumberStepper } from "./components/wt-number-stepper.js";
 export { WtFormActions, formMessage, formMessageStyles } from "./components/wt-form-actions.js";
@@ -77,7 +78,7 @@ export { UrlStateController, type UrlPathConfig } from "./url-state.js";
 
 export { WtRowActions } from "./components/wt-row-actions.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";
-export { WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
+export { DROPDOWN_ICONS, WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
 
 export { readableTextColor, isHexColor, CATEGORY_PALETTE } from "./category-color.js";
 

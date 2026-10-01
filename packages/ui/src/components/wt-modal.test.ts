@@ -9,6 +9,7 @@ import "./wt-combobox.js";
 import "./wt-price-input.js";
 import "./wt-number-stepper.js";
 import "./wt-switch.js";
+import "./wt-textarea.js";
 import "./wt-data-table.js";
 import type { WtDataTable } from "./wt-data-table.js";
 import { selectStyles } from "../base-styles.js";
@@ -144,6 +145,7 @@ const FIELDS = `<div style="display: grid">
   <wt-price-input label="Price" unit="€"></wt-price-input>
   <wt-number-stepper label="Guests"></wt-number-stepper>
   <wt-switch label="Active"></wt-switch>
+  <wt-textarea label="Notes"></wt-textarea>
   <div data-select></div>
 </div>`;
 
@@ -168,7 +170,7 @@ async function fieldsIn(root: ParentNode): Promise<HTMLElement[]> {
   shadow.innerHTML = SELECT_FIELD;
   const fields = [
     ...root.querySelectorAll<HTMLElement>(
-      "wt-input, wt-combobox, wt-price-input, wt-number-stepper, wt-switch",
+      "wt-input, wt-combobox, wt-price-input, wt-number-stepper, wt-switch, wt-textarea",
     ),
   ];
   for (const field of fields) await (field as WtModal).updateComplete;

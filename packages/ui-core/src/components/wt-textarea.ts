@@ -1,13 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
-@customElement("wt-input")
-export class WtInput extends LitElement {
-  // Delegates .focus() on the host to the inner <input> — a POS constantly needs to
-  // programmatically focus a specific field.
+@customElement("wt-textarea")
+export class WtTextarea extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
 
   static override styles = [
@@ -19,24 +17,27 @@ export class WtInput extends LitElement {
         max-width: var(--wt-field-max-width);
       }
 
-      .field.has-end .field-control {
-        padding-inline-end: calc(var(--wt-tap-min) + var(--wt-space-3));
+      /* The label's room is the box's padding, not the textarea's, so text the textarea scrolls
+         stays inside it and never runs under the floated label. */
+      .field:not([data-compact]) {
+        padding-top: calc(var(--wt-space-3) + var(--wt-font-size-sm));
       }
 
-      .field.has-end .field-label {
-        inset-inline-end: calc(var(--wt-tap-min) + var(--wt-space-3));
+      .field:not([data-compact]) .field-control {
+        padding-top: 0;
+        min-height: max(
+          var(--wt-tap-min),
+          calc(var(--wt-field-height) - var(--wt-space-3) - var(--wt-font-size-sm))
+        );
       }
 
-      .end {
-        display: none;
-        position: absolute;
-        inset-block: 0;
-        inset-inline-end: var(--wt-space-1);
-        align-items: center;
+      .field-control {
+        resize: vertical;
       }
 
-      .field.has-end .end {
-        display: flex;
+      /* A resting label sits where the first line of text will go, not in the middle of a tall box. */
+      .field[data-label="rest"]:not(:focus-within):not(:has(:autofill)) .field-label {
+        top: calc(var(--wt-field-height) / 2);
       }
     `,
   ];
@@ -44,77 +45,72 @@ export class WtInput extends LitElement {
   @property() value = "";
   @property() label = "";
   @property() name = "";
-  @property() type = "text";
-  @property() autocomplete = "";
-  @property() placeholder = "";
+  @property({ type: Number }) rows = 3;
   @property({ type: Number }) maxlength?: number;
+  @property() placeholder = "";
   @property() error = "";
-  /** Shown as the placeholder unless one is given, and kept as the input's description because a
+  /** Shown as the placeholder unless one is given, and kept as the textarea's description because a
    * placeholder disappears once the field holds a value. */
   @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, reflect: true }) invalid = false;
-  /** Names the input by `label` without drawing it, and makes the field compact. */
+  /** Names the textarea by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
-  @state() private hasEnd = false;
+  /** HTML reads `spellcheck="false"` as off; a plain Lit Boolean would read any present attribute as on. */
+  @property({ converter: { fromAttribute: (value: string | null) => value !== "false" } })
+  override spellcheck = true;
+  @property() override autocapitalize = "";
 
-  // Unnamed legacy fields retain a generated id. Named fields use the semantic name for both native
-  // attributes, so consumers never have to infer "email" from "wt-input-2". Each input owns its own
-  // shadow root, so repeated names do not collide with another field's label association.
-  private readonly generatedInputId = uniqueId("wt-input");
-  private readonly errorId = uniqueId("wt-input-error");
-  private readonly hintId = uniqueId("wt-input-hint");
+  private readonly generatedId = uniqueId("wt-textarea");
+  private readonly errorId = uniqueId("wt-textarea-error");
+  private readonly hintId = uniqueId("wt-textarea-hint");
 
   private onInput(event: Event): void {
-    this.value = (event.target as HTMLInputElement).value;
+    this.value = (event.target as HTMLTextAreaElement).value;
     dispatchWtChange(this, event, { value: this.value });
-  }
-
-  private onEndSlotChange(event: Event): void {
-    this.hasEnd = (event.target as HTMLSlotElement).assignedElements().length > 0;
   }
 
   override render() {
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
     const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
-    const inputId = this.name || this.generatedInputId;
+    const id = this.name || this.generatedId;
     const labelState = fieldLabelState({
       value: this.value,
       hint: this.hint,
       placeholder: this.placeholder,
-      type: this.type,
     });
     const showLabel = this.label !== "" && !this.hideLabel;
     return html`
       <div class="row">
         <div
-          class=${this.hasEnd ? "field has-end" : "field"}
+          class="field"
           part="field"
           data-label=${labelState}
           ?data-invalid=${this.invalid || hasError}
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
         >
-          ${showLabel ? fieldLabel(inputId, this.label, this.required) : nothing}
-          <input
+          ${showLabel ? fieldLabel(id, this.label, this.required) : nothing}
+          <textarea
             class="field-control"
-            id=${inputId}
+            part="control"
+            id=${id}
             name=${this.name || nothing}
+            rows=${this.rows}
             .value=${this.value}
-            type=${this.type}
-            autocomplete=${this.autocomplete || nothing}
             placeholder=${this.placeholder || this.hint}
             maxlength=${this.maxlength ?? nothing}
+            spellcheck=${this.spellcheck ? "true" : "false"}
+            autocapitalize=${this.autocapitalize || nothing}
             aria-label=${this.hideLabel && this.label ? this.label : nothing}
             ?required=${this.required}
             ?disabled=${this.disabled}
             aria-invalid=${this.invalid || hasError}
             aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
             @input=${this.onInput}
-          />
-          <slot class="end" name="end" @slotchange=${this.onEndSlotChange}></slot>
+          ></textarea>
         </div>
         <slot name="help"></slot>
       </div>
@@ -126,6 +122,6 @@ export class WtInput extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "wt-input": WtInput;
+    "wt-textarea": WtTextarea;
   }
 }

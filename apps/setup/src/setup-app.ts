@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { baseStyles } from "@waitron/ui";
+import { DROPDOWN_ICONS, baseStyles, registerIcons } from "@waitron/ui";
 import waitronLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
@@ -322,6 +322,8 @@ function describeConnectionFailure(error: unknown): ConnectionFailure {
     return { message: say("shell.connection.server_problem"), canRetry: true };
   return { message: say("shell.connection.unreachable"), canRetry: true };
 }
+
+registerIcons(DROPDOWN_ICONS);
 
 /**
  * The wizard's root. It owns the injected {@link SetupApi} and the request {@link SetupApp.draft}

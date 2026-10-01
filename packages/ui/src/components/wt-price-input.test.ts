@@ -165,10 +165,10 @@ test("a disabled field refuses typing and refuses to open the unit picker", asyn
   expect(unitClicks).toBe(0);
 });
 
-test("a disabled field dims via the disabled-opacity token", async () => {
+test("a disabled field keeps its amount at full opacity and dims the unit button via the disabled-opacity token", async () => {
   const el = await mount('<wt-price-input unit="kg" disabled></wt-price-input>');
   host.style.setProperty("--wt-opacity-disabled", "0.3");
-  expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).opacity).toBe("0.3");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).opacity).toBe("1");
   expect(getComputedStyle(el.shadowRoot!.querySelector("button.unit")!).opacity).toBe("0.3");
 });
 
@@ -271,14 +271,13 @@ test("a fixed unit is read out with the field, after any error", async () => {
   expect(input.getAttribute("aria-describedby")).toBe(`${error.id} ${unit.id}`);
 });
 
-test("a fixed unit paints its border and text from tokens, and stands as tall as the field", async () => {
+test("a fixed unit paints its text from tokens, with no border, and stands as tall as the field", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
-  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
   const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
   const input = el.shadowRoot!.querySelector("input")!;
   const styles = getComputedStyle(unit);
-  expect(styles.borderTopColor).toBe("rgb(1, 2, 3)");
+  expect(styles.borderTopStyle).toBe("none");
   expect(styles.color).toBe("rgb(4, 5, 6)");
   expect(styles.cursor).not.toBe("pointer");
   expect(unit.getBoundingClientRect().height).toBe(input.getBoundingClientRect().height);
@@ -292,14 +291,14 @@ test("a fixed unit is a tighter box than the unit button, padded by --wt-space-2
   expect([unit.paddingInlineStart, unit.paddingInlineEnd]).toEqual(["5px", "5px"]);
 });
 
-test("a fixed unit that is empty draws no unit box, and the field keeps its own trailing edge", async () => {
+test("a fixed unit that is empty draws no unit box, and the amount reaches the field box's trailing edge", async () => {
   const el = await mount("<wt-price-input fixed-unit></wt-price-input>");
-  host.style.setProperty("--wt-radius-md", "7px");
   const input = el.shadowRoot!.querySelector("input")!;
   expect(el.shadowRoot!.querySelector(".unit")).toBeNull();
   expect(input.hasAttribute("aria-describedby")).toBe(false);
-  expect(getComputedStyle(input).borderInlineEndWidth).toBe("1px");
-  expect(getComputedStyle(input).borderStartEndRadius).toBe("7px");
+  expect(input.getBoundingClientRect().right).toBe(
+    el.shadowRoot!.querySelector(".field")!.getBoundingClientRect().right,
+  );
 });
 
 test("the amount box is --wt-price-field-width wide when nothing stretches it", async () => {
@@ -310,24 +309,21 @@ test("the amount box is --wt-price-field-width wide when nothing stretches it", 
   expect(el.shadowRoot!.querySelector("input")!.getBoundingClientRect().width).toBe(91);
 });
 
-test("the amount box still fills a wider field", async () => {
+test("the amount box still fills a wider field, up to the unit button --wt-space-1 from its end", async () => {
   const el = await mount('<wt-price-input unit="kg" style="width: 400px"></wt-price-input>');
+  host.style.setProperty("--wt-space-1", "5px");
   const input = el.shadowRoot!.querySelector("input")!.getBoundingClientRect();
   const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
-  expect(input.width + unit.width).toBe(400);
+  expect(input.width + unit.width + 5).toBe(400);
 });
 
-test("a fixed unit joins the field with the field's own end border, and square corners at the seam", async () => {
+test("a fixed unit follows the amount directly, with no border at the seam", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
-  host.style.setProperty("--wt-radius-md", "7px");
-  const input = getComputedStyle(el.shadowRoot!.querySelector("input")!);
-  const unit = getComputedStyle(el.shadowRoot!.querySelector(".unit")!);
-  expect([
-    input.borderInlineEndWidth,
-    input.borderStartEndRadius,
-    input.borderEndEndRadius,
-  ]).toEqual(["1px", "0px", "0px"]);
-  expect([unit.borderInlineStartWidth, unit.borderStartEndRadius]).toEqual(["0px", "7px"]);
+  const input = el.shadowRoot!.querySelector("input")!;
+  const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+  expect(unit.getBoundingClientRect().left).toBe(input.getBoundingClientRect().right);
+  expect(getComputedStyle(input).borderInlineEndWidth).toBe("0px");
+  expect(getComputedStyle(unit).borderInlineStartWidth).toBe("0px");
 });
 
 test("exposes the amount and a fixed unit as parts, so a host can move the unit under the amount", async () => {
@@ -479,12 +475,14 @@ test("the currency sign paints from the muted-text token", async () => {
   expect(getComputedStyle(currency!).color).toBe("rgb(7, 8, 9)");
 });
 
-test("a disabled field dims its currency sign via the disabled-opacity token", async () => {
+test("a disabled field keeps its currency sign muted, at full opacity", async () => {
   const { currency } = await mountPrice(
     '<wt-price-input locale="en-GB" disabled></wt-price-input>',
   );
   host.style.setProperty("--wt-opacity-disabled", "0.3");
-  expect(getComputedStyle(currency!).opacity).toBe("0.3");
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(currency!).opacity).toBe("1");
+  expect(getComputedStyle(currency!).color).toBe("rgb(7, 8, 9)");
 });
 
 test("pressing the currency sign reaches the amount box beneath it", async () => {
@@ -527,11 +525,10 @@ test("changing the locale moves the sign to the side the new locale writes it, a
   expect(el.shadowRoot!.querySelector("input")!.hasAttribute("aria-describedby")).toBe(false);
 });
 
-test("with a locale the amount part is still the input, wider by its sign, and a fixed unit still joins the field's trailing edge", async () => {
+test("with a locale the amount part is still the input, wider by its sign, and a fixed unit still follows it directly", async () => {
   const { el, input, currency } = await mountPrice(
     '<wt-price-input unit="kg" fixed-unit locale="es-ES" style="display: inline-block"></wt-price-input>',
   );
-  host.style.setProperty("--wt-radius-md", "7px");
   host.style.setProperty("--wt-price-field-width", "91px");
   host.style.setProperty("--wt-space-1", "5px");
   expect(el.shadowRoot!.querySelector('[part~="amount"]')).toBe(input);
@@ -539,27 +536,26 @@ test("with a locale the amount part is still the input, wider by its sign, and a
   const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
   expect(box.width).toBeCloseTo(91 + currency!.getBoundingClientRect().width + 5, 1);
   expect([unit.top, unit.left]).toEqual([box.top, box.right]);
-  expect([
-    getComputedStyle(input).borderInlineEndWidth,
-    getComputedStyle(input).borderStartEndRadius,
-  ]).toEqual(["1px", "0px"]);
 });
 
 test("with a locale and a unit button, the amount box fills a wider field and meets the button", async () => {
   const { el, input } = await mountPrice(
     '<wt-price-input unit="kg" locale="en-GB" style="width: 400px"></wt-price-input>',
   );
+  host.style.setProperty("--wt-space-1", "5px");
   const box = input.getBoundingClientRect();
   const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
-  expect(box.width + unit.width).toBe(400);
-  expect(getComputedStyle(input).borderInlineEndWidth).toBe("0px");
+  expect(box.width + unit.width + 5).toBe(400);
+  expect(unit.left).toBe(box.right);
 });
 
-test("with a locale and no unit, the amount box keeps its own trailing edge", async () => {
-  const { input } = await mountPrice('<wt-price-input fixed-unit locale="en-GB"></wt-price-input>');
-  host.style.setProperty("--wt-radius-md", "7px");
-  expect(getComputedStyle(input).borderInlineEndWidth).toBe("1px");
-  expect(getComputedStyle(input).borderStartEndRadius).toBe("7px");
+test("with a locale and no unit, the amount box reaches the field box's trailing edge", async () => {
+  const { el, input } = await mountPrice(
+    '<wt-price-input fixed-unit locale="en-GB"></wt-price-input>',
+  );
+  expect(input.getBoundingClientRect().right).toBe(
+    el.shadowRoot!.querySelector(".field")!.getBoundingClientRect().right,
+  );
 });
 
 const unstretched = [
@@ -716,4 +712,307 @@ test("a hint shown as the placeholder paints from the muted-text token", async (
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   const input = el.shadowRoot!.querySelector("input")!;
   expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
+});
+
+// ── The filled field (A178) ──
+
+type Price = HTMLElementTagNameMap["wt-price-input"];
+
+function field(el: Element) {
+  const root = el.shadowRoot!;
+  return {
+    field: root.querySelector<HTMLElement>(".field")!,
+    label: root.querySelector<HTMLLabelElement>("label"),
+    input: root.querySelector("input")!,
+  };
+}
+
+test("draws the amount in a filled field box, its label resting large inside it while empty", async () => {
+  const el = await mount('<wt-price-input label="Price" unit="kg"></wt-price-input>');
+  host.style.setProperty("--wt-field-height", "70px");
+  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
+  host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
+  host.style.setProperty("--wt-field-line-width", "1px");
+  const { field: box, label, input } = field(el);
+  expect(box.getAttribute("part")).toBe("field");
+  expect(box.getAttribute("data-label")).toBe("rest");
+  expect(box.hasAttribute("data-compact")).toBe(false);
+  expect(box.getBoundingClientRect().height).toBe(70);
+  expect(getComputedStyle(box).backgroundColor).toBe("rgb(8, 8, 8)");
+  expect(getComputedStyle(box).boxShadow).toBe("rgb(7, 7, 7) 0px -1px 0px 0px inset");
+  expect(box.contains(label)).toBe(true);
+  expect(box.contains(input)).toBe(true);
+  expect(getComputedStyle(label!).fontSize).toBe("17px");
+  expect(getComputedStyle(input).borderTopStyle).toBe("none");
+  const boxRect = box.getBoundingClientRect();
+  const labelRect = label!.getBoundingClientRect();
+  expect(
+    Math.abs(labelRect.top + labelRect.height / 2 - (boxRect.top + boxRect.height / 2)),
+  ).toBeLessThanOrEqual(1);
+});
+
+for (const [what, attrs] of [
+  ["a value", 'value="9.00"'],
+  ["a hint", 'hint="Optional"'],
+  ["a placeholder", 'placeholder="4.50"'],
+] as const) {
+  test(`with ${what}, the label floats small at the top of the box`, async () => {
+    const el = await mount(`<wt-price-input label="Price" unit="kg" ${attrs}></wt-price-input>`);
+    host.style.setProperty("--wt-font-size-sm", "11px");
+    const { field: box, label } = field(el);
+    expect(box.getAttribute("data-label")).toBe("float");
+    expect(getComputedStyle(label!).fontSize).toBe("11px");
+    expect(label!.getBoundingClientRect().top - box.getBoundingClientRect().top).toBe(8);
+  });
+}
+
+test("a value set from code after the first render floats the label", async () => {
+  const el = await mount('<wt-price-input label="Price"></wt-price-input>');
+  expect(field(el).field.getAttribute("data-label")).toBe("rest");
+  (el as Price).value = "9.00";
+  await (el as Price).updateComplete;
+  expect(field(el).field.getAttribute("data-label")).toBe("float");
+});
+
+test("the amount paints its value from the field-value token", async () => {
+  const el = await mount('<wt-price-input label="Price" value="9.00"></wt-price-input>');
+  host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
+  expect(getComputedStyle(field(el).input).color).toBe("rgb(31, 32, 33)");
+});
+
+test("focusing the amount draws the focus line and label colour, and no focus ring on the amount", async () => {
+  const el = await mount('<wt-price-input label="Price" unit="kg"></wt-price-input>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field: box, label, input } = field(el);
+  input.focus();
+  expect(input.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(box).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label!).color).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(input).outlineStyle).toBe("none");
+});
+
+test("invalid marks the amount invalid and draws the danger line and label, with no error line", async () => {
+  const el = await mount('<wt-price-input label="Price" unit="kg" invalid></wt-price-input>');
+  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field: box, label, input } = field(el);
+  expect(el.hasAttribute("invalid")).toBe(true);
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect(el.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(input.hasAttribute("aria-describedby")).toBe(false);
+  expect(box.hasAttribute("data-invalid")).toBe(true);
+  expect(getComputedStyle(box).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label!).color).toBe("rgb(13, 14, 15)");
+});
+
+test("an error marks the field box invalid as the invalid property does, and a valid one is unmarked", async () => {
+  const el = await mount('<wt-price-input label="Price" error="Enter a price"></wt-price-input>');
+  const plain = await mount('<wt-price-input label="Price"></wt-price-input>');
+  expect(field(el).field.hasAttribute("data-invalid")).toBe(true);
+  expect(field(plain).field.hasAttribute("data-invalid")).toBe(false);
+  expect(plain.hasAttribute("invalid")).toBe(false);
+});
+
+test("a disabled field paints its own paler fill, a dashed line and muted text", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" value="9.00" disabled></wt-price-input>',
+  );
+  host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  const { field: box, input } = field(el);
+  expect(box.hasAttribute("data-disabled")).toBe(true);
+  expect(getComputedStyle(box).backgroundColor).toBe("rgb(21, 22, 23)");
+  expect(getComputedStyle(box, "::after").borderBottomStyle).toBe("dashed");
+  expect(getComputedStyle(input).color).toBe("rgb(24, 25, 26)");
+});
+
+test("hide-label makes the field box compact, the tap-target height", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" hide-label value="9.00"></wt-price-input>',
+  );
+  host.style.setProperty("--wt-tap-min", "47px");
+  const { field: box } = field(el);
+  expect(box.hasAttribute("data-compact")).toBe(true);
+  expect(box.getBoundingClientRect().height).toBe(47);
+  const labelled = await mount('<wt-price-input label="Price"></wt-price-input>');
+  expect(field(labelled).field.hasAttribute("data-compact")).toBe(false);
+});
+
+test("the unit button sits inside the field box at its trailing end, centred on it", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" style="width: 300px"></wt-price-input>',
+  );
+  host.style.setProperty("--wt-space-1", "5px");
+  const box = field(el).field.getBoundingClientRect();
+  const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
+  expect(box.right - unit.right).toBe(5);
+  expect(unit.top).toBeGreaterThan(box.top);
+  expect(unit.bottom).toBeLessThan(box.bottom);
+  expect(Math.abs(unit.top + unit.height / 2 - (box.top + box.height / 2))).toBeLessThanOrEqual(1);
+});
+
+test("a long label never runs under the unit button", async () => {
+  const el = await mount(
+    `<wt-price-input label="${"Selling price to the public including taxes ".repeat(3)}" unit="ración" value="9,00" style="width: 300px"></wt-price-input>`,
+  );
+  const label = field(el).label!.getBoundingClientRect();
+  const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
+  expect(label.right).toBeLessThanOrEqual(unit.left);
+});
+
+/** The input's text line: its box less its block padding. */
+function valueLine(input: HTMLInputElement) {
+  const box = input.getBoundingClientRect();
+  const s = getComputedStyle(input);
+  return {
+    top: box.top + Number.parseFloat(s.paddingTop),
+    bottom: box.bottom - Number.parseFloat(s.paddingBottom),
+  };
+}
+
+test.each(["", "hide-label"])(
+  "the currency sign sits inside the field box, on the amount's line (%s)",
+  async (hide) => {
+    const { el, input, currency } = await mountPrice(
+      `<wt-price-input label="Price" unit="kg" locale="en-GB" value="9.00" ${hide}></wt-price-input>`,
+    );
+    const box = field(el).field.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(currency!);
+    const glyph = range.getBoundingClientRect();
+    expect(glyph.left).toBeGreaterThanOrEqual(box.left);
+    expect(glyph.right).toBeLessThanOrEqual(box.right);
+    expect(glyph.top).toBeGreaterThanOrEqual(box.top);
+    expect(glyph.bottom).toBeLessThanOrEqual(box.bottom);
+    const line = valueLine(input);
+    expect(
+      Math.abs(glyph.top + glyph.height / 2 - (line.top + line.bottom) / 2),
+    ).toBeLessThanOrEqual(1);
+  },
+);
+
+test.each(["", "hide-label"])(
+  "a fixed unit sits inside the field box, after the amount, on the amount's line (%s)",
+  async (hide) => {
+    const el = await mount(
+      `<wt-price-input label="Price" unit="kg" fixed-unit value="9.00" ${hide}></wt-price-input>`,
+    );
+    const { field: box, input } = field(el);
+    const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+    expect(box.contains(unit)).toBe(true);
+    expect(unit.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      input.getBoundingClientRect().right,
+    );
+    expect(unit.getBoundingClientRect().right).toBeLessThanOrEqual(
+      box.getBoundingClientRect().right,
+    );
+    const range = document.createRange();
+    range.selectNodeContents(unit);
+    const text = range.getBoundingClientRect();
+    const line = valueLine(input);
+    expect(Math.abs(text.top + text.height / 2 - (line.top + line.bottom) / 2)).toBeLessThanOrEqual(
+      1,
+    );
+  },
+);
+
+test("a fixed unit is drawn as text with no box of its own", async () => {
+  const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
+  host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
+  const unit = getComputedStyle(el.shadowRoot!.querySelector(".unit")!);
+  expect(unit.color).toBe("rgb(7, 8, 9)");
+  expect(unit.borderTopStyle).toBe("none");
+  expect(unit.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+});
+
+test("the unit button is its own rounded box inside the field, with the tap-target size", async () => {
+  const el = await mount('<wt-price-input unit="kg"></wt-price-input>');
+  host.style.setProperty("--wt-radius-md", "7px");
+  host.style.setProperty("--wt-tap-min", "47px");
+  const unit = el.shadowRoot!.querySelector("button.unit")!;
+  const style = getComputedStyle(unit);
+  expect([style.borderStartStartRadius, style.borderEndStartRadius]).toEqual(["7px", "7px"]);
+  expect(style.borderInlineStartWidth).toBe("1px");
+  expect(unit.getBoundingClientRect().height).toBe(47);
+});
+
+test("a disabled field's fixed unit is muted, as its value is", async () => {
+  const el = await mount(
+    '<wt-price-input label="Limit" unit="%" fixed-unit value="10" disabled></wt-price-input>',
+  );
+  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".unit")!).color).toBe("rgb(24, 25, 26)");
+});
+
+function visibility(el: Element, selector: string): string {
+  return getComputedStyle(el.shadowRoot!.querySelector(selector)!).visibility;
+}
+
+test("an empty, unfocused labelled field rests its label like any field, and hides its currency sign under it", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" locale="en-GB"></wt-price-input>',
+  );
+  const { field: box, input } = field(el);
+  const currency = el.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]')!;
+  expect(box.getAttribute("data-label")).toBe("rest");
+  expect(visibility(el, '[part~="currency"]')).toBe("hidden");
+  // Hidden from sight only: the amount is still described by the sign.
+  expect(input.getAttribute("aria-describedby")).toBe(currency.id);
+  expect(currency.textContent!.trim()).toBe("€");
+});
+
+test("focusing an empty field with a currency sign floats its label and shows the sign", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" locale="en-GB"></wt-price-input>',
+  );
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  field(el).input.focus();
+  expect(visibility(el, '[part~="currency"]')).toBe("visible");
+  expect(getComputedStyle(field(el).label!).fontSize).toBe("11px");
+});
+
+test("a field with a value floats its label and shows its currency sign", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" locale="en-GB" value="9.00"></wt-price-input>',
+  );
+  expect(field(el).field.getAttribute("data-label")).toBe("float");
+  expect(visibility(el, '[part~="currency"]')).toBe("visible");
+});
+
+test("with no label drawn, an empty field shows its currency sign", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" hide-label unit="kg" locale="en-GB"></wt-price-input>',
+  );
+  expect(visibility(el, '[part~="currency"]')).toBe("visible");
+});
+
+test("a labelled field with a fixed unit floats its label across the box, past the amount and over the unit", async () => {
+  const el = await mount(
+    '<wt-price-input label="Descuento máximo por cuenta" unit="%" fixed-unit value="10" style="width: 400px"></wt-price-input>',
+  );
+  const { field: box, label, input } = field(el);
+  const text = el.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+  expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+  expect(label!.getBoundingClientRect().right).toBeGreaterThan(input.getBoundingClientRect().right);
+  expect(label!.getBoundingClientRect().right).toBeLessThanOrEqual(
+    box.getBoundingClientRect().right,
+  );
+  expect(visibility(el, ".unit")).toBe("visible");
+});
+
+test("while the label rests, a fixed unit is hidden under it and still describes the amount; focus shows it", async () => {
+  const el = await mount(
+    '<wt-price-input label="Descuento máximo por cuenta" unit="%" fixed-unit style="width: 400px"></wt-price-input>',
+  );
+  const { field: box, input } = field(el);
+  const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+  expect(box.getAttribute("data-label")).toBe("rest");
+  expect(visibility(el, ".unit")).toBe("hidden");
+  expect(input.getAttribute("aria-describedby")).toBe(unit.id);
+  input.focus();
+  expect(visibility(el, ".unit")).toBe("visible");
 });

@@ -1,5 +1,5 @@
 import { html } from "lit";
-import { applyTokens, registerIcons, type WtDataTable } from "../src/index.js";
+import { DROPDOWN_ICONS, applyTokens, registerIcons, type WtDataTable } from "../src/index.js";
 import "../src/components/wt-button.js";
 import "../src/components/wt-card.js";
 import "../src/components/wt-disclosure.js";
@@ -10,6 +10,7 @@ import "../src/components/wt-form-error-summary.js";
 import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
+import "../src/components/wt-textarea.js";
 import "../src/components/wt-price-input.js";
 import "../src/components/wt-number-stepper.js";
 import "../src/components/wt-spinner.js";
@@ -23,14 +24,13 @@ import "../src/components/wt-notice.js";
 import "../src/components/wt-language-footer.js";
 
 registerIcons({
-  check: "M2 8 L6 12 L14 4",
+  ...DROPDOWN_ICONS,
   cart: "M1 2 h3 l2 8 h7 l2 -6 H5",
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
   minus: "M2.5 7.25H13.5V8.75H2.5Z",
   // An unregistered icon renders nothing, leaving wt-row-actions' trigger a blank button.
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
-  "chevron-down": "M3 6 L8 11 L13 6",
   close:
     "M3.7 2.6 8 6.9l4.3-4.3 1.1 1.1L9.1 8l4.3 4.3-1.1 1.1L8 9.1l-4.3 4.3-1.1-1.1L6.9 8 2.6 3.7Z",
 });
@@ -93,6 +93,10 @@ const panel = (theme: "light" | "dark") => `
       <wt-disclosure heading="Cocina" summary="Sin opciones">
         <wt-input label="Nota para cocina"></wt-input>
       </wt-disclosure>
+      <wt-textarea label="Descripción" hint="La ve el cliente en la carta."></wt-textarea>
+      <wt-textarea label="Nota para cocina" value="Sin cebolla" maxlength="200" required></wt-textarea>
+      <wt-textarea label="Alérgenos" error="Escribe como mucho 200 caracteres."></wt-textarea>
+      <wt-textarea label="Nota anterior" value="Sin sal" disabled></wt-textarea>
       <wt-disclosure heading="Descriptores" summary="2 etiquetas" open>
         <wt-switch label="Vegetariano" checked></wt-switch>
       </wt-disclosure>

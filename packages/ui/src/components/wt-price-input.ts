@@ -1,13 +1,14 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
-import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
+import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 /**
  * The unit button's visible text is its accessible name, so an empty `unit` leaves it nameless.
  * `fixed-unit` shows the unit as text instead, for a field whose unit is not chosen here. The
- * amount box is the `amount` part and a fixed unit the `unit` part. A non-empty `locale` draws the
+ * amount input is the `amount` part and a fixed unit the `unit` part. A non-empty `locale` draws the
  * euro sign inside the amount box, on the side that locale writes it, as the `currency` part.
  */
 @customElement("wt-price-input")
@@ -16,175 +17,120 @@ export class WtPriceInput extends LitElement {
 
   static override styles = [
     baseStyles,
+    fieldStyles,
     css`
       :host {
         display: block;
         max-width: var(--wt-field-max-width);
       }
 
-      .label-row {
-        display: flex;
-        align-items: center;
-        margin-bottom: var(--wt-space-1);
-      }
-
-      label {
-        display: block;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
-      .control {
-        display: flex;
-      }
-
-      input {
-        flex: 1;
-        width: var(--wt-price-field-width);
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        /* The field and the unit button read as one control: the field rounds only its leading
-           corners and drops the seam border the button supplies. */
-        border-inline-end: 0;
-        border-start-start-radius: var(--wt-radius-md);
-        border-end-start-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        text-overflow: ellipsis;
-      }
-
-      /* --end-border mirrors the input's own trailing border, which a unit button supplies. */
+      /* Beside a unit button the label sits in the amount box, so a long one stops at the button
+         rather than under it; beside a fixed unit it sits in the field box and spans past it. */
       .amount-box {
-        --end-border: 0px;
         position: relative;
         display: flex;
         flex: 1;
+        align-self: stretch;
       }
 
-      .amount-box:last-child,
-      .fixed .amount-box {
-        --end-border: 1px;
+      .field.fixed {
+        flex-wrap: wrap;
       }
 
-      .fixed .amount-box {
+      .fixed .amount-box,
+      .fixed .field-control {
         flex: none;
+      }
+
+      .field-control {
+        flex: 1;
+        width: var(--wt-price-field-width);
+        min-width: var(--wt-tap-min);
       }
 
       /* The sign is measured into --currency-width, so the typed amount is padded clear of it, and
          an unstretched box grows by that padding so the amount keeps the room it had without it. */
-      .amount-box input {
+      .before .field-control,
+      .after .field-control {
         width: calc(var(--wt-price-field-width) + var(--currency-width, 0px) + var(--wt-space-1));
       }
 
-      .amount-box.before input {
+      .before .field-control {
         padding-inline-start: calc(
           var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)
         );
       }
 
-      .amount-box.after input {
+      .after .field-control {
         padding-inline-end: calc(
           var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)
         );
         text-align: end;
       }
 
+      /* The sign and a fixed unit take the amount's block padding, so they sit on its text line. */
+      .currency,
+      span.unit {
+        display: flex;
+        align-items: center;
+        padding-top: calc(var(--wt-space-3) + var(--wt-font-size-sm));
+        padding-bottom: var(--wt-space-2);
+      }
+
+      .field[data-compact] .currency,
+      .field[data-compact] span.unit {
+        padding-block: var(--wt-space-2);
+      }
+
       .currency {
         position: absolute;
         inset-block: 0;
-        display: flex;
-        align-items: center;
         color: var(--wt-color-text-muted);
         pointer-events: none;
       }
 
+      /* A resting label sits on the amount's line, where the sign and a fixed unit are drawn. */
+      .field[data-label="rest"]:not([data-compact]):not(:focus-within):not(:has(:autofill))
+        :is(.currency, span.unit) {
+        visibility: hidden;
+      }
+
       .before .currency {
-        inset-inline-start: calc(1px + var(--wt-space-3));
+        inset-inline-start: var(--wt-space-3);
       }
 
       .after .currency {
-        inset-inline-end: calc(var(--end-border) + var(--wt-space-3));
+        inset-inline-end: var(--wt-space-3);
       }
 
-      :host([disabled]) .currency {
-        ${disabledStyles}
+      span.unit {
+        flex: none;
+        align-self: stretch;
+        padding-inline: var(--wt-space-2);
+        color: var(--wt-color-text);
       }
 
-      input::placeholder {
+      .field[data-disabled] span.unit {
         color: var(--wt-color-text-muted);
       }
 
-      input:disabled {
-        ${disabledStyles}
-      }
-
-      input:last-child,
-      .amount-box:last-child input {
-        border-inline-end: 1px solid var(--wt-color-border);
-        border-start-end-radius: var(--wt-radius-md);
-        border-end-end-radius: var(--wt-radius-md);
-      }
-
-      /* The amount box draws the seam itself, so a host that moves the unit under it (flex-basis
-         100% on the unit part) leaves the box's trailing border in place. */
-      .fixed {
-        flex-wrap: wrap;
-      }
-
-      .fixed input {
+      button.unit {
         flex: none;
-        border-inline-end: 1px solid var(--wt-color-border);
-      }
-
-      input[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-      }
-
-      .unit {
-        flex: none;
+        align-self: center;
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
+        margin-inline-end: var(--wt-space-1);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
-        border-start-end-radius: var(--wt-radius-md);
-        border-end-end-radius: var(--wt-radius-md);
+        border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         font: inherit;
         cursor: pointer;
       }
 
-      span.unit {
-        display: inline-flex;
-        align-items: center;
-        padding-inline: var(--wt-space-2);
-        border-inline-start: 0;
-        cursor: default;
-      }
-
-      .unit:disabled {
+      button.unit:disabled {
         ${disabledStyles}
-      }
-
-      .required,
-      .error {
-        color: var(--wt-color-danger);
-      }
-
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .hint {
-        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -198,7 +144,8 @@ export class WtPriceInput extends LitElement {
   @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
-  /** Names the field for assistive technology without drawing the label above it. */
+  @property({ type: Boolean, reflect: true }) invalid = false;
+  /** Names the field by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property({ type: Boolean, attribute: "fixed-unit" }) fixedUnit = false;
   /** Draws the euro sign in the amount box as this locale writes it; empty draws none. */
@@ -275,6 +222,7 @@ export class WtPriceInput extends LitElement {
 
   override render() {
     const hasError = this.error !== "";
+    const invalid = this.invalid || hasError;
     const inputId = this.name || this.generatedInputId;
     const currency = this.locale ? currencySymbol(this.locale) : null;
     const hasHint = this.hint !== "";
@@ -284,44 +232,45 @@ export class WtPriceInput extends LitElement {
       ...(currency ? [this.currencyId] : []),
       ...(this.fixedUnit && this.unit ? [this.unitId] : []),
     ];
-    const input = html`<input
-      id=${inputId}
-      part="amount"
-      name=${this.name || nothing}
-      .value=${this.value}
-      inputmode="decimal"
-      placeholder=${this.placeholder || this.hint || nothing}
-      ?required=${this.required}
-      ?disabled=${this.disabled}
-      aria-label=${this.hideLabel && this.label ? this.label : nothing}
-      aria-invalid=${hasError}
-      aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
-      @input=${this.onInput}
-    />`;
+    const showLabel = this.label !== "" && !this.hideLabel;
+    const fixed = this.fixedUnit && this.unit !== "";
+    const label = showLabel ? fieldLabel(inputId, this.label, this.required) : nothing;
     return html`
-      ${
-        this.label && !this.hideLabel
-          ? html`<div class="label-row">
-              <label for=${inputId}
-                >${this.label}${
-                  this.required
-                    ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                    : nothing
-                }</label
-              >
-            </div>`
-          : nothing
-      }
-      <div class=${this.fixedUnit && this.unit ? "control fixed" : "control"}>
-        ${
-          currency
-            ? html`<span class="amount-box ${currency.side}"
-                >${input}<span id=${this.currencyId} class="currency" part="currency"
+      <div
+        class=${fixed ? "field fixed" : "field"}
+        part="field"
+        data-label=${fieldLabelState({
+          value: this.value,
+          hint: this.hint,
+          placeholder: this.placeholder,
+        })}
+        ?data-invalid=${invalid}
+        ?data-disabled=${this.disabled}
+        ?data-compact=${!showLabel}
+      >
+        ${fixed ? label : nothing}<span class="amount-box ${currency?.side ?? ""}"
+          >${fixed ? nothing : label}<input
+            class="field-control"
+            id=${inputId}
+            part="amount"
+            name=${this.name || nothing}
+            .value=${this.value}
+            inputmode="decimal"
+            placeholder=${this.placeholder || this.hint || nothing}
+            ?required=${this.required}
+            ?disabled=${this.disabled}
+            aria-label=${this.hideLabel && this.label ? this.label : nothing}
+            aria-invalid=${invalid}
+            aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+            @input=${this.onInput}
+          />${
+            currency
+              ? html`<span id=${this.currencyId} class="currency" part="currency"
                   >${currency.symbol}</span
-                ></span
-              >`
-            : input
-        }${this.renderUnit()}
+                >`
+              : nothing
+          }</span
+        >${this.renderUnit()}
       </div>
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}

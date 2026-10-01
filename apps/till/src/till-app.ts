@@ -3,7 +3,7 @@ import { isTillDestination, type TillDestination, tillPath } from "./navigation.
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
+import { DROPDOWN_ICONS, UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import {
   MONEY_SCALE,
   compareDecimal,
@@ -234,8 +234,9 @@ interface RefreshRetry {
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
-// wt-toast draws a `close` icon its consuming app registers.
-registerIcons({ close: CROSS_ICON_PATH });
+// Icons shared primitives draw and their consuming app registers: wt-toast's `close`, and
+// wt-combobox's.
+registerIcons({ close: CROSS_ICON_PATH, ...DROPDOWN_ICONS });
 
 /**
  * How long the till waits on a request it bounds, its automatic resends included, before cancelling

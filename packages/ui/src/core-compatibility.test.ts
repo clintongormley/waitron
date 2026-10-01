@@ -4,6 +4,7 @@ import * as legacy from "./index.js";
 import { cleanup, mount } from "./test-helpers.js";
 import * as button from "./components/wt-button.js";
 import * as input from "./components/wt-input.js";
+import * as textarea from "./components/wt-textarea.js";
 import * as card from "./components/wt-card.js";
 import * as icon from "./components/wt-icon.js";
 import * as spinner from "./components/wt-spinner.js";
@@ -21,6 +22,11 @@ test("wt-input has one implementation across entry points", () => {
   expect(core.WtInput).toBe(legacy.WtInput);
   expect(core.WtInput).toBe(input.WtInput);
   expect(customElements.get("wt-input")).toBe(core.WtInput);
+});
+test("wt-textarea has one implementation across entry points", () => {
+  expect(core.WtTextarea).toBe(legacy.WtTextarea);
+  expect(core.WtTextarea).toBe(textarea.WtTextarea);
+  expect(customElements.get("wt-textarea")).toBe(core.WtTextarea);
 });
 test("wt-card has one implementation across entry points", () => {
   expect(core.WtCard).toBe(legacy.WtCard);

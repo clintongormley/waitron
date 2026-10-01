@@ -5,8 +5,9 @@ This document is the contract. If you are building a view, read this first.
 
 ## Shared package boundary
 
-`@waitron/ui-core` owns account-form controls: button, input, card, icon, spinner,
-form actions and error summary, plus theme tokens, common styles and keyboard helpers.
+`@waitron/ui-core` owns account-form controls: button, input, textarea, card, icon, spinner,
+form actions and error summary, plus theme tokens, common styles (the filled field box,
+`fieldStyles`, among them) and keyboard helpers.
 Waitron's `@waitron/ui` keeps its existing root and deep component imports as re-exports.
 Venue controls and brand asset delivery stay in `packages/ui`.
 
@@ -110,7 +111,9 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
 `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`, `--wt-color-danger`,
 `--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
-`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`
+`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
+`--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
+`--wt-color-field-value`
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
@@ -129,6 +132,36 @@ dragged row still follows the pointer.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
+
+The five `--wt-color-field-*` tokens paint the filled form field (see "The field box" under Forms):
+
+| Token | Light | Dark | Paints |
+| --- | --- | --- | --- |
+| `--wt-color-field-fill` | `#f0f1f4` | `#262a33` | the field's background |
+| `--wt-color-field-line` | `#7d8390` | `#7a8291` | the bottom line at rest, and the dashed one when disabled |
+| `--wt-color-field-label-focus` | `#1a5fd0` | `#5c98ff` | the label of the focused field |
+| `--wt-color-field-fill-disabled` | `#f7f7f8` | `#1f2229` | a disabled field's background |
+| `--wt-color-field-value` | `#000000` | `#ffffff` | the value typed or chosen |
+
+Their contrast, computed 2026-10-01 from `colors.css` with WCAG 2.2's relative-luminance formula in
+a short Python script (light / dark): the line is 3.37 / 3.72 on the fill, 3.80 / 4.41 on
+`--wt-color-surface` and 3.55 / 4.85 on `--wt-color-bg`; the focused label is 5.18 / 5.06 on the
+fill; `--wt-color-text-muted` (the resting and floated label, the hint) is 5.43 / 5.95 on the fill
+and 5.72 / 6.59 on the disabled fill; `--wt-color-danger` is 5.79 / 5.14 and the value 18.59 /
+14.37 on the fill. The focused label has its own token because `--wt-color-primary` as 12px text on
+the fill is 4.10 / 4.49, under the 4.5:1 small text needs; the focused LINE is
+`--wt-color-primary` itself, which as a non-text mark needs only 3:1. **The fill alone does not
+mark a field out** — it is 1.13 / 1.19 against `--wt-color-surface` and 1.05 / 1.30 against
+`--wt-color-bg` — so the bottom line is what meets WCAG 2.2's 3:1 for a component's boundary
+(1.4.11, non-text contrast). In the light theme the disabled fill is the same colour as
+`--wt-color-bg`, so a disabled field on the page background shows only its dashed line. axe does
+not check non-text contrast, so the "field tokens" cases in
+`packages/ui-core/src/tokens/colors.test.ts` compute the ratios in both themes and fail below 3:1
+for the line (on the fill, the surface and the page background) and for `--wt-color-primary` on the
+fill, and below 4.5:1 for the focused label, the muted, body, danger and value colours on the fill
+and the muted colour on the disabled fill. Two more cases there hold that the
+`prefers-color-scheme` blocks give the five tokens the same values as the explicit `data-theme`
+ones.
 
 A user-chosen data colour is the one deliberate exception to "no hex, no hardcoded chrome" (no
 screen passes `wt-lozenge` one today: categories, its first user, lost their colour on 2026-09-30):
@@ -150,7 +183,16 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
 `--wt-field-max-width`, `--wt-cell-name-max-width`,
 `--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
-`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`, `--wt-duration-move`
+`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`, `--wt-duration-move`,
+`--wt-field-height`, `--wt-field-label-rest-size`, `--wt-field-line-width`,
+`--wt-field-line-width-active`, `--wt-dropdown-row-height`
+
+The field tokens size the filled form field (see "The field box" under Forms):
+`--wt-field-height` (56px) is a labelled field's height, above `--wt-tap-min`, which
+`packages/ui-core/src/tokens/structure.test.ts` holds; `--wt-field-label-rest-size` (16px) is a
+resting label's size; `--wt-field-line-width` (1px) is the bottom line at rest and
+`--wt-field-line-width-active` (2px) the focused or invalid one; `--wt-dropdown-row-height` (48px)
+is the least height of a row in `wt-combobox`'s open list.
 
 The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
 system font; the app ships no font files (A179, 2026-10-01 — before it the scale was 13, 15, 19
@@ -193,7 +235,7 @@ dialog, set `--wt-dialog-max-width` (the till's device chooser does).
 `--wt-form-max-width` (`36rem`, 576px at the default text size) is the one standard width of a form
 inside a `wt-modal` (owner, 2026-09-30, C105): a field there grows no wider than it, however wide the
 modal is. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
-`--wt-field-max-width` as its `max-width` — `wt-input`, `wt-combobox`, `wt-price-input`,
+`--wt-field-max-width` as its `max-width` — `wt-input`, `wt-textarea`, `wt-combobox`, `wt-price-input`,
 `wt-number-stepper`, `wt-switch`, a native `<select>` styled by `selectStyles` and a `<label>` that
 contains one (`label:has(select)`, in the same stylesheet), and the line that shows a form's message
 (`formMessageStyles`, so both the message a dialog shows at the end of its body and the one a
@@ -204,7 +246,7 @@ a screen does not set its own form width.
 
 What the cap covers of a field's label, hint and error depends on how the field is written:
 
-- The five custom elements: the label, hint and error are inside the element, so the cap holds them.
+- The six custom elements: the label, hint and error are inside the element, so the cap holds them.
 - A native select inside a block, grid or flex `<label>` (the Units form's Precision field is one):
   the label holds the label text, the select, and any hint or error written inside it, and all of
   them stop at the form width. The select is still `width: 100%` of that label, so it stays on its
@@ -238,7 +280,8 @@ beside it: the Printers screen's `.field-row` does, for the calibration wizard's
 button beside the ruler's answer, and the section member list's `.add` row does, for its Add button, along with that row's
 `.error` line (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
 the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
-cases in `packages/ui/src/components/wt-modal.test.ts` (every shared field, a native select
+cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
+`wt-price-input`, `wt-number-stepper` and `wt-switch`, a native select
 field's label, select, hint and error, and the message at 1280px; the select below its label text
 at 1280px; wide content and the footer row at full width; each field at the
 body's width at 390px; each field at its container's width outside a modal); the calibration case in
@@ -247,9 +290,9 @@ body's width at 390px; each field at its container's width outside a modal); the
 `apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
-`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that
-does not read `--wt-field-max-width` is seen by none of them, and neither is a screen-styled native
-control such as the product editor's description `<textarea>`.
+`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that does not read
+`--wt-field-max-width` is seen by none of them, and neither is a screen-styled native control such
+as the product editor's description `<textarea>`.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
@@ -312,12 +355,22 @@ settled convention; it is recorded in `docs/backlog.md` under what Task 11 left 
 
 Minimum interactive target, 44px, **on both axes**. POS screens are touched under time pressure by
 staff who are not looking carefully — a numpad key ("1", "+", "−") fails just as badly if it's
-44px tall but only 32px wide as if it were too short. `wt-button`, `wt-input`, `wt-price-input`,
-`wt-number-stepper`, `wt-switch` and `wt-combobox` apply `min-width` and `min-height` to the element
-that actually forms the hit target (the inner `button` for `wt-button`; the inner `input` for
-`wt-input`; the inner `input` and the unit button for `wt-price-input`; the inner `input` and both buttons for `wt-number-stepper`; both
-`:host` and `.control` for `wt-switch`; the `.trigger` button for `wt-combobox`) — never to an element that can overflow
-its own container (see "Hit targets must not overflow their container" below).
+44px tall but only 32px wide as if it were too short. `wt-button`, `wt-input`, `wt-textarea`,
+`wt-price-input`, `wt-number-stepper`, `wt-switch` and `wt-combobox` size the element that actually
+forms the hit target (the inner `button` for `wt-button`; the inner `input` for `wt-input`; the
+inner `textarea` for `wt-textarea`; the inner `input` and the unit button for `wt-price-input`; the
+inner `input` and both buttons for `wt-number-stepper`; both `:host` and `.control` for `wt-switch`;
+the `.trigger` button for `wt-combobox`) — never an element that can overflow its own container
+(see "Hit targets must not overflow their container" below). A field's control (`.field-control`
+in `fieldStyles`) takes `min-width: var(--wt-tap-min)` and `min-height: var(--wt-field-height)`
+(`wt-textarea` moves the floated label's share of that height into its field box's top padding,
+but never lets the textarea itself fall below `--wt-tap-min`, growing the box instead), or
+`--wt-tap-min` in a compact field; `wt-number-stepper`'s two buttons are exactly `--wt-tap-min`
+square; `wt-switch`'s `:host` and `.control` and `wt-price-input`'s unit button take `min-width` and
+`min-height` of `--wt-tap-min`. `wt-button` takes them at its default size and is exactly
+`--wt-tap-min` square with `shape="round"`, but its height depends on `size`: `size="lg"` is at
+least 1.4 × `--wt-tap-min` tall, and `size="sm"` only `--wt-space-6`, BELOW the tap target (its
+`min-width` stays `--wt-tap-min`).
 
 `min-width` is a floor, not a request: `wt-input`'s inner `<input>` sets both `width: 100%` (to
 fill its container) and `min-width: var(--wt-tap-min)`, so in a grid or flex cell narrower than
@@ -342,9 +395,10 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-notice` | `duration` (milliseconds on screen, default `4000`; `0` keeps it until the consumer removes it; a new value is counted from when it is set), `reducedMotion` (property only; overrides the `prefers-reduced-motion` query, which is read when the time is up); default slot (the words). An inline status message: the host takes `role="status"` unless given a role, so a change to its words is announced politely. When its time is up it fades out over `--wt-duration-fade`, then hides itself (`hidden`); under reduced motion it hides at once, with no fade. Taken off the page it stops counting, and counts its full duration again when put back. After hiding itself it shows again when put back or given a new duration; a `hidden` its page set while it was showing is kept, and a duration set while it is off the page starts no count until it is put back. It paints no colour of its own, so the consumer colours it (the Printers screen's Bluetooth rows do, through `::part`) | `wt-notice-gone` — `detail: {}` (its time is up and it is hidden). Not `wt-close`, which `wt-modal` and `wt-dialog` send and consumers listen for on them, so a notice inside one would read as the dialog closing |
-| `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `hint` (shown inside the empty field as its placeholder unless `placeholder` is set, and always the native input's description; see Forms), `maxlength` (a number passed to the native input; none by default), `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
-| `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `hint` (shown inside the empty amount as its placeholder unless `placeholder` is set, and always read first in the amount's description, before any error, the sign and a fixed unit; see Forms), `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message. `hide-label` names the field with `label` for assistive technology but draws no label. `fixed-unit` shows `unit` as plain text rather than a button, for a field whose unit is not chosen here; the field's description then reads the unit after any error, and an empty `unit` draws no unit box at all. The amount box is the `amount` part and a fixed unit the `unit` part: the amount box draws the seam between them, so a host can move the unit under it with `flex-basis: 100%` on the unit part and round the amount's trailing corners. The amount box is `--wt-price-field-width` wide where nothing stretches it and no sign is drawn, and fills a wider field unless it carries a fixed unit; a sign drawn by `locale` sits inside the box, and an unstretched box grows by the sign's measured width plus `--wt-space-1`, so the amount keeps the room it had without a sign. A host that lays the field out narrower than that box (a wrapping flex row with a small `min-width`) lets it run under its neighbour; the purchase form's VAT line gives its money fields `min-width: min-content` so the line wraps them instead. `locale` (default empty, which draws no sign) draws the euro sign inside the amount box on the side that locale writes it — before the amount for English, after it for Spanish (the amount then aligned to the sign), `--wt-space-1` from the amount — painted `--wt-color-text-muted`, as the `currency` part, and read in the field's description after any error and before a fixed unit. EUR is the only currency; the sign and its side come from `currencySymbol` in `@waitron/shared`, and a dashboard form sets it to `currentLocale()`. It also serves a value in a fixed unit that is not money, such as a percentage: `fixed-unit` with `unit="%"` and no `locale` draws `%` as text beside the narrow amount box and no euro sign, as the bill discount limit in `packages/adjustments/src/dashboard/reasons-screen.ts` does | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
-| `wt-number-stepper` | `value` (text), `label`, `name`, `min` (default `0`), `max` (default none), `placeholder`, `hint` (shown inside the empty box as its placeholder unless `placeholder` is set, and always the box's description; see Forms), `required` (reflected), `disabled` (reflected, and locks the box and both buttons), `invalid` (reflected), `error`, `hide-label` (names the box with `label` for assistive technology but draws no label), `decreaseLabel` and `increaseLabel` (functions given `label` that return the buttons' accessible names, property only, default "Decrease …" and "Increase …"; set translated ones). A whole-number box between a − and a + button, each disabled at its bound. + on a blank or non-number value gives the larger of `min` and 1, never above `max`; − never goes below `min`, so only clearing the box reaches blank. Typing emits exactly what was typed, never a clamped number, so the form's own validation sees a typed 0, a blank or a non-number. Its baseline is the number's, so a row aligned by baseline lines the text up. The box is `--wt-stepper-field-width` wide (a stepper whose blank value shows words, from a placeholder such as "No limit" or from a hint, sets it to `--wt-stepper-field-width-wide`, and so does a stepper set beside one, so the two boxes match); focusing the element focuses the box. The consuming app registers the `minus` and `plus` icons | `wt-change` — `detail: { value: string }` (on typing, and on each step that changes the value) |
+| `wt-input` | `value`, `label`, `name`, `type` (a date or time type always floats the label, because the browser draws its own format text in the empty field), `autocomplete`, `placeholder`, `hint` (shown inside the empty field as its placeholder unless `placeholder` is set, and always the native input's description; see Forms), `maxlength` (a number passed to the native input; none by default), `required`, `disabled`, `invalid`, `error`, `hide-label` (names the input with `label` for assistive technology but draws no label, and makes the field compact); `help` and `end` slots. Drawn as the filled field box (Forms → "The field box"); an action in the `end` slot sits inside the box at its trailing end, and a long label stops short of it | `wt-change` — `detail: { value: string }` |
+| `wt-textarea` | `value`, `label`, `name`, `rows` (default `3`), `maxlength`, `placeholder`, `hint` (as `wt-input`'s), `required`, `disabled`, `invalid` (reflected), `error`, `hide-label` (as `wt-input`'s), `spellcheck` (the attribute `spellcheck="false"` turns it off, as it does in HTML), `autocapitalize`; `help` slot. A multi-line field in the filled field box. The `<textarea>` is the `control` part, so a screen can set, say, a monospace font on it through `::part(control)`, and it can be resized vertically only. The floated label's room is the field box's top padding, so text the textarea scrolls never runs under the label, and a resting label sits on the first line's band rather than in the middle of a tall box. Enter inserts a newline: `submitOnEnter` acts only on single-line inputs | `wt-change` — `detail: { value: string }` (on every input) |
+| `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `hint` (shown inside the empty amount as its placeholder unless `placeholder` is set, and always read first in the amount's description, before any error, the sign and a fixed unit; see Forms), `required` (reflected), `disabled` (reflected), `invalid` (reflected; marks the field invalid without a message, as `wt-input`'s does), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted` in italics. A money field in the filled field box (Forms → "The field box") with a `<button>` inside the box at its trailing end, `--wt-space-1` from its edge, a rounded bordered button of its own, whose visible text is `unit` (which is also that button's accessible name, so supply one). Beside that button the label sits in the amount's part of the box, so a long label stops short of the button; with a fixed unit it spans the whole box. `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message. `hide-label` names the field with `label` for assistive technology but draws no label, and makes the field compact. `fixed-unit` shows `unit` as plain text rather than a button, for a field whose unit is not chosen here; the field's description then reads the unit after any error, and an empty `unit` draws no unit at all. A fixed unit is text with no box of its own, painted `--wt-color-text`, and `--wt-color-text-muted` while the field is disabled. The amount input is the `amount` part and a fixed unit the `unit` part; a field box holding a fixed unit wraps, so a host can move the unit under the amount with `flex-basis: 100%` on the unit part. The amount box is `--wt-price-field-width` wide where nothing stretches it and no sign is drawn, and fills a wider field unless it carries a fixed unit; a sign drawn by `locale` sits inside the box, and an unstretched box grows by the sign's measured width plus `--wt-space-1`, so the amount keeps the room it had without a sign. A host that lays the field out narrower than that box (a wrapping flex row with a small `min-width`) lets it run under its neighbour; the purchase form's VAT line gives its money fields `min-width: min-content` so the line wraps them instead. `locale` (default empty, which draws no sign) draws the euro sign inside the amount box on the side that locale writes it — before the amount for English, after it for Spanish (the amount then aligned to the sign), `--wt-space-1` from the amount — painted `--wt-color-text-muted`, as the `currency` part, and read in the field's description after any error and before a fixed unit. The label rests like any field's; while it rests on a labelled field that is empty and unfocused, the sign and a fixed unit are hidden under it (`visibility: hidden`) and stay named in the amount's `aria-describedby`, and focus or a value shows them again. With no label drawn they always show. EUR is the only currency; the sign and its side come from `currencySymbol` in `@waitron/shared`, and a dashboard form sets it to `currentLocale()`. It also serves a value in a fixed unit that is not money, such as a percentage: `fixed-unit` with `unit="%"` and no `locale` draws `%` as text beside the narrow amount box and no euro sign, as the bill discount limit in `packages/adjustments/src/dashboard/reasons-screen.ts` does | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
+| `wt-number-stepper` | `value` (text), `label`, `name`, `min` (default `0`), `max` (default none), `placeholder`, `hint` (shown inside the empty box as its placeholder unless `placeholder` is set, and always the box's description; see Forms), `required` (reflected), `disabled` (reflected, and locks the box and both buttons), `invalid` (reflected), `error`, `hide-label` (names the box with `label` for assistive technology but draws no label, and makes the box compact, as tall as the buttons), `decreaseLabel` and `increaseLabel` (functions given `label` that return the buttons' accessible names, property only, default "Decrease …" and "Increase …"; set translated ones). A whole-number field in the filled field box (Forms → "The field box"), with a − button before the box and a + button after it, outside it, each exactly `--wt-tap-min` square, bordered and centred on the box, and each disabled at its bound; a disabled button dims through `--wt-opacity-disabled`, while the box takes the disabled field look. + on a blank or non-number value gives the larger of `min` and 1, never above `max`; − never goes below `min`, so only clearing the box reaches blank. Typing emits exactly what was typed, never a clamped number, so the form's own validation sees a typed 0, a blank or a non-number. Its baseline is the number's, so a row aligned by baseline lines the text up. The box is `--wt-stepper-field-width` wide (a stepper whose blank value shows words, from a placeholder such as "No limit" or from a hint, sets it to `--wt-stepper-field-width-wide`, and so does a stepper set beside one, so the two boxes match), and a label longer than the box is cut with an ellipsis on one line, keeping a required field's `*`; the label is inset by the number's own `--wt-space-2` padding. Focusing the element focuses the box. The consuming app registers the `minus` and `plus` icons | `wt-change` — `detail: { value: string }` (on typing, and on each step that changes the value) |
 | `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (hides the drawn text while keeping `label` as the native switch's default accessible name), `accessible-name` (overrides the native switch's accessible name, for a row-specific name in a table whose column heading supplies the action). The drawn label is the `label` part, so a host can hide the text in one case only (the extras list form does on a phone) while the switch keeps its name. Its baseline is its label's text, so a row aligned by baseline lines the label up | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot. The message of a `wt-form-actions` placed directly in the `footer` slot shows at the end of the body instead, every such row's message joined, and is scrolled into view when it changes and when the dialog opens; a `wt-form-actions` in the body keeps its own message, which the dialog scrolls into view when it changes. Neither is scrolled to when it changes from an `input` event inside the dialog until a zero-delay timer the dialog then sets has run | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
@@ -354,8 +408,39 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
 | `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden; and `pinned` — `"end"` — which, set on the last column, keeps it at the trailing edge of the table's box while the others scroll sideways), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `rowToggleLabel` (`(row, expanded) => string` — names each row's toggle in place of the two fixed labels), `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `rowSelectable` (`(row) => boolean` — leaves a row without a checkbox, for example a variant that moves with its product), `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-filter-change` — `detail: { filters: Record<string, string> }` (reports a filter you change, not one restored from storage); `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
-| `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
+| `wt-combobox` | `options` (`{ value, label, icon?, group?, action? }[]`: `icon` is a registered `wt-icon` name drawn before the label and hidden from screen readers; consecutive options with the same `group` render under that heading, inside a `role="group"` the heading names, and the arrow keys step over the heading; an `action` row sends `wt-combobox-action` and never becomes the value or shows as chosen), `multiple`, `value`, `values`, `allowAdd` (`allow-add`), `label`, `name`, `placeholder`, `hint` (shown as the trigger's text while nothing is chosen unless `placeholder` is set, and always the trigger's description, before the error), `required`, `disabled`, `invalid`, `error`, `hide-label` (names the trigger with `label` but draws no label, and makes the field compact), `search` (`"always"`, the default; `"auto"`, which shows the search box only above `SEARCH_THRESHOLD`, 7, options; `"never"`; `allow-add` shows it whatever this says, because the new option is typed into it), `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel`; `help` slot. The one dropdown: the trigger is the control of the filled field box (Forms → "The field box"), showing the chosen option's label (cut with an ellipsis on one line) and a `chevron-down` icon at its trailing end; while nothing is chosen it shows the placeholder or hint, muted and italic, and with neither the label rests. While the list is open the field box drops its focus marking. The list's rows are at least `--wt-dropdown-row-height` tall and a hovered row paints `--wt-color-bg`; a chosen row's label is bold, and in a single choice the row also carries a `check` icon at its trailing end (a multiple choice shows its checkbox picture instead). A click opens the list scrolled so the chosen row (in a multiple choice, the first chosen row) is in view, without making it the active row. The search box sits on `--wt-color-surface` with one `--wt-field-line-width` line of `--wt-color-primary` all round, `--wt-radius-md` corners and no focus ring, in an area that carries `--wt-shadow-1`. The consuming app registers the `chevron-down` and `check` icons, which `DROPDOWN_ICONS` holds. Its keyboard is described under the table | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }`; `wt-combobox-action` — `detail: { value: string }` (an action row was picked: the list closes and the value is left alone) |
 | `wt-language-footer` | `active` (the code of the page's language; the parent sets it and the component never changes it), `loadLocales` (property; `() => Promise<{ code, label }[]>`, called on the first open and again after a failed load; defaults to `SUPPORTED_LOCALES`; one load at a time; while it is pending, a second press, Escape, or a press or focus outside cancels the opening, and a further press asks for it again). A page footer in the page's flow, never fixed, holding a `wt-button` named with the active language (from the loaded list, then `SUPPORTED_LOCALES`, then the bare code) whose menu of `menuitemradio` options opens upwards over what is above it. Opening focuses the checked option (or the first); ArrowDown and ArrowUp move between options and wrap, Home and End reach the ends; Escape closes it and returns focus to the trigger, and goes no further only when it closed the menu; a press or focus outside closes it without moving focus; `data-test` hooks `lang-trigger` and `lang-<code>` | `wt-locale-selected` — `detail: { code: string }`; a pick closes the menu and returns focus to the trigger |
+
+`wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
+Alt+ArrowDown, Enter and Space open the list with the chosen row active (the first row when nothing
+is chosen), and Space leaves the search box it opens empty (the "… on the closed trigger opens the
+list" cases and "Space on the closed trigger leaves the search box it opens empty" in
+`wt-combobox.test.ts`). In a form bound with `submitOnEnter`, Enter on the closed trigger opens the
+list and submits nothing ("Enter on a closed trigger in a form wired with submitOnEnter…"). A
+printable key on the closed trigger opens a list that has a search box
+with that character already searched for; on one without a search box it chooses the next option
+whose label starts with the typed text, without opening (the typed text starts again 500 ms after
+the last key, pressing one letter again steps on through the options starting with it, an action
+row is never chosen, and a closed multiple choice ignores it). In the open list, ArrowDown and
+ArrowUp move the active row and wrap at both ends, ArrowUp with no row active going to the last row;
+Home and End reach the first and last row; Enter picks the active row (an action row sends its
+event), and its default is prevented whether or not a row is active. Without a search box the list itself
+takes focus and names the active row with `aria-activedescendant`; there Space picks too (in a
+multiple choice it toggles the row and keeps the list open), and a printable key moves to the next
+row starting with it. Escape closes the list and returns focus to the trigger, and its default is
+prevented and its propagation stopped, so inside a `wt-dialog` it closes the list and not the
+dialog. Tab and Shift+Tab pick nothing, close
+the list and let focus move on, and focus leaving both the list and the trigger closes it. A press
+on the label of a closed dropdown opens the list; a press on the label while the list is open
+closes it and leaves focus on the trigger. Opened by a click, the list makes no row active (the
+first arrow press goes to the first row, or with ArrowUp the last) but scrolls the chosen row into
+view. While the list is open, the arrows, Home and End on the trigger move the active row and put
+focus back on the search box or list; when the options change, the active row follows its option by
+value (the add row stays active while it is still offered), else the chosen row, else the first,
+while a list opened by a click with no row active keeps none; and a `search="auto"` list whose new
+options cross the threshold stays open, and focus that was in the search box or list moves to
+whichever of them now takes the keys. The "No results" text sits outside the list box; the reason
+is in the code (`wt-combobox.ts`, the comment above it).
 
 Set a `wt-data-table` column’s `activatesRow: false` when it has an action separate from `rowClick`.
 Clicking blank space in that column does not open the row; its controls keep their own actions. This
@@ -591,10 +676,19 @@ registerIcons({ check: "M2 8 L6 12 L14 4" });
 An unregistered `name` renders nothing — there is no broken-icon fallback markup. When a
 `packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
 trigger, for one), that name becomes part of the primitive's contract: every consuming app must
-register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
-`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, `plus`, `minus`, `bin`, `grip`, `bell`, `close`, each a
-plain geometric shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (its header carries the
-Material Symbols attribution) and is registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
+register it itself, or that primitive's icon silently disappears there. `grep -rn "registerIcons("
+apps` lists the registrations; on 2026-10-01 the production ones were `apps/dashboard/src/main.ts`
+(registering `DASHBOARD_ICONS` from `apps/dashboard/src/icons.ts`, whose header carries the Material
+Symbols attribution), `apps/till/src/till-app.ts`, `apps/till/src/widgets/station-queue.ts`,
+`apps/till/src/widgets/menu-browser.ts` and `apps/setup/src/setup-app.ts`. `chevron-down` and
+`check`, which `wt-combobox` draws, are `DROPDOWN_ICONS`
+(`packages/ui/src/components/wt-combobox.ts`, exported from `@waitron/ui`), which
+`DASHBOARD_ICONS` spreads in and the till's `till-app.ts` and setup's `setup-app.ts` register.
+Each app's
+`src/dropdown-icons.test.ts` mounts a `wt-combobox` and checks that its chevron and its chosen row's
+tick draw: the till's and setup's import the app module, so they check the app's own registration;
+the dashboard's registers `DASHBOARD_ICONS` itself, so it checks the icon set, not that `main.ts`
+registers it. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
 different things at different scales: hamburger opens the whole app's navigation (used once);
 kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
@@ -616,9 +710,9 @@ For folder deletion, read what every selected folder contains before enabling De
 Empty folders are deleted without asking; otherwise offer moving their contents up as the
 default, reversible choice.
 
-### Accessible, clickable labels (`wt-input`, `wt-switch`, `wt-combobox`)
+### Accessible, clickable labels (`wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`, `wt-switch`, `wt-combobox`)
 
-All three associate their visible `<label>` with the control through a real `for`/`id` pair —
+All of them associate their visible `<label>` with the control through a real `for`/`id` pair —
 not by wrapping the control inside the `<label>` — so the existing layout and font sizing stay
 untouched. A named `wt-input` or `wt-combobox` uses that semantic name for its `name` and `id`. An
 unnamed legacy input, an unnamed combobox and every `wt-switch` use a module-level counter
@@ -637,6 +731,8 @@ unnamed legacy input, an unnamed combobox and every `wt-switch` use a module-lev
   is the `name` when one is set and a generated `wt-combobox-trigger-N` otherwise. The trigger also
   carries `aria-labelledby` pointing at that same `<label>`, so the accessible name does not depend
   on the `for`/`id` pair alone.
+- `wt-textarea`, `wt-price-input` and `wt-number-stepper` follow `wt-input`: the label's `for` is the
+  control's `id`, which is the `name` when one is set and a generated one otherwise.
 
 This is a fix, not the original shape: both primitives used to render `<label>` and the control as
 unconnected siblings — no `for`/`id`, no `aria-label` — which left every `wt-input` silent to a
@@ -669,13 +765,16 @@ primitive that can otherwise end up with no accessible name explicitly forwards 
   the dialog was left with no accessible name at all. Do not remove that `role` attribute — doing
   so silently blinds both `wt-dialog.test.ts`'s `declares an explicit dialog role...` test and the
   a11y suite to a real regression.
-- `wt-input`: the `invalid` property was visual-only (it only reddened the border). It now also
-  sets `aria-invalid="true"|"false"` on the inner `<input>`, so a screen reader user gets the same
-  signal a sighted user gets from the red border.
+- `wt-input`: `invalid` sets `aria-invalid="true"|"false"` on the inner `<input>` as well as
+  drawing the red bottom line, so a screen reader user gets the same signal a sighted user gets
+  from the line.
 - `wt-combobox`: declares the same `@property({ attribute: "aria-label" }) override ariaLabel` as
-  `wt-button` and binds it onto the inner `.trigger` button whenever there is no visible `label` to
-  point `aria-labelledby` at. The same fallback names the panel's search `<input>`, so a combobox
-  named only by a forwarded `aria-label` does not leave its search box called just "Search".
+  `wt-button` and binds it onto the inner `.trigger` button when `label` is empty. The same
+  fallback names the panel's search `<input>`, so a combobox named only by a forwarded
+  `aria-label` does not leave its search box called just "Search". With `hide-label` and a
+  `label`, the trigger is named by `label` and the host's `aria-label` is not used.
+- `hide-label` with a `label` names the control from `label` (its `aria-label`) in `wt-input`,
+  `wt-textarea`, `wt-price-input`, `wt-number-stepper` and `wt-combobox`.
 
 ### Hit targets must not overflow their container
 
@@ -797,18 +896,69 @@ html`
 `;
 ```
 
+#### The field box
+
+Every field primitive — `wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper` and
+`wt-combobox` — draws the same filled field box, from one shared stylesheet, `fieldStyles`
+(`packages/ui-core/src/field-styles.ts`; `packages/ui` imports it as
+`@waitron/ui-core/field-styles`). The box is `.field`, exposed as the `field` part: a
+`--wt-color-field-fill` background with `--wt-radius-md` top corners and square bottom ones, a
+`--wt-field-line-width` line of `--wt-color-field-line` along its bottom and no border elsewhere,
+at least `--wt-field-height` tall. Inside it sit the label, a real `<label for>` (see "Accessible,
+clickable labels"), and the control, `.field-control`, which has no border or background of its
+own. The value paints `--wt-color-field-value`; a placeholder or hint paints `--wt-color-text-muted`
+in italics.
+
+The box carries data attributes its primitive sets, and `fieldStyles` draws each:
+
+- **The label rests or floats** (`data-label`, from `fieldLabelState`). It rests, at
+  `--wt-field-label-rest-size` and centred in the box (in `wt-textarea`, on its first line), while the field is empty and unfocused, has
+  no hint and no placeholder, and is not a date or time type (`date`, `time`, `datetime-local`,
+  `month`, `week`), whose empty field the browser fills with its own format text. Otherwise it
+  floats, at `--wt-font-size-sm` at the top left, with the value or hint under it. A value set from
+  code rather than typed floats it too. The resting rule also leaves out a box whose control the
+  browser marks `:autofill`; `packages/ui-core/src/field-styles.test.ts` checks that the rule is
+  there and parses, and nothing makes a browser autofill a field. Resting or floated, the label is
+  `--wt-color-text-muted`. A label longer than the box is cut with an ellipsis on one line; the
+  ellipsis is on the label's text, `.field-label-text`, so a required field's `*` after it is never
+  the part cut.
+- **Focus** (`:focus-within`): the bottom line becomes `--wt-field-line-width-active` of
+  `--wt-color-primary` and the label `--wt-color-field-label-focus`. That line is the field's focus
+  indicator; the control draws no focus ring of its own. A dropdown whose list is open (`data-open`)
+  drops this marking, because typing then goes to the list.
+- **Invalid** (`data-invalid`, from `invalid` or a non-empty `error`): the line becomes
+  `--wt-field-line-width-active` of `--wt-color-danger` and the label `--wt-color-danger`, and both
+  win over the focus marking, so the field `focusFirstInvalid` focuses stays red. The message is a
+  paragraph under the box, read after the hint in the control's `aria-describedby`.
+- **Disabled** (`data-disabled`): the fill is `--wt-color-field-fill-disabled`, the bottom line is
+  a dashed `--wt-field-line-width` line of `--wt-color-field-line` drawn by the box's `::after`, so
+  a disabled field is as tall as an enabled one, the label and value are `--wt-color-text-muted`
+  (the label stays muted even when the field is invalid), and the cursor is `not-allowed`. A
+  disabled field box is not dimmed by `--wt-opacity-disabled`.
+- **Compact** (`data-compact`, whenever no label is drawn: `hide-label`, or no `label` at all): the
+  box's least height is `--wt-tap-min` instead of `--wt-field-height`, which makes a single-line
+  field exactly the tap-target height.
+
+What each primitive adds in or around the box — `wt-input`'s `end` slot, the price field's sign and
+unit, the stepper's buttons, the dropdown's chevron and list — is in its row of the primitives table
+above.
+
 Use `wt-help-tooltip` for short explanations that would distract from the form when always visible.
 Give its question-mark button a localized `aria-label`. It opens on click, stays open while you
-interact with it, and closes when you press Escape or click anywhere outside it. Place it in a
-`wt-input`'s `help` slot to align it beside that field's label.
+interact with it, and closes when you press Escape or click anywhere outside it. Place it in the
+`help` slot of a `wt-input`, `wt-textarea` or `wt-combobox`, which puts it beside the field box, at
+the box's trailing end and centred on it, outside the box, so it never sits in the control's own
+click area. `wt-price-input` and `wt-number-stepper` have no `help` slot.
 
 A field's hint is its placeholder, not a line under it (owner, 2026-09-30). The `hint` of
-`wt-input`, `wt-price-input` and `wt-number-stepper` shows inside the empty field, painted
-`--wt-color-text-muted`, and a hint too long for the field is cut with an ellipsis. Chromium draws
+`wt-input`, `wt-textarea`, `wt-price-input` and `wt-number-stepper` shows inside the empty field as
+its placeholder, and `wt-combobox`'s as the trigger's text while nothing is chosen, painted
+`--wt-color-text-muted` in italics; in a single-line field a hint too long for the field is cut with
+an ellipsis. Chromium draws
 that ellipsis only while the field is not focused; a focused field clips the hint at its edge
 (seen 2026-10-01 in Chromium screenshots of three 250px fields, one
 focused; adding `text-overflow` and `overflow` to `::placeholder` did not change it). The
-hint is also kept, hidden from sight, as the native input's accessible description, because a
+hint is also kept, hidden from sight, as the control's accessible description, because a
 placeholder disappears once the field holds a value. A `placeholder` set as well wins: the field
 shows it, and the hint is then only the description. Either way a hint is seen only while the field
 is empty, so a field that starts with a value (a stepper at 0) shows its hint only once it is
@@ -1309,6 +1459,12 @@ test("paints from the primary token", async () => {
   overrides on it (`host.style.setProperty(...)`) to prove a component reads a token rather than
   hardcoding a value.
 - `cleanup()` — removes every host mounted since the last call. Call it from `afterEach`.
+- `chooseOption(el, value)` — picks `value` on a single-choice `wt-combobox` (it sets `value`,
+  never `values`, so it cannot drive a `multiple` one): sets `value`, sends the `wt-change` a
+  click on a row sends, with `detail: { value }` (bubbling and composed), and awaits the render.
+  Unlike a click, it neither closes the list nor moves focus to the trigger. It is for a screen test
+  that picks an option without driving the list; an app's test imports it as
+  `@waitron/ui/src/test-helpers.js`. Its case is in `packages/ui/src/test-helpers.test.ts`.
 
 ### Accessibility testing (axe)
 
@@ -1340,7 +1496,7 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
 - `mountThemed(html, theme?)` — `mount()`, plus paints the host's own `background` from
   `--wt-color-bg` (exactly what `packages/ui/index.html`'s `.panel { background: var(--wt-color-bg) }`
   does) and, if `theme` is passed, sets `data-theme="light"|"dark"` on the host. Without the painted
-  background, a component with no background of its own (e.g. `wt-input`'s `<label>`) would be
+  background, a component with no background of its own (e.g. `wt-switch`'s `<label>`) would be
   contrast-checked against the browser's default white page background regardless of theme —
   meaningless for dark mode.
 - `expectNoA11yViolations(context)` — runs the full default axe ruleset against `context` (almost
@@ -1380,8 +1536,21 @@ tones, and closed — verified 2026-09-14 by running
 `packages/ui/src/components/wt-toast.a11y.test.ts`; `wt-notice` on screen, fading and gone —
 verified 2026-09-30 by running `packages/ui/src/components/wt-notice.a11y.test.ts`; `wt-language-footer` closed, and open with the
 active language checked — verified 2026-09-30 by running
-`packages/ui/src/components/wt-language-footer.a11y.test.ts`). No
-token values needed changing. (axe does flag unrelated `incomplete` — not
+`packages/ui/src/components/wt-language-footer.a11y.test.ts`; the field primitives in the filled
+field box — `wt-input` with its label resting in an empty field, focused, with its label hidden,
+disabled holding a value, invalid with an error message, and with a help button beside it;
+`wt-textarea` resting, floated over a value, with a hint, focused, invalid with and without a
+message, required, disabled holding a value, with its label hidden, and with a help button;
+`wt-price-input` invalid with no message, resting, resting over a hidden currency sign and fixed
+unit, focused, and disabled with a fixed unit; `wt-number-stepper` resting, focused, invalid with no
+message, with a label longer than the box, and with its label hidden; `wt-combobox` closed with a
+value chosen, open with the chosen row ticked, with icons, with groups, with an action row,
+without a search box, with focus back on the trigger, compact, with a hint shown as the
+placeholder, with a help button, disabled with a value chosen, and opened from the keyboard with
+and without a search box — verified 2026-10-01 by running
+`packages/ui-core/src/components/wt-input.a11y.test.ts`, `wt-textarea.a11y.test.ts` beside it, and
+`packages/ui/src/components/wt-price-input.a11y.test.ts`, `wt-number-stepper.a11y.test.ts` and
+`wt-combobox.a11y.test.ts`, each state in both themes). No token values needed changing. (axe does flag unrelated `incomplete` — not
 violation — results: a `color-contrast` "background partially obscured" reading on `wt-dialog`'s
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and
 an `aria-prohibited-attr` note about `aria-label` on a light-DOM host that forwards it inward, which
@@ -1413,10 +1582,16 @@ New primitives require an axe test covering every meaningfully distinct accessib
    ...), in both light and dark themes. Before trusting it, break the component's accessibility on
    purpose (remove an `aria-label`, unassociate a label) and confirm the test actually goes red,
    then restore the fix.
-6. If it's a form field, give its host `max-width: var(--wt-field-max-width)`, so it stops at the
-   form width in a `wt-modal`, and add a test that sets `--wt-field-max-width` on the `host` and
-   asserts the field's width follows it (`packages/ui-core/src/components/wt-input.test.ts` does).
-   Nothing else checks that a new field reads it.
+6. If it's a form field, draw it with `fieldStyles` (see Forms → "The field box"): render the
+   `.field` box with `part="field"` and the `data-label` (from `fieldLabelState`), `data-invalid`,
+   `data-disabled` and `data-compact` its primitive's state calls for, the label from
+   `fieldLabel` (its text in a `.field-label-text` span inside the `.field-label`), and the control
+   as `.field-control`, so it
+   looks and behaves like the other fields. Give its host `max-width: var(--wt-field-max-width)`,
+   so it stops at the form width in a `wt-modal`, and add a test that sets `--wt-field-max-width`
+   on the `host` and asserts the field's width follows it
+   (`packages/ui-core/src/components/wt-input.test.ts` does). Nothing else checks that a new field
+   reads it, or that it uses `fieldStyles`.
 7. Add it to the workbench and to the table above.
 
 ## Workbench

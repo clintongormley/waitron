@@ -46,8 +46,12 @@ test("discovers at least one interactive primitive", () => {
   expect(interactiveComponents.length).toBeGreaterThan(0);
 });
 
-test("the interactive set is exactly wt-button and wt-input", () => {
-  expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual(["wt-button", "wt-input"]);
+test("the interactive set is exactly wt-button, wt-input and wt-textarea", () => {
+  expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual([
+    "wt-button",
+    "wt-input",
+    "wt-textarea",
+  ]);
 });
 
 const mounted: HTMLElement[] = [];

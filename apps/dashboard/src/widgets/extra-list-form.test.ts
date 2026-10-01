@@ -1077,6 +1077,42 @@ it("drops each row's Preselected text on a phone, where the column heading names
   }
 });
 
+it("on a phone the price's unit moves under the amount and keeps its inset in the field box", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mount({
+      value: addons,
+      products: [
+        product({ unitId: PORTION.id, unit: PORTION }),
+        product({
+          id: EGG,
+          name: "Fried egg",
+          unitPrice: "0.80",
+          unitId: PORTION.id,
+          unit: PORTION,
+        }),
+      ],
+    });
+    const root = field(el, "item-0-price").shadowRoot!;
+    const box = root.querySelector(".field")!.getBoundingClientRect();
+    const amount = root.querySelector("input")!.getBoundingClientRect();
+    const unit = root.querySelector('[part="unit"]')!;
+    const text = document.createRange();
+    text.selectNodeContents(unit);
+    const drawn = text.getBoundingClientRect();
+    const inset = parseFloat(getComputedStyle(unit).getPropertyValue("--wt-space-2"));
+    expect(window.innerWidth).toBe(390);
+    expect(inset).toBeGreaterThan(0);
+    expect(drawn.top, "under the amount").toBeGreaterThanOrEqual(amount.bottom);
+    expect(drawn.left - box.left, "start inset").toBeGreaterThanOrEqual(inset);
+    expect(box.bottom - drawn.bottom, "bottom inset").toBeGreaterThanOrEqual(inset);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("draws every row's price box the same width, whatever its unit", async () => {
   const { el } = await mount({
     value: addons,

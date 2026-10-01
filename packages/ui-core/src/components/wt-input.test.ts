@@ -5,13 +5,27 @@ import "./wt-input.js";
 
 afterEach(cleanup);
 
+function parts(el: HTMLElement) {
+  const root = el.shadowRoot!;
+  return {
+    field: root.querySelector<HTMLElement>(".field")!,
+    label: root.querySelector<HTMLLabelElement>("label")!,
+    input: root.querySelector<HTMLInputElement>("input")!,
+  };
+}
+
+async function settle(el: HTMLElement): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await (el as LitElement).updateComplete;
+}
+
 test("renders its label", async () => {
   const el = await mount('<wt-input label="Weight"></wt-input>');
   expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Weight");
 });
 
-test("its value is body text and its label small text", async () => {
-  const el = await mount('<wt-input label="Weight"></wt-input>');
+test("its value is body text and its floated label small text", async () => {
+  const el = await mount('<wt-input label="Weight" value="1.25"></wt-input>');
   expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).fontSize).toBe("14px");
   expect(getComputedStyle(el.shadowRoot!.querySelector("label")!).fontSize).toBe("12px");
 });
@@ -129,11 +143,12 @@ test("a hint shown as the placeholder paints from the muted-text token", async (
   expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });
 
-test("places field help beside the label without nesting its button inside the label", async () => {
+test("places field help beside the field box, nesting its button in neither the label nor the box", async () => {
   const el = await mount('<wt-input label="Email"><button slot="help">?</button></wt-input>');
   const label = el.shadowRoot!.querySelector("label")!;
   const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="help"]')!;
   expect(label.contains(slot)).toBe(false);
+  expect(el.shadowRoot!.querySelector(".field")!.contains(slot)).toBe(false);
   expect(slot.assignedElements()[0]?.textContent).toBe("?");
 });
 
@@ -142,7 +157,7 @@ test("places an end action inside the field and only reserves space while it exi
   await new Promise((resolve) => setTimeout(resolve, 0));
   await (el as LitElement).updateComplete;
 
-  const control = el.shadowRoot!.querySelector<HTMLElement>(".control")!;
+  const control = el.shadowRoot!.querySelector<HTMLElement>(".field")!;
   const input = el.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   const action = el.querySelector<HTMLButtonElement>('[slot="end"]')!;
   expect(control.classList.contains("has-end")).toBe(true);
@@ -232,18 +247,28 @@ test("wires the invalid property to aria-invalid, not just the visual border", a
   expect(invalid.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
 });
 
-test("invalid state paints from the danger token", async () => {
-  const el = await mount("<wt-input invalid></wt-input>");
+test("invalid state paints the bottom line and the label from the danger token", async () => {
+  const el = await mount('<wt-input label="Email" invalid></wt-input>');
   host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
-  const input = el.shadowRoot!.querySelector("input")!;
-  expect(getComputedStyle(input).borderColor).toBe("rgb(13, 14, 15)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label } = parts(el);
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label).color).toBe("rgb(13, 14, 15)");
 });
 
-test("disabled input dims via the disabled-opacity token", async () => {
-  const el = await mount("<wt-input disabled></wt-input>");
+test("a disabled field paints its own paler fill, a dashed line and muted text, at full opacity", async () => {
+  const el = await mount('<wt-input label="Name" value="Ana" disabled></wt-input>');
   host.style.setProperty("--wt-opacity-disabled", "0.3");
-  const input = el.shadowRoot!.querySelector("input")!;
-  expect(getComputedStyle(input).opacity).toBe("0.3");
+  host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  const { field, input } = parts(el);
+  expect(field.hasAttribute("data-disabled")).toBe(true);
+  expect(getComputedStyle(field).backgroundColor).toBe("rgb(21, 22, 23)");
+  expect(getComputedStyle(field, "::after").borderBottomStyle).toBe("dashed");
+  expect(getComputedStyle(field).boxShadow).toBe("none");
+  expect(getComputedStyle(input).color).toBe("rgb(24, 25, 26)");
+  expect(getComputedStyle(input).opacity).toBe("1");
+  expect(getComputedStyle(field).opacity).toBe("1");
 });
 
 test("is no wider than the field cap a container sets, and as wide as its container without one", async () => {
@@ -273,7 +298,7 @@ test("an input with no attributes set is a plain text field with no label or pla
   const el = await mount("<wt-input></wt-input>");
   const input = el.shadowRoot!.querySelector("input")!;
   expect(el.shadowRoot!.querySelector("label")).toBeNull();
-  expect(el.shadowRoot!.querySelector(".label-row")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".field-label")).toBeNull();
   // The rendered attribute, not input.type: the browser reports "text" for an empty type
   // attribute as well, so only the attribute tells a default-typed field from an untyped one.
   expect(input.getAttribute("type")).toBe("text");
@@ -308,4 +333,238 @@ test("the placeholder paints from the muted-text token", async () => {
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   const input = el.shadowRoot!.querySelector("input")!;
   expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
+});
+
+test("a labelled empty field with no hint is the field height tall, its label resting large and centred", async () => {
+  const el = await mount('<wt-input label="Name"></wt-input>');
+  host.style.setProperty("--wt-field-height", "70px");
+  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  const { field, label, input } = parts(el);
+  expect(field.getBoundingClientRect().height).toBe(70);
+  expect(field.getAttribute("data-label")).toBe("rest");
+  expect(field.hasAttribute("data-compact")).toBe(false);
+  expect(input.hasAttribute("aria-label")).toBe(false);
+  expect(getComputedStyle(label).fontSize).toBe("17px");
+  const fieldBox = field.getBoundingClientRect();
+  const labelBox = label.getBoundingClientRect();
+  expect(
+    Math.abs(labelBox.top + labelBox.height / 2 - (fieldBox.top + fieldBox.height / 2)),
+  ).toBeLessThanOrEqual(1);
+});
+
+for (const [what, attrs] of [
+  ["a value", 'value="x"'],
+  ["a hint", 'hint="h"'],
+  ["a placeholder", 'placeholder="p"'],
+  ...["date", "time", "datetime-local", "month", "week"].map((type) => [
+    `type ${type}`,
+    `type="${type}"`,
+  ]),
+] as const) {
+  test(`with ${what}, the label floats small at the top`, async () => {
+    const el = await mount(`<wt-input label="When" ${attrs}></wt-input>`);
+    host.style.setProperty("--wt-font-size-sm", "11px");
+    const { field, label } = parts(el);
+    expect(field.getAttribute("data-label")).toBe("float");
+    expect(getComputedStyle(label).fontSize).toBe("11px");
+    expect(label.getBoundingClientRect().top).toBeLessThan(
+      field.getBoundingClientRect().top + field.getBoundingClientRect().height / 2,
+    );
+  });
+}
+
+test("focusing an empty field floats its label and draws the focus line and label colour", async () => {
+  const el = await mount('<wt-input label="Name"></wt-input>');
+  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label } = parts(el);
+  expect(getComputedStyle(label).fontSize).toBe("17px");
+  el.focus();
+  expect(getComputedStyle(label).fontSize).toBe("11px");
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label).color).toBe("rgb(4, 5, 6)");
+});
+
+test("a field at rest draws its bottom line from the field-line token at the resting width", async () => {
+  const el = await mount('<wt-input label="Name"></wt-input>');
+  host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
+  host.style.setProperty("--wt-field-line-width", "1px");
+  host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
+  const { field } = parts(el);
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(7, 7, 7) 0px -1px 0px 0px inset");
+  expect(getComputedStyle(field).backgroundColor).toBe("rgb(8, 8, 8)");
+});
+
+test("the focused control draws no focus ring of its own: the field's line is its focus indicator", async () => {
+  const el = await mount('<wt-input label="Name"></wt-input>');
+  const { input } = parts(el);
+  input.focus();
+  expect(input.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(input).outlineStyle).toBe("none");
+});
+
+test("a value set from code after the first render floats the label", async () => {
+  const el = await mount('<wt-input label="Name"></wt-input>');
+  const { field } = parts(el);
+  expect(field.getAttribute("data-label")).toBe("rest");
+  (el as HTMLElement & { value: string }).value = "Ana";
+  await (el as LitElement).updateComplete;
+  expect(field.getAttribute("data-label")).toBe("float");
+});
+
+test("typing into an empty field floats the label", async () => {
+  const el = await mount('<wt-input label="Name"></wt-input>');
+  const { field, input } = parts(el);
+  input.value = "A";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await (el as LitElement).updateComplete;
+  expect(field.getAttribute("data-label")).toBe("float");
+});
+
+test("an error marks the field invalid as the invalid property does", async () => {
+  const el = await mount('<wt-input label="Email" error="Enter a valid email address"></wt-input>');
+  const plain = await mount('<wt-input label="Email"></wt-input>');
+  expect(parts(el).field.hasAttribute("data-invalid")).toBe(true);
+  expect(parts(plain).field.hasAttribute("data-invalid")).toBe(false);
+});
+
+test("a focused invalid field keeps the danger line and label", async () => {
+  const el = await mount('<wt-input label="Email" invalid></wt-input>');
+  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  el.focus();
+  const { field, label, input } = parts(el);
+  expect(el.shadowRoot!.activeElement).toBe(input);
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label).color).toBe("rgb(13, 14, 15)");
+});
+
+test("the value paints from the field-value token", async () => {
+  const el = await mount('<wt-input label="Name" value="Ana"></wt-input>');
+  host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
+  expect(getComputedStyle(parts(el).input).color).toBe("rgb(31, 32, 33)");
+});
+
+test("a hint shown as the placeholder is italic", async () => {
+  const el = await mount('<wt-input label="Price" hint="Optional"></wt-input>');
+  expect(getComputedStyle(parts(el).input, "::placeholder").fontStyle).toBe("italic");
+});
+
+test("hide-label draws no label, names the input by its label, and makes the field compact", async () => {
+  const el = await mount('<wt-input label="Search" hide-label></wt-input>');
+  host.style.setProperty("--wt-tap-min", "47px");
+  const { field, input } = parts(el);
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(input.getAttribute("aria-label")).toBe("Search");
+  expect(field.hasAttribute("data-compact")).toBe(true);
+  expect(field.getBoundingClientRect().height).toBe(47);
+  expect(input.getBoundingClientRect().height).toBe(47);
+});
+
+test("a field with no label at all is compact and carries no accessible-name override", async () => {
+  const el = await mount("<wt-input></wt-input>");
+  host.style.setProperty("--wt-tap-min", "47px");
+  const { field, input } = parts(el);
+  expect(field.hasAttribute("data-compact")).toBe(true);
+  expect(field.getBoundingClientRect().height).toBe(47);
+  expect(input.hasAttribute("aria-label")).toBe(false);
+});
+
+test("an end action sits inside the field box at its trailing end, and the control leaves room for it", async () => {
+  const el = await mount('<wt-input label="Password"><button slot="end">Show</button></wt-input>');
+  await settle(el);
+  const { field, input } = parts(el);
+  const action = el.querySelector<HTMLButtonElement>('[slot="end"]')!;
+  const fieldBox = field.getBoundingClientRect();
+  const actionBox = action.getBoundingClientRect();
+  expect(actionBox.right).toBeLessThanOrEqual(fieldBox.right);
+  expect(actionBox.top).toBeGreaterThanOrEqual(fieldBox.top);
+  expect(actionBox.bottom).toBeLessThanOrEqual(fieldBox.bottom);
+  expect(actionBox.left).toBeGreaterThan(fieldBox.left + fieldBox.width / 2);
+  expect(parseFloat(getComputedStyle(input).paddingRight)).toBeGreaterThanOrEqual(
+    fieldBox.right - actionBox.left,
+  );
+});
+
+test("a long label stops short of an end action", async () => {
+  const el = await mount(
+    `<wt-input label="${"Your current password, as you last set it ".repeat(3)}" value="x"><button slot="end">Show</button></wt-input>`,
+  );
+  host.style.width = "390px";
+  await settle(el);
+  const action = el.querySelector<HTMLButtonElement>('[slot="end"]')!;
+  expect(parts(el).label.getBoundingClientRect().right).toBeLessThanOrEqual(
+    action.getBoundingClientRect().left,
+  );
+});
+
+test("field help sits outside the field box, at its trailing side and centred on it", async () => {
+  const el = await mount('<wt-input label="Email"><button slot="help">?</button></wt-input>');
+  const fieldBox = parts(el).field.getBoundingClientRect();
+  const helpBox = el.querySelector("button")!.getBoundingClientRect();
+  expect(helpBox.left).toBeGreaterThanOrEqual(fieldBox.right);
+  expect(
+    Math.abs(helpBox.top + helpBox.height / 2 - (fieldBox.top + fieldBox.height / 2)),
+  ).toBeLessThanOrEqual(1);
+});
+
+test("a long label at phone width is cut with an ellipsis on one line", async () => {
+  const long = "Nombre del cliente tal como aparecerá en la factura simplificada y en el ticket "
+    .repeat(2)
+    .slice(0, 120);
+  const el = await mount(`<wt-input label="${long}" value="Ana"></wt-input>`);
+  host.style.width = "390px";
+  const short = await mount('<wt-input label="Nombre" value="Ana"></wt-input>');
+  host.style.width = "390px";
+  const text = (input: HTMLElement) =>
+    input.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+  const label = text(el);
+  const field = parts(el).field;
+  expect(long).toHaveLength(120);
+  expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
+  expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+  expect(label.scrollHeight).toBe(text(short).scrollHeight);
+  expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(
+    field.getBoundingClientRect().right,
+  );
+});
+
+test("a long required label keeps its star visible at phone width", async () => {
+  const long = "Nombre del cliente tal como aparecerá en la factura simplificada y en el ticket "
+    .repeat(2)
+    .slice(0, 120);
+  const el = await mount(`<wt-input label="${long}" value="Ana" required></wt-input>`);
+  host.style.width = "390px";
+  const labelBox = parts(el).label.getBoundingClientRect();
+  const starBox = el.shadowRoot!.querySelector("[data-required]")!.getBoundingClientRect();
+  expect(starBox.width).toBeGreaterThan(0);
+  expect(starBox.left).toBeLessThan(labelBox.right);
+  expect(starBox.right).toBeLessThanOrEqual(labelBox.right);
+});
+
+test("a disabled field is as tall as an enabled one, and a compact disabled one is the tap-target height", async () => {
+  const enabled = await mount('<wt-input label="Name" value="Ana"></wt-input>');
+  const disabled = await mount('<wt-input label="Name" value="Ana" disabled></wt-input>');
+  const compact = await mount('<wt-input label="Search" hide-label disabled></wt-input>');
+  host.style.setProperty("--wt-tap-min", "47px");
+  expect(parts(disabled).field.getBoundingClientRect().height).toBe(
+    parts(enabled).field.getBoundingClientRect().height,
+  );
+  expect(parts(compact).field.getBoundingClientRect().height).toBe(47);
+});
+
+test("a disabled field's label stays muted even when the field is invalid", async () => {
+  const invalid = await mount('<wt-input label="Email" value="x" disabled invalid></wt-input>');
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  const withError = await mount(
+    '<wt-input label="Email" value="x" disabled error="Bad"></wt-input>',
+  );
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  expect(getComputedStyle(parts(invalid).label).color).toBe("rgb(24, 25, 26)");
+  expect(getComputedStyle(parts(withError).label).color).toBe("rgb(24, 25, 26)");
 });

@@ -82,3 +82,14 @@ export async function formMessageOf(actions: WtFormActions): Promise<Element | n
   }
   return actions.shadowRoot!.querySelector("[data-error]");
 }
+
+/** Sets `value` on a wt-combobox and sends the `wt-change` (bubbling, composed) a click on its row
+ * sends. Unlike a click, it neither closes the list nor moves focus to the trigger. */
+export async function chooseOption(el: Element, value: string): Promise<void> {
+  const box = el as HTMLElement & { value: string; updateComplete?: Promise<unknown> };
+  box.value = value;
+  box.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await box.updateComplete;
+}

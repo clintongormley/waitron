@@ -54,6 +54,9 @@ const overlaps = (a: DOMRect, b: DOMRect) =>
 
 const INTERACTIVE = "button, a[href], input, select, textarea, wt-button, wt-card, [tabindex]";
 
+// A small phone's height (iPhone SE), short enough that every screen below scrolls.
+const VIEWPORT_HEIGHT = 667;
+
 describe("the language chooser, with the page scrolled to the bottom", () => {
   const cases = (["admin", "venue", "cert", "connect", "restore-bucket", "mode"] as const).flatMap(
     (screen) =>
@@ -65,7 +68,7 @@ describe("the language chooser, with the page scrolled to the bottom", () => {
   it.each(cases)(
     "covers nothing interactive on the $screen screen ($locale, $width wide)",
     async ({ screen, locale, width }) => {
-      await page.viewport(width, 844);
+      await page.viewport(width, VIEWPORT_HEIGHT);
       const el = await mountAt(screen, [locale]);
       const scroller = document.scrollingElement!;
       scroller.scrollTop = scroller.scrollHeight;
@@ -83,7 +86,7 @@ describe("the language chooser, with the page scrolled to the bottom", () => {
   );
 
   it("is measured on a screen tall enough to scroll at phone width", async () => {
-    await page.viewport(390, 844);
+    await page.viewport(390, VIEWPORT_HEIGHT);
     await mountAt("admin", ["es-ES"]);
     const scroller = document.scrollingElement!;
     expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);

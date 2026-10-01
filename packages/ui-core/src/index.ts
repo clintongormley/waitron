@@ -1,6 +1,7 @@
 export * from "./tokens/index.js";
 export * from "./components/wt-button.js";
 export * from "./components/wt-input.js";
+export * from "./components/wt-textarea.js";
 export * from "./components/wt-card.js";
 export * from "./components/wt-icon.js";
 export * from "./components/wt-spinner.js";
@@ -9,3 +10,4 @@ export * from "./components/wt-form-error-summary.js";
 export * from "./interactive.js";
 export * from "./submit-on-enter.js";
 export * from "./base-styles.js";
+export * from "./field-styles.js";
