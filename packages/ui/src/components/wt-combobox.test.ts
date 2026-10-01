@@ -1881,6 +1881,45 @@ test("a repeated first letter steps through the options starting with it", async
   }
 });
 
+test("the same letter pressed again inside 500 ms steps on to the next option starting with it, on a closed trigger", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const { trigger } = fieldParts(el);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const seen: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      pressKeys(trigger, "p");
+      seen.push(el.value);
+      vi.advanceTimersByTime(100);
+    }
+    expect(seen).toEqual(["pepper", "paper", "pasta", "pepper"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the same letter pressed again inside 500 ms steps on to the next row starting with it, in an open list", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  const list = listbox(el);
+  expect(activeRowText(el, list)).toBe("Pack a new one…");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const seen: (string | undefined)[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      pressKeys(list, "p");
+      await el.updateComplete;
+      seen.push(activeRowText(el, list));
+      vi.advanceTimersByTime(100);
+    }
+    expect(seen).toEqual(["Pepper", "Paper", "Pasta", "Pepper"]);
+    expect(el.value).toBe("");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("keys with a modifier, and type-ahead on a closed multiple choice, change nothing", async () => {
   const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
   const { trigger, popup } = fieldParts(el);
