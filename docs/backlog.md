@@ -1255,8 +1255,8 @@ window it opens for one option, `apps/dashboard/src/widgets/option-label-form.ts
   radio button and the row menu in the same row must keep their own clicks.
 - **The "Edit option" window should open with its "Customer and kitchen names" section already
   expanded** — owner: _"it's the only thing on that screen"_ besides the name and the Available
-  switch. Today it starts collapsed like every `wt-disclosure`. "Add option" opens the same window;
-  the owner's reason applies to it too, but the owner named only Edit, so confirm. **This is an
+  switch. Today it starts collapsed like every `wt-disclosure`. "Add option" opens the same window
+  and starts expanded too (owner, 2026-10-01: "yes"). **This is an
   exception to a written rule:** `docs/developers/design-system.md` → "Sections always start
   collapsed", which the change must update to name the exception and why. Related: A169 redraws
   the same section.
