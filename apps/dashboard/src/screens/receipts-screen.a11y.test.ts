@@ -76,7 +76,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders accessibly with the error banner shown", async () => {
+  it("renders accessibly with a refused save shown in the form's bottom message", async () => {
     const { el, host } = await mountWidget<ReceiptsScreen>(
       "dashboard-receipts-screen",
       { api: stubApi({ putReceipt: vi.fn().mockRejectedValue({ code: "receipt.invalid" }) }) },

@@ -75,14 +75,14 @@ describe("receipts page: the receipt header and footer", () => {
     expect(footer.value).toBe("Gracias por su visita");
   });
 
-  it("renders exactly one h1 (Recibo)", async () => {
+  it("renders exactly one h1, the page title", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     const h1s = qa(el, "h1");
     expect(h1s).toHaveLength(1);
-    expect(h1s[0]!.textContent).toContain("Recibo");
+    expect(h1s[0]!.textContent).toBe("Recibos");
   });
 
   it("leaves both fields empty when the receipt config is empty", async () => {
@@ -173,9 +173,9 @@ describe("receipts page: the receipt header and footer", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("receipt.invalid");
-    const banner = (q(el, "wt-form-actions") as HTMLElement & { error: string }).error;
-    expect(banner).toContain(codeMessage("receipt.invalid", "es-ES"));
-    expect(banner).not.toContain("receipt.invalid");
+    const message = (q(el, "wt-form-actions") as HTMLElement & { error: string }).error;
+    expect(message).toContain(codeMessage("receipt.invalid", "es-ES"));
+    expect(message).not.toContain("receipt.invalid");
   });
 
   it("falls back to server.internal when a rejected putReceipt carries no code", async () => {

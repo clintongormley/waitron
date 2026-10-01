@@ -214,7 +214,8 @@ What the cap covers of a field's label, hint and error depends on how the field 
 Outside a `wt-modal`, `--wt-field-max-width` is the theme root's `none`, so a field on a page, or in a `wt-dialog`
 that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
 inside a modal's body inherits the cap. Page forms are bounded by their screen's own column instead
-(the setup wizard's raised column, and the `max-width` of screens such as backup, receipt and sign-in),
+(the setup wizard's raised column, the `max-width` of screens such as backup and sign-in, and the
+receipts screen's form column),
 so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
 still takes the body's whole width.
 
@@ -1249,7 +1250,7 @@ the normal, expected treatment there.
 | Role | Token(s) | Example |
 | --- | --- | --- |
 | Page title | `--wt-font-size-xl`, bold | a screen's own `<h1>` — "Your profile" no longer qualifies: it's a `wt-modal` heading now (`--wt-font-size-lg`, its own role, not this one) |
-| Group label | `--wt-font-size-sm`, bold, uppercase, muted | illustrative — no page-content screen currently uses this role; the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below) |
+| Group label | `--wt-font-size-sm`, bold, uppercase, muted | the receipts screen's section headings (`apps/dashboard/src/screens/receipts-screen.ts`); the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below) |
 | Field label | `--wt-font-size-sm`, normal weight, muted | "Name" |
 | Field value | `--wt-font-size-md`, bold | "Clinton Gormley" |
 

@@ -985,8 +985,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
    `kitchen-screen.ts`, `service-status-screen.ts`.
-6. **The two editors** — `canvas-editor-screen.ts`, `receipts-screen.ts` (`receipt-screen.ts` until
-   C116, 2026-10-01).
+6. **The two editors** — `canvas-editor-screen.ts`. The receipt one is done: C116 (2026-10-01)
+   rebuilt it under the current forms rules as the Receipts page, `receipts-screen.ts`.
 7. **Workforce** — `roster-screen.ts`, `my-schedule-screen.ts`, `planned-actual-screen.ts`,
    `approvals-screen.ts`.
 8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
@@ -7625,7 +7625,7 @@ ongoing overhaul listed at the top of Track A.
     own location (`deps.cfg.locationId`). Each field's hint, shown as its placeholder while it is
     empty, says what it is for and where it appears.
   - Beside the fields (below them at phone width) the server draws the sample sale from
-    `sample-receipt.ts` as a receipt would print it, with the unsaved header and footer, the venue's
+    `sample-receipt.ts` with the formatter a sale's receipt prints from, with the unsaved header and footer, the venue's
     legal name and tax ID, the location's receipt language, and the width of the receipt printer of
     the location's till first by name (80 mm at 180 dpi, 512 dots, when there is none):
     `POST /management-api/receipt-preview` (`apps/server/src/receipt-preview-api.ts`), which saves
