@@ -294,6 +294,21 @@ describe("till-ticket-view", () => {
     expect(text(el)).toContain("VERI*FACTU");
   });
 
+  it("shows «QR tributario:» centred, directly above the QR, in an English operator UI too", async () => {
+    setLocale("en-GB");
+    const { el } = await mount();
+    const qr = el.shadowRoot!.querySelector("svg")!.closest(".qr")!;
+    const caption = qr.previousElementSibling as HTMLElement | null;
+    expect(caption?.textContent?.trim()).toBe("QR tributario:");
+    expect(getComputedStyle(caption!).textAlign).toBe("center");
+  });
+
+  it("shows no «QR tributario:» caption when no QR is shown", async () => {
+    const { el } = await mount({ qr: "" });
+    expect(text(el)).not.toContain("QR tributario");
+    expect(text(el)).toContain("VERI*FACTU");
+  });
+
   it("prints the legend but no QR when the verification URL is empty", async () => {
     const { el } = await mount({ qr: "" });
     expect(el.shadowRoot!.querySelector("svg")).toBeNull();

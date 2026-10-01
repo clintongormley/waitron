@@ -2759,8 +2759,8 @@ describe("refund first (design §4.3, §6a)", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "")
-        .slice(0, 3),
-    ).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €", "VERI*FACTU"]);
+        .slice(0, 4),
+    ).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €", "QR tributario:", "VERI*FACTU"]);
   });
 });
 

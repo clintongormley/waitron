@@ -97,6 +97,9 @@ const LABEL = {
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
 
+/** AEAT's caption above the QR (its QR specification v0.5.0, §3). Spanish; never translated. */
+const QR_CAPTION = "QR tributario:";
+
 /** The per-dish option-quantity badge (`×2`). */
 const QTY_BADGE = "×";
 
@@ -276,6 +279,7 @@ export function formatReceipt({
       dpiValue(printer.resolution),
       safeWidthDots(printer.paperWidth),
     );
+    b.line(QR_CAPTION);
     b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
   }
 

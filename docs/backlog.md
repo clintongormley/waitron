@@ -7790,6 +7790,27 @@ ongoing overhaul listed at the top of Track A.
     `assertPassiveManagementReads` in `apps/server/src/boot.test.ts`, which sends a preview through
     the booted server with and without the passive header and checks that only the second moves the
     session's last-seen time.
+- **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01).** AEAT's «Detalle de
+  las especificaciones técnicas del código «QR» de la factura», version 0.5.0 of 10/12/2025, section
+  3, says: «La presentación del código «QR» incluirá también un texto que siempre deberá ir
+  precediéndolo: «QR tributario:», y que se situará encima del propio código «QR» (preferiblemente
+  centrado con respecto a este), de manera que sirva para identificarlo y distinguirlo de otros
+  posibles códigos «QR» que pudiera contener la factura para otros cometidos.» Both places that show
+  a filed sale's QR now put that exact text, in Spanish whatever the receipt language, on its own
+  line directly above it, centred like the QR, and only when there is a QR (a sale with no
+  verification link shows neither, and the VERI\*FACTU line under it is unchanged): the printed
+  receipt (`apps/server/src/receipt-ticket.ts`, which the sale's print, the dashboard's live preview
+  and the sample receipt all draw with) and the till's on-screen ticket
+  (`apps/till/src/screens/till-ticket-view.ts`). Checked and left alone: the two printer test pages
+  (`apps/server/src/printer-test-page.ts`, `apps/server/src/test-page.ts`) print a QR that is not an
+  invoice's, and the payment slip prints no QR. Nothing about the filed record changed.
+  - Still open, for the owner to decide: the same section 3 also says «El código «QR» se situará al
+    principio de la factura, antes de que empiece el contenido de ésta generado por el sistema
+    informático de facturación, a menos que se justifique la existencia de algún obstáculo para
+    ello, en cuyo caso, deberá quedar siempre bien visible y estar claramente separado y
+    diferenciado –de forma que destaque– del resto de contenidos y otros posibles «QR», ocupando un
+    lugar preeminente.» Waitron prints the QR near the END of the receipt, just above the
+    VERI\*FACTU line, and shows it there on the till's screen too. Not changed here.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
