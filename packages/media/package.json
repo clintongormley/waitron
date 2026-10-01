@@ -31,6 +31,7 @@
     "@types/node": "^26.0.0",
     "@vitest/browser-playwright": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.11",
+    "@waitron/migrations": "workspace:*",
     "drizzle-kit": "^0.31.11",
     "playwright": "^1.63.0",
     "typescript": "^7.0.0",

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
-import { binary, id, json, label, labelList, newId, now, table, ts } from "@waitron/db";
+import { binary, id, json, label, newId, now, table, ts } from "@waitron/db";
 
 export const mediaImages = table(
   "media_images",
@@ -8,8 +8,6 @@ export const mediaImages = table(
     id: id("id").primaryKey().$defaultFn(newId),
     filename: label("filename").notNull(),
     names: json<Record<string, string>>("names").notNull(),
-    altText: json<Record<string, string>>("alt_text").notNull(),
-    labels: labelList("labels").notNull().default([]),
     createdAt: ts("created_at").notNull().$defaultFn(now),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
@@ -26,10 +24,7 @@ export const mediaImages = table(
     ),
     // The column is plain text, so text that is not JSON reaches `json_type`, which raises
     // "malformed JSON" — a SQLITE_ERROR, not a CHECK-constraint failure.
-    check(
-      "media_images_names_ck",
-      sql`json_type(${t.names}) = 'object' and json_type(${t.altText}) = 'object'`,
-    ),
+    check("media_images_names_ck", sql`json_type(${t.names}) = 'object'`),
   ],
 );
 
