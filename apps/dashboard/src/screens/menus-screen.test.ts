@@ -3922,6 +3922,40 @@ describe("home page", () => {
     expect(modal(el, "layout-delete").open).toBe(false);
   });
 
+  it("drops a refused delete's message on Cancel, so the window neither keeps it shut nor scrolls to it reopened", async () => {
+    const client = api({
+      deleteHomeLayout: vi.fn().mockRejectedValue({ code: "menu.default_layout_required" }),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+    await el.updateComplete;
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    await vi.waitFor(async () =>
+      expect(await bottom(el, "layout-delete")).toBe(codeMessage("menu.default_layout_required")),
+    );
+    inModal(el, "layout-delete", '[data-test="layout-delete-cancel"]').click();
+    await el.updateComplete;
+    expect(modal(el, "layout-delete").open).toBe(false);
+    expect(await bottom(el, "layout-delete")).toBe("");
+
+    const seen: string[] = [];
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (
+      this: Element,
+    ) {
+      seen.push(this.textContent?.trim() ?? "");
+    });
+    try {
+      emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+      await el.updateComplete;
+      await modal(el, "layout-delete").updateComplete;
+    } finally {
+      spy.mockRestore();
+    }
+    expect(modal(el, "layout-delete").open).toBe(true);
+    expect(seen).not.toContain(codeMessage("menu.default_layout_required"));
+    expect(await bottom(el, "layout-delete")).toBe("");
+  });
+
   it("makes a layout the menu's default", async () => {
     const client = api();
     const el = await mountHome(client);
@@ -4245,6 +4279,18 @@ describe("the name forms", () => {
     expect(name().error).toBe("");
     expect(await bottom(el, form.form)).toBe("");
     expect(save().disabled).toBe(false);
+  });
+
+  it.each(forms)("$form keeps no message once it is cancelled", async (form) => {
+    const { el, name, save } = await opened(form);
+    await rename(el, name(), "");
+    save().click();
+    await el.updateComplete;
+    expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
+    inModal(el, form.form, `[data-test="${form.form}-cancel"]`).click();
+    await el.updateComplete;
+    expect(modal(el, form.form).open).toBe(false);
+    expect(await bottom(el, form.form)).toBe("");
   });
 });
 

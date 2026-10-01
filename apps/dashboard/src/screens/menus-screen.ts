@@ -1572,6 +1572,9 @@ export class MenusScreen extends LitElement {
     close: () => void;
     submit: () => void;
   }) {
+    // A shut dialog holds no message: a form's errors clear only when it next opens, and the dialog
+    // scrolls to its footer row's message as it opens, before the row has taken the cleared one.
+    const message = options.open ? (options.errors?.bottom ?? "") : "";
     return html`<wt-modal
       data-test=${options.test}
       .open=${options.open}
@@ -1583,7 +1586,7 @@ export class MenusScreen extends LitElement {
       }}
     >
       ${options.open ? options.body : nothing}
-      <wt-form-actions slot="footer" .error=${options.errors?.bottom ?? ""}
+      <wt-form-actions slot="footer" .error=${message}
         ><wt-button
           slot="cancel"
           variant="secondary"
