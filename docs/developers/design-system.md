@@ -1125,7 +1125,10 @@ from these cards: the edit form no longer needs to fit the page's own (narrower)
 modal sizes itself independently; and there's no more "why doesn't the current page highlight in
 the sidebar while editing" confusion, since the page never stopped being the page. See "Card action
 buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
-above for the close-event race a shared, reused modal needs to guard against.
+above for the close-event race a shared, reused modal needs to guard against. One exception: a row
+action that changes one thing and loses nothing saves straight away rather than opening a modal —
+Content languages' Set as default and Remove (removing a language keeps its translations); its Add
+still opens one.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the

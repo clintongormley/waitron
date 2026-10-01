@@ -6597,14 +6597,16 @@ ongoing overhaul listed at the top of Track A.
   (the ingredient form, the till's party name dialog, among others) are held only by the dialog's
   own 768px limit — whether they should follow the modal's form width is the owner's call.
 
-- **Content languages are managed on the page itself (C111, owner 2026-09-30) — DONE (2026-10-01,
-  no pull request yet).** The Content languages page used to show the default and the enabled
+- **Content languages are managed on the page itself (C111, owner 2026-09-30) — DONE
+  (2026-10-01).** The Content languages page used to show the default and the enabled
   languages as text with an Edit button, and Edit opened a dialog with a "Default language" select,
   each language with Remove, a two-sentence note, and an "Add language" select and button. Now the
   page lists the enabled languages as rows in one card, in the repeatable-list shape the design
   system describes (a hairline between rows, none above the first, Add in the card's footer), drawn
-  like the passkey rows on the profile screen. The first row is the default and says so, and has no
-  actions; every other row has "Set as default" and "Remove", which save at once. The other rows are
+  like the Password and PIN rows on the profile screen. The first row is the default and says so,
+  and has no actions; every other row has "Set as default" and "Remove", which save at once —
+  `docs/developers/design-system.md` records this as an exception to its rule that every action
+  opens a `wt-modal`. The other rows are
   in alphabetical order of their names in the dashboard's language. While a save is in flight every
   action waits; a refused save shows one message in the card, above Add language, and the actions
   keep working. "Add language" opens a `wt-modal` holding only the language list and Cancel / Add;
@@ -9389,22 +9391,20 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
-**The content-languages dialog keeps the languages it opened with — DONE (2026-10-01, C111, no
-pull request yet).** _C111 removed the Edit dialog. Set as default and Remove save from the
+**The content-languages dialog keeps the languages it opened with — DONE (2026-10-01, C111).** _C111 removed the Edit dialog. Set as default and Remove save from the
 languages the page shows at the press, and the Add language dialog adds to the languages the page
 holds when Add is pressed, so a live update that arrives while it is open is kept: the screen case
 "adds to the languages as they are now, after a change made elsewhere while the dialog was open"
 (`apps/dashboard/src/screens/content-languages-screen.test.ts`) adds French after a live update
 added Italian, and fails when the dialog is made to copy the list as it opens (tried
-2026-10-01)._ (Found 2026-09-29, reviewing C44's content-languages page, #829.) `apps/dashboard/src/widgets/content-languages.ts` copies
+2026-10-01)._ The original finding (found 2026-09-29, reviewing C44's content-languages page,
+#829): `apps/dashboard/src/widgets/content-languages.ts` copies
 the settings it is given when the dialog opens and does not take a newer copy while it is open. A
 throwaway browser test opened Edit with Spanish and English enabled, then delivered a live update
 adding French (as a change saved from another tab would), then saved without touching anything: the
 dialog submitted Spanish and English only, so the save removed French. The same test failed the
 same way with the Products page's code from before C44 restored, so this is older than the move to
-the Settings page; C44 left the dialog unchanged on purpose. **Next action:** decide what the open
-dialog does when the saved languages change under it (take the new list if nothing was edited, or
-warn and let the person reload), and fix it test-first in the widget.
+the Settings page; C44 left the dialog unchanged on purpose.
 
 **The till reports a failed list refresh after a SUCCESSFUL write as a failed write — DONE
 (PR #641; comment fixes from the #621 review landed as #632).** The park, cash-sale, card-sale and

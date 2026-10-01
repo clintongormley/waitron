@@ -12,9 +12,9 @@ its own, and takes the product's.
 A new venue starts with its content languages already chosen. A venue in Spain starts with Spanish
 as the default and Catalan and English alongside; a venue anywhere else starts with one language,
 worked out from where it is. To add another, open **Settings**, then **Content languages**, which
-shows your default and the languages you have now. Select **Edit**, keep your default, choose the
-language and select **Add language**. Save the settings to make its translation fields available
-throughout your content editors.
+lists your languages with the default first. Select **Add language**, choose the language and select
+**Add**. Its translation fields are then available throughout your content editors. To change the
+default, select **Set as default** on that language's row.
 
 For example, with Spanish as the default and English alongside, a product whose customer-facing name
 reads **Pan de verano** in Spanish can leave its English one empty while you prepare the translation.
@@ -36,8 +36,8 @@ some names and none in the new default language does. Edit a reusable section's 
 **Products and menus**, **Sections**.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
-Add the language again to resume using those translations. You cannot remove the default language
-until you choose a replacement.
+Add the language again to resume using those translations. The default language's row has no
+**Remove**: choose another default first.
 
 Your receipt-language settings remain independent. Adding English content does not add an English
 receipt, and changing the content default does not rewrite issued receipts. Kitchen displays,
