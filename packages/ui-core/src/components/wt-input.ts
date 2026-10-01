@@ -129,7 +129,7 @@ export class WtInput extends LitElement {
           ${
             showLabel
               ? html`<label class="field-label" for=${inputId}
-                  >${this.label}${
+                  ><span class="field-label-text">${this.label}</span>${
                     this.required
                       ? html`<span class="required" data-required aria-hidden="true">*</span>`
                       : nothing

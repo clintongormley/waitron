@@ -32,11 +32,19 @@ export const fieldStyles = css`
     position: absolute;
     inset-inline: var(--wt-space-3);
     top: var(--wt-space-2);
+    display: flex;
     font-size: var(--wt-font-size-sm);
     color: var(--wt-color-text-muted);
+  }
+  /* The text takes the ellipsis so a required field's star, after it, is never the part cut. */
+  .field-label-text {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     text-wrap: nowrap;
+  }
+  .field-label .required {
+    flex: none;
   }
   .field[data-label="rest"]:not(:focus-within):not(:has(:autofill)) .field-label {
     top: 50%;
@@ -75,8 +83,19 @@ export const fieldStyles = css`
   .field[data-disabled] {
     background: var(--wt-color-field-fill-disabled);
     box-shadow: none;
-    border-bottom: var(--wt-field-line-width) dashed var(--wt-color-field-line);
     cursor: not-allowed;
+  }
+  /* Drawn over the box rather than as its border, so a disabled field keeps the enabled height. */
+  .field[data-disabled]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    border-bottom: var(--wt-field-line-width) dashed var(--wt-color-field-line);
+    pointer-events: none;
+  }
+  .field[data-disabled] .field-label {
+    color: var(--wt-color-text-muted);
   }
   .field[data-disabled] .field-control {
     color: var(--wt-color-text-muted);

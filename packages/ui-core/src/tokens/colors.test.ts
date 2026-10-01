@@ -182,3 +182,23 @@ describe.each(["light", "dark"] as const)("field tokens (%s)", (theme) => {
     ).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+test("the OS dark preference gives the field tokens the same values as an explicit dark theme", async () => {
+  await commands.emulateColorScheme("dark");
+  const byPreference = mount();
+  const fromPreference = FIELD_TOKENS.map((name) => token(byPreference, name));
+  byPreference.remove();
+  const explicit = mount("dark");
+  expect(fromPreference).toEqual(FIELD_TOKENS.map((name) => token(explicit, name)));
+  expect(fromPreference).not.toEqual(FIELD_TOKENS.map(() => ""));
+});
+
+test("the OS light preference gives the field tokens the same values as an explicit light theme", async () => {
+  await commands.emulateColorScheme("light");
+  const byPreference = mount();
+  const fromPreference = FIELD_TOKENS.map((name) => token(byPreference, name));
+  byPreference.remove();
+  const explicit = mount("light");
+  expect(fromPreference).toEqual(FIELD_TOKENS.map((name) => token(explicit, name)));
+  expect(fromPreference).not.toEqual(FIELD_TOKENS.map(() => ""));
+});

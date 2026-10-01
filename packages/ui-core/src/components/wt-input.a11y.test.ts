@@ -28,8 +28,6 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
-  // invalid only flips a visual border by default — the design-system contract requires it to
-  // also set aria-invalid on the inner input, which is what makes this state accessible.
   test("invalid input", async () => {
     await mountThemed('<wt-input label="Peso (kg)" invalid value="-1"></wt-input>', theme);
     await expectNoA11yViolations(host);

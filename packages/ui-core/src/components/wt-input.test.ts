@@ -264,7 +264,7 @@ test("a disabled field paints its own paler fill, a dashed line and muted text, 
   const { field, input } = parts(el);
   expect(field.hasAttribute("data-disabled")).toBe(true);
   expect(getComputedStyle(field).backgroundColor).toBe("rgb(21, 22, 23)");
-  expect(getComputedStyle(field).borderBottomStyle).toBe("dashed");
+  expect(getComputedStyle(field, "::after").borderBottomStyle).toBe("dashed");
   expect(getComputedStyle(field).boxShadow).toBe("none");
   expect(getComputedStyle(input).color).toBe("rgb(24, 25, 26)");
   expect(getComputedStyle(input).opacity).toBe("1");
@@ -521,13 +521,50 @@ test("a long label at phone width is cut with an ellipsis on one line", async ()
   host.style.width = "390px";
   const short = await mount('<wt-input label="Nombre" value="Ana"></wt-input>');
   host.style.width = "390px";
-  const label = parts(el).label;
+  const text = (input: HTMLElement) =>
+    input.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+  const label = text(el);
   const field = parts(el).field;
   expect(long).toHaveLength(120);
   expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
   expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
-  expect(label.scrollHeight).toBe(parts(short).label.scrollHeight);
+  expect(label.scrollHeight).toBe(text(short).scrollHeight);
   expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(
     field.getBoundingClientRect().right,
   );
+});
+
+test("a long required label keeps its star visible at phone width", async () => {
+  const long = "Nombre del cliente tal como aparecerá en la factura simplificada y en el ticket "
+    .repeat(2)
+    .slice(0, 120);
+  const el = await mount(`<wt-input label="${long}" value="Ana" required></wt-input>`);
+  host.style.width = "390px";
+  const labelBox = parts(el).label.getBoundingClientRect();
+  const starBox = el.shadowRoot!.querySelector("[data-required]")!.getBoundingClientRect();
+  expect(starBox.width).toBeGreaterThan(0);
+  expect(starBox.left).toBeLessThan(labelBox.right);
+  expect(starBox.right).toBeLessThanOrEqual(labelBox.right);
+});
+
+test("a disabled field is as tall as an enabled one, and a compact disabled one is the tap-target height", async () => {
+  const enabled = await mount('<wt-input label="Name" value="Ana"></wt-input>');
+  const disabled = await mount('<wt-input label="Name" value="Ana" disabled></wt-input>');
+  const compact = await mount('<wt-input label="Search" hide-label disabled></wt-input>');
+  host.style.setProperty("--wt-tap-min", "47px");
+  expect(parts(disabled).field.getBoundingClientRect().height).toBe(
+    parts(enabled).field.getBoundingClientRect().height,
+  );
+  expect(parts(compact).field.getBoundingClientRect().height).toBe(47);
+});
+
+test("a disabled field's label stays muted even when the field is invalid", async () => {
+  const invalid = await mount('<wt-input label="Email" value="x" disabled invalid></wt-input>');
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  const withError = await mount(
+    '<wt-input label="Email" value="x" disabled error="Bad"></wt-input>',
+  );
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  expect(getComputedStyle(parts(invalid).label).color).toBe("rgb(24, 25, 26)");
+  expect(getComputedStyle(parts(withError).label).color).toBe("rgb(24, 25, 26)");
 });
