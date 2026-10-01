@@ -72,6 +72,7 @@ import {
   listStationQueue,
   listTablesWithState,
   markCollected,
+  markCollectedOnce,
   markCourseAway,
   markGroupServed,
   markServed,
@@ -1390,7 +1391,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
-      await markCollected({ db: deps.db }, deps.cfg, id);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (body.submissionId !== undefined) {
+        await markCollectedOnce({ db: deps.db }, deps.cfg, id, submissionIdOf(body));
+      } else {
+        await markCollected({ db: deps.db }, deps.cfg, id);
+      }
       return c.body(null, 200);
     }),
   );

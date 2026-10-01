@@ -10,7 +10,8 @@ import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/share
 import type { ServiceMode } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import { markCollected, parkOrder, placeOrder } from "./working-order.js";
-import { inTx, provisionBillVenue, registroCount, tabWith } from "./testing/bill-venue.js";
+import { inTx, provisionBillVenue, registroCount, send, tabWith } from "./testing/bill-venue.js";
+import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
@@ -343,5 +344,110 @@ describe("payment and handover in either order end with the same facts", () => {
     const expected = { status: "settled", handedOver: true, sales: 1, registros: 1, tickets: 1 };
     expect(await facts(paidFirst)).toEqual(expected);
     expect(await facts(handedOverFirst)).toEqual(expected);
+  });
+});
+
+describe("POST /api/orders/:id/collect with a submission id (retry-safe)", () => {
+  const handOverRoute = (id: string, body?: unknown) =>
+    send(venue.app, venue.cookie, "POST", `/api/orders/${id}/collect`, body);
+
+  it("answers a resent handover with the first result, not already_collected", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    const submissionId = randomUUID();
+
+    const first = await handOverRoute(id, { submissionId });
+    expect(first).toEqual({ status: 200, json: { body: "" } });
+    const handedOverAt = (await orderRow(id)).collectedAt;
+    expect(handedOverAt).not.toBeNull();
+
+    const retry = await handOverRoute(id, { submissionId });
+    expect(retry).toEqual({ status: 200, json: { body: "" } });
+    expect((await orderRow(id)).collectedAt).toBe(handedOverAt);
+  });
+
+  it("refuses a new handover request on an order already handed over", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    expect((await handOverRoute(id, { submissionId: randomUUID() })).status).toBe(200);
+
+    const again = await handOverRoute(id, { submissionId: randomUUID() });
+    expect(again).toEqual({
+      status: 409,
+      json: { code: "working_order.already_collected", params: { workingOrderId: id } },
+    });
+  });
+
+  it("records nothing for a refused handover, so the same id can be sent again once it can succeed", async () => {
+    const id = await parked("prepay", "Tarta");
+    const submissionId = randomUUID();
+    const refused = await handOverRoute(id, { submissionId });
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({ code: "working_order.not_settled" });
+
+    await payWorkingOrder(
+      deps(),
+      venue.cfg,
+      { id, lines: [], tender: { method: "cash", amount: "50.00" } },
+      venue.operatorId,
+    );
+    expect((await handOverRoute(id, { submissionId })).status).toBe(200);
+    expect((await orderRow(id)).collectedAt).not.toBeNull();
+  });
+
+  it("refuses the id when it was used for another command on the same bill (submission.id_reused)", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    const submissionId = randomUUID();
+    await inTx(venue, (tx) =>
+      runServiceCommand(
+        tx,
+        { kind: "bill", workingOrderId: id },
+        submissionId,
+        "adjustment.apply",
+        { orderId: id },
+        () => Promise.resolve({}),
+      ),
+    );
+
+    const reused = await handOverRoute(id, { submissionId });
+    expect(reused).toEqual({
+      status: 409,
+      json: { code: "submission.id_reused", params: { submissionId } },
+    });
+    expect((await orderRow(id)).collectedAt).toBeNull();
+  });
+
+  it("treats the same id on another order as that order's own request", async () => {
+    const first = await placed("ticket_then_pay", "Tarta");
+    const second = await placed("ticket_then_pay", "Tarta");
+    const submissionId = randomUUID();
+    expect((await handOverRoute(first, { submissionId })).status).toBe(200);
+    expect((await handOverRoute(second, { submissionId })).status).toBe(200);
+    expect((await orderRow(second)).collectedAt).not.toBeNull();
+  });
+
+  it.each([
+    ["empty", ""],
+    ["too long", "x".repeat(201)],
+    ["not a string", 7],
+    ["null", null],
+  ])("refuses a submission id that is %s, and hands nothing over", async (_case, submissionId) => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    const refused = await handOverRoute(id, { submissionId });
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "submissionId" } },
+    });
+    expect((await orderRow(id)).collectedAt).toBeNull();
+  });
+
+  it("reads a body that is not an object as one with no submission id", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    expect((await handOverRoute(id, 7)).status).toBe(200);
+    expect((await orderRow(id)).collectedAt).not.toBeNull();
+  });
+
+  it("without a submission id, behaves as before: a second request is already_collected", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    expect((await handOverRoute(id, {})).status).toBe(200);
+    expect((await handOverRoute(id)).status).toBe(409);
   });
 });

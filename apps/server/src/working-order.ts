@@ -4705,6 +4705,28 @@ export async function markCollected(
   return withTransaction(deps.db, (tx) => handOver(tx, cfg, id));
 }
 
+/**
+ * {@link markCollected} at most once per `submissionId` on this order: a resent request answers as
+ * the first did, and the same id sent for another command on this bill is `submission.id_reused`.
+ */
+export async function markCollectedOnce(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  submissionId: string,
+): Promise<void> {
+  return withTransaction(deps.db, (tx) =>
+    runServiceCommand(
+      tx,
+      { kind: "bill", workingOrderId: id },
+      submissionId,
+      "order.collect",
+      { workingOrderId: id },
+      () => handOver(tx, cfg, id),
+    ),
+  );
+}
+
 async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
   const [order] = await tx
     .select({
