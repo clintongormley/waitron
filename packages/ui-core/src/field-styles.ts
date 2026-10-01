@@ -1,4 +1,4 @@
-import { css } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
 
 const ALWAYS_FLOAT = new Set(["date", "time", "datetime-local", "month", "week"]);
 
@@ -13,6 +13,15 @@ export function fieldLabelState(opts: {
 }): "rest" | "float" {
   if (opts.value !== "" || opts.hint !== "" || opts.placeholder !== "") return "float";
   return ALWAYS_FLOAT.has((opts.type ?? "").toLowerCase()) ? "float" : "rest";
+}
+
+/** The label a field primitive draws inside its box, pointing at the control `forId` names. */
+export function fieldLabel(forId: string, label: string, required: boolean): TemplateResult {
+  return html`<label class="field-label" for=${forId}
+    ><span class="field-label-text">${label}</span>${
+      required ? html`<span class="required" data-required aria-hidden="true">*</span>` : nothing
+    }</label
+  >`;
 }
 
 /** The filled field box shared by every field primitive: `.field[part=field]` holding a

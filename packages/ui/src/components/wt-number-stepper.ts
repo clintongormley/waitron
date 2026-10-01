@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
+import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -172,17 +172,7 @@ export class WtNumberStepper extends LitElement {
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
         >
-          ${
-            showLabel
-              ? html`<label class="field-label" for=${inputId}
-                  ><span class="field-label-text">${this.label}</span>${
-                    this.required
-                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                      : nothing
-                  }</label
-                >`
-              : nothing
-          }
+          ${showLabel ? fieldLabel(inputId, this.label, this.required) : nothing}
           <input
             class="field-control"
             id=${inputId}

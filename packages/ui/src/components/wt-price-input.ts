@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
-import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
+import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
@@ -252,15 +252,7 @@ export class WtPriceInput extends LitElement {
     ];
     const showLabel = this.label !== "" && !this.hideLabel;
     const fixed = this.fixedUnit && this.unit !== "";
-    const label = showLabel
-      ? html`<label class="field-label" for=${inputId}
-          ><span class="field-label-text">${this.label}</span>${
-            this.required
-              ? html`<span class="required" data-required aria-hidden="true">*</span>`
-              : nothing
-          }</label
-        >`
-      : nothing;
+    const label = showLabel ? fieldLabel(inputId, this.label, this.required) : nothing;
     return html`
       <div
         class=${fixed ? "field fixed" : "field"}

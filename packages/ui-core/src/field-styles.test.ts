@@ -1,5 +1,6 @@
+import { render } from "lit";
 import { expect, test } from "vitest";
-import { fieldLabelState, fieldStyles } from "./field-styles.js";
+import { fieldLabel, fieldLabelState, fieldStyles } from "./field-styles.js";
 
 test("a label rests only while there is no value, hint or placeholder, and the type is not a date or time", () => {
   const empty = { value: "", hint: "", placeholder: "" };
@@ -31,4 +32,20 @@ test("a date or time type floats the label whatever the case it is written in, a
     expect(input.type, "the browser's reading").toBe(type.toLowerCase());
     expect(fieldLabelState({ ...empty, type }), type).toBe("float");
   }
+});
+
+test("the field label points at its control, holds its text in the part an ellipsis cuts, and stars only a required field", () => {
+  const box = document.createElement("div");
+  render(fieldLabel("price", "Precio", true), box);
+  const label = box.querySelector("label.field-label")!;
+  expect(label.getAttribute("for")).toBe("price");
+  expect(label.querySelector(".field-label-text")?.textContent).toBe("Precio");
+  const star = label.querySelector(".required[data-required]");
+  expect(star?.textContent).toBe("*");
+  expect(star?.getAttribute("aria-hidden")).toBe("true");
+  expect(label.textContent).toBe("Precio*");
+
+  render(fieldLabel("price", "Precio", false), box);
+  expect(box.querySelector("[data-required]")).toBeNull();
+  expect(box.querySelector("label")!.textContent).toBe("Precio");
 });

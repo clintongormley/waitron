@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
-import { fieldLabelState, fieldStyles } from "../field-styles.js";
+import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 @customElement("wt-textarea")
@@ -118,17 +118,7 @@ export class WtTextarea extends LitElement {
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
         >
-          ${
-            showLabel
-              ? html`<label class="field-label" for=${id}
-                  ><span class="field-label-text">${this.label}</span>${
-                    this.required
-                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                      : nothing
-                  }</label
-                >`
-              : nothing
-          }
+          ${showLabel ? fieldLabel(id, this.label, this.required) : nothing}
           <textarea
             class="field-control"
             part="control"

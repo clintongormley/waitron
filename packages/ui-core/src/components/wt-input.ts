@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
-import { fieldLabelState, fieldStyles } from "../field-styles.js";
+import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 @customElement("wt-input")
@@ -126,17 +126,7 @@ export class WtInput extends LitElement {
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
         >
-          ${
-            showLabel
-              ? html`<label class="field-label" for=${inputId}
-                  ><span class="field-label-text">${this.label}</span>${
-                    this.required
-                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                      : nothing
-                  }</label
-                >`
-              : nothing
-          }
+          ${showLabel ? fieldLabel(inputId, this.label, this.required) : nothing}
           <input
             class="field-control"
             id=${inputId}

@@ -1575,8 +1575,9 @@ New primitives require an axe test covering every meaningfully distinct accessib
    then restore the fix.
 6. If it's a form field, draw it with `fieldStyles` (see Forms → "The field box"): render the
    `.field` box with `part="field"` and the `data-label` (from `fieldLabelState`), `data-invalid`,
-   `data-disabled` and `data-compact` its primitive's state calls for, the label's text in a
-   `.field-label-text` span inside the `.field-label`, and the control as `.field-control`, so it
+   `data-disabled` and `data-compact` its primitive's state calls for, the label from
+   `fieldLabel` (its text in a `.field-label-text` span inside the `.field-label`), and the control
+   as `.field-control`, so it
    looks and behaves like the other fields. Give its host `max-width: var(--wt-field-max-width)`,
    so it stops at the form width in a `wt-modal`, and add a test that sets `--wt-field-max-width`
    on the `host` and asserts the field's width follows it
