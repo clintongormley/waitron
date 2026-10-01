@@ -2256,3 +2256,41 @@ test("type-ahead in a long list without a search box scrolls the row it reaches 
   });
   expect(activeRowText(el, list)).toBe("Zest");
 });
+
+test("pressing the label while the list is open leaves focus on the trigger", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { trigger, label, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+  await userEvent.click(label!);
+  await new Promise(requestAnimationFrame);
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(document.activeElement).toBe(el);
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("a label press that ends without a click on the label does not swallow a later scripted click", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { trigger, label, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  // Pressed on the label and released elsewhere, as a drag off it would: no click on the label.
+  label!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true }));
+  document.body.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, composed: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await userEvent.keyboard("{Escape}");
+  expect(popup.matches(":popover-open")).toBe(false);
+  label!.click();
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+});
+
+test("a label press cancelled by the browser does not swallow a later scripted click", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { trigger, label, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  label!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true }));
+  label!.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, composed: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await userEvent.keyboard("{Escape}");
+  label!.click();
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+});

@@ -582,15 +582,28 @@ export class WtCombobox extends LitElement {
 
   private labelPressedWhileOpen = false;
 
+  /** Forgotten a task after the press ends, by which time a click on the label has already run,
+   * so a press that ends anywhere else leaves no note behind for a later click. */
   private onLabelPointerdown(): void {
     this.labelPressedWhileOpen = this.popup.matches(":popover-open");
+    if (!this.labelPressedWhileOpen) return;
+    const ended = new AbortController();
+    const forget = () => {
+      ended.abort();
+      setTimeout(() => (this.labelPressedWhileOpen = false));
+    };
+    for (const type of ["pointerup", "pointercancel"])
+      window.addEventListener(type, forget, { capture: true, signal: ended.signal });
   }
 
   /** A press on the label while the list is open closes it (the popover's own light dismiss);
-   * forwarding the click to the trigger would open it again straight away. */
+   * forwarding the click to the trigger would open it again straight away. The dismissal leaves
+   * focus in the hidden search box, so it goes back to the trigger, as a select keeps it. */
   private onLabelClick(event: MouseEvent): void {
-    if (this.labelPressedWhileOpen) event.preventDefault();
+    if (!this.labelPressedWhileOpen) return;
     this.labelPressedWhileOpen = false;
+    event.preventDefault();
+    this.trigger.focus();
   }
 
   private onToggle(event: ToggleEvent): void {
