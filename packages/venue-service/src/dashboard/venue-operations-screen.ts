@@ -66,6 +66,12 @@ export class VenueOperationsScreen extends LitElement {
       section {
         margin-block: var(--wt-space-3);
       }
+      wt-data-table::part(till-zone-select) {
+        font-size: var(--wt-font-size-sm);
+        padding: var(--wt-space-1);
+        min-width: 0;
+        box-sizing: border-box;
+      }
       .toolbar {
         display: flex;
         align-items: center;
@@ -707,7 +713,8 @@ export class VenueOperationsScreen extends LitElement {
             cell: (device) =>
               html`<select
                 aria-label=${`${device.label}: ${t("venue.starts_in")}`}
-                .value=${model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId ?? ""}
+                part="till-zone-select"
+                .value=${live(model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId ?? "")}
                 ?disabled=${this.busy}
                 @change=${(event: Event) => {
                   const zoneId = (event.currentTarget as HTMLSelectElement).value;
@@ -718,8 +725,13 @@ export class VenueOperationsScreen extends LitElement {
                   );
                 }}
               >
-                <option value="">${t("venue.counter_zone")}</option>
-                ${model.zones.map((zone) => html`<option value=${zone.id}>${zone.name}</option>`)}
+                <option
+                  value=""
+                  ?selected=${!model.deviceZones.some((row) => row.deviceId === device.id)}
+                >
+                  ${t("venue.counter_zone")}
+                </option>
+                ${model.zones.map((zone) => html`<option value=${zone.id} ?selected=${model.deviceZones.some((row) => row.deviceId === device.id && row.zoneId === zone.id)}>${zone.name}</option>`)}
               </select>`,
           },
         ],

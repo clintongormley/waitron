@@ -210,7 +210,7 @@ describe("venue operations screen", () => {
       'select[aria-label="Front till: Starts in"]',
     )!;
     expect(selector).not.toBeNull();
-    expect(selector.options[0]!.textContent).toBe("The venue's counter zone");
+    expect(selector.options[0]!.textContent!.trim()).toBe("The venue's counter zone");
     selector.value = "z1";
     selector.dispatchEvent(new Event("change", { bubbles: true }));
     await settle(el);
@@ -220,6 +220,119 @@ describe("venue operations screen", () => {
     await settle(el);
     expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
   });
+  it("shows a stored starting zone when the zones view first loads", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!;
+    expect(selector.value).toBe("z1");
+  });
+
+  it("returns a refused starting-zone choice to the stored counter default", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [],
+      }),
+      setDeviceDefaultZone: vi.fn().mockRejectedValue(new Error("refused")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!;
+    selector.value = "z1";
+    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(el);
+    expect(api.setDeviceDefaultZone).toHaveBeenCalledWith("t1", "z1");
+    expect(selector.value).toBe("");
+    expect(pageAlert(el)).toContain("could not be saved");
+  });
+
+  it("restores a stored zone when clearing it is refused", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
+      }),
+      clearDeviceDefaultZone: vi.fn().mockRejectedValue(new Error("refused")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!;
+    expect(selector.value).toBe("z1");
+    selector.value = "";
+    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(el);
+    expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
+    expect(selector.value).toBe("z1");
+    expect(pageAlert(el)).toContain("could not be saved");
+  });
+
+  it.each(["devices", "device_zone_defaults"] as const)(
+    "refreshes the till table after %s changes elsewhere",
+    async (type) => {
+      const liveData = new LiveData();
+      const initial = {
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [],
+      };
+      const load = vi.fn().mockResolvedValue(initial);
+      const el = await mount({ load, liveData } as unknown as VenueServiceApi);
+      await selectTab(el, "zones");
+      load.mockResolvedValue({
+        ...initial,
+        devices: [{ id: "t1", label: "Updated till", kind: "till", active: true }],
+        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
+      });
+      liveData.invalidate([{ type }]);
+      await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+      expect(tableText(el, "tills")).toContain("Updated till");
+      expect(table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!.value).toBe(
+        "z1",
+      );
+    },
+  );
+
+  it.each(["en", "es"] as const)(
+    "keeps the %s starting-zone choice readable on a phone",
+    async (locale) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      await page.viewport(390, 844);
+      try {
+        setLocale(locale);
+        const el = await mount({
+          load: vi.fn().mockResolvedValue({
+            ...model,
+            devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+          }),
+        } as unknown as VenueServiceApi);
+        hosts.at(-1)!.style.width = "310px";
+        await selectTab(el, "zones");
+        const root = table(el, "tills").shadowRoot!;
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        const selector = root.querySelector<HTMLSelectElement>("select")!;
+        expect(selector.getBoundingClientRect().right).toBeLessThanOrEqual(
+          scroll.getBoundingClientRect().right,
+        );
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d")!;
+        context.font = getComputedStyle(selector).font;
+        expect(
+          context.measureText(selector.options[0]!.textContent!.trim()).width + 32,
+        ).toBeLessThanOrEqual(selector.clientWidth);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
   it("shows a load error when the venue configuration request fails", async () => {
     const api = {
       load: vi.fn().mockRejectedValue(new Error("offline")),

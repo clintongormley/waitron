@@ -303,7 +303,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.zones": "Zonas de servicio y cartas",
   "venue.tills": "Cajas",
   "venue.starts_in": "Empieza en",
-  "venue.counter_zone": "La zona de mostrador del local",
+  "venue.counter_zone": "Zona del mostrador",
   "venue.department": "Departamento",
   "venue.inherit": "Usar el valor del departamento",
   "venue.save_zone": "Guardar zona",

@@ -23,6 +23,8 @@ export const QUERY_DEPENDENCIES = {
     "categories",
     "kitchen_stations",
     "floor_zones",
+    "devices",
+    "device_zone_defaults",
     "products",
     "content_languages",
     "menu_details",
