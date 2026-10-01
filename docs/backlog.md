@@ -1518,6 +1518,19 @@ of the six places in Chromium and Safari, find the cause, and fix it in the shar
 the products drag) rather than per screen; a browser test that reads the dragged row's computed
 background and shadow mid-drag, in both themes, so a look that silently stops painting fails.
 
+**The extras list editor's "Add product" dropdown offers products already in the list (A181, owner
+2026-10-01: "when create extras lists, the products dropdown should remove already chosen
+products") — OPEN.** The picker is handed every product (`.options=${this.products.map(…)}`,
+`apps/dashboard/src/widgets/extra-list-form.ts`), while a list may hold each product once: the
+unique index `extra_list_items_list_product_uq` (`packages/catalogue/src/schema/extras.ts`) and
+`parseExtraListInput` refuse a second, because a diner's pick is matched to an item by product id.
+So today picking a product already in the list can only end in a refusal. **Wanted:** the dropdown
+leaves out every product the draft list already holds, on creating AND editing a list; deleting a
+row makes its product pickable again; with every product used, the dropdown says so (its
+`noResultsLabel`, or a sentence of its own) rather than opening empty. Worth checking the same in
+the other "pick a product to add" lists while there (the menu section's Add products,
+`section-add-products.ts`; the product editor's attach-a-list picker).
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
