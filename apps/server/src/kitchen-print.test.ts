@@ -6,6 +6,8 @@ import {
   diningTables,
   locations,
   nowIso,
+  orderGroups,
+  parties,
   partyTables,
   printJobs,
   ticketItems,
@@ -40,7 +42,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createCourse, createStation, setProductCourse } from "./kitchen.js";
+import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -168,6 +170,155 @@ function lineWidths(payload: Uint8Array): Set<number> {
 
 /** A basket line for a product at quantity 1. */
 const line = (productId: string) => ({ productId, quantity: "1" });
+
+describe("show the rest of the order", () => {
+  it("adds other stations only to an enabled station ticket and refreshes the list on reprint", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const result = await asApp(cfg, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const fryer = await createStation(tx, cfg, { name: "Fryer" });
+      const cold = await createStation(tx, cfg, { name: "Cold" });
+      await updateStation(tx, cfg, grill.id, { showsRestOfOrder: true });
+      const grillPrinter = await makePrinter(tx, cfg, "Grill printer", "station");
+      const fryerPrinter = await makePrinter(tx, cfg, "Fryer printer", "station");
+      const passPrinter = await makePrinter(tx, cfg, "Pase", "order");
+      await attachPrinterToStation(tx, { stationId: grill.id, printerId: grillPrinter });
+      await attachPrinterToStation(tx, { stationId: fryer.id, printerId: fryerPrinter });
+      await attachPrinterToStation(tx, { stationId: grill.id, printerId: passPrinter });
+      const burger = await makeProduct(tx, cfg, catalogueId, "Burger", { stationId: grill.id });
+      const chips = await makeProduct(tx, cfg, catalogueId, "Chips", { stationId: fryer.id });
+      const salad = await makeProduct(tx, cfg, catalogueId, "Salad", { stationId: cold.id });
+      const orderId = await fireNewOrder(tx, cfg, [line(burger), line(chips)]);
+      const first = await printJobsFor(tx);
+      const beforeSalad = new Set(first.map((job) => job.id));
+      await fireNewOrder(tx, cfg, [line(salad)]);
+      const later = (await printJobsFor(tx)).filter((job) => !beforeSalad.has(job.id));
+      const lineId = randomUUID();
+      await tx.insert(workingOrderLines).values({
+        id: lineId,
+        workingOrderId: orderId,
+        lineNo: 3,
+        name: "Salad",
+        descriptions: { [LOCALE]: "Salad" },
+        quantity: 1000,
+        unitPriceGross: 150,
+        vatClass: "general",
+        lineTotal: 150,
+      });
+      await tx.insert(ticketItems).values({
+        nodeId: cfg.nodeId,
+        workingOrderId: orderId,
+        workingOrderLineId: lineId,
+        stationId: cold.id,
+        state: "queued",
+        firedAt: nowIso(),
+        quantity: 1000,
+      });
+      await tx.insert(workingOrderLines).values({
+        workingOrderId: orderId,
+        lineNo: 4,
+        name: "Water",
+        descriptions: { [LOCALE]: "Water" },
+        quantity: 1000,
+        unitPriceGross: 100,
+        vatClass: "general",
+        lineTotal: 100,
+      });
+      const [party] = await tx
+        .insert(parties)
+        .values({ openedBy: OPERATOR })
+        .returning({ id: parties.id });
+      const [group] = await tx
+        .insert(orderGroups)
+        .values({
+          partyId: party!.id,
+          position: 1,
+          state: "held",
+          submittedBy: OPERATOR,
+          holdPrintedAt: nowIso(),
+        })
+        .returning({ id: orderGroups.id });
+      const pastry = await createStation(tx, cfg, { name: "Pastry" });
+      const held = async (name: string, stationId: string, lineNo: number) => {
+        const id = randomUUID();
+        await tx.insert(workingOrderLines).values({
+          id,
+          workingOrderId: orderId,
+          lineNo,
+          name,
+          descriptions: { [LOCALE]: name },
+          quantity: 1000,
+          unitPriceGross: 100,
+          vatClass: "general",
+          lineTotal: 100,
+          groupId: group!.id,
+        });
+        await tx.insert(ticketItems).values({
+          nodeId: cfg.nodeId,
+          workingOrderId: orderId,
+          workingOrderLineId: id,
+          stationId,
+          state: "queued",
+          firedAt: null,
+          quantity: 1000,
+        });
+      };
+      await held("Steak", grill.id, 5);
+      await held("Dessert", pastry.id, 6);
+      const beforeReprint = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await reprintOrderTickets(tx, cfg, orderId);
+      const reprinted = (await printJobsFor(tx)).filter((job) => !beforeReprint.has(job.id));
+      const [chipsLine] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          sql`${workingOrderLines.workingOrderId} = ${orderId} and ${workingOrderLines.name} = 'Chips'`,
+        );
+      await tx
+        .update(workingOrderLines)
+        .set({ servedAt: nowIso() })
+        .where(eq(workingOrderLines.id, chipsLine!.id));
+      const beforeServed = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await reprintOrderTickets(tx, cfg, orderId);
+      const served = (await printJobsFor(tx)).filter((job) => !beforeServed.has(job.id));
+      await tx
+        .update(workingOrderLines)
+        .set({ servedAt: null })
+        .where(eq(workingOrderLines.id, chipsLine!.id));
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: nowIso() })
+        .where(eq(ticketItems.workingOrderLineId, chipsLine!.id));
+      const beforeAway = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await reprintOrderTickets(tx, cfg, orderId);
+      const away = (await printJobsFor(tx)).filter((job) => !beforeAway.has(job.id));
+      return { first, later, reprinted, served, away, grillPrinter, fryerPrinter, passPrinter };
+    });
+    const firstAt = (id: string) =>
+      printedLines(result.first.find((job) => job.printerId === id)!.payload);
+    expect(firstAt(result.grillPrinter).join(" ")).toContain("También en este pedido");
+    expect(firstAt(result.grillPrinter)).toContain(`${thousandthsToDecimal(1000)} x Chips — Fryer`);
+    expect(firstAt(result.fryerPrinter).join(" ")).not.toContain("También en este pedido");
+    expect(firstAt(result.passPrinter).join(" ")).not.toContain("También en este pedido");
+    expect(result.later.some((job) => job.printerId === result.grillPrinter)).toBe(false);
+    const grillReprint = printedLines(
+      result.reprinted.find((job) => job.printerId === result.grillPrinter)!.payload,
+    );
+    expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Chips — Fryer`);
+    expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Salad — Cold`);
+    expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Dessert — Pastry (en espera)`);
+    expect(grillReprint.join(" ").match(/También en este pedido/g)).toHaveLength(1);
+    expect(grillReprint.filter((entry) => entry.includes("Chips — Fryer"))).toHaveLength(1);
+    expect(grillReprint.join(" ")).not.toContain("Water");
+    for (const jobs of [result.served, result.away]) {
+      const grillText = decodeTicket(
+        jobs.find((job) => job.printerId === result.grillPrinter)!.payload,
+      );
+      expect(grillText).not.toContain("Chips — Fryer");
+      expect(grillText).toContain("Salad — Cold");
+    }
+  });
+});
 
 /** Create a sellable product, optionally routed to a station and/or a course. */
 async function makeProduct(

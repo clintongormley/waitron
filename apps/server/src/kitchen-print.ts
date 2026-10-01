@@ -35,6 +35,7 @@ import type { EscSetting, PaperWidth, PrintConfig, Resolution } from "@waitron/p
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
+import { readRestOfOrder } from "./rest-of-order.js";
 import { partyFamilies, partyFamily } from "./parties.js";
 import type { KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
@@ -220,15 +221,19 @@ async function buildTicketItems(
   return byLine;
 }
 
-async function readStationNames(
+async function readStations(
   tx: Transaction,
   stationIds: string[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, { name: string; showsRestOfOrder: boolean }>> {
   const rows = await tx
-    .select({ id: kitchenStations.id, name: kitchenStations.name })
+    .select({
+      id: kitchenStations.id,
+      name: kitchenStations.name,
+      showsRestOfOrder: kitchenStations.showsRestOfOrder,
+    })
     .from(kitchenStations)
     .where(inArray(kitchenStations.id, stationIds));
-  return new Map(rows.map((row) => [row.id, row.name]));
+  return new Map(rows.map(({ id, ...station }) => [id, station]));
 }
 
 /** The order's table, as {@link orderTableLabels} names it. */
@@ -360,7 +365,13 @@ async function planKitchenTickets(
     reprint,
     mark,
     orderScopeAlsoAt = [],
-  }: { reprint: boolean; mark?: "HOLD" | "FIRE"; orderScopeAlsoAt?: readonly string[] },
+    restOfOrderExcept,
+  }: {
+    reprint: boolean;
+    mark?: "HOLD" | "FIRE";
+    orderScopeAlsoAt?: readonly string[];
+    restOfOrderExcept?: ReadonlySet<string>;
+  },
 ): Promise<KitchenJob[]> {
   if (firedItems.length === 0) return [];
 
@@ -373,7 +384,7 @@ async function planKitchenTickets(
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStationNames(tx, stationIds);
+  const stationNames = await readStations(tx, stationIds);
   const order = await readOrderHeader(tx, cfg, orderId);
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
@@ -393,9 +404,10 @@ async function planKitchenTickets(
   const groupOrder = (item: KitchenTicketItem) => item.group ?? 0;
   // Station names are unique per location, so the name alone orders them.
   const stations = [...stationNames.entries()]
-    .map(([id, name]) => ({
+    .map(([id, station]) => ({
       id,
-      name,
+      name: station.name,
+      showsRestOfOrder: station.showsRestOfOrder,
       items: arrangeTicketItems(
         itemsByStation
           .get(id)!
@@ -413,6 +425,19 @@ async function planKitchenTickets(
     orderScopeAlsoAt,
     mappingsByStation(mappingRows),
   );
+  const restRoutes = routes.filter(
+    (route) =>
+      route.station !== null &&
+      stationById.get(route.station)?.showsRestOfOrder &&
+      !restOfOrderExcept?.has(route.station),
+  );
+  const rest = restRoutes.length === 0 ? [] : (await readRestOfOrder(tx, [orderId])).get(orderId)!;
+  const eachByIdentity =
+    restRoutes.length === 0
+      ? new Set<string>()
+      : await VENUE_SERVICE.readLinesSoldInEach(tx, [
+          ...new Set(rest.map((item) => item.workingOrderLineId)),
+        ]);
   const head = {
     reprint,
     mark,
@@ -432,7 +457,31 @@ async function planKitchenTickets(
               items: each.items,
             })),
           }
-        : { ...head, scope: "station", stationName: station.name, items: station.items },
+        : {
+            ...head,
+            scope: "station",
+            stationName: station.name,
+            items: station.items,
+            ...(restRoutes.includes(route)
+              ? {
+                  alsoOnOrder: {
+                    locale: cfg.locale,
+                    items: rest
+                      .filter((item) => item.stationId !== route.station)
+                      .map((item) => ({
+                        qty: item.quantity,
+                        unit:
+                          item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
+                            ? undefined
+                            : ticketName(item.unitName, cfg.locale),
+                        name: item.name,
+                        stationName: item.stationName,
+                        held: item.held,
+                      })),
+                  },
+                }
+              : {}),
+          },
       route.printers[0]!,
     );
     const lineIds = [
@@ -712,7 +761,7 @@ async function printCorrectionSlips(
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStationNames(tx, stationIds);
+  const stationNames = await readStations(tx, stationIds);
   const header = knownHeader ?? (await readOrderHeader(tx, cfg, orderId));
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();
@@ -739,7 +788,7 @@ async function printCorrectionSlips(
       const bytes = formatCorrectionSlip(
         {
           ...change,
-          stationName: stationNames.get(target.stationId)!,
+          stationName: stationNames.get(target.stationId)!.name,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
           at,
@@ -1085,6 +1134,7 @@ export async function reprintOrderTickets(
     reprint: true,
     mark: held.mark,
     orderScopeAlsoAt: held.orderScopeAlsoAt,
+    restOfOrderExcept: new Set(fired.items.map((item) => item.stationId)),
   });
   for (const hold of holdJobs) {
     const same = jobs.find(
