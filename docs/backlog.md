@@ -5064,8 +5064,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `GET /api/unpaid-departure-authorizers`. The owner's other answers of 2026-10-01: printing
     no receipt is kept; a handheld may record a departure, gated on `sale.void` alone like any
     till (the route does not call `assertNotHandheld`); and a party whose bills all owe nothing is
-    settled and closed by the departure rather than refused (the €0.00 Pay error is queued
-    separately). Open:
+    settled and closed by the departure rather than refused (the €0.00 Pay error was fixed
+    separately, by B28). Open:
     - **Known limit, kept by the owner's decision of 2026-10-01 — a bill holding a payment cannot
       be left unpaid.** The departure
       refuses a bill holding any bill payment, even one given back in full
@@ -5091,6 +5091,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `party.bill_outstanding`. Cancelling each given-away line and then finishing did close it
       (measured the same day through the adjustments route), but that takes served dishes off the
       bill, and whether the till offers a cancel on a given-away line was not checked.
+      _(2026-10-01, B28: since B28, Pay settles an open bill whose every line was given away, and
+      Finish table then closes the party — tested for a party with one bill paid in cash, the case
+      "lets Finish table close the party once the bill is paid" in
+      `apps/server/src/pay-owing-nothing.test.ts`.)_
       `unpaid_departure.nothing_outstanding` is left for a party with no bill presented and none
       open with items on it, which Finish table does not refuse as unpaid. `unpaid_departures`
       refuses an amount of zero or less (`unpaid_departures_amount_ck`). The list of departures
@@ -5123,7 +5127,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/till-sale.ts`), because no money changes hands, as C59 settles an invoice
       that owes nothing; cash typed in is not taken and no change is given. The card reader is
       not asked at all: the reader pay's first step files and settles the sale (`payIntegrated`),
-      takes no tip, and still refuses a malformed one. The ticket carries the tender
+      takes no tip, and still refuses a malformed one when tips are on. The ticket carries the tender
       `{ method: "unpaid" }`, as C59's does, and a resent Pay or reader Pay returns the same
       ticket and files nothing more. Read, not run: cash-up reads tender rows, so such a sale adds
       no line to it (`packages/reporting/src/cash-up.ts`), and the VAT summaries read each sale's
@@ -5135,14 +5139,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       closes the party (tested). No fiscal code changed; the golden-hash suite
       (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`) and `inmutabilidad` pass unedited.
       Whether AEAT accepts a 0.00 simplified invoice was not tested here; B17's departure already
-      files one. Tests: `apps/server/src/pay-owing-nothing.test.ts` — run against the unchanged
-      `fileImmediateSale` and reader step, twelve of its fifteen cases fail; with the zero
-      check removed from `fileImmediateSale` alone the Pay, collect and counter cases fail, and with
-      it removed from the reader's first step alone the three reader cases do; removing the tip
-      check fails the malformed-tip case. A case in `apps/till/src/widgets/tender-pay.test.ts`
-      shows a 0.00 total can be confirmed in cash with nothing typed (sending `0`) and by card; it
-      passed on the unchanged till, which needed no change, and fails when Confirm is disabled at
-      zero.
+      files one. Tests: `apps/server/src/pay-owing-nothing.test.ts`. Run 2026-10-01 against the
+      base commit's `apps/server/src/till-sale.ts`, every case fails except the cash Pay of a bill
+      that owes something (the drawer control), the malformed cash amount and the malformed tip.
+      With the zero check removed from `fileImmediateSale` alone, the Pay cases (cash, manual
+      card, resent, Finish table), both collect cases and the cash sale of a free item fail. With
+      the zero branch removed from the reader's first step alone, every reader case fails except
+      the malformed tip, which the tip check before the reader is asked still refuses; removing
+      only that branch's tip check fails the malformed-tip case. A case in
+      `apps/till/src/widgets/tender-pay.test.ts` shows a 0.00 total can be confirmed in cash with
+      nothing typed (sending `0`) and by card; it passed on the unchanged till, which needed no
+      change, and fails when Confirm is disabled at zero.
     - **OPEN — a bill presented without an invoice keeps the label it was placed with when the
       departure invoices it.** Every other path that invoices such a bill saves the receipt label
       (the party's name and tables) in the update that settles it; the departure leaves the bill
@@ -5450,6 +5457,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         captured card payment with no sale still takes the recovery branch first, settling at the
         captured amount with all of it recorded as tip; the below-zero case with a capture was not
         run. The branch for an order with no sale yet was not run with a zero total.
+        _(2026-10-01, B28: since B28 that branch files and settles a zero total without asking the
+        reader; cases in `apps/server/src/pay-owing-nothing.test.ts`.)_
         **DONE (A144, #929, 2026-09-30): a correction is filed at the cent amounts its rows store.**
         Measured first, with a new suite that drives core's `recordCorrection` through the real
         Veri\*Factu backend (`packages/fiscal-verifactu/src/correction-amount.huella.test.ts`). On
