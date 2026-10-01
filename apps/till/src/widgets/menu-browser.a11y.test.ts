@@ -107,6 +107,48 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("home blanks for empty and undrawable targets have no violations", async () => {
+    const { el, host } = await mount(theme);
+    el.menu = {
+      ...menu,
+      structure: {
+        members: [
+          ...menu.structure.members,
+          {
+            kind: "section",
+            sectionId: "sec-empty",
+            internalName: "Empty",
+            names: {},
+            image: null,
+            color: null,
+            members: [member("missing")],
+          },
+        ],
+      },
+      homeLayouts: [
+        {
+          id: "lay-home",
+          name: "Home",
+          tiles: [
+            { kind: "product", productId: "p-cafe" },
+            { kind: "empty" },
+            { kind: "product", productId: "p-missing" },
+            { kind: "product", productId: "p-cola" },
+            { kind: "section", sectionId: "sec-empty" },
+            { kind: "product", productId: "p-burger" },
+          ],
+        },
+      ],
+    };
+    el.products = products.map((each) =>
+      each.productId === "p-cola" ? { ...each, ordering: "not_sold_separately" } : each,
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll('[data-region="shortcuts"] .slot')).toHaveLength(4);
+    expect((button(el, "Burger") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   it("search results holding an unavailable product have no violations", async () => {
     const { el, host } = await mount(theme);
     const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
