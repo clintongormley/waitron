@@ -2589,17 +2589,21 @@ export class TillApp extends LitElement {
     return said && failure === "held.stale" ? "gone" : "unread";
   }
 
-  /** A discard refused because the order holds money, or has a card payment under way, says so;
-   * any other refusal shows `held.stale`. The list refreshes on every path. */
+  /** The server checks for money before it checks the order is still open, so a refusal for an
+   * order the held list no longer holds after the refresh is shown as the order gone:
+   * `held.stale`. */
   async #onDiscardOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     this.errorKey = undefined;
+    let refused = false;
     try {
       await this.api.abandonWorkingOrder(id);
     } catch (error) {
+      refused = true;
       this.errorKey = discardError(error);
     }
     await this.#refreshHeldOrders();
+    if (refused && !this.heldOrders.some((order) => order.id === id)) this.errorKey = "held.stale";
   }
 
   /**

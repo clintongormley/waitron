@@ -3363,6 +3363,26 @@ describe("till-app", () => {
     expect(c.heldOrders).toEqual([heldSummary]);
   });
 
+  it("discard-order: a money refusal for an order the refreshed list no longer holds shows held.stale", async () => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-1" }),
+      listWorkingOrders: vi.fn().mockResolvedValueOnce([heldSummary]).mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    expect(c.heldOrders).toEqual([heldSummary]);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.stale"));
+    expect(banner.textContent).not.toContain(t("held.discard_holds_money"));
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+    expect(c.heldOrders).toEqual([]);
+  });
+
   it("discard-order: refused while a card payment is under way, says so in that code's own words, and refreshes", async () => {
     const { el } = await mountApp({
       abandonWorkingOrder: vi.fn().mockRejectedValue({
