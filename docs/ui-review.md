@@ -123,7 +123,8 @@ Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
 - Keep the language chooser at the bottom right, including PIN entry, pairing and kitchen displays.
   Its menu opens upwards. Kitchen displays change language locally because no staff member is signed in.
   Since 2026-09-30 (C93) the setup wizard and the dashboard put it in a footer at the foot of the
-  page (`wt-language-footer`); the till keeps it at the bottom right until lane B's B18.
+  page (`wt-language-footer`); the till keeps it at the bottom right until lane B's B18. Since
+  2026-10-01 (B18), the till uses the shared footer too, after its sign-in content or shell region.
 
 The setup wizard receives the form behavior. It has no translated UI or language chooser, and wizard
 steps are not tabs; this change does not persist setup credentials or unfinished form contents. (Since 2026-09-29, C42, the wizard is translated and has the language chooser.)

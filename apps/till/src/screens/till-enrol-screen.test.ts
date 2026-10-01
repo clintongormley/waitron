@@ -466,7 +466,14 @@ it("does not emit `enrolled` for an approval that lands after teardown", async (
 it("renders its own language chooser, so a fresh device can be set up in Spanish", async () => {
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
   await flush(el);
-  expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+});
+
+it("puts the shared language footer after the join form in page flow", async () => {
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
+  await flush(el);
+  const form = el.shadowRoot!.querySelector(".screen")!;
+  expect(form.nextElementSibling?.localName).toBe("wt-language-footer");
 });
 
 it("feeds its language chooser from the venue's locale list", async () => {
@@ -480,7 +487,7 @@ it("feeds its language chooser from the venue's locale list", async () => {
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi({ getLocales }),
   });
-  const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+  const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
   chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
   await vi.waitFor(() => {
     const menu = chooser.shadowRoot!.querySelector('[role="menu"]');

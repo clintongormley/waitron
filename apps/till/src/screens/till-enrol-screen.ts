@@ -1,10 +1,10 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-language-footer.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import "../widgets/language-chooser.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TillApi } from "../api/client.js";
 
@@ -26,16 +26,23 @@ export class TillEnrolScreen extends LitElement {
     baseStyles,
     css`
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
       }
 
       /* A narrow reading column so the field + button stack rather than span a device edge-to-edge. */
       .screen {
         display: flex;
+        flex: 1;
         max-width: var(--till-enrol-max-width, 24rem);
         margin-inline: auto;
         flex-direction: column;
         gap: var(--wt-space-3);
+      }
+
+      wt-language-footer {
+        padding-inline: var(--wt-space-3);
       }
 
       .title {
@@ -152,9 +159,10 @@ export class TillEnrolScreen extends LitElement {
               : this.#renderName()
         }
       </section>
-      <till-language-chooser
+      <wt-language-footer
+        active=${currentLocale()}
         .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-      ></till-language-chooser>
+      ></wt-language-footer>
     `;
   }
 

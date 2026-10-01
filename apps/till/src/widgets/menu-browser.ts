@@ -205,8 +205,6 @@ export class TillMenuBrowser extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* Held at the bottom of the view while a weight is entered, clear of the column the till's
-         floating language button takes at the bottom right: a tap target and two gaps wide. */
       .weigh {
         position: sticky;
         bottom: 0;
