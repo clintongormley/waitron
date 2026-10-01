@@ -38,9 +38,9 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
   test("placeholder", async () => {
     await mountThemed('<wt-input label="Peso (kg)" placeholder="1.25"></wt-input>', theme);
     await expectNoA11yViolations(host);
-    const input = host.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
-    const placeholder = getComputedStyle(input, "::placeholder").color;
-    const field = getComputedStyle(input).backgroundColor;
+    const root = host.querySelector("wt-input")!.shadowRoot!;
+    const placeholder = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
+    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
@@ -50,14 +50,52 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
       theme,
     );
     await expectNoA11yViolations(host);
-    const input = host.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
-    const placeholder = getComputedStyle(input, "::placeholder").color;
-    const field = getComputedStyle(input).backgroundColor;
+    const root = host.querySelector("wt-input")!.shadowRoot!;
+    const placeholder = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
+    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
   test("disabled input", async () => {
     await mountThemed('<wt-input label="Peso (kg)" disabled></wt-input>', theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("resting label in an empty field", async () => {
+    await mountThemed('<wt-input label="Nombre"></wt-input>', theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("focused field", async () => {
+    const el = await mountThemed('<wt-input label="Nombre"></wt-input>', theme);
+    el.focus();
+    expect(el.shadowRoot!.activeElement).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("field with its label hidden", async () => {
+    await mountThemed('<wt-input label="Buscar" hide-label></wt-input>', theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("disabled field holding a value", async () => {
+    await mountThemed('<wt-input label="Nombre" value="Ana" disabled></wt-input>', theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("invalid field with an error message", async () => {
+    await mountThemed(
+      '<wt-input label="Correo" value="ana@" error="Escribe un correo válido"></wt-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("field with a help button beside it", async () => {
+    await mountThemed(
+      '<wt-input label="Correo"><button slot="help" aria-label="Ayuda">?</button></wt-input>',
+      theme,
+    );
     await expectNoA11yViolations(host);
   });
 });

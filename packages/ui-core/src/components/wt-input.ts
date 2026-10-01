@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 @customElement("wt-input")
@@ -11,51 +12,30 @@ export class WtInput extends LitElement {
 
   static override styles = [
     baseStyles,
+    fieldStyles,
     css`
       :host {
         display: block;
         max-width: var(--wt-field-max-width);
       }
 
-      .label-row {
+      .row {
         display: flex;
         align-items: center;
-        margin-bottom: var(--wt-space-1);
+        gap: var(--wt-space-2);
       }
 
-      label {
-        display: block;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
+      .row > .field {
+        flex: 1;
+        min-width: 0;
       }
 
-      .control {
-        position: relative;
-      }
-
-      input {
-        width: 100%;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        text-overflow: ellipsis;
-      }
-
-      input::placeholder {
-        color: var(--wt-color-text-muted);
-      }
-
-      input:disabled {
-        ${disabledStyles}
-      }
-
-      .control.has-end input {
+      .field.has-end .field-control {
         padding-inline-end: calc(var(--wt-tap-min) + var(--wt-space-3));
+      }
+
+      .field.has-end .field-label {
+        inset-inline-end: calc(var(--wt-tap-min) + var(--wt-space-3));
       }
 
       .end {
@@ -66,12 +46,8 @@ export class WtInput extends LitElement {
         align-items: center;
       }
 
-      .control.has-end .end {
+      .field.has-end .end {
         display: flex;
-      }
-
-      input[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
       }
 
       .required,
@@ -108,6 +84,8 @@ export class WtInput extends LitElement {
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, reflect: true }) invalid = false;
+  /** Names the input by `label` without drawing it, and makes the field compact. */
+  @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @state() private hasEnd = false;
 
   // Unnamed legacy fields retain a generated id. Named fields use the semantic name for both native
@@ -131,37 +109,53 @@ export class WtInput extends LitElement {
     const hasHint = this.hint !== "";
     const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
     const inputId = this.name || this.generatedInputId;
+    const labelState = fieldLabelState({
+      value: this.value,
+      hint: this.hint,
+      placeholder: this.placeholder,
+      type: this.type,
+    });
+    const showLabel = this.label !== "" && !this.hideLabel;
     return html`
-      ${
-        this.label
-          ? html`<div class="label-row">
-              <label for=${inputId}
-                >${this.label}${
-                  this.required
-                    ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                    : nothing
-                }</label
-              >
-              <slot name="help"></slot>
-            </div>`
-          : nothing
-      }
-      <div class=${this.hasEnd ? "control has-end" : "control"}>
-        <input
-          id=${inputId}
-          name=${this.name || nothing}
-          .value=${this.value}
-          type=${this.type}
-          autocomplete=${this.autocomplete || nothing}
-          placeholder=${this.placeholder || this.hint}
-          maxlength=${this.maxlength ?? nothing}
-          ?required=${this.required}
-          ?disabled=${this.disabled}
-          aria-invalid=${this.invalid || hasError}
-          aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
-          @input=${this.onInput}
-        />
-        <slot class="end" name="end" @slotchange=${this.onEndSlotChange}></slot>
+      <div class="row">
+        <div
+          class=${this.hasEnd ? "field has-end" : "field"}
+          part="field"
+          data-label=${labelState}
+          ?data-invalid=${this.invalid || hasError}
+          ?data-disabled=${this.disabled}
+          ?data-compact=${!showLabel}
+        >
+          ${
+            showLabel
+              ? html`<label class="field-label" for=${inputId}
+                  >${this.label}${
+                    this.required
+                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
+                      : nothing
+                  }</label
+                >`
+              : nothing
+          }
+          <input
+            class="field-control"
+            id=${inputId}
+            name=${this.name || nothing}
+            .value=${this.value}
+            type=${this.type}
+            autocomplete=${this.autocomplete || nothing}
+            placeholder=${this.placeholder || this.hint}
+            maxlength=${this.maxlength ?? nothing}
+            aria-label=${this.hideLabel && this.label ? this.label : nothing}
+            ?required=${this.required}
+            ?disabled=${this.disabled}
+            aria-invalid=${this.invalid || hasError}
+            aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+            @input=${this.onInput}
+          />
+          <slot class="end" name="end" @slotchange=${this.onEndSlotChange}></slot>
+        </div>
+        <slot name="help"></slot>
       </div>
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
