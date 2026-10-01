@@ -1587,7 +1587,10 @@ leaving 6 of the spec's 9; the station field the spec lists for
 `apps/dashboard/src/widgets/product-editor.ts` is gone; and the new
 `packages/venue-service/src/dashboard/prep-stations-screen.ts` shows field errors as a separate
 `<p class="error">` beside the field rather than through its `error` property, so it should move
-onto `error`.
+onto `error`. B29 (#1011) added a fourth native `<select>` to
+`apps/dashboard/src/screens/printers-screen.ts`, "Drawer opens at" (`name="printer-drawer-till"`),
+which the spec's "cb ×3" row for that file does not count; its refusal is a separate
+`<p class="field-error">` under the field.
 
 **A178a — DONE (#1010).** The shared field primitives
 draw the filled field: five colour tokens, whose contrast
