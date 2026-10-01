@@ -4,35 +4,54 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, ReceiptConfig } from "../api/client.js";
-import { ReceiptScreen } from "./receipt-screen.js";
+import { ReceiptsScreen } from "./receipts-screen.js";
+
+const PREVIEW = {
+  preview: {
+    widthDots: 512,
+    columns: 42,
+    text: "Deli Test SL\n",
+    blocks: [{ kind: "text", text: "Deli Test SL\n" }],
+    qrData: [],
+    omittedGraphics: false,
+    truncated: false,
+    unsupported: false,
+  },
+  marks: { headerSubtitle: null, footerMessage: null },
+};
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
   return {
     getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt } }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
+    getLocationSettings: vi
+      .fn()
+      .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
+    putLocationSettings: vi.fn().mockResolvedValue(undefined),
+    previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
     ...overrides,
   } as unknown as DashboardApi;
 }
 
-async function flush(el: ReceiptScreen): Promise<void> {
+async function flush(el: ReceiptsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
 }
 
-const q = (el: ReceiptScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
-const qa = (el: ReceiptScreen, sel: string) => Array.from(el.shadowRoot!.querySelectorAll(sel));
-const errorKey = (el: ReceiptScreen): string | null =>
+const q = (el: ReceiptsScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+const qa = (el: ReceiptsScreen, sel: string) => Array.from(el.shadowRoot!.querySelectorAll(sel));
+const errorKey = (el: ReceiptsScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 const lastPut = (api: DashboardApi): ReceiptConfig =>
   (api.putReceipt as unknown as { mock: { calls: [ReceiptConfig][] } }).mock.calls.at(-1)![0];
 
-function typeHeader(el: ReceiptScreen, value: string): void {
+function typeHeader(el: ReceiptsScreen, value: string): void {
   q(el, "[data-test=header-subtitle]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
 
-function typeFooter(el: ReceiptScreen, value: string): void {
+function typeFooter(el: ReceiptsScreen, value: string): void {
   const ta = q(el, "[data-test=footer-message]") as HTMLTextAreaElement;
   ta.value = value;
   ta.dispatchEvent(new Event("input", { bubbles: true }));
@@ -40,13 +59,13 @@ function typeFooter(el: ReceiptScreen, value: string): void {
 
 afterEach(cleanupWidgets);
 
-describe("receipt-screen", () => {
+describe("receipts page: the receipt header and footer", () => {
   it("loads the two fields from getReceipt().receipt on connect", async () => {
     const api = stubApi(
       {},
       { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
     );
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     expect(api.getReceipt).toHaveBeenCalledTimes(1);
@@ -56,19 +75,19 @@ describe("receipt-screen", () => {
     expect(footer.value).toBe("Gracias por su visita");
   });
 
-  it("renders exactly one h1 (Recibo)", async () => {
+  it("renders exactly one h1, the page title", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     const h1s = qa(el, "h1");
     expect(h1s).toHaveLength(1);
-    expect(h1s[0]!.textContent).toContain("Recibo");
+    expect(h1s[0]!.textContent).toBe("Recibos");
   });
 
   it("leaves both fields empty when the receipt config is empty", async () => {
     const api = stubApi(); // receipt: {}
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     const header = q(el, "[data-test=header-subtitle]") as HTMLElement & { value: string };
@@ -79,7 +98,7 @@ describe("receipt-screen", () => {
 
   it("Guardar composes the edited fields and calls putReceipt with them", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     typeHeader(el, "Av. de la Constitución 3");
@@ -97,7 +116,7 @@ describe("receipt-screen", () => {
 
   it("saves a loaded receipt round-trip verbatim (no edit)", async () => {
     const api = stubApi({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Hasta pronto" });
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     q(el, "[data-test=save]")!.click();
@@ -110,7 +129,7 @@ describe("receipt-screen", () => {
 
   it("omits a blank field so it reaches putReceipt as an ABSENT key, not an empty string", async () => {
     const api = stubApi({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" });
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     typeHeader(el, "   "); // whitespace-only is blank
@@ -125,7 +144,7 @@ describe("receipt-screen", () => {
 
   it("sends an empty {} when both fields are blank (matches DEFAULT_RECEIPT)", async () => {
     const api = stubApi(); // both empty from the start
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     q(el, "[data-test=save]")!.click();
@@ -135,7 +154,7 @@ describe("receipt-screen", () => {
 
   it("trims surrounding whitespace off a saved field", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     typeFooter(el, "  Gracias por su visita  ");
@@ -145,23 +164,23 @@ describe("receipt-screen", () => {
     expect(lastPut(api)).toEqual({ footerMessage: "Gracias por su visita" });
   });
 
-  it("surfaces a rejected putReceipt as a role=alert with the raw code", async () => {
+  it("surfaces a rejected putReceipt in the form's bottom message, without the raw code", async () => {
     const api = stubApi({ putReceipt: vi.fn().mockRejectedValue({ code: "receipt.invalid" }) });
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     q(el, "[data-test=save]")!.click();
     await flush(el);
 
     expect(errorKey(el)).toBe("receipt.invalid");
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("receipt.invalid", "es-ES"));
-    expect(banner).not.toContain("receipt.invalid");
+    const message = (q(el, "wt-form-actions") as HTMLElement & { error: string }).error;
+    expect(message).toContain(codeMessage("receipt.invalid", "es-ES"));
+    expect(message).not.toContain("receipt.invalid");
   });
 
   it("falls back to server.internal when a rejected putReceipt carries no code", async () => {
     const api = stubApi({ putReceipt: vi.fn().mockRejectedValue({}) });
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     q(el, "[data-test=save]")!.click();
@@ -171,10 +190,9 @@ describe("receipt-screen", () => {
 
   it("shows an error key when the initial load is rejected (and never rejects)", async () => {
     const api = stubApi({ getReceipt: vi.fn().mockRejectedValue({ code: "server.internal" }) });
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
-    expect(errorKey(el)).toBe("server.internal");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("server.internal", "es-ES"));
     expect(banner).not.toContain("server.internal");
@@ -182,7 +200,7 @@ describe("receipt-screen", () => {
 
   it("contains the field change events so they do not leak past the screen (stopPropagation)", async () => {
     const api = stubApi();
-    const { el, host } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el, host } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     const escapedChange = vi.fn();
@@ -213,7 +231,7 @@ it.each([
     });
     const request = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(result);
     const api = stubApi({ [method]: request });
-    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(field)!;
@@ -247,7 +265,7 @@ it("refreshes clean receipt fields while preserving an unsaved header", async ()
   const api = Object.assign(stubApi({}, { headerSubtitle: "Before", footerMessage: "Before" }), {
     liveData,
   });
-  const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+  const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
   await flush(el);
   el.shadowRoot!.querySelector("[data-test=header-subtitle]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Unsaved" } }),

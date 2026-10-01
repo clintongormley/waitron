@@ -2,7 +2,8 @@ import type { EscSetting } from "@waitron/printing";
 import { formatReceipt } from "./receipt-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-const SAMPLE_SALE: TillSaleResult = {
+/** The sale a sample or preview receipt shows: it was never filed. */
+export const SAMPLE_SALE: TillSaleResult = {
   orderLabel: "Mesa 6",
   orderNumber: 41,
   invoiceNumber: "MUESTRA/1",

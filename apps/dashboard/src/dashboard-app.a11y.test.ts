@@ -279,9 +279,9 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipt]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipts]")!.click();
     await flush(el);
-    const receipt = el.shadowRoot!.querySelector("dashboard-receipt-screen");
+    const receipt = el.shadowRoot!.querySelector("dashboard-receipts-screen");
     expect(receipt).toBeTruthy();
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),

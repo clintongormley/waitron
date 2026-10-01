@@ -3,14 +3,27 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
-import { LocationSettingsScreen } from "./location-settings-screen.js";
+import { ReceiptsScreen } from "./receipts-screen.js";
 import { t } from "../i18n/t.js";
 
-const q = (el: LocationSettingsScreen, selector: string) =>
+const q = (el: ReceiptsScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-const flush = async (el: LocationSettingsScreen) => {
+const flush = async (el: ReceiptsScreen) => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
+};
+const PREVIEW = {
+  preview: {
+    widthDots: 512,
+    columns: 42,
+    text: "Deli Test SL\n",
+    blocks: [{ kind: "text", text: "Deli Test SL\n" }],
+    qrData: [],
+    omittedGraphics: false,
+    truncated: false,
+    unsupported: false,
+  },
+  marks: { headerSubtitle: null, footerMessage: null },
 };
 function api(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
@@ -18,37 +31,38 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
     putLocationSettings: vi.fn().mockResolvedValue(undefined),
+    getReceipt: vi.fn().mockResolvedValue({ receipt: {} }),
+    putReceipt: vi.fn().mockResolvedValue(undefined),
+    previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
     ...overrides,
   } as unknown as DashboardApi;
 }
-function edit(el: LocationSettingsScreen, value: string) {
+function edit(el: ReceiptsScreen, value: string) {
   q(el, "[name=operationDescription]").dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
-async function bottomOf(el: LocationSettingsScreen): Promise<string> {
+async function bottomOf(el: ReceiptsScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
-const errorOf = (el: LocationSettingsScreen) =>
-  q(el, "[name=operationDescription]").getAttribute("error");
-const saveDisabled = (el: LocationSettingsScreen) =>
-  q(el, "[data-test=save]").hasAttribute("disabled");
-async function nativeSaveDisabled(el: LocationSettingsScreen): Promise<boolean> {
+const errorOf = (el: ReceiptsScreen) => q(el, "[name=operationDescription]").getAttribute("error");
+const saveDisabled = (el: ReceiptsScreen) => q(el, "[data-test=save]").hasAttribute("disabled");
+async function nativeSaveDisabled(el: ReceiptsScreen): Promise<boolean> {
   const button = q(el, "[data-test=save]") as HTMLElement & { updateComplete: Promise<unknown> };
   await button.updateComplete;
   return button.shadowRoot!.querySelector("button")!.disabled;
 }
-const focusedInput = (el: LocationSettingsScreen) => {
+const focusedInput = (el: ReceiptsScreen) => {
   const field = q(el, "[name=operationDescription]");
   return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
 };
 afterEach(cleanupWidgets);
-describe("location invoice description", () => {
+describe("receipts page: the location's invoice description", () => {
   it("reads the current setting and saves the entered description", async () => {
     const client = api();
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -63,7 +77,7 @@ describe("location invoice description", () => {
   });
   it("explains an empty field without saving", async () => {
     const client = api();
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -80,7 +94,7 @@ describe("location invoice description", () => {
         params: { field: "operationDescription" },
       }),
     });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -94,7 +108,7 @@ describe("location invoice description", () => {
   });
   it("reports a failed read and offers retry", async () => {
     const client = api({ getLocationSettings: vi.fn().mockRejectedValue(new Error("offline")) });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -104,7 +118,7 @@ describe("location invoice description", () => {
   it("keeps an edited description when the setting refreshes elsewhere", async () => {
     const liveData = new LiveData();
     const client = Object.assign(api(), { liveData });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -115,7 +129,9 @@ describe("location invoice description", () => {
       operationDescription: "Cambiado en otro sitio",
     });
     liveData.invalidate([{ type: "locations" }]);
-    await vi.waitFor(() => expect(q(el, "p").textContent).toBe("Calle Nueva"));
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=location-name]").textContent).toBe("Calle Nueva"),
+    );
     expect((q(el, "[name=operationDescription]") as unknown as { value: string }).value).toBe(
       "Borrador local",
     );
@@ -124,7 +140,7 @@ describe("location invoice description", () => {
     const client = api({
       putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -144,10 +160,9 @@ describe("location invoice description", () => {
         const client = api({
           putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
         });
-        const { el } = await mountWidget<LocationSettingsScreen>(
-          "dashboard-location-settings-screen",
-          { api: client },
-        );
+        const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
+          api: client,
+        });
         await flush(el);
         q(el, "[data-test=save]").click();
         await flush(el);
@@ -169,7 +184,7 @@ describe("location invoice description", () => {
     },
   );
   it("leaves the spacing token between the field and the action row", async () => {
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: api(),
     });
     await flush(el);
@@ -185,7 +200,7 @@ describe("location invoice description", () => {
         .mockRejectedValueOnce(new Error("offline"))
         .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta" }),
     });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -199,7 +214,7 @@ describe("location invoice description", () => {
   });
   it("saves the description when Enter is pressed in it", async () => {
     const client = api();
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -224,7 +239,7 @@ describe("location invoice description", () => {
           resolve = done;
         }),
     );
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: api({ putLocationSettings }),
     });
     await flush(el);
@@ -239,7 +254,7 @@ describe("location invoice description", () => {
     }
   });
   it("says nothing about errors before the first submission, and Save works", async () => {
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: api(),
     });
     await flush(el);
@@ -250,7 +265,7 @@ describe("location invoice description", () => {
     expect(saveDisabled(el)).toBe(false);
   });
   it("on an invalid submission shows the field and bottom messages, focuses the field and disables Save", async () => {
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: api(),
     });
     await flush(el);
@@ -264,7 +279,7 @@ describe("location invoice description", () => {
     expect((q(el, "[name=operationDescription]") as unknown as { value: string }).value).toBe("  ");
   });
   it("re-checks every change after a failed submission, and Save works again once fixed", async () => {
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: api(),
     });
     await flush(el);
@@ -288,7 +303,7 @@ describe("location invoice description", () => {
         params: { field: "operationDescription" },
       }),
     });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -309,7 +324,7 @@ describe("location invoice description", () => {
     const client = api({
       putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -327,7 +342,7 @@ describe("location invoice description", () => {
         params: { field: "locationId" },
       }),
     });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -341,7 +356,7 @@ describe("location invoice description", () => {
     const client = api({
       putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
-    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+    const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
       api: client,
     });
     await flush(el);
@@ -353,8 +368,8 @@ describe("location invoice description", () => {
     expect(client.putLocationSettings).toHaveBeenCalledTimes(2);
   });
   it.each(["light", "dark"] as const)("has no accessibility violations in %s", async (theme) => {
-    const { el, host } = await mountWidget<LocationSettingsScreen>(
-      "dashboard-location-settings-screen",
+    const { el, host } = await mountWidget<ReceiptsScreen>(
+      "dashboard-receipts-screen",
       { api: api() },
       theme,
     );

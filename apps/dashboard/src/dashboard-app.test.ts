@@ -229,7 +229,7 @@ const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-
 const units = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-units-screen");
 const navUnits = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-units]");
-const receipt = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-receipt-screen");
+const receipt = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-receipts-screen");
 const statuses = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-service-status-screen");
 const roster = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-roster-screen");
@@ -262,7 +262,7 @@ const navStaff = (el: DashboardApp) =>
 const navCatalogue = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-catalogue]");
 const navReceipt = (el: DashboardApp) =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipt]");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipts]");
 const navStatuses = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-statuses]");
 const navRoster = (el: DashboardApp) =>
@@ -299,7 +299,7 @@ const NAV_SCREENS = [
   "approvals",
   "planned-actual",
   "purchases",
-  "receipt",
+  "receipts",
   "devices",
   "printers",
   "printing-rules",
@@ -328,7 +328,7 @@ const SCREEN_TAGS = [
   "dashboard-sales-screen",
   "dashboard-staff-screen",
   "dashboard-catalogue-screen",
-  "dashboard-receipt-screen",
+  "dashboard-receipts-screen",
   "dashboard-service-status-screen",
   "dashboard-roster-screen",
   "dashboard-approvals-screen",
@@ -1625,7 +1625,7 @@ describe("dashboard-app", () => {
 
     navReceipt(el)!.click();
     await flush(el);
-    expect(mountedScreens(el)).toEqual(["dashboard-receipt-screen"]);
+    expect(mountedScreens(el)).toEqual(["dashboard-receipts-screen"]);
     expect(receipt(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
 
@@ -2014,6 +2014,50 @@ describe("dashboard-app", () => {
     }
   });
 
+  it("offers a manager one Receipts page in Settings, where Receipt and Location invoices were, and opens it", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getLocationSettings: vi
+        .fn()
+        .mockResolvedValue({ name: "Sala principal", operationDescription: "Venta" }),
+      previewReceipt: vi.fn(() => new Promise(() => undefined)),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(navItem(el, "receipt")).toBeNull();
+    expect(navItem(el, "location-settings")).toBeNull();
+    const item = navItem(el, "receipts")!;
+    expect(item.textContent!.trim()).toBe(t("nav.receipts"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    expect(panel.contains(item)).toBe(true);
+    item.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-receipts-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/receipts");
+  });
+
+  it("hides the Receipts page from a supervisor", async () => {
+    const supervisor = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p3",
+        role: "supervisor",
+        locale: null,
+        venueLocale: "es-ES",
+        sessionDefault: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
+    await flush(el);
+    expect(navItem(el, "devices")).toBeTruthy();
+    expect(navItem(el, "receipts")).toBeNull();
+  });
+
   it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -2093,7 +2137,7 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Content languages in Settings, after Location invoices, to a session holding person.manage, and opens its page", async () => {
+  it("offers Content languages in Settings, after Receipts, to a session holding person.manage, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["person.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -2104,7 +2148,7 @@ describe("dashboard-app", () => {
     expect(item!.textContent!.trim()).toBe(t("nav.content_languages"));
     const panel = el.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
     const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
-    expect(order.indexOf("nav-content-languages")).toBe(order.indexOf("nav-location-settings") + 1);
+    expect(order.indexOf("nav-content-languages")).toBe(order.indexOf("nav-receipts") + 1);
 
     item!.click();
     await flush(el);
@@ -4188,7 +4232,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
 
   it.each([
     ["menus", "dashboard-menus-screen"],
-    ["location-settings", "dashboard-location-settings-screen"],
+    ["receipts", "dashboard-receipts-screen"],
     ["device-profiles", "dashboard-device-profiles-screen"],
     ["diagnostics", "dashboard-diagnostics-screen"],
     ["backup", "dashboard-backup-screen"],

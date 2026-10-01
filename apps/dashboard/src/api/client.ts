@@ -359,6 +359,18 @@ export interface ReceiptConfig {
   footerMessage?: string;
 }
 
+/** Blocks `[start, end)` of a print preview. */
+export interface BlockRange {
+  start: number;
+  end: number;
+}
+
+/** A sample receipt drawn with unsaved trim, and the blocks each trim field adds (`null` when blank). */
+export interface ReceiptPreview {
+  preview: PrintJobPreview;
+  marks: { headerSubtitle: BlockRange | null; footerMessage: BlockRange | null };
+}
+
 export interface TestEmailAddress {
   name: string;
   address: string;
@@ -1959,6 +1971,11 @@ export class DashboardApi {
 
   putReceipt(receipt: ReceiptConfig): Promise<void> {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
+  }
+
+  /** Draws a sample receipt with this trim; saves and prints nothing. */
+  previewReceipt(receipt: ReceiptConfig): Promise<ReceiptPreview> {
+    return this.#request<ReceiptPreview>("/management-api/receipt-preview", "POST", { receipt });
   }
 
   // ── Table service-status configuration ──────────────────────────────────────────────────────────

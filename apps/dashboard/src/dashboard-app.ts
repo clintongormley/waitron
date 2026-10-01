@@ -45,8 +45,7 @@ import "./screens/catalogue-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
-import "./screens/receipt-screen.js";
-import "./screens/location-settings-screen.js";
+import "./screens/receipts-screen.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
@@ -94,8 +93,7 @@ const CORE_SCREENS = [
   "modifiers",
   "menus",
   "units",
-  "receipt",
-  "location-settings",
+  "receipts",
   "content-languages",
   "statuses",
   "floor",
@@ -191,8 +189,7 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.configuration",
     icon: "gear",
     items: [
-      { screen: "receipt", labelKey: "nav.receipt" },
-      { screen: "location-settings", labelKey: "nav.location_settings", requiresManager: true },
+      { screen: "receipts", labelKey: "nav.receipts", requiresManager: true },
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
@@ -1636,16 +1633,12 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
-      case "location-settings":
-        return html`<dashboard-location-settings-screen
-          .api=${this.api}
-        ></dashboard-location-settings-screen>`;
       case "content-languages":
         return html`<dashboard-content-languages-screen
           .api=${this.api}
         ></dashboard-content-languages-screen>`;
-      case "receipt":
-        return html`<dashboard-receipt-screen .api=${this.api}></dashboard-receipt-screen>`;
+      case "receipts":
+        return html`<dashboard-receipts-screen .api=${this.api}></dashboard-receipts-screen>`;
       case "statuses":
         return html`<dashboard-service-status-screen
           .api=${this.api}

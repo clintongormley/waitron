@@ -210,9 +210,23 @@ export const en = {
     "Enter a price with up to two decimal places, or leave it blank to charge the product's own.",
   "extras.duplicate_product": "This product is already on the list. Remove one of the two rows.",
 
-  "nav.location_settings": "Location invoices",
+  "nav.receipts": "Receipts",
+  "receipts.title": "Receipts",
+  "receipts.venue_wide": "Every location",
+  "receipts.header_subtitle_hint":
+    "Printed under your venue's name, e.g. a tagline or address line",
+  "receipts.footer_message_hint": "Printed at the bottom, e.g. a thank-you or opening hours",
+  "receipts.operation_description_hint":
+    "Sent to the tax agency with every sale; not printed on the receipt",
+  "receipts.preview": "Preview",
+  "receipts.preview_paper": "Receipt preview",
+  "receipts.preview_error": "The preview could not be updated.",
+  "receipts.not_printed": "Sent to the tax agency (not printed)",
+  "receipts.saved":
+    "Saved. Receipts printed from now on, and future tax records, use these settings.",
+  "receipts.trim_save_error": "The header and footer could not be saved.",
+  "receipts.trim_too_long": "Use at most {max} characters.",
   "nav.content_languages": "Content languages",
-  "location_settings.title": "Location invoices",
   "location_settings.description": "Invoice operation description",
   "location_settings.help":
     "This text is copied onto future fiscal records for this location. Existing records keep their original description.",
@@ -222,7 +236,6 @@ export const en = {
     "The description was rejected. Use at most 500 characters and remove hidden control characters.",
   "location_settings.load_error": "The location settings could not be loaded.",
   "location_settings.save_error": "The description could not be saved. Try again.",
-  "location_settings.saved": "Saved. Future records will use this description.",
   "location_settings.retry": "Retry",
 
   "content_languages.title": "Content languages",
@@ -394,7 +407,6 @@ export const en = {
   "nav.staff": "Users",
   "nav.catalogue": "Products",
   "nav.units": "Units",
-  "nav.receipt": "Receipt",
   "nav.roster": "Shifts",
   "nav.approvals": "Approvals",
   "nav.planned_actual": "Planned vs actual",
@@ -591,7 +603,6 @@ export const en = {
   "catalogue.empty_prompt": "Create a menu on the Menus screen before adding products.",
   "catalogue.new": "New catalogue",
   "catalogue.create": "Create catalogue",
-  "receipt.title": "Receipt",
   "receipt.header_subtitle": "Header subtitle",
   "receipt.footer_message": "Footer message",
   "status.title": "Service statuses",
@@ -2104,9 +2115,23 @@ export const es: Record<StringKey, string> = {
     "Introduce un precio con un máximo de dos decimales, o déjalo vacío para cobrar el del producto.",
   "extras.duplicate_product": "Este producto ya está en la lista. Quita una de las dos filas.",
 
-  "nav.location_settings": "Facturación del local",
+  "nav.receipts": "Recibos",
+  "receipts.title": "Recibos",
+  "receipts.venue_wide": "Todos los locales",
+  "receipts.header_subtitle_hint":
+    "Se imprime bajo el nombre del local; p. ej., un lema o una línea de dirección",
+  "receipts.footer_message_hint": "Se imprime al final; p. ej., un agradecimiento o el horario",
+  "receipts.operation_description_hint":
+    "Se envía a Hacienda con cada venta; no se imprime en el recibo",
+  "receipts.preview": "Vista previa",
+  "receipts.preview_paper": "Vista previa del recibo",
+  "receipts.preview_error": "No se ha podido actualizar la vista previa.",
+  "receipts.not_printed": "Se envía a Hacienda (no se imprime)",
+  "receipts.saved":
+    "Guardado. Los recibos que se impriman a partir de ahora y los futuros registros fiscales usarán estos ajustes.",
+  "receipts.trim_save_error": "No se han podido guardar la cabecera y el pie.",
+  "receipts.trim_too_long": "Usa como máximo {max} caracteres.",
   "nav.content_languages": "Idiomas del contenido",
-  "location_settings.title": "Facturación del local",
   "location_settings.description": "Descripción de la operación",
   "location_settings.help":
     "Este texto se copia en los futuros registros fiscales de este local. Los registros existentes conservan su descripción original.",
@@ -2116,7 +2141,6 @@ export const es: Record<StringKey, string> = {
     "La descripción no es válida. Usa como máximo 500 caracteres y elimina los caracteres de control ocultos.",
   "location_settings.load_error": "No se ha podido cargar la configuración del local.",
   "location_settings.save_error": "No se ha podido guardar la descripción. Inténtalo de nuevo.",
-  "location_settings.saved": "Guardado. Los futuros registros usarán esta descripción.",
   "location_settings.retry": "Reintentar",
 
   "content_languages.title": "Idiomas del contenido",
@@ -2290,7 +2314,6 @@ export const es: Record<StringKey, string> = {
   "nav.staff": "Usuarios",
   "nav.catalogue": "Productos",
   "nav.units": "Unidades",
-  "nav.receipt": "Recibo",
   "nav.roster": "Turnos",
   "nav.approvals": "Aprobaciones",
   "nav.planned_actual": "Previsto vs real",
@@ -2491,7 +2514,6 @@ export const es: Record<StringKey, string> = {
   "catalogue.empty_prompt": "Crea una carta en la pantalla Cartas antes de añadir productos.",
   "catalogue.new": "Nuevo catálogo",
   "catalogue.create": "Crear catálogo",
-  "receipt.title": "Recibo",
   "receipt.header_subtitle": "Subtítulo de cabecera",
   "receipt.footer_message": "Mensaje de pie",
   "status.title": "Estados de servicio",
