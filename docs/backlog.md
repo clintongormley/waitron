@@ -3851,7 +3851,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
       line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.
       The till offers one of several of a dish with extras, and never offers part of a weighed
-      line: its give-away and discount dialog says the same sentence above the action. A
+      line: its give-away and discount dialog says the same sentence beside the action. A
       give-away or a discount that would take nothing off — the line already free, or a discount
       too small to move any price — is now refused `adjustment.no_reduction`; before, every such
       case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
@@ -5700,15 +5700,21 @@ ongoing overhaul listed at the top of Track A.
   shows every row's message, joined; a dialog opened with a footer row's message already present
   scrolls it into view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
   message scrolled into view when it appears. None of these scrolls happens when the message changes
-  in the same browser task as an edit inside the dialog (typing, choosing from a list, ticking a
-  box): a form that re-checks its fields on every keystroke clears and re-shows its message as the
+  from an `input` event inside the dialog until a zero-delay timer the dialog then sets has run
+  (typing, a native list, a tick box; a `wt-combobox` choice, a
+  `wt-number-stepper` −/+ button and `wt-price-input`'s unit button fire no `input`, so a re-check
+  they cause is still scrolled to): a form that re-checks its fields on every keystroke clears and re-shows its message as the
   person types, and a measured case scrolled a long dialog 1,773 px away from the focused field. A
-  refusal that comes back from a request later is scrolled to, even while focus is still in a field.
+  refusal that comes back after that timer has run is scrolled to, even while focus is still in a field.
   These dialogs drew their own message instead and now pass it to their footer `wt-form-actions`:
   the categories screen's delete dialog (`#dialogMessage`, removed) and products window, which drew
   a refused add at the top of its body; the staff screen's row action confirmation; the delete
   dialogs on the modifiers, catalogue, sections and labels screens; the servers screen's remove and
   clear confirmations; the menus screen's layout delete; and the image library's image delete.
+  Open follow-ups: three dialogs still draw their own refusal because none has a `wt-form-actions`
+  row in its footer to hand it to: the menus screen's add-products window has its row inside the
+  `section-add-products` component, and `packages/bookings/src/dashboard/booking-form.ts` and
+  `apps/till/src/widgets/supervisor-override-dialog.ts` put bare `wt-button`s in the footer slot.
   Browser tests hold the placement on location settings, the setup wizard's connect form, the
   profile screen's Add passkey dialog, the sign-in passkey step and the address check, at 1280 and
   390 pixels wide where the width matters. A `wt-form-actions` wrapped in another element inside a

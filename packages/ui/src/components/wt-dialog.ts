@@ -83,16 +83,17 @@ export class WtDialog extends LitElement {
   @state() private footerMessage = "";
   private footerActions: WtFormActions[] = [];
 
-  /** True from a field's `input` event until the task it arrived in ends. A message that changes
-   * within that task is taken to be the form re-checking the edit, and is not scrolled to: that would
-   * carry the field out of sight. A refusal from a request arrives in a later task. */
+  /** True from an `input` event inside the dialog until a zero-delay timer the dialog then sets
+   * has run. A message that changes meanwhile is taken to be the form re-checking the edit, and is
+   * not scrolled to: that would carry the field out of sight. */
   private editing = false;
 
   constructor() {
     super();
-    // Captured, so this runs before the field's own listeners: the browser runs microtasks after
-    // each listener it calls, so a form's re-check has rendered before a bubbling listener here
-    // would run. wt-input also stops the event inside its own shadow root.
+    // Captured, so this runs before the field's own listeners: for an event the browser dispatches
+    // itself, it runs microtasks after each listener it calls, so a form's re-check has rendered
+    // before a bubbling listener here would run. wt-input also stops the event inside its own
+    // shadow root.
     this.addEventListener(
       "input",
       () => {
