@@ -103,9 +103,7 @@ export class ContentLanguagesScreen extends LitElement {
   /** How many configurations the server has delivered, so a save can tell whether one arrived while
    * it was in flight. */
   #reads = 0;
-  readonly #writer = {
-    updateContentLanguages: (config: ContentLanguages) => this.#write(config),
-  };
+  readonly #saveAdded = (config: ContentLanguages) => this.#write(config);
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -222,7 +220,7 @@ export class ContentLanguagesScreen extends LitElement {
       <dashboard-add-content-language
         .open=${this.adding}
         .config=${config}
-        .api=${this.#writer}
+        .save=${this.#saveAdded}
         @languages-closed=${() => {
           this.adding = false;
         }}

@@ -11,14 +11,12 @@ afterEach(cleanupWidgets);
 const CONFIG = { defaultLanguage: "es", languages: ["es", "en"] };
 
 async function mount(
-  api: AddContentLanguageDialog["api"] = {
-    updateContentLanguages: vi.fn().mockResolvedValue(undefined),
-  },
+  save: AddContentLanguageDialog["save"] = vi.fn().mockResolvedValue(undefined),
 ) {
   return mountWidget<AddContentLanguageDialog>("dashboard-add-content-language", {
     open: true,
     config: CONFIG,
-    api,
+    save,
   });
 }
 
@@ -89,23 +87,22 @@ describe("add content language dialog", () => {
     }
   });
 
-  it("adds the chosen language after the enabled ones, keeps the default, announces the saved languages and closes", async () => {
-    const api = { updateContentLanguages: vi.fn().mockResolvedValue(undefined) };
-    const { el, host } = await mount(api);
+  it("saves the chosen language after the enabled ones, keeping the default, then announces the save and closes", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { el, host } = await mount(save);
     const saved = vi.fn();
     host.addEventListener("languages-saved", saved);
     await choose(el, "fr");
     click(el, "save-language");
     const config = { defaultLanguage: "es", languages: ["es", "en", "fr"] };
     await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
-    expect(api.updateContentLanguages).toHaveBeenCalledWith(config);
-    expect(saved.mock.calls[0]![0].detail).toEqual(config);
+    expect(save).toHaveBeenCalledWith(config);
     expect(el.open).toBe(false);
   });
 
   it("says nothing before the first Add, then explains an Add with no language beside the field and at the bottom, focuses it and holds Add until one is chosen", async () => {
-    const api = { updateContentLanguages: vi.fn() };
-    const { el } = await mount(api);
+    const save = vi.fn();
+    const { el } = await mount(save);
     expect(el.shadowRoot!.querySelector("#language-error")).toBeNull();
     expect(await bottomOf(el)).toBeNull();
     expect(disabled(el, "save-language")).toBe(false);
@@ -113,7 +110,7 @@ describe("add content language dialog", () => {
     click(el, "save-language");
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
-    expect(api.updateContentLanguages).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
     expect(field(el).getAttribute("aria-invalid")).toBe("true");
     expect(field(el).getAttribute("aria-describedby")).toBe("language-error");
     expect(el.shadowRoot!.querySelector("#language-error")!.textContent).toBe(
@@ -133,13 +130,11 @@ describe("add content language dialog", () => {
   });
 
   it("shows a refused save at the bottom, leaves the dialog open with Add working, and drops the message when Add is pressed again", async () => {
-    const api = {
-      updateContentLanguages: vi
-        .fn()
-        .mockRejectedValueOnce({ code: "content.language_invalid" })
-        .mockReturnValueOnce(new Promise(() => {})),
-    };
-    const { el } = await mount(api);
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "content.language_invalid" })
+      .mockReturnValueOnce(new Promise(() => {}));
+    const { el } = await mount(save);
     await choose(el, "fr");
     click(el, "save-language");
     await vi.waitFor(async () =>
@@ -152,7 +147,7 @@ describe("add content language dialog", () => {
     click(el, "save-language");
     await el.updateComplete;
     expect(await bottomOf(el)).toBeNull();
-    expect(api.updateContentLanguages).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the chosen language through a live refresh of the enabled languages", async () => {
@@ -165,8 +160,8 @@ describe("add content language dialog", () => {
   });
 
   it("drops the chosen language when a live refresh enables it: the placeholder shows, stays when the language is disabled again, and Add counts as nothing chosen", async () => {
-    const api = { updateContentLanguages: vi.fn().mockResolvedValue(undefined) };
-    const { el } = await mount(api);
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mount(save);
     await choose(el, "");
     await choose(el, "fr");
     el.config = { defaultLanguage: "es", languages: ["es", "en", "fr"] };
@@ -180,7 +175,7 @@ describe("add content language dialog", () => {
     click(el, "save-language");
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
-    expect(api.updateContentLanguages).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
     expect(field(el).getAttribute("aria-invalid")).toBe("true");
     expect(el.shadowRoot!.querySelector("#language-error")!.textContent).toBe(
       t("content_languages.choose"),
@@ -190,14 +185,14 @@ describe("add content language dialog", () => {
   });
 
   it("sends no duplicate when Add is pressed before a refresh enabling the chosen language has rendered", async () => {
-    const api = { updateContentLanguages: vi.fn().mockResolvedValue(undefined) };
-    const { el } = await mount(api);
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mount(save);
     await choose(el, "fr");
     el.config = { defaultLanguage: "es", languages: ["es", "en", "fr"] };
     click(el, "save-language");
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
-    expect(api.updateContentLanguages).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
     expect(field(el).value).toBe("");
     expect(field(el).getAttribute("aria-invalid")).toBe("true");
   });
@@ -248,15 +243,13 @@ describe("add content language dialog", () => {
 
   it("stays open and unchanged while a save is in flight", async () => {
     let finish!: () => void;
-    const api = {
-      updateContentLanguages: vi.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            finish = resolve;
-          }),
-      ),
-    };
-    const { el, host } = await mount(api);
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { el, host } = await mount(save);
     const closed = vi.fn();
     const saved = vi.fn();
     host.addEventListener("languages-closed", closed);
@@ -272,16 +265,13 @@ describe("add content language dialog", () => {
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     await userEvent.keyboard("{Escape}");
     expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-    expect(api.updateContentLanguages).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledOnce();
     expect(closed).not.toHaveBeenCalled();
     expect(el.open).toBe(true);
 
     finish();
     await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
-    expect(saved.mock.calls[0]![0].detail).toEqual({
-      defaultLanguage: "es",
-      languages: ["es", "en", "fr"],
-    });
+    expect(save).toHaveBeenCalledWith({ defaultLanguage: "es", languages: ["es", "en", "fr"] });
     await closeReportsDelivered();
     expect(closed).not.toHaveBeenCalled();
   });

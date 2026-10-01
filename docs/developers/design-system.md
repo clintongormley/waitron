@@ -1111,7 +1111,7 @@ inside it does something different. Four shapes cover what's needed so far:
   in.
 - **A field whose value can't be shown** (a password, a PIN): don't render a fake masked value —
   there's nothing real to show. Put the label and its one action ("Change") on the same row.
-- **A repeatable list** (passkeys today; the same shape applies to printers, staff, devices): each
+- **A repeatable list** (passkeys and content languages today; the same shape applies to printers, staff, devices): each
   item is its own row carrying its own action ("Remove"), and an "Add" action sits in the same
   footer position the single-form case uses for "Edit".
 - **A purely informational card** (a status sentence, nothing to edit): just the sentence, muted,
@@ -1125,10 +1125,9 @@ from these cards: the edit form no longer needs to fit the page's own (narrower)
 modal sizes itself independently; and there's no more "why doesn't the current page highlight in
 the sidebar while editing" confusion, since the page never stopped being the page. See "Card action
 buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
-above for the close-event race a shared, reused modal needs to guard against. One exception: a row
-action that changes one thing and loses nothing saves straight away rather than opening a modal —
-Content languages' Set as default and Remove (removing a language keeps its translations); its Add
-still opens one.
+above for the close-event race a shared, reused modal needs to guard against. One exception (C111,
+owner 2026-09-30): Content languages' Set as default and Remove save straight away, without a modal
+(removing a language keeps its translations); its Add language still opens one.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the

@@ -30,9 +30,7 @@ export class AddContentLanguageDialog extends LitElement {
   ];
   @property({ type: Boolean }) open = false;
   @property({ attribute: false }) config!: ContentLanguages;
-  @property({ attribute: false }) api!: {
-    updateContentLanguages(config: ContentLanguages): Promise<void>;
-  };
+  @property({ attribute: false }) save!: (config: ContentLanguages) => Promise<void>;
   @state() private language = "";
   @state() private busy = false;
   @state() private attempted = false;
@@ -70,11 +68,9 @@ export class AddContentLanguageDialog extends LitElement {
       languages: [...this.config.languages, this.language],
     };
     try {
-      await this.api.updateContentLanguages(config);
+      await this.save(config);
       this.open = false;
-      this.dispatchEvent(
-        new CustomEvent("languages-saved", { detail: config, bubbles: true, composed: true }),
-      );
+      this.dispatchEvent(new CustomEvent("languages-saved", { bubbles: true, composed: true }));
     } catch (error) {
       this.error = codeOf(error);
     } finally {
