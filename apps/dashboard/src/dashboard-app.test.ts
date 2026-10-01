@@ -1739,52 +1739,6 @@ describe("dashboard-app", () => {
     expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe(heading);
   });
 
-  it("keeps a group expanded once collapsed if it holds the current screen, so you never lose your place", async () => {
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-    });
-    await flush(el);
-    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
-    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-menu")!;
-    header.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-    navItem(el, "catalogue")!.click();
-    await flush(el);
-
-    header.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-    expect(panel.hidden).toBe(false);
-    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
-
-    // The collapse recorded while on catalogue applies once the current screen is elsewhere.
-    navItem(el, "overview")!.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("false");
-    expect(panel.hidden).toBe(true);
-  });
-
-  it("does not clear a group's collapse when its header is clicked while it shows open only for holding the current page", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-    });
-    await flush(el);
-    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
-    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-menu")!;
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-
-    header.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-
-    navItem(el, "overview")!.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("false");
-    expect(panel.hidden).toBe(true);
-  });
-
   it("collapses the current page's group when its header is clicked, and opens it on a second click", async () => {
     history.replaceState(null, "", "/manage/catalogue");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
