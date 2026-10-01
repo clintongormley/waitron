@@ -104,15 +104,16 @@ row menu offers **Remove** or **Restore** there too, and an Inactive variant is 
 change the **Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
-In the menu offer you can optionally give a variant its own price on that menu, or clear its
-**Offered on this menu** box to stop offering it there. An order charges the first of these that is
-set: the variant's price on that menu, the variant's own price, then the product's price on that
-menu, then the product's own price.
+On the menu you can give it a price of its own, switch it off, or let it follow the menus it comes
+from. A price you set for this menu wins. Otherwise, prices set for that size on included menus
+and on the product contribute to its price. If there is no size-level price, it follows the
+combined product price.
 
-You can leave a menu offer's price empty, with variants or without. The menu then charges the
-product's own price, and follows it when you change that price. The empty field shows the product's
-price greyed out as a hint. For a product without variants that hint is what the menu charges; for
-one with variants, each variant shows its own price hint.
+Leave a menu price empty to let those contributions decide it. For example, if Drinks prices beer
+at €3.00 and Evening includes only Drinks' beer, Evening charges €3.00. If Evening also puts that
+beer in its own section at the product's €2.80, the prices disagree. Set Evening's beer price to
+resolve that disagreement before publishing. The Prices view shows where each price comes from
+and which settings still need your decision.
 
 ## Declare allergens and dietary suitability directly
 

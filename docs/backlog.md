@@ -207,11 +207,23 @@ or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved (owner, 2026-10-01). PF2b Tasks 1–10 are implemented and independently
 reviewed. The branch is rebased over slice 1 and name-only photos; migration upgrade failures,
-branch finishing and landing remain pending. After landing, reset each dev venue
+branch finishing and landing remain pending. The whole-branch review reproduced two
+upgrade failures: the chronological guard refuses library-section deletion before referencing
+menu details are emptied, and a complete upgrade from media0004 refuses a trigger drop in
+shipped media0005. The runner is parked for an explicit migration decision; no guard or shipped
+SQL exception was inferred. After landing, reset each dev venue
 with `wa-wt reset demo <name>`: library sections and their placements disappear, menu switched-off
 settings clear, and stored variant switches become explicit on decisions. Per-menu extras are
 retired; menu extras follow product-level attachments and settings. Reload tills running the older
-build before using the new published document. Slice 3 is
+build before using the new published document.
+
+A controlled render of the Spanish menu preview at 390 px on 2026-10-01 showed its selected
+Preview tab initially clipped after programmatic selection. Clicking that tab scrolled it fully
+into view. The shared tab component and menu tab labels are unchanged across this branch;
+a base-build render was not run, so this observation does not establish when it began.
+The local lane E receipt `~/waitron-campaign-e/receipts/finish-render-20261001/render-report.md` records the geometry and
+click-path screenshot. Check restored selection visibility before changing the shared component.
+Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
 ([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), approved, lane D's PF3 after
 PF1); 3b, opening hours, by-hand open and close, fallbacks (a real replacement; a station with none is a
@@ -1177,8 +1189,7 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   grepping the whole seed directory for `createExtraList`, which matches nothing. So a demo box
   shows the Options half of the feature and not the Extras half, and `docs/products.md` now says so
   rather than describing extra prices that are not seeded. **Next action:** seed one extras list on
-  a demo dish, with a menu-offer price that differs from the product's own, which is what the
-  removed text used to illustrate.
+  a demo dish, with a list-item price that differs from the extra product's own price.
 - **CLOSED 2026-10-01: a menu item carries its product's extras and options lists.** Per-menu
   extras were dropped (owner decision 2026-09-30). A menu offer uses the list item's price, else
   the extra product's own price; publishing freezes those choices and prices.

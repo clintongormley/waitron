@@ -36,12 +36,12 @@ same six with one path segment different. They are mounted by one helper, `mount
 
 | Route | Answers |
 | --- | --- |
-| `GET /management-api/modifiers/{options,extras}` | `{ optionLists: OptionListRow[] }` / `{ extraLists: ExtraListRow[] }`: each list with a `usage` object: `products`, the number of products carrying it, and for extras `menus`, the number of menu entries publishing it |
+| `GET /management-api/modifiers/{options,extras}` | `{ optionLists: OptionListRow[] }` / `{ extraLists: ExtraListRow[] }`: each list with a `usage` object: `products`, the number of products carrying it |
 | `POST /management-api/modifiers/{options,extras}` | the created list under `optionList` / `extraList`, 201 |
 | `GET /management-api/modifiers/{options,extras}/:id` | the list under `optionList` / `extraList` |
 | `PATCH /management-api/modifiers/{options,extras}/:id` | the updated list, same key. The body is the COMPLETE list, not a patch of changed fields |
 | `DELETE /management-api/modifiers/{options,extras}/:id` | `{ ok: true }` |
-| `GET /management-api/modifiers/{options,extras}/:id/dependants` | `{ dependants }` for the Used by popup and the delete confirmation: for options, `products` alone, the products carrying the list; for extras, those `products` plus `menus`, the menu entries publishing it, each with its `menuName` |
+| `GET /management-api/modifiers/{options,extras}/:id/dependants` | `{ dependants }` for the Used by popup and the delete confirmation: for both kinds, `products`, the products carrying the list |
 
 An id that is not a uuid is refused with `shared.invalid_id`, whose `kind` says which id was meant
 (`OptionListId`, `ExtraListId`). A body fault is `options.invalid` or `extras.invalid` naming the
