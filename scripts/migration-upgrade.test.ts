@@ -245,6 +245,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0044_drop_table_bill_pointer": {
     refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
   },
+  // Rebuilds `printers`, refused once a print job or station mapping names a printer (C107).
+  "core/0053_drop_printer_character_set": {
+    refused: ["DROP TABLE `printers`", "FOREIGN KEY constraint failed"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */
