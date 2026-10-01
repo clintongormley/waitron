@@ -1259,7 +1259,23 @@ window it opens for one option, `apps/dashboard/src/widgets/option-label-form.ts
   and starts expanded too (owner, 2026-10-01: "yes"). **This is an
   exception to a written rule:** `docs/developers/design-system.md` → "Sections always start
   collapsed", which the change must update to name the exception and why. Related: A169 redraws
-  the same section.
+  the same section, and A171 splits it in two.
+
+**The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171,
+owner 2026-10-01: "i think we should separate kitchen name from customer facing names
+(everywhere)") — OPEN.** Three editors put the kitchen name inside one "Customer and kitchen
+names" section with the customer-facing name in each language: an options list
+(`apps/dashboard/src/widgets/option-list-form.ts`), one option (`option-label-form.ts`) and an
+extras list (`extra-list-form.ts`). The product editor already keeps them apart — the kitchen name
+is in its "Kitchen" section with station and course, the customer-facing names under
+"Descriptors" (`product-editor.ts`) — and the variant form (`variant-form.ts`) has no section but
+shows the kitchen name as its own field directly above the customer-facing names. **Next action:**
+settle where the kitchen name goes in the three editors (its own section, or a plain field
+always on show), then apply it, keeping the product editor and variant form consistent with it.
+Done together with A169 and A170, which redraw and pre-open the section being split: after the
+split, A170's "starts expanded" applies to whatever holds the names in the option window. The
+section heading strings (`options.names_section`, `extras.names_section` in
+`apps/dashboard/src/i18n/strings.ts`, English and Spanish) change with it.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
