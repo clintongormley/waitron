@@ -7952,7 +7952,7 @@ ongoing overhaul listed at the top of Track A.
   _(2026-10-01, C122: C112 left a required language's missing names shown nowhere — the gap report
   was read only when a save changed the default. Done: the Content languages page now lists them,
   entry below.)_
-- **A visible list of missing translations (C122, owner 2026-10-01) — done (2026-10-01).** The
+- **A visible list of missing translations (C122, owner 2026-10-01) — done (2026-10-01, #1006).** The
   Content languages page gains a **Missing translations** section under the language card, rather
   than a page of its own: the page already holds the languages and the region's rules, and a new
   page would need its own menu entry and permission.
