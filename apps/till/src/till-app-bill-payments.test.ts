@@ -1125,6 +1125,22 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expectReadAgain({ bills: reads.bills, balance: reads.balance });
   });
 
+  it("says why a transfer to or from a bill holding money was refused, and reads the bills again", async () => {
+    const transferItems = vi
+      .fn()
+      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-4" });
+    const { el, order, reads } = await openHolding({ transferItems });
+    const before = listed(order);
+
+    emit(order, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    expect(transferItems).toHaveBeenCalledOnce();
+    expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
+    expect(listed(tableOrder(el))).toEqual(before);
+    expectReadAgain({ bills: reads.bills, balance: reads.balance });
+  });
+
   it.each(["bill.refund_in_progress", "working_order.not_open"])(
     "says a split refused %s in that code's own words, and reads the bill again",
     async (code) => {

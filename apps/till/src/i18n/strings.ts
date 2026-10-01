@@ -619,6 +619,8 @@ export const en = {
   "table.take_payment": "Take payment",
   "table.still_to_pay": "Still to pay at this table",
   "table.finish": "Finish table",
+  "table.finish_bill_holds_money":
+    "A bill on this table owes nothing but still holds money. Give it back before finishing the table",
   "table.request_bill": "Mark bill requested for {party}",
   "table.cancel_bill_request": "Cancel the bill request for {party}",
   "table.action_move_bill": "Move this bill",
@@ -1386,6 +1388,8 @@ export const es: Record<StringKey, string> = {
   "table.take_payment": "Cobrar esta cuenta",
   "table.still_to_pay": "Pendiente de pago en la mesa",
   "table.finish": "Cerrar mesa",
+  "table.finish_bill_holds_money":
+    "Una cuenta de esta mesa no debe nada pero aún tiene dinero. Devuélvelo antes de cerrar la mesa",
   "table.request_bill": "Marcar cuenta pedida para {party}",
   "table.cancel_bill_request": "Anular la petición de cuenta de {party}",
   "table.action_move_bill": "Mover esta cuenta",

@@ -119,10 +119,10 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     expect(codeMessage(code, "en")).not.toContain(code);
   }
   expect(codeMessage("bill.payments_received", "en")).toBe(
-    "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments. If an empty bill still holds money, give it back before finishing the table",
+    "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta. Si una cuenta vacía aún tiene dinero, devuélvelo antes de cerrar la mesa",
+    "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta",
   );
 });
 

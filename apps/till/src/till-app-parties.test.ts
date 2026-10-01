@@ -3396,6 +3396,26 @@ describe("till-app: another device changed the table first", () => {
     expect(banner(el)!.textContent).toContain(t("party.changed_gone"));
   });
 
+  it("says a bill owing nothing still holds money when Finish is refused for it, in its own words", async () => {
+    const { el } = await mountApp({
+      finishTable: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-9" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "finish-table", {});
+    await flush(el);
+
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(
+      "A bill on this table owes nothing but still holds money. Give it back before finishing the table",
+    );
+    expect(text).not.toContain(codeMessage("bill.payments_received"));
+    expect(tableOrder(el)!.finishRefused).toBe(false);
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+  });
+
   it("says something else changed when its tables and bills read the same", async () => {
     const reads = floorThat([mesa4], [seated({}, { revision: 5 })]);
     const { el } = await mountApp({

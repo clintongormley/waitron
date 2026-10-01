@@ -4150,6 +4150,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       payment was given back in full, in `apps/server/src/party-bill-actions.test.ts`, and "will
       not abandon an emptied bill that still holds a tip, and finishes once it is given back" in
       `apps/server/src/parties.test.ts`.
+    - **DONE — finishing a table whose bill owes nothing but still holds money gets its own till
+      message** (lane B item B22, 2026-10-01; the owner's "queue it" on B19's FYI). The till now
+      picks the words by the action it sent, not by the code alone: a Finish table refused
+      `bill.payments_received` says "A bill on this table owes nothing but still holds money. Give
+      it back before finishing the table" (`table.finish_bill_holds_money` in
+      `apps/till/src/i18n/strings.ts`), and a refused merge or transfer says B19's text without its
+      finish-table sentence, ending "Take the rest from the bill's payments". The server and its
+      error code are unchanged. Guards: "says a bill owing nothing still holds money when Finish is
+      refused for it, in its own words" in `apps/till/src/till-app-parties.test.ts`; the merge and
+      transfer cases for a bill holding money in `apps/till/src/till-app-bill-payments.test.ts`; the
+      two wordings pinned in `apps/till/src/i18n/codes.test.ts` and
+      `apps/till/src/i18n/strings.test.ts`.
     - **OPEN — the generic "received more than the bill" text also answers a comp or discount.**
       The till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer
       items, or refund the difference first") is on `main`, and the adjustment dialog shows it

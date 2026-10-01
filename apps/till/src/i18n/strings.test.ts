@@ -75,3 +75,18 @@ describe("the till's Spanish Clear snooze label, and no aplazar in the catalogue
     expect(aplaza).toEqual([]);
   });
 });
+
+describe("the Finish table refusal for a bill that owes nothing but holds money", () => {
+  it.each([
+    [
+      "en-GB",
+      "A bill on this table owes nothing but still holds money. Give it back before finishing the table",
+    ],
+    [
+      "es-ES",
+      "Una cuenta de esta mesa no debe nada pero aún tiene dinero. Devuélvelo antes de cerrar la mesa",
+    ],
+  ])("says what to do in %s", (locale, message) => {
+    expect(catalogues[locale]?.["table.finish_bill_holds_money"]).toBe(message);
+  });
+});
