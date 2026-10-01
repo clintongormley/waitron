@@ -409,6 +409,116 @@ it("slides the released row from where it was drawn when it is released straight
   near(box(el, "a").top, b.top - 0.2 * a.height);
 });
 
+it("slides the released row from where it was drawn at release when the pointer moved on after it changed place", async () => {
+  // The render after a crossing schedules a slide for the next frame; the release comes first.
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.top + 0.3 * a.height);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  pointer(document, "pointermove", 1, b.top + 0.7 * a.height);
+  const drawn = box(el, "a").top;
+  near(drawn, b.top + 0.2 * a.height);
+  pointer(document, "pointerup", 1);
+  await nextFrame();
+  expect(slides(el, "a")).toEqual(["transform"]);
+  near(box(el, "a").top, drawn);
+});
+
+/** The test host, made the scrolling box around the list, with room below the list to scroll. */
+async function mountScrolling() {
+  const { el, host } = await mountWidget<TestReorderHost>("test-reorder-host", { items: three() });
+  host.style.setProperty("--wt-duration-move", "0s");
+  host.style.height = "300px";
+  host.style.overflowY = "auto";
+  const room = document.createElement("div");
+  room.style.height = "1000px";
+  host.appendChild(room);
+  const scroll = async (by: number) => {
+    const scrolled = new Promise((resolve) =>
+      host.addEventListener("scroll", resolve, { once: true }),
+    );
+    host.scrollTop += by;
+    await scrolled;
+    await el.updateComplete;
+  };
+  return { el, scroll };
+}
+
+it("keeps the dragged row under a pointer that stays still while the list scrolls", async () => {
+  const { el, scroll } = await mountScrolling();
+  const a = box(el, "a");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  await scroll(0.4 * a.height);
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  near(box(el, "a").top, a.top);
+  pointer(document, "pointerup", 1);
+});
+
+it("keeps the dragged row under a still pointer while the page scrolls", async () => {
+  const { el, host } = await mountWidget<TestReorderHost>("test-reorder-host", { items: three() });
+  host.style.setProperty("--wt-duration-move", "0s");
+  const room = document.createElement("div");
+  room.style.height = `${2 * innerHeight}px`;
+  host.appendChild(room);
+  try {
+    const a = box(el, "a");
+    pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+    const scrolled = new Promise((resolve) =>
+      document.addEventListener("scroll", resolve, { once: true }),
+    );
+    scrollBy(0, 0.4 * a.height);
+    await scrolled;
+    await el.updateComplete;
+    expect(order(el)).toEqual(["a", "b", "c"]);
+    near(box(el, "a").top, a.top);
+    pointer(document, "pointerup", 1);
+  } finally {
+    scrollTo(0, 0);
+  }
+});
+
+it("keeps the dragged row under a still pointer while a scrolling box inside a shadow root scrolls", async () => {
+  // Shaped like wt-modal: the list is slotted into a shadow root whose own box scrolls.
+  const { el, host } = await mountWidget<TestReorderHost>("test-reorder-host", { items: three() });
+  host.style.setProperty("--wt-duration-move", "0s");
+  const frame = document.createElement("div");
+  frame.attachShadow({ mode: "open" }).innerHTML =
+    `<div style="height: 300px; overflow-y: auto"><slot></slot><div style="height: 1000px"></div></div>`;
+  frame.appendChild(el);
+  host.appendChild(frame);
+  await el.updateComplete;
+  const scroller = frame.shadowRoot!.firstElementChild!;
+  const a = box(el, "a");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  const scrolled = new Promise((resolve) =>
+    scroller.addEventListener("scroll", resolve, { once: true }),
+  );
+  scroller.scrollTop += 0.4 * a.height;
+  await scrolled;
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  near(box(el, "a").top, a.top);
+  pointer(document, "pointerup", 1);
+});
+
+it("moves the dragged row past a row the scroll carries under a still pointer", async () => {
+  const { el, scroll } = await mountScrolling();
+  const a = box(el, "a");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  // Measures the rows' bounds before the scroll, so the crossing below shows that bounds taken from
+  // the top of the table body stay right after the list scrolls.
+  pointer(document, "pointermove", 1, a.top + a.height / 2);
+  await scroll(0.8 * a.height);
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  near(box(el, "a").top, a.top);
+  pointer(document, "pointerup", 1);
+  await scroll(0.1 * a.height);
+  expect(order(el)).toEqual(["b", "a", "c"]);
+});
+
 it("lands the released row in its slot when the slide ends", async () => {
   const el = await mountTimed("50ms");
   const a = box(el, "a");

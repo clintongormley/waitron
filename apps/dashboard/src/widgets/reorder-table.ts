@@ -72,6 +72,8 @@ export class ReorderController implements ReactiveController {
    * is waiting for its frame. */
   #before: Map<HTMLElement, { drawn: number; rest: number }> | null = null;
   #frame = 0;
+  /** Everything a scroll listener was added to for the current drag. */
+  #scrollTargets: EventTarget[] = [];
 
   static readonly styles: CSSResult = css`
     .handle {
@@ -95,9 +97,12 @@ export class ReorderController implements ReactiveController {
     .handle:disabled {
       ${disabledStyles}
     }
-    @media (prefers-reduced-motion: no-preference) {
+    tr[data-sliding] {
+      transition: transform var(--wt-duration-move) ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
       tr[data-sliding] {
-        transition: transform var(--wt-duration-move) ease-out;
+        transition: none;
       }
     }
     /* A lifted row, marked by the controller while a pointer drag is in progress. */
@@ -250,17 +255,40 @@ export class ReorderController implements ReactiveController {
     document.addEventListener("pointermove", this.#onPointerMove);
     document.addEventListener("pointerup", this.#onPointerEnd);
     document.addEventListener("pointercancel", this.#onPointerEnd);
+    // A scroll of any ancestor moves the rows under a pointer that has not moved. An element's scroll
+    // event does not bubble, and a capturing listener outside a shadow root does not hear one fired
+    // inside it, so each ancestor in the flattened tree gets its own listener; the document's hears
+    // the page itself.
+    this.#scrollTargets = [document];
+    let at: Element | null = row;
+    while (at !== null) {
+      const parent: Node | null = at.parentNode;
+      at =
+        at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null);
+      if (at !== null) this.#scrollTargets.push(at);
+    }
+    for (const target of this.#scrollTargets) {
+      target.addEventListener("scroll", this.#onScroll, { passive: true });
+    }
   }
 
   readonly #onPointerMove = (event: PointerEvent): void => {
     const drag = this.#drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
     drag.y = event.clientY;
+    this.#track(drag);
+  };
+
+  readonly #onScroll = (): void => {
+    this.#track(this.#drag!);
+  };
+
+  #track(drag: { id: string; grab: number; y: number }): void {
     this.#follow(drag);
-    const over = this.#rowAt(event.clientY, drag.id);
+    const over = this.#rowAt(drag.y, drag.id);
     if (over === null || over === drag.id) return;
     this.#model.move(drag.id, this.#model.order().indexOf(over), "pointer");
-  };
+  }
 
   /** A cancelled pointer (the OS interrupting a touch) ends the drag like a release: each crossed
    * row has already moved on screen. */
@@ -277,6 +305,8 @@ export class ReorderController implements ReactiveController {
     const row = this.#draggedRow;
     if (row !== null) {
       row.removeAttribute("data-dragging");
+      // A slide still waiting for its frame would restart this one from before the last render.
+      this.#before?.delete(row);
       this.#slideHome(row);
     }
     this.#draggedRow = null;
@@ -285,6 +315,8 @@ export class ReorderController implements ReactiveController {
     document.removeEventListener("pointermove", this.#onPointerMove);
     document.removeEventListener("pointerup", this.#onPointerEnd);
     document.removeEventListener("pointercancel", this.#onPointerEnd);
+    for (const target of this.#scrollTargets) target.removeEventListener("scroll", this.#onScroll);
+    this.#scrollTargets = [];
   }
 
   #rows(): NodeListOf<HTMLElement> {

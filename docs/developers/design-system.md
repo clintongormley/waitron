@@ -165,7 +165,7 @@ and till app suites: one for the app's own text, one for text on the page outsid
 
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
 `--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by
-dragging.
+dragging in `ReorderController` (`apps/dashboard/src/widgets/reorder-table.ts`).
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour

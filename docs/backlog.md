@@ -1626,12 +1626,14 @@ everywhere"_.
   of its way over `--wt-duration-move`, and land at once under reduced motion; a row moves past a
   taller one only once the pointer is a row's height from its far edge, so rows of different
   heights no longer swap back and forth. Looked at in light and dark, English and Spanish, at 1280
-  and 390px. Two things seen then and left as they were, because each shows the same with the
-  row lifted in place and not moved at all (so neither comes from this change): the lifted row
-  shows a faint line at each cell boundary, most visible in the dark theme; and a row lifted at
-  the bottom of its list has its shadow cut off where the table ends. The likely cause, not
-  checked, is the sideways-scroll wrapper each list puts round its table (`.table-wrap`,
-  `overflow-x: auto`), which also clips top and bottom.
+  and 390px. Two things seen then and left as they were: the lifted row shows a faint line at
+  each cell boundary, most visible in the dark theme; and a row lifted at the bottom of its list
+  has its shadow cut off where the table ends. Each shows the same with the row lifted in place
+  before any slide, but that was not compared against the code before this branch, so whether
+  this branch's lifting (`position: relative`, `z-index: 1`) contributes is not known. The likely
+  cause, not checked, is the sideways-scroll wrapper each list puts round its table
+  (`.table-wrap`, or `.wrap` in the variant table; `overflow-x: auto`), which also clips top and
+  bottom.
 - **Products — WAITING on the owner.** Dragging a product onto a folder on the Products screen
   (`apps/dashboard/src/widgets/product-list.ts`, `apps/dashboard/src/widgets/catalogue-browser.ts`,
   #968) uses the browser's own drag (`draggable="true"`, `dragstart`); the folder under the
@@ -1658,11 +1660,12 @@ everywhere"_.
   an insertion mark, and its tests assert that design ("marks the dragged tile and an insertion
   point while dragging", and the `.dragging`/`.drop-before` checks after it, in
   `canvas-grid-preview.test.ts`), so bringing it onto the same look changes assertions. The owner's
-  "fixed everywhere" covers it; does the owner want it? The floor plan already moves the table with
+  "fixed everywhere" covers it; does the owner want it? A182, recorded the same day, plans to
+  retire the canvas editor, so this question may fall away with it. The floor plan already moves the table with
   the pointer (`packages/ui/src/components/wt-floor-canvas.ts`, `#onPointerMove`).
 
 **Next action:** the owner chooses (A), (B) or (C) for Products, and yes or no for the canvas
-tiles. Then a new branch executes the matching plan.
+tiles (unless A182's retirement of canvases makes that moot). Then a new branch executes the matching plan.
 
 **The extras list editor's "Add product" dropdown offered products already in the list (A181, owner
 2026-10-01: "when create extras lists, the products dropdown should remove already chosen
