@@ -84,14 +84,14 @@ leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite
 
 ### The `WAITRON_TILL_*` variables
 
-| Variable                   | Required | Default | What it is                                                        |
-| -------------------------- | -------- | ------- | ----------------------------------------------------------------- |
-| `WAITRON_TILL_LOCATION_ID` | yes      | —       | The location this till sells from.                                |
-| `WAITRON_TILL_TILL_ID`     | yes      | —       | This physical till.                                               |
-| `WAITRON_TILL_NODE_ID`     | yes      | —       | The compute node whose SIF/chain it files to.                     |
-| `WAITRON_TILL_SERIES_ID`   | yes      | —       | The standard invoice series.                                      |
-| `WAITRON_TILL_LOCALE`      | no       | `es-ES` | The till's UI + invoice locale.                                   |
-| `WAITRON_TILL_TIPS`        | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it. |
+| Variable                   | Required | Default | What it is                                                                                                                                                         |
+| -------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WAITRON_TILL_LOCATION_ID` | yes      | —       | The location this till sells from.                                                                                                                                 |
+| `WAITRON_TILL_TILL_ID`     | yes      | —       | This physical till.                                                                                                                                                |
+| `WAITRON_TILL_NODE_ID`     | yes      | —       | The compute node whose SIF/chain it files to.                                                                                                                      |
+| `WAITRON_TILL_SERIES_ID`   | yes      | —       | The standard invoice series.                                                                                                                                       |
+| `WAITRON_TILL_LOCALE`      | no       | `es-ES` | Overrides the default UI language; also the kitchen's unit names and the payment slip's date and money format. Not the receipt's language: that is the location's. |
+| `WAITRON_TILL_TIPS`        | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                  |
 
 Each is resolved once at boot by `loadTillConfig` (`apps/server/src/till-config.ts`); a missing or
 malformed value fails the boot loudly (`server.till_config_missing` / `server.till_config_invalid`),

@@ -98,6 +98,7 @@ import {
   readContentLanguages,
   readSavedContentLanguages,
   readInvoiceLocales,
+  readReceiptLanguage,
   parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
@@ -4675,6 +4676,8 @@ export async function priceForIssuance(
 /** An invoice {@link issueUnpaidInvoice} filed, and the order fields its receipt prints. */
 export interface IssuedInvoice {
   saleId: SaleId;
+  /** The language the invoice was filed in. */
+  locale: string;
   fiscal: Awaited<ReturnType<typeof recordSale>>["fiscal"];
   orderLabel: string | null;
   orderNumber: number;
@@ -4695,13 +4698,13 @@ export async function issueUnpaidInvoice(
   saleTillId: TillId,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
+  const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, backend, {
     tillId: saleTillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(id),
-    locale: cfg.locale,
-    invoiceLocales: cfg.invoiceLocales,
+    ...language,
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
@@ -4714,7 +4717,7 @@ export async function issueUnpaidInvoice(
     .update(workingOrders)
     .set({ label: order.orderLabel })
     .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
-  return { saleId, fiscal, ...order };
+  return { saleId, fiscal, locale: language.locale, ...order };
 }
 
 /** The receipt of an invoice {@link issueUnpaidInvoice} filed. */
@@ -4727,6 +4730,7 @@ async function unpaidReceipt(
   const { priced } = invoice;
   return {
     ...(await readReceiptIssuer(backend, tx, issued.saleId)),
+    locale: issued.locale,
     orderLabel: issued.orderLabel,
     orderNumber: issued.orderNumber,
     invoiceNumber: await readInvoiceNumber(tx, issued.saleId),

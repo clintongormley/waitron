@@ -52,6 +52,7 @@ const PRINTER_58: EscSetting = {
  * cash tendered — so every printed amount can be asserted by its digit portion.
  */
 const FILED_SALE: TillSaleResult = {
+  locale: "es-ES",
   orderLabel: "Mesa 6",
   orderNumber: 41,
   invoiceNumber: "A/1",
@@ -459,6 +460,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // line. Σ(line.gross) === total and Σ(base + tax) === total: the receipt groups the filed lines
     // and never recomputes a fiscal figure.
     const withOptions: TillSaleResult = {
+      locale: "es-ES",
       orderLabel: null,
       orderNumber: 1,
       invoiceNumber: "A/7",
@@ -514,6 +516,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // A child line's filed `quantity` is the COMBINED count (dish quantity × per-option quantity).
     // The "×N" badge appears only when the PER-DISH count is above 1.
     const withPerOptionQty: TillSaleResult = {
+      locale: "es-ES",
       orderLabel: null,
       orderNumber: 1,
       invoiceNumber: "A/9",

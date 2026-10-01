@@ -30,8 +30,8 @@ async function readVenueGeography(
  * The venue's default UI locale, from geography and an optional override, through the shared
  * `override → area → country → English` chain.
  *
- * This is a DISPLAY value, DELIBERATELY separate from the fiscal `cfg.locale` / `cfg.invoiceLocales`
- * that feed receipt and invoice rendering. The `override` is the RAW `WAITRON_TILL_LOCALE`
+ * This is a DISPLAY value, DELIBERATELY separate from the location's receipt language, which a sale
+ * is filed and printed in. The `override` is the RAW `WAITRON_TILL_LOCALE`
  * (`cfg.localeOverride`), NOT the defaulted `cfg.locale`, whose `es-ES` default would mask the
  * geography derivation.
  */

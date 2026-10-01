@@ -9,6 +9,7 @@ import {
   withTransaction,
   type Database,
 } from "@waitron/db";
+import { readReceiptLanguage } from "@waitron/catalogue";
 import { authorizeManager } from "@waitron/identity";
 import { validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
 import { textGrid, type EscSetting, type PaperWidth } from "@waitron/printing";
@@ -121,7 +122,7 @@ export function mountReceiptPreviewApi(
       const sessionId = requireManagementSession(c);
       const requested = requireReceiptParameter(c.req.queries("receipt"));
       const asked = optionalPaperWidth(c.req.queries("paperWidth"));
-      const { issuer, settings } = await withTransaction(deps.db, async (tx) => {
+      const { issuer, settings, language } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -137,7 +138,11 @@ export function mountReceiptPreviewApi(
           )
           .where(eq(tills.locationId, deps.cfg.locationId))
           .orderBy(asc(tills.name), asc(tills.id));
-        return { issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId }, settings };
+        return {
+          issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+          settings,
+          language: await readReceiptLanguage(tx, deps.cfg.locationId),
+        };
       });
       const printer = chooseSetting(settings, asked);
       const receipt = validateReceiptConfig(requested);
@@ -148,7 +153,7 @@ export function mountReceiptPreviewApi(
             result: SAMPLE_SALE,
             issuer,
             receipt: trim,
-            invoiceLocale: deps.cfg.locale,
+            invoiceLocale: language.locale,
             printer,
             simulated: deps.cfg.practiceMode,
           }),

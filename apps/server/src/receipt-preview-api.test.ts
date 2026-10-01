@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { printers, readTenant, tills, withTransaction } from "@waitron/db";
+import { locations, printers, readTenant, tills, withTransaction } from "@waitron/db";
 import { validateReceiptConfig } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -64,6 +64,12 @@ function linesOf(result: ReceiptPreviewResponse, start: number, end: number): st
 
 function printedLines(result: ReceiptPreviewResponse): string[] {
   return linesOf(result, 0, result.preview.blocks.length);
+}
+
+function setLocationLanguages(invoiceLocales: string[]): Promise<unknown> {
+  return withTransaction(suite.db, (tx) =>
+    tx.update(locations).set({ invoiceLocales }).where(eq(locations.id, venue.cfg.locationId)),
+  );
 }
 
 async function withPrinters(
@@ -382,7 +388,14 @@ describe("GET /management-api/receipt-preview", () => {
   });
 
   it("formats the sample in the location's receipt language", async () => {
-    expect((await rendered({}, { locale: "en-GB" })).preview.text).toContain("€5.50");
+    // `cfg.locale` stays the fixture's `es-ES`, which would print «5,50 €». Restored in `finally`, as
+    // the location is shared.
+    await setLocationLanguages(["en-GB"]);
+    try {
+      expect((await rendered({})).preview.text).toContain("€5.50");
+    } finally {
+      await setLocationLanguages(["es-ES"]);
+    }
   });
 
   it("marks a practice installation's receipt as a practice one, as its printed receipts are", async () => {

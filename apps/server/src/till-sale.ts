@@ -30,6 +30,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId } from "@waitron/shared";
+import { readReceiptLanguage } from "@waitron/catalogue";
 import type { GrossLines } from "@waitron/catalogue";
 import {
   payments,
@@ -183,6 +184,8 @@ export interface BillTenderRefund {
 
 export interface TillSaleResult {
   issuer?: { venueName: string; nif: string };
+  /** The language the sale was filed in (`sales.locale`), which its receipt prints in. */
+  locale: string;
   orderLabel: string | null;
   orderNumber: number;
   /** `NumSerieFactura`-shaped "A/1", read back from the sale row + its series after filing. */
@@ -577,6 +580,7 @@ export async function readSettledTicket(
       number: sales.invoiceNumber,
       issuedAt: sales.issuedAt,
       total: sales.total,
+      locale: sales.locale,
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
@@ -608,6 +612,7 @@ export async function readSettledTicket(
 
   return {
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
+    locale: issued.locale,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // So a replay's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
@@ -684,14 +689,14 @@ async function fileImmediateSale(
   // The issue reading, shared by the invoice, the tender and the order's `settled_at`.
   const settledAt = clock.now().instant;
 
+  const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     // The sale-idempotency key (`sales_working_order_id_key`).
     workingOrderId: brandWorkingOrderId(workingOrderId),
-    locale: cfg.locale,
-    invoiceLocales: cfg.invoiceLocales,
+    ...language,
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
@@ -743,6 +748,7 @@ async function fileImmediateSale(
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
+    locale: language.locale,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
@@ -1153,14 +1159,14 @@ async function finalizeCapture(
   try {
     return await withTransaction(deps.db, async (tx) => {
       const { priced, clock } = issueMoment(deps.clock, grossInP1);
+      const language = await readReceiptLanguage(tx, cfg.locationId);
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
         // The sale-idempotency key (`sales_working_order_id_key`) the backstop below relies on.
         workingOrderId: brandWorkingOrderId(req.id),
-        locale: cfg.locale,
-        invoiceLocales: cfg.invoiceLocales,
+        ...language,
         total: priced.total,
         lines: priced.lines,
         vatBreakdown: priced.vatBreakdown,
@@ -1213,6 +1219,7 @@ async function finalizeCapture(
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
         ...(await readReceiptOrder(tx, cfg, req.id)),
+        locale: language.locale,
         invoiceNumber: await readInvoiceNumber(tx, saleId),
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
@@ -1293,13 +1300,13 @@ async function finalizeRecovery(
     /* v8 ignore stop */
     const settledAt = new Date(captured.settledAt);
 
+    const language = await readReceiptLanguage(tx, cfg.locationId);
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
       tillId: cfg.tillId,
       nodeId: cfg.nodeId,
       seriesId: cfg.seriesId,
       workingOrderId: brandWorkingOrderId(req.id),
-      locale: cfg.locale,
-      invoiceLocales: cfg.invoiceLocales,
+      ...language,
       total: priced.total,
       lines: priced.lines,
       vatBreakdown: priced.vatBreakdown,
@@ -1351,6 +1358,7 @@ async function finalizeRecovery(
     const ticket: TillSaleResult = {
       ...(await readReceiptIssuer(deps.backend, tx, saleId)),
       ...(await readReceiptOrder(tx, cfg, req.id)),
+      locale: language.locale,
       invoiceNumber: await readInvoiceNumber(tx, saleId),
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,

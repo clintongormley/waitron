@@ -1274,6 +1274,22 @@ export async function readInvoiceLocales(tx: Transaction, locationId: string): P
   return row?.invoiceLocales ?? [];
 }
 
+/**
+ * The language a location's receipts are filed and printed in — the FIRST of its saved
+ * `invoice_locales` — together with the whole list, which a sale snapshots. Read inside the
+ * caller's transaction, so a sale files the language its lines were keyed under.
+ */
+export async function readReceiptLanguage(
+  tx: Transaction,
+  locationId: string,
+): Promise<{ locale: string; invoiceLocales: string[] }> {
+  const invoiceLocales = await readInvoiceLocales(tx, locationId);
+  const locale = invoiceLocales[0];
+  // The column's CHECK holds one or two entries, so only a missing row leaves the list empty.
+  if (locale === undefined) throw new Error(`readReceiptLanguage: no location ${locationId}`);
+  return { locale, invoiceLocales };
+}
+
 export interface LocationCatalogue extends Catalogue {
   /** In this location's accessible set — its default (`locations.catalogue_id`) OR a
    * `location_catalogues` member. */

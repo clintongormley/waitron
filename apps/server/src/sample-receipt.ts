@@ -4,6 +4,7 @@ import type { TillSaleResult } from "./till-sale.js";
 
 /** The sale a sample or preview receipt shows: it was never filed. */
 export const SAMPLE_SALE: TillSaleResult = {
+  locale: "es-ES",
   orderLabel: "Mesa 6",
   orderNumber: 41,
   invoiceNumber: "MUESTRA/1",
