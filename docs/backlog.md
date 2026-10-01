@@ -1493,6 +1493,31 @@ they restyle every field and the text size; then A169–A172 and A175–A177, bu
 rather than restyled twice. A168, A173 and A174 do not depend on them and can go at any time — though
 A173 (the dropdown's arrow) disappears if A178 replaces the native dropdown.
 
+**Dragging a row: the row being dragged cannot be seen, everywhere (A180, owner 2026-10-01: "drag
+and drop works, but you don't see the row being dragged. this should be fixed everywhere") —
+OPEN.** Two kinds of drag exist in the dashboard:
+
+- **Reordering a list by its handle** — `ReorderController`
+  (`apps/dashboard/src/widgets/reorder-table.ts`), used by the options list and extras list editors
+  (`option-list-form.ts`, `extra-list-form.ts`), the variant table (`variant-table.ts`), a menu
+  list's members (`member-list-editor.ts`) and the product editor's modifiers (`product-editor.ts`).
+  It uses pointer events, not the browser's own drag: the row stays in the table and jumps slot to
+  slot as the pointer crosses rows, and while it moves the controller marks it `data-dragging`, for
+  which its styles (included by all five) paint `--wt-color-surface-lifted` and `--wt-shadow-2` on
+  the `tr` (A64 added that look). Read from the code, not yet reproduced; candidate causes to check
+  on screen: a cell's own background covering the row's, a `box-shadow` on a table row that the
+  browser does not draw, or the look working but being too faint to read as "the row in my hand"
+  — nothing follows the pointer between slots.
+- **Dragging a product onto a folder** on the Products screen (`apps/dashboard/src/widgets/product-list.ts`,
+  #968) — the browser's own drag (`draggable="true"` and `dragstart`); the folder under the pointer
+  is lit (`::part(drop-target)`), and the browser draws its own picture of what is dragged.
+
+**Wanted:** while dragging, the dragged row is plainly visible — lifted, and following the pointer
+— in every list that reorders and on every drag onto a target. **Next action:** reproduce on each
+of the six places in Chromium and Safari, find the cause, and fix it in the shared controller (and
+the products drag) rather than per screen; a browser test that reads the dragged row's computed
+background and shadow mid-drag, in both themes, so a look that silently stops painting fails.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
