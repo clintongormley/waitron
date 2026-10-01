@@ -5753,7 +5753,7 @@ ongoing overhaul listed at the top of Track A.
   the modal's form width is the owner's call.
 
 - **A field's hint shows inside the empty field as its placeholder, not as a line under it (C104,
-  owner 2026-09-30) — DONE (2026-10-01).** The owner, on the Pair a Bluetooth device dialog's PIN
+  owner 2026-09-30) — DONE (2026-10-01, #966).** The owner, on the Pair a Bluetooth device dialog's PIN
   field: "put the hint line in the field, not under it", and "that should be a standard". The three
   shared fields that take a `hint` (`wt-input`, `wt-price-input`, `wt-number-stepper`; no other
   shared field has one) now use it as the placeholder when the screen sets none, so every hinted
