@@ -6,6 +6,12 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CounterWaitingOrder } from "../api/client.js";
 
+/** A `pay-waiting-order` event's detail: the order, and the mode its payment is taken in. */
+export interface PayWaitingOrderDetail {
+  id: string;
+  serviceMode: CounterWaitingOrder["serviceMode"];
+}
+
 /**
  * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
  * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
@@ -66,13 +72,9 @@ export class TillCounterWaiting extends LitElement {
   ];
 
   @property({ attribute: false }) orders: CounterWaitingOrder[] = [];
-  /** This till can take a sent order's payment: it has a collect stage to open. */
-  @property({ type: Boolean }) canPay = false;
 
-  #emit(type: string, order: CounterWaitingOrder): void {
-    this.dispatchEvent(
-      new CustomEvent(type, { detail: { id: order.id }, bubbles: true, composed: true }),
-    );
+  #emit(type: string, detail: object): void {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
   #state(order: CounterWaitingOrder): StringKey {
@@ -82,7 +84,7 @@ export class TillCounterWaiting extends LitElement {
 
   #row(order: CounterWaitingOrder): TemplateResult {
     const scope = `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
-    const pay = this.canPay && order.status === "placed";
+    const pay = order.status === "placed";
     return html`
       <div class="order" data-waiting-order=${order.id}>
         <div class="summary">
@@ -98,7 +100,11 @@ export class TillCounterWaiting extends LitElement {
                   data-waiting-pay
                   variant="primary"
                   aria-label=${`${t("action.pay")} ${scope}`}
-                  @click=${() => this.#emit("pay-waiting-order", order)}
+                  @click=${() =>
+                    this.#emit("pay-waiting-order", {
+                      id: order.id,
+                      serviceMode: order.serviceMode,
+                    } satisfies PayWaitingOrderDetail)}
                   >${t("action.pay")}</wt-button
                 >`
               : nothing
@@ -109,7 +115,7 @@ export class TillCounterWaiting extends LitElement {
                   data-waiting-hand-over
                   variant=${pay ? "secondary" : "primary"}
                   aria-label=${`${t("waiting.hand_over")} ${scope}`}
-                  @click=${() => this.#emit("hand-over-order", order)}
+                  @click=${() => this.#emit("hand-over-order", { id: order.id })}
                   >${t("waiting.hand_over")}</wt-button
                 >`
               : nothing

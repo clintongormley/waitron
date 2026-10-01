@@ -14,6 +14,7 @@ const sent: CounterWaitingOrder = {
   collectedAt: null,
   total: "7.50",
   canHandOver: true,
+  serviceMode: "ticket_then_pay",
 };
 
 const orders: CounterWaitingOrder[] = [
@@ -32,6 +33,7 @@ const orders: CounterWaitingOrder[] = [
     orderNumber: 11,
     status: "settled",
     settledAt: "2026-10-01T10:01:00.000Z",
+    serviceMode: null,
   },
 ];
 
@@ -41,19 +43,10 @@ describe.each(["light", "dark"] as const)("till-counter-waiting a11y (%s theme)"
   it("all three waiting states, with Pay and Hand over, have no violations", async () => {
     const { el, host } = await mountWidget<TillCounterWaiting>(
       "till-counter-waiting",
-      { orders, canPay: true },
+      { orders },
       theme,
     );
     expect(el.shadowRoot!.querySelectorAll("[data-waiting-state]")).toHaveLength(3);
-    await expectNoA11yViolations(host);
-  });
-
-  it("the list on a till that takes no sent order's payment has no violations", async () => {
-    const { host } = await mountWidget<TillCounterWaiting>(
-      "till-counter-waiting",
-      { orders, canPay: false },
-      theme,
-    );
     await expectNoA11yViolations(host);
   });
 });

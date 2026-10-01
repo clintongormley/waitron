@@ -106,6 +106,7 @@ import "./widgets/tab-shell.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
+import type { PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
 import { owing, paidInPart } from "./state/bill-state.js";
@@ -232,9 +233,8 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 registerIcons({ close: CROSS_ICON_PATH });
 
 /**
- * How long the till waits on a re-read of the table's offers, a draft read, save or take-over, a
- * submission (from the save before it to its last retry), or a bill request (to its last retry)
- * before cancelling it. It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus
+ * How long the till waits on a request it bounds, its automatic resends included, before cancelling
+ * it. It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus
  * `STACK_CAPTURE_MS`, `packages/store/src/venue-liveness.ts`), so a server whose main thread had
  * stopped when the wait began is killed before the till gives up.
  */
@@ -1140,6 +1140,13 @@ export class TillApp extends LitElement {
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
+  /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
+  #payWaitingRequest = 0;
+  /** Each pay, card payment, place, collect or hold sent from the counter basket. */
+  #counterSends = 0;
+  /** The service mode of the waiting order the collect stage was opened on: its own, not the till's
+   * zone's. Unset when the basket holds anything else. */
+  @state() private collectFlow?: OrderFlow;
   @state() private zones: FloorZone[] = [];
   @state() private tables: TableState[] = [];
   /**
@@ -1275,8 +1282,8 @@ export class TillApp extends LitElement {
   /** Each refund send. Only the one started last writes {@link #unansweredRefund}, so an earlier
    * operator's send answered late neither replaces nor clears a later one's. */
   #refundSends = 0;
-  /** Ends the basket's edit lock taken by the latest {@link #reloadCounterOrder}; a no-op once it
-   * has ended, and for a lock taken later. */
+  /** Ends the basket's edit lock taken by the latest {@link #reloadCounterOrder} or
+   * {@link #onPayWaitingOrder}; a no-op once it has ended, and for a lock taken later. */
   #endReloadLock: () => void = () => {};
   #adjustOpening = false;
   /**
@@ -1542,8 +1549,8 @@ export class TillApp extends LitElement {
   }
 
   /** Never throws: a failure is said in the list's own retry notice. */
-  #refreshWaiting(messageKey: StringKey = "refresh.waiting"): Promise<void> {
-    return this.#refreshList("waiting", messageKey);
+  #refreshWaiting(): Promise<void> {
+    return this.#refreshList("waiting", "refresh.waiting");
   }
 
   /**
@@ -1791,6 +1798,7 @@ export class TillApp extends LitElement {
       this.api.setServiceZone(context.zoneId);
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       this.stage = "order";
+      this.collectFlow = undefined;
       await this.#refreshStationQueue();
       this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
       this.errorKey = undefined;
@@ -2094,6 +2102,7 @@ export class TillApp extends LitElement {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;
+    this.#counterSends++;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
     // replays against the same row rather than filing a second record.
@@ -2113,7 +2122,7 @@ export class TillApp extends LitElement {
       this.#showTicket(id);
       // A just-paid retrieved order must drop off the held list.
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
-      await this.#refreshWaiting();
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
@@ -2150,6 +2159,7 @@ export class TillApp extends LitElement {
   async #onCollectCard(event: Event, retried = false): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;
+    this.#counterSends++;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
@@ -2175,9 +2185,9 @@ export class TillApp extends LitElement {
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        this.#showTicket(id, this.orderFlow !== "invoice_first");
+        this.#showTicket(id, this.#basketFlow() !== "invoice_first");
         await this.#refreshAfterWrite("held", "refresh.held_after_sale");
-        await this.#refreshWaiting();
+        await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
       } else {
         this.cardOutcome = out.outcome;
       }
@@ -2288,6 +2298,7 @@ export class TillApp extends LitElement {
   async #onPlaceOrder(retried = false): Promise<void> {
     if (this.placing) return;
     this.placing = true;
+    this.#counterSends++;
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
@@ -2306,7 +2317,7 @@ export class TillApp extends LitElement {
       await this.api.placeOrder(id);
       this.stage = "collect";
       await this.#refreshAfterWrite("station", "refresh.station_after_place");
-      await this.#refreshWaiting();
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_place");
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
@@ -2331,13 +2342,14 @@ export class TillApp extends LitElement {
   async #onCollectOrder(event: Event): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
+    this.#counterSends++;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const id = this.#store.id;
     this.errorKey = undefined;
     try {
       this.result = await this.api.collectOrder(id, tender);
-      this.#showTicket(id, this.orderFlow !== "invoice_first");
-      await this.#refreshWaiting();
+      this.#showTicket(id, this.#basketFlow() !== "invoice_first");
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
       // permanent refusal takes `sale.refused`.
@@ -2409,21 +2421,56 @@ export class TillApp extends LitElement {
       this.#handingOver.delete(id);
     }
     if (!live()) return;
-    await this.#refreshWaiting(handedOver ? "refresh.waiting_after_hand_over" : "refresh.waiting");
+    if (!handedOver) return this.#refreshWaiting();
+    // The counter's prep-queue card offers its own Collect, which would now be refused.
+    await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
+    await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
   }
 
-  /** Opens the collect stage that follows Place order on a sent order from the waiting list. */
+  /**
+   * Opens the collect stage that follows Place order on a sent order from the waiting list, in that
+   * order's own mode. Staff edits are locked while it is read, as in {@link #reloadCounterOrder}. An
+   * answer is dropped, unsaid, once a later Pay, another basket, a send from the basket or the end of
+   * the operator's session has overtaken it.
+   */
   async #onPayWaitingOrder(event: Event): Promise<void> {
-    const { id } = (event as CustomEvent<{ id: string }>).detail;
-    if (this.submitting || this.placing) return;
+    const { id, serviceMode } = (event as CustomEvent<PayWaitingOrderDetail>).detail;
+    if (this.#counterOrderInFlight()) return;
+    const request = ++this.#payWaitingRequest;
+    const session = this.#operatorSession;
+    const load = this.#store.loadGeneration;
+    const sends = this.#counterSends;
+    const movedOn = () =>
+      request !== this.#payWaitingRequest ||
+      session !== this.#operatorSession ||
+      load !== this.#store.loadGeneration ||
+      sends !== this.#counterSends;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const unlock = this.#store.lockEdits();
+    this.#endReloadLock = unlock;
+    limit.signal.addEventListener("abort", unlock, { once: true });
     this.errorKey = undefined;
     try {
-      this.#loadIntoBasket(await this.api.retrievePlacedOrder(id), null);
+      const order = await this.api.retrievePlacedOrder(id, { signal: limit.signal });
+      if (movedOn()) return;
+      this.#loadIntoBasket(order, null);
       this.stage = "collect";
+      // Only an invoice_first order's invoice was issued when it was placed (`placeOrder`); any
+      // other files its invoice when it is collected.
+      this.collectFlow = serviceMode === "invoice_first" ? "invoice_first" : "ticket_then_pay";
     } catch {
+      if (movedOn()) return;
       this.errorKey = "held.stale";
+    } finally {
+      limit.done();
+      unlock();
     }
     await this.#refreshWaiting();
+  }
+
+  /** The mode the basket's pay controls and receipt follow. */
+  #basketFlow(): OrderFlow {
+    return this.collectFlow ?? this.orderFlow;
   }
 
   /** The floor's station summary names the station to open; the station screen reads it from the
@@ -2471,6 +2518,7 @@ export class TillApp extends LitElement {
   async #onParkOrder(event: Event, retried = false): Promise<void> {
     if (this.parking) return;
     this.parking = true;
+    this.#counterSends++;
     const { label } = (event as CustomEvent<ParkOrderDetail>).detail;
     // Read the id and map the lines BEFORE the await: a successful clear() re-mints the id, so the
     // values sent must be captured against the basket as it stands now.
@@ -2619,6 +2667,7 @@ export class TillApp extends LitElement {
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
     this.counterLines = listed;
     this.cardOutcome = undefined;
+    this.collectFlow = undefined;
   }
 
   /** Null when the lines cannot be read: the basket then offers no adjustment, and keeps its own
@@ -2884,6 +2933,7 @@ export class TillApp extends LitElement {
     this.ticketWorkingOrderId = undefined;
     this.originalReceiptAvailable = false;
     this.stage = "order";
+    this.collectFlow = undefined;
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     // The home tab is the canvas's first tab (a handheld has no counter tab). After settling a tab the
@@ -5458,7 +5508,7 @@ export class TillApp extends LitElement {
         .defaultStationId=${this.#defaultStationId()}
         .operatorName=${this.operatorName}
         .invoiceLocale=${this.invoiceLocale}
-        .orderFlow=${this.orderFlow}
+        .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
         .busy=${this.submitting || this.placing}
         .payHeld=${this.#payHeld()}
@@ -5491,7 +5541,7 @@ export class TillApp extends LitElement {
       .busy=${this.submitting}
       .payHeld=${this.#payHeld()}
       .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
-      .orderFlow=${this.orderFlow}
+      .orderFlow=${this.#basketFlow()}
       .stage=${this.stage}
       .cardProvider=${this.cardProvider}
       .tipsEnabled=${this.tipsEnabled}

@@ -262,10 +262,7 @@ export class TillCardGrid extends LitElement {
             .orders=${this.heldOrders}
             .tables=${this.tables}
           ></till-held-orders
-          ><till-counter-waiting
-            .orders=${this.counterWaiting}
-            .canPay=${this.orderFlow !== "prepay"}
-          ></till-counter-waiting>`;
+          ><till-counter-waiting .orders=${this.counterWaiting}></till-counter-waiting>`;
       case "prep-queue":
         return html`<till-station-queue
           .groups=${this.stationQueue}

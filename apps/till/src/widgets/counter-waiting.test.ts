@@ -15,6 +15,7 @@ const paid: CounterWaitingOrder = {
   collectedAt: null,
   total: "18.00",
   canHandOver: true,
+  serviceMode: null,
 };
 
 const sent: CounterWaitingOrder = {
@@ -27,6 +28,7 @@ const sent: CounterWaitingOrder = {
   collectedAt: null,
   total: "7.50",
   canHandOver: true,
+  serviceMode: "invoice_first",
 };
 
 const handedOver: CounterWaitingOrder = {
@@ -58,7 +60,6 @@ describe("till-counter-waiting", () => {
   it("titles the list and shows each order's number, label and total", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [paid, sent],
-      canPay: true,
     });
     expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe(t("waiting.title"));
     const row = rowOf(el, "wo-paid");
@@ -70,7 +71,6 @@ describe("till-counter-waiting", () => {
   it("a paid order not yet handed over says so and offers Hand over only", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [paid],
-      canPay: true,
     });
     const row = rowOf(el, "wo-paid");
     expect(row.querySelector("[data-waiting-state]")!.textContent).toBe(
@@ -82,7 +82,6 @@ describe("till-counter-waiting", () => {
   it("a sent, unpaid order says so and offers Pay first, then Hand over", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [sent],
-      canPay: true,
     });
     const row = rowOf(el, "wo-sent");
     expect(row.querySelector("[data-waiting-state]")!.textContent).toBe(t("waiting.sent_not_paid"));
@@ -98,7 +97,6 @@ describe("till-counter-waiting", () => {
   it("a sent order that cannot be handed over yet offers Pay alone", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [{ ...sent, canHandOver: false }],
-      canPay: true,
     });
     expect(buttons(rowOf(el, "wo-sent"))).toEqual([t("action.pay")]);
   });
@@ -106,7 +104,6 @@ describe("till-counter-waiting", () => {
   it("an order handed over and not paid says so and offers Pay only", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [handedOver],
-      canPay: true,
     });
     const row = rowOf(el, "wo-handed");
     expect(row.querySelector("[data-waiting-state]")!.textContent).toBe(
@@ -115,19 +112,9 @@ describe("till-counter-waiting", () => {
     expect(buttons(row)).toEqual([t("action.pay")]);
   });
 
-  it("offers no Pay on a till that cannot take a sent order's payment", async () => {
-    const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
-      orders: [sent, handedOver],
-      canPay: false,
-    });
-    expect(buttons(rowOf(el, "wo-sent"))).toEqual([t("waiting.hand_over")]);
-    expect(buttons(rowOf(el, "wo-handed"))).toEqual([]);
-  });
-
   it("names each button with the order it acts on", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [paid, sent],
-      canPay: true,
     });
     expect(rowOf(el, "wo-paid").querySelector("wt-button[data-waiting-hand-over]")!.ariaLabel).toBe(
       `${t("waiting.hand_over")} #11 Ana`,
@@ -137,10 +124,9 @@ describe("till-counter-waiting", () => {
     );
   });
 
-  it("Hand over and Pay ask the app, naming the order, past the widget's shadow root", async () => {
+  it("Hand over and Pay ask the app, naming the order and, for Pay, its mode, past the widget's shadow root", async () => {
     const { el, host } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [sent],
-      canPay: true,
     });
     const seen: [string, unknown][] = [];
     for (const type of ["hand-over-order", "pay-waiting-order"])
@@ -150,7 +136,7 @@ describe("till-counter-waiting", () => {
     row.querySelector<HTMLElement>("wt-button[data-waiting-pay]")!.click();
     expect(seen).toEqual([
       ["hand-over-order", { id: "wo-sent" }],
-      ["pay-waiting-order", { id: "wo-sent" }],
+      ["pay-waiting-order", { id: "wo-sent", serviceMode: "invoice_first" }],
     ]);
   });
 });

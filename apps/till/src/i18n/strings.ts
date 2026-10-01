@@ -607,7 +607,13 @@ export const en = {
     "The sale was recorded, but the list of held orders could not refresh.",
   "refresh.held_after_move": "The bill was moved, but the list of held orders could not refresh.",
   "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
+  "refresh.station_after_hand_over":
+    "The order was handed over, but the kitchen queue could not refresh.",
   "refresh.waiting": "The list of waiting orders could not refresh.",
+  "refresh.waiting_after_sale":
+    "The sale was recorded, but the list of waiting orders could not refresh.",
+  "refresh.waiting_after_place":
+    "The order was placed, but the list of waiting orders could not refresh.",
   "refresh.waiting_after_hand_over":
     "The order was handed over, but the list of waiting orders could not refresh.",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
@@ -1389,7 +1395,13 @@ export const es: Record<StringKey, string> = {
     "La cuenta se movió, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.station_after_place":
     "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
+  "refresh.station_after_hand_over":
+    "El pedido se entregó, pero la cola de cocina no se pudo actualizar.",
   "refresh.waiting": "La lista de pedidos pendientes no se pudo actualizar.",
+  "refresh.waiting_after_sale":
+    "La venta se registró, pero la lista de pedidos pendientes no se pudo actualizar.",
+  "refresh.waiting_after_place":
+    "El pedido se envió, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_hand_over":
     "El pedido se entregó, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.retry_in": "Se reintentará en {n} segundos.",

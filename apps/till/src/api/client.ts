@@ -963,8 +963,11 @@ export interface CounterWaitingOrder {
   openedAt: string;
   settledAt: string | null;
   collectedAt: string | null;
+  /** What collecting a placed order charges, credit notes included. */
   total: string;
   canHandOver: boolean;
+  /** A placed order's own service mode, frozen when it was opened; null on a settled one. */
+  serviceMode: OrderFlow | "table_tab" | null;
 }
 
 /**
