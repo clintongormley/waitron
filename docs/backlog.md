@@ -4865,13 +4865,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       kitchen when it is paid in those modes, which today happens only for a pay-first order; that
       would change the setup of "refuses a settled order that was never fired (ticket.not_fired)"
       in `apps/server/src/working-order.pay-and-dispatch.test.ts`, so B16 left it.
-    - **OPEN, owner question — paying a sent order still counts as its handover.** When no earlier
-      handover was recorded, paying a placed order stamps the payment time as its handover, so it
-      leaves the waiting list and the kitchen queue at payment. Tests pin that:
-      `apps/server/src/till-sale-integrated.db.test.ts`,
-      `apps/server/src/till-api.fiscal-sale-paths.test.ts` and
-      `apps/server/src/collect-by-invoice.test.ts`. **Owner decision:** should paying a sent order
-      leave it listed until it is handed over?
+    - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
+      B25, PR to follow). Paying a placed counter order records the payment only: it stays on the
+      waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
+      kitchen queue's Collect) records the handover time. An order handed over before it was paid
+      keeps that time. Cases: "paying a counter order sent without payment, before it is handed
+      over" in `apps/server/src/counter-handover.test.ts`.
     - **OPEN — the kitchen queue's Collect sends no submission id**, on the station screen and on
       the counter's prep-queue card, so a Collect resent after a lost reply is refused
       `working_order.already_collected`. The waiting list's Hand over sends one. Two assertions pin
@@ -4879,18 +4878,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/till/src/till-app.test.ts`, and on the station screen in
       `apps/till/src/screens/till-station-screen.test.ts`. A third, in
       `apps/till/src/api/client.test.ts`, pins the body the client sends when it is given none.
-    - **OPEN — a collect straight after Place order does not re-read the kitchen queue.** Collecting
-      sets the order's handover time when none was set, so the order leaves the kitchen queue, but
-      the till re-reads the queue after a collect only when the collect was opened from the waiting
-      list, so the counter's prep-queue card can keep showing the order until the queue is next
-      read. Re-reading it after every collect would also stop an existing case proving what its
-      title says: "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late
-      failure does not bring the notice back" (`apps/till/src/till-app.test.ts`). The collect's
-      re-read would supersede the retry's request, so the retry's late failure would be ignored
-      whether or not the zone switch's own re-read superseded it. Tried 2026-10-01: with the
-      zone switch changed to end the retry without re-reading the queue, the case fails on the
-      notice coming back; with a re-read after every collect as well, it fails only on its call
-      count (four reads where it asserts three). So B16 left it.
+    - **OPEN — a collect straight after Place order does not re-read the kitchen queue.** Since B25
+      a collect leaves the order on the kitchen queue but turns it from sent to paid, and the
+      counter's prep-queue card offers Collect on a paid order only. The till re-reads the queue
+      after a collect only when the collect was opened from the waiting list, so after any other
+      collect the card can keep showing the order as sent, with no Collect, until the queue is next
+      read; the waiting list, re-read after every collect, offers Hand over meanwhile. (Read in
+      `#onCollectOrder`, `apps/till/src/till-app.ts`, and `#collectAction`,
+      `apps/till/src/widgets/station-queue.ts`; not run.) Re-reading it after every collect would
+      also stop an existing case proving what its title says: "a switch to a prepay zone ends a
+      kitchen-queue retry, and that retry's late failure does not bring the notice back"
+      (`apps/till/src/till-app.test.ts`). The collect's re-read would supersede the retry's request,
+      so the retry's late failure would be ignored whether or not the zone switch's own re-read
+      superseded it. Tried 2026-10-01: with the zone switch changed to end the retry without
+      re-reading the queue, the case fails on the notice coming back; with a re-read after every
+      collect as well, it fails only on its call count (four reads where it asserts three). So B16
+      left it.
     - **OPEN — completed orders cannot be looked up.** The plan's "completed orders stay reachable"
       was not built: no till or dashboard screen lists completed orders (the dashboard's Sales
       screen shows totals).
