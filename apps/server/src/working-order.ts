@@ -2280,9 +2280,9 @@ export function isReleased(
 }
 
 /**
- * The named orders holding a dish line the kitchen was never told to make: one never sent and
- * holding no kitchen item ({@link unsentDishLines}), or one that is not released work
- * ({@link isReleased}) — held in a group, or held or recalled by its kitchen item.
+ * The named orders holding a dish the kitchen is not making: one never sent and holding no kitchen
+ * item ({@link unsentDishLines}), or one that is not released work ({@link isReleased}) — held in
+ * a group, or held or recalled by its kitchen item.
  */
 export async function ordersWithUnfiredDish(
   tx: Transaction,
@@ -4689,9 +4689,9 @@ export interface IssuedInvoice {
 
 /**
  * File the priced invoice with no tender and no settlement until `collectOrder` settles it, and,
- * on an order still open, save the label it was issued under. A placed order's label cannot change
- * until it settles (`working_orders_enforce_transition`). Prints nothing. `saleTillId` is the
- * device's register on the fiscal record.
+ * on an order still open, save the label it was issued under. A placed order's label can change
+ * only in the update that moves it to settled or abandoned (`working_orders_enforce_transition`).
+ * Prints nothing. `saleTillId` is the device's register on the fiscal record.
  */
 export async function issueUnpaidInvoice(
   tx: Transaction,
