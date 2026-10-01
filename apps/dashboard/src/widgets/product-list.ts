@@ -10,6 +10,7 @@ import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
+import { holdPageCursor, releasePageCursor } from "./reorder-table.js";
 import {
   modifierListName,
   modifierListNames,
@@ -77,6 +78,19 @@ export class ProductList extends LitElement {
       wt-data-table::part(drop-target) {
         background: var(--wt-color-surface-lifted);
       }
+      wt-data-table::part(dragging) {
+        position: relative;
+        z-index: 1;
+        pointer-events: none;
+        background: var(--wt-color-surface-lifted);
+        box-shadow: var(--wt-shadow-2);
+      }
+      wt-data-table::part(product-cell),
+      wt-data-table::part(folder-cell) {
+        touch-action: none;
+        user-select: none;
+        cursor: var(--reorder-drag-cursor, grab);
+      }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
         display: inline-block;
@@ -126,45 +140,114 @@ export class ProductList extends LitElement {
   #listNames: ReadonlyMap<string, string> = new Map();
   #dragged: string[] = [];
   #dropTarget: HTMLElement | null = null;
+  #pointerDrag: {
+    pointerId: number;
+    key: string;
+    row: HTMLElement;
+    x: number;
+    y: number;
+    active: boolean;
+  } | null = null;
+
+  override disconnectedCallback(): void {
+    if (this.#pointerDrag)
+      this.#endDrag(new PointerEvent("pointercancel", { pointerId: this.#pointerDrag.pointerId }));
+    super.disconnectedCallback();
+  }
 
   #clearDropTarget(): void {
     this.#dropTarget?.part.remove("drop-target");
     this.#dropTarget = null;
   }
-  #startDrag(event: DragEvent, key: string): void {
-    event.stopPropagation();
-    this.#dragged = this.selected.includes(key) ? [...this.selected] : [key];
-    event.dataTransfer?.setData("application/x-waitron-items", JSON.stringify(this.#dragged));
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  #startDrag(event: PointerEvent, key: string): void {
+    if (this.#pointerDrag) return;
+    const row = (event.currentTarget as HTMLElement).closest<HTMLElement>("tr[data-row-key]");
+    if (!row) return;
+    this.#pointerDrag = {
+      pointerId: event.pointerId,
+      key,
+      row,
+      x: event.clientX,
+      y: event.clientY,
+      active: false,
+    };
+    document.addEventListener("pointermove", this.#moveDrag);
+    document.addEventListener("pointerup", this.#endDrag);
+    document.addEventListener("pointercancel", this.#endDrag);
+  }
+  readonly #moveDrag = (event: PointerEvent): void => {
+    const drag = this.#pointerDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return;
+    event.preventDefault();
+    if (!drag.active) {
+      drag.active = true;
+      drag.row.part.add("dragging");
+      holdPageCursor();
+      this.#dragged = this.selected.includes(drag.key) ? [...this.selected] : [drag.key];
+      this.dispatchEvent(
+        new CustomEvent("drag-items", {
+          detail: { keys: this.#dragged },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
+    drag.row.style.transform = `translateY(${event.clientY - drag.y}px)`;
+    this.#clearDropTarget();
+    const target = event
+      .composedPath()
+      .find(
+        (item): item is HTMLElement =>
+          item instanceof HTMLElement && item.part?.contains("folder-cell"),
+      );
+    const folderId = target
+      ?.closest<HTMLElement>("tr[data-row-key]")
+      ?.dataset.rowKey?.replace(/^folder:/, "");
+    if (target && folderId && acceptsCatalogueDrop(this.#dragged, folderId, this.categories)) {
+      this.#dropTarget = target;
+      target.part.add("drop-target");
+    }
     this.dispatchEvent(
-      new CustomEvent("drag-items", {
-        detail: { keys: this.#dragged },
+      new CustomEvent("pointer-drag-move", {
+        detail: { path: event.composedPath() },
         bubbles: true,
         composed: true,
       }),
     );
-  }
-  #endDrag(event: DragEvent): void {
-    event.stopPropagation();
+  };
+  readonly #endDrag = (event: PointerEvent): void => {
+    const drag = this.#pointerDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    document.removeEventListener("pointermove", this.#moveDrag);
+    document.removeEventListener("pointerup", this.#endDrag);
+    document.removeEventListener("pointercancel", this.#endDrag);
+    this.#pointerDrag = null;
+    drag.row.part.remove("dragging");
+    drag.row.style.removeProperty("transform");
+    if (drag.active) releasePageCursor();
+    if (drag.active && event.type === "pointerup" && this.#dropTarget) {
+      const folderId = this.#dropTarget
+        .closest<HTMLElement>("tr[data-row-key]")
+        ?.dataset.rowKey?.replace(/^folder:/, "");
+      if (folderId) this.#dropFolder(folderId);
+    }
+    if (drag.active) {
+      this.dispatchEvent(
+        new CustomEvent("pointer-drag-end", {
+          detail: { path: event.composedPath(), cancelled: event.type === "pointercancel" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
     this.#clearDropTarget();
     this.#dragged = [];
     this.dispatchEvent(
       new CustomEvent("drag-items", { detail: { keys: [] }, bubbles: true, composed: true }),
     );
-  }
-  #overFolder(event: DragEvent, folderId: string): void {
-    event.stopPropagation();
-    this.#clearDropTarget();
-    if (!acceptsCatalogueDrop(this.#dragged, folderId, this.categories)) return;
-    event.preventDefault();
-    this.#dropTarget = event.currentTarget as HTMLElement;
-    this.#dropTarget.part.add("drop-target");
-  }
-  #dropFolder(event: DragEvent, folderId: string): void {
-    event.stopPropagation();
-    this.#clearDropTarget();
-    if (!acceptsCatalogueDrop(this.#dragged, folderId, this.categories)) return;
-    event.preventDefault();
+  };
+  #dropFolder(folderId: string): void {
     this.dispatchEvent(
       new CustomEvent("drop-items", {
         detail: { keys: [...this.#dragged], folderId },
@@ -172,7 +255,6 @@ export class ProductList extends LitElement {
         composed: true,
       }),
     );
-    this.#endDrag(event);
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -270,9 +352,7 @@ export class ProductList extends LitElement {
             ? html`<strong>${variant.name}</strong>`
             : html`<span
                 part=${ancestorOnly ? "product-cell context" : "product-cell"}
-                draggable="true"
-                @dragstart=${(event: DragEvent) => this.#startDrag(event, product.id)}
-                @dragend=${(event: DragEvent) => this.#endDrag(event)}
+                @pointerdown=${(event: PointerEvent) => this.#startDrag(event, product.id)}
               >
                 ${
                   product.image === null
@@ -282,7 +362,11 @@ export class ProductList extends LitElement {
                         aria-hidden="true"
                       ></span>`
                     : html`<span part="thumb-frame" data-test="thumb"
-                        ><img part="thumbnail" src=${`/media/${product.image}`} alt=""
+                        ><img
+                          part="thumbnail"
+                          src=${`/media/${product.image}`}
+                          alt=""
+                          draggable="false"
                       /></span>`
                 }<strong>${product.name}</strong>
               </span>`,
@@ -456,12 +540,7 @@ export class ProductList extends LitElement {
           if (column.key === "name")
             return html`<span
               part="folder-cell"
-              draggable="true"
-              @dragstart=${(event: DragEvent) => this.#startDrag(event, row.key)}
-              @dragend=${(event: DragEvent) => this.#endDrag(event)}
-              @dragover=${(event: DragEvent) => this.#overFolder(event, folder.id)}
-              @dragleave=${() => this.#clearDropTarget()}
-              @drop=${(event: DragEvent) => this.#dropFolder(event, folder.id)}
+              @pointerdown=${(event: PointerEvent) => this.#startDrag(event, row.key)}
               ><wt-icon name="folder"></wt-icon
               ><wt-button
                 variant="ghost"

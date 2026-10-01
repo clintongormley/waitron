@@ -1029,15 +1029,51 @@ it("drags a product outside the selection alone and never offers a variant as a 
   });
   const root = await tableRoot(el);
   const cell = root.querySelector<HTMLElement>('[part~="product-cell"]')!;
-  const data = new DataTransfer();
-  cell.dispatchEvent(
-    new DragEvent("dragstart", { bubbles: true, composed: true, dataTransfer: data }),
+  const offered: string[][] = [];
+  el.addEventListener("drag-items", (event) =>
+    offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
   );
-  expect(data.getData("application/x-waitron-items")).toBe('["bun"]');
+  const start = cell.getBoundingClientRect();
+  cell.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      clientX: start.x + 8,
+      clientY: start.y + 8,
+    }),
+  );
+  cell.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      clientX: start.x + 8,
+      clientY: start.y + 20,
+    }),
+  );
+  expect(offered).toEqual([["bun"]]);
+  cell.dispatchEvent(
+    new PointerEvent("pointercancel", { bubbles: true, composed: true, pointerId: 1 }),
+  );
   root.querySelector<HTMLElement>(".tree-toggle")!.click();
   const variant = (await tableRoot(el)).querySelector('tr[data-row-key="bun:small"]')!;
   expect(variant).not.toBeNull();
-  expect(variant.querySelector('[draggable="true"]')).toBeNull();
+  variant.dispatchEvent(
+    new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 2 }),
+  );
+  variant.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, composed: true, pointerId: 2, clientY: 20 }),
+  );
+  expect(offered).toEqual([["bun"], []]);
+});
+
+it("does not start the browser's native image drag from a product thumbnail", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [product({ id: "pictured", image: "abc123.webp" })],
+  });
+  const image = (await tableRoot(el)).querySelector<HTMLImageElement>('img[part="thumbnail"]')!;
+  expect(image.draggable).toBe(false);
 });
 
 describe("the product list at phone width", () => {

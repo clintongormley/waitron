@@ -145,16 +145,16 @@ export class CatalogueBrowser extends LitElement {
     this.#dropTarget?.classList.remove("drop-target");
     this.#dropTarget = null;
   }
-  #overCrumb(event: DragEvent, folderId: string | null): void {
+  #overCrumb(target: HTMLElement | null, folderId: string | null): void {
     this.#clearDropTarget();
     if (
+      !target ||
       this.operationBusy ||
       this.summaryLoading ||
       !acceptsCatalogueDrop(this.#dragged, folderId, this.categories)
     )
       return;
-    event.preventDefault();
-    this.#dropTarget = event.currentTarget as HTMLElement;
+    this.#dropTarget = target;
     this.#dropTarget.classList.add("drop-target");
   }
   async #drop(keys: string[], folderId: string | null): Promise<void> {
@@ -176,12 +176,11 @@ export class CatalogueBrowser extends LitElement {
       this.operationBusy = false;
     }
   }
-  #dropCrumb(event: DragEvent, folderId: string | null): void {
+  #dropCrumb(folderId: string | null): void {
     const keys = this.#dragged;
     this.#clearDropTarget();
     if (!acceptsCatalogueDrop(keys, folderId, this.categories)) return;
     this.#dragged = [];
-    event.preventDefault();
     void this.#drop(keys, folderId);
   }
 
@@ -456,11 +455,7 @@ export class CatalogueBrowser extends LitElement {
       <ol>
         ${crumbs.map(
           (crumb, index) =>
-            html`<li
-              @dragover=${(event: DragEvent) => this.#overCrumb(event, crumb.id)}
-              @dragleave=${() => this.#clearDropTarget()}
-              @drop=${(event: DragEvent) => this.#dropCrumb(event, crumb.id)}
-            >
+            html`<li data-crumb-drop=${crumb.id ?? ""}>
               ${index === crumbs.length - 1 ? html`<span aria-current="location">${crumb.name}</span>` : html`<wt-button variant="ghost" data-test=${`crumb-${index}`} @click=${() => this.#navigate("open-folder", { folderId: crumb.id })}>${crumb.name}</wt-button><span class="sep" aria-hidden="true">›</span>`}
             </li>`,
         )}
@@ -544,6 +539,21 @@ export class CatalogueBrowser extends LitElement {
         }
       </div>
       <dashboard-product-list
+        @pointer-drag-move=${(event: CustomEvent<{ path: EventTarget[] }>) => {
+          event.stopPropagation();
+          const target =
+            event.detail.path.find(
+              (item): item is HTMLElement =>
+                item instanceof HTMLElement && item.matches("li[data-crumb-drop]"),
+            ) ?? null;
+          this.#overCrumb(target, target?.dataset.crumbDrop || null);
+        }}
+        @pointer-drag-end=${(event: CustomEvent<{ path: EventTarget[]; cancelled: boolean }>) => {
+          event.stopPropagation();
+          if (!event.detail.cancelled && this.#dropTarget)
+            this.#dropCrumb(this.#dropTarget.dataset.crumbDrop || null);
+          this.#clearDropTarget();
+        }}
         @drag-items=${(event: CustomEvent<{ keys: string[] }>) => {
           event.stopPropagation();
           this.#dragged = event.detail.keys;

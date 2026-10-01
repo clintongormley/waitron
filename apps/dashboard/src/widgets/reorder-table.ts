@@ -21,14 +21,14 @@ const DRAG_CURSOR = "--reorder-drag-cursor";
  * page's own cursor back only when the last one ends. */
 const pageDrag = { count: 0, cursor: "" };
 
-function holdPageCursor(): void {
+export function holdPageCursor(): void {
   if (pageDrag.count++ > 0) return;
   pageDrag.cursor = document.body.style.cursor;
   document.body.style.cursor = "grabbing";
   document.body.style.setProperty(DRAG_CURSOR, "grabbing");
 }
 
-function releasePageCursor(): void {
+export function releasePageCursor(): void {
   if (--pageDrag.count > 0) return;
   document.body.style.cursor = pageDrag.cursor;
   document.body.style.removeProperty(DRAG_CURSOR);
