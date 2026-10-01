@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -112,9 +113,7 @@ function toggleSwitch(el: PrintingRulesScreen, sel: string, checked: boolean): v
 }
 
 function pickSelect(el: PrintingRulesScreen, sel: string, value: string): void {
-  const select = q(el, sel) as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  void chooseOption(q(el, sel)!, value);
 }
 
 const switchChecked = (el: PrintingRulesScreen, sel: string): boolean =>
@@ -240,7 +239,7 @@ describe("printing rules", () => {
     const values = [...select.options].map((o) => o.value);
     // The clear option ("") first, then only the ACTIVE printer p1 — the inactive p2 is not offered.
     expect(values).toEqual(["", "p1"]);
-    expect(select.options[0]!.textContent).toContain(t("printers.receipt_no_printer", "es-ES"));
+    expect(select.options[0]!.label).toContain(t("printers.receipt_no_printer", "es-ES"));
   });
 
   it("reflects each till's PERSISTED receipt printer in its select (set → the id, unset → the clear option)", async () => {
@@ -252,6 +251,52 @@ describe("printing rules", () => {
     // t1 has p1 set; t2 has none — the selects are reconciled to those values in updated().
     expect((q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement).value).toBe("p1");
     expect((q(el, "[data-test=till-receipt-printer-t2]") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("picks a till's receipt printer from a labelled dropdown showing the stored one, prompting no printer while it has none", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+    type Combobox = HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      label: string;
+      placeholder: string;
+      name: string;
+    };
+    const t1 = q(el, "wt-combobox[data-test=till-receipt-printer-t1]") as Combobox;
+    const t2 = q(el, "wt-combobox[data-test=till-receipt-printer-t2]") as Combobox;
+    expect(t1.name).toBe("receiptPrinterId");
+    expect(t1.label).toBe(t("printers.receipt_printer"));
+    expect(t1.placeholder).toBe(t("printers.receipt_no_printer"));
+    expect(t1.options).toEqual([
+      { value: "", label: t("printers.receipt_no_printer") },
+      { value: "p1", label: "Cocina" },
+    ]);
+    expect(t1.value).toBe("p1");
+    expect(t2.value).toBe("");
+    await chooseOption(t2, "p1");
+    await flush(el);
+    expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t2", "p1");
+  });
+
+  it("shows the till's stored receipt printer again after a refused change", async () => {
+    const api = stubApi({
+      setTillReceiptPrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+    const t1 = q(el, "wt-combobox[data-test=till-receipt-printer-t1]") as HTMLElement & {
+      value: string;
+    };
+    await chooseOption(t1, "");
+    await flush(el);
+    expect(q(el, "[role=alert]")).not.toBeNull();
+    expect(t1.value).toBe("p1");
   });
 
   it("picking a printer calls setTillReceiptPrinter with the till + chosen printer id, then reloads", async () => {
