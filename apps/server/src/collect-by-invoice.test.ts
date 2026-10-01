@@ -258,7 +258,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
 
     expect(await tendersOf(saleId)).toEqual([]);
     expect((await salesOf(billId))[0]!.settledAt).not.toBeNull();
-    expect(await collectedAtOf(billId)).not.toBeNull();
+    expect(await collectedAtOf(billId)).toBeNull();
     expect(await drawerOpensOf(saleId)).toEqual([]);
     expect(ticket.tender).toEqual({ method: "unpaid" });
     expect(await statusOf(venue, billId)).toBe("settled");
@@ -277,7 +277,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
 
     expect(await tendersOf(saleId)).toEqual([]);
     expect((await salesOf(billId))[0]!.settledAt).not.toBeNull();
-    expect(await collectedAtOf(billId)).not.toBeNull();
+    expect(await collectedAtOf(billId)).toBeNull();
     const paid = await inTx(venue, (tx) =>
       tx
         .select({ amount: payments.amount })

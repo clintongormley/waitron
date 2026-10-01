@@ -6,7 +6,6 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 // its codes.
 import "./errors.js";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
 import {
   addDecimal,
   AppError,
@@ -623,22 +622,10 @@ function settlementFor(tender: TillTender, total: string): { settledAmount: stri
 }
 
 /**
- * The handover time a payment of a placed order writes: its own, unless the order was handed over
- * before it was paid.
- */
-function keepHandover(paidAt: string): SQL {
-  return sql`coalesce(${workingOrders.collectedAt}, ${paidAt})`;
-}
-
-/**
  * File an IMMEDIATE cash/card sale from an order's gross lines and settle it on the caller's `tx`,
  * so the sale, its tender/settlement, its chained fiscal record and the → `settled` transition commit
  * as one unit. It does NOT read or guard the order status: the caller resolved it, and one write
  * transaction runs on the venue file at a time, so nothing has moved the row in between.
- *
- * `markCollected` stamps the order-level `collected_at` handover marker in the same settle UPDATE,
- * keeping an earlier handover's time (`keepHandover`), so a counter collect leaves its station
- * queue. NON-FISCAL.
  */
 async function fileImmediateSale(
   tx: Transaction,
@@ -648,7 +635,6 @@ async function fileImmediateSale(
   tender: TillTender,
   order: GrossOrder,
   operatorId?: string,
-  markCollected = false,
 ): Promise<TillSaleResult> {
   const { priced, clock } = issueMoment(
     deps.clock,
@@ -705,7 +691,6 @@ async function fileImmediateSale(
       label: (await readReceiptOrder(tx, cfg, workingOrderId, { atIssuance: true })).orderLabel,
       status: "settled",
       settledAt: settledAt.toISOString(),
-      ...(markCollected ? { collectedAt: keepHandover(settledAt.toISOString()) } : {}),
     })
     .where(eq(workingOrders.id, workingOrderId));
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
@@ -876,8 +861,6 @@ async function payIntegrated(
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
     const gross = await issuancePass(tx, cfg, req.id, order);
-    // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at` unless
-    // an earlier handover set it.
     const wasPlaced = locked?.status === "placed";
     // An open order's lines could still change under the reader, so it is marked in flight (plan
     // D22). A placed order's priced columns are already frozen, and
@@ -1089,8 +1072,8 @@ async function finalizeCapture(
   tip: Decimal,
   result: PaymentResult,
   operatorId?: string,
-  // True when the order was `placed` at P1: a counter collect.
-  markCollected = false,
+  // True when the order was `placed` at P1.
+  wasPlaced = false,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`/`accepted_offline`
@@ -1134,7 +1117,7 @@ async function finalizeCapture(
 
       // After `recordSale`, so a concurrent loser, refused there, never reaches the fire. A placed
       // order was fired when it was placed and must not be fired again.
-      const notSent = markCollected ? null : await firePrepayOrder(tx, cfg, req.id);
+      const notSent = wasPlaced ? null : await firePrepayOrder(tx, cfg, req.id);
 
       await tx
         .update(workingOrders)
@@ -1142,9 +1125,7 @@ async function finalizeCapture(
           label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
           status: "settled",
           settledAt: settledAt.toISOString(),
-          ...(markCollected
-            ? { collectedAt: keepHandover(settledAt.toISOString()) }
-            : { paymentAttemptAt: null }),
+          ...(wasPlaced ? {} : { paymentAttemptAt: null }),
         })
         .where(eq(workingOrders.id, req.id));
       await clearBillRequestIfPaid(tx, req.id, deps.log);
@@ -1274,17 +1255,14 @@ async function finalizeRecovery(
     // except a dish no station can take (`firePrepayOrder`).
     const notSent = locked?.status === "open" ? await firePrepayOrder(tx, cfg, req.id) : null;
 
-    // Settled at the ORIGINAL capture instant. A recovered `placed` order was a counter collect, so
-    // it is stamped collected too, unless an earlier handover set it.
+    // Settled at the ORIGINAL capture instant.
     await tx
       .update(workingOrders)
       .set({
         label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
         status: "settled",
         settledAt: settledAt.toISOString(),
-        ...(locked?.status === "placed"
-          ? { collectedAt: keepHandover(settledAt.toISOString()) }
-          : { paymentAttemptAt: null }),
+        ...(locked?.status === "placed" ? {} : { paymentAttemptAt: null }),
       })
       .where(eq(workingOrders.id, req.id));
     await clearBillRequestIfPaid(tx, req.id, deps.log);
@@ -1397,14 +1375,9 @@ async function finalizeSettle(
         ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
-      // A settle is always a counter collect of a placed order.
       await tx
         .update(workingOrders)
-        .set({
-          status: "settled",
-          settledAt: settledAt.toISOString(),
-          collectedAt: keepHandover(settledAt.toISOString()),
-        })
+        .set({ status: "settled", settledAt: settledAt.toISOString() })
         .where(eq(workingOrders.id, req.id));
       await clearBillRequestIfPaid(tx, req.id, deps.log);
 
@@ -1487,14 +1460,10 @@ async function finalizeSettleRecovery(
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
-    // Settled at the ORIGINAL capture instant; a settle recovery is always a counter collect.
+    // Settled at the ORIGINAL capture instant.
     await tx
       .update(workingOrders)
-      .set({
-        status: "settled",
-        settledAt: settledAt.toISOString(),
-        collectedAt: keepHandover(settledAt.toISOString()),
-      })
+      .set({ status: "settled", settledAt: settledAt.toISOString() })
       .where(eq(workingOrders.id, req.id));
     await clearBillRequestIfPaid(tx, req.id, deps.log);
 
@@ -1604,11 +1573,7 @@ export async function collectOrder(
 
       await tx
         .update(workingOrders)
-        .set({
-          status: "settled",
-          settledAt: settledAt.toISOString(),
-          collectedAt: keepHandover(settledAt.toISOString()),
-        })
+        .set({ status: "settled", settledAt: settledAt.toISOString() })
         .where(eq(workingOrders.id, req.id));
       await clearBillRequestIfPaid(tx, req.id, deps.log);
 
@@ -1620,7 +1585,7 @@ export async function collectOrder(
     }
 
     const order = await priceStoredOrderForIssuance(tx, req.id);
-    return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId, true);
+    return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });
 }
 
@@ -1641,7 +1606,7 @@ async function settleOwingNothing(
   await settleSale(tx, { saleId, tenders: [] });
   await tx
     .update(workingOrders)
-    .set({ status: "settled", settledAt, collectedAt: keepHandover(settledAt) })
+    .set({ status: "settled", settledAt })
     .where(eq(workingOrders.id, workingOrderId));
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
   return readSettledTicket(deps.backend, tx, cfg, workingOrderId);

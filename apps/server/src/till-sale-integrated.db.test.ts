@@ -747,7 +747,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(payments[0]!.linkedToSale).toBe(true);
   });
 
-  it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2), stamps collected_at, drops from the station queue", async () => {
+  it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2), records no handover, stays on the station queue", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const app = suite.db;
@@ -776,9 +776,9 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const payments = await paymentsFor(id);
     expect(payments).toHaveLength(1);
     expect(payments[0]!.linkedToSale).toBe(true);
-    // A placed card collect stamps `collected_at`, so the order leaves its station queue.
-    expect(await collectedAtSet(id)).toBe(true);
-    expect(await stationQueueOrderIds(station)).toEqual([]);
+    // Paying records no handover, so the order stays on its station queue until it is handed over.
+    expect(await collectedAtSet(id)).toBe(false);
+    expect(await stationQueueOrderIds(station)).toEqual([id]);
   });
 
   it("refuses an ABANDONED order (working_order.not_open) and never touches the reader", async () => {
@@ -1005,7 +1005,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await saleCount(id)).toBe(0);
   });
 
-  it("recovers a lost-T2 capture on a PLACED order: files, stamps collected_at, drops from the station queue", async () => {
+  it("recovers a lost-T2 capture on a PLACED order: files, records no handover, stays on the station queue", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const app = suite.db;
@@ -1041,9 +1041,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await paymentCount(id)).toBe(1);
     expect(await preparationTicketCount(id)).toBe(1); // placement fired it; recovery did not re-fire
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    // A recovered placed collect leaves its station queue.
-    expect(await collectedAtSet(id)).toBe(true);
-    expect(await stationQueueOrderIds(station)).toEqual([]);
+    expect(await collectedAtSet(id)).toBe(false);
+    expect(await stationQueueOrderIds(station)).toEqual([id]);
   });
 
   it("recovers with a reconstructed tip when the captured amount exceeds the locked total", async () => {
@@ -1173,7 +1172,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     return { id, saleId: await saleIdFor(id) };
   }
 
-  it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale), stamps collected_at, drops from the station queue", async () => {
+  it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale), records no handover, stays on the station queue", async () => {
     const { cfg, cafe } = await modeVenue("invoice_first");
     const station = await defaultStationId(cfg);
     const app = suite.db;
@@ -1199,9 +1198,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await outstandingSalesFor()).toEqual([]);
-    // A settle is a counter collect, so the order leaves its station queue.
-    expect(await collectedAtSet(id)).toBe(true);
-    expect(await stationQueueOrderIds(station)).toEqual([]);
+    expect(await collectedAtSet(id)).toBe(false);
+    expect(await stationQueueOrderIds(station)).toEqual([id]);
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
     const payments = await paymentsFor(id);
     expect(payments).toHaveLength(1);
@@ -1319,8 +1317,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await tendersFor(id)).toEqual([]);
       expect(await paymentCount(id)).toBe(0);
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-      expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(station)).toEqual([]);
+      expect(await collectedAtSet(id)).toBe(false);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await outstandingSalesFor()).toEqual([]);
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
@@ -1437,7 +1435,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       return externalRef;
     }
 
-    it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row, stamps collected_at, drops from the station queue", async () => {
+    it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row, records no handover, stays on the station queue", async () => {
       const { cfg, cafe } = await modeVenue("invoice_first");
       const station = await defaultStationId(cfg);
       const app = suite.db;
@@ -1458,9 +1456,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await filedSaleTotal(id)).toBe("1.50");
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await outstandingSalesFor()).toEqual([]);
-      // An invoice-first recovery is a counter collect, so the order leaves its station queue.
-      expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(station)).toEqual([]);
+      expect(await collectedAtSet(id)).toBe(false);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);

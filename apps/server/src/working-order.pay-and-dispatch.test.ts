@@ -2038,10 +2038,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
         ?.items[0]?.state,
     ).toBe("preparing");
 
-    // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
-    // legal placed → settled transition (the enforce_transition trigger forbids any other edit of a
-    // placed row, save its party, delivery table and revision). The default-station display drops a
-    // collected order (§3e), so it leaves the queue.
+    // Order 1 paid and handed over, written directly. The default-station display drops a
+    // handed-over order (§3e), so it leaves the queue.
     // ONE clock reading bound to both columns, so they hold the same instant.
     const settledNow = nowIso();
     await suite.db.execute(sql`
