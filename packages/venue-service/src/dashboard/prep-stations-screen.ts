@@ -323,6 +323,8 @@ export class PrepStationsScreen extends LitElement {
       else if (codeOf(e) === "route.station_inactive" && pending.field) {
         this.claimField = pending.field;
         this.claimError = t("prep.station_inactive");
+      } else if (codeOf(e) === "route.station_inactive") {
+        this.error = t("prep.station_inactive");
       } else this.error = t("prep.save_error");
       this.pending = undefined;
       this.#restoreOrder();
@@ -331,6 +333,7 @@ export class PrepStationsScreen extends LitElement {
     }
   }
   #cancelRouting() {
+    if (this.busy) return;
     this.pending = undefined;
     this.#restoreOrder();
     this.assignmentChoiceKey++;
@@ -804,6 +807,7 @@ export class PrepStationsScreen extends LitElement {
       oldClaim && claim?.target && JSON.stringify(oldClaim.target) !== JSON.stringify(claim.target);
     return html`<wt-modal
       open
+      .dismissible=${!this.busy}
       data-test="routing-preview"
       heading=${t("prep.preview_title")}
       @wt-close=${() => this.#cancelRouting()}
@@ -842,6 +846,7 @@ export class PrepStationsScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           data-test="cancel-routing"
+          ?disabled=${this.busy}
           @click=${() => this.#cancelRouting()}
           >${t("prep.cancel")}</wt-button
         ><wt-button

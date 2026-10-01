@@ -597,6 +597,86 @@ it("writes a chosen folder and zone to the selected station", async () => {
     target: { kind: "station", stationId: "bar" },
   });
 });
+it.each(["create", "update"] as const)(
+  "shows an inactive station refusal when an exception %s is rejected after preview",
+  async (operation) => {
+    setLocale("en");
+    const refusal = { code: "route.station_inactive" };
+    const a = api({
+      load: vi.fn().mockResolvedValue(exceptionView),
+      createException: vi.fn().mockRejectedValue(refusal),
+      updateException: vi.fn().mockRejectedValue(refusal),
+    });
+    const el = await mount(a);
+    q(
+      el,
+      operation === "create" ? '[data-test="add-exception"]' : '[data-test="edit-exception-a"]',
+    )!.click();
+    await settle(el);
+    if (operation === "create") {
+      q(el, '[data-test="exception-zone"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "terrace" } }),
+      );
+    }
+    q(el, '[data-test="exception-target"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "bar" } }),
+    );
+    await settle(el);
+    q(el, '[data-test="save-exception"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(q(el, '[role="alert"]')?.textContent).toContain("This station is switched off");
+    expect(q(el, '[role="alert"]')?.textContent).not.toContain("could not be saved");
+  },
+);
+it("keeps a dragged reorder pending while its confirmed save is in flight", async () => {
+  let finish!: () => void;
+  const saving = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const reordered = {
+    ...exceptionView,
+    routing: {
+      ...exceptionView.routing,
+      exceptions: exceptionView.routing.exceptions.map((e) => ({
+        ...e,
+        position: e.id === "b" ? 0 : 1,
+      })),
+    },
+  };
+  const a = api({
+    load: vi.fn().mockResolvedValueOnce(exceptionView).mockResolvedValue(reordered),
+    reorderExceptions: vi.fn().mockReturnValue(saving),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="drag-b"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+  );
+  await settle(el);
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
+  q(el, '[data-test="cancel-routing"]')!.click();
+  q(el, '[data-test="routing-preview"]')!.dispatchEvent(new CustomEvent("wt-close"));
+  await settle(el);
+  expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+  expect(
+    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
+      row.getAttribute("data-id"),
+    ),
+  ).toEqual(["b", "a"]);
+  expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
+  finish();
+  await settle(el);
+  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  expect(
+    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
+      row.getAttribute("data-id"),
+    ),
+  ).toEqual(["b", "a"]);
+});
 it("puts the server's condition refusal beside What", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue(exceptionView),
