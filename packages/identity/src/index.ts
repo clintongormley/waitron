@@ -94,6 +94,8 @@ export {
   PIN_THROTTLE_MAX_KEYS_PER_SLOT,
   PIN_THROTTLE_MAX_WAIT_SECONDS,
   createPinThrottle,
+  pinThrottleRetryAfterSeconds,
+  pinThrottleUnlockAt,
 } from "./pin-throttle.js";
 export type { PinThrottle, PinThrottleOptions } from "./pin-throttle.js";
 export {
