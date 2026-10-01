@@ -71,10 +71,12 @@ describe("device made-here stations", () => {
         })
         .returning();
       const off = await createStation(tx, venue.cfg, { name: "Off" });
+      await setMadeHereStations(tx, venue.cfg, device!.id, [venue.defaultStationId]);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, off.id));
       await expect(setMadeHereStations(tx, venue.cfg, device!.id, [off.id])).rejects.toMatchObject({
         code: "station.not_found",
       });
+      expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([venue.defaultStationId]));
       await expect(
         setMadeHereStations(
           tx,
@@ -83,7 +85,7 @@ describe("device made-here stations", () => {
           [venue.defaultStationId],
         ),
       ).rejects.toMatchObject({ code: "station.not_found" });
-      expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set());
+      expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([venue.defaultStationId]));
     });
   });
 

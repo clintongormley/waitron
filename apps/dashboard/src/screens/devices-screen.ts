@@ -199,6 +199,8 @@ export class DevicesScreen extends LitElement {
   @state() private armedRevokeId: string | null = null;
   @state() private errorKey: string | null = null;
   @state() private madeHereRefusals: Record<string, string> = {};
+  @state() private madeHerePending: Record<string, string[]> = {};
+  readonly #madeHereSaving = new Set<string>();
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -459,23 +461,48 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  async #onMadeHereChange(device: DeviceRow): Promise<void> {
+  #onMadeHereChange(device: DeviceRow): void {
     const group = this.shadowRoot?.querySelector(`[data-test="made-here-${device.id}"]`);
     const stationIds = [
       ...(group?.querySelectorAll<HTMLInputElement>('input[name="stationIds"]') ?? []),
     ]
       .filter((box) => box.checked)
       .map((box) => box.value);
+    this.madeHerePending = { ...this.madeHerePending, [device.id]: stationIds };
     this.madeHereRefusals = Object.fromEntries(
       Object.entries(this.madeHereRefusals).filter(([id]) => id !== device.id),
     );
+    void this.#saveMadeHere(device.id);
+  }
+
+  async #saveMadeHere(deviceId: string): Promise<void> {
+    // One writer per device keeps responses in tap order while the latest choice survives renders.
+    if (this.#madeHereSaving.has(deviceId)) return;
+    this.#madeHereSaving.add(deviceId);
     try {
-      await this.api.setDeviceMadeHere(device.id, stationIds);
-      this.devices = this.devices.map((row) =>
-        row.id === device.id ? { ...row, madeHereStationIds: stationIds } : row,
-      );
-    } catch (error) {
-      this.madeHereRefusals = { ...this.madeHereRefusals, [device.id]: codeOf(error) };
+      while (this.madeHerePending[deviceId] !== undefined) {
+        const stationIds = this.madeHerePending[deviceId];
+        try {
+          await this.api.setDeviceMadeHere(deviceId, stationIds);
+        } catch (error) {
+          this.madeHerePending = Object.fromEntries(
+            Object.entries(this.madeHerePending).filter(([id]) => id !== deviceId),
+          );
+          this.madeHereRefusals = { ...this.madeHereRefusals, [deviceId]: codeOf(error) };
+          return;
+        }
+        this.devices = this.devices.map((row) =>
+          row.id === deviceId ? { ...row, madeHereStationIds: stationIds } : row,
+        );
+        const latest = this.madeHerePending[deviceId];
+        if (latest.length === stationIds.length && latest.every((id, i) => id === stationIds[i])) {
+          this.madeHerePending = Object.fromEntries(
+            Object.entries(this.madeHerePending).filter(([id]) => id !== deviceId),
+          );
+        }
+      }
+    } finally {
+      this.#madeHereSaving.delete(deviceId);
     }
   }
 
@@ -547,6 +574,7 @@ export class DevicesScreen extends LitElement {
 
   #renderDevice(device: DeviceRow): TemplateResult {
     const armed = this.armedRevokeId === device.id;
+    const madeHereStationIds = this.madeHerePending[device.id] ?? device.madeHereStationIds;
     return html`<li data-test="device-row-${device.id}">
       <wt-card>
         <div class="row">
@@ -618,8 +646,8 @@ export class DevicesScreen extends LitElement {
                         type="checkbox"
                         name="stationIds"
                         value=${station.id}
-                        .checked=${live(device.madeHereStationIds.includes(station.id))}
-                        @change=${() => void this.#onMadeHereChange(device)}
+                        .checked=${live(madeHereStationIds.includes(station.id))}
+                        @change=${() => this.#onMadeHereChange(device)}
                       />
                       ${station.name}</label
                     >`,
