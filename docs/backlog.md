@@ -1324,6 +1324,22 @@ reproduce in the dashboard on Chromium and Safari, then give the shared select r
 right-hand end for its arrow (more end padding, or draw the arrow ourselves so its position is
 ours rather than the browser's), and look at a couple of other screens' dropdowns afterwards.
 
+**A tabbed screen's "Add …" button sits on the same row as its tabs, always (A174, owner
+2026-10-01: "can we always put the "Add xxx" button on the same row as the tabs?") — OPEN.** Today
+`wt-tabs` (`packages/ui/src/components/wt-tabs.ts`) draws only the tab row and one panel per tab;
+there is nowhere beside the tabs to put anything, so a screen puts its Add button inside each tab's
+panel, on its own row above the table — e.g. the Modifiers screen's "Add extras list" / "Add options
+list" (`#renderTab`, `apps/dashboard/src/screens/modifiers-screen.ts`) and the Venue screen's per-tab
+toolbars (`#toolbar`, `packages/venue-service/src/dashboard/venue-operations-screen.ts`). Wanted:
+`wt-tabs` gains a place at the trailing end of the tab row for actions, and the screen fills it with
+the Add button belonging to the tab on show, so the button changes as the tab does. The button must
+sit outside the element marked `role="tablist"` (a list of tabs may hold only tabs), and the tab row
+scrolls sideways when the tabs do not fit (`overflow-x: auto`), so decide what happens at phone
+width — the button must stay on screen, not scroll away with the tabs. **Next action:** list every
+screen using `wt-tabs` with an Add or Create button in a tab (candidates from a grep: Modifiers,
+Venue, Menus, Printers, the profile screen's passkeys), move each, and record the rule in
+`docs/developers/design-system.md` next to "Put Create in a menu beside the table heading".
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
