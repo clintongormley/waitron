@@ -1,8 +1,4 @@
-/**
- * The page a printer's row menu prints: its name and saved layout, the venue's date and time, a line
- * of accented text, a rule across the text grid's two edges and a QR, drawn at the printer's saved
- * setting. Not the calibration ruler page, which is `test-page.ts`.
- */
+/** Not the calibration ruler page, which is `test-page.ts`. */
 import {
   QR_QUIET_ZONE,
   chooseQrDots,
@@ -17,7 +13,7 @@ import {
 import type { SupportedLocale } from "@waitron/shared";
 import { qrModules } from "./qr-matrix.js";
 
-/** Fixed sample content, not a tax-agency link, so scanning it submits nothing. */
+/** Fixed sample content, never a tax-agency link. */
 export const PRINTER_TEST_PAGE_QR_TEXT = "Waitron test page";
 
 const SAMPLE_TEXT = "Café, jamón, niño · 5 € · ¿Sí? ¡Sí!";
@@ -35,11 +31,9 @@ const WORDS: Readonly<Record<SupportedLocale, { title: string; verdict: string }
 
 export interface PrinterTestPageInput {
   locale: SupportedLocale;
-  /** The printer's SAVED setting, which sizes the lines, the print area and the QR. */
   printer: EscSetting;
   printerName: string;
   now: Date;
-  /** The venue's time zone, which the printed date and time are shown in. */
   timeZone: string;
 }
 

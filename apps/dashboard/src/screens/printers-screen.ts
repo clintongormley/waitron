@@ -445,7 +445,7 @@ export class PrintersScreen extends LitElement {
       }
       .sent {
         display: block;
-        color: var(--wt-color-success);
+        color: var(--wt-color-text-muted);
         margin-top: var(--wt-space-3);
       }
     `,

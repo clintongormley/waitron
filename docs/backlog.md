@@ -3196,7 +3196,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with `wt-data-table`'s new opt-in `pinned: "end"` column option, so the three-dot button (⋮)
   holding Edit, Disable and Forget pairing (_2026-09-30 (C103): named Unpair_; _2026-09-30 (C109): a
   Bluetooth printer an agent reports paired shows Unpair in place of Disable, except where C109's
-  entry says the row shows Disable_) is in view without
+  entry says the row shows Disable_; _2026-10-01 (C108): and Print test page, between Edit and
+  Disable_) is in view without
   scrolling; the other columns still
   scroll sideways under it. Measured 2026-09-30 in headless Chromium, with a long printer name and
   a long agent name: before the change the table was 1175 px (English) to 1402 px (Spanish in
