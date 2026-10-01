@@ -602,3 +602,14 @@ it("offers only active stations for a new exception and names a switched-off edi
   expect(edited.options.map((o) => o.value)).toContain("old");
   expect(edited.shadowRoot!.querySelector(".trigger .value")!.textContent).toContain("Old bar");
 });
+it.each([
+  ["en", "Old bar (Switched off)"],
+  ["es-ES", "Old bar (Desactivada)"],
+] as const)("names a retained inactive exception station in %s", async (locale, expected) => {
+  setLocale(locale);
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
+  q(el, '[data-test="edit-exception-b"]')!.click();
+  await settle(el);
+  const target = q(el, '[data-test="exception-target"]')!;
+  expect(target.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(expected);
+});

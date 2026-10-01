@@ -435,7 +435,12 @@ export class PrepStationsScreen extends LitElement {
     const selected = this.exceptionTarget;
     const previous =
       selected && selected !== NO_PREPARATION && !active.some((option) => option.value === selected)
-        ? [{ value: selected, label: `${this.#stationName(selected)} (${t("prep.switched_off")})` }]
+        ? [
+            {
+              value: selected,
+              label: `${this.#stationName(selected)} (${t("prep.inactive_station_label")})`,
+            },
+          ]
         : [];
     return [...active, ...previous, { value: NO_PREPARATION, label: t("prep.no_preparation") }];
   }
