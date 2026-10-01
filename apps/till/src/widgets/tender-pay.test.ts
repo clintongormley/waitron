@@ -4,7 +4,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
-import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -733,19 +733,30 @@ describe("till-tender-pay", () => {
   ])("in $locale, the cash and card buttons", ({ locale, cash, card }) => {
     afterEach(() => setLocale("en-GB"));
 
-    it.each([
+    const zones = [
       { mode: "prepay", stage: "order" },
       { mode: "ticket_then_pay", stage: "order" },
       { mode: "invoice_first", stage: "order" },
       { mode: "ticket_then_pay", stage: "collect" },
       { mode: "invoice_first", stage: "collect" },
-    ] as const)(
-      `read ${cash} and ${card} side by side, both primary, in a $mode zone at the $stage stage`,
+    ] as const;
+
+    async function mountAt(mode: OrderFlow, stage: "order" | "collect", width?: string) {
+      setLocale(locale);
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "2");
+      const mounted = await mountWidget<TillTenderPay>("till-tender-pay", { store, mode, stage });
+      if (width !== undefined) {
+        mounted.host.style.width = width;
+        await mounted.el.updateComplete;
+      }
+      return mounted;
+    }
+
+    it.each(zones)(
+      `read ${cash} then ${card}, both primary, in a $mode zone at the $stage stage`,
       async ({ mode, stage }) => {
-        setLocale(locale);
-        const store = new WorkingOrderStore();
-        store.addProduct(cafe, "2");
-        const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, mode, stage });
+        const { el } = await mountAt(mode, stage);
         const cashButton = query(el, ".pay")!;
         const cardButton = query(el, ".pay-card")!;
         expect(cashButton.textContent!.trim()).toBe(cash);
@@ -753,6 +764,34 @@ describe("till-tender-pay", () => {
         expect(cashButton.getAttribute("variant")).toBe("primary");
         expect(cardButton.getAttribute("variant")).toBe("primary");
         expect(cashButton.nextElementSibling).toBe(cardButton);
+      },
+    );
+
+    it.each(zones)(
+      `share one row in a 400px widget, ${cash} on the left, each half the width, in a $mode zone at the $stage stage`,
+      async ({ mode, stage }) => {
+        const { el } = await mountAt(mode, stage, "400px");
+        const widget = el.getBoundingClientRect();
+        const cashBox = query(el, ".pay")!.getBoundingClientRect();
+        const cardBox = query(el, ".pay-card")!.getBoundingClientRect();
+        expect(cardBox.top).toBe(cashBox.top);
+        expect(cardBox.left).toBeGreaterThan(cashBox.right);
+        expect(cashBox.left).toBeCloseTo(widget.left, 0);
+        expect(cardBox.right).toBeCloseTo(widget.right, 0);
+        expect(cardBox.width).toBeCloseTo(cashBox.width, 0);
+      },
+    );
+
+    it.each(zones)(
+      `stay inside a 106px widget in a $mode zone at the $stage stage`,
+      async ({ mode, stage }) => {
+        const { el } = await mountAt(mode, stage, "106px");
+        const widget = el.getBoundingClientRect();
+        for (const selector of [".pay", ".pay-card"]) {
+          const box = query(el, selector)!.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(widget.left);
+          expect(box.right).toBeLessThanOrEqual(widget.right);
+        }
       },
     );
   });

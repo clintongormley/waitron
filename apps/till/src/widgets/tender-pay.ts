@@ -111,6 +111,16 @@ export class TillTenderPay extends LitElement {
         margin-top: var(--wt-space-3);
       }
 
+      /* Two equal columns, falling to one where the widget is too narrow for both. */
+      .tenders {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(min(100%, calc(var(--wt-tap-min) * 3)), 1fr)
+        );
+        gap: var(--wt-space-2);
+      }
+
       .pay,
       .pay-card,
       .hold,
@@ -495,11 +505,9 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /** No Hold: a placed order is not parked again. */
-  #renderIdleCollect(disabled: boolean) {
+  #renderTenderButtons(disabled: boolean) {
     return html`
-      ${this.#renderCardExtras()}
-      <div class="actions">
+      <div class="tenders">
         <wt-button
           class="pay"
           variant="primary"
@@ -514,21 +522,20 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
+  /** No Hold: a placed order is not parked again. */
+  #renderIdleCollect(disabled: boolean) {
+    return html`
+      ${this.#renderCardExtras()}
+      <div class="actions">${this.#renderTenderButtons(disabled)}</div>
+    `;
+  }
+
   /** `withPlace`: a zone that sends to the kitchen without payment can still send it unpaid. */
   #renderIdlePay(disabled: boolean, withPlace: boolean) {
     return html`
       ${this.#renderCardExtras()}
       <div class="actions">
-        <wt-button
-          class="pay"
-          variant="primary"
-          size="lg"
-          ?disabled=${disabled}
-          @click=${() => this.#startPaying()}
-        >
-          ${t("tender.cash")}
-        </wt-button>
-        ${this.#renderCardButton(disabled)}
+        ${this.#renderTenderButtons(disabled)}
         ${
           withPlace
             ? html`<wt-button
