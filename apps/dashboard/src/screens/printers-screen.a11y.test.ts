@@ -471,7 +471,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
           q(el, "[data-test=calibration-next]")!.click();
           await flush(el);
         }
-        const select = q(el, 'select[name="drawerTillId"]') as HTMLSelectElement;
+        const select = q(el, 'select[name="printer-drawer-till"]') as HTMLSelectElement;
         expect(select.value).toBe("t2");
         const inside = () => {
           const dialog = q(el, '[data-test="edit-printer-modal"]')!
@@ -484,7 +484,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         };
         inside();
         await expectNoA11yViolations(host);
-        await chooseOption(el, "drawerTillId", "t1");
+        await chooseOption(el, "printer-drawer-till", "t1");
         q(el, "[data-test=save-printer-p1]")!.click();
         await flush(el);
         expect(select.getAttribute("aria-invalid")).toBe("true");

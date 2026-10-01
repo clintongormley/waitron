@@ -729,10 +729,13 @@ describe("guided printer calibration", () => {
   });
 
   describe("the till whose drawer this is", () => {
-    // A till at another location, which the server would refuse as the drawer's owner.
+    // Only a cash register at the printer's location that prints its receipts on it may own the
+    // drawer, so Caja 1 and Caja 2 are offered and the other two, which the server refuses, are not.
     const drawerTills: Till[] = [
-      ...tills,
-      { id: "t3", label: "Terraza 1", locationId: "loc-2", receiptPrinterId: null },
+      { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
+      { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: "p1" },
+      { id: "t4", label: "Caja 3", locationId: "loc-1", receiptPrinterId: "p2" },
+      { id: "t3", label: "Terraza 1", locationId: "loc-2", receiptPrinterId: "p1" },
     ];
     // The owner is the SECOND till at the printer's location, so a dropdown showing its first
     // option, or its first till, fails.
@@ -743,7 +746,7 @@ describe("guided printer calibration", () => {
       drawerOwnerTillId: "t2",
     };
     const ownerSelect = (el: PrintersScreen) =>
-      q(el, 'select[name="drawerTillId"]') as HTMLSelectElement | null;
+      q(el, 'select[name="printer-drawer-till"]') as HTMLSelectElement | null;
 
     // Fails if the dropdown is shown without a drawer, lists every till rather than the printer's
     // location's, or marks the saved owner with a `.value` binding alone instead of `.selected`.
@@ -795,7 +798,7 @@ describe("guided printer calibration", () => {
         listTills: vi.fn().mockResolvedValue(drawerTills),
       });
       const el = await openStepThree(api);
-      await chooseOption(el, "drawerTillId", choice);
+      await chooseOption(el, "printer-drawer-till", choice);
       q(el, "[data-test=save-printer-p1]")!.click();
       await flush(el);
       expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { drawerTillId: sent });
@@ -808,8 +811,8 @@ describe("guided printer calibration", () => {
         listTills: vi.fn().mockResolvedValue(drawerTills),
       });
       const el = await openStepThree(api);
-      await chooseOption(el, "drawerTillId", "t1");
-      await chooseOption(el, "drawerTillId", "t2");
+      await chooseOption(el, "printer-drawer-till", "t1");
+      await chooseOption(el, "printer-drawer-till", "t2");
       q(el, "[data-test=save-printer-p1]")!.click();
       await flush(el);
       expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -828,7 +831,7 @@ describe("guided printer calibration", () => {
         }),
       });
       const el = await openStepThree(api);
-      await chooseOption(el, "drawerTillId", "t1");
+      await chooseOption(el, "printer-drawer-till", "t1");
       q(el, "[data-test=save-printer-p1]")!.click();
       await flush(el);
       const select = ownerSelect(el)!;
@@ -840,10 +843,67 @@ describe("guided printer calibration", () => {
       expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(t("form.fix_fields"));
       expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
       await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(select));
-      await chooseOption(el, "drawerTillId", "t2");
+      await chooseOption(el, "printer-drawer-till", "t2");
       expect(q(el, "[data-test=drawer-till-error]")).toBeNull();
       expect(ownerSelect(el)!.getAttribute("aria-invalid")).toBe("false");
       expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe("");
+    });
+
+    // Fails if a saved owner that now prints its receipts elsewhere is dropped from the dropdown
+    // (which would then show the first option while the saved choice stays), shown as though it
+    // could still open the drawer, or dropped once another register is chosen.
+    it("keeps a saved owner that no longer prints here selected and says it cannot open the drawer", async () => {
+      const api = stubApi({
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue([{ ...ownedByCaja2, drawerTillId: "t4", drawerOwnerTillId: null }]),
+        listTills: vi.fn().mockResolvedValue(drawerTills),
+      });
+      const el = await openStepThree(api);
+      const stale = t("printers.drawer_till_ineligible").replace("{till}", "Caja 3");
+      const options = () =>
+        Array.from(ownerSelect(el)!.options).map((option) => option.textContent!.trim());
+      expect(options()).toEqual([t("printers.drawer_owner_default"), "Caja 1", "Caja 2", stale]);
+      expect(ownerSelect(el)!.value).toBe("t4");
+      expect(ownerSelect(el)!.selectedOptions[0]!.textContent!.trim()).toBe(stale);
+      await chooseOption(el, "printer-drawer-till", "t1");
+      expect(options()).toContain(stale);
+      await chooseOption(el, "printer-drawer-till", "t4");
+      q(el, "[data-test=save-printer-p1]")!.click();
+      await flush(el);
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+    });
+
+    // Fails if the refused sentence runs the dialog's full width instead of its field's.
+    it("keeps a refused owner's sentence to its field's width", async () => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      await page.viewport(1280, 800);
+      try {
+        const api = stubApi({
+          listPrinters: vi.fn().mockResolvedValue([ownedByCaja2]),
+          listTills: vi.fn().mockResolvedValue(drawerTills),
+          updatePrinter: vi.fn().mockRejectedValue({
+            code: "management.request_invalid",
+            params: { field: "drawerTillId" },
+          }),
+        });
+        const el = await openStepThree(api);
+        await chooseOption(el, "printer-drawer-till", "t1");
+        q(el, "[data-test=save-printer-p1]")!.click();
+        await flush(el);
+        const probe = document.createElement("div");
+        probe.style.width = "var(--wt-form-max-width)";
+        el.shadowRoot!.appendChild(probe);
+        const form = probe.getBoundingClientRect().width;
+        const step = q(el, '[data-test="calibration-step-3"]')!.getBoundingClientRect();
+        const message = q(el, "[data-test=drawer-till-error]")!.getBoundingClientRect();
+        expect(step.width).toBeGreaterThan(form);
+        expect(message.width).toBeGreaterThan(0);
+        expect(message.width).toBeLessThanOrEqual(form);
+      } finally {
+        await page.viewport(width, height);
+      }
     });
   });
 

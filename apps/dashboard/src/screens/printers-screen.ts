@@ -128,6 +128,8 @@ const PRINTER_FIELDS: readonly string[] = ["name", "host", "port"];
 
 interface EditablePrinter {
   id: string;
+  /** Null for a printer this dialog has just created, which no register prints at yet. */
+  locationId: string | null;
   name: string;
   transport: PrintTransport;
   host: string;
@@ -1141,6 +1143,7 @@ export class PrintersScreen extends LitElement {
           ? { ...disabled, name, active: true }
           : {
               id: createdId,
+              locationId: null,
               name,
               transport: device.transport,
               host: device.host ?? null,
@@ -1909,7 +1912,10 @@ export class PrintersScreen extends LitElement {
     });
   }
 
-  #openPrinter(p: Omit<Printer, "locationId">, event?: Event): void {
+  #openPrinter(
+    p: Omit<Printer, "locationId"> & Pick<EditablePrinter, "locationId">,
+    event?: Event,
+  ): void {
     if (event) this.#rememberEditTrigger(event);
     this.#closeTest();
     this.calibrationStep = 0;
@@ -1921,6 +1927,7 @@ export class PrintersScreen extends LitElement {
     this.rulerNumber = "";
     this.editingPrinter = {
       id: p.id,
+      locationId: p.locationId,
       name: p.name,
       transport: p.transport,
       active: p.active,
@@ -2687,41 +2694,50 @@ export class PrintersScreen extends LitElement {
     </wt-modal>`;
   }
 
-  /** The register whose till opens this printer's drawer, from those at the printer's location. */
+  /**
+   * The server lets only a register at the printer's location that prints its receipts here own
+   * the drawer. A saved owner that no longer qualifies stays listed, marked, so the manager sees it
+   * and can choose another.
+   */
   #renderDrawerTill(p: EditablePrinter, refused: boolean): TemplateResult {
-    const locationId = this.printers.find(({ id }) => id === p.id)?.locationId;
-    const registers = this.tills.filter((till) => till.locationId === locationId);
-    return html`<div class="setting-field">
-      <label class="setting-field"
-        >${t("printers.drawer_opens_at")}
-        <select
-          name="drawerTillId"
-          aria-invalid=${refused ? "true" : "false"}
-          aria-describedby=${refused ? "drawer-till-error" : nothing}
-          @change=${(e: Event) => {
-            const value = (e.target as HTMLSelectElement).value;
-            this.drawerTillRefused = false;
-            this.#editPrinter(p.id, { drawerTillId: value === "" ? null : value });
-          }}
-        >
-          <option value="" .selected=${p.drawerTillId === null}>
-            ${t("printers.drawer_owner_default")}
-          </option>
-          ${registers.map(
-            (till) =>
-              html`<option value=${till.id} .selected=${p.drawerTillId === till.id}>
-                ${till.label}
-              </option>`,
-          )}
-        </select>
-      </label>
-      ${
-        refused
-          ? html`<p class="field-error" id="drawer-till-error" data-test="drawer-till-error">
-              ${t("printers.drawer_till_invalid")}
-            </p>`
-          : nothing
-      }
+    const eligible = (till: Till) =>
+      till.locationId === p.locationId && till.receiptPrinterId === p.id;
+    const registers = this.tills.filter(
+      (till) => eligible(till) || till.id === p.saved.drawerTillId,
+    );
+    return html`<div class="field-row">
+      <div class="setting-field">
+        <label class="setting-field"
+          >${t("printers.drawer_opens_at")}
+          <select
+            name="printer-drawer-till"
+            aria-invalid=${refused ? "true" : "false"}
+            aria-describedby=${refused ? "drawer-till-error" : nothing}
+            @change=${(e: Event) => {
+              const value = (e.target as HTMLSelectElement).value;
+              this.drawerTillRefused = false;
+              this.#editPrinter(p.id, { drawerTillId: value === "" ? null : value });
+            }}
+          >
+            <option value="" .selected=${p.drawerTillId === null}>
+              ${t("printers.drawer_owner_default")}
+            </option>
+            ${registers.map(
+              (till) =>
+                html`<option value=${till.id} .selected=${p.drawerTillId === till.id}>
+                  ${eligible(till) ? till.label : t("printers.drawer_till_ineligible").replace("{till}", () => till.label)}
+                </option>`,
+            )}
+          </select>
+        </label>
+        ${
+          refused
+            ? html`<p class="field-error" id="drawer-till-error" data-test="drawer-till-error">
+                ${t("printers.drawer_till_invalid")}
+              </p>`
+            : nothing
+        }
+      </div>
     </div>`;
   }
 
