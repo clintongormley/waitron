@@ -8,8 +8,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "department_hours",
       "route_exceptions",
       "station_claims",
-      "route_exceptions",
-      "station_claims",
       "device_zone_defaults",
       // The policy goes BEFORE the menus it names: `zone_service_policies_default_allowed_fk`
       // points (zone_id, default_menu_id) at `zone_menus`.
