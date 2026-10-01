@@ -8,6 +8,7 @@ describe("VENUE_SERVICE", () => {
       "acknowledgeKitchenNotice",
       "copyLineContext",
       "copyOrderContext",
+      "describeMakers",
       "findOrderContext",
       "findOrderModes",
       "getOrderContext",
