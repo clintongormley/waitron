@@ -288,7 +288,7 @@ function dishNotSent(workingOrderId: string, dishes: string, orderNumber: number
 }
 
 describe("paying a pay-first order, or an open counter order in a zone that sends before payment, whose dish no kitchen station can take", () => {
-  it("sends a dish whose station is switched off to the next matching route whose station is on", async () => {
+  it("alerts for a switched-off station instead of using a later matching rule", async () => {
     const made = await dish("Steak");
     const closed = await station("Closed grill");
     const open = await station("Kitchen");
@@ -301,9 +301,11 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const res = await payCash(await enrolTill(), id);
 
     expect(res.status).toBe(200);
-    expect(await kitchenItems(id)).toEqual([{ productId: made.productId, stationId: open }]);
+    expect(await kitchenItems(id)).toEqual([]);
     expect(await filedFor(id)).toBe(1);
-    expect(await alertsFor(await saleOf(id))).toEqual([]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3")),
+    ]);
   });
 
   it("takes a cash payment, files it, sends nothing for the dish and raises one alert naming it", async () => {

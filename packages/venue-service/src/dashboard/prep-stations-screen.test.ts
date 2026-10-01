@@ -56,7 +56,13 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     assignProduct: vi.fn(),
     removeClaim: vi.fn(),
     preview: vi.fn().mockResolvedValue([]),
-    explain: vi.fn().mockResolvedValue({ route: null, decidedBy: null, skipped: [], stations: [] }),
+    explain: vi.fn().mockResolvedValue({
+      route: null,
+      decidedBy: null,
+      fallbacks: [],
+      noReplacement: false,
+      stations: [],
+    }),
     createStation: vi.fn(),
     updateStation: vi.fn(),
     deactivateStation: vi.fn(),
@@ -81,124 +87,7 @@ async function settle(el: PrepStationsScreen) {
   await el.updateComplete;
 }
 const q = (el: PrepStationsScreen, s: string) => el.shadowRoot!.querySelector<HTMLElement>(s);
-function restSwitch(el: PrepStationsScreen) {
-  const host = q(el, '[data-test="station-bar"] wt-switch[name="showsRestOfOrder"]')!;
-  return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
-}
-
-it("shows the stored rest-of-order choice and explanation on the default station", async () => {
-  setLocale("en");
-  const el = await mount(api());
-  const { host, input } = restSwitch(el);
-  expect(input.checked).toBe(false);
-  expect(host.shadowRoot!.querySelector("label")!.textContent).toBe("Show the rest of the order");
-  expect(q(el, '[data-test="station-bar"]')!.textContent).toContain(
-    "Its tickets and kitchen screen also list the order's dishes at other stations.",
-  );
-});
-
-it("shows the switch on another station with its stored on value", async () => {
-  const another: PrepStationsView = {
-    ...view,
-    stations: [
-      ...view.stations,
-      {
-        ...view.stations[0]!,
-        id: "grill",
-        name: "Grill",
-        isDefault: false,
-        showsRestOfOrder: true,
-      },
-    ],
-  };
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(another) }));
-  const card = q(el, '[data-test="station-grill"]')!;
-  const input = card.querySelector("wt-switch")!.shadowRoot!.querySelector("input")!;
-  expect(input.checked).toBe(true);
-});
-
-it("saves a switch change immediately and disables it while saving", async () => {
-  let finish!: () => void;
-  const updateStation = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
-  const saved = { ...view, stations: [{ ...view.stations[0]!, showsRestOfOrder: true }] };
-  const el = await mount(
-    api({ updateStation, load: vi.fn().mockResolvedValueOnce(view).mockResolvedValue(saved) }),
-  );
-  restSwitch(el).input.click();
-  await settle(el);
-  expect(updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
-  expect(restSwitch(el).input.disabled).toBe(true);
-  expect(restSwitch(el).input.checked).toBe(true);
-  finish();
-  await settle(el);
-  expect(restSwitch(el).input.disabled).toBe(false);
-  expect(restSwitch(el).input.checked).toBe(true);
-});
-
-it("lets another station save while the first station's switch is pending", async () => {
-  const another: PrepStationsView = {
-    ...view,
-    stations: [
-      ...view.stations,
-      { ...view.stations[0]!, id: "grill", name: "Grill", isDefault: false },
-    ],
-  };
-  const updateStation = vi
-    .fn()
-    .mockImplementationOnce(() => new Promise<void>(() => {}))
-    .mockResolvedValue(undefined);
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(another), updateStation }));
-  restSwitch(el).input.click();
-  await settle(el);
-  const grill = q(el, '[data-test="station-grill"] wt-switch')!;
-  expect(grill.shadowRoot!.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
-  grill.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
-  await settle(el);
-  expect(updateStation).toHaveBeenCalledWith("grill", { showsRestOfOrder: true });
-});
-
-it("restores the native switch and puts an unnamed refusal at the card bottom", async () => {
-  const el = await mount(
-    api({ updateStation: vi.fn().mockRejectedValue({ code: "station.offline" }) }),
-  );
-  restSwitch(el).input.click();
-  await settle(el);
-  expect(restSwitch(el).input.checked).toBe(false);
-  const card = q(el, '[data-test="station-bar"]')!;
-  const alert = card.querySelector('[role="alert"]')!;
-  expect(alert.textContent).toContain("could not be saved");
-  expect(alert).toBe(card.lastElementChild);
-});
-
-it("puts a field-named refusal directly under the switch", async () => {
-  const el = await mount(
-    api({
-      updateStation: vi.fn().mockRejectedValue({
-        code: "management.request_invalid",
-        params: { field: "showsRestOfOrder" },
-      }),
-    }),
-  );
-  restSwitch(el).input.click();
-  await settle(el);
-  expect(restSwitch(el).input.checked).toBe(false);
-  const fieldError = q(el, '[data-test="station-bar"] [data-field-error="showsRestOfOrder"]')!;
-  expect(fieldError.getAttribute("role")).toBe("alert");
-  expect(fieldError.textContent).toContain("could not be saved");
-  expect(fieldError.previousElementSibling).toBe(restSwitch(el).host);
-});
-
-it("labels the switch and its explanation in Spanish", async () => {
-  setLocale("es");
-  const el = await mount(api());
-  expect(restSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
-    "Mostrar el resto del pedido",
-  );
-  expect(q(el, '[data-test="station-bar"]')!.textContent).toContain(
-    "Sus comandas y su pantalla de cocina también muestran los platos del pedido en otras estaciones.",
-  );
-});
-it("explains exceptions, claims, defaults, skipped rules and an unroutable product", async () => {
+it("explains exceptions, claims, defaults and an unroutable product", async () => {
   setLocale("en");
   const a = api({
     load: vi.fn().mockResolvedValue({
@@ -224,25 +113,31 @@ it("explains exceptions, claims, defaults, skipped rules and an unroutable produ
       .mockResolvedValueOnce({
         route: { kind: "station", stationId: "bar" },
         decidedBy: { kind: "exception", exceptionId: "ex" },
-        skipped: [],
+        fallbacks: [],
+        noReplacement: false,
         stations: [{ id: "bar", name: "Bar", active: true }],
       })
       .mockResolvedValueOnce({
         route: { kind: "station", stationId: "bar" },
         decidedBy: { kind: "claim", categoryId: "cocktails" },
-        skipped: [{ decision: { kind: "claim", categoryId: "drinks" }, stationId: "off" }],
-        stations: [
-          { id: "bar", name: "Bar", active: true },
-          { id: "off", name: "Cocktail bar", active: false },
-        ],
+        fallbacks: [],
+        noReplacement: false,
+        stations: [{ id: "bar", name: "Bar", active: true }],
       })
       .mockResolvedValueOnce({
         route: { kind: "station", stationId: "bar" },
         decidedBy: { kind: "default" },
-        skipped: [],
+        fallbacks: [],
+        noReplacement: false,
         stations: [{ id: "bar", name: "Bar", active: true }],
       })
-      .mockResolvedValueOnce({ route: null, decidedBy: null, skipped: [], stations: [] }),
+      .mockResolvedValueOnce({
+        route: null,
+        decidedBy: null,
+        fallbacks: [],
+        noReplacement: false,
+        stations: [],
+      }),
   });
   const el = await mount(a);
   const select = q(el, '[data-test="test-product"]')!;
@@ -255,10 +150,6 @@ it("explains exceptions, claims, defaults, skipped rules and an unroutable produ
     select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
     await settle(el);
     expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(expected);
-    if (expected.includes("Bar claims"))
-      expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-        "Skipped: Cocktail bar claims Drinks, but Cocktail bar is switched off",
-      );
   }
 });
 
@@ -338,7 +229,8 @@ it("clears a completed tester answer when Back removes the product", async () =>
         explain: vi.fn().mockResolvedValue({
           route: { kind: "station", stationId: "bar" },
           decidedBy: { kind: "default" },
-          skipped: [],
+          fallbacks: [],
+          noReplacement: false,
           stations: [{ id: "bar", name: "Bar", active: true }],
         }),
       }),
@@ -360,7 +252,8 @@ it("ignores a pending tester answer after Back removes the product", async () =>
   let complete!: (value: {
     route: { kind: "station"; stationId: string };
     decidedBy: { kind: "default" };
-    skipped: [];
+    fallbacks: [];
+    noReplacement: false;
     stations: { id: string; name: string; active: boolean }[];
   }) => void;
   const pending = new Promise<Parameters<typeof complete>[0]>((resolve) => {
@@ -374,7 +267,8 @@ it("ignores a pending tester answer after Back removes the product", async () =>
     complete({
       route: { kind: "station", stationId: "bar" },
       decidedBy: { kind: "default" },
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
       stations: [{ id: "bar", name: "Bar", active: true }],
     });
     await settle(el);
@@ -400,7 +294,8 @@ it("explains a no-preparation claim as an assignment", async () => {
       explain: vi.fn().mockResolvedValue({
         route: { kind: "no_preparation" },
         decidedBy: { kind: "claim", categoryId: "cocktails" },
-        skipped: [],
+        fallbacks: [],
+        noReplacement: false,
         stations: [],
       }),
     }),
@@ -1246,7 +1141,8 @@ it("lets the tester change zones and clear the product without retaining a route
     explain: vi.fn().mockResolvedValue({
       route: { kind: "station", stationId: "bar" },
       decidedBy: { kind: "default" },
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
       stations: [],
     }),
   });

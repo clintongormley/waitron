@@ -24,7 +24,33 @@ export interface RoutingRules {
   readonly parentOf: ReadonlyMap<string, string | null>; // categoryId → parent categoryId
   readonly activeStationIds: ReadonlySet<string>;
   readonly defaultStationId: string | null; // the active default, or null
+  readonly timing: ReadonlyMap<string, StationTiming>;
 }
+
+/** One weekly interval. Only the HH:MM portion of each endpoint counts. */
+export interface WeeklyInterval {
+  readonly weekday: number;
+  readonly opensAt: string;
+  readonly closesAt: string;
+}
+
+export interface StationTiming {
+  readonly fallbackId: string | null;
+  readonly hours: readonly WeeklyInterval[];
+  readonly today: "open" | "closed" | null;
+}
+
+export interface RoutingMoment {
+  readonly weekday: number;
+  readonly timeOfDay: string;
+}
+
+export type StationStatus =
+  | {
+      readonly open: true;
+      readonly why: "default" | "opened_by_hand" | "in_hours" | "no_hours" | "time_not_applied";
+    }
+  | { readonly open: false; readonly why: "switched_off" | "closed_by_hand" | "out_of_hours" };
 
 export interface ProductFacts {
   readonly productId: string;
@@ -37,15 +63,16 @@ export type RoutingDecision =
   | { readonly kind: "claim"; readonly categoryId: string }
   | { readonly kind: "default" };
 
-export interface SkippedRule {
-  readonly decision: RoutingDecision;
-  readonly stationId: string; // the switched-off station it named
+export interface FallbackStep {
+  readonly stationId: string;
+  readonly why: "switched_off" | "closed_by_hand" | "out_of_hours";
 }
 
 export interface MakerChoice {
-  readonly route: RouteTarget | null; // null: nothing can take it (no active default)
+  readonly route: RouteTarget | null;
   readonly decidedBy: RoutingDecision | null;
-  readonly skipped: readonly SkippedRule[];
+  readonly fallbacks: readonly FallbackStep[];
+  readonly noReplacement: boolean;
 }
 
 export function folderAncestors(
@@ -67,23 +94,88 @@ function orderedExceptions(rules: RoutingRules): RouteException[] {
   return [...rules.exceptions].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
 }
 
-function targetIsActive(rules: RoutingRules, target: RouteTarget): boolean {
-  return target.kind === "no_preparation" || rules.activeStationIds.has(target.stationId);
+export function stationStatus(
+  rules: RoutingRules,
+  stationId: string,
+  moment: RoutingMoment | null,
+): StationStatus {
+  if (!rules.activeStationIds.has(stationId)) return { open: false, why: "switched_off" };
+  if (stationId === rules.defaultStationId) return { open: true, why: "default" };
+  if (moment === null) return { open: true, why: "time_not_applied" };
+  const timing = rules.timing.get(stationId);
+  if (timing?.today === "closed") return { open: false, why: "closed_by_hand" };
+  if (timing?.today === "open") return { open: true, why: "opened_by_hand" };
+  if (!timing?.hours.length) return { open: true, why: "no_hours" };
+  const inside = timing.hours.some(({ weekday, opensAt, closesAt }) => {
+    const opening = opensAt.slice(0, 5);
+    const closing = closesAt.slice(0, 5);
+    const time = moment.timeOfDay;
+    if (opening < closing) return weekday === moment.weekday && opening <= time && time < closing;
+    return (
+      (weekday === moment.weekday && time >= opening) ||
+      ((weekday + 1) % 7 === moment.weekday && time < closing)
+    );
+  });
+  return inside ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" };
+}
+
+function walkFallbacks(
+  rules: RoutingRules,
+  start: string | null,
+  moment: RoutingMoment | null,
+  seen: Set<string>,
+) {
+  const steps: FallbackStep[] = [];
+  let current = start;
+  while (current !== null && !seen.has(current)) {
+    seen.add(current);
+    const status = stationStatus(rules, current, moment);
+    if (status.open) return { stationId: current, steps };
+    steps.push({ stationId: current, why: status.why });
+    current = rules.timing.get(current)?.fallbackId ?? null;
+  }
+  return { stationId: null, steps };
+}
+
+export function followFallbacks(
+  rules: RoutingRules,
+  stationId: string,
+  moment: RoutingMoment | null,
+): { readonly stationId: string | null; readonly steps: readonly FallbackStep[] } {
+  return walkFallbacks(rules, stationId, moment, new Set());
+}
+
+export function closedSendsTo(
+  rules: RoutingRules,
+  stationId: string,
+  moment: RoutingMoment | null,
+): string | null {
+  if (stationId === rules.defaultStationId) return stationId;
+  return walkFallbacks(
+    rules,
+    rules.timing.get(stationId)?.fallbackId ?? null,
+    moment,
+    new Set([stationId]),
+  ).stationId;
 }
 
 export function chooseMaker(
   rules: RoutingRules,
   product: ProductFacts,
   zoneId: string | null,
+  moment: RoutingMoment | null,
 ): MakerChoice {
   const ancestors = folderAncestors(rules.parentOf, product.categoryId);
-  const skipped: SkippedRule[] = [];
-  const accept = (target: RouteTarget, decision: RoutingDecision): MakerChoice | null => {
-    if (target.kind === "station" && !rules.activeStationIds.has(target.stationId)) {
-      skipped.push({ decision, stationId: target.stationId });
-      return null;
-    }
-    return { route: target, decidedBy: decision, skipped };
+  const accept = (target: RouteTarget, decision: RoutingDecision): MakerChoice => {
+    if (target.kind === "no_preparation")
+      return { route: target, decidedBy: decision, fallbacks: [], noReplacement: false };
+    const { stationId, steps } = followFallbacks(rules, target.stationId, moment);
+    return {
+      route: stationId === null ? null : { kind: "station", stationId },
+      decidedBy: decision,
+      fallbacks: steps,
+      noReplacement: stationId === null,
+    };
   };
 
   for (const exception of orderedExceptions(rules)) {
@@ -95,22 +187,23 @@ export function chooseMaker(
       continue;
     }
     const choice = accept(exception.target, { kind: "exception", exceptionId: exception.id });
-    if (choice !== null) return choice;
+    return choice;
   }
   for (const categoryId of ancestors) {
     const target = rules.claims.get(categoryId);
     if (target === undefined) continue;
     const choice = accept(target, { kind: "claim", categoryId });
-    if (choice !== null) return choice;
+    return choice;
   }
   if (rules.defaultStationId !== null && rules.activeStationIds.has(rules.defaultStationId)) {
     return {
       route: { kind: "station", stationId: rules.defaultStationId },
       decidedBy: { kind: "default" },
-      skipped,
+      fallbacks: [],
+      noReplacement: false,
     };
   }
-  return { route: null, decidedBy: null, skipped };
+  return { route: null, decidedBy: null, fallbacks: [], noReplacement: false };
 }
 
 export function unreachableExceptions(rules: RoutingRules): Set<string> {
@@ -118,7 +211,6 @@ export function unreachableExceptions(rules: RoutingRules): Set<string> {
   const unreachable = new Set<string>();
   for (const [i, candidate] of exceptions.entries()) {
     const covered = exceptions.slice(0, i).some((earlier) => {
-      if (!targetIsActive(rules, earlier.target)) return false;
       if (earlier.zoneId !== null && earlier.zoneId !== candidate.zoneId) return false;
       if (earlier.categoryId === null && earlier.productId === null) return true;
       if (earlier.productId !== null) return earlier.productId === candidate.productId;

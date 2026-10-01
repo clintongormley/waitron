@@ -1,9 +1,10 @@
-import type { RouteException, RouteTarget, RoutingDecision, SkippedRule } from "./routing.js";
+import type { FallbackStep, RouteException, RouteTarget, RoutingDecision } from "./routing.js";
 
 export interface RouteExplanation {
   route: RouteTarget | null;
   decidedBy: RoutingDecision | null;
-  skipped: SkippedRule[];
+  fallbacks: FallbackStep[];
+  noReplacement: boolean;
   stations: { id: string; name: string; active: boolean }[];
 }
 

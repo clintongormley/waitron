@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   chooseMaker,
+  closedSendsTo,
+  followFallbacks,
   folderAncestors,
+  stationStatus,
   unreachableExceptions,
   type RouteTarget,
+  type RoutingMoment,
   type RoutingRules,
 } from "./routing.js";
 
@@ -23,6 +27,7 @@ const base: RoutingRules = {
   parentOf,
   activeStationIds: new Set(["bar", "cocktailBar", "mainBar", "terraceBar", "kitchen"]),
   defaultStationId: "kitchen",
+  timing: new Map(),
 };
 const mojito = { productId: "mojito", routedProductId: "mojito", categoryId: "cocktails" };
 const lager = { productId: "lager", routedProductId: "lager", categoryId: "beer" };
@@ -30,19 +35,21 @@ const bread = { productId: "bread", routedProductId: "bread", categoryId: null }
 
 describe("chooseMaker", () => {
   it("gives the nearest claimed folder, and an unclaimed subfolder its parent's claim", () => {
-    expect(chooseMaker(base, mojito, null)).toEqual({
+    expect(chooseMaker(base, mojito, null, null)).toEqual({
       route: station("cocktailBar"),
       decidedBy: { kind: "claim", categoryId: "cocktails" },
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
     });
-    expect(chooseMaker(base, lager, "indoors").decidedBy).toEqual({
+    expect(chooseMaker(base, lager, "indoors", null).decidedBy).toEqual({
       kind: "claim",
       categoryId: "drinks",
     });
-    expect(chooseMaker(base, bread, "indoors")).toEqual({
+    expect(chooseMaker(base, bread, "indoors", null)).toEqual({
       route: station("kitchen"),
       decidedBy: { kind: "default" },
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
     });
   });
 
@@ -68,13 +75,13 @@ describe("chooseMaker", () => {
         },
       ],
     };
-    expect(chooseMaker(rules, mojito, "terrace").route).toEqual(station("mainBar"));
-    expect(chooseMaker(rules, lager, "terrace").route).toEqual(station("terraceBar"));
-    expect(chooseMaker(rules, mojito, "indoors").decidedBy).toEqual({
+    expect(chooseMaker(rules, mojito, "terrace", null).route).toEqual(station("mainBar"));
+    expect(chooseMaker(rules, lager, "terrace", null).route).toEqual(station("terraceBar"));
+    expect(chooseMaker(rules, mojito, "indoors", null).decidedBy).toEqual({
       kind: "claim",
       categoryId: "cocktails",
     });
-    expect(chooseMaker(rules, mojito, null).decidedBy).toEqual({
+    expect(chooseMaker(rules, mojito, null, null).decidedBy).toEqual({
       kind: "claim",
       categoryId: "cocktails",
     });
@@ -95,37 +102,50 @@ describe("chooseMaker", () => {
       ],
     };
     const lagerPint = { productId: "lager-pint", routedProductId: "lager", categoryId: "beer" };
-    expect(chooseMaker(rules, lagerPint, null)).toEqual({
+    expect(chooseMaker(rules, lagerPint, null, null)).toEqual({
       route: { kind: "no_preparation" },
       decidedBy: { kind: "exception", exceptionId: "e1" },
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
     });
   });
 
   it("routes a variant with a folder of its own by that folder", () => {
     const mocktail = { productId: "virgin", routedProductId: "mojito", categoryId: "food" };
-    expect(chooseMaker(base, mocktail, null).decidedBy).toEqual({ kind: "default" });
+    expect(chooseMaker(base, mocktail, null, null).decidedBy).toEqual({ kind: "default" });
   });
 
-  it("skips a rule whose station is switched off, and records it", () => {
-    const rules = { ...base, activeStationIds: new Set(["bar", "kitchen"]) };
-    expect(chooseMaker(rules, mojito, null)).toEqual({
-      route: station("bar"),
-      decidedBy: { kind: "claim", categoryId: "drinks" },
-      skipped: [{ decision: { kind: "claim", categoryId: "cocktails" }, stationId: "cocktailBar" }],
+  it("follows a switched-off station's fallback", () => {
+    const rules = {
+      ...base,
+      activeStationIds: new Set(["bar", "mainBar", "kitchen"]),
+      timing: new Map([["cocktailBar", { fallbackId: "mainBar", hours: [], today: null }]]),
+    };
+    expect(chooseMaker(rules, mojito, null, null)).toEqual({
+      route: station("mainBar"),
+      decidedBy: { kind: "claim", categoryId: "cocktails" },
+      fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
+      noReplacement: false,
+    });
+    expect(chooseMaker({ ...rules, timing: new Map() }, mojito, null, null)).toEqual({
+      route: null,
+      decidedBy: { kind: "claim", categoryId: "cocktails" },
+      fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
+      noReplacement: true,
     });
   });
 
-  it("never skips a no-preparation target", () => {
+  it("never walks a no-preparation target", () => {
     const rules = { ...base, claims: new Map([["drinks", { kind: "no_preparation" as const }]]) };
-    expect(chooseMaker(rules, lager, null).route).toEqual({ kind: "no_preparation" });
+    expect(chooseMaker(rules, lager, null, null).route).toEqual({ kind: "no_preparation" });
   });
 
   it("returns no route when nothing matches and there is no active default", () => {
-    expect(chooseMaker({ ...base, defaultStationId: null }, bread, null)).toEqual({
+    expect(chooseMaker({ ...base, defaultStationId: null }, bread, null, null)).toEqual({
       route: null,
       decidedBy: null,
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
     });
   });
 });
@@ -225,7 +245,7 @@ describe("unreachableExceptions", () => {
     expect(unreachableExceptions(rules)).toEqual(new Set(["p1", "p3"]));
   });
 
-  it("does not flag an exception behind one whose station is switched off", () => {
+  it("flags an exception behind one whose station is switched off", () => {
     const rules: RoutingRules = {
       ...base,
       activeStationIds: new Set(["bar", "mainBar", "kitchen"]),
@@ -248,7 +268,7 @@ describe("unreachableExceptions", () => {
         },
       ],
     };
-    expect(unreachableExceptions(rules)).toEqual(new Set());
+    expect(unreachableExceptions(rules)).toEqual(new Set(["on"]));
   });
 });
 
@@ -276,7 +296,7 @@ describe("the design's terrace example, written in the wrong order", () => {
       ],
     };
     expect(unreachableExceptions(rules)).toEqual(new Set(["cocktails"]));
-    expect(chooseMaker(rules, mojito, "terrace").route).toEqual(station("terraceBar"));
+    expect(chooseMaker(rules, mojito, "terrace", null).route).toEqual(station("terraceBar"));
   });
 });
 
@@ -301,7 +321,7 @@ describe("routing edge cases", () => {
       },
     ];
     const rules = { ...base, exceptions };
-    expect(chooseMaker(rules, bread, null).decidedBy).toEqual({
+    expect(chooseMaker(rules, bread, null, null).decidedBy).toEqual({
       kind: "exception",
       exceptionId: "a",
     });
@@ -323,20 +343,20 @@ describe("routing edge cases", () => {
         },
       ],
     };
-    expect(chooseMaker(rules, mojito, null).decidedBy).toEqual({
+    expect(chooseMaker(rules, mojito, null, null).decidedBy).toEqual({
       kind: "exception",
       exceptionId: "both",
     });
-    expect(chooseMaker(rules, { ...mojito, categoryId: "food" }, null).decidedBy).toEqual({
+    expect(chooseMaker(rules, { ...mojito, categoryId: "food" }, null, null).decidedBy).toEqual({
       kind: "default",
     });
-    expect(chooseMaker(rules, { ...mojito, routedProductId: "different" }, null).decidedBy).toEqual(
-      { kind: "claim", categoryId: "cocktails" },
-    );
-    expect(chooseMaker(rules, bread, null).decidedBy).toEqual({ kind: "default" });
+    expect(
+      chooseMaker(rules, { ...mojito, routedProductId: "different" }, null, null).decidedBy,
+    ).toEqual({ kind: "claim", categoryId: "cocktails" });
+    expect(chooseMaker(rules, bread, null, null).decidedBy).toEqual({ kind: "default" });
   });
 
-  it("records every inactive match in search order before accepting no preparation", () => {
+  it("keeps the first switched-off exception even when later rules say no preparation", () => {
     const rules = {
       ...base,
       activeStationIds: new Set<string>(),
@@ -363,22 +383,20 @@ describe("routing edge cases", () => {
         },
       ],
     };
-    expect(chooseMaker(rules, mojito, null)).toEqual({
-      route: { kind: "no_preparation" },
-      decidedBy: { kind: "claim", categoryId: "drinks" },
-      skipped: [
-        { decision: { kind: "exception", exceptionId: "first" }, stationId: "mainBar" },
-        { decision: { kind: "exception", exceptionId: "second" }, stationId: "bar" },
-        { decision: { kind: "claim", categoryId: "cocktails" }, stationId: "cocktailBar" },
-      ],
+    expect(chooseMaker(rules, mojito, null, null)).toEqual({
+      route: null,
+      decidedBy: { kind: "exception", exceptionId: "first" },
+      fallbacks: [{ stationId: "mainBar", why: "switched_off" }],
+      noReplacement: true,
     });
   });
 
   it("rejects a switched-off default instead of routing work to it", () => {
-    expect(chooseMaker({ ...base, activeStationIds: new Set() }, bread, null)).toEqual({
+    expect(chooseMaker({ ...base, activeStationIds: new Set() }, bread, null, null)).toEqual({
       route: null,
       decidedBy: null,
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
     });
   });
 
@@ -473,4 +491,240 @@ describe("routing edge cases", () => {
       expect(unreachableExceptions(rules)).toEqual(new Set(unreachable ? ["b"] : []));
     },
   );
+});
+
+const at = (weekday: number, timeOfDay: string): RoutingMoment => ({ weekday, timeOfDay });
+const FRI = 5,
+  SAT = 6;
+
+describe("opening hours", () => {
+  const rules: RoutingRules = {
+    ...base,
+    activeStationIds: new Set([
+      ...base.activeStationIds,
+      "upstairs",
+      "downstairs",
+      "late",
+      "midnight",
+    ]),
+    timing: new Map([
+      [
+        "upstairs",
+        {
+          fallbackId: "downstairs",
+          hours: [{ weekday: FRI, opensAt: "19:00", closesAt: "21:00" }],
+          today: null,
+        },
+      ],
+      [
+        "late",
+        {
+          fallbackId: null,
+          hours: [{ weekday: FRI, opensAt: "22:00:00", closesAt: "02:00:00" }],
+          today: null,
+        },
+      ],
+      [
+        "midnight",
+        {
+          fallbackId: null,
+          hours: [{ weekday: FRI, opensAt: "20:00", closesAt: "00:00" }],
+          today: null,
+        },
+      ],
+    ]),
+  };
+  const open = (id: string, m: RoutingMoment | null) => stationStatus(rules, id, m);
+
+  it("includes the opening minute and excludes the closing minute", () => {
+    expect(open("upstairs", at(FRI, "19:00"))).toEqual({ open: true, why: "in_hours" });
+    expect(open("upstairs", at(FRI, "20:59"))).toEqual({ open: true, why: "in_hours" });
+    expect(open("upstairs", at(FRI, "21:00"))).toEqual({ open: false, why: "out_of_hours" });
+    expect(open("upstairs", at(SAT, "20:00"))).toEqual({ open: false, why: "out_of_hours" });
+  });
+
+  it("keeps past-midnight hours open on the next day up to closing", () => {
+    expect(open("late", at(FRI, "21:59")).open).toBe(false);
+    expect(open("late", at(FRI, "23:30")).open).toBe(true);
+    expect(open("late", at(SAT, "01:59")).open).toBe(true);
+    expect(open("late", at(SAT, "02:00")).open).toBe(false);
+    expect(open("midnight", at(FRI, "23:59")).open).toBe(true);
+    expect(open("midnight", at(SAT, "00:00")).open).toBe(false);
+    const saturday = {
+      ...rules,
+      timing: new Map([
+        [
+          "late",
+          {
+            fallbackId: null,
+            hours: [{ weekday: SAT, opensAt: "22:00", closesAt: "02:00" }],
+            today: null,
+          },
+        ],
+      ]),
+    };
+    expect(stationStatus(saturday, "late", at(0, "01:00")).open).toBe(true);
+  });
+
+  it("uses no hours and the default before schedule closures", () => {
+    expect(open("downstairs", at(FRI, "04:00"))).toEqual({ open: true, why: "no_hours" });
+    const kitchenHours = {
+      ...rules,
+      timing: new Map([
+        [
+          "kitchen",
+          {
+            fallbackId: "bar",
+            hours: [{ weekday: 1, opensAt: "09:00", closesAt: "10:00" }],
+            today: "closed" as const,
+          },
+        ],
+      ]),
+    };
+    expect(stationStatus(kitchenHours, "kitchen", at(FRI, "20:00"))).toEqual({
+      open: true,
+      why: "default",
+    });
+  });
+
+  it("uses today's by-hand change, except when time does not apply", () => {
+    const closed = {
+      ...rules,
+      timing: new Map([
+        [
+          "upstairs",
+          {
+            fallbackId: "downstairs",
+            hours: [{ weekday: FRI, opensAt: "19:00", closesAt: "21:00" }],
+            today: "closed" as const,
+          },
+        ],
+      ]),
+    };
+    expect(stationStatus(closed, "upstairs", at(FRI, "20:00"))).toEqual({
+      open: false,
+      why: "closed_by_hand",
+    });
+    const opened = {
+      ...rules,
+      timing: new Map([
+        [
+          "upstairs",
+          {
+            fallbackId: "downstairs",
+            hours: [{ weekday: FRI, opensAt: "19:00", closesAt: "21:00" }],
+            today: "open" as const,
+          },
+        ],
+      ]),
+    };
+    expect(stationStatus(opened, "upstairs", at(SAT, "12:00"))).toEqual({
+      open: true,
+      why: "opened_by_hand",
+    });
+    expect(stationStatus(closed, "upstairs", null)).toEqual({
+      open: true,
+      why: "time_not_applied",
+    });
+    expect(stationStatus(base, "retired", null)).toEqual({ open: false, why: "switched_off" });
+  });
+});
+
+describe("fallbacks", () => {
+  const rules: RoutingRules = {
+    ...base,
+    claims: new Map([["drinks", station("upstairs")]]),
+    activeStationIds: new Set(["upstairs", "downstairs", "kitchen", "a", "b"]),
+    timing: new Map([
+      [
+        "upstairs",
+        {
+          fallbackId: "downstairs",
+          hours: [{ weekday: FRI, opensAt: "19:00", closesAt: "21:00" }],
+          today: null,
+        },
+      ],
+      ["downstairs", { fallbackId: null, hours: [], today: null }],
+      ["a", { fallbackId: "b", hours: [], today: "closed" }],
+      ["b", { fallbackId: "a", hours: [], today: "closed" }],
+    ]),
+  };
+
+  it("sends work from an out-of-hours station to its first open fallback", () => {
+    expect(chooseMaker(rules, lager, null, at(FRI, "22:00"))).toEqual({
+      route: station("downstairs"),
+      decidedBy: { kind: "claim", categoryId: "drinks" },
+      fallbacks: [{ stationId: "upstairs", why: "out_of_hours" }],
+      noReplacement: false,
+    });
+    expect(chooseMaker(rules, lager, null, at(FRI, "20:00")).route).toEqual(station("upstairs"));
+  });
+
+  it("returns a dead end when every fallback is closed", () => {
+    const closed = {
+      ...rules,
+      timing: new Map([
+        ...rules.timing,
+        ["downstairs", { fallbackId: null, hours: [], today: "closed" as const }],
+      ]),
+    };
+    expect(chooseMaker(closed, lager, null, at(FRI, "22:00"))).toEqual({
+      route: null,
+      decidedBy: { kind: "claim", categoryId: "drinks" },
+      fallbacks: [
+        { stationId: "upstairs", why: "out_of_hours" },
+        { stationId: "downstairs", why: "closed_by_hand" },
+      ],
+      noReplacement: true,
+    });
+  });
+
+  it("stops a fallback loop before revisiting a station", () => {
+    expect(followFallbacks(rules, "a", at(FRI, "20:00"))).toEqual({
+      stationId: null,
+      steps: [
+        { stationId: "a", why: "closed_by_hand" },
+        { stationId: "b", why: "closed_by_hand" },
+      ],
+    });
+  });
+
+  it("reaches the default only through an explicit fallback", () => {
+    const toKitchen = {
+      ...rules,
+      timing: new Map([
+        ...rules.timing,
+        ["a", { fallbackId: "kitchen", hours: [], today: "closed" as const }],
+      ]),
+    };
+    expect(followFallbacks(toKitchen, "a", at(FRI, "20:00")).stationId).toBe("kitchen");
+  });
+
+  it("keeps a missing default distinct from a closed chain", () => {
+    expect(
+      chooseMaker({ ...rules, defaultStationId: null }, bread, null, at(FRI, "20:00")),
+    ).toEqual({
+      route: null,
+      decidedBy: null,
+      fallbacks: [],
+      noReplacement: false,
+    });
+  });
+
+  it("does not walk a no-preparation route", () => {
+    const np = { ...rules, claims: new Map([["drinks", { kind: "no_preparation" as const }]]) };
+    expect(chooseMaker(np, lager, null, at(FRI, "22:00"))).toEqual({
+      route: { kind: "no_preparation" },
+      decidedBy: { kind: "claim", categoryId: "drinks" },
+      fallbacks: [],
+      noReplacement: false,
+    });
+  });
+
+  it("finds where a station's work would go if it closed", () => {
+    expect(closedSendsTo(rules, "upstairs", at(FRI, "20:00"))).toBe("downstairs");
+    expect(closedSendsTo(rules, "downstairs", at(FRI, "20:00"))).toBeNull();
+    expect(closedSendsTo(rules, "a", at(FRI, "20:00"))).toBeNull();
+    expect(closedSendsTo(rules, "kitchen", at(FRI, "20:00"))).toBe("kitchen");
+  });
 });

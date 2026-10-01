@@ -1393,7 +1393,8 @@ describe("routing explanation route", () => {
     expect(await response.json()).toMatchObject({
       route: { kind: "station", stationId: fx.stationId },
       decidedBy: { kind: "default" },
-      skipped: [],
+      fallbacks: [],
+      noReplacement: false,
       stations: [{ id: fx.stationId, name: "Terrace bar", active: true }],
     });
     expect(

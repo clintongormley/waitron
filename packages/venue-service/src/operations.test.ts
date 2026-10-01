@@ -832,7 +832,7 @@ describe("routing outcomes and menu readiness", () => {
     });
   });
 
-  it("skips a switched-off folder claim for its active parent claim", async () => {
+  it("treats a switched-off folder claim without a fallback as a dead end", async () => {
     const { cfg, zoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const kitchen = await insertStation(tx, cfg.locationId, "Kitchen");
@@ -856,7 +856,7 @@ describe("routing outcomes and menu readiness", () => {
         .where(eq(kitchenStations.id, closedGrill));
 
       await expect(resolveMakers(tx, cfg, zoneId, [steak.id])).resolves.toEqual(
-        new Map([[steak.id, station(kitchen)]]),
+        new Map([[steak.id, null]]),
       );
     });
   });

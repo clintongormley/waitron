@@ -484,17 +484,16 @@ export class PrepStationsScreen extends LitElement {
       this.explanation?.stations.find((station) => station.id === id)?.name ?? this.#stationName(id)
     );
   }
-  #testRule(decision: RoutingDecision, skippedStationId?: string): string {
+  #testRule(decision: RoutingDecision): string {
     if (decision.kind === "default") return t("prep.test_default");
     if (decision.kind === "claim") {
       const folder = this.#path(decision.categoryId).split(" › ").at(-1)!;
-      if (!skippedStationId && this.explanation?.route?.kind === "no_preparation")
+      if (this.explanation?.route?.kind === "no_preparation")
         return t("prep.test_no_prep_claim")
           .replace("{folder}", folder)
           .replace("{target}", t("prep.no_preparation"));
-      const name = skippedStationId
-        ? this.#testStationName(skippedStationId)
-        : this.explanation?.route?.kind === "station"
+      const name =
+        this.explanation?.route?.kind === "station"
           ? this.#testStationName(this.explanation.route.stationId)
           : t("prep.no_preparation");
       return t("prep.test_claim").replace("{station}", name).replace("{folder}", folder);
@@ -538,7 +537,6 @@ export class PrepStationsScreen extends LitElement {
         ${explanation?.route === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
         ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
         ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${this.#testRule(explanation.decidedBy)}</p>` : nothing}
-        ${explanation?.skipped.map((rule) => html`<p>${t("prep.test_skipped")}: ${this.#testRule(rule.decision, rule.stationId)}${t("prep.test_station_off").replaceAll("{station}", this.#testStationName(rule.stationId))}</p>`) ?? nothing}
       </div>
     </wt-card>`;
   }

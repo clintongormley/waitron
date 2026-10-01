@@ -182,12 +182,13 @@ describe("route explanation", () => {
       expect(await explainRoute(tx, f.cfg, f.variant, f.terrace)).toMatchObject({
         route: { kind: "station", stationId: f.terraceBar },
         decidedBy: { kind: "exception", exceptionId: id },
-        skipped: [],
+        fallbacks: [],
+        noReplacement: false,
         stations: expect.arrayContaining([{ id: f.terraceBar, name: "Terrace Bar", active: true }]),
       });
     }));
 
-  it("names a claim after skipping a switched-off exception", async () =>
+  it("names a switched-off exception as a dead end", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
@@ -202,9 +203,10 @@ describe("route explanation", () => {
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
       expect(await explainRoute(tx, f.cfg, f.mojito, f.terrace)).toMatchObject({
-        route: { kind: "station", stationId: f.bar },
-        decidedBy: { kind: "claim", categoryId: f.drinks },
-        skipped: [{ decision: { kind: "exception", exceptionId: id }, stationId: f.terraceBar }],
+        route: null,
+        decidedBy: { kind: "exception", exceptionId: id },
+        fallbacks: [{ stationId: f.terraceBar, why: "switched_off" }],
+        noReplacement: true,
         stations: expect.arrayContaining([
           { id: f.terraceBar, name: "Terrace Bar", active: false },
         ]),
@@ -480,6 +482,7 @@ describe("stored preparation rules", () => {
           await loadRoutingRules(tx, f.cfg),
           { productId: f.mojito, routedProductId: f.mojito, categoryId: moved!.categoryId },
           f.terrace,
+          null,
         ),
       ).toMatchObject({ decidedBy: { kind: "claim", categoryId: f.drinks } });
     }));
@@ -679,17 +682,21 @@ describe("assigning an unfiled product from Prep stations", () => {
         target: { kind: "station", stationId: f.bar },
       });
       const product = { productId: f.bread, routedProductId: f.bread, categoryId: null };
-      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual(
-        noPrep,
-      );
+      expect(
+        chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace, null).route,
+      ).toEqual(noPrep);
       const { assignUnfiledProduct } = await import("./routing-store.js");
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
-      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual({
+      expect(
+        chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace, null).route,
+      ).toEqual({
         kind: "station",
         stationId: f.terraceBar,
       });
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.bar });
-      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual({
+      expect(
+        chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace, null).route,
+      ).toEqual({
         kind: "station",
         stationId: f.bar,
       });

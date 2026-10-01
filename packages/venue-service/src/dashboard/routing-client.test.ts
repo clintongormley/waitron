@@ -80,7 +80,13 @@ it("offers an active product to the tester when it has no variants", async () =>
 });
 
 it("asks the route tester for a product and an optional zone", async () => {
-  const request = vi.fn(async () => ({ route: null, decidedBy: null, skipped: [], stations: [] }));
+  const request = vi.fn(async () => ({
+    route: null,
+    decidedBy: null,
+    fallbacks: [],
+    noReplacement: false,
+    stations: [],
+  }));
   const result = await new PrepStationsApi(request as DashboardRequest).explain("lager", null);
   expect(result.route).toBeNull();
   expect(request).toHaveBeenCalledWith(
@@ -92,7 +98,13 @@ it("asks the route tester for a product and an optional zone", async () => {
 });
 
 it("escapes product and zone identifiers in a zoned route explanation", async () => {
-  const request = vi.fn(async () => ({ route: null, decidedBy: null, skipped: [], stations: [] }));
+  const request = vi.fn(async () => ({
+    route: null,
+    decidedBy: null,
+    fallbacks: [],
+    noReplacement: false,
+    stations: [],
+  }));
   await new PrepStationsApi(request as DashboardRequest).explain("rice & beans", "front/bar");
   expect(request).toHaveBeenCalledWith(
     "/management-api/venue-service/routing/explain?productId=rice+%26+beans&zoneId=front%2Fbar",

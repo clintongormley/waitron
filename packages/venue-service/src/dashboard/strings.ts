@@ -82,8 +82,6 @@ const en = {
   "prep.test_no_prep_claim": "{folder} is assigned to {target}",
   "prep.test_exception": "the exception '{rule}'",
   "prep.test_default": "nothing else matched, so the default station takes it",
-  "prep.test_skipped": "Skipped",
-  "prep.test_station_off": ", but {station} is switched off",
   "prep.test_no_route":
     "Nothing can make this: no rule matched and no default station is switched on.",
   "prep.test_error": "The route could not be checked.",
@@ -270,8 +268,6 @@ const es: Record<keyof typeof en, string> = {
   "prep.test_no_prep_claim": "{folder} está asignada a {target}",
   "prep.test_exception": "la excepción «{rule}»",
   "prep.test_default": "ninguna otra regla coincidió, así que va a la estación predeterminada",
-  "prep.test_skipped": "Omitida",
-  "prep.test_station_off": ", pero {station} está desactivada",
   "prep.test_no_route":
     "No se puede preparar: ninguna regla coincidió y ninguna estación predeterminada está activa.",
   "prep.test_error": "No se pudo comprobar la ruta.",

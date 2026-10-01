@@ -287,6 +287,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
     parentOf: new Map(folders.map((row) => [row.id, row.parentId])),
     activeStationIds: new Set(stations.filter((row) => row.active).map((row) => row.id)),
     defaultStationId: stations.find((row) => row.active && row.isDefault)?.id ?? null,
+    timing: new Map(),
   };
   return { rules, folders, stations };
 }
@@ -323,10 +324,11 @@ export async function explainRoute(
       categoryId: product.categoryId,
     },
     zoneId,
+    null,
   );
   return {
     ...choice,
-    skipped: [...choice.skipped],
+    fallbacks: [...choice.fallbacks],
     stations: stations.map(({ id, name, active }) => ({ id, name, active })),
   };
 }
@@ -438,8 +440,8 @@ export async function previewRoutingChange(
         routedProductId: product.routedId,
         categoryId: product.categoryId,
       };
-      const from = chooseMaker(rules, facts, zone.id).route;
-      const to = chooseMaker(after, facts, zone.id).route;
+      const from = chooseMaker(rules, facts, zone.id, null).route;
+      const to = chooseMaker(after, facts, zone.id, null).route;
       if (JSON.stringify(from) !== JSON.stringify(to))
         moves.push({
           productId: product.id,
@@ -503,6 +505,7 @@ export async function resolveMakers(
           categoryId: product.categoryId,
         },
         zoneId,
+        null,
       ).route,
     );
   }
@@ -532,6 +535,7 @@ export async function describeMakers(
       route: chooseMaker(
         rules,
         { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
+        null,
         null,
       ).route,
       variesByZone: rules.exceptions.some(
