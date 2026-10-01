@@ -186,7 +186,7 @@ function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
  *  `host` overrides the request `Host` header. */
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "PUT",
   path: string,
   opts: { body?: unknown; cookie?: string | null; host?: string } = {},
 ): Promise<Response> {
@@ -993,6 +993,90 @@ describe("Device management routes (device.manage)", () => {
       );
       expect(malformed.status).toBe(404);
     });
+  });
+});
+
+describe("PUT /management-api/devices/:id/made-here (device.manage)", () => {
+  it("sets a device's list and includes it in the management GET", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue);
+    const bar = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Bar" }),
+    );
+    const path = `/management-api/devices/${deviceId}/made-here`;
+    const put = await send(app, "PUT", path, {
+      cookie: venue.managerCookie,
+      body: { stationIds: [bar.id] },
+    });
+    expect(put.status).toBe(204);
+    const get = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    expect(get.status).toBe(200);
+    expect(
+      ((await get.json()) as { id: string; madeHereStationIds: string[] }[]).find(
+        (d) => d.id === deviceId,
+      )?.madeHereStationIds,
+    ).toEqual([bar.id]);
+  });
+
+  it("refuses missing permission, malformed input, unknown device and switched-off station", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue);
+    const path = `/management-api/devices/${deviceId}/made-here`;
+    const cases: { path: string; cookie?: string; body: unknown; status: number; code: string }[] =
+      [
+        { path, body: { stationIds: [] }, status: 401, code: "management_session.required" },
+        {
+          path,
+          cookie: venue.staffCookie,
+          body: { stationIds: [] },
+          status: 403,
+          code: "authorization.not_permitted",
+        },
+        {
+          path: "/management-api/devices/bad/made-here",
+          cookie: venue.managerCookie,
+          body: { stationIds: [] },
+          status: 404,
+          code: "device.not_found",
+        },
+        {
+          path: `/management-api/devices/${randomUUID()}/made-here`,
+          cookie: venue.managerCookie,
+          body: { stationIds: [] },
+          status: 404,
+          code: "device.not_found",
+        },
+        ...[{}, { stationIds: null }, { stationIds: ["bad"] }].map((body) => ({
+          path,
+          cookie: venue.managerCookie,
+          body,
+          status: 400,
+          code: "management.request_invalid",
+        })),
+      ];
+    for (const one of cases) {
+      const res = await send(app, "PUT", one.path, { cookie: one.cookie, body: one.body });
+      expect(res.status).toBe(one.status);
+      expect(await res.json()).toMatchObject({
+        error: {
+          code: one.code,
+          ...(one.code === "management.request_invalid" ? { params: { field: "stationIds" } } : {}),
+        },
+      });
+    }
+    const off = await withTransaction(suite.db, async (tx) => {
+      const row = await createStation(tx, venue.cfg, { name: "Off" });
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, row.id));
+      return row;
+    });
+    const res = await send(app, "PUT", path, {
+      cookie: venue.managerCookie,
+      body: { stationIds: [off.id] },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "station.not_found" } });
   });
 });
 

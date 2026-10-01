@@ -120,6 +120,22 @@ export class DevicesScreen extends LitElement {
         flex: 1 1 calc(var(--wt-space-6) * 6);
         min-width: 0;
       }
+      .made-here {
+        margin: var(--wt-space-3) 0 0;
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .made-here legend {
+        color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .made-here .check {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-top: var(--wt-space-2);
+      }
       .hint {
         margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
@@ -182,6 +198,7 @@ export class DevicesScreen extends LitElement {
   @state() private armedDenyId: string | null = null;
   @state() private armedRevokeId: string | null = null;
   @state() private errorKey: string | null = null;
+  @state() private madeHereRefusals: Record<string, string> = {};
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -442,6 +459,26 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  async #onMadeHereChange(device: DeviceRow): Promise<void> {
+    const group = this.shadowRoot?.querySelector(`[data-test="made-here-${device.id}"]`);
+    const stationIds = [
+      ...(group?.querySelectorAll<HTMLInputElement>('input[name="stationIds"]') ?? []),
+    ]
+      .filter((box) => box.checked)
+      .map((box) => box.value);
+    this.madeHereRefusals = Object.fromEntries(
+      Object.entries(this.madeHereRefusals).filter(([id]) => id !== device.id),
+    );
+    try {
+      await this.api.setDeviceMadeHere(device.id, stationIds);
+      this.devices = this.devices.map((row) =>
+        row.id === device.id ? { ...row, madeHereStationIds: stationIds } : row,
+      );
+    } catch (error) {
+      this.madeHereRefusals = { ...this.madeHereRefusals, [device.id]: codeOf(error) };
+    }
+  }
+
   #profileName(deviceProfileId: string | null): string {
     if (deviceProfileId === null) return t("devices.device_profile_none");
     return (
@@ -569,6 +606,28 @@ export class DevicesScreen extends LitElement {
           }
         </div>
         ${device.active ? this.#renderHardware(device) : nothing}
+        ${
+          device.active && device.kind !== "kds_station"
+            ? html`<fieldset class="made-here" data-test="made-here-${device.id}">
+                <legend>${t("devices.made_here")}</legend>
+                <p class="hint">${t("devices.made_here_hint")}</p>
+                ${this.stations.map(
+                  (station) =>
+                    html`<label class="check">
+                      <input
+                        type="checkbox"
+                        name="stationIds"
+                        value=${station.id}
+                        .checked=${live(device.madeHereStationIds.includes(station.id))}
+                        @change=${() => void this.#onMadeHereChange(device)}
+                      />
+                      ${station.name}</label
+                    >`,
+                )}
+                ${this.madeHereRefusals[device.id] === undefined ? nothing : html`<p class="error" role="alert">${codeMessage(this.madeHereRefusals[device.id]!)}</p>`}
+              </fieldset>`
+            : nothing
+        }
       </wt-card>
     </li>`;
   }

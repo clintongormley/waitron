@@ -724,6 +724,9 @@ export const en = {
   "devices.receipt_printer": "Receipt printer",
   "devices.receipt_printer_none": "— no printer —",
   "devices.default_reader": "Default card reader",
+  "devices.made_here": "Made here, no ticket",
+  "devices.made_here_hint":
+    "When this device sends an item for a ticked station, the item gets no ticket and does not appear on kitchen screens. That station is still where it is made.",
   "devices.default_reader_none": "— cash and manual card only —",
   "devices.label": "Label",
   "devices.pairing_title": "Allow new devices",
@@ -2671,6 +2674,9 @@ export const es: Record<StringKey, string> = {
   "devices.receipt_printer": "Impresora de tickets",
   "devices.receipt_printer_none": "— sin impresora —",
   "devices.default_reader": "Lector predeterminado",
+  "devices.made_here": "Se prepara aquí, sin comanda",
+  "devices.made_here_hint":
+    "Cuando este dispositivo envía un artículo de una estación marcada, el artículo no lleva comanda ni aparece en las pantallas de cocina. Esa estación sigue constando como donde se prepara.",
   "devices.default_reader_none": "— solo efectivo y tarjeta manual —",
   "devices.label": "Etiqueta",
   "devices.pairing_title": "Permitir dispositivos nuevos",
