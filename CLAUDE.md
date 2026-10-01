@@ -250,7 +250,8 @@ hook, or how tests are scheduled:
   that still exists holding fewer. Weaker than its name — the rows are synthetic,
   read from each step's schema rather than written by the product, so a migration that fails only
   on values the product writes and they lack passes; a step that cannot carry them goes in its
-  `RESETS`, where the walk restarts empty; it installs
+  `RESETS`, where the walk restarts empty, and at one a constraint refuses, nothing else the step
+  does to the rows is seen; it installs
   today's change-feed list, and today's append-only list less the tables the previous step lacked, at every step; it applies everything up to core's
   `0003` in one go; rows are counted, not compared, so a step that rewrites a value passes; and
   beyond the counts it asserts only that each step does not throw, so a rebuild that silently

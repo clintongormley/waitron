@@ -1034,14 +1034,16 @@ each the guard checks the failure is still the listed one, then migrates an empt
 point and carries on. A reset that expects a row loss must lose exactly the listed tables, so a
 second table losing rows at the same step fails the guard; at a step refused by a constraint,
 nothing else the step does to the rows is seen. Removing the row-count comparison made the `core/0012` entry fail with
-`is listed in RESETS … but it carried them`, so a listed step that stops failing is reported. The
+`is listed in RESETS … but it carried the rows`, so a listed step that stops failing is reported. The
 null-column refusals are about these synthetic rows; whether a real box held such a null was not
 checked.
 
-A new schema the filler cannot satisfy fails with `could not write row N of <table>`; the fix is a
-`CANDIDATES` entry for the column or a `ONE_ROW` entry with its reason, not a `RESETS` entry, which
-is for a step that refuses or loses rows it was given. An entry the walk never reaches fails the
-guard too.
+A new schema the filler cannot satisfy fails with `could not write row N of <table>` (or `could
+not write <table>`, when a foreign key names a table the step lacks). First check that the new
+schema accepts any row at all; if it does, the fix is usually a `CANDIDATES` entry for the column
+or a `ONE_ROW` entry with its reason. It is never a `RESETS` entry, which is for a step that refuses
+or loses rows it was given. An entry the walk never reaches fails the guard too; a `CANDIDATES` or
+`ONE_ROW` entry the walk reaches but no longer needs passes.
 
 Runtime, three runs each on the same machine (`CI` unset, agent variables unset), Vitest's `tests`
 figure: 8.05, 8.09 and 8.07 seconds before; 9.93, 9.96 and 9.95 after.

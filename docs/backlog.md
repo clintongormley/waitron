@@ -6781,8 +6781,8 @@ approved.
   between steps.
   - **A164: the upgrade guard carries rows — DONE (2026-10-01, owner: "queue it").** After each
     step `scripts/migration-upgrade.test.ts` tops every table up to two rows (one where `ONE_ROW`
-    or a singleton CHECK says so), the second repeating the first, where its constraints allow, except in its key and unique-index columns, and fails a step that refuses them or
-    leaves a table holding fewer. Shown by three planted migrations (a `not null` column with no
+    or a singleton CHECK says so), the second repeating the first, where its constraints allow, except in its key and in each unique index over plain columns, and fails a step that refuses them or
+    leaves a table that still exists holding fewer. Shown by three planted migrations (a `not null` column with no
     default, a cascading rebuild, a unique index), each passing the guard before and failing it after; the
     receipt is in [ci-and-gates.md](developers/ci-and-gates.md) → *The upgrade test carries rows
     through every step*. It found seven shipped steps that cannot carry these rows, listed in the

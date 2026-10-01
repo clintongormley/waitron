@@ -179,12 +179,19 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
       );
     };
 
-    const reset = tags.split(", ").find((tag) => tag in RESETS);
+    const resets = tags.split(", ").filter((tag) => tag in RESETS);
+    for (const entry of resets) reached.resets.add(entry);
+    if (resets.length > 1) {
+      throw new Error(
+        `Step ${label} matches ${resets.length} RESETS entries (${resets.join(", ")}); ` +
+          "a step is checked against one entry, so merge them into one",
+      );
+    }
+    const [reset] = resets;
     if (reset === undefined) {
       await step();
       continue;
     }
-    reached.resets.add(reset);
     const failure = await step().then(
       () => undefined,
       (error: unknown) => error,
@@ -208,8 +215,8 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
  * of a refusal's message, or exactly the tables whose rows the step loses, so a loss beside the
  * listed ones fails the guard. Before go-live a schema change may need a venue reset (CLAUDE.md
  * §3), so at a listed step the guard checks the failure, then migrates an empty database to the
- * same point and fills it again. A listed step that carries the rows, or a key naming no step the
- * walk takes, fails the guard.
+ * same point and fills it again. A listed step that carries the rows, a step two keys name, or a
+ * key naming no step the walk takes, fails the guard.
  */
 const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
   // Rebuilds `menu_items`; dropping the old one is refused while a non-cascading child holds rows.
@@ -256,7 +263,8 @@ function resetMismatch(expected: (typeof RESETS)[string], failure: unknown): str
   return [
     unlisted.length > 0 &&
       `it also lost rows RESETS does not list:\n${unlisted.map((t) => failure.lost[t]).join("\n")}`,
-    kept.length > 0 && `it kept the rows of ${kept.join(", ")}`,
+    kept.length > 0 &&
+      `it did not lose rows from ${kept.join(", ")} (it kept them, or the table no longer exists)`,
   ]
     .filter(Boolean)
     .join("; ");
@@ -409,9 +417,9 @@ function tableCounts(connection: DatabaseSync, skip: Set<string>): Map<string, n
 
 /**
  * After a step: every table the step before filled that still exists holds at least the rows it
- * held, and every table holds two rows (one for a singleton). Returns the counts the next step is
- * held to. A table a step dropped or renamed away is absent from `sqlite_master` afterwards and is
- * not compared.
+ * held, and every table holds two rows (one for a singleton or a table {@link ONE_ROW} names).
+ * Returns the counts the next step is held to. A table a step dropped or renamed away is absent
+ * from `sqlite_master` afterwards and is not compared.
  */
 function carryRows(
   venueDir: string,
@@ -638,7 +646,10 @@ function readRows(connection: DatabaseSync, query: string, ...params: Value[]): 
   return statement.all(...params) as Row[];
 }
 
-/** Tops `shape` up to two rows (one for a singleton), or fails naming the table. */
+/**
+ * Tops `shape` up to two rows (one for a singleton or a table {@link ONE_ROW} names), or fails
+ * naming the table.
+ */
 function fill(connection: DatabaseSync, shape: Shape, label: string) {
   if (shape.name in ONE_ROW) reached.oneRow.add(shape.name);
   const want = shape.singleton || shape.name in ONE_ROW ? 1 : 2;
