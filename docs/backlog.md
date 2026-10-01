@@ -4977,8 +4977,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       whose dish no kitchen station can take" in `apps/server/src/till-api.unroutable-dish.test.ts`,
       now "paying a pay-first order, or an open counter order in a zone that sends before payment,
       whose dish no kitchen station can take" (its existing cases unchanged; one case added).
-      OPEN, queued as lane B item B30 (owner, 2026-10-01): the cash button reads Cash/Efectivo
-      instead of Pay or Collect, drawn as strong as Card. B30's drawer half is done (next entry).
+      DONE in lane B item B30 (owner, 2026-10-01): the button that opens the cash screen reads
+      Cash/Efectivo at both stages instead of Pay or Collect, a main action beside Card/Tarjeta, in
+      every zone mode and on handhelds; `action.collect` is gone. Left as they were: the waiting
+      list's Pay, a table's and the bill dialog's "Take payment", "Take the rest" and the kitchen
+      queue's Collect. Existing assertions changed (owner-approved for these two buttons): five in
+      `apps/till/src/widgets/tender-pay.test.ts` that read `action.pay` or `action.collect` on this
+      button now read `tender.cash`. B30's drawer half is the next entry.
     - **DONE — a card hand-keyed on a machine Waitron does not talk to opens the drawer for its
       slip** (owner, 2026-10-01: _"Only if the device taking payment is the till with the cash
       drawer, we shouldn't open it remotely. But the drawer is the typical place to store credit
