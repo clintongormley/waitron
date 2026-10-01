@@ -3341,6 +3341,69 @@ describe("till-app", () => {
     expect(c.heldOrders).toEqual([]);
   });
 
+  it("discard-order: refused for an order still holding money, says to give it back, and refreshes", async () => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-1" }),
+      listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.discard_holds_money"));
+    expect(banner.textContent).not.toContain(t("held.stale"));
+    expect(banner.textContent).not.toContain(codeMessage("bill.payments_received"));
+    expect(el.shadowRoot!.textContent).not.toContain("bill.payments_received");
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+    expect(c.heldOrders).toEqual([heldSummary]);
+  });
+
+  it("discard-order: a money refusal for an order the refreshed list no longer holds shows held.stale", async () => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-1" }),
+      listWorkingOrders: vi.fn().mockResolvedValueOnce([heldSummary]).mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    expect(c.heldOrders).toEqual([heldSummary]);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.stale"));
+    expect(banner.textContent).not.toContain(t("held.discard_holds_money"));
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+    expect(c.heldOrders).toEqual([]);
+  });
+
+  it("discard-order: refused while a card payment is under way, says so in that code's own words, and refreshes", async () => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi.fn().mockRejectedValue({
+        code: "order.payment_in_flight",
+        status: 409,
+        workingOrderId: "wo-1",
+      }),
+      listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(codeMessage("order.payment_in_flight"));
+    expect(banner.textContent).not.toContain(t("held.stale"));
+    expect(el.shadowRoot!.textContent).not.toContain("order.payment_in_flight");
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+  });
+
   it("discard success clears a stale banner left by a prior failed action", async () => {
     // A failed retrieve sets a `held.stale` banner; a SUCCESSFUL discard must clear it, like every
     // sibling handler.

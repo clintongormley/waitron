@@ -90,3 +90,15 @@ describe("the Finish table refusal for a bill that owes nothing but holds money"
     expect(catalogues[locale]?.["table.finish_bill_holds_money"]).toBe(message);
   });
 });
+
+describe("the discard refusal for a held order that still holds money", () => {
+  it.each([
+    [
+      "en-GB",
+      "This order still holds money from a payment. Give it back before discarding the order",
+    ],
+    ["es-ES", "Este pedido aún tiene dinero de un pago. Devuélvelo antes de descartar el pedido"],
+  ])("says what to do in %s", (locale, message) => {
+    expect(catalogues[locale]?.["held.discard_holds_money"]).toBe(message);
+  });
+});

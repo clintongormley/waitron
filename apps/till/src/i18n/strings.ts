@@ -583,6 +583,8 @@ export const en = {
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
+  "held.discard_holds_money":
+    "This order still holds money from a payment. Give it back before discarding the order",
   "held.reread_failed":
     "The order could not be read again. Hold it, then retrieve it, to check it.",
   "held.changed_elsewhere":
@@ -1353,6 +1355,8 @@ export const es: Record<StringKey, string> = {
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",
+  "held.discard_holds_money":
+    "Este pedido aún tiene dinero de un pago. Devuélvelo antes de descartar el pedido",
   "held.reread_failed":
     "No se pudo volver a leer el pedido. Apárcalo y recupéralo para comprobarlo.",
   "held.changed_elsewhere":

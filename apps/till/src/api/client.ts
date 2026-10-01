@@ -1920,8 +1920,11 @@ export class TillApi {
   }
 
   /**
-   * Discard a parked order (`open → abandoned`) → `DELETE /api/working-orders/:id`. A non-open or
-   * unknown id rejects with `working_order.not_open`.
+   * Discard a parked order (`open → abandoned`) → `DELETE /api/working-orders/:id`. Rejects first
+   * `bill.refund_in_progress` while a card refund on it is pending, `order.payment_in_flight` while
+   * a card payment is under way, and `bill.payments_received` while it holds money from a payment;
+   * otherwise `working_order.not_open` for a non-open or unknown id. So a non-open order that
+   * still holds money answers `bill.payments_received`.
    */
   async abandonWorkingOrder(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}`, "DELETE");
