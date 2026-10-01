@@ -137,6 +137,10 @@ export class ProductList extends LitElement {
         white-space: nowrap;
       }
       wt-data-table::part(maker-link) {
+        display: block;
+        max-inline-size: 12rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
         color: var(--wt-color-primary);
       }
     `,

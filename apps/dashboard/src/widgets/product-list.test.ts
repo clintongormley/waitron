@@ -1191,6 +1191,47 @@ it("keeps touch scrolling on the name cell and starts a drag from its grip", asy
 });
 
 describe("the product list at phone width", () => {
+  it.each(["en-GB", "es-ES"])(
+    "keeps the full made-at link clear of pinned actions after scrolling at 390 px (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: [product({ id: "mojito" })],
+          madeAt: {
+            mojito: {
+              stationId: "bar",
+              stationName: "Downstairs bar",
+              noPreparation: false,
+              variesByZone: true,
+            },
+          },
+        });
+        const root = await tableRoot(el);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        const cell = cellUnder(root, "mojito", t("product.made_at"));
+        scroll.scrollLeft = cell.offsetLeft;
+        const link = cell.querySelector("a")!;
+        const actions = root.querySelector<HTMLElement>(
+          'tr[data-row-key="mojito"] td[data-pinned="end"]',
+        )!;
+        expect(link.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+          scroll.getBoundingClientRect().left,
+        );
+        expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(
+          actions.getBoundingClientRect().left,
+        );
+        expect(link.getBoundingClientRect().height).toBeGreaterThan(30);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
   // A long unbroken product name widens the name column past a phone's screen.
   const phoneProducts = () => [
     product({ id: "a" }),
