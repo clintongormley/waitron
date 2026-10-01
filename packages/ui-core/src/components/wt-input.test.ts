@@ -298,7 +298,7 @@ test("an input with no attributes set is a plain text field with no label or pla
   const el = await mount("<wt-input></wt-input>");
   const input = el.shadowRoot!.querySelector("input")!;
   expect(el.shadowRoot!.querySelector("label")).toBeNull();
-  expect(el.shadowRoot!.querySelector(".label-row")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".field-label")).toBeNull();
   // The rendered attribute, not input.type: the browser reports "text" for an empty type
   // attribute as well, so only the attribute tells a default-typed field from an untyped one.
   expect(input.getAttribute("type")).toBe("text");
