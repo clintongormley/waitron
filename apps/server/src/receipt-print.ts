@@ -102,13 +102,14 @@ export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: TillConfig,
   ticket: TillSaleResult,
+  saleId: string,
 ): Promise<void> {
   const [loc] = await tx
     .select({ mode: locations.receiptPrintMode })
     .from(locations)
     .where(eq(locations.id, cfg.locationId));
   if (loc?.mode !== "auto") return;
-  await enqueueOriginalReceipt(tx, cfg, ticket);
+  await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
 }
 
 /**
@@ -119,10 +120,18 @@ export async function enqueueReceiptReprint(
   tx: Transaction,
   cfg: TillConfig,
   ticket: TillSaleResult,
+  saleId: string,
 ): Promise<void> {
   const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, true);
   if (resolved === undefined) return;
-  await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
+  await enqueuePrintJob(
+    tx,
+    printConfig(cfg),
+    resolved.printer.id,
+    resolved.receiptBytes,
+    "document",
+    { saleId },
+  );
 }
 
 /**
@@ -158,10 +167,18 @@ export async function enqueueOriginalReceipt(
   tx: Transaction,
   cfg: TillConfig,
   ticket: TillSaleResult,
+  saleId: string,
 ): Promise<void> {
   const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, false);
   if (resolved === undefined) return;
-  await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
+  await enqueuePrintJob(
+    tx,
+    printConfig(cfg),
+    resolved.printer.id,
+    resolved.receiptBytes,
+    "document",
+    { saleId },
+  );
 }
 
 async function enqueueBillDrawer(

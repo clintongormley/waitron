@@ -748,7 +748,7 @@ async function issueWhenFullyPaid(
     payments: await readBillTenderLines(tx, saleId),
     qr: fiscal.verificationUrl ?? "",
   };
-  await enqueueSaleReceipt(tx, cfg, ticket);
+  await enqueueSaleReceipt(tx, cfg, ticket, saleId);
   return { invoice: ticket, total };
 }
 

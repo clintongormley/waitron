@@ -15,6 +15,7 @@ import {
 } from "./columns.js";
 import { printAgents } from "./print-agents.js";
 import { printers } from "./printers.js";
+import { sales } from "./sales.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -66,10 +67,16 @@ export const printJobs = table(
     /* v8 ignore start */
     resendOf: id("resend_of").references((): AnySQLiteColumn => printJobs.id),
     /* v8 ignore stop */
+    // The sale a till receipt prints, original or duplicate (`apps/server/src/receipt-print.ts`); a
+    // resend copies it.
+    /* v8 ignore start */
+    saleId: id("sale_id").references(() => sales.id),
+    /* v8 ignore stop */
   },
   (t) => [
     index("print_jobs_pull_idx").on(t.printerId, t.status),
     index("print_jobs_resend_of_idx").on(t.resendOf),
+    index("print_jobs_sale_id_idx").on(t.saleId),
     check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),
     check("print_jobs_status_ck", enumCheck(t.status)),
   ],

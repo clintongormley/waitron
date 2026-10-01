@@ -294,6 +294,13 @@ async function createdAtOf(jobId: string): Promise<string> {
   return row!.createdAt;
 }
 
+/** The count the printer's "jobs waiting" alert shows for `printerId`, or 0 when it raises none. */
+async function waitingAt(printerId: string): Promise<number> {
+  const alerts = await inTx((tx) => printingAlertSource().read({ tx, now: new Date() }));
+  const alert = alerts.find((a) => a.key === `printer.jobs_waiting:${printerId}`);
+  return alert === undefined ? 0 : Number(alert.params.count);
+}
+
 const problemsOf = (partyId: string, now?: Date) =>
   inTx((tx) => listPrintProblems(tx, partyId, now));
 
@@ -800,6 +807,117 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       code: "party.not_open",
       params: { partyId },
     });
+  });
+});
+
+describe("the printer's alert after the till's Reprint (A167)", () => {
+  it("counts a failed ticket while the till's Reprint waits, and drops it once the Reprint has printed", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const reprint = (await links()).find((row) => row.reprint)!.printJobId;
+    expect(await waitingAt(v.cocinaPrinter)).toBe(1);
+
+    await setJob(reprint, { status: "done" });
+    expect(await waitingAt(v.cocinaPrinter)).toBe(0);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
+  });
+
+  it("counts both when the till's Reprint also runs out of attempts", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    await setJob((await links()).find((row) => row.reprint)!.printJobId, exhausted);
+
+    expect(await waitingAt(v.cocinaPrinter)).toBe(2);
+  });
+
+  it("keeps counting a failed ticket when a later round's ticket prints, which is no Reprint", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await submit(v, mesa4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    const later = (await links()).at(-1)!;
+    expect(later).toMatchObject({ printerId: v.cocinaPrinter, reprint: false });
+
+    await setJob(later.printJobId, { status: "done" });
+    expect(await waitingAt(v.cocinaPrinter)).toBe(1);
+  });
+
+  it("keeps counting the station printer's failed ticket when only the pass printer's Reprint has printed", async () => {
+    const v = await setupVenue();
+    const pase = await passPrinter(v);
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await setJob(await jobFor(mesa4.tabId, pase), { status: "done" });
+    const before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const reprints = (await links()).slice(before);
+    // The station printer's Reprint still waits, and is young, so only the failed ticket counts.
+    await setJob(reprints.find((row) => row.printerId === pase)!.printJobId, { status: "done" });
+
+    expect(await waitingAt(v.cocinaPrinter)).toBe(1);
+  });
+
+  it("drops a failed Reprint once a later Reprint has printed", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    await setJob((await links()).at(-1)!.printJobId, exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    expect(await waitingAt(v.cocinaPrinter)).toBe(2);
+
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+    expect(await waitingAt(v.cocinaPrinter)).toBe(0);
+  });
+
+  it("keeps counting a Reprint that runs out of attempts after an earlier Reprint printed", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const failedAgain = (await links()).at(-1)!.printJobId;
+    await setJob(failedAgain, exhausted);
+
+    expect(await waitingAt(v.cocinaPrinter)).toBe(1);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([
+      { workingOrderId: mesa4.tabId, since: await createdAtOf(failedAgain) },
+    ]);
+  });
+
+  it("keeps counting a ticket linked to two bills until each bill's Reprint has printed", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    const lineNo = await lineNoOf(mesa4.tabId, "fish");
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, mesa4.tabId, [{ lineNo }], {
+        expectedPartyRevision: (await command(mesa4.partyId)).expectedPartyRevision,
+        operatorId: ALEX,
+      }),
+    );
+
+    await reprintPrinted(v, checkId);
+    expect(await waitingAt(v.cocinaPrinter)).toBe(1);
+
+    await reprintPrinted(v, mesa4.tabId);
+    expect(await waitingAt(v.cocinaPrinter)).toBe(0);
+  });
+
+  it("keeps counting a failed job no kitchen ticket links, such as a receipt", async () => {
+    const v = await setupVenue();
+    await firedTable(v, "Mesa 4");
+    const { jobId } = await inTx((tx) =>
+      enqueuePrintJob(tx, { locationId: v.cfg.locationId }, v.cocinaPrinter, Uint8Array.from([1])),
+    );
+    await setJob(jobId, exhausted);
+
+    expect(await waitingAt(v.cocinaPrinter)).toBe(1);
   });
 });
 

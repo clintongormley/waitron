@@ -606,8 +606,8 @@ export async function printSaleReceipt(
       .where(eq(sales.workingOrderId, workingOrderId));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
-    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket);
-    else await enqueueOriginalReceipt(tx, cfg, ticket);
+    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id);
+    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id);
   });
 }
 
@@ -716,7 +716,7 @@ async function fileImmediateSale(
     qr: fiscal.verificationUrl ?? "",
   };
 
-  await enqueueSaleReceipt(tx, cfg, ticket);
+  await enqueueSaleReceipt(tx, cfg, ticket, saleId);
   if (tender.method === "cash") await enqueueCashSaleDrawer(tx, cfg, saleId, operatorId);
   return ticket;
 }
@@ -1183,7 +1183,7 @@ async function finalizeCapture(
       };
       // Card: a receipt and no drawer. A throw here would roll back a sale whose card P2 already
       // charged.
-      await enqueueSaleReceipt(tx, cfg, ticket);
+      await enqueueSaleReceipt(tx, cfg, ticket, saleId);
       return ticket;
     });
   } catch (error) {
@@ -1322,7 +1322,7 @@ async function finalizeRecovery(
       qr: fiscal.verificationUrl ?? "",
     };
     // Card: a receipt and no drawer. The replay above returns before this, so nothing prints twice.
-    await enqueueSaleReceipt(tx, cfg, ticket);
+    await enqueueSaleReceipt(tx, cfg, ticket, saleId);
     return { outcome: "captured", ticket };
   });
 }

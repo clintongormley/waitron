@@ -10,6 +10,7 @@ import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 /**
  * The whole of what a caller does to print: one read and one insert, with no socket and no wait on
  * hardware, so a slow, broken or absent printer can never delay the caller (CLAUDE.md §5).
+ * `saleId` names the sale a receipt prints.
  */
 export async function enqueuePrintJob(
   tx: Transaction,
@@ -17,8 +18,9 @@ export async function enqueuePrintJob(
   printerId: string,
   payload: Uint8Array,
   kind: "document" | "drawer" = "document",
+  { saleId = null }: { saleId?: string | null } = {},
 ): Promise<{ jobId: string }> {
-  return insertPrintJob(tx, cfg, printerId, payload, kind, null);
+  return insertPrintJob(tx, cfg, printerId, payload, kind, { resendOf: null, saleId });
 }
 
 async function insertPrintJob(
@@ -27,7 +29,7 @@ async function insertPrintJob(
   printerId: string,
   payload: Uint8Array,
   kind: "document" | "drawer",
-  resendOf: string | null,
+  { resendOf, saleId }: { resendOf: string | null; saleId: string | null },
 ): Promise<{ jobId: string }> {
   // A deactivated printer is reported as `printer.not_found`, not a code of its own.
   const [printer] = await tx
@@ -44,6 +46,7 @@ async function insertPrintJob(
       payload,
       kind,
       resendOf,
+      saleId,
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
@@ -63,7 +66,7 @@ export function canResendPrintJob(job: {
 
 /**
  * Resend the opaque document to its original printer and location, preserving delivery history. The
- * copy names the first job of its chain, which `printJobInTrouble`
+ * copy names the first job of its chain, and the sale a receipt prints, which `printJobInTrouble`
  * (apps/server/src/print-job-trouble.ts) reads to clear a failed job once a later copy has printed.
  */
 export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ jobId: string }> {
@@ -76,6 +79,6 @@ export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ 
     job.printerId,
     job.payload,
     "document",
-    job.resendOf ?? job.id,
+    { resendOf: job.resendOf ?? job.id, saleId: job.saleId },
   );
 }
