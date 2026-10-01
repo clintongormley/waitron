@@ -19,6 +19,7 @@ import {
   type FolderContents,
   catalogueExists,
   readContentLanguages,
+  listTranslationGapReport,
   writeContentLanguages,
   validateContentTranslations,
   createCatalogue,
@@ -796,6 +797,20 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       return c.json(
         await gated(sessionId, async () => deps.contentLanguageRules ?? NO_CONTENT_LANGUAGE_RULES),
+      );
+    }),
+  );
+
+  app.get("/management-api/content-translation-gaps", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(
+        await gated(sessionId, async (tx) =>
+          listTranslationGapReport(
+            tx,
+            await readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE),
+          ),
+        ),
       );
     }),
   );
