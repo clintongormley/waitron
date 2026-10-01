@@ -25,7 +25,10 @@ export class WtTextarea extends LitElement {
 
       .field:not([data-compact]) .field-control {
         padding-top: 0;
-        min-height: calc(var(--wt-field-height) - var(--wt-space-3) - var(--wt-font-size-sm));
+        min-height: max(
+          var(--wt-tap-min),
+          calc(var(--wt-field-height) - var(--wt-space-3) - var(--wt-font-size-sm))
+        );
       }
 
       .field-control {

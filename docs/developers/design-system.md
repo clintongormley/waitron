@@ -363,8 +363,9 @@ inner `input` and both buttons for `wt-number-stepper`; both `:host` and `.contr
 the `.trigger` button for `wt-combobox`) — never an element that can overflow its own container
 (see "Hit targets must not overflow their container" below). A field's control (`.field-control`
 in `fieldStyles`) takes `min-width: var(--wt-tap-min)` and `min-height: var(--wt-field-height)`
-(`wt-textarea` moves the floated label's share of that height into its field box's top padding),
-or `--wt-tap-min` in a compact field; `wt-number-stepper`'s two buttons are exactly `--wt-tap-min`
+(`wt-textarea` moves the floated label's share of that height into its field box's top padding,
+but never lets the textarea itself fall below `--wt-tap-min`, growing the box instead), or
+`--wt-tap-min` in a compact field; `wt-number-stepper`'s two buttons are exactly `--wt-tap-min`
 square; `wt-switch`'s `:host` and `.control` and `wt-price-input`'s unit button take `min-width` and
 `min-height` of `--wt-tap-min`. `wt-button` takes them at its default size and is exactly
 `--wt-tap-min` square with `shape="round"`, but its height depends on `size`: `size="lg"` is at

@@ -66,6 +66,15 @@ test("the field box is at least the field height tall and grows with its rows", 
   expect(height(six)).toBeGreaterThan(height(three));
 });
 
+test("a short labelled textarea is still a full tap target, and its field box grows to hold it", async () => {
+  const el = await mount('<wt-textarea label="Note" rows="1"></wt-textarea>');
+  const tapMin = parseFloat(getComputedStyle(host).getPropertyValue("--wt-tap-min"));
+  const fieldHeight = parseFloat(getComputedStyle(host).getPropertyValue("--wt-field-height"));
+  const { field, textarea } = parts(el);
+  expect(textarea.getBoundingClientRect().height).toBeGreaterThanOrEqual(tapMin);
+  expect(field.getBoundingClientRect().height).toBeGreaterThan(fieldHeight);
+});
+
 test("the textarea fills the box under the label, so text it scrolls never runs under the label", async () => {
   const el = await mount(
     `<wt-textarea label="Note" rows="2" value="${"una línea\n".repeat(12)}"></wt-textarea>`,
