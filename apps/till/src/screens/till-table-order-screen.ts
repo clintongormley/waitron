@@ -662,8 +662,11 @@ export class TillTableOrderScreen extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
-      .finish-refusal wt-button {
-        align-self: flex-end;
+      .finish-refusal-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
       }
 
       .status-options {
@@ -2870,18 +2873,28 @@ export class TillTableOrderScreen extends LitElement {
         this.finishRefused
           ? html`<div class="finish-refusal" role="alert" data-finish-refusal>
               <span>${codeMessage("party.bill_outstanding")}</span>
-              ${
-                firstUnpaid === undefined
-                  ? nothing
-                  : html`<wt-button
-                      size="sm"
-                      variant="primary"
-                      data-take-payment
-                      @click=${() => this.#takePayment(firstUnpaid)}
-                    >
-                      ${t("table.take_payment")}
-                    </wt-button>`
-              }
+              <div class="finish-refusal-actions">
+                ${
+                  firstUnpaid === undefined
+                    ? nothing
+                    : html`<wt-button
+                          size="sm"
+                          variant="primary"
+                          data-take-payment
+                          @click=${() => this.#takePayment(firstUnpaid)}
+                        >
+                          ${t("table.take_payment")}
+                        </wt-button>
+                        <wt-button
+                          size="sm"
+                          variant="secondary"
+                          data-record-departure
+                          @click=${() => this.#dispatch("record-unpaid-departure", {})}
+                        >
+                          ${t("departure.record")}
+                        </wt-button>`
+                }
+              </div>
             </div>`
           : nothing
       }

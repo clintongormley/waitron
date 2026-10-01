@@ -12,6 +12,7 @@ import type {
   TableState,
   TillProduct,
   TillZoneMenu,
+  UnpaidDeparture,
 } from "../api/client.js";
 
 afterEach(cleanupWidgets);
@@ -183,6 +184,34 @@ describe("till-card-grid", () => {
       heldOrders: [mesa],
     });
     expect(el.shadowRoot!.querySelector("till-held-orders")).not.toBeNull();
+  });
+
+  it("shows the held-orders card with the bills left unpaid when nothing else is held or waiting", async () => {
+    const store = new WorkingOrderStore();
+    const departure: UnpaidDeparture = {
+      id: "ud-1",
+      workingOrderId: "wo-1",
+      billLabel: null,
+      tableLabels: ["4"],
+      saleId: "s-1",
+      invoiceNumber: "F-0007",
+      amount: "30.00",
+      reason: "Ran off",
+      recordedByName: "Ana",
+      authorizedByName: "Ana",
+      recordedAt: "2026-10-01T21:30:00.000Z",
+    };
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: heldTab,
+      store,
+      heldOrders: [],
+      unpaidDepartures: [departure],
+    });
+    const list = el.shadowRoot!.querySelector<HTMLElement & { departures: unknown }>(
+      "till-unpaid-departures",
+    );
+    expect(list!.departures).toEqual([departure]);
+    expect(list!.previousElementSibling!.localName).toBe("till-counter-waiting");
   });
 
   it("gives the held-orders card the floor's tables, which its Move to table lists", async () => {

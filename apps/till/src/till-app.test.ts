@@ -29,9 +29,11 @@ import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
+import type { TillUnpaidDepartures } from "./widgets/unpaid-departures.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   CounterWaitingOrder,
+  UnpaidDeparture,
   DevDeviceList,
   FloorZone,
   HeldOrderSummary,
@@ -402,6 +404,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
+    listUnpaidDepartures: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn().mockResolvedValue({
       id: "wo-1",
       orderNumber: 5,
@@ -9488,5 +9491,73 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="waiting"]')!;
     expect(notice.hasAttribute("data-active")).toBe(true);
     expect(notice.textContent).toContain(t("refresh.waiting"));
+  });
+});
+
+describe("the bills parties left without paying", () => {
+  const departure: UnpaidDeparture = {
+    id: "ud-1",
+    workingOrderId: "wo-9",
+    billLabel: null,
+    tableLabels: ["4"],
+    saleId: "s-9",
+    invoiceNumber: "F-0009",
+    amount: "30.00",
+    reason: "Ran off",
+    recordedByName: "Ana",
+    authorizedByName: "Ana",
+    recordedAt: "2026-10-01T21:30:00.000Z",
+  };
+  const departuresList = (el: TillApp) =>
+    counterGrid(el)?.shadowRoot?.querySelector<TillUnpaidDepartures>("till-unpaid-departures") ??
+    null;
+
+  it("lists them in the held-orders card even when nothing is held or waiting", async () => {
+    const { el } = await mountApp({
+      listUnpaidDepartures: vi.fn().mockResolvedValue([departure]),
+    });
+    await toCounter(el);
+
+    expect(departuresList(el)!.departures).toEqual([departure]);
+    expect(
+      departuresList(el)!.shadowRoot!.querySelector('[data-departure="ud-1"]')!.textContent,
+    ).toContain("Ran off");
+  });
+
+  it("shows no list, and no held-orders card, when nobody has left without paying", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+
+    expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+    expect(departuresList(el)?.departures ?? []).toEqual([]);
+    expect(counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")).toBeNull();
+  });
+
+  it("reads them again whenever the waiting orders are read again", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    const reads = vi.mocked(currentApi.listUnpaidDepartures).mock.calls.length;
+    const waitingReads = vi.mocked(currentApi.listCounterWaiting).mock.calls.length;
+
+    emit(counter(el)!, "hand-over-order", { id: "wo-sent" });
+    await flush(el);
+
+    expect(vi.mocked(currentApi.listCounterWaiting).mock.calls.length).toBeGreaterThan(
+      waitingReads,
+    );
+    expect(currentApi.listUnpaidDepartures).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("a failed read of the list says so and offers to try again", async () => {
+    const { el } = await mountApp({
+      listUnpaidDepartures: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await toCounter(el);
+
+    const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="departures"]')!;
+    expect(notice.hasAttribute("data-active")).toBe(true);
+    expect(notice.textContent).toContain(t("refresh.departures"));
+    const waiting = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="waiting"]')!;
+    expect(waiting.hasAttribute("data-active")).toBe(false);
   });
 });
