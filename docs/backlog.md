@@ -6598,7 +6598,7 @@ ongoing overhaul listed at the top of Track A.
   own 768px limit — whether they should follow the modal's form width is the owner's call.
 
 - **Content languages are managed on the page itself (C111, owner 2026-09-30) — DONE
-  (2026-10-01).** The Content languages page used to show the default and the enabled
+  (2026-10-01, #987).** The Content languages page used to show the default and the enabled
   languages as text with an Edit button, and Edit opened a dialog with a "Default language" select,
   each language with Remove, a two-sentence note, and an "Add language" select and button. Now the
   page lists the enabled languages as rows in one card, in the repeatable-list shape the design
