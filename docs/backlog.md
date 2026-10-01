@@ -1421,9 +1421,40 @@ look. Things to settle in the spec:
   separate on purpose, `apps/till/src/select-styles.ts`). A175 (search fields' corners) and A169
   (the folding section) should be built to the same look, or after it.
 
-**Next action:** brainstorm → spec, starting from mockups of one field in each state (empty, empty
-with a hint, focused, filled, error, required, disabled) and one dropdown open, in Waitron's
-tokens, light and dark.
+**Look approved (owner, 2026-10-01: "perfect!")** —
+[the mockups](https://claude.ai/artifact/6qKuHL4qWPJAqFeL1CpWcz): every field state in both themes,
+an open dropdown, and the Edit option window in the new style (which also shows A170–A172). What
+they settle:
+
+- a field is 56px tall, filled, with 8px rounded top corners, square bottom corners and a 1px line
+  along the bottom; focused, the line is 2px in the primary blue and the label turns blue;
+- the label is 16px inside an empty field with no hint, and 12px at the top left once the field is
+  focused, filled, or has a hint; the required `*` travels with it;
+- a hint is grey AND italic, so it cannot be taken for a filled-in value;
+- an error turns the line (2px) and the label red, with the message under the field;
+- disabled: a paler fill, a dashed bottom line, greyed text;
+- the open dropdown: a search box at the top, 48px rows, the hovered row tinted, the chosen row bold
+  with a tick, and the field's line and label blue while it is open.
+
+Colours, each worked out with WCAG's contrast formula on 2026-10-01 — they become new `--wt-*`
+tokens in both themes:
+
+| | Light | Dark |
+| --- | --- | --- |
+| field fill | `#f0f1f4` | `#262a33` |
+| bottom line | `#7d8390` — 3.37:1 on the fill | `#7a8291` — 3.72:1 on the fill |
+| focused line | `--wt-color-primary` (`#1f6feb`) | `--wt-color-primary` (`#4c8dff`) |
+| focused label | `#1a5fd0` — 5.18:1 on the fill | `#5c98ff` — 5.06:1 on the fill |
+| disabled fill | `#f7f7f8` | `#1f2229` |
+
+The focused label needs its own colour because the primary blue, as small text on the fill, comes
+out at 4.1:1 (light) and 4.49:1 (dark), under the 4.5:1 small text needs. Label, hint and value
+text reuse `--wt-color-text-muted`, `--wt-color-text` and `--wt-color-danger`, all above 4.5:1 on
+the fill in both themes.
+
+**Next action:** spec → plan from the approved mockups. The open questions above (the custom
+dropdown's keyboard and screen-reader behaviour, and whether the till follows) are still the
+spec's to settle.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
