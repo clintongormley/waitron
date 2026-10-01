@@ -191,15 +191,14 @@ slices, each with its own plan and pull request:
    split off to another station.
 
 Slice 3 needs slice 1. Slice 2 is independent of both. Several entries below are overtaken by this
-design, and each carries a dated note. **Slice 1 is in progress** on `feature/product-folders`,
+design, and each carries a dated note. **Slice 1 is implemented** in [#968](https://github.com/clintongormley/waitron/pull/968),
 following the [approved plan](superpowers/plans/2026-09-30-product-folders-slice-1.md).
-The branch removes labels and category presentation fields and adds the bulk move/delete API;
-the folder browser, selection actions, native dragging and Categories retirement are implemented
-and task-reviewed. Branch review and current-head CI remain before landing.
-Branch-review decision pending: the approved empty-folder shortcut also deletes kitchen routing
-rules without showing the existing warning. Confirm whether folders with routing rules should
-use the confirmation even when they contain no products or subfolders; the regression and proposed
-guard are recorded in lane D's PF1 review receipts.
+Products and folders can be browsed, selected, moved, deleted and dragged together; labels,
+category presentation fields and the Categories screen are retired. Eleven task reviews and
+whole-branch review are complete. Every development venue needs `wa-wt reset demo <name>`.
+The owner confirmed on 2026-10-01 that deleting only empty folders remains immediate, including
+any routing rules attached to them. Confirmation is shown when selected folders contain products
+or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
