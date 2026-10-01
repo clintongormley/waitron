@@ -1474,6 +1474,11 @@ system font at 14px first — no font to bundle, no licence notice to ship. **Wa
 widely reported to zoom the page in when a field whose text is under 16px is focused — not yet
 tried here. If it does, the usual remedy is to keep field text at 16px on small screens only.
 
+**Build order for A168–A179 (owner, 2026-10-01: "yes, all good"):** A178 and A179 first, since
+they restyle every field and the text size; then A169–A172 and A175–A177, built in the new style
+rather than restyled twice. A168, A173 and A174 do not depend on them and can go at any time — though
+A173 (the dropdown's arrow) disappears if A178 replaces the native dropdown.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
