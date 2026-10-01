@@ -52,7 +52,7 @@ export function mountUnpaidDepartureApi(
       const request = parseDeparture(asObject(await readRawJsonBody<unknown>(c)));
       const saleTillId = await requireSaleTillId(deps, c);
       const result = await withTransaction(deps.db, (tx) =>
-        recordUnpaidDeparture(tx, deps, deps.cfg, saleTillId, partyId, request, {
+        recordUnpaidDeparture(tx, { ...deps, log }, deps.cfg, saleTillId, partyId, request, {
           personId,
           sessionId,
           attempts: overridePinAttempts(pinThrottle, tillId),

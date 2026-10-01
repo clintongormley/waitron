@@ -18,7 +18,12 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { recordCorrection, recordSubstitution, recordVoid } from "@waitron/core";
+import {
+  listOutstandingSales,
+  recordCorrection,
+  recordSubstitution,
+  recordVoid,
+} from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -611,42 +616,103 @@ describe("a bill that owes nothing", () => {
     expect((await partyState(party.partyId)).state).toBe("closed");
   });
 
-  it("refuses a party whose only owing bill a credit note has brought to nothing, and writes nothing", async () => {
+  it("settles a presented bill whose credit note brought it to nothing, so no sale is left owing nothing", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
+    await credit(placedId, "14.88", "-18.00");
+    const [invoiced] = await salesOf(placedId);
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer.status).toBe(200);
+    expect(await departuresOf(placedId)).toEqual([]);
+    expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
+    expect(await salesOf(placedId)).toEqual([
+      { id: invoiced!.id, total: 1800, settledAt: expect.any(String) },
+    ]);
+    expect(await statusOf(venue, placedId)).toBe("settled");
+    expect(registroCount(venue, placedId)).toBe(1);
+    const outstanding = (await inTx(venue, listOutstandingSales)).map((sale) => sale.saleId);
+    expect(outstanding).not.toContain(invoiced!.id);
+    const [owed] = await salesOf(party.tabId);
+    expect(outstanding).toContain(owed!.id);
+  });
+
+  it("invoices and settles an open bill whose every line was given away, beside a bill it records", async () => {
+    const ana = await seatedWith(venue, "Caña");
+    await giveAway(ana.tabId, 1);
+    const luis = await seatedWith(venue, "Botella tinto");
+    const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
+      tableId: luis.tableId,
+      bills: "separate",
+      expectedPartyRevision: revisionOf(ana.partyId),
+      otherPartyId: luis.partyId,
+      expectedOtherPartyRevision: revisionOf(luis.partyId),
+    });
+    expect(joined.status).toBe(200);
+
+    const answer = await depart(ana.partyId, {
+      expectedPartyRevision: revisionOf(ana.partyId),
+      reason: REASON,
+    });
+
+    expect(answer.status).toBe(200);
+    expect(answer.json.departures).toEqual([
+      expect.objectContaining({ workingOrderId: luis.tabId, amount: "30.00" }),
+    ]);
+    expect(await departuresOf(ana.tabId)).toEqual([]);
+    expect(registroCount(venue, ana.tabId)).toBe(1);
+    const [given] = await salesOf(ana.tabId);
+    expect(given).toEqual({ id: expect.any(String), total: 0, settledAt: expect.any(String) });
+    expect(await statusOf(venue, ana.tabId)).toBe("settled");
+    const outstanding = (await inTx(venue, listOutstandingSales)).map((sale) => sale.saleId);
+    expect(outstanding).not.toContain(given!.id);
+    expect((await partyState(ana.partyId)).state).toBe("closed");
+  });
+
+  it("closes a party whose only owing bill a credit note has brought to nothing, settling it and recording no departure", async () => {
     const party = await seatedWith(venue);
     const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
     await credit(placedId, "14.88", "-18.00");
+    const [invoiced] = await salesOf(placedId);
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),
       reason: REASON,
     });
 
-    expect(answer).toMatchObject({
-      status: 409,
-      json: { code: "unpaid_departure.nothing_outstanding", params: { partyId: party.partyId } },
-    });
+    expect(answer).toMatchObject({ status: 200, json: { state: "closed", departures: [] } });
     expect(await departuresOf(placedId)).toEqual([]);
     expect(registroCount(venue, placedId)).toBe(1);
-    expect((await partyState(party.partyId)).state).toBe("open");
+    expect(await salesOf(placedId)).toEqual([
+      { id: invoiced!.id, total: 1800, settledAt: expect.any(String) },
+    ]);
+    expect(await statusOf(venue, placedId)).toBe("settled");
+    expect((await partyState(party.partyId)).state).toBe("closed");
+    expect(await tableHeldBy(party.tableId)).toBeNull();
   });
 
-  it("refuses a party whose only owing bill was given away in full, before filing its invoice", async () => {
+  it("closes a party whose only owing bill was given away in full, invoicing it at 0.00 and settling it", async () => {
     const party = await seatedWith(venue, "Caña");
     await giveAway(party.tabId, 1);
-    const counters = nextInvoiceNumbers();
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),
       reason: REASON,
     });
 
-    expect(answer).toMatchObject({
-      status: 409,
-      json: { code: "unpaid_departure.nothing_outstanding", params: { partyId: party.partyId } },
-    });
-    await expectNothingWritten(party.partyId, party.tabId);
-    expect(await salesOf(party.tabId)).toEqual([]);
-    expect(nextInvoiceNumbers()).toEqual(counters);
+    expect(answer).toMatchObject({ status: 200, json: { state: "closed", departures: [] } });
+    expect(await departuresOf(party.tabId)).toEqual([]);
+    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(await salesOf(party.tabId)).toEqual([
+      { id: expect.any(String), total: 0, settledAt: expect.any(String) },
+    ]);
+    expect(await statusOf(venue, party.tabId)).toBe("settled");
+    expect((await partyState(party.partyId)).state).toBe("closed");
+    expect(await tableHeldBy(party.tableId)).toBeNull();
   });
 });
 
@@ -935,7 +1001,7 @@ describe("what is refused", () => {
     }
   });
 
-  it("refuses a party with nothing outstanding: Finish is the action then", async () => {
+  it("refuses a party with nothing outstanding, which Finish table then closes", async () => {
     const party = await seatedWith(venue);
 
     const answer = await depart(party.partyId, {
@@ -948,6 +1014,14 @@ describe("what is refused", () => {
       json: { code: "unpaid_departure.nothing_outstanding", params: { partyId: party.partyId } },
     });
     expect((await partyState(party.partyId)).state).toBe("open");
+    const finished = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/finish`,
+      { expectedPartyRevision: revisionOf(party.partyId) },
+    );
+    expect(finished).toMatchObject({ status: 200, json: { state: "closed" } });
   });
 
   it("refuses a stale party revision as Finish does, and writes nothing", async () => {

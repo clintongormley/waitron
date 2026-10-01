@@ -18,10 +18,12 @@ import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
 import { authorize, persons } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
 import { AppError, decimalToCents, rawCentsToDecimal } from "@waitron/shared";
-import type { Decimal, TillId } from "@waitron/shared";
+import type { Decimal, SaleId, TillId } from "@waitron/shared";
 import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
 import { correctionsCents, readIssuedSales } from "./sale-due.js";
+import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
+import { settleIssuedOwingNothing } from "./till-sale.js";
 import {
   issueUnpaidInvoice,
   markOrderPlaced,
@@ -57,9 +59,12 @@ export interface RecordedDeparture {
  * An open bill is invoiced now, as an invoice-first placing invoices it, without a receipt; a
  * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
  * A bill owing nothing once invoiced (its credit notes cancel its invoice, or every line was given
- * away) gets no row, though it is still invoiced, as above, beside a bill that gets one.
+ * away) gets no row and is settled as collecting it settles it ({@link settleIssuedOwingNothing}),
+ * so the party closes with no departure rows when every bill owes nothing: Pay cannot settle an
+ * open bill whose every line was given away, and Finish table refuses it.
  *
- * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill would get a row,
+ * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill is still to pay
+ * ({@link billOwes}), which is no bill Finish table refuses as unpaid,
  * `unpaid_departure.unfired_dishes` for a bill to be invoiced holding a dish the kitchen is not
  * making ({@link ordersWithUnfiredDish}: never sent, held, or recalled), and
  * `unpaid_departure.bill_holds_payment` for an open bill holding a payment, one given back in full
@@ -67,7 +72,7 @@ export interface RecordedDeparture {
  */
 export async function recordUnpaidDeparture(
   tx: Transaction,
-  deps: { backend: FiscalBackend; clock: TrustedClock },
+  deps: { backend: FiscalBackend; clock: TrustedClock; log?: Logger },
   cfg: TillConfig,
   saleTillId: TillId,
   partyId: string,
@@ -111,7 +116,6 @@ export async function recordUnpaidDeparture(
   // whole bill, which marks the bill rather than writing a payment of it.
   await refusePaymentInFlight(tx, [...openIds]);
 
-  // Priced before any is filed, so a departure that would record nothing files nothing.
   const invoices = [];
   for (const bill of toInvoice) {
     invoices.push(await priceForIssuance(tx, deps.clock, cfg, bill.workingOrderId));
@@ -121,11 +125,8 @@ export async function recordUnpaidDeparture(
     ...invoices.map((invoice) => [invoice.id, invoice.priced.total] as const),
   ]);
   const departing = owingIds.filter((id) => decimalToCents(due.get(id)!) > 0);
-  if (departing.length === 0) {
-    throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
-  }
 
-  const saleOf = new Map([...invoiced].map(([id, sale]) => [id, sale.saleId as string]));
+  const saleOf = new Map<string, SaleId>([...invoiced].map(([id, sale]) => [id, sale.saleId]));
   for (const invoice of invoices) {
     const { saleId } = await issueUnpaidInvoice(
       tx,
@@ -140,7 +141,44 @@ export async function recordUnpaidDeparture(
       await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId);
     }
   }
+  for (const id of owingIds) {
+    if (decimalToCents(due.get(id)!) === 0) {
+      await settleIssuedOwingNothing(tx, deps, id, saleOf.get(id)!);
+    }
+  }
 
+  const departures =
+    departing.length === 0
+      ? []
+      : await insertDepartures(tx, departing, saleOf, due, {
+          partyId,
+          reason: req.reason,
+          recordedBy: operator.personId,
+          authorizedBy,
+          tillId: saleTillId,
+        });
+
+  const empty = bills
+    .filter((bill) => bill.status === "open" && bill.lines === 0)
+    .map((bill) => bill.workingOrderId);
+  const closed = await closeParty(tx, partyId, empty, operator.personId);
+  return { ...closed, departures };
+}
+
+/** One `unpaid_departures` row for each of `departing`, at what its invoice owes in `due`. */
+async function insertDepartures(
+  tx: Transaction,
+  departing: readonly string[],
+  saleOf: ReadonlyMap<string, SaleId>,
+  due: ReadonlyMap<string, Decimal>,
+  common: {
+    partyId: string;
+    reason: string;
+    recordedBy: string;
+    authorizedBy: string;
+    tillId: TillId;
+  },
+): Promise<RecordedDeparture[]> {
   const numbers = await readInvoiceNumbers(
     tx,
     departing.map((id) => saleOf.get(id)!),
@@ -150,20 +188,16 @@ export async function recordUnpaidDeparture(
     .insert(unpaidDepartures)
     .values(
       departing.map((workingOrderId) => ({
-        partyId,
+        ...common,
         workingOrderId,
         saleId: saleOf.get(workingOrderId)!,
         amount: decimalToCents(due.get(workingOrderId)!),
-        reason: req.reason,
-        recordedBy: operator.personId,
-        authorizedBy,
-        tillId: saleTillId,
         recordedAt,
       })),
     )
     .returning({ id: unpaidDepartures.id, workingOrderId: unpaidDepartures.workingOrderId });
   const idOf = new Map(rows.map((row) => [row.workingOrderId, row.id]));
-  const departures = departing.map((workingOrderId): RecordedDeparture => {
+  return departing.map((workingOrderId): RecordedDeparture => {
     const saleId = saleOf.get(workingOrderId)!;
     return {
       id: idOf.get(workingOrderId)!,
@@ -173,12 +207,6 @@ export async function recordUnpaidDeparture(
       amount: due.get(workingOrderId)!,
     };
   });
-
-  const empty = bills
-    .filter((bill) => bill.status === "open" && bill.lines === 0)
-    .map((bill) => bill.workingOrderId);
-  const closed = await closeParty(tx, partyId, empty, operator.personId);
-  return { ...closed, departures };
 }
 
 /** One unpaid departure whose invoice is still owed, as the till lists it. */

@@ -5036,8 +5036,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     departure** beside Take payment. It needs the new core permission `sale.unpaid_departure`
     (supervisor and up, or a supervisor's PIN) and a reason. Each owing bill with no invoice yet is
     invoiced now for its full amount and filed; a bill already invoiced keeps its invoice. One row
-    per bill goes into the new append-only core table `unpaid_departures` (amount still due, reason,
-    who recorded it, who authorised it), and the party closes exactly as Finish table closes it. No
+    per bill owing more than zero goes into the new append-only core table `unpaid_departures`
+    (amount still due, reason, who recorded it, who authorised it), and the party closes exactly
+    as Finish table closes it. No
     receipt is printed and nothing is sent to the kitchen. The counter's held-orders card lists the
     departures still unpaid under "Left without paying". Server:
     `POST /api/parties/:id/unpaid-departure`, `GET /api/unpaid-departures`,
@@ -5050,19 +5051,37 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **OPEN — collecting PART of the debt later is not built**, for the same reason. Collecting
       it in full uses `POST /api/working-orders/:id/collect`, and the bill then leaves the list.
     - **OPEN — a dish never sent, on hold or recalled blocks the departure**
-      (`unpaid_departure.unfired_dishes`); staff cancel it first. The guests were never served it.
+      (`unpaid_departure.unfired_dishes`); staff cancel it first.
     - **OPEN — handhelds never see the list.** It sits in the counter's held-orders card, which the
       default phone and tablet layouts lack. The dashboard may be the better home.
     - A bill that owes nothing once invoiced — one already invoiced whose credit notes bring it to
-      zero, or an open bill whose every line was given away — gets no departure row. Beside a bill
-      that does get one it is still invoiced (at 0.00, for the open bill) and the party closes;
-      when no bill would get a row the departure is refused `unpaid_departure.nothing_outstanding`
-      before any invoice is filed. `unpaid_departures` refuses an amount of zero or less
-      (`unpaid_departures_amount_ck`). The list of departures shows what each invoice owes now,
-      net of its credit notes, and leaves out one a credit note has brought to nothing; the row
-      keeps the amount owed when the party left. Cases in `apps/server/src/unpaid-departure.test.ts`
-      ("a bill that owes nothing", and the list's credit-note cases). The till's dialog leaves
-      such bills out of what it shows.
+      zero, or an open bill whose every line was given away — gets no departure row. The departure
+      invoices it (at 0.00, for the open bill) and settles it with no payment, as collecting a bill
+      that owes nothing settles it (`settleIssuedOwingNothing` in `apps/server/src/till-sale.ts`),
+      so no unsettled sale owing 0.00 is left behind. When every bill owes nothing the party closes
+      with no departure row at all, rather than being refused, because the obvious actions do not
+      close such a table: measured 2026-10-01, Pay on an open bill whose every line was given away
+      answers 500 (cash and manual card alike), and Finish table refuses it
+      `party.bill_outstanding`. Cancelling each given-away line and then finishing did close it
+      (measured the same day through the adjustments route), but that takes served dishes off the
+      bill, and whether the till offers a cancel on a given-away line was not checked.
+      `unpaid_departure.nothing_outstanding` is left for a party with no bill presented and none
+      open with items on it, which Finish table does not refuse as unpaid. `unpaid_departures`
+      refuses an amount of zero or less (`unpaid_departures_amount_ck`). The list of departures
+      shows what each invoice owes now, net of its credit notes, and leaves out one a credit note
+      has brought to nothing; the row keeps the amount owed when the party left. Cases in
+      `apps/server/src/unpaid-departure.test.ts` ("a bill that owes nothing", "refuses a party with
+      nothing outstanding, which Finish table then closes", and the list's credit-note cases). The
+      till's dialog lists each bill at what `GET /api/parties/:id/bills` says it owes, which is its
+      lines' total less payments and reads no credit note: measured 2026-10-01, an open bill whose
+      every line was given away read 0.00 and is left out, but a presented bill credited to nothing
+      read 18.00, its full amount.
+    - **OPEN — Pay on an open bill whose every line was given away answers 500.**
+      `POST /api/sales` with a cash tender of 0.00 or a manual card tries to file the sale with a
+      tender of 0.00, which `tenders_amount_ck` refuses, and the bill stays open (measured
+      2026-10-01: `CHECK constraint failed: tenders_amount_ck`). Read from the till's code, not run: its Pay
+      confirm is enabled at 0.00 and sends that request. Pay goes through `payWorkingOrder` and
+      `fileImmediateSale` in `apps/server/src/till-sale.ts`, which no B17 commit changes.
     - **OPEN — a bill presented without an invoice keeps the label it was placed with when the
       departure invoices it.** Every other path that invoices such a bill saves the receipt label
       (the party's name and tables) in the update that settles it; the departure leaves the bill
@@ -5071,7 +5090,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Measured 2026-10-01: saving the label on such a bill made the departure answer 500; without
       it the bill's label stayed null while the open bill invoiced beside it was given the
       table's. Not measured: what its invoice's reprint and the debt list then show, both of which
-      read the stored label. Fixing it needs that trigger to allow the label to change.
+      read the stored label. Fixing it needs that trigger to allow the label to change. A bill
+      the departure settles because it owes nothing goes through collect's settle-owing-nothing
+      path, which saves no label. Whether a bill presented without an invoice can owe nothing was
+      not established: giving a line away on a presented bill is refused `tab.not_open` (measured
+      2026-10-01).
   - **The service plan's acceptance checks (spec §12), swept against `main` plus B17 on
     2026-10-01.** Each check has a test, is partly met with the rest already recorded in this
     backlog, or is out of scope by the plan's D13. Two gaps were not recorded before:
