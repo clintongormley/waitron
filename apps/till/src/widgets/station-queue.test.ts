@@ -92,6 +92,17 @@ const withElsewhere: StationQueueGroup = {
       state: "queued",
       held: true,
     },
+    {
+      id: "other-steak",
+      name: "Steak",
+      quantity: "0.750",
+      unitName: { "en-GB": "lb", "es-ES": "kg" },
+      unitPrecision: 3,
+      soldInEach: false,
+      stationName: "Grill",
+      state: "ready",
+      held: false,
+    },
   ],
 };
 
@@ -114,6 +125,9 @@ describe("till-station-queue", () => {
     expect(burger.textContent).toContain("Preparing");
     const fries = section.querySelector('[data-elsewhere-item="other-fries"]')!;
     expect(fries.textContent).toContain("On hold");
+    const steak = section.querySelector('[data-elsewhere-item="other-steak"]')!;
+    expect(steak.textContent).toContain("0.75 lb× Steak");
+    expect(steak.textContent).toContain("Ready");
     expect(section.querySelector("button, wt-button")).toBeNull();
   });
 
@@ -154,6 +168,9 @@ describe("till-station-queue", () => {
       );
       expect(section.querySelector('[data-elsewhere-item="other-fries"]')!.textContent).toContain(
         "En espera",
+      );
+      expect(section.querySelector('[data-elsewhere-item="other-steak"]')!.textContent).toContain(
+        "0.75 kg× Steak",
       );
     } finally {
       setLocale(previousLocale);
