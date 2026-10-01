@@ -509,6 +509,33 @@ describe("till-app: the party's bills and Finish table", () => {
     );
   });
 
+  it("says a bill owing nothing still holds money when Finish is refused for it, in its own words", async () => {
+    const { el } = await mountApp({
+      finishTable: vi.fn().mockRejectedValue({
+        code: "bill.payments_received",
+        status: 409,
+        workingOrderId: "wo-check",
+      }),
+    });
+    const order = await openMesa(el);
+    const holding = { ...checkBill, total: "0.00", outstanding: "0.00", hasPayments: true };
+    vi.mocked(api.getPartyBills).mockResolvedValue([tabBill, holding]);
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+    emit(order, "finish-table", {});
+    await flush(el);
+
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(
+      "A bill on this table owes nothing but still holds money. Give it back before finishing the table",
+    );
+    expect(text).not.toContain(codeMessage("bill.payments_received"));
+    expect(tableOrder(el)!.finishRefused).toBe(false);
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(api.getPartyBills).toHaveBeenCalledTimes(billReads + 1);
+    expect(tableOrder(el)!.bills).toEqual([tabBill, holding]);
+  });
+
   it("shows the bill's new figures right after a dish is cancelled", async () => {
     const server = { voided: false };
     const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
@@ -1965,6 +1992,25 @@ describe("till-app: a table action's answer once the waiter has opened another p
     expect(call).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.party?.id).toBe("v7");
     expect(tableOrder(el)!.finishRefused).toBe(false);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a refusal of Finish for a bill still holding money, arriving late, says nothing on the other party", async () => {
+    const { call, answer } = held();
+    const { el } = await mountApp({ finishTable: call });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    answer.refuse({ code: "bill.payments_received", status: 409, workingOrderId: "wo-9" });
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.party?.id).toBe("v7");
     expect(banner(el)).toBeNull();
   });
 

@@ -2161,7 +2161,8 @@ export class TillApi {
 
   /**
    * Finish a party's table → `POST /api/parties/:partyId/finish`. Rejects `party.bill_outstanding`
-   * while a bill is unpaid, `party.not_open`, or `party.out_of_date` when the party changed since
+   * while a bill is unpaid, `bill.payments_received` while an open bill with no items left still
+   * holds money, `party.not_open`, or `party.out_of_date` when the party changed since
    * `expectedPartyRevision` was read.
    */
   finishTable(partyId: string, expectedPartyRevision: number): Promise<{ state: "closed" }> {
