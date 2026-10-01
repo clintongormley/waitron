@@ -18,9 +18,10 @@ export interface AddableProduct {
 }
 
 /**
- * Picks several products to add to one section. Membership of this section or of the menu around
- * it is only marked, never refused: a product may sit in several sections. A host may put its own
- * Cancel in the `cancel` slot, which lands beside the confirm action.
+ * Picks several products to add to one section. A product the section already holds is not
+ * offered; one elsewhere on the menu around it is only marked, since a product may sit in several
+ * sections. A host may put its own Cancel in the `cancel` slot, which lands beside the confirm
+ * action.
  */
 @customElement("dashboard-section-add-products")
 export class SectionAddProducts extends LitElement {
@@ -132,14 +133,19 @@ export class SectionAddProducts extends LitElement {
   @state() private search = "";
   @state() private selected: ReadonlySet<string> = new Set();
   @state() private error = false;
-  #sorted: AddableProduct[] = [];
+  /** Every product the section does not already hold, by name. */
+  #offered: AddableProduct[] = [];
   #options: { id: string; path: string }[] = [];
   /** Null when no category is chosen. */
   #within: ReadonlySet<string> | null = null;
 
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("products"))
-      this.#sorted = [...this.products].sort((a, b) => byLabel(a.name, b.name));
+    if (changed.has("products") || changed.has("inSection")) {
+      const held = new Set(this.inSection);
+      this.#offered = this.products
+        .filter((product) => !held.has(product.id))
+        .sort((a, b) => byLabel(a.name, b.name));
+    }
     // A category deleted under the filter would otherwise hide every product behind a dropdown
     // that has fallen back to "All categories".
     if (
@@ -159,13 +165,13 @@ export class SectionAddProducts extends LitElement {
   }
 
   #chosen(): string[] {
-    return this.#sorted.filter((product) => this.selected.has(product.id)).map(({ id }) => id);
+    return this.#offered.filter((product) => this.selected.has(product.id)).map(({ id }) => id);
   }
 
   #visible(): AddableProduct[] {
     const within = this.#within;
     const needle = this.search.trim().toLocaleLowerCase();
-    return this.#sorted.filter(
+    return this.#offered.filter(
       (product) =>
         (within === null || (product.categoryId !== null && within.has(product.categoryId))) &&
         product.name.toLocaleLowerCase().includes(needle),
@@ -197,7 +203,7 @@ export class SectionAddProducts extends LitElement {
     );
   }
 
-  #item(product: AddableProduct, inSection: Set<string>, onMenu: Set<string>) {
+  #item(product: AddableProduct, onMenu: Set<string>) {
     return html`<li data-product=${product.id}>
       <label class="pick">
         <input
@@ -210,11 +216,6 @@ export class SectionAddProducts extends LitElement {
         />
         <span class="name">${product.name}</span>
         ${
-          inSection.has(product.id)
-            ? html`<span class="mark">${t("add_products.in_section")}</span>`
-            : nothing
-        }
-        ${
           onMenu.has(product.id)
             ? html`<span class="mark">${t("add_products.on_menu")}</span>`
             : nothing
@@ -226,16 +227,19 @@ export class SectionAddProducts extends LitElement {
   #list() {
     if (this.products.length === 0)
       return html`<p class="notice" data-test="empty">${t("add_products.empty")}</p>`;
+    if (this.#offered.length === 0)
+      return html`<p class="notice" data-test="all-in-section">
+        ${t("add_products.all_in_section")}
+      </p>`;
     const visible = this.#visible();
     if (visible.length === 0)
       return html`<p class="notice" data-test="no-matches">${t("add_products.no_matches")}</p>`;
-    const inSection = new Set(this.inSection);
     const onMenu = new Set(this.onMenu ?? []);
     return html`<ul>
       ${repeat(
         visible,
         (product) => product.id,
-        (product) => this.#item(product, inSection, onMenu),
+        (product) => this.#item(product, onMenu),
       )}
     </ul>`;
   }

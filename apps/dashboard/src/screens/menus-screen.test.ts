@@ -1788,7 +1788,7 @@ it("explains a refused move, reads the menu again, and drops the moves queued be
   ]);
 });
 
-it("adds products to a section with this menu's products and the section's own both marked", async () => {
+it("adds products to a section, leaving out the section's own and marking this menu's", async () => {
   const client = api();
   const el = await mountLunch(client);
   await editDrinks(el);
@@ -1809,7 +1809,9 @@ it("adds products to a section with this menu's products and the section's own b
     [...picker.shadowRoot!.querySelectorAll(`li[data-product="${id}"] .mark`)].map((mark) =>
       text(mark),
     );
-  expect(marks("p-lager")).toEqual([t("add_products.in_section"), t("add_products.on_menu")]);
+  // What the section already holds is not offered at all.
+  for (const held of ["p-lager", "p-lemonade"])
+    expect(picker.shadowRoot!.querySelector(`li[data-product="${held}"]`)).toBeNull();
   expect(marks("p-burger")).toEqual([t("add_products.on_menu")]);
   expect(marks("p-chips")).toEqual([]);
 

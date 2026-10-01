@@ -1694,6 +1694,19 @@ this one. Whether to hide it there too is the owner's call; the route's document
 (`docs/developers/product-categories.md`, `POST /management-api/sections/:id/members/products`)
 says "a product the list already holds is skipped"; this change did not test that.
 
+**A menu section's "Add products" checklist offered products already in that section (A183, owner
+2026-10-01: "hide in this section products", on A181's report) — DONE 2026-10-01.** The checklist
+(`apps/dashboard/src/widgets/section-add-products.ts`) listed every product and marked one the
+section held _In this section_, still tickable. Ticking one added nothing: `addProducts`
+(`packages/catalogue/src/sections.ts`) skips a product the list already holds, which the case
+"adds several products at once, skipping those already in the list" in
+`packages/catalogue/src/sections.test.ts` pins (run 2026-10-01, passing). **What was built:** a
+product already in the section is no longer offered; one elsewhere on the menu is still offered
+with its _On this menu_ mark; a product ticked before the section came to hold it is dropped from
+the count and from what is added; and with every product in the section the checklist says
+_"Every product is already in this section."_ (Spanish: _"Todos los productos ya están en esta
+sección."_). The _In this section_ mark and its string are gone. The till has no such checklist.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,

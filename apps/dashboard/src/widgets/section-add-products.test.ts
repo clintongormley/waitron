@@ -37,7 +37,7 @@ async function mount(props: Partial<SectionAddProducts> = {}) {
   const { el } = await mountWidget<SectionAddProducts>("dashboard-section-add-products", {
     products,
     categories,
-    inSection: ["p-lemonade"],
+    inSection: [],
     onMenu: ["p-burger", "p-lemonade"],
     ...props,
   });
@@ -144,33 +144,58 @@ it("keeps a ticked product chosen while a filter hides it, and a second tick unc
   expect(adds).toEqual([{ productIds: ["p-burger", "p-ipa"] }]);
 });
 
-it("marks In this section and On this menu with two different texts, and both can still be added", async () => {
-  const el = await mount();
+it("leaves out a product already in this section, and marks one elsewhere on the menu, which can be added", async () => {
+  const el = await mount({ inSection: ["p-lemonade"] });
   const adds = capture(el);
+  expect(listed(el)).toEqual(["p-burger", "p-ipa", "p-lager", "p-water"]);
   const marks = (id: string) =>
     [...q(el, `li[data-product="${id}"]`).querySelectorAll(".mark")].map((mark) =>
       mark.textContent!.trim(),
     );
-  expect(t("add_products.in_section")).not.toBe(t("add_products.on_menu"));
-  expect(marks("p-lemonade")).toEqual([t("add_products.in_section"), t("add_products.on_menu")]);
   expect(marks("p-burger")).toEqual([t("add_products.on_menu")]);
   expect(marks("p-lager")).toEqual([]);
   // The mark is part of the checkbox's name, not only something seen beside it.
-  const lemonade = q<HTMLInputElement>(el, 'input[value="p-lemonade"]');
-  expect(lemonade.closest("label")!.textContent).toContain(t("add_products.in_section"));
-  expect(lemonade.disabled).toBe(false);
-  await tick(el, "p-lemonade");
+  const burger = q<HTMLInputElement>(el, 'input[value="p-burger"]');
+  expect(burger.closest("label")!.textContent).toContain(t("add_products.on_menu"));
   await tick(el, "p-burger");
   q(el, '[data-test="add"]').click();
-  expect(adds).toEqual([{ productIds: ["p-burger", "p-lemonade"] }]);
+  expect(adds).toEqual([{ productIds: ["p-burger"] }]);
+});
+
+it("offers a product again once the section no longer holds it", async () => {
+  const el = await mount({ inSection: ["p-lemonade"] });
+  el.inSection = [];
+  await el.updateComplete;
+  expect(listed(el)).toContain("p-lemonade");
+});
+
+it("drops a ticked product from what it adds once the section holds it", async () => {
+  const el = await mount();
+  const adds = capture(el);
+  await tick(el, "p-lemonade");
+  await tick(el, "p-ipa");
+  el.inSection = ["p-lemonade"];
+  await el.updateComplete;
+  expect(q(el, '[data-test="count"]').textContent!.trim()).toBe(
+    t("add_products.selected").replace("{count}", "1"),
+  );
+  q(el, '[data-test="add"]').click();
+  expect(adds).toEqual([{ productIds: ["p-ipa"] }]);
+});
+
+it("says every product is already in the section when it holds them all", async () => {
+  const el = await mount({ inSection: products.map(({ id }) => id) });
+  expect(listed(el)).toEqual([]);
+  expect(q(el, '[data-test="all-in-section"]').textContent!.trim()).toBe(
+    t("add_products.all_in_section"),
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="no-matches"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="empty"]')).toBeNull();
 });
 
 it("shows no On this menu mark outside a menu", async () => {
   const el = await mount({ onMenu: null });
   expect(el.shadowRoot!.textContent).not.toContain(t("add_products.on_menu"));
-  expect(q(el, 'li[data-product="p-lemonade"]').textContent).toContain(
-    t("add_products.in_section"),
-  );
 });
 
 it("explains, rather than emitting, when confirmed with nothing chosen", async () => {
