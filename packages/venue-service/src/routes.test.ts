@@ -153,6 +153,109 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("saves station hours and validates each interval", async () => {
+    const fx = await fixture();
+    const path = `/management-api/venue-service/stations/${fx.stationId}/hours`;
+    expect(
+      (
+        await send(fx.app, "PUT", path, fx.managerCookie, {
+          hours: [{ weekday: 5, opensAt: "19:00", closesAt: "21:00" }],
+        })
+      ).status,
+    ).toBe(204);
+    for (const [body, field] of [
+      [{}, "hours"],
+      [{ hours: "bad" }, "hours"],
+      [{ hours: [{ weekday: 7, opensAt: "19:00", closesAt: "21:00" }] }, "hours.0"],
+      [{ hours: [{ weekday: 5, opensAt: "19:00", closesAt: "19:00" }] }, "hours.0"],
+    ] as const) {
+      const response = await send(fx.app, "PUT", path, fx.managerCookie, body);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const unknown = await send(
+      fx.app,
+      "PUT",
+      `/management-api/venue-service/stations/${crypto.randomUUID()}/hours`,
+      fx.managerCookie,
+      { hours: [] },
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "station.not_found" } });
+  });
+
+  it("saves and clears a fallback while refusing loops and a missing key", async () => {
+    const fx = await fixture();
+    const path = `/management-api/venue-service/stations/${fx.stationId}/fallback`;
+    const [another] = await db
+      .insert(kitchenStations)
+      .values({ locationId: fx.locationId, name: "Second bar" })
+      .returning({ id: kitchenStations.id });
+    expect(
+      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: another!.id }))
+        .status,
+    ).toBe(204);
+    const saved = (await (
+      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+    ).json()) as { stationTimes: { stationId: string; fallbackStationId: string | null }[] };
+    expect(
+      saved.stationTimes.find((station) => station.stationId === fx.stationId)?.fallbackStationId,
+    ).toBe(another!.id);
+    const missing = await send(fx.app, "PUT", path, fx.managerCookie, {});
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "fallbackStationId" } },
+    });
+    const loop = await send(fx.app, "PUT", path, fx.managerCookie, {
+      fallbackStationId: fx.stationId,
+    });
+    expect(loop.status).toBe(409);
+    expect(await loop.json()).toMatchObject({ error: { code: "station.fallback_loop" } });
+    const other = await fixture();
+    expect(
+      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: other.stationId }))
+        .status,
+    ).toBe(409);
+    expect(
+      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: null })).status,
+    ).toBe(204);
+    const cleared = (await (
+      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+    ).json()) as { stationTimes: { stationId: string; fallbackStationId: string | null }[] };
+    expect(
+      cleared.stationTimes.find((station) => station.stationId === fx.stationId)?.fallbackStationId,
+    ).toBeNull();
+  });
+
+  it("saves and clears today's by-hand state and validates its value", async () => {
+    const fx = await fixture();
+    const path = `/management-api/venue-service/stations/${fx.stationId}/today`;
+    expect((await send(fx.app, "PUT", path, fx.managerCookie, { state: "closed" })).status).toBe(
+      204,
+    );
+    const model = (await (
+      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+    ).json()) as { stationTimes: { stationId: string; today: string | null }[] };
+    expect(model.stationTimes.find((station) => station.stationId === fx.stationId)?.today).toBe(
+      "closed",
+    );
+    for (const state of [undefined, "unknown"]) {
+      const response = await send(
+        fx.app,
+        "PUT",
+        path,
+        fx.managerCookie,
+        state === undefined ? {} : { state },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "state" } },
+      });
+    }
+    expect((await send(fx.app, "PUT", path, fx.managerCookie, { state: null })).status).toBe(204);
+  });
   it("keeps stored rules and foreign station or zone references within their location", async () => {
     const fx = await fixture(),
       other = await fixture();

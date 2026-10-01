@@ -44,4 +44,11 @@ describe("VENUE_SERVICE", () => {
     expect(names).toContain("service_settings");
     expect(names).not.toContain("kitchen_notices");
   });
+
+  it("transfers station hours and fallbacks but not today's by-hand state", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(names).toContain("station_hours");
+    expect(names).toContain("station_fallbacks");
+    expect(names).not.toContain("station_day_states");
+  });
 });

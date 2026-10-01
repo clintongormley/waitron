@@ -11,11 +11,16 @@ import { AppError, normaliseUuid } from "@waitron/shared";
 import { resolveZoneContext, type VenueScope } from "./operations.js";
 import {
   chooseMaker,
+  closedSendsTo,
   folderAncestors,
+  stationStatus,
   unreachableExceptions,
   type RouteTarget,
   type RoutingRules,
 } from "./routing.js";
+import { readLocationClock } from "@waitron/reporting";
+import { venueMoment } from "./station-times.js";
+import { stationDayStates, stationFallbacks, stationHours } from "./schema/station-times.js";
 import type {
   ExceptionInput,
   RouteExplanation,
@@ -248,7 +253,7 @@ export async function reorderExceptions(
       .where(and(eq(routeExceptions.locationId, cfg.locationId), eq(routeExceptions.id, id)));
 }
 
-async function snapshot(tx: Transaction, cfg: VenueScope) {
+async function snapshot(tx: Transaction, cfg: VenueScope, businessDay: string | null = null) {
   const claims = await tx
     .select()
     .from(stationClaims)
@@ -274,6 +279,54 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
+  const stationIds = stations.map((row) => row.id);
+  const hours =
+    stationIds.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(stationHours)
+          .where(inArray(stationHours.stationId, stationIds))
+          .orderBy(asc(stationHours.weekday), asc(stationHours.opensAt), asc(stationHours.id));
+  const fallbacks =
+    stationIds.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(stationFallbacks)
+          .where(inArray(stationFallbacks.stationId, stationIds));
+  const dayStates =
+    stationIds.length === 0 || businessDay === null
+      ? []
+      : await tx
+          .select()
+          .from(stationDayStates)
+          .where(
+            and(
+              inArray(stationDayStates.stationId, stationIds),
+              eq(stationDayStates.businessDay, businessDay),
+            ),
+          );
+  const fallbackByStation = new Map(fallbacks.map((row) => [row.stationId, row.fallbackStationId]));
+  const todayByStation = new Map(
+    dayStates.map((row) => [row.stationId, row.open ? ("open" as const) : ("closed" as const)]),
+  );
+  const timing = new Map(
+    stations.map((station) => [
+      station.id,
+      {
+        hours: hours
+          .filter((row) => row.stationId === station.id)
+          .map((row) => ({
+            weekday: row.weekday,
+            opensAt: row.opensAt.slice(0, 5),
+            closesAt: row.closesAt.slice(0, 5),
+          })),
+        fallbackId: fallbackByStation.get(station.id) ?? null,
+        today: todayByStation.get(station.id) ?? null,
+      },
+    ]),
+  );
   const rules: RoutingRules = {
     claims: new Map(claims.map((row) => [row.categoryId, readTarget(row)])),
     exceptions: exceptions.map(({ id, position, zoneId, categoryId, productId, ...row }) => ({
@@ -287,13 +340,17 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
     parentOf: new Map(folders.map((row) => [row.id, row.parentId])),
     activeStationIds: new Set(stations.filter((row) => row.active).map((row) => row.id)),
     defaultStationId: stations.find((row) => row.active && row.isDefault)?.id ?? null,
-    timing: new Map(),
+    timing,
   };
   return { rules, folders, stations };
 }
 
-export async function loadRoutingRules(tx: Transaction, cfg: VenueScope): Promise<RoutingRules> {
-  return (await snapshot(tx, cfg)).rules;
+export async function loadRoutingRules(
+  tx: Transaction,
+  cfg: VenueScope,
+  businessDay: string | null,
+): Promise<RoutingRules> {
+  return (await snapshot(tx, cfg, businessDay)).rules;
 }
 
 export async function explainRoute(
@@ -480,7 +537,7 @@ export async function resolveMakers(
   const outcomes = new Map<string, RouteTarget | null>();
   if (ids.length === 0) return outcomes;
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  const rules = await loadRoutingRules(tx, cfg);
+  const rules = await loadRoutingRules(tx, cfg, null);
   const productRows = await tx
     .select({
       id: products.id,
@@ -516,7 +573,7 @@ export async function describeMakers(
   tx: Transaction,
   cfg: VenueScope,
 ): Promise<ReadonlyMap<string, { route: RouteTarget | null; variesByZone: boolean }>> {
-  const rules = await loadRoutingRules(tx, cfg);
+  const rules = await loadRoutingRules(tx, cfg, null);
   const rows = await tx
     .select({
       id: products.id,
@@ -549,8 +606,15 @@ export async function describeMakers(
   return result;
 }
 
-export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<RoutingModel> {
-  const { rules, folders, stations } = await snapshot(tx, cfg);
+export async function routingModel(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<RoutingModel> {
+  const moment = await venueMoment(tx, cfg, at);
+  const { rules, folders, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const cutover = clock.dayCutover.slice(0, 5);
   const neverMatches = unreachableExceptions(rules);
   const productFolders = await tx
     .select({
@@ -574,8 +638,6 @@ export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<Ro
         .some(
           (earlier) =>
             earlier.categoryId !== null &&
-            (earlier.target.kind === "no_preparation" ||
-              rules.activeStationIds.has(earlier.target.stationId)) &&
             (earlier.zoneId === null || earlier.zoneId === candidate.zoneId) &&
             family.every((row) => below(row.categoryId, earlier.categoryId!)),
         )
@@ -584,9 +646,6 @@ export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<Ro
   }
   const stationOff = (target: RouteTarget) =>
     target.kind === "station" && !rules.activeStationIds.has(target.stationId);
-  const namedStations = new Set<string>();
-  for (const target of [...rules.claims.values(), ...rules.exceptions.map((e) => e.target)])
-    if (target.kind === "station") namedStations.add(target.stationId);
   const unfiled = await tx
     .select({ id: products.id, name: products.name })
     .from(products)
@@ -610,8 +669,17 @@ export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<Ro
       products: unfiled,
     },
     defaultStationId: rules.defaultStationId,
-    stations: stations
-      .filter((row) => row.isDefault || namedStations.has(row.id))
-      .map(({ id, name, active }) => ({ id, name, active })),
+    stations: stations.map(({ id, name, active }) => ({ id, name, active })),
+    stationTimes: stations.map(({ id }) => ({
+      stationId: id,
+      status: stationStatus(rules, id, moment),
+      hours: [...(rules.timing.get(id)?.hours ?? [])],
+      fallbackStationId: rules.timing.get(id)?.fallbackId ?? null,
+      today: rules.timing.get(id)?.today ?? null,
+      closedSendsTo: closedSendsTo(rules, id, moment),
+    })),
+    todayEnds:
+      moment === null ? null : { timeOfDay: cutover, tomorrow: moment.timeOfDay >= cutover },
+    clockReadable: moment !== null,
   };
 }

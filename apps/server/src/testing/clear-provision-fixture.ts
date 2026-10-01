@@ -6,6 +6,9 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
   await db.transaction(async (tx) => {
     for (const table of [
       "department_hours",
+      "station_day_states",
+      "station_fallbacks",
+      "station_hours",
       "route_exceptions",
       "station_claims",
       "device_zone_defaults",

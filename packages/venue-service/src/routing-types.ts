@@ -1,4 +1,20 @@
-import type { FallbackStep, RouteException, RouteTarget, RoutingDecision } from "./routing.js";
+import type {
+  FallbackStep,
+  RouteException,
+  RouteTarget,
+  RoutingDecision,
+  StationStatus,
+  WeeklyInterval,
+} from "./routing.js";
+
+export interface StationTimes {
+  stationId: string;
+  status: StationStatus;
+  hours: WeeklyInterval[];
+  fallbackStationId: string | null;
+  today: "open" | "closed" | null;
+  closedSendsTo: string | null;
+}
 
 export interface RouteExplanation {
   route: RouteTarget | null;
@@ -32,6 +48,9 @@ export interface RoutingMove {
 }
 
 export interface RoutingModel {
+  stationTimes: StationTimes[];
+  todayEnds: { timeOfDay: string; tomorrow: boolean } | null;
+  clockReadable: boolean;
   claims: { categoryId: string; target: RouteTarget; stationOff: boolean }[];
   exceptions: (RouteException & { neverMatches: boolean; stationOff: boolean })[];
   unassigned: { folders: { id: string; name: string }[]; products: { id: string; name: string }[] };

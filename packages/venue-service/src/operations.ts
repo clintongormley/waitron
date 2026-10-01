@@ -69,7 +69,7 @@ export interface DepartmentHoursInterval {
  * checks length alone: the one caller outside tests, the hours route, admits only `HH:MM`
  * (`CLOCK_TIME` in `./routes.ts`).
  */
-function storedTime(value: string): string {
+export function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 

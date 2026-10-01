@@ -22,6 +22,18 @@ const view: PrepStationsView = {
     },
     defaultStationId: "bar",
     stations: [{ id: "bar", name: "Bar", active: true }],
+    stationTimes: [
+      {
+        stationId: "bar",
+        status: { open: true, why: "default" },
+        hours: [],
+        fallbackStationId: null,
+        today: null,
+        closedSendsTo: "bar",
+      },
+    ],
+    todayEnds: { timeOfDay: "06:00", tomorrow: true },
+    clockReadable: true,
   },
   stations: [
     {

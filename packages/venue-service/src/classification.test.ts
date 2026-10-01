@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
 
 describe("VENUE_SERVICE_CLASSIFICATION", () => {
+  it("replicates station timing and today's state", () => {
+    expect(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) =>
+        ["station_hours", "station_fallbacks", "station_day_states"].includes(entry.table),
+      ).map((entry) => [entry.table, entry.class]),
+    ).toEqual([
+      ["station_hours", "state"],
+      ["station_fallbacks", "state"],
+      ["station_day_states", "state"],
+    ]);
+  });
   it("copies stored claims and exceptions as replicated state", () => {
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) =>

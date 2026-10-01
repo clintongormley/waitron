@@ -234,7 +234,7 @@ describe("stored preparation rules", () => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      expect((await routingModel(tx, f.cfg)).claims).toEqual([
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims).toEqual([
         {
           categoryId: f.drinks,
           target: { kind: "station", stationId: f.terraceBar },
@@ -242,10 +242,10 @@ describe("stored preparation rules", () => {
         },
       ]);
       await setClaim(tx, f.cfg, f.drinks, noPrep);
-      expect((await loadRoutingRules(tx, f.cfg)).claims.get(f.drinks)).toEqual(noPrep);
+      expect((await loadRoutingRules(tx, f.cfg, null)).claims.get(f.drinks)).toEqual(noPrep);
       await removeClaim(tx, f.cfg, f.drinks);
       await removeClaim(tx, f.cfg, f.drinks);
-      expect((await routingModel(tx, f.cfg)).claims).toEqual([]);
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims).toEqual([]);
     }));
 
   it("refuses inactive stations, missing folders, missing products, variants and missing zones", async () =>
@@ -304,7 +304,11 @@ describe("stored preparation rules", () => {
       const a = await createException(tx, f.cfg, f.input);
       const b = await createException(tx, f.cfg, { ...f.input, categoryId: f.cocktails });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position, e.neverMatches]),
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+          e.neverMatches,
+        ]),
       ).toEqual([
         [a, 0, false],
         [b, 1, true],
@@ -316,14 +320,23 @@ describe("stored preparation rules", () => {
           params: { field: "ids" },
         });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position, e.neverMatches]),
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+          e.neverMatches,
+        ]),
       ).toEqual([
         [b, 0, false],
         [a, 1, false],
       ]);
       await deleteException(tx, f.cfg, a);
       const c = await createException(tx, f.cfg, { ...f.input, target: noPrep });
-      expect((await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position])).toEqual([
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+        ]),
+      ).toEqual([
         [b, 0],
         [c, 1],
       ]);
@@ -333,7 +346,9 @@ describe("stored preparation rules", () => {
         productId: f.mojito,
         target: noPrep,
       });
-      expect((await routingModel(tx, f.cfg)).exceptions[0]).toMatchObject({
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions[0],
+      ).toMatchObject({
         id: b,
         position: 0,
         zoneId: null,
@@ -355,8 +370,8 @@ describe("stored preparation rules", () => {
         other = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, noPrep);
       await removeClaim(tx, other.cfg, f.drinks);
-      const ownRules = await loadRoutingRules(tx, f.cfg);
-      const otherRules = await loadRoutingRules(tx, other.cfg);
+      const ownRules = await loadRoutingRules(tx, f.cfg, null);
+      const otherRules = await loadRoutingRules(tx, other.cfg, null);
       expect(ownRules.claims.get(f.drinks)).toEqual(noPrep);
       expect(otherRules.claims.size).toBe(0);
       expect(ownRules.activeStationIds).toEqual(new Set([f.bar, f.terraceBar]));
@@ -386,12 +401,17 @@ describe("stored preparation rules", () => {
         code: "management.request_invalid",
         params: { field: "ids" },
       });
-      expect((await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position])).toEqual([
-        [a, 0],
-      ]);
-      expect((await routingModel(tx, other.cfg)).exceptions.map((e) => [e.id, e.position])).toEqual(
-        [[b, 0]],
-      );
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+        ]),
+      ).toEqual([[a, 0]]);
+      expect(
+        (await routingModel(tx, other.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map(
+          (e) => [e.id, e.position],
+        ),
+      ).toEqual([[b, 0]]);
     }));
 
   it("flags a product caught with all variants, but permits a variant in another folder", async () =>
@@ -404,16 +424,22 @@ describe("stored preparation rules", () => {
         productId: f.mojito,
       });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(true);
       await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.variant));
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(false);
       await tx.update(products).set({ categoryId: null }).where(eq(products.id, f.variant));
       await updateException(tx, f.cfg, earlier, { ...f.input, zoneId: null, target: noPrep });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(true);
       await updateException(tx, f.cfg, product, {
         ...f.input,
@@ -423,7 +449,9 @@ describe("stored preparation rules", () => {
       });
       await updateException(tx, f.cfg, earlier, f.input);
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(false);
       await updateException(tx, f.cfg, product, {
         ...f.input,
@@ -431,9 +459,9 @@ describe("stored preparation rules", () => {
         productId: f.mojito,
       });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.exceptions.find((e) => e.id === product)).toMatchObject({
-        neverMatches: false,
+        neverMatches: true,
         stationOff: true,
       });
       expect(model.defaultStationId).toBeNull();
@@ -444,7 +472,7 @@ describe("stored preparation rules", () => {
       const f = await fixture(tx);
       const [plain] = await tx.insert(categories).values({ name: "Plain" }).returning();
       await setClaim(tx, f.cfg, f.drinks, noPrep);
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.unassigned.folders).toContainEqual({ id: f.food, name: "Food" });
       expect(model.unassigned.folders).toContainEqual({ id: plain!.id, name: "Plain" });
       expect(
@@ -456,10 +484,13 @@ describe("stored preparation rules", () => {
       );
       await tx.update(products).set({ active: false }).where(eq(products.id, f.bread));
       expect(
-        (await routingModel(tx, f.cfg)).unassigned.products.some((p) => p.id === f.bread),
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).unassigned.products.some(
+          (p) => p.id === f.bread,
+        ),
       ).toBe(false);
       expect(model.defaultStationId).toBe(f.bar);
-      expect(model.stations).toEqual([{ id: f.bar, name: "Bar", active: true }]);
+      expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: true });
+      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
     }));
 
   it("cascades folder rules and moves its product to the nearest surviving claim", async () =>
@@ -469,7 +500,7 @@ describe("stored preparation rules", () => {
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await createException(tx, f.cfg, { ...f.input, categoryId: f.cocktails });
       await deleteCatalogueItems(tx, { productIds: [], categoryIds: [f.cocktails] }, "move_up");
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.claims.some((c) => c.categoryId === f.cocktails)).toBe(false);
       expect(model.exceptions).toEqual([]);
       const [moved] = await tx
@@ -479,7 +510,7 @@ describe("stored preparation rules", () => {
       expect(moved!.categoryId).toBe(f.drinks);
       expect(
         chooseMaker(
-          await loadRoutingRules(tx, f.cfg),
+          await loadRoutingRules(tx, f.cfg, null),
           { productId: f.mojito, routedProductId: f.mojito, categoryId: moved!.categoryId },
           f.terrace,
           null,
@@ -496,13 +527,20 @@ describe("stored preparation rules", () => {
         target: { kind: "station", stationId: f.terraceBar },
       });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.claims).toContainEqual({
         categoryId: f.beer,
         target: { kind: "station", stationId: f.bar },
         stationOff: true,
       });
       expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
+      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
+      expect(model.stationTimes).toContainEqual(
+        expect.objectContaining({
+          stationId: f.switchedOff,
+          status: { open: false, why: "switched_off" },
+        }),
+      );
       expect(model.stations).toContainEqual({
         id: f.terraceBar,
         name: "Terrace Bar",
@@ -525,9 +563,10 @@ describe("stored preparation rules", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.defaultStationId).toBeNull();
-      expect(model.stations).toEqual([{ id: f.bar, name: "Bar", active: false }]);
+      expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
+      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
     }));
 
   it("permits a service-zone-only exception and keeps its no-preparation target", async () =>
@@ -539,7 +578,7 @@ describe("stored preparation rules", () => {
         productId: null,
         target: noPrep,
       });
-      expect((await routingModel(tx, f.cfg)).exceptions).toEqual([
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions).toEqual([
         {
           id,
           position: 0,
@@ -633,7 +672,9 @@ describe("assigning an unfiled product from Prep stations", () => {
           code: "route.subject_not_found",
           params: { subject: "product" },
         });
-      expect((await routingModel(tx, f.cfg)).exceptions).toEqual([]);
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions).toEqual(
+        [],
+      );
     }));
 
   it("collapses repeated product assignments to one effective rule", async () =>
@@ -661,7 +702,9 @@ describe("assigning an unfiled product from Prep stations", () => {
       ]);
       const { assignUnfiledProduct } = await import("./routing-store.js");
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
-      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toMatchObject([
         { productId: f.bread, target: { kind: "station", stationId: f.terraceBar } },
       ]);
     }));
@@ -683,24 +726,24 @@ describe("assigning an unfiled product from Prep stations", () => {
       });
       const product = { productId: f.bread, routedProductId: f.bread, categoryId: null };
       expect(
-        chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace, null).route,
+        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
       ).toEqual(noPrep);
       const { assignUnfiledProduct } = await import("./routing-store.js");
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
       expect(
-        chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace, null).route,
+        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
       ).toEqual({
         kind: "station",
         stationId: f.terraceBar,
       });
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.bar });
       expect(
-        chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace, null).route,
+        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
       ).toEqual({
         kind: "station",
         stationId: f.bar,
       });
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(
         model.exceptions.filter((e) => e.productId === f.bread && e.zoneId === null),
       ).toHaveLength(1);
@@ -720,7 +763,7 @@ describe("routing previews", () => {
         productId: null,
         target: noPrep,
       });
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "exception",
         id: null,
@@ -738,7 +781,7 @@ describe("routing previews", () => {
           to: noPrep,
         }),
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
 
   it("previews a revised assignment ahead of broader exceptions without saving it", async () =>
@@ -746,7 +789,7 @@ describe("routing previews", () => {
       const f = await fixture(tx);
       const { assignUnfiledProduct } = await import("./routing-store.js");
       await assignUnfiledProduct(tx, f.cfg, f.bread, noPrep);
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "assignment",
         productId: f.bread,
@@ -759,7 +802,7 @@ describe("routing previews", () => {
           to: { kind: "station", stationId: f.terraceBar },
         }),
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
 
   it("previews replacing duplicate product assignments as one rule", async () =>
@@ -785,7 +828,7 @@ describe("routing previews", () => {
           noPreparation: true,
         },
       ]);
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "assignment",
         productId: f.bread,
@@ -797,7 +840,7 @@ describe("routing previews", () => {
           to: { kind: "station", stationId: f.terraceBar },
         }),
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
 
   it("shows the fallback after removing a claim without removing the stored claim", async () =>
@@ -816,9 +859,9 @@ describe("routing previews", () => {
           to: { kind: "station", stationId: f.bar },
         }),
       ]);
-      expect((await routingModel(tx, f.cfg)).claims).toMatchObject([
-        { categoryId: f.drinks, target: noPrep },
-      ]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims,
+      ).toMatchObject([{ categoryId: f.drinks, target: noPrep }]);
     }));
 
   it("shows the fallback after deleting an exception and rejects unknown exception ids", async () =>
@@ -838,7 +881,9 @@ describe("routing previews", () => {
           to: { kind: "station", stationId: f.bar },
         }),
       ]);
-      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([{ id }]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toMatchObject([{ id }]);
       for (const change of [
         { kind: "exception_delete", id: randomUUID() } as const,
         { kind: "exception", id: randomUUID(), input: f.input } as const,
@@ -863,7 +908,9 @@ describe("routing previews", () => {
           code: "route.subject_not_found",
           params: { subject: "product" },
         });
-      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([{ id }]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toMatchObject([{ id }]);
     }));
 
   it("shows a claim move in every active zone without writing it", async () =>
@@ -883,7 +930,7 @@ describe("routing previews", () => {
         vatClass: "general",
       });
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "claim",
         categoryId: f.drinks,
@@ -918,7 +965,7 @@ describe("routing previews", () => {
           to: { kind: "station", stationId: f.terraceBar },
         },
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
   it("rejects an inactive destination with the write code", async () =>
     scoped(async (tx) => {
@@ -982,7 +1029,11 @@ describe("routing previews", () => {
         },
       ]);
       expect(moves.some((m) => m.zoneId === inside!.id)).toBe(false);
-      expect((await routingModel(tx, f.cfg)).exceptions.map((e) => e.id)).toEqual([first, second]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map(
+          (e) => e.id,
+        ),
+      ).toEqual([first, second]);
     }));
   it("puts an unfiled assignment before a broader zone exception", async () =>
     scoped(async (tx) => {
@@ -1002,6 +1053,8 @@ describe("routing previews", () => {
         from: noPrep,
         to: { kind: "station", stationId: f.terraceBar },
       });
-      expect((await routingModel(tx, f.cfg)).exceptions).toHaveLength(1);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toHaveLength(1);
     }));
 });

@@ -54,6 +54,7 @@ import {
 } from "./routing-store.js";
 import type { ExceptionInput, RouteTarget } from "./routing.js";
 import type { RoutingChange } from "./routing-types.js";
+import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
@@ -71,6 +72,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "route.subject_not_found": 404,
   "route.not_found": 404,
   "route.station_inactive": 409,
+  "station.not_found": 404,
+  "station.fallback_loop": 409,
+  "time_zone.unreadable": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "invoice_first", "ticket_then_pay"]);
@@ -206,7 +210,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.get("/management-api/venue-service/routing", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        return c.json(await gated(sessionId, (tx) => routingModel(tx, ctx.cfg)));
+        return c.json(await gated(sessionId, (tx) => routingModel(tx, ctx.cfg, new Date())));
       }),
     );
 
@@ -297,6 +301,75 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "ids" });
         const ids = body.ids.map((id) => requireBodyUuid(id, "ids"));
         await gated(sessionId, (tx) => reorderExceptions(tx, ctx.cfg, ids));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/stations/:stationId/hours", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        if (!Array.isArray(body.hours))
+          throw new AppError("management.request_invalid", { field: "hours" });
+        const hours = body.hours.map((value, index) => {
+          if (typeof value !== "object" || value === null)
+            throw new AppError("management.request_invalid", { field: `hours.${index}` });
+          const interval = value as Record<string, unknown>;
+          const { weekday, opensAt, closesAt } = interval;
+          if (
+            typeof weekday !== "number" ||
+            !Number.isInteger(weekday) ||
+            weekday < 0 ||
+            weekday > 6 ||
+            typeof opensAt !== "string" ||
+            !CLOCK_TIME.test(opensAt) ||
+            typeof closesAt !== "string" ||
+            !CLOCK_TIME.test(closesAt) ||
+            opensAt === closesAt
+          )
+            throw new AppError("management.request_invalid", { field: `hours.${index}` });
+          return { weekday, opensAt, closesAt };
+        });
+        await gated(sessionId, (tx) => replaceStationHours(tx, ctx.cfg, stationId, hours));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/stations/:stationId/fallback", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        if (body.fallbackStationId === undefined)
+          throw new AppError("management.request_invalid", { field: "fallbackStationId" });
+        const fallbackStationId =
+          body.fallbackStationId === null
+            ? null
+            : requireBodyUuid(body.fallbackStationId, "fallbackStationId");
+        await gated(sessionId, (tx) =>
+          setStationFallback(tx, ctx.cfg, stationId, fallbackStationId),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/stations/:stationId/today", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        if (body.state !== "open" && body.state !== "closed" && body.state !== null)
+          throw new AppError("management.request_invalid", { field: "state" });
+        await gated(sessionId, (tx) =>
+          setStationToday(
+            tx,
+            ctx.cfg,
+            stationId,
+            body.state as "open" | "closed" | null,
+            new Date(),
+          ),
+        );
         return c.body(null, 204);
       }),
     );
