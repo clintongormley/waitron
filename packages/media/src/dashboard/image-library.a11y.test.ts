@@ -11,8 +11,6 @@ const image: LibraryImage = {
   id: "bread",
   filename: "bread.png",
   names: { es: "Pan", en: "Bread" },
-  altText: { es: "Pan recién hecho", en: "Freshly baked bread" },
-  labels: ["Food", "Breakfast"],
   createdAt: "2026-09-12T10:00:00Z",
   updatedAt: "2026-09-12T10:00:00Z",
   usageCount: 1,
@@ -28,7 +26,6 @@ async function mount(theme: "light" | "dark"): Promise<ImageLibrary> {
   const library = document.createElement("dashboard-image-library");
   library.api = {
     listImages: vi.fn().mockResolvedValue({ images: [image], total: 1 }),
-    listLabels: vi.fn().mockResolvedValue({ labels: image.labels }),
     getImage: vi.fn().mockResolvedValue({
       image,
       uses: [

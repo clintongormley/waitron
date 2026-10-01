@@ -38,8 +38,6 @@ describe("the media module descriptor", () => {
           id: "image-a",
           filename,
           names: JSON.stringify({ en: "Bread" }),
-          alt_text: JSON.stringify({ en: "Loaf" }),
-          labels: JSON.stringify([]),
         },
       ],
       media_image_data: [{ image_id: "image-a", bytes: `\\x${bytes.toString("hex")}` }],
@@ -93,8 +91,6 @@ describe("the media module descriptor", () => {
         {
           image: await samplePreparedImage({ width: 8 }),
           names: { en: "Bread" },
-          altText: {},
-          labels: [],
         },
         { fallbackLanguage: "en" },
       );

@@ -50,9 +50,8 @@ site.
 ## Add a photograph once
 
 Open **Image library**, choose **Upload photo**, and select a JPEG, PNG or WebP file. Give it a short
-name that helps you find it and, if you can, alt text that describes the photograph for someone who
-cannot see it. Only the name is required, in your default content language; alt text is optional but
-recommended for accessibility.
+name that helps you find it. The name is required in your default content language; names in your
+other content languages are optional.
 
 Waitron keeps a smaller copy of each photograph rather than the file you chose. A phone photo is
 often several megabytes, and a library of thousands of them would make every backup and every
@@ -63,31 +62,25 @@ anyone who has a photo's address can open it. Files up to 20 MB are accepted. If
 as too large, has too many pixels or cannot be read, export a smaller copy from your photo app and
 upload that instead.
 
-For the bread photograph, you might enter **Pan de verano** as the name and **Rebanadas de pan con
-tomate sobre un plato blanco** as the Spanish alt text. Leave the English fields blank until you
-have a translation. Choose **Save** to add the photo to the library; cancelling before Save leaves
-it out of the library.
-
-Enter labels separated by commas, such as **Food, Summer menu**. You can assign several labels and
-reuse them on other photographs. A new label appears when you save its first image. When you remove
-its last assignment, it disappears from the label filter. Capitalization variants share one label.
+For the bread photograph, you might enter **Pan de verano** as the Spanish name. Leave the English
+name blank until you have a translation. Choose **Save** to add the photo to the library; cancelling
+before Save leaves it out of the library.
 
 ## Find and reuse an image
 
-Search the names, alt text and labels, and narrow the results with **Filter by label**. Choose
-**Relevance** to prioritize search matches, **Date** to browse uploads or **Name** to scan names.
-Date starts with the newest uploads; switch to **Oldest first** when you need the earliest ones.
-Name starts with **A–Z** and also offers **Z–A**. Use the page controls when more photographs match
-than fit on the current page.
+**Search images** finds photographs by the words in their names. Choose **Relevance** to prioritize
+search matches, **Date** to browse uploads or **Name** to scan names. Date starts with the newest
+uploads; switch to **Oldest first** when you need the earliest ones. Name starts with **A–Z** and
+also offers **Z–A**. Use the page controls when more photographs match than fit on the current page.
 
 In a product editor, select **Choose image** to open the same library, then select **Use image** on
 the photograph you want. Save the product to keep the association. You can reuse one photograph on
 several products. Uploading the same file again finds the existing image and keeps its existing
-names, alt text and labels, as long as Waitron's image library has not been upgraded in between: a
-newer version may make a slightly different copy, which is then stored as a new image. A notice
-identifies the reused image and lets you open it for editing.
+names, as long as Waitron's image library has not been upgraded in between: a newer version may make
+a slightly different copy, which is then stored as a new image. A notice identifies the reused image
+and lets you open it for editing.
 
-Choose **Edit** on the photograph's card in the library to add translations or change its labels.
+Choose **Edit** on the photograph's card in the library to add translations or change its name.
 Editing this shared record changes the metadata wherever that photograph is reused.
 
 ## Remove a use before deleting the photograph
@@ -96,11 +89,10 @@ Editing this shared record changes the metadata wherever that photograph is reus
 The photograph stays in the library for your other products.
 
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
-product variant, category or section still uses it, deletion is blocked. You see links to those
-products, including inactive products, to those categories, and to those sections, a section
-shown by its internal name. Remove the photograph from each of them before trying deletion again. A
-section's link opens its editor in **Products and menus**, **Sections**, where **Remove image**
-clears it when you save the section.
+product variant or section still uses it, deletion is blocked. You see links to those products,
+including inactive products, and to those sections, a section shown by its internal name. Remove
+the photograph from each of them before trying deletion again. A section's link opens its editor in
+**Products and menus**, **Sections**, where **Remove image** clears it when you save the section.
 
 A published menu also holds every photograph its last publish included, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by

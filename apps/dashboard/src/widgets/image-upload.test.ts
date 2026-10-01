@@ -17,7 +17,7 @@ async function open(el: ImageUpload): Promise<HTMLElement> {
 function select(picker: HTMLElement, filename = "abc123.png"): void {
   picker.dispatchEvent(
     new CustomEvent("select-image", {
-      detail: { filename, altText: { es: "Pan recién hecho" } },
+      detail: { filename, names: { es: "Pan", en: "Bread" } },
       bubbles: true,
       composed: true,
     }),
@@ -25,25 +25,13 @@ function select(picker: HTMLElement, filename = "abc123.png"): void {
 }
 
 describe("image-upload", () => {
-  it("uses default-language alt text when the interface language is disabled for content", async () => {
+  it("uses the default-language name as the preview's alt text when the interface language is disabled for content", async () => {
     setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
     setLocale("en-GB");
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
-    const picker = await open(el);
-    picker.dispatchEvent(
-      new CustomEvent("select-image", {
-        detail: {
-          filename: "bread.png",
-          altText: { es: "Pan recién hecho", en: "English description" },
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    select(await open(el));
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.alt).toBe(
-      "Pan recién hecho",
-    );
+    expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.alt).toBe("Pan");
   });
   it("opens the shared library and emits the stored reference on selection", async () => {
     const api = stubApi();
@@ -59,13 +47,15 @@ describe("image-upload", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
   });
-  it("renders the selected image preview from /media with its translated alt text", async () => {
+  it("renders the selected image preview from /media with its name in the viewer's language as alt text", async () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+    setLocale("en-GB");
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
     select(await open(el));
     await el.updateComplete;
     const img = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!;
     expect(img.getAttribute("src")).toBe("/media/abc123.png");
-    expect(img.alt).toBe("Pan recién hecho");
+    expect(img.alt).toBe("Bread");
   });
   it("shows a pre-set preview without requesting the library", async () => {
     const api = stubApi();

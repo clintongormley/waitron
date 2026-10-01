@@ -11,8 +11,6 @@ const image: LibraryImage = {
   id: "one",
   filename: "one.jpg",
   names: { es: "Pan", en: "Bread" },
-  altText: { es: "Pan recién hecho" },
-  labels: ["Food", "Summer menu"],
   createdAt: "2026-09-12T12:00:00Z",
   updatedAt: "2026-09-12T12:00:00Z",
   usageCount: 0,
@@ -21,7 +19,6 @@ let el: ImageLibrary;
 function api() {
   return {
     listImages: vi.fn().mockResolvedValue({ images: [image], total: 1 }),
-    listLabels: vi.fn().mockResolvedValue({ labels: image.labels }),
     uploadImage: vi.fn().mockResolvedValue({ image, created: true }),
     updateImage: vi.fn().mockResolvedValue({ image }),
     deleteImage: vi.fn().mockResolvedValue({ deleted: true, uses: [] }),
@@ -56,17 +53,26 @@ beforeEach(() => {
   setContentLanguages({ defaultLanguage: "es", languages: ["es", "fr"] });
 });
 
-it("shows the default name and alt text when the interface language is disabled for content", async () => {
-  const client = api();
-  client.listImages.mockResolvedValue({
-    images: [{ ...image, altText: { en: "English description", es: "Pan recién hecho" } }],
-    total: 1,
-  });
-  await mount(client);
+it("gives each thumbnail the photo's name in the viewer's language as its alt text", async () => {
+  setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+  await mount();
+  expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-image=one] img")!.alt).toBe("Bread");
+});
+
+it("falls back to the default-language name for a thumbnail's alt text when the viewer's language is disabled for content", async () => {
+  await mount();
   expect(el.shadowRoot!.querySelector("[data-image=one] h2")!.textContent).toBe("Pan");
-  expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-image=one] img")!.alt).toBe(
-    "Pan recién hecho",
-  );
+  expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-image=one] img")!.alt).toBe("Pan");
+});
+
+it("offers no label filter, no labels field and no alt-text field", async () => {
+  await mount();
+  expect(el.shadowRoot!.querySelector("select[name=image-label]")).toBeNull();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-input[name=name-es]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[name=image-labels]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[name^=alt-]")).toBeNull();
 });
 
 for (const { locale, edit, remove, use } of [
@@ -105,7 +111,6 @@ it("asks the server to sort names in the displayed content language", async () =
   const zebra = { ...image, names: { es: "Cebra", en: "Zebra" } };
   const apple = { ...image, id: "two", names: { es: "Manzana", en: "Apple" } };
   const request = vi.fn().mockImplementation(async (path: string) => {
-    if (path.includes("image-labels")) return { labels: [] };
     const language = new URL(path, location.origin).searchParams.get("language") ?? "es";
     return { images: language.startsWith("en") ? [apple, zebra] : [zebra, apple], total: 2 };
   });
@@ -120,10 +125,7 @@ it("asks the server to sort names in the displayed content language", async () =
   expect(
     [...el.shadowRoot!.querySelectorAll("article h2")].map((heading) => heading.textContent),
   ).toEqual(["Apple", "Zebra"]);
-  const query = new URL(
-    request.mock.calls.filter((call) => !call[0].includes("image-labels")).at(-1)![0],
-    location.origin,
-  );
+  const query = new URL(request.mock.calls.at(-1)![0], location.origin);
   expect(query.searchParams.get("language")).toBe("en-GB");
 });
 
@@ -159,7 +161,7 @@ it("refreshes image ordering passively after content-language settings change", 
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("image-labels", "Draft label");
+  field("name-fr", "Brouillon");
   background.listImages.mockResolvedValue({
     images: [{ ...image, id: "two", names: { es: "First" } }, image],
     total: 2,
@@ -172,9 +174,9 @@ it("refreshes image ordering passively after content-language settings change", 
     ),
   ).toEqual(["two", "one"]);
   expect(
-    (el.shadowRoot!.querySelector("wt-input[name=image-labels]") as HTMLElement & { value: string })
+    (el.shadowRoot!.querySelector("wt-input[name=name-fr]") as HTMLElement & { value: string })
       .value,
-  ).toBe("Draft label");
+  ).toBe("Brouillon");
 });
 
 // `countUsages` (packages/media/src/images.ts) counts a live version's photos from these two.
@@ -190,7 +192,7 @@ it.each(["menu_publications", "menu_version_images"])(
   },
 );
 
-// The library's live read (listImages, listLabels) names neither; only the delete dialog's one-off
+// The library's live read (listImages) names neither; only the delete dialog's one-off
 // getImage does, and it is not refreshed live.
 it.each(["menu_versions", "catalogues"])(
   "does not refresh the library when %s changes",
@@ -208,7 +210,7 @@ afterEach(() => {
   el?.remove();
 });
 
-it("requires file and default-language name but keeps alt text optional", async () => {
+it("requires file and default-language name", async () => {
   const client = await mount();
   click("[data-test=upload]");
   await el.updateComplete;
@@ -219,11 +221,6 @@ it("requires file and default-language name but keeps alt text optional", async 
   expect(
     el.shadowRoot!.querySelector("wt-input[name=name-es]")!.getAttribute("error"),
   ).toBeTruthy();
-  // Alt text is optional: the default-language alt field is neither required nor flagged as missing.
-  expect(el.shadowRoot!.querySelector("wt-input[name=alt-es]")!.getAttribute("error")).toBeFalsy();
-  expect(el.shadowRoot!.querySelector("wt-input[name=alt-es]")!.hasAttribute("required")).toBe(
-    false,
-  );
   expect(el.shadowRoot!.querySelector("wt-input[name=name-fr]")!.hasAttribute("required")).toBe(
     false,
   );
@@ -233,15 +230,10 @@ it("requires file and default-language name but keeps alt text optional", async 
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   field("name-es", "Pan");
-  field("image-labels", "Food, Summer menu");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() => expect(client.uploadImage).toHaveBeenCalledOnce());
-  expect(client.uploadImage.mock.calls[0]![1]).toEqual({
-    names: { es: "Pan" },
-    altText: {},
-    labels: ["Food", "Summer menu"],
-  });
+  expect(client.uploadImage.mock.calls[0]![1]).toEqual({ names: { es: "Pan" } });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull());
   expect(el.shadowRoot!.querySelector("[data-test=duplicate-upload]")).toBeNull();
 });
@@ -283,8 +275,6 @@ it("explains when a duplicate photo reuses the existing image and keeps its meta
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   field("name-es", "Different name");
-  field("alt-es", "Different alt text");
-  field("image-labels", "Different label");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() =>
@@ -293,7 +283,7 @@ it("explains when a duplicate photo reuses the existing image and keeps its meta
   const notice = el.shadowRoot!.querySelector("[data-test=duplicate-upload]")!;
   expect(notice.getAttribute("role")).toBe("status");
   expect(notice.textContent).toContain("Pan");
-  expect(notice.textContent).toContain("name, alt text and labels are unchanged");
+  expect(notice.textContent).toContain("Its name is unchanged.");
   expect(client.updateImage).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelectorAll("[data-image=one]")).toHaveLength(1);
   click("[data-test=edit-duplicate]");
@@ -302,23 +292,12 @@ it("explains when a duplicate photo reuses the existing image and keeps its meta
     (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement & { value: string })
       .value,
   ).toBe("Pan");
-  expect(
-    (el.shadowRoot!.querySelector("wt-input[name=alt-es]") as HTMLElement & { value: string })
-      .value,
-  ).toBe("Pan recién hecho");
-  expect(
-    (el.shadowRoot!.querySelector("wt-input[name=image-labels]") as HTMLElement & { value: string })
-      .value,
-  ).toBe("Food, Summer menu");
 });
 
-it("sends search, label, and sort to the server", async () => {
+it("sends search and sort to the server", async () => {
   const client = await mount();
   field("image-search", "summer bread");
   await el.updateComplete;
-  const label = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-label]")!;
-  label.value = "Food";
-  label.dispatchEvent(new Event("change"));
   const sort = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-sort]")!;
   sort.value = "name";
   sort.dispatchEvent(new Event("change"));
@@ -326,7 +305,6 @@ it("sends search, label, and sort to the server", async () => {
     expect(client.listImages).toHaveBeenLastCalledWith({
       search: "summer bread",
       language: "en-GB",
-      label: "Food",
       sort: "name",
       direction: "asc",
       offset: 0,
@@ -372,7 +350,6 @@ it.each([
       expect(client.listImages).toHaveBeenLastCalledWith({
         search: "",
         language: "en-GB",
-        label: "",
         sort: "relevance",
         offset: 0,
         limit: 24,
@@ -482,8 +459,6 @@ it("retains every translation while editing enabled languages and keeps a draft 
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Nuevo pan", en: "Bread" },
-      altText: image.altText,
-      labels: image.labels,
     }),
   );
 });
@@ -539,7 +514,7 @@ it.each([
   expect(codeMessage(code, "es")).toContain(es);
 });
 
-it("deletes unused images only after confirmation and refreshes the list of labels", async () => {
+it("deletes unused images only after confirmation", async () => {
   const client = await mount();
   click("[data-test=delete-one]");
   await vi.waitFor(() =>
@@ -547,10 +522,8 @@ it("deletes unused images only after confirmation and refreshes the list of labe
   );
   expect(client.deleteImage).not.toHaveBeenCalled();
   client.listImages.mockResolvedValue({ images: [], total: 0 });
-  client.listLabels.mockResolvedValue({ labels: [] });
   click("[data-test=confirm-delete]");
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-image=one]")).toBeNull());
-  expect(el.shadowRoot!.querySelectorAll("select[name=image-label] option")).toHaveLength(1);
   expect(el.shadowRoot!.textContent).toContain("No images found");
 });
 
@@ -596,31 +569,6 @@ it("keeps the latest search results when an older search resolves later", async 
   finish({ images: [image], total: 1 });
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(el.shadowRoot!.querySelector("[data-image=one]")).toBeNull();
-});
-
-it("resets a filter when its final image and unused label disappear", async () => {
-  const client = await mount();
-  const label = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-label]")!;
-  label.value = "Food";
-  label.dispatchEvent(new Event("change"));
-  await vi.waitFor(() => expect(client.listImages).toHaveBeenCalledTimes(2));
-  click("[data-test=delete-one]");
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
-  );
-  client.listImages.mockResolvedValue({ images: [], total: 0 });
-  client.listLabels.mockResolvedValue({ labels: [] });
-  click("[data-test=confirm-delete]");
-  await vi.waitFor(() =>
-    expect(client.listImages).toHaveBeenLastCalledWith({
-      search: "",
-      language: "en-GB",
-      label: "",
-      sort: "relevance",
-      offset: 0,
-      limit: 24,
-    }),
-  );
 });
 
 it("returns to the previous page after its final image is deleted", async () => {
@@ -679,7 +627,6 @@ it("keeps draft translations under their languages when the default changes live
   click("[data-test=edit-one]");
   await el.updateComplete;
   field("name-es", "Pan editado");
-  field("image-labels", "Food, Breakfast");
   setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "es"] });
   await el.updateComplete;
   const french = el.shadowRoot!.querySelector("wt-input[name=name-fr]") as HTMLElement & {
@@ -696,14 +643,11 @@ it("keeps draft translations under their languages when the default changes live
   await el.updateComplete;
   expect(client.updateImage).not.toHaveBeenCalled();
   field("name-fr", "Pain");
-  field("alt-fr", "Pain frais");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Pan editado", en: "Bread", fr: "Pain" },
-      altText: { es: "Pan recién hecho", fr: "Pain frais" },
-      labels: ["Food", "Breakfast"],
     }),
   );
 });
@@ -826,11 +770,7 @@ it("saves the image when Enter is pressed in a name field", async () => {
   name.focus();
   await userEvent.keyboard("{Enter}");
   await vi.waitFor(() =>
-    expect(client.updateImage).toHaveBeenCalledWith("one", {
-      names: image.names,
-      altText: image.altText,
-      labels: image.labels,
-    }),
+    expect(client.updateImage).toHaveBeenCalledWith("one", { names: image.names }),
   );
 });
 

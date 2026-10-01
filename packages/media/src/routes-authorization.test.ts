@@ -30,12 +30,8 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 
-const original = { names: { en: "Bread" }, altText: { en: "A loaf" }, labels: ["Food"] };
-const changed = {
-  names: { en: "Sourdough" },
-  altText: { en: "A sourdough loaf" },
-  labels: ["Bakery"],
-};
+const original = { names: { en: "Bread" } };
+const changed = { names: { en: "Sourdough" } };
 
 function uploadBody(bytes: Uint8Array<ArrayBuffer>): FormData {
   const form = new FormData();
@@ -100,7 +96,6 @@ it("denies every library operation to a staff caller and preserves existing imag
   const headers = await session("staff");
   const requests: [string, RequestInit][] = [
     ["/management-api/images", { headers }],
-    ["/management-api/image-labels", { headers }],
     [`/management-api/images/${image.id}`, { headers }],
     // Deliberately NOT a decodable picture: authorisation comes before any image work, so a staff
     // caller gets 403 here, never the 422 these bytes would earn from the decoder.
@@ -127,16 +122,14 @@ it("denies every library operation to a staff caller and preserves existing imag
   }
 
   // Nothing above wrote: the one image is still there with its ORIGINAL metadata (not `changed`),
-  // and its bytes are still there. Read through the tables rather than raw SQL — `names`,
-  // `alt_text` and `labels` are JSON text columns, and a raw select skips the read mapping that
-  // parses them, handing back the stored string instead.
+  // and its bytes are still there. Read through the tables rather than raw SQL — `names` is a JSON
+  // text column, and a raw select skips the read mapping that parses it, handing back the stored
+  // string instead.
   const rows = await suite.db
     .select({
       id: mediaImages.id,
       filename: mediaImages.filename,
       names: mediaImages.names,
-      altText: mediaImages.altText,
-      labels: mediaImages.labels,
     })
     .from(mediaImages);
   expect(rows).toEqual([{ id: image.id, filename: image.filename, ...original }]);

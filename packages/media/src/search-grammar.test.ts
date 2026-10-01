@@ -26,8 +26,6 @@ const suite = useVenueDb({
           {
             image: await samplePreparedImage({ width: 8 + index }),
             names: { en: name },
-            altText: { en: "Photo" },
-            labels: [],
           },
           { fallbackLanguage: "en" },
         );
@@ -110,8 +108,6 @@ describe("punctuation and degenerate queries", () => {
         {
           image: await samplePreparedImage({ width: 100 + marker }),
           names: { en: name },
-          altText: { en: "Photo" },
-          labels: [],
         },
         { fallbackLanguage: "en" },
       );

@@ -138,12 +138,10 @@ describe("seedMedia", () => {
       });
       await seedMedia(tx, { productsByImage });
       const before = await tx.execute(
-        sql`select id, filename, names, alt_text from media_images order by id`,
+        sql`select id, filename, names from media_images order by id`,
       );
       await seedMedia(tx, { productsByImage });
-      const after = await tx.execute(
-        sql`select id, filename, names, alt_text from media_images order by id`,
-      );
+      const after = await tx.execute(sql`select id, filename, names from media_images order by id`);
       expect(after.rows).toEqual(before.rows);
       expect(after.rows.length).toBeGreaterThan(0);
     });

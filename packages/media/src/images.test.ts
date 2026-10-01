@@ -18,7 +18,6 @@ import {
   deleteImage,
   readImage,
   listImageUsages,
-  listImageLabels,
   listImageTranslationGaps,
   listImages,
 } from "./images.js";
@@ -40,7 +39,7 @@ describe("image library", () => {
     await withTransaction(suite.db, async (tx) => {
       const image = await uploadImage(
         tx,
-        { image: photo, names: { en: "Bread" }, altText: {}, labels: [] },
+        { image: photo, names: { en: "Bread" } },
         { fallbackLanguage: "en" },
       );
       const selects = vi.spyOn(tx, "select");
@@ -58,20 +57,17 @@ describe("image library", () => {
         {
           image: photo,
           names: { en: "Bread" },
-          altText: { en: "A loaf on a plate" },
-          labels: [" Food ", "food", "Summer"],
         },
         { fallbackLanguage: "es" },
       );
       expect(first.created).toBe(true);
       expect(first.image.filename).toBe(photo.filename);
       expect(first.image.filename).toMatch(/^[a-f0-9]{64}\.webp$/);
-      expect(first.image.labels).toEqual(["Food", "Summer"]);
       // Prepared again from the same upload, not the same object: the reuse rests on prepareImage
       // giving identical bytes for identical input.
       const duplicate = await uploadImage(
         tx,
-        { image: await prepare(8), names: { en: "Other" }, altText: { en: "Other" }, labels: [] },
+        { image: await prepare(8), names: { en: "Other" } },
         { fallbackLanguage: "es" },
       );
       expect(duplicate).toEqual({ created: false, image: first.image });
@@ -101,9 +97,7 @@ describe("unknown images and other refusals", () => {
     const imageId = crypto.randomUUID();
     for (const names of [{ en: "Bread" }, { fr: "Pain" }] as Record<string, string>[]) {
       await expect(
-        withTransaction(suite.db, (tx) =>
-          updateImage(tx, imageId, { names, altText: {}, labels: [] }, "en"),
-        ),
+        withTransaction(suite.db, (tx) => updateImage(tx, imageId, { names }, "en")),
       ).rejects.toMatchObject({ code: "image.not_found", params: { imageId } });
     }
   });
@@ -114,48 +108,33 @@ describe("unknown images and other refusals", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         await tx.execute(sql`drop table content_languages`);
-        return uploadImage(tx, { image: photo, names: { en: "Bread" }, altText: {}, labels: [] });
+        return uploadImage(tx, { image: photo, names: { en: "Bread" } });
       }),
     ).rejects.toThrow("no such table: content_languages");
   });
 });
 
-describe("metadata, labels and references", () => {
-  it("requires a default name and keeps alt text optional", async () => {
-    const good = { image: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] };
+describe("metadata and references", () => {
+  it("requires a default name", async () => {
+    const good = { image: photo, names: { en: "Bread" } };
     const options = { fallbackLanguage: "en" };
     for (const [input, code] of [
       [{ ...good, names: { fr: "Pain" } }, "image.translation_required"],
-      [{ ...good, labels: [" "] }, "image.invalid_metadata"],
       [{ ...good, names: { en: "a".repeat(201) } }, "image.invalid_metadata"],
-      [{ ...good, altText: { en: "a".repeat(2001) } }, "image.invalid_metadata"],
     ] as const) {
       await expect(
         withTransaction(suite.db, (tx) => uploadImage(tx, input as typeof good, options)),
       ).rejects.toMatchObject({ code });
     }
-    await withTransaction(suite.db, async (tx) => {
-      // Alt text is optional: an upload with no alt text succeeds and stores an empty map.
-      const { created, image } = await uploadImage(
-        tx,
-        { image: photo, names: { en: "Bread" }, altText: {}, labels: [] },
-        options,
-      );
-      expect(created).toBe(true);
-      expect(image.altText).toEqual({});
-      expect(await listImageLabels(tx)).toEqual([]);
-    });
   });
 
-  it("derives labels from current assignments, edits metadata without changing bytes, and removes unused images", async () => {
+  it("edits metadata without changing bytes, and removes unused images", async () => {
     await withTransaction(suite.db, async (tx) => {
       const first = await uploadImage(
         tx,
         {
           image: photo,
           names: { en: "Bread" },
-          altText: { en: "Loaf" },
-          labels: ["Food", "Summer  menu"],
         },
         { fallbackLanguage: "en" },
       );
@@ -164,23 +143,18 @@ describe("metadata, labels and references", () => {
         {
           image: await prepare(13),
           names: { en: "Cake" },
-          altText: { en: "Slice" },
-          labels: ["Food"],
         },
         { fallbackLanguage: "en" },
       );
-      expect(await listImageLabels(tx)).toEqual(["Food", "Summer menu"]);
       const edited = await updateImage(
         tx,
         first.image.id,
-        { names: { en: "Sourdough", fr: "Pain" }, altText: { en: "A loaf" }, labels: ["Winter"] },
+        { names: { en: "Sourdough", fr: "Pain" } },
         "en",
       );
       expect(edited.filename).toBe(first.image.filename);
       expect(edited.names).toEqual({ en: "Sourdough", fr: "Pain" });
-      expect(await listImageLabels(tx)).toEqual(["Food", "Winter"]);
       expect(await deleteImage(tx, second.image.id)).toEqual({ deleted: true, uses: [] });
-      expect(await listImageLabels(tx)).toEqual(["Winter"]);
       expect(await readImageBytes(tx, second.image.filename)).toBeNull();
     });
   });
@@ -190,7 +164,7 @@ describe("metadata, labels and references", () => {
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        { image: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] },
+        { image: photo, names: { en: "Bread" } },
         { fallbackLanguage: "en" },
       );
       // Through the table definitions, not raw SQL: `id`, `created_at` and `updated_at` are
@@ -234,7 +208,7 @@ describe("metadata, labels and references", () => {
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        { image: photo, names: { en: "Large loaf" }, altText: { en: "Loaf" }, labels: [] },
+        { image: photo, names: { en: "Large loaf" } },
         { fallbackLanguage: "en" },
       );
       const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
@@ -290,7 +264,7 @@ describe("metadata, labels and references", () => {
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        { image: photo, names: { en: "Loaf" }, altText: { en: "Loaf" }, labels: [] },
+        { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
       const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
@@ -325,7 +299,7 @@ describe("metadata, labels and references", () => {
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        { image: photo, names: { en: "Loaf" }, altText: { en: "Loaf" }, labels: [] },
+        { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
       const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
@@ -373,13 +347,11 @@ describe("metadata, labels and references", () => {
     });
   });
 
-  it("reports a missing name but not missing alt text as a translation gap", async () => {
+  it("reports a missing name as a translation gap", async () => {
     await withTransaction(suite.db, async (tx) => {
-      // Alt text is optional, so an image named in French but without French alt text is complete;
-      // only a missing name in the target language is a gap that blocks a default-language change.
       await uploadImage(
         tx,
-        { image: photo, names: { en: "Bread", fr: "Pain" }, altText: {}, labels: [] },
+        { image: photo, names: { en: "Bread", fr: "Pain" } },
         { fallbackLanguage: "en" },
       );
       const nameless = await uploadImage(
@@ -387,8 +359,6 @@ describe("metadata, labels and references", () => {
         {
           image: await prepare(16),
           names: { en: "Cake" },
-          altText: { en: "Slice" },
-          labels: [],
         },
         { fallbackLanguage: "en" },
       );
@@ -400,10 +370,10 @@ describe("metadata, labels and references", () => {
 });
 
 describe("search and sorting", () => {
-  it("filters and pages a date-sorted library list in SQL", async () => {
+  it("pages a date-sorted library list in SQL", async () => {
     await withTransaction(suite.db, async (tx) => {
       const added = [];
-      for (const [index, labels] of [["Food"], ["Other"], ["food"], ["Food"]].entries()) {
+      for (const index of [0, 1, 2, 3]) {
         added.push(
           (
             await uploadImage(
@@ -411,8 +381,6 @@ describe("search and sorting", () => {
               {
                 image: await prepare(180 + index),
                 names: { en: `Photo ${index}` },
-                altText: {},
-                labels,
               },
               { fallbackLanguage: "en" },
             )
@@ -423,107 +391,28 @@ describe("search and sorting", () => {
           .set({ createdAt: new Date(2026, 0, index + 1) })
           .where(eq(mediaImages.id, added[index]!.id));
       }
-      await tx
-        .update(mediaImages)
-        .set({ labels: ["food"] })
-        .where(eq(mediaImages.id, added[2]!.id));
       const result = await listImages(tx, {
-        label: " FOOD ",
         sort: "date",
         direction: "desc",
         offset: 1,
         limit: 1,
       });
-      expect(result.total).toBe(3);
+      expect(result.total).toBe(4);
       expect(result.images.map((image) => image.id)).toEqual([added[2]!.id]);
 
-      const statement = datedImagePageQuery(tx, ["Food", "food"], "desc", 1, 1).toSQL();
-      expect(statement.sql).toMatch(/json_each/);
+      const statement = datedImagePageQuery(tx, "desc", 1, 1).toSQL();
       expect(statement.sql).toMatch(/order by .*created_at.*desc.*id.*asc/);
       expect(statement.sql).toMatch(/limit \? offset \?/);
-      expect(statement.params).toEqual(["Food", "food", 1, 1]);
-      const unfiltered = datedImagePageQuery(tx, null, "asc", 2, 3).toSQL();
-      expect(unfiltered.sql).not.toMatch(/json_each/);
-      expect(unfiltered.sql).toMatch(/order by .*created_at.*asc.*id.*asc/);
-      expect(unfiltered.params).toEqual([3, 2]);
+      expect(statement.params).toEqual([1, 1]);
+      const ascending = datedImagePageQuery(tx, "asc", 2, 3).toSQL();
+      expect(ascending.sql).toMatch(/order by .*created_at.*asc.*id.*asc/);
+      expect(ascending.params).toEqual([3, 2]);
     });
   });
 
-  it("keeps Unicode label matching when the page is selected in SQL", async () => {
+  it("matches whole words only, and treats a query as text", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const image = await uploadImage(
-        tx,
-        {
-          image: photo,
-          names: { en: "Summer" },
-          altText: {},
-          labels: ["Été"],
-        },
-        { fallbackLanguage: "en" },
-      );
-      const result = await listImages(tx, { label: "été", limit: 1 });
-      expect(result.total).toBe(1);
-      expect(result.images.map((row) => row.id)).toEqual([image.image.id]);
-    });
-  });
-
-  it.each(["search", "name"] as const)("applies the label filter to %s results", async (mode) => {
-    await withTransaction(suite.db, async (tx) => {
-      const add = async (width: number, name: string, labels: string[]) =>
-        (
-          await uploadImage(
-            tx,
-            {
-              image: await prepare(width),
-              names: { en: name },
-              altText: {},
-              labels,
-            },
-            { fallbackLanguage: "en" },
-          )
-        ).image;
-      const food = await add(190, "Bread", ["Food"]);
-      await add(191, "Bread basket", ["Other"]);
-      const options =
-        mode === "search"
-          ? { query: "bread", label: "Food" }
-          : { sort: "name" as const, label: "Food" };
-      expect((await listImages(tx, options)).images.map((row) => row.id)).toEqual([food.id]);
-    });
-  });
-
-  it("searches labels, matches a quoted phrase and combines a label filter", async () => {
-    await withTransaction(suite.db, async (tx) => {
-      const add = async (
-        marker: number,
-        names: Record<string, string>,
-        altText: Record<string, string>,
-        labels: string[],
-      ) =>
-        (
-          await uploadImage(
-            tx,
-            { image: await prepare(9 + marker), names, altText, labels },
-            { fallbackLanguage: "en" },
-          )
-        ).image;
-      await add(1, { en: "Bakery" }, { en: "Breads on a plate" }, ["Food"]);
-      const name = await add(2, { en: "Bread", es: "Pan recién horneado" }, { en: "A loaf" }, [
-        "Food",
-        "Summer menu",
-      ]);
-      const label = await add(3, { en: "Cake" }, { en: "A slice" }, ["Sweet", "Summer menu"]);
-      await add(4, { en: "Pears", es: "Peras maduras" }, { en: "Fruit" }, ["Fruit"]);
-      expect(
-        (await listImages(tx, { query: "bread", label: " SUMMER MENU " })).images.map(
-          (row) => row.id,
-        ),
-      ).toEqual([name.id]);
-      expect(
-        (await listImages(tx, { query: '"summer menu"', sort: "name", language: "en" })).images.map(
-          (row) => row.id,
-        ),
-      ).toEqual([name.id, label.id]);
+      await uploadImage(tx, { image: photo, names: { en: "Bread" } }, { fallbackLanguage: "en" });
       expect(await listImages(tx, { query: "bre" })).toEqual({ images: [], total: 0 });
       expect((await listImages(tx, { query: "'; drop table products; --" })).total).toBe(0);
     });
@@ -544,8 +433,6 @@ describe("search and sorting", () => {
                   en: ["Zulu", "Alpha", "Bravo"][n]!,
                   ...(n === 0 ? { fr: "Aardvark" } : {}),
                 },
-                altText: { en: "Food" },
-                labels: [],
               },
               { fallbackLanguage: "en" },
             )
@@ -590,7 +477,6 @@ describe("search and sorting", () => {
 describe("input boundaries", () => {
   it.each([
     { query: "x".repeat(501) },
-    { label: "x".repeat(101) },
     { offset: -1 },
     { offset: 0.5 },
     { limit: 0 },
@@ -618,59 +504,20 @@ describe("input boundaries", () => {
     await withTransaction(suite.db, async (tx) => {
       const [row] = await tx
         .insert(mediaImages)
-        .values({ filename, names: { en: "Dish" }, altText: {}, labels: [] })
+        .values({ filename, names: { en: "Dish" } })
         .returning({ id: mediaImages.id });
       await tx.insert(mediaImageData).values({ imageId: row!.id, bytes });
       expect(await readImageBytes(tx, filename)).toEqual({ bytes, contentType });
     });
   });
 
-  it("rejects malformed translation maps and reuses label spelling across images", async () => {
-    const input = {
-      image: photo,
-      names: { en: "Dish" },
-      altText: { en: "Plate" },
-      labels: ["Summer menu"],
-    };
+  it("rejects malformed translation maps", async () => {
+    const input = { image: photo, names: { en: "Dish" } };
     for (const names of [null, [], { zz: "unknown" }, { en: "A", "en-GB": "B" }, { en: 42 }]) {
       await expect(
         withTransaction(suite.db, (tx) => uploadImage(tx, { ...input, names } as typeof input, {})),
       ).rejects.toThrow();
     }
-    await withTransaction(suite.db, async (tx) => {
-      await uploadImage(tx, input, {});
-      const { image } = await uploadImage(
-        tx,
-        { ...input, image: await prepare(18), labels: ["SUMMER MENU"] },
-        {},
-      );
-      expect(image.labels).toEqual(["Summer menu"]);
-      expect(await listImageLabels(tx)).toEqual(["Summer menu"]);
-    });
-  });
-});
-
-it("keeps a name match above repeated alt-text matches when sorting by relevance", async () => {
-  await withTransaction(suite.db, async (tx) => {
-    const name = await uploadImage(
-      tx,
-      { image: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] },
-      {},
-    );
-    const alt = await uploadImage(
-      tx,
-      {
-        image: await prepare(11),
-        names: { en: "Bakery" },
-        altText: { en: "bread ".repeat(100) },
-        labels: [],
-      },
-      {},
-    );
-    expect((await listImages(tx, { query: "bread" })).images.map((image) => image.id)).toEqual([
-      name.image.id,
-      alt.image.id,
-    ]);
   });
 });
 
@@ -684,8 +531,6 @@ it("sorts accented names alphabetically in both directions across pages", async 
         {
           image: await prepare(109 + index),
           names: { en: name },
-          altText: { en: name },
-          labels: ["Food"],
         },
         { fallbackLanguage: "en" },
       );
@@ -695,7 +540,6 @@ it("sorts accented names alphabetically in both directions across pages", async 
         sort: "name" as const,
         direction,
         limit: 2,
-        label: "Food",
         fallbackLanguage: "en",
       };
       const first = await listImages(tx, query);
@@ -717,8 +561,6 @@ it("sorts by the default when the requested language was disabled while retainin
       {
         image: photo,
         names: { fr: "Abricot", en: "Zebra" },
-        altText: { fr: "Un abricot" },
-        labels: [],
       },
       {},
     );
@@ -727,8 +569,6 @@ it("sorts by the default when the requested language was disabled while retainin
       {
         image: await prepare(17),
         names: { fr: "Poire", en: "Apple" },
-        altText: { fr: "Une poire" },
-        labels: [],
       },
       {},
     );
@@ -742,11 +582,7 @@ it("protects an image used by sections, a menu's own list among them, and counts
   const { createSection, updateSection, sections } = await import("@waitron/catalogue");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(
-      tx,
-      { image: photo, names: { en: "Drinks" }, altText: { en: "Glasses" }, labels: [] },
-      {},
-    );
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
     const drinks = await createSection(tx, {
       internalName: "Drinks (internal)",
       names: { en: "Drinks (customer)" },
@@ -792,11 +628,7 @@ it("protects an image only a live menu version names, and releases it once anoth
   const publish = async (tx: Transaction, menuId: string) =>
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
   await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(
-      tx,
-      { image: photo, names: { en: "Lemonade" }, altText: { en: "A glass" }, labels: [] },
-      {},
-    );
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createCatalogue(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
       catalogueId: menu.id,
@@ -850,11 +682,7 @@ it("protects the photo of a product a live menu version offers only as an extra"
   const publish = async (tx: Transaction, menuId: string) =>
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
   await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(
-      tx,
-      { image: photo, names: { en: "Lemon" }, altText: { en: "A slice" }, labels: [] },
-      {},
-    );
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemon" } }, {});
     const menu = await createCatalogue(tx, { name: "Lunch Menu" });
     const make = (name: string, photoName: string | null) =>
       createProduct(tx, {
@@ -906,50 +734,20 @@ it("protects the photo of a product a live menu version offers only as an extra"
 });
 
 describe("relevance scores and tie-breaks", () => {
-  const add = async (
-    tx: Transaction,
-    width: number,
-    names: Record<string, string>,
-    labels: string[],
-    altText: Record<string, string> = { en: "Photo" },
-  ) => uploadImage(tx, { image: await prepare(width), names, altText, labels }, {});
+  const add = async (tx: Transaction, width: number, names: Record<string, string>) =>
+    uploadImage(tx, { image: await prepare(width), names }, {});
   const ids = async (tx: Transaction, options: Parameters<typeof listImages>[1]) =>
     (await listImages(tx, options)).images.map((image) => image.id);
 
-  it("scores a term found in several fields at its best field's weight, not its last", async () => {
-    await withTransaction(suite.db, async (tx) => {
-      // 1 (name) + 0.2 (alt text) = 1.2; scored at the alt text's weight it would be 0.4.
-      const nameAndAlt = await add(tx, 200, { en: "Crust" }, [], { en: "crust with seed" });
-      // 0.4 + 0.4 = 0.8.
-      const labels = await add(tx, 201, { en: "Loaf" }, ["crust", "seed"]);
-      expect(await ids(tx, { query: "crust seed" })).toEqual([
-        nameAndAlt.image.id,
-        labels.image.id,
-      ]);
-    });
-  });
-
   it("scores an image by its best-matching OR group, not its first or last", async () => {
     await withTransaction(suite.db, async (tx) => {
-      // Groups score 0.4, 2 and 0.4.
-      const best = await add(tx, 200, { en: "Rye bread" }, ["crust", "seed"]);
-      // Only the first group matches, at 1.
-      const single = await add(tx, 201, { en: "Crust" }, []);
-      expect(await ids(tx, { query: "crust OR rye bread OR seed" })).toEqual([
+      // Groups score 1, 3, no match and 1.
+      const best = await add(tx, 200, { en: "Rye bread toast crust seed" });
+      // Only the third group matches, at 2.
+      const single = await add(tx, 201, { en: "Oat flax" });
+      expect(await ids(tx, { query: "crust OR rye bread toast OR oat flax OR seed" })).toEqual([
         best.image.id,
         single.image.id,
-      ]);
-    });
-  });
-
-  it("ranks a name match above a higher-scoring match elsewhere, whichever was stored first", async () => {
-    await withTransaction(suite.db, async (tx) => {
-      // Three labels at 0.4 score 1.2, more than the other image's one name word at 1.
-      const labels = await add(tx, 200, { en: "Loaf" }, ["rye", "seed", "crust"]);
-      const name = await add(tx, 201, { en: "Bread" }, []);
-      expect(await ids(tx, { query: "bread OR rye seed crust" })).toEqual([
-        name.image.id,
-        labels.image.id,
       ]);
     });
   });
@@ -964,9 +762,7 @@ describe("relevance scores and tie-breaks", () => {
         [high, `${"b".repeat(64)}.webp`],
         [low, `${"c".repeat(64)}.webp`],
       ] as const) {
-        await tx
-          .insert(mediaImages)
-          .values({ id, filename, names: { en: "Bread" }, altText: {}, labels: [], createdAt });
+        await tx.insert(mediaImages).values({ id, filename, names: { en: "Bread" }, createdAt });
       }
       for (const sort of ["name", "date"] as const) {
         for (const direction of ["asc", "desc"] as const) {
@@ -981,12 +777,12 @@ describe("relevance scores and tie-breaks", () => {
       // No stored language settings, so each call's fallback is the default it validates against.
       const english = await uploadImage(
         tx,
-        { image: await prepare(200), names: { en: "Bread" }, altText: {}, labels: [] },
+        { image: await prepare(200), names: { en: "Bread" } },
         { fallbackLanguage: "en" },
       );
       const french = await uploadImage(
         tx,
-        { image: await prepare(201), names: { fr: "Abricot" }, altText: {}, labels: [] },
+        { image: await prepare(201), names: { fr: "Abricot" } },
         { fallbackLanguage: "fr" },
       );
       const options = { sort: "name", fallbackLanguage: "fr" } as const;

@@ -18,18 +18,12 @@ import {
 } from "@waitron/shared";
 import { count, eq, inArray, isNotNull } from "drizzle-orm";
 import { mediaImageData, mediaImages } from "./schema/images.js";
-import {
-  IMAGE_LIST_COLUMNS,
-  datedImagePageQuery,
-  imageLabelCondition,
-} from "./image-page-query.js";
+import { IMAGE_LIST_COLUMNS, datedImagePageQuery } from "./image-page-query.js";
 import type { PreparedImage } from "./prepare.js";
 import "./errors.js";
 
 export interface ImageMetadataInput {
   names: Record<string, string>;
-  altText: Record<string, string>;
-  labels: string[];
 }
 export interface ImageRecord extends ImageMetadataInput {
   id: string;
@@ -93,30 +87,8 @@ function normalizeTranslations(
   return result;
 }
 
-function normalizeLabels(labels: string[]): string[] {
-  if (
-    !Array.isArray(labels) ||
-    labels.length > 50 ||
-    labels.some(
-      (label) => typeof label !== "string" || label.trim().length === 0 || label.length > 100,
-    )
-  ) {
-    throw new AppError("image.invalid_metadata", {});
-  }
-  const seen = new Map<string, string>();
-  for (const label of labels) {
-    const display = label.normalize("NFC").trim().replace(/\s+/gu, " ");
-    if (!seen.has(display.toLowerCase())) seen.set(display.toLowerCase(), display);
-  }
-  return [...seen.values()].sort();
-}
-
 export function normalizeImageMetadata(input: ImageMetadataInput): ImageMetadataInput {
-  return {
-    names: normalizeTranslations(input.names, 200),
-    altText: normalizeTranslations(input.altText, 2000),
-    labels: normalizeLabels(input.labels),
-  };
+  return { names: normalizeTranslations(input.names, 200) };
 }
 
 async function metadata(
@@ -125,8 +97,6 @@ async function metadata(
   fallbackLanguage: string,
 ): Promise<ImageMetadataInput> {
   const value = normalizeImageMetadata(input);
-  // A name in the default language is required; alt text is optional (its language codes and lengths
-  // are still validated by normalizeImageMetadata above).
   try {
     await validateContentTranslations(tx, value.names, fallbackLanguage);
   } catch (error) {
@@ -139,10 +109,6 @@ async function metadata(
     }
     throw error;
   }
-  const existing = new Map(
-    (await listImageLabels(tx)).map((label) => [label.toLowerCase(), label]),
-  );
-  value.labels = value.labels.map((label) => existing.get(label.toLowerCase()) ?? label).sort();
   return value;
 }
 
@@ -225,8 +191,6 @@ export async function readImage(tx: Transaction, imageId: string): Promise<Image
     id: row.id,
     filename: row.filename,
     names: row.names,
-    altText: row.altText,
-    labels: row.labels,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     usageCount: (await listImageUsagesForFilename(tx, row.filename)).length,
@@ -294,20 +258,12 @@ export async function updateImage(
   return readImage(tx, imageId);
 }
 
-/** Every distinct label in use, in order. */
-export async function listImageLabels(tx: Transaction): Promise<string[]> {
-  const rows = await tx.select({ labels: mediaImages.labels }).from(mediaImages);
-  return [...new Set(rows.flatMap((row) => row.labels))].sort();
-}
-
 export async function listImageTranslationGaps(
   tx: Transaction,
   language: string,
 ): Promise<{ kind: "image"; id: string }[]> {
   const code = contentLanguageCode(language);
   const rows = await tx.select({ id: mediaImages.id, names: mediaImages.names }).from(mediaImages);
-  // Only a missing name is a gap; alt text is optional, so its absence never blocks a
-  // default-language change.
   return rows
     .filter((row) => resolveContentText(row.names, code, code) === "")
     .map((row) => ({ kind: "image", id: row.id }));
@@ -332,12 +288,6 @@ export async function deleteImage(
   if (uses.length > 0) return { deleted: false, uses };
   await tx.delete(mediaImages).where(eq(mediaImages.id, imageId));
   return { deleted: true, uses: [] };
-}
-
-/** One searchable unit of text, with the weight of the field it came from. */
-interface Field {
-  readonly tokens: readonly string[];
-  readonly weight: number;
 }
 
 /** One term of a parsed query: a single word, or a phrase that must appear intact. */
@@ -393,40 +343,26 @@ function fieldHolds(field: readonly string[], tokens: readonly string[]): boolea
 }
 
 /**
- * The best weight at which `item` is found, or `null` when it is not found at all.
- *
- * A phrase is matched WITHIN one field value — one translation, or one label — so it cannot
- * straddle two labels.
- */
-function itemWeight(fields: readonly Field[], item: QueryItem): number | null {
-  let best: number | null = null;
-  for (const field of fields) {
-    if (fieldHolds(field.tokens, item.tokens) && (best === null || field.weight > best)) {
-      best = field.weight;
-    }
-  }
-  return best;
-}
-
-/**
  * Does any group match, and how strongly?
  *
- * `null` is "no match". The score is the summed weight of the positive terms of the best-scoring
- * group. Under the relevance sort `listImages` orders by a name match first, so the score decides
- * only ties under it.
+ * `null` is "no match". The score is the number of positive terms in the best-scoring group. A
+ * phrase is matched WITHIN one translation of the name, so it cannot straddle two.
  */
-function scoreSearch(groups: readonly QueryItem[][], fields: readonly Field[]): number | null {
+function scoreSearch(
+  groups: readonly QueryItem[][],
+  names: readonly (readonly string[])[],
+): number | null {
   let best: number | null = null;
   for (const group of groups) {
     let score = 0;
     let matched = true;
     for (const item of group) {
-      const weight = itemWeight(fields, item);
-      if (item.negated ? weight !== null : weight === null) {
+      const found = names.some((name) => fieldHolds(name, item.tokens));
+      if (item.negated === found) {
         matched = false;
         break;
       }
-      score += weight ?? 0;
+      if (!item.negated) score += 1;
     }
     if (matched && (best === null || score > best)) best = score;
   }
@@ -435,7 +371,6 @@ function scoreSearch(groups: readonly QueryItem[][], fields: readonly Field[]): 
 
 export interface ListImagesOptions {
   query?: string;
-  label?: string;
   sort?: "relevance" | "date" | "name";
   direction?: "asc" | "desc";
   offset?: number;
@@ -445,7 +380,7 @@ export interface ListImagesOptions {
 }
 
 /**
- * The image library's list: search, label filter, ordering and one page.
+ * The image library's list: search, ordering and one page.
  *
  * **The name ordering is JavaScript's collator:** SQLite ships `BINARY`, `NOCASE` and `RTRIM` and
  * nothing accent-aware.
@@ -455,14 +390,12 @@ export async function listImages(
   options: ListImagesOptions = {},
 ): Promise<{ images: ImageRecord[]; total: number }> {
   const query = options.query?.trim() ?? "";
-  const label = options.label?.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase() ?? "";
   const sort = options.sort ?? (query ? "relevance" : "date");
   const direction = options.direction ?? (sort === "name" ? "asc" : "desc");
   const offset = options.offset ?? 0;
   const limit = options.limit ?? 40;
   if (
     query.length > 500 ||
-    label.length > 100 ||
     !["relevance", "date", "name"].includes(sort) ||
     !["asc", "desc"].includes(direction) ||
     !Number.isSafeInteger(offset) ||
@@ -483,18 +416,10 @@ export async function listImages(
   // resolves to. The library's first load sends `sort=relevance` with no query.
   const effectiveSort = sort === "relevance" && !query ? "date" : sort;
   const groups = query ? parseSearch(query) : [];
-  // Resolve label spelling with JavaScript's Unicode case mapping before asking SQLite for a page.
-  const matchingLabels =
-    label === ""
-      ? null
-      : (await listImageLabels(tx)).filter((value) => value.toLowerCase() === label);
 
   if (!query && effectiveSort === "date") {
-    const [{ total }] = await tx
-      .select({ total: count() })
-      .from(mediaImages)
-      .where(imageLabelCondition(matchingLabels));
-    const page = await datedImagePageQuery(tx, matchingLabels, direction, offset, limit);
+    const [{ total }] = await tx.select({ total: count() }).from(mediaImages);
+    const page = await datedImagePageQuery(tx, direction, offset, limit);
     const usage = await countUsages(
       tx,
       page.map((row) => row.filename),
@@ -505,29 +430,19 @@ export async function listImages(
     };
   }
 
-  const rows = await tx
-    .select(IMAGE_LIST_COLUMNS)
-    .from(mediaImages)
-    .where(imageLabelCondition(matchingLabels));
+  const rows = await tx.select(IMAGE_LIST_COLUMNS).from(mediaImages);
 
-  const matched: { row: (typeof rows)[number]; nameMatch: boolean; score: number }[] = [];
+  const matched: { row: (typeof rows)[number]; score: number }[] = [];
   for (const row of rows) {
     if (!query) {
-      matched.push({ row, nameMatch: false, score: 0 });
+      matched.push({ row, score: 0 });
       continue;
     }
-    const names: Field[] = Object.values(row.names).map((value) => ({
-      tokens: searchTokens(value),
-      weight: 1,
-    }));
-    const fields: Field[] = [
-      ...names,
-      ...row.labels.map((value) => ({ tokens: searchTokens(value), weight: 0.4 })),
-      ...Object.values(row.altText).map((value) => ({ tokens: searchTokens(value), weight: 0.2 })),
-    ];
-    const score = scoreSearch(groups, fields);
-    if (score === null) continue;
-    matched.push({ row, nameMatch: scoreSearch(groups, names) !== null, score });
+    const score = scoreSearch(
+      groups,
+      Object.values(row.names).map((name) => searchTokens(name)),
+    );
+    if (score !== null) matched.push({ row, score });
   }
 
   // An empty or whitespace-only translation is not a name: it falls through to the site default.
@@ -540,9 +455,6 @@ export async function listImages(
   const sign = direction === "asc" ? 1 : -1;
   matched.sort((left, right) => {
     if (effectiveSort === "relevance") {
-      // The name match is the FIRST term, not a tiebreak: a photo whose NAME matches outranks one
-      // that only repeats the word in its alt text, however many times.
-      if (left.nameMatch !== right.nameMatch) return left.nameMatch ? -1 : 1;
       if (left.score !== right.score) return right.score - left.score;
     } else if (effectiveSort === "name") {
       const order = collator.compare(displayName(left.row.names), displayName(right.row.names));

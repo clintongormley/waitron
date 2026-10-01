@@ -26,11 +26,7 @@ const options = { fallbackLanguage: "en" };
 it("refuses image bytes for an absent image and removes the bytes with their image", async () => {
   await seedTenant(suite.db);
   const { image } = await withTransaction(suite.db, (tx) =>
-    uploadImage(
-      tx,
-      { image: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: ["Food"] },
-      options,
-    ),
+    uploadImage(tx, { image: photo, names: { en: "Bread" } }, options),
   );
 
   // Bytes naming no image row. `errcode` 787 is `SQLITE_CONSTRAINT_FOREIGNKEY`

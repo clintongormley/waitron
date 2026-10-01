@@ -959,7 +959,8 @@ component rules harden around the dashboard alone.
 languages product and menu text is written in and which one is the fallback; photos live in a shared
 library (the mandatory `packages/media` module) with translated names, alt text, search and reuse,
 and a picture cannot be deleted while a product uses it.
-[Operator guide](content-and-images.md).
+[Operator guide](content-and-images.md). _(2026-10-01, A157: a photo now has a translated name and
+nothing else — alt text and photo labels are gone; see the entry below.)_
 
 What it left open:
 
@@ -980,7 +981,8 @@ shows a preview of the chosen picture.
 
 What that leaves open:
 
-- **Nothing tells you which pictures have no alt text.** Making it optional was right — being unable
+- **DONE by removal (2026-10-01, A157): nothing told you which pictures had no alt text.** A photo
+  no longer has alt text at all; the text below is what was open before. Making it optional was right — being unable
   to save a photograph because you had not written a description was worse — but there is now no
   prompt, no warning and no report anywhere. A venue can end up with a library where most pictures
   have no alt text and nothing ever surfaces it, which is the accessibility cost of the fix.
@@ -996,6 +998,23 @@ What that leaves open:
   nothing checking that it renders, so open it in the browser packages' real Chromium. **Next action:**
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
   crosses them proves less than it looks. That is a different rule and wants its own line.
+
+**A photo has a name and nothing else — DONE (2026-10-01, lane A's A157; owner, 2026-09-30: "y" to
+removing alt text, then "y" to removing photo labels).** No customer-facing screen shows a photo
+today, and where one will, the photo sits beside the dish's name, so its alt text belongs empty
+there; one photo can also serve several products. Photo labels were free text per photo used only
+by the library's "Filter by label" dropdown and a small search weight, and shared a word with
+product labels, which confused the owner. Removed: the `alt_text` and `labels` columns of
+`media_images` (media migration `0005_photo_name_only.sql`), their handling in the upload and edit
+routes, the `GET /management-api/image-labels` route and its live query, the library's fields and
+filter, the configuration export and import of both, the demo seed and the strings. The library
+thumbnail's and the upload preview's `alt` is now the photo's name in the viewer's language. Product
+labels are untouched. The migration drops media's eleven reference triggers, copies
+`media_image_data` aside, runs drizzle's rebuild, puts the bytes back and recreates the triggers:
+drizzle's file as generated failed its rename on an upgraded database with
+`no such table: main.media_images`, and without the copy the rebuild's `DROP TABLE` emptied
+`media_image_data` through its cascading key
+(`packages/media/src/schema/name-only-upgrade.test.ts`).
 
 **Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is
 resized to at most 1600 pixels on its longer side, turned upright, stripped of its metadata (GPS
@@ -8468,10 +8487,10 @@ approved.
   - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
     `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
     characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
-    the NUL; closing it needs a migration. Read only, not run: configuration import refuses an
-    image whose default-language alt text is blank (`src/configuration-transfer.ts`, pinned by the
-    `"alt"` case in its test), while an upload leaves alt text optional, so a venue holding such a
-    photo may export a bundle it cannot import.
+    the NUL; closing it needs a migration. (Gone with alt text, 2026-10-01, A157: configuration
+    import refused an image whose default-language alt text was blank while an upload left alt
+    text optional — confirmed by running it: an upload with no alt text exported `"{}"` and the
+    import refused it with `image.invalid_metadata`.)
   - Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only
     change. `reorder.test.ts`'s test names say an out-of-range move "clamps"; `reorder()` ignores
     it. #616 fixed the till's copies of "a `wt-button` forwards only `disabled`/`aria-label`",
@@ -9490,14 +9509,13 @@ will not find it.
 
 **The media library still reads every matching image for search and name sorting, inside the venue
 write lock — OPEN (found 2026-09-23, task F1's review wave).** The unsearched date sort now counts,
-filters by label, orders and pages in SQL. With no label filter, it reads only the page's metadata.
+orders and pages in SQL, reading only the page's metadata.
 Search still scores and pages in JavaScript, and name sorting still uses `Intl.Collator` for accented
-names. A label filter resolves its canonical spelling by reading the labels column across images
-before SQL filters the page, preserving Unicode case matching; `listImageLabels` and
-`listImageTranslationGaps` still read all rows of their selected columns. The route
+names. `listImageTranslationGaps` still reads all rows of its selected columns. (Photo labels and
+their filter went with A157, 2026-10-01.) The route
 (`GET /management-api/images`) uses `withTransaction`, the venue's exclusive write lock, so these
 remaining scans can delay a sale. **Next action:** decide how far to push search ranking into SQL;
-measure a way to bound name sorting and label-spelling lookup without changing their results.
+measure a way to bound name sorting without changing its results.
 
 **`sale_voids` has no index on `voided_at` — DONE (lane A's A33, #663; found by #605).** Core
 migration `0011_sale_voids_voided_at_idx` adds `sale_voids_voided_at_idx`, declared in

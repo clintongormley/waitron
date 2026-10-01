@@ -2,8 +2,6 @@ import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 
 export interface ImageMetadata {
   names: Record<string, string>;
-  altText: Record<string, string>;
-  labels: string[];
 }
 export interface LibraryImage extends ImageMetadata {
   id: string;
@@ -26,7 +24,6 @@ export type ImageUsage =
   | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number };
 export interface ImageQuery {
   search: string;
-  label: string;
   language: string;
   sort: "relevance" | "date" | "name";
   direction?: "asc" | "desc";
@@ -50,11 +47,6 @@ export class ImageApi {
       passive: this.passive,
     });
   }
-  listLabels(): Promise<{ labels: string[] }> {
-    return this.request("/management-api/image-labels", "GET", undefined, {
-      passive: this.passive,
-    });
-  }
   getImage(id: string): Promise<{ image: LibraryImage; uses: ImageUsage[] }> {
     return this.request(`/management-api/images/${encodeURIComponent(id)}`, "GET", undefined, {
       passive: this.passive,
@@ -67,8 +59,6 @@ export class ImageApi {
     const form = new FormData();
     form.set("file", file);
     form.set("names", JSON.stringify(metadata.names));
-    form.set("altText", JSON.stringify(metadata.altText));
-    form.set("labels", JSON.stringify(metadata.labels));
     return this.request("/management-api/images", "POST", form);
   }
   updateImage(id: string, metadata: ImageMetadata): Promise<{ image: LibraryImage }> {

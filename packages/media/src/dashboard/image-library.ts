@@ -108,9 +108,6 @@ export class ImageLibrary extends LitElement {
       h2 {
         font-size: var(--wt-font-size-md);
       }
-      .labels {
-        color: var(--wt-color-text-muted);
-      }
       .fields {
         display: grid;
         gap: var(--wt-space-3);
@@ -152,10 +149,8 @@ export class ImageLibrary extends LitElement {
   @property({ attribute: false }) api!: ImageApi;
   @property({ type: Boolean }) picker = false;
   @state() private images: LibraryImage[] = [];
-  @state() private labels: string[] = [];
   @state() private total = 0;
   @state() private search = "";
-  @state() private label = "";
   @state() private sort: ImageQuery["sort"] = "relevance";
   @state() private direction: "asc" | "desc" = "desc";
   @state() private offset = 0;
@@ -163,8 +158,6 @@ export class ImageLibrary extends LitElement {
   @state() private editor: {
     image: LibraryImage | null;
     names: Record<string, string>;
-    altText: Record<string, string>;
-    labels: string;
     file: File | null;
   } | null = null;
   @state() private attempted = false;
@@ -226,7 +219,6 @@ export class ImageLibrary extends LitElement {
     this.loadError = false;
     const query: ImageQuery = {
       search: this.search,
-      label: this.label,
       language: currentLocale(),
       sort: this.sort,
       ...(this.sort === "relevance" ? {} : { direction: this.direction }),
@@ -239,26 +231,18 @@ export class ImageLibrary extends LitElement {
         "library",
         {
           key: `media:${JSON.stringify(query)}`,
-          dependencies: [
-            ...new Set([...QUERY_DEPENDENCIES.images, ...QUERY_DEPENDENCIES.labels]),
-          ].map((type) => ({ type })),
+          dependencies: QUERY_DEPENDENCIES.images.map((type) => ({ type })),
           refreshMs: 60_000,
           read: async () => {
             const api = initial ? this.api : (this.api.background ?? this.api);
             initial = false;
-            const [result, labels] = await Promise.all([api.listImages(query), api.listLabels()]);
-            return { ...result, ...labels };
+            return api.listImages(query);
           },
         },
         (value) => {
           this.images = value.images;
           this.total = value.total;
-          this.labels = value.labels;
-          if (this.label !== "" && !value.labels.includes(this.label)) {
-            this.label = "";
-            this.offset = 0;
-            void this.#load(true);
-          } else if (this.offset > 0 && this.offset >= value.total) {
+          if (this.offset > 0 && this.offset >= value.total) {
             this.offset = Math.max(0, Math.ceil(value.total / 24) - 1) * 24;
             void this.#load(true);
           }
@@ -277,8 +261,6 @@ export class ImageLibrary extends LitElement {
     this.editor = {
       image,
       names: { ...image?.names },
-      altText: { ...image?.altText },
-      labels: image?.labels.join(", ") ?? "",
       file: null,
     };
     this.attempted = false;
@@ -290,10 +272,10 @@ export class ImageLibrary extends LitElement {
     this.#setPreview(null);
     this.editor = null;
   }
-  #field(field: "names" | "altText", language: string, value: string): void {
+  #name(language: string, value: string): void {
     if (this.editor !== null)
-      this.editor = { ...this.editor, [field]: { ...this.editor[field], [language]: value } };
-    if (field === "names") this.#dropRefusal(`name-${language}`);
+      this.editor = { ...this.editor, names: { ...this.editor.names, [language]: value } };
+    this.#dropRefusal(`name-${language}`);
   }
   #dropRefusal(field: string): void {
     if (this.refusal?.field === field) this.refusal = null;
@@ -315,7 +297,6 @@ export class ImageLibrary extends LitElement {
       ...this.#languages().map((language) => [`name-${language}`, ""] as const),
     ]);
     if (!this.attempted) return errors;
-    // Alt text is optional; only a file (for a new image) and a default-language name are required.
     if (editor.image === null && editor.file === null) errors.set("file", t("image.file_required"));
     if (!editor.names[config.defaultLanguage]?.trim())
       errors.set(`name-${config.defaultLanguage}`, t("image.required"));
@@ -335,18 +316,7 @@ export class ImageLibrary extends LitElement {
       return;
     }
     this.busy = true;
-    const metadata: ImageMetadata = {
-      names: editor.names,
-      altText: editor.altText,
-      labels: [
-        ...new Set(
-          editor.labels
-            .split(",")
-            .map((label) => label.trim())
-            .filter(Boolean),
-        ),
-      ],
-    };
+    const metadata: ImageMetadata = { names: editor.names };
     try {
       if (editor.image === null) {
         const result = await this.api.uploadImage(editor.file!, metadata);
@@ -477,27 +447,10 @@ export class ImageLibrary extends LitElement {
                 ?required=${language === config.defaultLanguage}
                 ?disabled=${this.busy}
                 error=${errors.get(`name-${language}`)!}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#field("names", language, event.detail.value)}
-              ></wt-input>
-              <wt-input
-                name=${`alt-${language}`}
-                label=${t("image.alt")}
-                .value=${editor.altText[language] ?? ""}
-                ?disabled=${this.busy}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#field("altText", language, event.detail.value)}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#name(language, event.detail.value)}
               ></wt-input>
             </fieldset>`,
         )}
-        <wt-input
-          name="image-labels"
-          label=${t("image.labels")}
-          .value=${editor.labels}
-          ?disabled=${this.busy}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.editor = { ...this.editor!, labels: event.detail.value };
-          }}
-        ></wt-input>
-        <p>${t("image.labels_help")}</p>
       </div>
       <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
@@ -532,18 +485,6 @@ export class ImageLibrary extends LitElement {
             this.#filter();
           }}
         ></wt-input>
-        <label
-          >${t("image.filter_label")}<select
-            name="image-label"
-            @change=${(event: Event) => {
-              this.label = (event.target as HTMLSelectElement).value;
-              this.#filter();
-            }}
-          >
-            <option value="" ?selected=${this.label === ""}>${t("image.all_labels")}</option>
-            ${this.labels.map((label) => html`<option value=${label} ?selected=${this.label === label}>${label}</option>`)}
-          </select></label
-        >
         <label
           >${t("image.sort")}<select
             name="image-sort"
@@ -600,13 +541,8 @@ export class ImageLibrary extends LitElement {
         ${this.images.map((image) => {
           const name = this.#text(image.names);
           return html`<article data-image=${image.id}>
-            <img
-              src=${`/media/${encodeURIComponent(image.filename)}`}
-              alt=${this.#text(image.altText)}
-              loading="lazy"
-            />
+            <img src=${`/media/${encodeURIComponent(image.filename)}`} alt=${name} loading="lazy" />
             <h2>${name}</h2>
-            <p class="labels">${image.labels.join(" · ")}</p>
             <time datetime=${image.createdAt}
               >${new Date(image.createdAt).toLocaleDateString(currentLocale())}</time
             >
