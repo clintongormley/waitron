@@ -133,11 +133,17 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
-2. **Staff cannot clock in or out** (A10). The working-time record is a legal duty from the first day
+2. **Build good screens for each kind of device, and retire canvases** (A4's A182, owner
+   2026-10-01). The till, handheld, kitchen screen and pass are still built from stored canvases of
+   tabs and cards, against the owner's 2026-09-20 decision for well-designed built-in screens.
+   Design the screens first, then remove canvases; until then, no new feature is built as a canvas
+   card.
+
+3. **Staff cannot clock in or out** (A10). The working-time record is a legal duty from the first day
    the deli employs anyone, and only its library is built: nothing in `apps/` calls `clockIn` or
    `clockOut`.
 
-3. **What a standalone box still lacks before a real venue runs it:**
+4. **What a standalone box still lacks before a real venue runs it:**
    - an off-box home for the backup archive (B2) — the bucket stream of `venue.db` is built, but
      archives can only be saved on the box itself (`LocalFsBackend`);
    - installing or renewing the AEAT certificate after setup (A9) — today only the setup wizard can
@@ -147,10 +153,10 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    - the bootable USB installer (B3), the last piece of "install without a terminal";
    - the degraded-but-trading recovery spec (B5).
 
-4. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
+5. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-5. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
+6. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut. #689 printed calibration samples and a sample receipt on the
    owner's NT-806 and fired its drawer from the calibration test. Since C107 every printout is drawn
@@ -160,7 +166,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    venue that has used its printers refuses to start"). A real sale's slip, the duplicates, the
    cash-settlement drawer job and the feed-before-cut are still unwalked.
 
-6. **Smaller, independent pieces**, in no fixed order: a dashboard screen for the modelo 303 download
+7. **Smaller, independent pieces**, in no fixed order: a dashboard screen for the modelo 303 download
    (*Detail → Reporting*); refusing requests from a device that is not enrolled (A4); the pairing
    alert, "devices tried to join" (A5); Logging Slice 2, the one-touch bug report (A9); the
    first real Bluetooth pairing at the box through the dashboard (A3; the print agent's side, P2b,
@@ -6356,7 +6362,8 @@ bill is refused.
   screens written in code that plug in
   ([service design §11](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md)).
   Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list
-  of tabs, each tab a grid of cards, chosen per device profile. Not ranked yet. What exists today:
+  of tabs, each tab a grid of cards, chosen per device profile. Ranked second under *What to work on next* (owner,
+  2026-10-01). What exists today:
   - A default canvas per form factor, in code (`packages/layouts/src/default-canvases.ts`): the
     till gets a Counter tab (product grid, basket, total, pay, held orders) and a Floor tab; a phone
     or tablet handheld gets Floor and Order; a kitchen screen gets one Kitchen tab. The card types
