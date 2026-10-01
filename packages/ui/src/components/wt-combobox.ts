@@ -1,7 +1,7 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
@@ -43,17 +43,6 @@ export class WtCombobox extends LitElement {
       :host {
         display: block;
         max-width: var(--wt-field-max-width);
-      }
-
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-
-      .row > .field {
-        flex: 1;
-        min-width: 0;
       }
 
       /* As wide as its text, not the box, so the trigger under the rest of the box takes the
@@ -217,24 +206,6 @@ export class WtCombobox extends LitElement {
 
       .add {
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .required,
-      .error {
-        color: var(--wt-color-danger);
-      }
-
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .hint {
-        ${visuallyHiddenStyles}
       }
     `,
   ];

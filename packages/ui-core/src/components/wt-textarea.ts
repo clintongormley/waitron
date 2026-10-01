@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { baseStyles } from "../base-styles.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
@@ -15,17 +15,6 @@ export class WtTextarea extends LitElement {
       :host {
         display: block;
         max-width: var(--wt-field-max-width);
-      }
-
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-
-      .row > .field {
-        flex: 1;
-        min-width: 0;
       }
 
       /* The label's room is the box's padding, not the textarea's, so text the textarea scrolls
@@ -46,24 +35,6 @@ export class WtTextarea extends LitElement {
       /* A resting label sits where the first line of text will go, not in the middle of a tall box. */
       .field[data-label="rest"]:not(:focus-within):not(:has(:autofill)) .field-label {
         top: calc(var(--wt-field-height) / 2);
-      }
-
-      .required,
-      .error {
-        color: var(--wt-color-danger);
-      }
-
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .hint {
-        ${visuallyHiddenStyles}
       }
     `,
   ];

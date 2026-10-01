@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { baseStyles } from "../base-styles.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
@@ -17,17 +17,6 @@ export class WtInput extends LitElement {
       :host {
         display: block;
         max-width: var(--wt-field-max-width);
-      }
-
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-
-      .row > .field {
-        flex: 1;
-        min-width: 0;
       }
 
       .field.has-end .field-control {
@@ -48,24 +37,6 @@ export class WtInput extends LitElement {
 
       .field.has-end .end {
         display: flex;
-      }
-
-      .required,
-      .error {
-        color: var(--wt-color-danger);
-      }
-
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .hint {
-        ${visuallyHiddenStyles}
       }
     `,
   ];

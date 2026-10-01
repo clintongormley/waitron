@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
 import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 /**
@@ -131,24 +131,6 @@ export class WtPriceInput extends LitElement {
 
       button.unit:disabled {
         ${disabledStyles}
-      }
-
-      .required,
-      .error {
-        color: var(--wt-color-danger);
-      }
-
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .hint {
-        ${visuallyHiddenStyles}
       }
     `,
   ];

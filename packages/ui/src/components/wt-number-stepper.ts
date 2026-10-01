@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
@@ -64,24 +64,6 @@ export class WtNumberStepper extends LitElement {
 
       button:disabled {
         ${disabledStyles}
-      }
-
-      .required,
-      .error {
-        color: var(--wt-color-danger);
-      }
-
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .hint {
-        ${visuallyHiddenStyles}
       }
     `,
   ];

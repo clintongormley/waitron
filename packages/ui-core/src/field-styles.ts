@@ -1,4 +1,5 @@
 import { css, html, nothing, type TemplateResult } from "lit";
+import { visuallyHiddenStyles } from "./base-styles.js";
 
 const ALWAYS_FLOAT = new Set(["date", "time", "datetime-local", "month", "week"]);
 
@@ -25,7 +26,8 @@ export function fieldLabel(forId: string, label: string, required: boolean): Tem
 }
 
 /** The filled field box shared by every field primitive: `.field[part=field]` holding a
- * `.field-label` and a `.field-control`. See design-system.md → Forms. */
+ * `.field-label` and a `.field-control`, the `.row` that sets it beside a `help` slot, and the
+ * `.error` and visually hidden `.hint` paragraphs under it. See design-system.md → Forms. */
 export const fieldStyles = css`
   .field {
     position: relative;
@@ -119,5 +121,28 @@ export const fieldStyles = css`
   }
   .field-control:focus-visible {
     outline: none;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--wt-space-2);
+  }
+  .row > .field {
+    flex: 1;
+    min-width: 0;
+  }
+  .required,
+  .error {
+    color: var(--wt-color-danger);
+  }
+  .required {
+    margin-inline-start: var(--wt-space-1);
+  }
+  .error {
+    margin: var(--wt-space-1) 0 0;
+    font-size: var(--wt-font-size-sm);
+  }
+  .hint {
+    ${visuallyHiddenStyles}
   }
 `;
