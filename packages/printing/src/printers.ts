@@ -3,10 +3,12 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Transaction, printCharacterSet } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
-import type { CharacterSet } from "./charset.js";
 import type { PaperWidth, Resolution } from "./layout.js";
+
+/** The `printers.character_set` column, which nothing prints with any more and which is to be dropped. */
+type CharacterSet = (typeof printCharacterSet.enumValues)[number];
 
 /**
  * Maps a refused printer write to a domain code, or rethrows. The CHECK branch names its constraint

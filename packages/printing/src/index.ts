@@ -13,25 +13,25 @@ export type {
 } from "./printers.js";
 export { enqueuePrintJob, resendPrintJob, canResendPrintJob } from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";
-export {
-  DEFAULT_CHARACTER_TABLE,
-  decodeBytes,
-  encodeText,
-  prepareText,
-  selectCharacterTable,
-} from "./charset.js";
-export type { CharacterSet } from "./charset.js";
+export type { EscSetting } from "./escpos.js";
+export { escPosCommands } from "./escpos-commands.js";
+export type { EscPosCommand } from "./escpos-commands.js";
+export { prepareText } from "./text.js";
+export { TEXT_BAND_HEIGHT, drawTextBand, readRasterText } from "./raster-text.js";
+export type { Alignment } from "./raster-text.js";
 export {
   QR_QUIET_ZONE,
   chooseQrDots,
   columnsFor,
   dpiValue,
+  gridForWidth,
   labelAmountLines,
   safeWidthDots,
+  textGrid,
   withQuietZone,
   wrapText,
 } from "./layout.js";
-export type { PaperWidth, Resolution } from "./layout.js";
+export type { PaperWidth, Resolution, TextGrid } from "./layout.js";
 export {
   BLUETOOTH_PRINTING_UNAVAILABLE,
   MAX_DELIVERY_ATTEMPTS,

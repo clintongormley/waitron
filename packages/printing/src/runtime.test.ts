@@ -17,6 +17,8 @@ import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
+const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
+
 // Every case below runs its transactions one after another, so none of them observes two agents
 // contending; that property is runtime.race.test.ts's.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -94,7 +96,7 @@ describe("runAgentOnce (pull → push → report)", () => {
         tx,
         cfg,
         printerId,
-        esc().text("Table 4").cut().bytes(),
+        esc(SETTING).text("Table 4").cut().bytes(),
       );
 
       const sink = new FakeSink();
@@ -106,7 +108,9 @@ describe("runAgentOnce (pull → push → report)", () => {
         transport: sink,
       });
 
-      expect(sink.written).toEqual([{ printerId, bytes: esc().text("Table 4").cut().bytes() }]);
+      expect(sink.written).toEqual([
+        { printerId, bytes: esc(SETTING).text("Table 4").cut().bytes() },
+      ]);
       expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
       const row = await jobRow(tx, jobId);
       expect(row.status).toBe("done");

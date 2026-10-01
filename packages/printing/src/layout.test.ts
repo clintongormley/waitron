@@ -3,6 +3,8 @@ import {
   chooseQrDots,
   columnsFor,
   dpiValue,
+  gridForWidth,
+  textGrid,
   labelAmountLines,
   safeWidthDots,
   withQuietZone,
@@ -213,5 +215,27 @@ describe("withQuietZone", () => {
       [false, false, true, false],
       [false, false, false, false],
     ]);
+  });
+});
+
+describe("text grid per paper width and resolution", () => {
+  it.each([
+    ["58mm", "180dpi", 360, 30, 0],
+    ["58mm", "203dpi", 384, 30, 12],
+    ["80mm", "180dpi", 512, 42, 4],
+    ["80mm", "203dpi", 576, 42, 36],
+  ] as const)(
+    "%s at %s draws %i dots wide, %i columns from dot %i",
+    (paperWidth, resolution, widthDots, columns, offsetDots) => {
+      expect(textGrid(paperWidth, resolution)).toEqual({ widthDots, columns, offsetDots });
+      expect(gridForWidth(widthDots)).toEqual({ widthDots, columns, offsetDots });
+      expect(columns).toBe(columnsFor(paperWidth));
+    },
+  );
+
+  it("reads any other width as as many whole cells as fit, centred", () => {
+    expect(gridForWidth(400)).toEqual({ widthDots: 400, columns: 33, offsetDots: 2 });
+    expect(gridForWidth(48)).toEqual({ widthDots: 48, columns: 4, offsetDots: 0 });
+    expect(gridForWidth(8)).toEqual({ widthDots: 8, columns: 0, offsetDots: 4 });
   });
 });

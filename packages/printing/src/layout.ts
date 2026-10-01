@@ -1,6 +1,6 @@
 /**
- * Text passed to the wrapping helpers must already be prepared for the printer's character set
- * (`prepareText`), so one character is one printed column.
+ * Text passed to the wrapping helpers must already be through `prepareText`, so one character is one
+ * printed column.
  */
 export type PaperWidth = "58mm" | "80mm";
 export type Resolution = "180dpi" | "203dpi";
@@ -17,6 +17,49 @@ export function columnsFor(width: PaperWidth): number {
 /** The printable width images must stay within: 360 dots on 58mm, 504 on 80mm. */
 export function safeWidthDots(width: PaperWidth): number {
   return COLUMNS[width] * DOTS_PER_COLUMN;
+}
+
+/**
+ * The dots across one line of each setting, which every text image is drawn to:
+ * - 58mm/180dpi 360 and 80mm/180dpi 512: the Epson TM-T88III's specification (the 360 and 512 above).
+ * - 58mm/203dpi 384: a 384-dot-wide image printed correctly on the owner's NETUM Bluetooth printer
+ *   (queue item C106); not a measured printable width.
+ * - 80mm/203dpi 576: unmeasured, the common value for 80 mm paper at 203 dpi. C106's photograph of a
+ *   512-dot image printed hard left on the owner's 80 mm network NETUM is consistent with it.
+ */
+const WIDTH_DOTS: Readonly<Record<PaperWidth, Readonly<Record<Resolution, number>>>> = {
+  "58mm": { "180dpi": 360, "203dpi": 384 },
+  "80mm": { "180dpi": 512, "203dpi": 576 },
+};
+
+/** Where text sits in an image: `columns` cells of {@link DOTS_PER_COLUMN} dots from `offsetDots`. */
+export interface TextGrid {
+  widthDots: number;
+  columns: number;
+  offsetDots: number;
+}
+
+function centred(widthDots: number, columns: number): TextGrid {
+  return {
+    widthDots,
+    columns,
+    offsetDots: Math.floor((widthDots - columns * DOTS_PER_COLUMN) / 2),
+  };
+}
+
+/** The column count is the paper width's whatever the resolution, so no layout depends on it. */
+export function textGrid(width: PaperWidth, resolution: Resolution): TextGrid {
+  return centred(WIDTH_DOTS[width][resolution], COLUMNS[width]);
+}
+
+/** The grid of the setting drawing `widthDots`; for any other width, every whole cell that fits. */
+export function gridForWidth(widthDots: number): TextGrid {
+  for (const width of Object.keys(WIDTH_DOTS) as PaperWidth[]) {
+    for (const resolution of Object.keys(WIDTH_DOTS[width]) as Resolution[]) {
+      if (WIDTH_DOTS[width][resolution] === widthDots) return textGrid(width, resolution);
+    }
+  }
+  return centred(widthDots, Math.floor(widthDots / DOTS_PER_COLUMN));
 }
 
 export function dpiValue(resolution: Resolution): 180 | 203 {
