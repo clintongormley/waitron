@@ -240,7 +240,7 @@ async function setupLunch(): Promise<Lunch> {
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${lunch.id} where zone_id = ${zoneId}`);
     await tx.execute(sql`
-      insert into preparation_routes (id, location_id, category_id, station_id)
+      insert into station_claims (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${category.id},
         (select id from kitchen_stations where location_id = ${cfg.locationId} and is_default))`);
     const [person] = await tx

@@ -12,7 +12,15 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { listAccessibleCatalogues, listAvailableProducts, menuStatus } from "@waitron/catalogue";
+import {
+  createCategory,
+  createProduct,
+  listAccessibleCatalogues,
+  listAvailableProducts,
+  menuStatus,
+} from "@waitron/catalogue";
+import { locationId as brandLocationId } from "@waitron/shared";
+import { resolveMakers, setClaim } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { seedDemoRestaurant } from "./seed.js";
 
@@ -106,6 +114,57 @@ describe("seedDemoRestaurant", () => {
       ).rows[0]!.n,
     }));
     expect(after).toEqual({ ...before, sales: 0 });
+  });
+
+  it("routes seeded drinks by zone, dishes to Kitchen, and a test-only no-preparation folder without work", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 1 });
+
+    await withTransaction(suite.db, async (tx) => {
+      const cfg = { locationId: brandLocationId(venue.locationId) };
+      const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
+        select id, name from kitchen_stations where location_id = ${venue.locationId}`);
+      const { rows: zones } = await tx.execute<{ id: string; name: string }>(sql`
+        select id, name from floor_zones where location_id = ${venue.locationId}`);
+      const { products } = await listAvailableProducts(tx, venue.locationId);
+      const drink = products.find((product) => product.name === "Negroni")!;
+      const dish = products.find((product) => product.name === "Solomillo")!;
+      const downstairs = zones.find((zone) => zone.name === "Downstairs bar")!;
+      const upstairs = zones.find((zone) => zone.name === "Upstairs bar")!;
+      const downstairsStation = stations.find((station) => station.name === "Downstairs bar")!;
+      const upstairsStation = stations.find((station) => station.name === "Upstairs bar")!;
+      const kitchen = stations.find((station) => station.name === "Kitchen")!;
+
+      expect(await resolveMakers(tx, cfg, downstairs.id, [drink.id, dish.id])).toEqual(
+        new Map([
+          [drink.id, { kind: "station", stationId: downstairsStation.id }],
+          [dish.id, { kind: "station", stationId: kitchen.id }],
+        ]),
+      );
+      expect(await resolveMakers(tx, cfg, upstairs.id, [drink.id, dish.id])).toEqual(
+        new Map([
+          [drink.id, { kind: "station", stationId: upstairsStation.id }],
+          [dish.id, { kind: "station", stationId: kitchen.id }],
+        ]),
+      );
+
+      const [menu] = await listAccessibleCatalogues(tx, venue.locationId);
+      const folder = await createCategory(tx, { name: "Test-only packaged snacks" });
+      const snack = await createProduct(tx, {
+        catalogueId: menu!.id,
+        name: "Test-only packet of crisps",
+        categoryId: folder.id,
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      await setClaim(tx, cfg, folder.id, { kind: "no_preparation" });
+      for (const zone of [downstairs, upstairs]) {
+        expect(await resolveMakers(tx, cfg, zone.id, [snack.id])).toEqual(
+          new Map([[snack.id, { kind: "no_preparation" }]]),
+        );
+      }
+    });
   });
 
   it("runs every sub-seed: both menus, the floor, the staff, the adjustment reasons, a sale, and content-addressed media", async () => {
@@ -206,18 +265,24 @@ describe("seedDemoRestaurant", () => {
         station_name: string;
       }>(sql`
         select z.name as zone_name, s.name as station_name
-        from preparation_routes r
+        from route_exceptions r
         join categories c on c.id = r.category_id
         join floor_zones z on z.id = r.zone_id
         join kitchen_stations s on s.id = r.station_id
         where c.name = 'Drinks'
         order by z.name`);
+      const { rows: cocktailClaims } = await tx.execute<{ station_name: string }>(sql`
+        select s.name as station_name from station_claims r
+        join categories c on c.id = r.category_id
+        join kitchen_stations s on s.id = r.station_id
+        where c.name = 'Drinks'`);
       const published = await menuStatus(
         tx,
         menus.map((menu) => menu.id),
       );
       return {
         menus,
+        cocktailClaims,
         menuStates: [...published.values()].map((status) => status.state),
         products,
         tables: tableRows[0]!.n,
@@ -329,8 +394,8 @@ describe("seedDemoRestaurant", () => {
       },
     ]);
     expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
+    expect(read.cocktailClaims).toEqual([{ station_name: "Downstairs bar" }]);
     expect(read.cocktailRoutes).toEqual([
-      { zone_name: "Downstairs bar", station_name: "Downstairs bar" },
       { zone_name: "Upstairs bar", station_name: "Upstairs bar" },
     ]);
 

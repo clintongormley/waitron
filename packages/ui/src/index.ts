@@ -86,3 +86,6 @@ export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge
 export { WtToast, type WtToastTone } from "./components/wt-toast.js";
 export { WtNotice } from "./components/wt-notice.js";
 export { WtLanguageFooter, type WtLocaleOption } from "./components/wt-language-footer.js";
+
+export { ReorderController, type ReorderModel } from "./reorder-table.js";
+export { reorder } from "./reorder.js";

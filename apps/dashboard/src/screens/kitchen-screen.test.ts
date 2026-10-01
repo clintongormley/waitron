@@ -22,31 +22,6 @@ const STATIONS: Station[] = [
   },
 ];
 
-/** s2's thresholds differ from the defaults the screen falls back to, so seeding from them shows the
- * form reads the row's own values. */
-const TWO_STATIONS: Station[] = [
-  {
-    id: "s1",
-    name: "Cocina",
-    displayOrder: 0,
-    isDefault: true,
-    active: true,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  },
-  {
-    id: "s2",
-    name: "Plancha",
-    displayOrder: 1,
-    isDefault: false,
-    active: true,
-    warmAfterMinutes: 4,
-    overdueAfterMinutes: 9,
-    forgottenAfterMinutes: 14,
-  },
-];
-
 const COURSES: Course[] = [{ id: "c1", name: "Entrantes", displayOrder: 0, active: true }];
 
 const TWO_COURSES: Course[] = [
@@ -91,150 +66,15 @@ function type(el: KitchenScreen, sel: string, value: string): void {
 }
 
 describe("kitchen-screen", () => {
-  it("loads and lists the stations on connect (one h1)", async () => {
+  it("links to Prep stations without the former stations panel", async () => {
     const api = stubApi();
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
-    expect(api.listStations).toHaveBeenCalledTimes(1);
-    expect(q(el, "[data-test=station-row-s1]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
-  });
-
-  it("shows the empty state when there are no stations", async () => {
-    const api = stubApi({}, []);
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    expect(el.shadowRoot!.textContent).toContain(t("kitchen.no_stations", "es-ES"));
-  });
-
-  it("creates a station from the new-station form (createStation with the name), then reloads", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    type(el, "[data-new-station]", "Plancha");
-    q(el, "[data-add-station]")!.click();
-    await flush(el);
-    expect(api.createStation).toHaveBeenCalledWith({ name: "Plancha" });
-    expect(api.listStations).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not create an empty-name station", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    q(el, "[data-add-station]")!.click();
-    await flush(el);
-    expect(api.createStation).not.toHaveBeenCalled();
-  });
-
-  it("saves an edited station row (updateStation with the row's current name + order + thresholds), then reloads", async () => {
-    // The untouched thresholds still ride the patch: the route takes all three or none.
-    const api = stubApi({}, TWO_STATIONS);
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    type(el, "[data-test=station-name-s2]", "Pase");
-    type(el, "[data-test=station-order-s2]", "x");
-    type(el, "[data-test=station-order-s2]", "3");
-    q(el, "[data-test=station-save-s2]")!.click();
-    await flush(el);
-    expect(api.updateStation).toHaveBeenCalledTimes(1);
-    expect(api.updateStation).toHaveBeenCalledWith("s2", {
-      name: "Pase",
-      displayOrder: 3,
-      warmAfterMinutes: 4,
-      overdueAfterMinutes: 9,
-      forgottenAfterMinutes: 14,
-    });
-    expect(api.listStations).toHaveBeenCalledTimes(2);
-  });
-
-  it("seeds the three threshold fields from the station's current values", async () => {
-    const api = stubApi({}, TWO_STATIONS);
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    const warm = q(el, "[data-test=station-warm-s2]") as HTMLElement & { value: string };
-    const overdue = q(el, "[data-test=station-overdue-s2]") as HTMLElement & { value: string };
-    const forgotten = q(el, "[data-test=station-forgotten-s2]") as HTMLElement & { value: string };
-    expect(warm.value).toBe("4");
-    expect(overdue.value).toBe("9");
-    expect(forgotten.value).toBe("14");
-  });
-
-  it("saves edited threshold values (updateStation with the three *AfterMinutes fields), then reloads", async () => {
-    const api = stubApi({}, TWO_STATIONS);
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    type(el, "[data-test=station-warm-s2]", "3");
-    type(el, "[data-test=station-overdue-s2]", "8");
-    type(el, "[data-test=station-forgotten-s2]", "12");
-    q(el, "[data-test=station-save-s2]")!.click();
-    await flush(el);
-    expect(api.updateStation).toHaveBeenCalledWith("s2", {
-      name: "Plancha",
-      displayOrder: 1,
-      warmAfterMinutes: 3,
-      overdueAfterMinutes: 8,
-      forgottenAfterMinutes: 12,
-    });
-    expect(api.listStations).toHaveBeenCalledTimes(2);
-  });
-
-  it("rejects a client-side invalid threshold set (out of order or non-positive) without calling the API", async () => {
-    const api = stubApi({}, TWO_STATIONS);
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-
-    // warm >= overdue
-    type(el, "[data-test=station-warm-s2]", "10");
-    type(el, "[data-test=station-overdue-s2]", "8");
-    type(el, "[data-test=station-forgotten-s2]", "14");
-    q(el, "[data-test=station-save-s2]")!.click();
-    await flush(el);
-    expect(api.updateStation).not.toHaveBeenCalled();
-    const alert = q(el, "[role=alert]");
-    expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("management.request_invalid", "es-ES"));
-
-    // overdue >= forgotten
-    type(el, "[data-test=station-warm-s2]", "4");
-    type(el, "[data-test=station-overdue-s2]", "14");
-    type(el, "[data-test=station-forgotten-s2]", "14");
-    q(el, "[data-test=station-save-s2]")!.click();
-    await flush(el);
-    expect(api.updateStation).not.toHaveBeenCalled();
-
-    // non-positive
-    type(el, "[data-test=station-warm-s2]", "0");
-    type(el, "[data-test=station-overdue-s2]", "9");
-    type(el, "[data-test=station-forgotten-s2]", "14");
-    q(el, "[data-test=station-save-s2]")!.click();
-    await flush(el);
-    expect(api.updateStation).not.toHaveBeenCalled();
-    expect(api.listStations).toHaveBeenCalledTimes(1);
-  });
-
-  it("deactivates a station row", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    q(el, "[data-test=station-deactivate-s1]")!.click();
-    await flush(el);
-    expect(api.deactivateStation).toHaveBeenCalledWith("s1");
-    expect(api.listStations).toHaveBeenCalledTimes(2);
-  });
-
-  it("makes a non-default station the default (setDefaultStation), then reloads", async () => {
-    const api = stubApi({}, TWO_STATIONS);
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    expect(q(el, "[data-test=station-default-s1]")).toBeNull();
-    expect(q(el, "[data-test=station-row-s1]")!.textContent).toContain(
-      t("kitchen.default_badge", "es-ES"),
+    expect(q(el, "[data-test=stations-panel]")).toBeNull();
+    expect(q(el, 'a[href="/manage/prep-stations"]')?.textContent).toContain(
+      t("kitchen.prep_stations_link"),
     );
-    q(el, "[data-test=station-default-s2]")!.click();
-    await flush(el);
-    expect(api.setDefaultStation).toHaveBeenCalledWith("s2");
-    expect(api.listStations).toHaveBeenCalledTimes(2);
+    expect(api.listStations).not.toHaveBeenCalled();
   });
 
   it("toggles the whole-ticket bump mode to ticket and back to line", async () => {
@@ -249,44 +89,6 @@ describe("kitchen-screen", () => {
     expect(api.setBumpMode).toHaveBeenNthCalledWith(2, "line");
   });
 
-  it("surfaces a rejected create as a localised role=alert banner, never the raw code", async () => {
-    const api = stubApi({
-      createStation: vi.fn().mockRejectedValue({ code: "station.name_taken" }),
-    });
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    type(el, "[data-new-station]", "Cocina");
-    q(el, "[data-add-station]")!.click();
-    await flush(el);
-    const alert = q(el, "[role=alert]");
-    expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("station.name_taken", "es-ES"));
-    expect(alert!.textContent).not.toContain("station.name_taken");
-  });
-
-  it("surfaces a rejected load as a localised role=alert banner", async () => {
-    const api = stubApi({
-      listStations: vi.fn().mockRejectedValue({ code: "server.internal" }),
-    });
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    expect(q(el, "[role=alert]")).not.toBeNull();
-  });
-
-  it("surfaces a rejected make-default as the localised station.not_found alert", async () => {
-    const api = stubApi(
-      { setDefaultStation: vi.fn().mockRejectedValue({ code: "station.not_found" }) },
-      TWO_STATIONS,
-    );
-    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await flush(el);
-    q(el, "[data-test=station-default-s2]")!.click();
-    await flush(el);
-    const alert = q(el, "[role=alert]");
-    expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("station.not_found", "es-ES"));
-  });
-
   it("surfaces a rejected bump-mode write as a localised role=alert banner", async () => {
     const api = stubApi({ setBumpMode: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
@@ -296,7 +98,7 @@ describe("kitchen-screen", () => {
     expect(q(el, "[role=alert]")).not.toBeNull();
   });
 
-  it("loads and lists the courses on connect (beside the stations)", async () => {
+  it("loads and lists the courses on connect", async () => {
     const api = stubApi({}, STATIONS, TWO_COURSES);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
@@ -407,18 +209,6 @@ describe("kitchen-screen", () => {
 
 it.each([
   {
-    method: "createStation",
-    field: "[data-new-station]",
-    button: "[data-add-station]",
-    result: { id: "s9" },
-  },
-  {
-    method: "updateStation",
-    field: "[data-test=station-name-s1]",
-    button: "[data-test=station-save-s1]",
-    result: null,
-  },
-  {
     method: "createCourse",
     field: "[data-new-course]",
     button: "[data-add-course]",
@@ -468,21 +258,6 @@ it.each([
   },
 );
 
-it("refreshes displayed stations when their data changes elsewhere", async () => {
-  const liveData = new LiveData();
-  const api = Object.assign(stubApi(), { liveData });
-  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
-    "dashboard-kitchen-screen",
-    { api },
-  );
-  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["stations"]!;
-  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
-  vi.mocked(api.listStations).mockResolvedValue([]);
-  liveData.invalidate([{ type: "kitchen_stations", id: "changed-elsewhere" }]);
-  await vi.waitFor(() => expect(rows()).toEqual([]));
-  expect(api.listStations).toHaveBeenCalledTimes(2);
-});
-
 describe("kitchen-screen remaining edges", () => {
   function pressEnter(el: KitchenScreen, sel: string): void {
     q(el, sel)!
@@ -499,28 +274,9 @@ describe("kitchen-screen remaining edges", () => {
 
   async function mountLoaded(api: DashboardApi): Promise<KitchenScreen> {
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
-    await vi.waitFor(() => expect(q(el, "[data-test=station-row-s1]")).not.toBeNull());
     await vi.waitFor(() => expect(q(el, "[data-test=course-row-c1]")).not.toBeNull());
     return el;
   }
-
-  it.each(["order", "warm", "overdue", "forgotten"])(
-    "saves the station when Enter is pressed in its %s field",
-    async (field) => {
-      const api = stubApi({}, TWO_STATIONS);
-      const el = await mountLoaded(api);
-
-      pressEnter(el, `[data-test=station-${field}-s2]`);
-
-      expect(api.updateStation).toHaveBeenCalledWith("s2", {
-        name: "Plancha",
-        displayOrder: 1,
-        warmAfterMinutes: 4,
-        overdueAfterMinutes: 9,
-        forgottenAfterMinutes: 14,
-      });
-    },
-  );
 
   it("saves the course when Enter is pressed in its order field", async () => {
     const api = stubApi();
@@ -531,39 +287,6 @@ describe("kitchen-screen remaining edges", () => {
     pressEnter(el, "[data-test=course-order-c1]");
 
     expect(api.updateCourse).toHaveBeenCalledWith("c1", { name: "Entrantes", displayOrder: 3 });
-  });
-
-  it.each(["overdue", "forgotten"])(
-    "reads a non-numeric %s threshold as zero, and refuses to save it",
-    async (field) => {
-      const api = stubApi({}, TWO_STATIONS);
-      const el = await mountLoaded(api);
-
-      type(el, `[data-test=station-${field}-s2]`, "soon");
-      await el.updateComplete;
-
-      expect(
-        (q(el, `[data-test=station-${field}-s2]`) as HTMLElement & { value: string }).value,
-      ).toBe("0");
-      q(el, "[data-test=station-save-s2]")!.click();
-      await el.updateComplete;
-      expect(api.updateStation).not.toHaveBeenCalled();
-      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("management.request_invalid"));
-    },
-  );
-
-  it("shows a localized alert when deactivating a station is rejected", async () => {
-    const api = stubApi({
-      deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
-    });
-    const el = await mountLoaded(api);
-
-    q(el, "[data-test=station-deactivate-s1]")!.click();
-
-    await vi.waitFor(() =>
-      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("station.not_found")),
-    );
-    expect(api.listStations).toHaveBeenCalledTimes(1);
   });
 
   it("shows a localized alert when deactivating a course is rejected", async () => {
@@ -578,22 +301,6 @@ describe("kitchen-screen remaining edges", () => {
       expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
     );
     expect(api.listCourses).toHaveBeenCalledTimes(1);
-  });
-
-  it("does nothing when Save is pressed on a station that has since disappeared", async () => {
-    const liveData = new LiveData();
-    const api = Object.assign(stubApi({}, TWO_STATIONS), { liveData });
-    const el = await mountLoaded(api);
-    const staleSave = q(el, "[data-test=station-save-s2]")!;
-    vi.mocked(api.listStations).mockResolvedValue(STATIONS.map((s) => ({ ...s })));
-    liveData.invalidate([{ type: "kitchen_stations", id: "s2" }]);
-    await vi.waitFor(() => expect(q(el, "[data-test=station-row-s2]")).toBeNull());
-
-    staleSave.click();
-    await el.updateComplete;
-
-    expect(api.updateStation).not.toHaveBeenCalled();
-    expect(q(el, "[role=alert]")).toBeNull();
   });
 
   it("does nothing when Save is pressed on a course that has since disappeared", async () => {

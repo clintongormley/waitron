@@ -26,6 +26,12 @@ import type {
   ProductEditorBody as ProductEditorInput,
 } from "@waitron/catalogue/src/product-types.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
+export interface MadeAt {
+  stationId: string | null;
+  stationName: string | null;
+  noPreparation: boolean;
+  variesByZone: boolean;
+}
 import type {
   ExtraList,
   ExtraListDependants,
@@ -1805,6 +1811,10 @@ export class DashboardApi {
     return this.#request<Product[]>(`/management-api/catalogues/${catalogueId}/products`, "GET");
   }
 
+  listMadeAt(): Promise<Record<string, MadeAt>> {
+    return this.#request<Record<string, MadeAt>>("/management-api/products/made-at", "GET");
+  }
+
   getProductEditor(id: string): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "GET");
   }
@@ -2091,6 +2101,9 @@ export class DashboardApi {
     name: string;
     displayOrder?: number;
     isDefault?: boolean;
+    warmAfterMinutes?: number;
+    overdueAfterMinutes?: number;
+    forgottenAfterMinutes?: number;
   }): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/stations", "POST", input);
   }
@@ -2117,12 +2130,6 @@ export class DashboardApi {
 
   setDefaultStation(id: string): Promise<void> {
     return this.#request<void>(`/management-api/stations/${id}/default`, "POST");
-  }
-
-  setCategoryStation(categoryId: string, stationId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/categories/${categoryId}/station`, "PUT", {
-      stationId,
-    });
   }
 
   setBumpMode(mode: BumpMode): Promise<void> {

@@ -1,6 +1,7 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -379,9 +380,12 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     await writeProductModifiers(tx, productIds.get("Pizza")!, [{ kind: "extras", id: extras.id }]);
     await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
     const tables = await offerProducts(tx, cfg, { zone: "tables" });
-    await tx.run(sql`
-      update preparation_routes set station_id = null, no_preparation = 1
-      where product_id = ${productIds.get("Coffee")!}`);
+    await createException(tx, cfg, {
+      zoneId: null,
+      categoryId: null,
+      productId: productIds.get("Coffee")!,
+      target: { kind: "no_preparation" },
+    });
     const people = await tx
       .insert(persons)
       .values([

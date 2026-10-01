@@ -254,8 +254,8 @@ hook, or how tests are scheduled:
   does to the rows is seen; it installs
   today's change-feed list, and today's append-only list less the tables the previous step lacked, at every step; it applies everything up to core's
   `0003` in one go; rows are counted, not compared, so a step that rewrites a value passes; and
-  beyond the counts it asserts only that each step does not throw, so a rebuild that silently
-  drops a trigger ON the rebuilt table passes it (SQLite drops one silently:
+  after the final step it also checks the nine product triggers, but a rebuild that drops
+  any other trigger passes it (SQLite drops one silently:
   [conventions-data.md](docs/developers/conventions-data.md)). Cost: an earlier bricked box that
   was wiped, and a box that failed three starts on 2026-09-26. See
   [ci-and-gates.md](docs/developers/ci-and-gates.md).

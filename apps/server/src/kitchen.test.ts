@@ -4,7 +4,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   catalogues,
-  categories,
   locations,
   products,
   tills,
@@ -28,10 +27,8 @@ import {
   deactivateStation,
   listCourses,
   listStations,
-  setCategoryStation,
   setDefaultStation,
   setProductCourse,
-  setProductStation,
   updateCourse,
   updateStation,
 } from "./kitchen.js";
@@ -234,30 +231,11 @@ describe("kitchen-station config", () => {
   });
 });
 
-async function categoryStation(categoryId: string): Promise<string | null> {
-  const { rows } = await db.execute<{ station_id: string | null }>(
-    sql`select station_id from categories where id = ${categoryId}`,
-  );
-  return rows[0]!.station_id;
-}
-async function productStation(productId: string): Promise<string | null> {
-  const { rows } = await db.execute<{ station_id: string | null }>(
-    sql`select station_id from products where id = ${productId}`,
-  );
-  return rows[0]!.station_id;
-}
 async function productCourse(productId: string): Promise<string | null> {
   const { rows } = await db.execute<{ course_id: string | null }>(
     sql`select course_id from products where id = ${productId}`,
   );
   return rows[0]!.course_id;
-}
-async function seedCategory(): Promise<string> {
-  const [row] = await db
-    .insert(categories)
-    .values({ name: "Food" })
-    .returning({ id: categories.id });
-  return row!.id;
 }
 async function seedProduct(): Promise<string> {
   const [cat] = await db
@@ -289,60 +267,6 @@ async function seedVariant(parentId: string): Promise<string> {
     .returning({ id: products.id });
   return row!.id;
 }
-
-describe("routing config", () => {
-  it("setCategoryStation sets then clears the category's default station", async () => {
-    const cfg = await setupVenue();
-    const categoryId = await seedCategory();
-    const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Cocina" }));
-    await asApp(cfg, (tx) => setCategoryStation(tx, cfg, categoryId, stationId));
-    expect(await categoryStation(categoryId)).toBe(stationId);
-    await asApp(cfg, (tx) => setCategoryStation(tx, cfg, categoryId, null));
-    expect(await categoryStation(categoryId)).toBeNull();
-  });
-
-  it("setProductStation sets then clears the product's override station", async () => {
-    const cfg = await setupVenue();
-    const productId = await seedProduct();
-    const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
-    await asApp(cfg, (tx) => setProductStation(tx, cfg, productId, stationId));
-    expect(await productStation(productId)).toBe(stationId);
-    await asApp(cfg, (tx) => setProductStation(tx, cfg, productId, null));
-    expect(await productStation(productId)).toBeNull();
-  });
-
-  it("setProductStation leaves a variant's id alone, as it does an id naming no product", async () => {
-    const cfg = await setupVenue();
-    const productId = await seedProduct();
-    const variantId = await seedVariant(productId);
-    const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
-    await asApp(cfg, (tx) => setProductStation(tx, cfg, variantId, stationId));
-    expect(await productStation(variantId)).toBeNull();
-    await asApp(cfg, (tx) => setProductStation(tx, cfg, productId, stationId));
-    expect(await productStation(productId)).toBe(stationId);
-  });
-
-  it("setCategoryStation / setProductStation reject an inactive or absent station with station.not_found", async () => {
-    const cfg = await setupVenue();
-    const categoryId = await seedCategory();
-    const productId = await seedProduct();
-    const missing = randomUUID();
-    await expect(
-      asApp(cfg, (tx) => setCategoryStation(tx, cfg, categoryId, missing)),
-    ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
-    await expect(
-      asApp(cfg, (tx) => setProductStation(tx, cfg, productId, missing)),
-    ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
-    const { id: dead } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Retired" }));
-    await asApp(cfg, (tx) => deactivateStation(tx, cfg, dead));
-    await expect(
-      asApp(cfg, (tx) => setCategoryStation(tx, cfg, categoryId, dead)),
-    ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: dead } });
-    await expect(
-      asApp(cfg, (tx) => setProductStation(tx, cfg, productId, dead)),
-    ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: dead } });
-  });
-});
 
 describe("kitchen-course config", () => {
   it("creates/lists/updates/deactivates a course and orders by display_order then name", async () => {

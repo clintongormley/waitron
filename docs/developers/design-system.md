@@ -117,7 +117,7 @@ after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
 
 `--wt-color-surface-lifted` is the background of something picked up and moving — a table row
-while a pointer drags it (`apps/dashboard/src/widgets/reorder-table.ts`). A dragged row can sit
+while a pointer drags it (`packages/ui/src/reorder-table.ts`). A dragged row can sit
 inside a `wt-modal`, which is painted `--wt-color-surface-raised`, so the lifted surface differs
 from `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both themes, and
 keeps `--wt-color-text` and `--wt-color-text-muted` at 4.5:1 or more; the "lifted surface" test
@@ -165,7 +165,7 @@ and till app suites: one for the app's own text, one for text on the page outsid
 
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
 `--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by
-dragging in `ReorderController` (`apps/dashboard/src/widgets/reorder-table.ts`).
+dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour
@@ -819,7 +819,7 @@ tree; the same reference inside the shadow root did describe it).
 #### A field that falls back to another value
 
 Some fields store a value only to override one they would otherwise take from somewhere else — a
-variant's VAT, unit, station or photo from its parent product, an extra's price from its product's. Such a field is
+variant's VAT, unit or photo from its parent product, an extra's price from its product's. Such a field is
 **empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
@@ -837,9 +837,8 @@ record's own value applies and its blank languages show no placeholder hint.
   (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
   product" (`editor.same_as_parent`). Mark it chosen with `.selected` while the stored value is null,
   like every option built from an expression. A choice that means "none" on a record of its own
-  (in the product editor: `editor.unit_each` for the unit, `product.no_station` for the kitchen
-  station, `product.no_course` for the course) is left out where the empty value already means
-  "fall back": offering both would read as one thing and save as another.
+  (in the product editor: `editor.unit_each` for the unit and `product.no_course` for the course)
+  is left out where the empty value already means "fall back": offering both would read as one thing and save as another.
 - **A single-choice `wt-combobox`** (the product editor's main category): its first option has an
   empty value and reads "Same as &lt;fallback value&gt;", and so does its placeholder, which is what
   it shows while the stored value is null; like a `<select>`, it has no separate hint line.
@@ -867,8 +866,8 @@ Three rules make the fold safe rather than merely tidy.
 
 **Every collapsed section carries a one-line summary of what is inside it**, passed as `summary`, so
 nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
-empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Bar · Drinks`. An empty
-summary means an empty section, which is a useful signal in itself. One exception: the extras list
+empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Drinks` (kitchen name
+and course). An empty summary means an empty section, which is a useful signal in itself. One exception: the extras list
 form's names section (`apps/dashboard/src/widgets/extra-list-form.ts`) summarises with a count of
 the names filled in ("2 of 3 filled in"), as the owner's review of the Extras and Options editors
 chose (2026-09-26).
@@ -1565,8 +1564,8 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
-`departments`, `zones` and `routing`. The dashboard preserves module-owned `view` segments
-while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
+`departments`, `zones` and `kitchen` (Changes after sending). The dashboard preserves module-owned
+`view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
 `apps/dashboard/src/navigation.ts`).

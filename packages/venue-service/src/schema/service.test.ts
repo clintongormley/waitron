@@ -6,13 +6,13 @@ import {
   departments,
   deviceZoneDefaults,
   orderServiceContexts,
-  preparationRoutes,
   workingLineContexts,
   zoneMenus,
   zoneServicePolicies,
 } from "./service.js";
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
+import { routeExceptions, stationClaims } from "./routing.js";
 
 /**
  * The Drizzle declarations, read without a database. A foreign key's name exists only here: the
@@ -68,23 +68,33 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: ["device_zone_defaults_pk"],
   },
-  preparation_routes: {
-    table: preparationRoutes,
+  station_claims: {
+    table: stationClaims,
     foreignKeys: [
-      "preparation_routes_location_fk",
-      "preparation_routes_zone_fk",
-      "preparation_routes_category_fk",
-      "preparation_routes_product_fk",
-      "preparation_routes_station_fk",
+      "station_claims_location_fk",
+      "station_claims_category_fk",
+      "station_claims_station_fk",
     ],
-    checks: ["preparation_routes_subject_ck", "preparation_routes_target_ck"],
-    indexes: [
-      "preparation_routes_lookup_idx",
-      "preparation_routes_zone_product_key",
-      "preparation_routes_zone_category_key",
-      "preparation_routes_venue_product_key",
-      "preparation_routes_venue_category_key",
+    checks: ["station_claims_target_ck"],
+    indexes: ["station_claims_folder_key"],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
+  route_exceptions: {
+    table: routeExceptions,
+    foreignKeys: [
+      "route_exceptions_location_fk",
+      "route_exceptions_zone_fk",
+      "route_exceptions_category_fk",
+      "route_exceptions_product_fk",
+      "route_exceptions_station_fk",
     ],
+    checks: [
+      "route_exceptions_what_ck",
+      "route_exceptions_condition_ck",
+      "route_exceptions_target_ck",
+    ],
+    indexes: ["route_exceptions_order_idx"],
     uniqueConstraints: [],
     primaryKeys: [],
   },
@@ -151,8 +161,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers all ten of the package's tables", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(10);
+  it("covers all eleven of the package's tables", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(11);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {
@@ -175,16 +185,11 @@ describe("venue-service schema", () => {
     const partial = [
       ...getTableConfig(departments).indexes,
       ...getTableConfig(zoneServicePolicies).indexes,
-      ...getTableConfig(preparationRoutes).indexes,
       ...getTableConfig(kitchenNotices).indexes,
     ].filter((index) => index.config.where !== undefined);
     expect(partial.map((index) => [index.config.name, index.config.unique])).toEqual([
       ["departments_one_default_per_location_key", true],
       ["zone_service_policies_one_counter_default_key", true],
-      ["preparation_routes_zone_product_key", true],
-      ["preparation_routes_zone_category_key", true],
-      ["preparation_routes_venue_product_key", true],
-      ["preparation_routes_venue_category_key", true],
       ["kitchen_notices_open_idx", false],
     ]);
   });

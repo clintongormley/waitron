@@ -1,3 +1,4 @@
+import { reorder } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -8,7 +9,6 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import type { HomeLayout, HomeTile, MemberRef, SectionMember } from "../api/client.js";
 import type { TileRef } from "@waitron/catalogue/src/section-types.js";
 import { MemberListEditor } from "./member-list-editor.js";
-import { reorder } from "./reorder.js";
 import { t } from "../i18n/t.js";
 
 /**

@@ -46,6 +46,18 @@ describe("DashboardApi", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+  it("reads the products' made-at descriptions", async () => {
+    const makers = {
+      lager: { stationId: "bar", stationName: "Bar", noPreparation: false, variesByZone: false },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(makers));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listMadeAt()).toEqual(makers);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/products/made-at",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
   it("uses the discovery, adoption and separate reader-management routes", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -1663,30 +1675,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1/default", {
       method: "POST",
       credentials: "include",
-    });
-  });
-
-  it("setCategoryStation PUTs { stationId } to the category's station route (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setCategoryStation("c1", "s1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/c1/station", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stationId: "s1" }),
-    });
-  });
-
-  it("setCategoryStation carries a null stationId to CLEAR the category route", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await api.setCategoryStation("c1", null);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/c1/station", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stationId: null }),
     });
   });
 

@@ -30,7 +30,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { resolveNewOrderZone } from "./operations.js";
+import { configureZone, createDepartment, resolveNewOrderZone } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -75,7 +75,7 @@ async function fixture(): Promise<Fixture> {
     .returning({ id: floorZones.id });
   const [station] = await db
     .insert(kitchenStations)
-    .values({ locationId: scopedLocationId, name: "Terrace bar" })
+    .values({ locationId: scopedLocationId, name: "Terrace bar", isDefault: true })
     .returning({ id: kitchenStations.id });
 
   const { menuId, categoryId, managerSessionId, staffSessionId } = await db.transaction(
@@ -153,81 +153,266 @@ async function send(
 }
 
 describe("venue service management routes", () => {
-  it("requires an explicit zone when replacing a route and keeps its scope on invalid input", async () => {
-    const fx = await fixture();
-    const departmentResponse = await send(
-      fx.app,
-      "POST",
-      "/management-api/venue-service/departments",
-      fx.managerCookie,
-      { name: "Dining", defaultServiceMode: "table_tab" },
-    );
-    const department = (await departmentResponse.json()) as { id: string };
+  it("keeps stored rules and foreign station or zone references within their location", async () => {
+    const fx = await fixture(),
+      other = await fixture();
+    const base = "/management-api/venue-service/routing";
     expect(
       (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/zones/${fx.zoneId}`,
-          fx.managerCookie,
-          { departmentId: department.id },
-        )
+        await send(other.app, "PUT", `${base}/claims/${fx.categoryId}`, other.managerCookie, {
+          noPreparation: true,
+        })
       ).status,
     ).toBe(204);
-    const original = { zoneId: fx.zoneId, categoryId: fx.categoryId, stationId: fx.stationId };
-    const created = await send(
-      fx.app,
-      "POST",
-      "/management-api/venue-service/routes",
-      fx.managerCookie,
-      original,
-    );
-    expect(created.status).toBe(201);
-    const route = (await created.json()) as { id: string };
-    const rejected = await send(
-      fx.app,
-      "PUT",
-      `/management-api/venue-service/routes/${route.id}`,
-      fx.managerCookie,
-      { categoryId: fx.categoryId, noPreparation: true },
-    );
-    expect(rejected.status).toBe(400);
-    expect(await rejected.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "zoneId" } },
+    expect(
+      (await send(fx.app, "DELETE", `${base}/claims/${fx.categoryId}`, fx.managerCookie)).status,
+    ).toBe(204);
+    expect(await (await send(fx.app, "GET", base, fx.managerCookie)).json()).toMatchObject({
+      claims: [],
+      exceptions: [],
     });
-    const unchanged = (await (
-      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as { routes: unknown[] };
-    expect(unchanged.routes).toEqual([
-      { id: route.id, ...original, productId: null, noPreparation: false },
-    ]);
+    expect(await (await send(other.app, "GET", base, other.managerCookie)).json()).toMatchObject({
+      claims: [{ categoryId: fx.categoryId }],
+    });
+    const created = await send(other.app, "POST", `${base}/exceptions`, other.managerCookie, {
+      categoryId: other.categoryId,
+      noPreparation: true,
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
     expect(
       (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/routes/${route.id}`,
-          fx.managerCookie,
-          { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
-        )
+        await send(fx.app, "PUT", `${base}/exceptions/${id}`, fx.managerCookie, {
+          zoneId: null,
+          categoryId: fx.categoryId,
+          productId: null,
+          noPreparation: true,
+        })
       ).status,
-    ).toBe(204);
-    const updated = (await (
-      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as { routes: unknown[] };
-    expect(updated.routes).toEqual([
-      {
-        id: route.id,
-        zoneId: null,
-        categoryId: fx.categoryId,
-        productId: null,
-        stationId: null,
-        noPreparation: true,
-      },
-    ]);
+    ).toBe(404);
+    expect(
+      (await send(fx.app, "DELETE", `${base}/exceptions/${id}`, fx.managerCookie)).status,
+    ).toBe(404);
+    expect(
+      (await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, { ids: [id] }))
+        .status,
+    ).toBe(400);
+    for (const [body, status, code] of [
+      [{ categoryId: fx.categoryId, stationId: other.stationId }, 409, "route.station_inactive"],
+      [{ zoneId: other.zoneId, noPreparation: true }, 404, "service_zone.not_found"],
+    ] as const) {
+      const response = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, body);
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+    expect(await (await send(other.app, "GET", base, other.managerCookie)).json()).toMatchObject({
+      exceptions: [{ id, target: { kind: "no_preparation" } }],
+    });
   });
 
-  it("edits departments and preparation routes in place", async () => {
+  it("reads, claims, creates, replaces, reorders and removes stored preparation rules", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/${fx.categoryId}`, fx.managerCookie, {
+          stationId: fx.stationId,
+        })
+      ).status,
+    ).toBe(204);
+    const first = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, {
+      categoryId: fx.categoryId,
+      noPreparation: true,
+    });
+    expect(first.status).toBe(201);
+    const { id } = (await first.json()) as { id: string };
+    const input = {
+      zoneId: null,
+      categoryId: fx.categoryId,
+      productId: null,
+      stationId: fx.stationId,
+    };
+    expect(
+      (await send(fx.app, "PUT", `${base}/exceptions/${id}`, fx.managerCookie, input)).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, { ids: [id] }))
+        .status,
+    ).toBe(204);
+    const response = await send(fx.app, "GET", base, fx.managerCookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      claims: [
+        {
+          categoryId: fx.categoryId,
+          target: { kind: "station", stationId: fx.stationId },
+          stationOff: false,
+        },
+      ],
+      exceptions: [
+        {
+          id,
+          position: 0,
+          zoneId: null,
+          categoryId: fx.categoryId,
+          productId: null,
+          target: { kind: "station", stationId: fx.stationId },
+          neverMatches: false,
+          stationOff: false,
+        },
+      ],
+      stations: [{ id: fx.stationId, name: "Terrace bar", active: true }],
+    });
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/${fx.categoryId}`, fx.managerCookie, {
+          noPreparation: true,
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "DELETE", `${base}/claims/${fx.categoryId}`, fx.managerCookie)).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "DELETE", `${base}/exceptions/${id}`, fx.managerCookie)).status,
+    ).toBe(204);
+    expect(await (await send(fx.app, "GET", base, fx.managerCookie)).json()).toMatchObject({
+      claims: [],
+      exceptions: [],
+    });
+  });
+
+  it("rejects missing or conflicting targets, dual subjects and empty conditions by field", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    for (const [body, field] of [
+      [{ categoryId: fx.categoryId }, "target"],
+      [{ categoryId: fx.categoryId, stationId: fx.stationId, noPreparation: true }, "target"],
+      [
+        { categoryId: fx.categoryId, productId: crypto.randomUUID(), noPreparation: true },
+        "subject",
+      ],
+      [{ noPreparation: true }, "condition"],
+    ] as const) {
+      const res = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const missingClaimTarget = await send(
+      fx.app,
+      "PUT",
+      `${base}/claims/${fx.categoryId}`,
+      fx.managerCookie,
+      {},
+    );
+    expect(missingClaimTarget.status).toBe(400);
+    expect(await missingClaimTarget.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "target" } },
+    });
+    for (const ids of [undefined, "bad", ["bad-id"], [crypto.randomUUID()]]) {
+      const response = await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, {
+        ids,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "ids" } },
+      });
+    }
+    expect(
+      (await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, { ids: [] })).status,
+    ).toBe(204);
+  });
+
+  it("requires explicit replacement condition keys and preserves the rejected exception", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    const created = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, {
+      categoryId: fx.categoryId,
+      noPreparation: true,
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const complete: Record<string, unknown> = {
+      zoneId: null,
+      categoryId: fx.categoryId,
+      productId: null,
+      noPreparation: true,
+    };
+    for (const field of ["zoneId", "categoryId", "productId"]) {
+      const body = { ...complete };
+      delete body[field];
+      const response = await send(
+        fx.app,
+        "PUT",
+        `${base}/exceptions/${id}`,
+        fx.managerCookie,
+        body,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(await (await send(fx.app, "GET", base, fx.managerCookie)).json()).toMatchObject({
+      exceptions: [
+        {
+          id,
+          zoneId: null,
+          categoryId: fx.categoryId,
+          productId: null,
+          target: { kind: "no_preparation" },
+        },
+      ],
+    });
+  });
+
+  it("gates every stored-rule endpoint and applies domain status codes", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    for (const [method, path, body] of [
+      ["GET", base, undefined],
+      ["PUT", `${base}/claims/${fx.categoryId}`, { noPreparation: true }],
+      ["DELETE", `${base}/claims/${fx.categoryId}`, undefined],
+      ["PUT", `${base}/products/${crypto.randomUUID()}/assignment`, { noPreparation: true }],
+      ["POST", `${base}/exceptions`, { categoryId: fx.categoryId, noPreparation: true }],
+      [
+        "PUT",
+        `${base}/exceptions/${crypto.randomUUID()}`,
+        { zoneId: null, categoryId: fx.categoryId, productId: null, noPreparation: true },
+      ],
+      ["DELETE", `${base}/exceptions/${crypto.randomUUID()}`, undefined],
+      ["PUT", `${base}/exception-order`, { ids: [] }],
+    ] as const) {
+      expect((await send(fx.app, method, path, undefined, body)).status).toBe(401);
+      expect((await send(fx.app, method, path, fx.staffCookie, body)).status).toBe(403);
+    }
+    const missing = await send(
+      fx.app,
+      "DELETE",
+      `${base}/exceptions/${crypto.randomUUID()}`,
+      fx.managerCookie,
+    );
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: "route.not_found" } });
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/${fx.categoryId}`, fx.managerCookie, {
+          stationId: crypto.randomUUID(),
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/bad-id`, fx.managerCookie, {
+          noPreparation: true,
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it("edits a department in place", async () => {
     const fx = await fixture();
     const created = await send(
       fx.app,
@@ -256,54 +441,10 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(204);
-    const createdRoute = await send(
-      fx.app,
-      "POST",
-      "/management-api/venue-service/routes",
-      fx.managerCookie,
-      {
-        categoryId: fx.categoryId,
-        stationId: fx.stationId,
-      },
-    );
-    const route = (await createdRoute.json()) as { id: string };
-    const routeInput = { zoneId: null, categoryId: fx.categoryId, noPreparation: true };
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/routes/${route.id}`,
-          fx.managerCookie,
-          routeInput,
-        )
-      ).status,
-    ).toBe(204);
     const listed = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
     expect(await listed.json()).toMatchObject({
       departments: [{ id: department.id, ...departmentInput, active: true }],
-      routes: [
-        {
-          id: route.id,
-          zoneId: null,
-          categoryId: fx.categoryId,
-          productId: null,
-          stationId: null,
-          noPreparation: true,
-        },
-      ],
     });
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/routes/${route.id}`,
-          fx.managerCookie,
-          { zoneId: null, categoryId: fx.categoryId, stationId: fx.stationId },
-        )
-      ).status,
-    ).toBe(204);
   });
 
   it("checks edit permissions and rejects malformed fields without changing rows", async () => {
@@ -314,22 +455,11 @@ describe("venue service management routes", () => {
         defaultServiceMode: "table_tab",
       })
     ).json()) as { id: string };
-    const route = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-        categoryId: fx.categoryId,
-        noPreparation: true,
-      })
-    ).json()) as { id: string };
     const paths = [
       {
         method: "PATCH" as const,
         path: `/management-api/venue-service/departments/${department.id}`,
         body: { name: "Deli", tradingName: "Deli", defaultServiceMode: "prepay" },
-      },
-      {
-        method: "PUT" as const,
-        path: `/management-api/venue-service/routes/${route.id}`,
-        body: { zoneId: null, categoryId: fx.categoryId, stationId: fx.stationId },
       },
     ];
     for (const { method, path, body } of paths) {
@@ -349,28 +479,15 @@ describe("venue service management routes", () => {
       expect((await send(fx.app, "PATCH", paths[0]!.path, fx.managerCookie, body)).status).toBe(
         400,
       );
-    for (const body of [
-      { zoneId: null, categoryId: fx.categoryId },
-      {
-        zoneId: null,
-        categoryId: fx.categoryId,
-        productId: crypto.randomUUID(),
-        noPreparation: true,
-      },
-      { zoneId: null, categoryId: fx.categoryId, stationId: fx.stationId, noPreparation: true },
-    ])
-      expect((await send(fx.app, "PUT", paths[1]!.path, fx.managerCookie, body)).status).toBe(400);
     expect(
       await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json(),
     ).toMatchObject({
       departments: [{ id: department.id, name: "Restaurant" }],
-      routes: [{ id: route.id, noPreparation: true }],
     });
   });
 
-  it("scopes edited rows and route references to their venue", async () => {
-    // A second location in the same database: `fx`'s manager must not reach rows or references
-    // that live in `other`'s location.
+  it("scopes edited departments to their venue", async () => {
+    // A manager cannot edit a department in another location sharing the same database.
     const fx = await fixture();
     const other = await fixture();
     const department = (await (
@@ -381,12 +498,6 @@ describe("venue service management routes", () => {
         other.managerCookie,
         { name: "Other", defaultServiceMode: "prepay" },
       )
-    ).json()) as { id: string };
-    const route = (await (
-      await send(other.app, "POST", "/management-api/venue-service/routes", other.managerCookie, {
-        categoryId: other.categoryId,
-        noPreparation: true,
-      })
     ).json()) as { id: string };
     expect(
       (
@@ -400,98 +511,15 @@ describe("venue service management routes", () => {
       ).status,
     ).toBe(404);
     expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/routes/${route.id}`,
-          fx.managerCookie,
-          { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
-        )
-      ).status,
-    ).toBe(404);
-    const own = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-        categoryId: fx.categoryId,
-        noPreparation: true,
-      })
-    ).json()) as { id: string };
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/routes/${own.id}`,
-          fx.managerCookie,
-          { zoneId: null, categoryId: fx.categoryId, stationId: other.stationId },
-        )
-      ).status,
-    ).toBe(409);
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/routes/${own.id}`,
-          fx.managerCookie,
-          { zoneId: other.zoneId, categoryId: fx.categoryId, noPreparation: true },
-        )
-      ).status,
-    ).toBe(404);
-    await send(
-      fx.app,
-      "DELETE",
-      `/management-api/venue-service/routes/${own.id}`,
-      fx.managerCookie,
-    );
-    expect(
       await (
         await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
       ).json(),
     ).toMatchObject({
       departments: [{ id: department.id, name: "Other" }],
-      routes: [{ id: route.id, categoryId: other.categoryId, noPreparation: true }],
     });
   });
 
-  it("rejects a duplicate route edit and keeps the original route", async () => {
-    const fx = await fixture();
-    const existing = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-        categoryId: fx.categoryId,
-        noPreparation: true,
-      })
-    ).json()) as { id: string };
-    const secondCategory = await db.transaction((tx) => createCategory(tx, { name: "Other" }));
-    const route = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-        categoryId: secondCategory.id,
-        noPreparation: true,
-      })
-    ).json()) as { id: string };
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/routes/${route.id}`,
-          fx.managerCookie,
-          { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
-        )
-      ).status,
-    ).toBe(409);
-    const listed = (await (
-      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as { routes: unknown[] };
-    expect(listed.routes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: existing.id, categoryId: fx.categoryId }),
-        expect.objectContaining({ id: route.id, categoryId: secondCategory.id }),
-      ]),
-    );
-  });
-
-  it("configures a department, zone menu, and preparation route", async () => {
+  it("configures a department and zone menu", async () => {
     const fx = await fixture();
     const created = await send(
       fx.app,
@@ -548,29 +576,6 @@ describe("venue service management routes", () => {
       ).status,
     ).toBe(204);
 
-    const route = await send(
-      fx.app,
-      "POST",
-      "/management-api/venue-service/routes",
-      fx.managerCookie,
-      {
-        zoneId: fx.zoneId,
-        categoryId: fx.categoryId,
-        stationId: fx.stationId,
-      },
-    );
-    expect(route.status).toBe(201);
-    const routeId = ((await route.json()) as { id: string }).id;
-    expect(
-      (
-        await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-          zoneId: fx.zoneId,
-          categoryId: fx.categoryId,
-          stationId: fx.stationId,
-        })
-      ).status,
-    ).toBe(409);
-
     const listed = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
     expect(listed.status).toBe(200);
     expect(await listed.json()).toMatchObject({
@@ -589,14 +594,6 @@ describe("venue service management routes", () => {
           serviceMode: "prepay",
         },
       ],
-      routes: [
-        {
-          zoneId: fx.zoneId,
-          categoryId: fx.categoryId,
-          stationId: fx.stationId,
-          noPreparation: false,
-        },
-      ],
       hours: [
         { departmentId: department.id, weekday: 1, opensAt: "09:00:00", closesAt: "14:00:00" },
         { departmentId: department.id, weekday: 1, opensAt: "17:00:00", closesAt: "23:00:00" },
@@ -605,17 +602,6 @@ describe("venue service management routes", () => {
       zoneMenus: [{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 0, isDefault: true }],
       readiness: [{ code: "zone.menu_unpublished", zoneId: fx.zoneId }],
     });
-    expect(
-      (
-        await send(
-          fx.app,
-          "DELETE",
-          `/management-api/venue-service/routes/${routeId}`,
-          fx.managerCookie,
-        )
-      ).status,
-    ).toBe(204);
-
     const blocked = await send(
       fx.app,
       "DELETE",
@@ -644,7 +630,7 @@ describe("venue service management routes", () => {
     ).toBe(204);
   });
 
-  it("accepts inherited service mode and an explicit no-preparation route", async () => {
+  it("accepts inherited service mode", async () => {
     const fx = await fixture();
     const created = await send(
       fx.app,
@@ -665,38 +651,14 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(204);
-    expect(
-      (
-        await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-          categoryId: fx.categoryId,
-          noPreparation: true,
-        })
-      ).status,
-    ).toBe(201);
   });
 
-  it("requires a manager and screens malformed route bodies", async () => {
+  it("requires a manager and screens malformed resource ids", async () => {
     const fx = await fixture();
     expect((await send(fx.app, "GET", "/management-api/venue-service")).status).toBe(401);
     expect(
       (await send(fx.app, "GET", "/management-api/venue-service", fx.staffCookie)).status,
     ).toBe(403);
-    expect(
-      (
-        await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-          categoryId: fx.categoryId,
-        })
-      ).status,
-    ).toBe(400);
-    expect(
-      (
-        await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-          categoryId: fx.categoryId,
-          productId: crypto.randomUUID(),
-          noPreparation: true,
-        })
-      ).status,
-    ).toBe(400);
     expect(
       (
         await send(
@@ -841,56 +803,6 @@ describe("venue service management routes", () => {
     ).toEqual([{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 3, isDefault: false }]);
   });
 
-  it("routes a single product rather than a category, and refuses a route naming neither", async () => {
-    const fx = await fixture();
-    const product = await withTransaction(db, (tx) =>
-      createProduct(tx, {
-        catalogueId: fx.menuId,
-        categoryId: fx.categoryId,
-        name: "Negroni",
-        pricingUnit: "each",
-        unitPrice: "9.00",
-        vatClass: "general",
-      }),
-    );
-    const created = await send(
-      fx.app,
-      "POST",
-      "/management-api/venue-service/routes",
-      fx.managerCookie,
-      { productId: product.id, stationId: fx.stationId },
-    );
-    expect(created.status).toBe(201);
-    const route = (await created.json()) as { id: string };
-    const rejected = await send(
-      fx.app,
-      "POST",
-      "/management-api/venue-service/routes",
-      fx.managerCookie,
-      { categoryId: null, stationId: fx.stationId },
-    );
-    expect(rejected.status).toBe(400);
-    expect(await rejected.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "subject" } },
-    });
-    expect(
-      (
-        (await (
-          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-        ).json()) as { routes: unknown[] }
-      ).routes,
-    ).toEqual([
-      {
-        id: route.id,
-        zoneId: null,
-        categoryId: null,
-        productId: product.id,
-        stationId: fx.stationId,
-        noPreparation: false,
-      },
-    ]);
-  });
-
   it("stores the zone a device's new orders start in", async () => {
     const fx = await fixture();
     const department = (await (
@@ -948,6 +860,35 @@ describe("venue service management routes", () => {
     await expect(
       withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
     ).resolves.toMatchObject({ zoneId: fx.zoneId, departmentId: department.id });
+    const listed = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as {
+      deviceZones: { deviceId: string; zoneId: string }[];
+    };
+    expect(listed.deviceZones).toContainEqual({ deviceId: device!.id, zoneId: fx.zoneId });
+    expect(
+      (
+        await send(
+          fx.app,
+          "DELETE",
+          `/management-api/venue-service/devices/${device!.id}/default-zone`,
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(
+          fx.app,
+          "DELETE",
+          `/management-api/venue-service/devices/${device!.id}/default-zone`,
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(204);
+    await expect(
+      withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
+    ).rejects.toMatchObject({ code: "service_zone.default_missing" });
   });
 });
 
@@ -1224,5 +1165,246 @@ describe("the release-reminder setting", () => {
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
     expect(body.printHeldWork).toBe(false);
+  });
+});
+
+describe("Prep stations product assignment route", () => {
+  it("requires a manager and writes one prioritized product-wide exception", async () => {
+    const fx = await fixture();
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Bread",
+        categoryId: null,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = `/management-api/venue-service/routing/products/${product.id}/assignment`;
+    expect((await send(fx.app, "PUT", path, undefined, { stationId: fx.stationId })).status).toBe(
+      401,
+    );
+    expect(
+      (await send(fx.app, "PUT", path, fx.staffCookie, { stationId: fx.stationId })).status,
+    ).toBe(403);
+    expect(
+      (await send(fx.app, "PUT", path, fx.managerCookie, { stationId: fx.stationId })).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "PUT", path, fx.managerCookie, { noPreparation: true })).status,
+    ).toBe(204);
+    const model = (await (
+      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+    ).json()) as { exceptions: { productId: string; target: unknown }[] };
+    expect(
+      model.exceptions
+        .filter((e) => e.productId === product.id)
+        .map(({ productId, target }) => ({ productId, target })),
+    ).toEqual([{ productId: product.id, target: { kind: "no_preparation" } }]);
+  });
+});
+
+describe("routing preview route", () => {
+  it("previews assignment and exception changes without saving them", async () => {
+    const fx = await fixture();
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Bread",
+        categoryId: null,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = "/management-api/venue-service/routing/preview";
+    const assignment = await send(fx.app, "POST", path, fx.managerCookie, {
+      kind: "assignment",
+      productId: product.id,
+      target: { kind: "no_preparation" },
+    });
+    expect(assignment.status).toBe(200);
+    expect(await assignment.json()).toEqual([
+      expect.objectContaining({ productId: product.id, to: { kind: "no_preparation" } }),
+    ]);
+    const exception = await send(fx.app, "POST", path, fx.managerCookie, {
+      kind: "exception",
+      id: null,
+      input: {
+        productId: product.id,
+        target: { kind: "station", stationId: fx.stationId },
+      },
+    });
+    expect(exception.status).toBe(200);
+    expect(await exception.json()).toEqual([]);
+    expect(
+      await (
+        await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+      ).json(),
+    ).toMatchObject({ claims: [], exceptions: [] });
+  });
+
+  it("validates preview shapes and preserves saved exceptions", async () => {
+    const fx = await fixture();
+    const path = "/management-api/venue-service/routing/preview";
+    const created = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/routing/exceptions",
+      fx.managerCookie,
+      {
+        categoryId: fx.categoryId,
+        noPreparation: true,
+      },
+    );
+    const { id } = (await created.json()) as { id: string };
+    for (const [body, field] of [
+      [{ kind: "claim", categoryId: fx.categoryId, target: [] }, "target"],
+      [{ kind: "claim", categoryId: fx.categoryId, target: { kind: "unknown" } }, "target"],
+      [{ kind: "exception", id, input: null }, "input"],
+      [
+        {
+          kind: "exception",
+          id,
+          input: { categoryId: fx.categoryId, target: { kind: "no_preparation" } },
+        },
+        "zoneId",
+      ],
+      [{ kind: "exception_order", ids: null }, "ids"],
+      [{ kind: "unknown" }, "kind"],
+    ] as const) {
+      const response = await send(fx.app, "POST", path, fx.managerCookie, body);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    for (const body of [
+      { kind: "exception_delete", id },
+      { kind: "exception_order", ids: [id] },
+      {
+        kind: "exception",
+        id,
+        input: {
+          zoneId: null,
+          categoryId: fx.categoryId,
+          productId: null,
+          target: { kind: "no_preparation" },
+        },
+      },
+    ]) {
+      const response = await send(fx.app, "POST", path, fx.managerCookie, body);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual([]);
+    }
+    expect(
+      await (
+        await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+      ).json(),
+    ).toMatchObject({ exceptions: [{ id }] });
+  });
+
+  it("requires a manager, returns moves, and leaves the claim unchanged", async () => {
+    const fx = await fixture();
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Lager",
+        categoryId: fx.categoryId,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = "/management-api/venue-service/routing/preview";
+    const body = {
+      kind: "claim",
+      categoryId: fx.categoryId,
+      target: { kind: "no_preparation" },
+    };
+    expect((await send(fx.app, "POST", path, undefined, body)).status).toBe(401);
+    expect((await send(fx.app, "POST", path, fx.staffCookie, body)).status).toBe(403);
+    const result = await send(fx.app, "POST", path, fx.managerCookie, body);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual([
+      expect.objectContaining({
+        productId: product.id,
+        productName: "Lager",
+        zoneId: fx.zoneId,
+        from: { kind: "station", stationId: fx.stationId },
+        to: { kind: "no_preparation" },
+      }),
+    ]);
+    expect(
+      await (
+        await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+      ).json(),
+    ).toMatchObject({ claims: [] });
+  });
+  it("accepts omitted nullable conditions for a new exception as the save route does", async () => {
+    const fx = await fixture();
+    const response = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/routing/preview",
+      fx.managerCookie,
+      {
+        kind: "exception",
+        id: null,
+        input: { categoryId: fx.categoryId, target: { kind: "no_preparation" } },
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+  });
+});
+
+describe("routing explanation route", () => {
+  it("requires a manager and explains a product in its service zone", async () => {
+    const fx = await fixture();
+    await withTransaction(db, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { locationId: fx.locationId },
+        { name: "Dining", defaultServiceMode: "table_tab" },
+      );
+      await configureZone(
+        tx,
+        { locationId: fx.locationId },
+        { zoneId: fx.zoneId, departmentId: department.id },
+      );
+    });
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Lager",
+        categoryId: fx.categoryId,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = `/management-api/venue-service/routing/explain?productId=${product.id}&zoneId=${fx.zoneId}`;
+    expect((await send(fx.app, "GET", path)).status).toBe(401);
+    expect((await send(fx.app, "GET", path, fx.staffCookie)).status).toBe(403);
+    const response = await send(fx.app, "GET", path, fx.managerCookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      route: { kind: "station", stationId: fx.stationId },
+      decidedBy: { kind: "default" },
+      skipped: [],
+      stations: [{ id: fx.stationId, name: "Terrace bar", active: true }],
+    });
+    expect(
+      (
+        await send(
+          fx.app,
+          "GET",
+          "/management-api/venue-service/routing/explain?productId=bad",
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(400);
   });
 });

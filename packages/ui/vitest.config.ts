@@ -4,9 +4,13 @@ import type { BrowserCommand } from "vitest/node";
 import { parkPointerCommands } from "./src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
+type ReducedMotion = "reduce" | "no-preference" | null;
 
 interface PlaywrightPage {
-  emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
+  emulateMedia(options: {
+    colorScheme?: ColorScheme;
+    reducedMotion?: ReducedMotion;
+  }): Promise<void>;
 }
 
 /** Only the playwright provider's command context carries a `page`, hence the cast. */
@@ -16,6 +20,14 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
+};
+
+const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = async (
+  context,
+  reducedMotion,
+) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  await page.emulateMedia({ reducedMotion });
 };
 
 export default defineConfig({
@@ -34,6 +46,7 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
+        emulateReducedMotion,
         ...parkPointerCommands,
       },
     },

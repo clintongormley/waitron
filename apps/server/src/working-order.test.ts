@@ -78,17 +78,21 @@ import {
   createStation,
   deactivateCourse,
   deactivateStation,
-  setCategoryStation,
   setProductCourse,
-  setProductStation,
 } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import {
+  claimFolderFor,
+  routeProductTo,
+  offerProducts,
+  type ZoneOffers,
+} from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { createException, setClaim } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
@@ -517,9 +521,7 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
     const { tabLines, stationItems, expoItems } = await withTransaction(db, async (tx) => {
       const { offerId, variantId, productId } = await seedVariantOffer(tx, catalogueId);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      await tx.execute(sql`
-        insert into preparation_routes (id, location_id, zone_id, product_id, station_id)
-        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${productId}, ${cocina.id})`);
+      await insertRoute(tx, cfg, { zoneId, productId, stationId: cocina.id });
       await createOpenOrder(
         tx,
         cfg,
@@ -1017,11 +1019,12 @@ describe("openTab service context", () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-      await tx.execute(sql`
-        insert into preparation_routes
-          (id, location_id, zone_id, product_id, station_id)
-        values (${randomUUID()}, ${cfg.locationId}, ${zoneId},
-          (select product_id from menu_items where id = ${premiumCafeOfferId}), ${station.id})`);
+      const [offer] = (
+        await tx.execute<{ product_id: string }>(
+          sql`select product_id from menu_items where id = ${premiumCafeOfferId}`,
+        )
+      ).rows;
+      await insertRoute(tx, cfg, { zoneId, productId: offer!.product_id, stationId: station.id });
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
@@ -1073,14 +1076,16 @@ describe("openTab service context", () => {
       const downstairsBar = await createStation(tx, cfg, { name: "Downstairs bar" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where id = ${cafeId}`);
-      await tx.execute(sql`
-        insert into preparation_routes
-          (id, location_id, zone_id, category_id, station_id)
-        values
-          (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id},
-            ${upstairsBar.id}),
-          (${randomUUID()}, ${cfg.locationId}, ${downstairsZone.rows[0]!.id},
-            ${product.rows[0]!.category_id}, ${downstairsBar.id})`);
+      await insertRoute(tx, cfg, {
+        zoneId,
+        categoryId: product.rows[0]!.category_id,
+        stationId: upstairsBar.id,
+      });
+      await insertRoute(tx, cfg, {
+        zoneId: downstairsZone.rows[0]!.id,
+        categoryId: product.rows[0]!.category_id,
+        stationId: downstairsBar.id,
+      });
 
       const upstairsTable = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
@@ -1120,10 +1125,12 @@ describe("openTab service context", () => {
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
-      await tx.execute(sql`
-        insert into preparation_routes
-          (id, location_id, zone_id, product_id, no_preparation)
-        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${cafeId}, true)`);
+      await createException(tx, cfg, {
+        zoneId,
+        productId: cafeId,
+        categoryId: null,
+        target: { kind: "no_preparation" },
+      });
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Deli shelf', ${zoneId}, ${nowIso()})
@@ -2332,8 +2339,7 @@ const stubBackend = {} as unknown as FiscalBackend;
 /** A basket line for a product at quantity 1 — the shape createOpenOrder/fireLines consume. */
 const line = (productId: string) => ({ productId, quantity: "1" });
 
-/** Create a sellable product in the venue's catalogue, optionally with a category and/or a station
- *  override; returns its id. Descriptions match the location's single locale so `check_locales` passes. */
+/** Create a sellable product, optionally filed in a category or routed by a product exception. */
 async function makeProduct(
   tx: Transaction,
   cfg: TillConfig,
@@ -2349,7 +2355,7 @@ async function makeProduct(
     vatClass: "general",
   });
   if (route.stationId !== undefined) {
-    await setProductStation(tx, cfg, id, route.stationId);
+    await routeProductTo(tx, cfg, id, route.stationId);
   }
   return id;
 }
@@ -2444,10 +2450,8 @@ async function placeOrderWith(
 }
 
 /**
- * Open an order with NO service context and one line per product, then FIRE it, so each line takes
- * `fireLines`' context-less station chain (product, then category, then the default station) rather
- * than a preparation route. The lines are written straight to the table because pricing one needs a
- * zone; the price and name columns are placeholders nothing here reads.
+ * Open an order with no service context and one line per product, then fire it. Raw lines let the
+ * routing tests exercise orders without a service zone; price and name are fixture placeholders.
  */
 async function fireContextless(
   tx: Transaction,
@@ -2762,13 +2766,92 @@ describe("basket-wide modifier resolution (perf)", () => {
 });
 
 describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
-  it("routes product > category > default and snapshots the station at fire time", async () => {
+  it("fires a zone-less order at the station that claimed its folder", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const bar = await createStation(tx, cfg, { name: "Bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: bar.id });
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const { id } = await fireContextless(tx, cfg, [product]);
+      expect(byProduct(await ticketItemsFor(tx, id), product).stationId).toBe(bar.id);
+    });
+  });
+
+  it("sends a line with no product to the active default and refuses it when that station is off", async () => {
+    const { cfg } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const id = randomUUID();
+      await createOpenOrder(tx, cfg, id, [], null);
+      await tx.insert(workingOrderLines).values({
+        workingOrderId: id,
+        lineNo: 1,
+        productId: null,
+        name: "Handwritten",
+        descriptions: { [LOCALE]: "Handwritten" },
+        quantity: 1000,
+        unitPriceGross: 150,
+        vatClass: "general",
+        lineTotal: 150,
+      });
+      const [line] = await fireableLines(tx, id);
+      await fireLines(tx, cfg, id, [line!]);
+      expect((await ticketItemsFor(tx, id))[0]!.stationId).toBe(kitchen.id);
+      await deactivateStation(tx, cfg, kitchen.id);
+      await expect(fireLines(tx, cfg, id, [line!])).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: cfg.locationId },
+      });
+      await expect(fireLines(tx, cfg, id, [line!], { unroutable: "skip" })).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: cfg.locationId },
+      });
+    });
+  });
+
+  it("releases a held no-preparation dish on an order with no service zone", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const drinks = await createCategory(tx, { name: "Bottles" });
+      await setClaim(tx, cfg, drinks.id, { kind: "no_preparation" });
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const course = await createCourse(tx, cfg, { name: "Bottles" });
+      const id = randomUUID();
+      await createOpenOrder(tx, cfg, id, [], null);
+      await insertContextlessLines(tx, id, [product]);
+      await tx
+        .update(workingOrderLines)
+        .set({ courseId: course.id })
+        .where(eq(workingOrderLines.workingOrderId, id));
+      const [line] = await fireableLines(tx, id);
+      await fireLines(tx, cfg, id, [{ ...line!, hold: true }]);
+      const stamp = async () =>
+        (
+          await tx
+            .select({ sentAt: workingOrderLines.sentAt })
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, id))
+        )[0]!.sentAt;
+      expect(await ticketItemsFor(tx, id)).toEqual([]);
+      expect(await stamp()).toBeNull();
+      await fireCourse(tx, cfg, id, course.id, OPERATOR);
+      const sentAt = await stamp();
+      expect(sentAt).toEqual(expect.any(String));
+      expect(await ticketItemsFor(tx, id)).toEqual([]);
+      await fireCourse(tx, cfg, id, course.id, OPERATOR);
+      expect(await stamp()).toBe(sentAt);
+    });
+  });
+
+  it("routes exceptions before folder claims and the default and snapshots the station at fire time", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const drinks = await createCategory(tx, { name: "Copas" });
-      await setCategoryStation(tx, cfg, drinks.id, barra.id);
+      await claimFolderFor(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
         categoryId: drinks.id,
@@ -2783,7 +2866,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
 
       // Re-route the category AFTER firing. The already-fired item is SNAPSHOTTED, so it does NOT move —
       // the rule (re-categorising a product later never reroutes food already sent).
-      await setCategoryStation(tx, cfg, drinks.id, cocina.id);
+      await claimFolderFor(tx, cfg, drinks.id, cocina.id);
       const after = await ticketItemsFor(tx, orderId);
       expect(byProduct(after, cana).stationId).toBe(barra.id);
     });
@@ -2796,12 +2879,11 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const food = await createCategory(tx, { name: "Food" });
-      await setCategoryStation(tx, cfg, drinks.id, bar.id);
-      await setCategoryStation(tx, cfg, food.id, kitchen.id);
+      await claimFolderFor(tx, cfg, drinks.id, bar.id);
+      await claimFolderFor(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
 
-      // The station comes from the context-less chain; the frozen category from a sale, which a
-      // context-less order cannot carry.
+      // The raw unzoned order checks routing; the offered order freezes the sale category.
       const { id: routedId } = await fireContextless(tx, cfg, [product]);
       expect(byProduct(await ticketItemsFor(tx, routedId), product).stationId).toBe(bar.id);
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(product)]);
@@ -2953,13 +3035,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where id = ${cafeId}`);
-      await tx.execute(sql`
-        insert into preparation_routes (id, location_id, zone_id, category_id, station_id)
-        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id},
-          ${bar.id})`);
-      await tx.execute(sql`
-        insert into preparation_routes (id, location_id, zone_id, product_id, station_id)
-        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
+      await claimFolderFor(tx, cfg, product.rows[0]!.category_id, bar.id);
+      await routeProductTo(tx, cfg, aguaId, kitchen.id);
       const aguaOffer = await addProductToMenu(tx, {
         menuId: catalogueId,
         productId: aguaId,
@@ -2972,7 +3049,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         returning id`);
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
-      const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoutes");
+      const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolveMakers");
       try {
         await addTabRound(tx, cfg, tabId, [
           { menuItemId: premiumCafeOfferId, quantity: "1" },
@@ -7109,10 +7186,12 @@ async function insertRoute(
   cfg: TillConfig,
   route: { zoneId?: string; productId?: string; categoryId?: string; stationId: string },
 ): Promise<void> {
-  await tx.execute(sql`
-    insert into preparation_routes (id, location_id, zone_id, product_id, category_id, station_id)
-    values (${randomUUID()}, ${cfg.locationId}, ${route.zoneId ?? null}, ${route.productId ?? null},
-      ${route.categoryId ?? null}, ${route.stationId})`);
+  await createException(tx, cfg, {
+    zoneId: route.zoneId ?? null,
+    productId: route.productId ?? null,
+    categoryId: route.categoryId ?? null,
+    target: { kind: "station", stationId: route.stationId },
+  });
 }
 
 describe("a variant is sold as the product it is", () => {
@@ -7278,17 +7357,16 @@ describe("a variant is sold as the product it is", () => {
     }
   });
 
-  it("fires a variant line to its parent's product station, and one overriding the station to its own", async () => {
+  it("fires variants by their effective folder claims", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const copas = await createStation(tx, cfg, { name: "Copas" });
-      await setProductStation(tx, cfg, wine.parentId, barra.id);
-      await tx.update(products).set({ stationId: copas.id }).where(eq(products.id, wine.wine175));
-      // An order with no service context, so the station comes from the product and category
-      // routes. Its two lines name the two variants, which is what an order line for each carries.
+      await claimFolderFor(tx, cfg, wine.vinosId, barra.id);
+      await claimFolderFor(tx, cfg, wine.copasId, copas.id);
+      // Both lines name variants; their effective folders select the two claims.
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -7307,15 +7385,15 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("fires a variant line to its parent's category station, and one in its own category to that one's", async () => {
+  it("fires variants by their inherited or own folder claim", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const bodega = await createStation(tx, cfg, { name: "Bodega" });
       const terraza = await createStation(tx, cfg, { name: "Terraza" });
-      await setCategoryStation(tx, cfg, wine.vinosId, bodega.id);
-      await setCategoryStation(tx, cfg, wine.copasId, terraza.id);
+      await claimFolderFor(tx, cfg, wine.vinosId, bodega.id);
+      await claimFolderFor(tx, cfg, wine.copasId, terraza.id);
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -7334,17 +7412,16 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("takes the preparation route keyed on the parent's product id, and a variant's own category route where it outranks it", async () => {
+  it("takes an earlier variant-folder exception before the parent-product exception", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
       const terraza = await createStation(tx, cfg, { name: "Terraza" });
-      // Venue-wide product route on the PARENT (rank 2), and a zone route on Wine 175's own
-      // category (rank 3), which outranks it for Wine 175 alone.
-      await insertRoute(tx, cfg, { productId: wine.parentId, stationId: barra.id });
+      // The earlier zoned folder exception wins only for Wine 175; its sibling takes the parent-product exception.
       await insertRoute(tx, cfg, { zoneId, categoryId: wine.copasId, stationId: terraza.id });
+      await insertRoute(tx, cfg, { productId: wine.parentId, stationId: barra.id });
       await createOpenOrder(
         tx,
         cfg,
@@ -7363,7 +7440,7 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("takes the preparation route of the parent's category, and one in its own category that one's", async () => {
+  it("takes a category exception for the parent, and one in its own category for the variant", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {

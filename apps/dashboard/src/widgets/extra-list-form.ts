@@ -1,3 +1,4 @@
+import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -15,8 +16,6 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { optionalTextFields, translations, wholeWithin, type FieldContext } from "./form-fields.js";
-import { reorder } from "./reorder.js";
-import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 
@@ -153,18 +152,22 @@ export class ExtraListForm extends LitElement {
    * carries its message with it. */
   @state() private serverErrors: Record<string, string> = {};
 
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.items.map((item) => item.id),
-    move: (id, to) => this.#move(id, to),
-    label: (id) => {
-      const item = this.items.find((each) => each.id === id);
-      return item ? this.#productName(item.productId) : t("extras.product");
-    },
-    busy: () => this.busy,
-    get reorderLabel(): string {
-      return t("extras.reorder");
-    },
-  } satisfies ReorderModel);
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.items.map((item) => item.id),
+      move: (id, to) => this.#move(id, to),
+      label: (id) => {
+        const item = this.items.find((each) => each.id === id);
+        return item ? this.#productName(item.productId) : t("extras.product");
+      },
+      busy: () => this.busy,
+      get reorderLabel(): string {
+        return t("extras.reorder");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("action.reordered") },
+  );
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (changes.has("products"))

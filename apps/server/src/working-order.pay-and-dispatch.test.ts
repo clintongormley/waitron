@@ -68,7 +68,7 @@ import {
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
-import { preparationRoutes } from "@waitron/venue-service";
+import { createException } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -2092,9 +2092,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   it("sendToPrep stamps the settled order's lines sent as it fires them", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
-    // With no route any station can take, paying leaves the dish unsent; its route is restored
-    // before `sendToPrep`, which then sends what the payment could not.
-    const routes = await withdrawRoutes(cfg);
+    // With the default station off, paying leaves the dish unsent; turning it back on before
+    // `sendToPrep` lets that call send the same stored dish.
+    await setDefaultStationActive(cfg, false);
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,
@@ -2115,7 +2115,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       ).map((row) => row.sentAt);
     expect(await ticketStateOf(id)).toBeNull();
     expect(await sentAt()).toEqual([null]);
-    await restoreRoutes(routes);
+    await setDefaultStationActive(cfg, true);
 
     await sendToPrep({ db: suite.db }, cfg, id);
 
@@ -2192,16 +2192,10 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
   });
 });
 
-/** Remove the location's preparation routes, answering them for {@link restoreRoutes}. */
-async function withdrawRoutes(cfg: TillConfig) {
-  return suite.db
-    .delete(preparationRoutes)
-    .where(eq(preparationRoutes.locationId, cfg.locationId))
-    .returning();
-}
-
-async function restoreRoutes(routes: (typeof preparationRoutes.$inferSelect)[]): Promise<void> {
-  await suite.db.insert(preparationRoutes).values(routes);
+async function setDefaultStationActive(cfg: TillConfig, active: boolean): Promise<void> {
+  await suite.db.execute(sql`
+    update kitchen_stations set active = ${active ? 1 : 0}
+    where location_id = ${cfg.locationId} and is_default`);
 }
 
 /** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
@@ -2457,9 +2451,14 @@ describe("markCollected (the counter handover)", () => {
     const id = randomUUID();
     // Paying sends the walk-up's dishes, but a no-preparation dish is given no ticket item, so an
     // order of it alone has nothing on any station display to hand over.
-    await suite.db.execute(sql`
-      update preparation_routes set station_id = null, no_preparation = 1
-      where product_id = ${cafe.id}`);
+    await withTransaction(suite.db, (tx) =>
+      createException(tx, cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: cafe.id,
+        target: { kind: "no_preparation" },
+      }),
+    );
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,

@@ -246,6 +246,12 @@ A deliberate blank tile, for spacing, is left out.
 
 ### 5.1 How routing works today
 
+_2026-10-01: an order with a service zone did not reach steps 2–4; it used only the zone's
+routes and refused a dish none matched (`route.missing`). Slice 3a replaced both paths with
+ordered exceptions, ancestor folder claims and the active venue default. The former
+`preparation_routes` table and product/category station fields are removed; station editing and
+the default moved to Prep Stations. The list below records the design's starting point._
+
 - **Stations** are managed on the dashboard's Kitchen screen (`apps/dashboard/src/screens/kitchen-screen.ts`):
   - name;
   - lateness thresholds;
@@ -297,6 +303,10 @@ The chosen station is **recorded when the work is sent**, as today. Changing a r
 work that has already been sent.
 
 ### 5.4 Delivery area
+
+_2026-10-01, approved R10: you set a till's default service zone on Venue operations › Service
+zones and menus. Devices remains a core screen; configuration export does not carry devices or
+their default zones. Slice 3a matches the order's service zone without an order-type condition._
 
 Exceptions match on **where the finished item is delivered**. That single condition replaces
 separate conditions for order type and ordering device. The delivery area is found as follows:
@@ -407,6 +417,13 @@ still their maker. This is a **device setting, not routing**. Left empty, the ba
 usual. Watchers do not see these items either.
 
 ### 5.12 The screen
+
+_2026-10-01, approved R7: slice 3a shows station printers and kitchen screens read-only, with
+links to Printing rules and Devices. You attach printers on Printing rules and bind a kitchen
+screen when it joins. Slice 3a builds claims, ordered exceptions, their previews and a
+product/delivery-area tester; opening hours, fallbacks, watchers and extras follow in later slices.
+Approved R6 leaves folder move/delete routing previews as a backlog gap: deletion counts rules
+removed, but neither action lists products whose station changes._
 
 **Prep Stations** replaces two things: the Kitchen screen's station list, and Venue operations ›
 Preparation routing. It holds:

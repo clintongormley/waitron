@@ -133,7 +133,7 @@ export interface Product {
 
 /**
  * The product-editor write body's product half, as `parseProductEditorInput` validates it. The kitchen
- * routing (`stationId`/`courseId`) is NOT here — it rides in {@link ProductRouting} and the two combine
+ * routing (`courseId`) is NOT here — it rides in {@link ProductRouting} and the two combine
  * as {@link ProductEditorBody}, the complete body the editor sends.
  *
  * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value.
@@ -172,12 +172,11 @@ export interface ProductEditorInput {
 
 /** A product editor body's optional kitchen routing: absent leaves it alone, `null` clears it. */
 export interface ProductRouting {
-  stationId?: string | null;
   courseId?: string | null;
 }
 
-/** The complete product-editor write body: the product fields plus the kitchen routing, saved on one
- * transaction so a station this venue lacks rolls the product back rather than leaving it unrouted. */
+/** The complete product-editor write body: the product fields plus the kitchen course, saved on one
+ * transaction. */
 export type ProductEditorBody = ProductEditorInput & ProductRouting;
 
 /** A parent's value for each field its variants inherit — what a variant's blank field reads as. */
@@ -188,7 +187,6 @@ export interface InheritedValues {
   vatClass: VatClass;
   unitId: string | null;
   primaryCategoryId: string | null;
-  stationId: string | null;
   courseId: string | null;
   /** The parent's PUBLISHED allergens (its manual overlay merged with its recipe derivation, or null
    * when not yet reviewed), which are what a variant with no allergen overlay of its own reads. The
@@ -206,6 +204,5 @@ export type ProductEditorValue = Omit<ProductEditorInput, "variants" | "parentId
   parentId: string | null;
   inherited: InheritedValues | null;
   variants: ProductVariant[];
-  stationId: string | null;
   courseId: string | null;
 };

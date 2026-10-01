@@ -9,6 +9,7 @@ import { ProductList } from "./product-list.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("es"));
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
 // a choice one test makes would otherwise be restored into the next one.
 beforeEach(() => {
@@ -111,6 +112,26 @@ function product(
 }
 
 describe("product-list", () => {
+  it("shows the made-at station, zone variation, and tester link", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "lager" }), product({ id: "mojito" })],
+      madeAt: {
+        lager: { stationId: "bar", stationName: "Bar", noPreparation: false, variesByZone: false },
+        mojito: {
+          stationId: "cocktail",
+          stationName: "Cocktail bar",
+          noPreparation: false,
+          variesByZone: true,
+        },
+      },
+    });
+    const root = await tableRoot(el);
+    expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
+    const cell = cellUnder(root, "mojito", "Made at");
+    expect(cell.textContent).toContain("Cocktail bar · varies by service zone");
+    expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/mojito");
+  });
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
@@ -148,6 +169,7 @@ describe("product-list", () => {
       ]),
     ).toEqual([
       ["reporting-category", true],
+      ["made-at", true],
       ["price", true],
       ["modifiers", true],
       ["ordering", true],
@@ -1169,6 +1191,47 @@ it("keeps touch scrolling on the name cell and starts a drag from its grip", asy
 });
 
 describe("the product list at phone width", () => {
+  it.each(["en-GB", "es-ES"])(
+    "keeps the full made-at link clear of pinned actions after scrolling at 390 px (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: [product({ id: "mojito" })],
+          madeAt: {
+            mojito: {
+              stationId: "bar",
+              stationName: "Downstairs bar",
+              noPreparation: false,
+              variesByZone: true,
+            },
+          },
+        });
+        const root = await tableRoot(el);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        const cell = cellUnder(root, "mojito", t("product.made_at"));
+        scroll.scrollLeft = cell.offsetLeft;
+        const link = cell.querySelector("a")!;
+        const actions = root.querySelector<HTMLElement>(
+          'tr[data-row-key="mojito"] td[data-pinned="end"]',
+        )!;
+        expect(link.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+          scroll.getBoundingClientRect().left,
+        );
+        expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(
+          actions.getBoundingClientRect().left,
+        );
+        expect(link.getBoundingClientRect().height).toBeGreaterThan(30);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
   // A long unbroken product name widens the name column past a phone's screen.
   const phoneProducts = () => [
     product({ id: "a" }),

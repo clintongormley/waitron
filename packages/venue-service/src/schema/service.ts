@@ -4,19 +4,16 @@ import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizz
 import { menuItems, menuVersions } from "@waitron/catalogue";
 import {
   catalogues,
-  categories,
   count,
   devices,
   flag,
   floorZones,
   id,
   json,
-  kitchenStations,
   label,
   locations,
   newId,
   nowIso,
-  products,
   table,
   timeOfDay,
   tsString,
@@ -155,71 +152,6 @@ export const deviceZoneDefaults = table(
       foreignColumns: [floorZones.id],
       name: "device_zone_defaults_zone_fk",
     }),
-  ],
-);
-
-export const preparationRoutes = table(
-  "preparation_routes",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
-    zoneId: id("zone_id"),
-    categoryId: id("category_id"),
-    productId: id("product_id"),
-    stationId: id("station_id"),
-    noPreparation: flag("no_preparation").notNull().default(false),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "preparation_routes_location_fk",
-    }),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "preparation_routes_zone_fk",
-    }),
-    foreignKey({
-      columns: [t.categoryId],
-      foreignColumns: [categories.id],
-      name: "preparation_routes_category_fk",
-    }),
-    foreignKey({
-      columns: [t.productId],
-      foreignColumns: [products.id],
-      name: "preparation_routes_product_fk",
-    }),
-    foreignKey({
-      columns: [t.stationId],
-      foreignColumns: [kitchenStations.id],
-      name: "preparation_routes_station_fk",
-    }),
-    // Each comparison is 1 or 0, so the sum counts the non-null columns; `nullif` turns a false
-    // flag into NULL so it does not count.
-    check(
-      "preparation_routes_subject_ck",
-      sql`(${t.categoryId} is not null) + (${t.productId} is not null) = 1`,
-    ),
-    check(
-      "preparation_routes_target_ck",
-      sql`(${t.stationId} is not null) + (nullif(${t.noPreparation}, false) is not null) = 1`,
-    ),
-    index("preparation_routes_lookup_idx").on(t.locationId, t.zoneId, t.productId, t.categoryId),
-    // A null zone means venue-wide routing, so each of the four specificities has its own partial
-    // unique index: a venue-wide route and a zone route for the same subject can both exist.
-    uniqueIndex("preparation_routes_zone_product_key")
-      .on(t.locationId, t.zoneId, t.productId)
-      .where(sql`${t.zoneId} is not null and ${t.productId} is not null`),
-    uniqueIndex("preparation_routes_zone_category_key")
-      .on(t.locationId, t.zoneId, t.categoryId)
-      .where(sql`${t.zoneId} is not null and ${t.categoryId} is not null`),
-    uniqueIndex("preparation_routes_venue_product_key")
-      .on(t.locationId, t.productId)
-      .where(sql`${t.zoneId} is null and ${t.productId} is not null`),
-    uniqueIndex("preparation_routes_venue_category_key")
-      .on(t.locationId, t.categoryId)
-      .where(sql`${t.zoneId} is null and ${t.categoryId} is not null`),
   ],
 );
 

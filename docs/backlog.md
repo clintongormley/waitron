@@ -237,8 +237,12 @@ The local lane E receipt `~/waitron-campaign-e/receipts/finish-render-20261001/r
 click-path screenshot. Check restored selection visibility before changing the shared component.
 Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
-([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), approved, lane D's PF3 after
-PF1); 3b, opening hours, by-hand open and close, fallbacks (a real replacement; a station with none is a
+([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), **built 2026-10-01**, branch
+`feat/prep-station-rules`; [PR #1004](https://github.com/clintongormley/waitron/pull/1004)). Prep Stations now edits folder claims and ordered
+exceptions, previews routing changes and tests a product's maker. Products link to that tester;
+till default service zones are set on Venue operations. The old preparation-route table and
+product/category station fields are removed. 3b, opening hours, by-hand open and close, fallbacks
+(a real replacement; a station with none is a
 dead end, and the till asks the waiter where to make such a dish, or to remove it, before sending or
 taking payment), and down-printer and dark-screen alerts
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner on
@@ -1142,7 +1146,7 @@ What it left open:
   there is no colour left to show._
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
-  dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
+  dependant (beyond products, child categories and routing rules) has nowhere to plug in one.
   _2026-10-01: this route is retired by product-folders slice 1; folder deletion uses the bulk
   selection summary and delete operations described in [Product categories](developers/product-categories.md)._
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
@@ -1188,11 +1192,10 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   one a diner may leave unanswered — is a possible future change, not built. Today an unanswered ACTIVE list refuses the order with `options.label_required`.
 - **A variant offers its parent's lists and cannot override them.** The attachment list is the one
   thing a variant does not override; a per-variant attachment row is a possible later
-  addition. Everything else about a variant — price, names, photo, VAT, category,
-  unit, kitchen station, allergens, dietary declarations — IS editable per variant. A product-level
-  preparation route cannot name a variant: `createPreparationRoute`
-  (`packages/venue-service/src/operations.ts`) refuses one with `route.subject_not_found`, and a
-  variant line takes its parent's routes.
+  addition. A variant can edit its price, names, photo, VAT, category, unit, allergens and dietary
+  declarations. _2026-10-01, slice 3a: the station field is removed. A product exception names a
+  top-level product and covers its variants; a variant uses its own folder for claims, or its
+  parent's folder when it has none (`packages/venue-service/src/routing-store.ts`)._
 
 **Two gaps Task 13 did not create but did leave standing in the open, both worth a decision:**
 
@@ -1348,7 +1351,7 @@ owner 2026-10-01: "i think we should separate kitchen name from customer facing 
 names" section with the customer-facing name in each language: an options list
 (`apps/dashboard/src/widgets/option-list-form.ts`), one option (`option-label-form.ts`) and an
 extras list (`extra-list-form.ts`). The product editor already keeps them apart — the kitchen name
-is in its "Kitchen" section with station and course, the customer-facing names under
+is in its "Kitchen" section with course, the customer-facing names under
 "Descriptors" (`product-editor.ts`) — and the variant form (`variant-form.ts`) has no section but
 shows the kitchen name as its own field directly above the customer-facing names. **Decided
 (owner, 2026-10-01, mockup B):** in the three editors the kitchen name is a plain field, always
@@ -1906,27 +1909,22 @@ Every sale line is now priced from the menu offers of its order's service zone, 
 priced a line by bare `productId` is gone; a sale sent with no `zoneId` takes the venue's
 counter-default zone, and a venue with none is refused `service_zone.default_missing`.
 What B4 leaves open:
-- **The old station chain in `fireLines` routes nothing the till can sell now.** For an order with
-  no zone, `fireLines` (`apps/server/src/working-order.ts`) takes each line's kitchen station from
-  the product, then its category, then the venue's default station, and refuses
-  `station.no_default` when none is set. On an order in a zone, a line that names a product routes
-  by the zone's preparation routes, and `resolvePreparationRoutes`
-  (`packages/venue-service/src/operations.ts`) refuses `route.missing` rather than fall back to the
-  chain. Every path that prices new lines now refuses
-  an order with no zone, so the chain is reached by orders parked with lines before B4, and by the
-  tests that build such an order directly (`createOpenOrder` with no lines, a line inserted by
-  hand, then `fireLines`), which keep it covered. A transfer from a zoned tab onto an empty tab on
-  a table in no zone is refused `service_zone.mode_incompatible` for part of a line as for a whole
-  one (`transferLines`, pinned by "refuses a transfer onto an empty tab on a table in no zone" in
-  `apps/server/src/transfer-lines.test.ts`). _(2026-09-30, Task 13: `transferLines` is deleted; the
-  refusal is now `transferItems`'s (`apps/server/src/bill-actions.ts`), pinned by "refuses a
-  transfer onto an empty bill of the party with no service zone" in the same test file.)_ So
-  three dashboard settings no longer route anything sold today: the product editor's station
-  (saved through `setProductStation`, `apps/server/src/catalogue-api.ts`), a category's station
-  (`PUT /management-api/categories/:id/station`, `apps/server/src/management-api.ts`; the
-  dashboard's API client has `setCategoryStation`, and no screen calls it) and the Kitchen
-  screen's default station (`apps/dashboard/src/screens/kitchen-screen.ts`). **Next action:** owner
-  to decide whether to delete the chain and those settings, or keep them.
+- **The old station chain in `fireLines` routes nothing the till can sell now. DONE
+  (2026-10-01, slice 3a).** The product/category station fields and their settings are deleted.
+  `resolveMakers` now uses ordered exceptions, the nearest folder claim, then the active venue
+  default, for orders with or without a service zone. The default station is edited on Prep
+  Stations; Kitchen keeps courses, bump mode and fire control. The branch's
+  `apps/server/scripts/demo-seed/seed.test.ts` exercises the seeded downstairs and upstairs drink
+  destinations and Kitchen dishes through this resolver.
+- **Deleting or moving a folder does not show which products change station** (2026-10-01,
+  slice 3a, approved R6). The delete dialog counts claims and exceptions removed, but lists no
+  products whose destination changes. **Move to…** also changes folder ancestry without a routing
+  preview. Add that preview before extending these operations during service.
+- **A future rebuild of `categories` can empty its routing rules** (2026-10-01, slice 3a).
+  `station_claims_category_fk` and `route_exceptions_category_fk` both use `ON DELETE CASCADE`
+  (`packages/venue-service/src/schema/routing.ts`). Dropping the parent table during a rebuild
+  can delete those dependent rows; follow CLAUDE.md §3's rebuild rule and add a populated-upgrade
+  check before another categories rebuild.
 - **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
   path.** The till builds its buttons from zone offers (`GET /api/default-service-zone/offers` and
   `GET /api/service-zones/:zoneId/offers`). `TillApi.listProducts` (`apps/till/src/api/client.ts`)
@@ -3901,7 +3899,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `*** REPRINT ***`, a party's ticket names `GROUP n`, and a new venue setting chooses whether
     identical dishes print as one entry (`3 x Burger`, the default) or one entry each; a dish sold
     by weight or volume is never added together or split. The setting is
-    `service_settings.kitchen_ticket_grouping`, chosen on the dashboard's Preparation routing tab
+    `service_settings.kitchen_ticket_grouping`, chosen on Venue operations' **Changes after sending** tab (slice 3a)
     and saved through its own route,
     `PUT /management-api/venue-service/settings/kitchen-ticket-grouping`, so the existing settings
     route is unchanged. Venue-service `0005` adds the column and `0006` rebuilds the table to add
@@ -3974,8 +3972,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
       a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line by
       line, because nothing records a unit's kind (a unit field would need a migration).
-    - The setting sits under "Changes after sending" on the Preparation routing tab; it may deserve
-      a heading of its own. _(Task 6, 2026-09-27: so does "Print held groups in advance", which is
+    - The setting sits on Venue operations' **Changes after sending** tab (slice 3a). _(Task 6, 2026-09-27: so does "Print held groups in advance", which is
       not about sent work at all.)_
     - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire
       still fires a party's held groups, is to be removed in a follow-up.
@@ -5863,7 +5860,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `route.station_inactive` or `route.missing` when a dish had no kitchen station to go to.
       Now a route whose station is switched off falls back to the next matching route whose
       station is on (never to a no-preparation route), for every caller
-      (`resolvePreparationRouteOutcomes`, `packages/venue-service/src/operations.ts`). When no
+      (`resolvePreparationRouteOutcomes`, `packages/venue-service/src/operations.ts`). (2026-10-01,
+      slice 3a: this resolver is retired. `resolveMakers` skips rules naming inactive stations,
+      then considers later exceptions, ancestor claims and the active default. An explicit
+      no-preparation target remains a valid answer.) When no
       usable route is left, paying a pay-first order takes the payment and files it, sends nothing
       for that dish, and records one `route.dish_not_sent` alert for the sale naming the dishes'
       staff names and the zone (`raiseDishesNotSent`, `apps/server/src/dish-not-sent-alert.ts`;
@@ -8079,8 +8079,9 @@ ongoing overhaul listed at the top of Track A.
 - **Folder-driven routing to multiple printers/destinations** (owner, 2026-09-30): the
   [approved routing design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)
   replaces the former label-driven proposal. Prep stations claim folders, with ordered exceptions
-  and fallbacks; slice 3 remains unbuilt. Slice 1 retains the current direct-category routing until
-  that slice lands. Reporting attribution stays separate so one sale is counted once.
+  and fallbacks. _2026-10-01: slice 3a builds folder claims and ordered exceptions; opening
+  hours and fallbacks are slice 3b, and watcher copies are slice 3d._ Reporting attribution stays separate so one sale is counted
+  once.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; department hours and calendar exceptions; workforce
   assignments; immutable department attribution and reporting; batched readiness and offer queries;

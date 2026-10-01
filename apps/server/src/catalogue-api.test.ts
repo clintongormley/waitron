@@ -23,7 +23,15 @@ import {
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
-import { createCourse, createStation } from "./kitchen.js";
+import { createCourse } from "./kitchen.js";
+import {
+  VENUE_SERVICE_MIGRATIONS,
+  createException,
+  setClaim,
+  createDepartment,
+  configureZone,
+} from "@waitron/venue-service";
+import { floorZones, kitchenStations } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -225,7 +233,12 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    CATALOGUE_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    VENUE_SERVICE_MIGRATIONS,
+  ],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
@@ -264,7 +277,7 @@ const suite = useVenueDb({
 
 /**
  * The venue the product editor's kitchen routing is checked against. Only `locationId` is read by
- * `setProductStation`/`setProductCourse`; the fiscal ids are shape-fillers, as they are in the other
+ * `setProductCourse`; the fiscal ids are shape-fillers, as they are in the other
  * route suites.
  */
 function venueCfg(): TillConfig {
@@ -295,13 +308,12 @@ function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageR
   return app;
 }
 
-/** A live kitchen station and course of the seeded venue. */
-async function seedRouting(): Promise<{ stationId: string; courseId: string }> {
+/** A live kitchen course of the seeded venue. */
+async function seedRouting(): Promise<{ courseId: string }> {
   return withTransaction(suite.db, async (tx) => {
     const cfg = venueCfg();
-    const station = await createStation(tx, cfg, { name: `Pass ${crypto.randomUUID()}` });
     const course = await createCourse(tx, cfg, { name: `Course ${crypto.randomUUID()}` });
-    return { stationId: station.id, courseId: course.id };
+    return { courseId: course.id };
   });
 }
 
@@ -908,6 +920,67 @@ describe("mountCatalogueApi — labels", () => {
 });
 
 describe("mountCatalogueApi — products", () => {
+  it("GET /management-api/products/made-at names the base station and zone variation", async () => {
+    const app = mountApp();
+    const menu = await createCatalogueVia(app, `Made at ${crypto.randomUUID()}`);
+    const folder = async (name: string, parentId: string | null = null) => {
+      const response = await send(app, "POST", "/management-api/categories", {
+        body: { name, parentId },
+      });
+      return ((await response.json()) as { id: string }).id;
+    };
+    const drinks = await folder(`Drinks ${crypto.randomUUID()}`);
+    const cocktails = await folder(`Cocktails ${crypto.randomUUID()}`, drinks);
+    const create = async (name: string, categoryId: string | null) => {
+      const response = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId: menu,
+          categoryId,
+          name,
+          pricingUnit: "each",
+          unitPrice: "3",
+          vatClass: "general",
+        },
+      });
+      expect(response.status).toBe(201);
+      return ((await response.json()) as { id: string }).id;
+    };
+    const lager = await create("Lager", drinks);
+    const mojito = await create("Mojito", cocktails);
+    const bread = await create("Bread", null);
+    await withTransaction(suite.db, async (tx) => {
+      const cfg = venueCfg();
+      const [bar, cocktailBar] = await tx
+        .insert(kitchenStations)
+        .values([
+          { locationId: cfg.locationId, name: "Bar", isDefault: true },
+          { locationId: cfg.locationId, name: "Cocktail bar" },
+        ])
+        .returning();
+      await setClaim(tx, cfg, drinks, { kind: "station", stationId: bar!.id });
+      const [terrace] = await tx
+        .insert(floorZones)
+        .values({ locationId: cfg.locationId, name: "Terrace" })
+        .returning();
+      const department = await createDepartment(tx, cfg, {
+        name: "Dining",
+        defaultServiceMode: "table_tab",
+      });
+      await configureZone(tx, cfg, { zoneId: terrace!.id, departmentId: department.id });
+      await createException(tx, cfg, {
+        zoneId: terrace!.id,
+        categoryId: cocktails,
+        productId: null,
+        target: { kind: "station", stationId: cocktailBar!.id },
+      });
+    });
+    const response = await send(app, "GET", "/management-api/products/made-at");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body[lager]).toMatchObject({ stationName: "Bar", variesByZone: false });
+    expect(body[mojito]).toMatchObject({ stationName: "Bar", variesByZone: true });
+    expect(body[bread]).toMatchObject({ stationName: "Bar", variesByZone: false });
+  });
   it("GET /management-api/catalogues/:id/products → 200 (empty for a fresh catalogue)", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Empty catalogue");
@@ -1360,14 +1433,14 @@ describe("mountCatalogueApi — products", () => {
   it("saves a variant's override, and a blank returns the field to inheriting", async () => {
     const app = mountApp("es-ES");
     const { variantId, ownCategoryId } = await parentWithVariant(app);
-    const { stationId, courseId } = await seedRouting();
+    const { courseId } = await seedRouting();
     const value = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
     ).json()) as Record<string, unknown>;
     const stored = async () =>
       (
         await suite.db.execute<Record<string, unknown>>(
-          sql`select vat_class, unit_price, category_id, manual_allergens, station_id
+          sql`select vat_class, unit_price, category_id, manual_allergens
               from products where id = ${variantId}`,
         )
       ).rows[0];
@@ -1376,7 +1449,6 @@ describe("mountCatalogueApi — products", () => {
       unit_price: null,
       category_id: null,
       manual_allergens: null,
-      station_id: null,
     };
 
     const kept = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
@@ -1398,7 +1470,6 @@ describe("mountCatalogueApi — products", () => {
         unitPrice: "2.60",
         primaryCategoryId: ownCategoryId,
         allergens: { eggs: { presence: "contains" } },
-        stationId,
         courseId,
       },
     });
@@ -1408,7 +1479,6 @@ describe("mountCatalogueApi — products", () => {
       unitPrice: "2.60",
       primaryCategoryId: ownCategoryId,
       allergens: { eggs: { presence: "contains" } },
-      stationId,
       courseId,
     });
     expect(await stored()).toEqual({
@@ -1416,11 +1486,10 @@ describe("mountCatalogueApi — products", () => {
       unit_price: 260,
       category_id: ownCategoryId,
       manual_allergens: JSON.stringify({ eggs: { presence: "contains" } }),
-      station_id: stationId,
     });
 
     const cleared = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-      body: { ...value, unitPrice: null, stationId: null, courseId: null },
+      body: { ...value, unitPrice: null, courseId: null },
     });
     expect(cleared.status).toBe(200);
     expect(await cleared.json()).toEqual({ ...value, unitPrice: null });
@@ -1776,42 +1845,21 @@ describe("mountCatalogueApi — products", () => {
     expect(await offeredIds()).toEqual([]);
   });
 
-  it("creates a product with its kitchen station and course in one save", async () => {
+  it("creates a product with its kitchen course in one save", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Routing catalogue");
-    const { stationId, courseId } = await seedRouting();
+    const { courseId } = await seedRouting();
     const created = await send(
       app,
       "POST",
       `/management-api/catalogues/${catalogueId}/product-editor`,
-      { body: await editorBody(app, { stationId, courseId }) },
+      { body: await editorBody(app, { courseId }) },
     );
     expect(created.status).toBe(201);
-    expect(await created.json()).toMatchObject({ stationId, courseId });
+    expect(await created.json()).toMatchObject({ courseId });
   });
 
-  it("saves the kitchen station and course on the editor PUT and reads them back", async () => {
-    const app = mountApp("es-ES");
-    const catalogueId = await createCatalogueVia(app, "Routing catalogue");
-    const { stationId, courseId } = await seedRouting();
-    const created = await send(
-      app,
-      "POST",
-      `/management-api/catalogues/${catalogueId}/product-editor`,
-      { body: await editorBody(app) },
-    );
-    const productId = ((await created.json()) as { id: string }).id;
-
-    const updated = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
-      body: await editorBody(app, { name: "Rutas cambiadas", stationId, courseId }),
-    });
-    expect(updated.status).toBe(200);
-    expect(await updated.json()).toMatchObject({ name: "Rutas cambiadas", stationId, courseId });
-    const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
-    expect(await read.json()).toMatchObject({ stationId, courseId });
-  });
-
-  it("rolls the WHOLE product back when the save names a station this venue does not have", async () => {
+  it("saves the kitchen course on the editor PUT and reads it back", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Routing catalogue");
     const { courseId } = await seedRouting();
@@ -1822,29 +1870,37 @@ describe("mountCatalogueApi — products", () => {
       { body: await editorBody(app) },
     );
     const productId = ((await created.json()) as { id: string }).id;
-    const before = await send(app, "GET", `/management-api/products/${productId}/editor`);
-    const beforeValue = await before.json();
 
+    const updated = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, { name: "Rutas cambiadas", courseId }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({ name: "Rutas cambiadas", courseId });
+    const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
+    expect(await read.json()).toMatchObject({ courseId });
+  });
+
+  it("rolls the whole product back when the save names an absent course", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Routing catalogue");
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      {
+        body: await editorBody(app),
+      },
+    );
+    const productId = ((await created.json()) as { id: string }).id;
+    const beforeValue = await (
+      await send(app, "GET", `/management-api/products/${productId}/editor`)
+    ).json();
+    const missing = crypto.randomUUID();
     const rejected = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
-      body: await editorBody(app, {
-        name: "Nombre que no debe guardarse",
-        unitPrice: "9.99",
-        stationId: crypto.randomUUID(),
-        courseId,
-      }),
+      body: await editorBody(app, { name: "Unsaved", unitPrice: "9.99", courseId: missing }),
     });
     expect(rejected.status).toBe(404);
-    expect(await rejected.json()).toMatchObject({ error: { code: "station.not_found" } });
-    // A malformed id is the same refusal.
-    const malformed = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
-      body: await editorBody(app, { stationId: "not-a-uuid" }),
-    });
-    expect(malformed.status).toBe(404);
-    expect(await malformed.json()).toMatchObject({
-      error: { code: "station.not_found", params: { stationId: "not-a-uuid" } },
-    });
-    // Not one field of the product moved: the name, the price and the course all share the save's
-    // single transaction with the rejected routing write.
+    expect(await rejected.json()).toMatchObject({ error: { code: "course.not_found" } });
     const after = await send(app, "GET", `/management-api/products/${productId}/editor`);
     expect(await after.json()).toEqual(beforeValue);
   });

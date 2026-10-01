@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { catalogues, categories, floorZones, kitchenStations, products } from "@waitron/db";
+import { catalogues, floorZones, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   addProducts,
@@ -13,11 +13,9 @@ import {
   allowMenuInZone,
   configureZone,
   createDepartment,
-  createPreparationRoute,
-  deletePreparationRoute,
+  createException,
+  setClaim,
   listDepartments,
-  listPreparationRoutes,
-  updatePreparationRoute,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import type { TillConfig } from "../till-config.js";
@@ -41,9 +39,6 @@ export interface OfferProductsOptions {
   serviceMode?: ServiceMode;
   /** Defaults to every top-level product of the location's accessible catalogues. */
   productIds?: readonly string[];
-  /** `"mirror-legacy"` (default) writes, per product, the venue-wide product route to the station
-   *  `fireLines`' context-less chain would pick; `"none"` writes and removes no route. */
-  routes?: "mirror-legacy" | "none";
 }
 
 type Cfg = Pick<TillConfig, "locationId" | "orderFlow">;
@@ -57,8 +52,7 @@ const TABLES_ZONE = "Test tables";
  * zoned path. The menu is never one the suite made, so the prices this writes never overwrite the
  * suite's own. Each product sits on the menu's top level with no menu price, so it sells at the
  * product's own price. The menu is published, so a till sells what the products were when this
- * ran. Idempotent: call it again after adding products or changing stations, or to publish a change
- * to a product.
+ * ran. Idempotent: call it again after adding products or to publish a product change.
  */
 export async function offerProducts(
   tx: Transaction,
@@ -78,9 +72,6 @@ export async function offerProducts(
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
-  if ((options.routes ?? "mirror-legacy") === "mirror-legacy") {
-    await mirrorLegacyRoutes(tx, cfg, productIds);
-  }
   await publishWorkingMenu(tx, menuId);
 
   const offerFor = (productId: string): string => {
@@ -197,52 +188,27 @@ async function topLevelProducts(tx: Transaction, cfg: Cfg): Promise<string[]> {
   return rows.map((row) => row.id);
 }
 
-/**
- * The context-less chain in `fireLines` (working-order.ts): the product's station, else its
- * category's, else the location's active default. A variant is not offered here, so a product's own
- * station is its effective one.
- */
-async function mirrorLegacyRoutes(
+/** Test-only: route one top-level product to a station on every order, as an exception. */
+export async function routeProductTo(
   tx: Transaction,
   cfg: Cfg,
-  productIds: readonly string[],
+  productId: string,
+  stationId: string,
 ): Promise<void> {
-  if (productIds.length === 0) return;
-  const [fallback] = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.isDefault, true),
-        eq(kitchenStations.active, true),
-      ),
-    );
-  const rows = await tx
-    .select({
-      id: products.id,
-      productStationId: products.stationId,
-      categoryStationId: categories.stationId,
-    })
-    .from(products)
-    .leftJoin(categories, eq(categories.id, products.categoryId))
-    .where(inArray(products.id, [...productIds]));
-  const existing = new Map(
-    (await listPreparationRoutes(tx, cfg))
-      .filter((route) => route.zoneId === null && route.productId !== null)
-      .map((route) => [route.productId!, route]),
-  );
-  for (const row of rows) {
-    const stationId = row.productStationId ?? row.categoryStationId ?? fallback?.id ?? null;
-    const route = existing.get(row.id);
-    if (stationId === null) {
-      if (route !== undefined) await deletePreparationRoute(tx, cfg, route.id);
-      continue;
-    }
-    const input = { productId: row.id, target: { kind: "station" as const, stationId } };
-    if (route === undefined) await createPreparationRoute(tx, cfg, input);
-    else if (route.stationId !== stationId || route.noPreparation) {
-      await updatePreparationRoute(tx, cfg, route.id, input);
-    }
-  }
+  await createException(tx, cfg, {
+    zoneId: null,
+    categoryId: null,
+    productId,
+    target: { kind: "station", stationId },
+  });
+}
+
+/** Test-only: a station claims a folder. */
+export async function claimFolderFor(
+  tx: Transaction,
+  cfg: Cfg,
+  categoryId: string,
+  stationId: string,
+): Promise<void> {
+  await setClaim(tx, cfg, categoryId, { kind: "station", stationId });
 }

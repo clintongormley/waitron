@@ -1,6 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
 import {
-  floorZones,
   isRefusal,
   NOT_NULL_VIOLATION,
   products,
@@ -15,9 +14,8 @@ import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-/** The dishes of a paid order that no kitchen station could take, and the zone it was sold in. */
+/** The dishes of a paid order that no prep station could take. */
 export interface DishesNotSent {
-  zoneId: string;
   /** In line order; a product may appear more than once. */
   productIds: readonly string[];
 }
@@ -47,7 +45,6 @@ export async function raiseDishesNotSent(
     log?.("error", "route.dish_not_sent", {
       saleId,
       workingOrderId,
-      zoneId: notSent.zoneId,
       productIds: [...new Set(notSent.productIds)],
       error: String(error),
     });
@@ -70,10 +67,6 @@ async function recordDishesNotSent(
     .from(products)
     .where(inArray(products.id, ids));
   const nameOf = new Map(rows.map((row) => [row.id, row.name]));
-  const [zone] = await tx
-    .select({ name: floorZones.name })
-    .from(floorZones)
-    .where(eq(floorZones.id, notSent.zoneId));
   const [order] = await tx
     .select({ orderNumber: workingOrders.orderNumber, label: workingOrders.label })
     .from(workingOrders)
@@ -82,8 +75,6 @@ async function recordDishesNotSent(
     tillId: cfg.tillId,
     saleId: brandSaleId(saleId),
     error: new AppError("route.dish_not_sent", {
-      zoneId: notSent.zoneId,
-      zoneName: zone!.name,
       // `products.name` is not null but may be blank.
       dishes: ids.map((id) => nameOf.get(id) || id).join(", "),
       workingOrderId,

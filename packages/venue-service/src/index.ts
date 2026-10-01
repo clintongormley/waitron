@@ -12,3 +12,5 @@ export { VENUE_SERVICE_ROUTES } from "./routes.js";
 export { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 export { VENUE_SERVICE_ALERTS } from "./alerts.js";
 export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
+export * from "./routing.js";
+export * from "./routing-store.js";

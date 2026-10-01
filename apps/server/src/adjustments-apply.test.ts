@@ -3098,12 +3098,10 @@ describe("a counter order (B11c)", () => {
         .insert(floorZones)
         .values({ locationId: venue.cfg.locationId, name })
         .returning({ id: floorZones.id });
-      // `routes: "none"` keeps the Coffee's no-preparation route the suite set up.
       return (
         await offerProducts(tx, venue.cfg, {
           zone: { zoneId: zone!.id },
           serviceMode,
-          routes: "none",
         })
       ).zoneId;
     });

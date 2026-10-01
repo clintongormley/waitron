@@ -17,14 +17,12 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         readiness: [{ code: "venue.department_missing" }],
         departments: [],
         zones: [],
-        routes: [],
+        deviceZones: [],
+        devices: [],
         hours: [],
         zoneMenus: [],
         menus: [],
-        categories: [],
-        stations: [],
         floorZones: [],
-        products: [],
         settings: { editSentLines: true },
       }),
     } as unknown as VenueServiceApi;
@@ -48,14 +46,12 @@ describe.each(["light", "dark"] as const)("kitchen changes setting accessibility
         readiness: [],
         departments: [],
         zones: [],
-        routes: [],
+        deviceZones: [],
+        devices: [],
         hours: [],
         zoneMenus: [],
         menus: [],
-        categories: [],
-        stations: [],
         floorZones: [],
-        products: [],
         settings: { editSentLines: true },
       }),
       saveSettings: refusal ? vi.fn().mockRejectedValue(refusal) : vi.fn(),
@@ -64,7 +60,7 @@ describe.each(["light", "dark"] as const)("kitchen changes setting accessibility
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="kitchen"]')!.click();
     await el.updateComplete;
     if (refusal) {
       el.shadowRoot!.querySelector("wt-switch")!.shadowRoot!.querySelector("input")!.click();
@@ -93,14 +89,12 @@ describe.each(["light", "dark"] as const)(
           readiness: [],
           departments: [],
           zones: [],
-          routes: [],
+          deviceZones: [],
+          devices: [],
           hours: [],
           zoneMenus: [],
           menus: [],
-          categories: [],
-          stations: [],
           floorZones: [],
-          products: [],
           settings: { editSentLines: true },
           kitchenTicketGrouping: "combined",
         }),
@@ -110,7 +104,7 @@ describe.each(["light", "dark"] as const)(
       await new Promise((resolve) => setTimeout(resolve, 0));
       await el.updateComplete;
       const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-      tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+      tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="kitchen"]')!.click();
       await el.updateComplete;
       const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
         'select[name="kitchenTicketGrouping"]',
@@ -143,14 +137,12 @@ describe.each(["light", "dark"] as const)("print held work setting accessibility
         readiness: [],
         departments: [],
         zones: [],
-        routes: [],
+        deviceZones: [],
+        devices: [],
         hours: [],
         zoneMenus: [],
         menus: [],
-        categories: [],
-        stations: [],
         floorZones: [],
-        products: [],
         settings: { editSentLines: true },
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
@@ -161,7 +153,7 @@ describe.each(["light", "dark"] as const)("print held work setting accessibility
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="kitchen"]')!.click();
     await el.updateComplete;
     const toggle = el.shadowRoot!.querySelector('wt-switch[name="printHeldWork"]');
     expect(toggle).not.toBeNull();
@@ -192,14 +184,12 @@ describe.each(["light", "dark"] as const)(
           readiness: [],
           departments: [],
           zones: [],
-          routes: [],
+          deviceZones: [],
+          devices: [],
           hours: [],
           zoneMenus: [],
           menus: [],
-          categories: [],
-          stations: [],
           floorZones: [],
-          products: [],
           settings: { editSentLines: true },
           kitchenTicketGrouping: "combined",
           printHeldWork: false,
@@ -211,7 +201,7 @@ describe.each(["light", "dark"] as const)(
       await new Promise((resolve) => setTimeout(resolve, 0));
       await el.updateComplete;
       const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-      tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+      tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="kitchen"]')!.click();
       await el.updateComplete;
       const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
         'select[name="releaseReminderMinutes"]',
@@ -241,14 +231,12 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
         readiness: [],
         departments: [],
         zones: [],
-        routes: [],
+        deviceZones: [],
+        devices: [],
         hours: [],
         zoneMenus: [],
         menus: [],
-        categories: [],
-        stations: [],
         floorZones: [],
-        products: [],
         settings: { editSentLines: true },
       }),
       createDepartment: vi.fn(),

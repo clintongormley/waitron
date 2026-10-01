@@ -40,7 +40,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createCourse, createStation, setProductCourse, setProductStation } from "./kitchen.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -52,7 +52,7 @@ import {
 } from "./kitchen-print.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
   billRow,
   inTx,
@@ -185,7 +185,7 @@ async function makeProduct(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  if (route.stationId !== undefined) await setProductStation(tx, cfg, id, route.stationId);
+  if (route.stationId !== undefined) await routeProductTo(tx, cfg, id, route.stationId);
   if (route.courseId !== undefined) await setProductCourse(tx, cfg, id, route.courseId);
   return id;
 }
@@ -216,7 +216,7 @@ type ProductLine = {
 
 /** Open a working order in the counter zone, selling each line through the zone's offer for its
  *  product. Call once the suite's products, stations and extras are final: the offers' routes mirror
- *  the product/category/default station each product would have taken. */
+ *  the active claim or default station each product would have taken. */
 async function createOfferedOrder(
   tx: Transaction,
   cfg: TillConfig,
@@ -256,8 +256,7 @@ async function fireNewOrder(
 
 /**
  * Open an order with NO service context holding one dish line and one child line per pick, then FIRE
- * it, so the dish takes `fireLines`' context-less station chain (product, then category, then the
- * default station) rather than a preparation route. The lines are written straight to the table
+ * it, so the dish's zone-less product exception selects its station. The lines are written straight to the table
  * because pricing one needs a zone; the price and name columns are placeholders nothing here reads.
  */
 async function fireContextlessDish(
@@ -906,7 +905,7 @@ describe("a dish sold by the piece prints no unit", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await setProductStation(tx, cfg, id, cocina.id);
+      await routeProductTo(tx, cfg, id, cocina.id);
       return id;
     };
     return {
@@ -1394,7 +1393,7 @@ async function ticketWithNames(frozen: {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await setProductStation(tx, cfg, productId, station.id);
+    await routeProductTo(tx, cfg, productId, station.id);
     const orderId = randomUUID();
     const { lineRows } = await createOfferedOrder(tx, cfg, orderId, [line(productId)]);
     const parent = lineRows[0]!;

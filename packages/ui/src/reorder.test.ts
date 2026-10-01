@@ -12,3 +12,8 @@ it("clamps an out-of-range source index too", () => {
   expect(reorder(["a", "b", "c"], -1, 1)).toEqual(["a", "b", "c"]);
   expect(reorder(["a", "b", "c"], 5, 1)).toEqual(["a", "b", "c"]);
 });
+
+it("ignores an index exactly at the list length", () => {
+  expect(reorder(["a", "b", "c"], 3, 1)).toEqual(["a", "b", "c"]);
+  expect(reorder(["a", "b", "c"], 0, 3)).toEqual(["a", "b", "c"]);
+});

@@ -8,6 +8,7 @@ describe("VENUE_SERVICE", () => {
       "acknowledgeKitchenNotice",
       "copyLineContext",
       "copyOrderContext",
+      "describeMakers",
       "findOrderContext",
       "findOrderModes",
       "getOrderContext",
@@ -25,9 +26,8 @@ describe("VENUE_SERVICE", () => {
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",
+      "resolveMakers",
       "resolveNewOrderZone",
-      "resolvePreparationRouteOutcomes",
-      "resolvePreparationRoutes",
       "resolveZoneContext",
       "retargetOrderContext",
     ]);

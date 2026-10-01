@@ -10,13 +10,17 @@ import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
-import { holdPageCursor, pointerElementsAt, releasePageCursor } from "./reorder-table.js";
+import {
+  holdPageCursor,
+  pointerElementsAt,
+  releasePageCursor,
+} from "@waitron/ui/src/reorder-table.js";
 import {
   modifierListName,
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, Product } from "../api/client.js";
+import type { CategorySummary, MadeAt, Product } from "../api/client.js";
 import {
   PRODUCT_ORDERINGS,
   type ProductOrdering,
@@ -136,6 +140,13 @@ export class ProductList extends LitElement {
         font-size: var(--wt-font-size-sm);
         white-space: nowrap;
       }
+      wt-data-table::part(maker-link) {
+        display: block;
+        max-inline-size: 12rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        color: var(--wt-color-primary);
+      }
     `,
   ];
 
@@ -144,6 +155,7 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) folders: CategorySummary[] = [];
   @property({ type: Boolean }) showPath = true;
   @property({ attribute: false }) products: Product[] = [];
+  @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
@@ -422,6 +434,21 @@ export class ProductList extends LitElement {
         label: t("editor.main_category"),
         cell: (row) => this.#category(this.#values(row).primaryCategoryId),
         searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
+      },
+      {
+        key: "made-at",
+        choosable: "shown",
+        label: t("product.made_at"),
+        cell: (row) => {
+          const id = row.variant?.id ?? row.product.id;
+          const maker = this.madeAt[id];
+          const name = maker?.noPreparation
+            ? t("product.no_preparation")
+            : (maker?.stationName ?? t("product.nowhere"));
+          return html`<a part="maker-link" href=${`/manage/prep-stations/test/${id}`}
+            >${name}${maker?.variesByZone ? html` · ${t("product.varies_by_zone")}` : nothing}</a
+          >`;
+        },
       },
       {
         key: "price",

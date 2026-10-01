@@ -29,7 +29,6 @@ const coffee: ProductEditorDraft = {
   dietaryDeclarations: ["vegan"],
   primaryCategoryId: "drinks",
   modifiers: [],
-  stationId: "bar",
   courseId: null,
 };
 // One list of each kind attached, so the scan covers the Modifiers table: its reorder handles, its
@@ -88,7 +87,6 @@ const variantPage: ProductEditorDraft = {
     vatClass: "reduced",
     unitId: "each",
     primaryCategoryId: "drinks",
-    stationId: "bar",
     courseId: "starters",
     allergens: { milk: { presence: "contains" } },
     dietaryDeclarations: ["vegan"],
@@ -102,7 +100,6 @@ const variantPage: ProductEditorDraft = {
   allergens: null,
   dietaryDeclarations: null,
   primaryCategoryId: null,
-  stationId: null,
   courseId: null,
 };
 
@@ -166,7 +163,6 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
           { id: "drinks", name: "Drinks", parentId: null },
           { id: "food", name: "Food", parentId: null },
         ],
-        stations: [{ id: "bar", name: "Bar" }],
         courses: [{ id: "starters", name: "Starters" }],
         fieldErrors:
           state === "ordering-refused" ? { ordering: "The server rejected this value." } : {},

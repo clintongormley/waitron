@@ -36,7 +36,8 @@ const TABLES = [
   "zone_service_policies",
   "zone_menus",
   "device_zone_defaults",
-  "preparation_routes",
+  "station_claims",
+  "route_exceptions",
   "department_hours",
   "order_service_contexts",
   "working_line_contexts",
@@ -169,10 +170,18 @@ describe("the venue-service migration set carries no tenant column", () => {
         primaryKey: ["device_id"],
         foreignKeys: ["(device_id) -> devices(id)", "(zone_id) -> floor_zones(id)"],
       },
-      preparation_routes: {
+      station_claims: {
         primaryKey: ["id"],
         foreignKeys: [
-          "(category_id) -> categories(id)",
+          "(category_id) -> categories(id) on delete cascade",
+          "(location_id) -> locations(id)",
+          "(station_id) -> kitchen_stations(id)",
+        ],
+      },
+      route_exceptions: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(category_id) -> categories(id) on delete cascade",
           "(location_id) -> locations(id)",
           "(product_id) -> products(id)",
           "(station_id) -> kitchen_stations(id)",
@@ -218,12 +227,10 @@ describe("the venue-service migration set carries no tenant column", () => {
     const columns = (name: string) => defs[name]?.columns;
     // No PRAGMA reports a partial index's `WHERE`, so it is read off the stored statement.
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
-    expect(columns("preparation_routes_lookup_idx")).toEqual([
-      "location_id",
-      "zone_id",
-      "product_id",
-      "category_id",
-    ]);
+    expect(columns("station_claims_folder_key")).toEqual(["location_id", "category_id"]);
+    expect(defs["station_claims_folder_key"]?.unique).toBe(true);
+    expect(columns("route_exceptions_order_idx")).toEqual(["location_id", "position"]);
+    expect(defs["route_exceptions_order_idx"]?.unique).toBe(false);
     expect(columns("zone_menus_order_idx")).toEqual(["zone_id", "display_order"]);
     expect(columns("kitchen_notices_open_idx")).toEqual(["station_id", "created_at"]);
     expect(predicate("kitchen_notices_open_idx")).toBe(
@@ -236,33 +243,6 @@ describe("the venue-service migration set carries no tenant column", () => {
       "closes_at",
     ]);
     expect(columns("departments_location_name_key")).toEqual(["location_id", "name"]);
-    expect(columns("preparation_routes_zone_product_key")).toEqual([
-      "location_id",
-      "zone_id",
-      "product_id",
-    ]);
-    expect(predicate("preparation_routes_zone_product_key")).toBe(
-      `"preparation_routes"."zone_id" is not null and "preparation_routes"."product_id" is not null`,
-    );
-    expect(columns("preparation_routes_zone_category_key")).toEqual([
-      "location_id",
-      "zone_id",
-      "category_id",
-    ]);
-    expect(predicate("preparation_routes_zone_category_key")).toBe(
-      `"preparation_routes"."zone_id" is not null and "preparation_routes"."category_id" is not null`,
-    );
-    expect(columns("preparation_routes_venue_product_key")).toEqual(["location_id", "product_id"]);
-    expect(predicate("preparation_routes_venue_product_key")).toBe(
-      `"preparation_routes"."zone_id" is null and "preparation_routes"."product_id" is not null`,
-    );
-    expect(columns("preparation_routes_venue_category_key")).toEqual([
-      "location_id",
-      "category_id",
-    ]);
-    expect(predicate("preparation_routes_venue_category_key")).toBe(
-      `"preparation_routes"."zone_id" is null and "preparation_routes"."category_id" is not null`,
-    );
     expect(columns("departments_one_default_per_location_key")).toEqual(["location_id"]);
     expect(predicate("departments_one_default_per_location_key")).toBe(
       `"departments"."is_default"`,
@@ -274,10 +254,6 @@ describe("the venue-service migration set carries no tenant column", () => {
     for (const name of [
       "department_hours_interval_key",
       "departments_location_name_key",
-      "preparation_routes_zone_product_key",
-      "preparation_routes_zone_category_key",
-      "preparation_routes_venue_product_key",
-      "preparation_routes_venue_category_key",
       "departments_one_default_per_location_key",
       "zone_service_policies_one_counter_default_key",
     ]) {

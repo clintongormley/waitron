@@ -233,10 +233,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id}
       where zone_id = ${zone.rows[0]!.id}`);
-    // A raw insert never reaches the column's client-side `$defaultFn(newId)`, so it names its own
-    // id; it stays raw because the station is chosen by a subquery.
     await tx.execute(sql`
-      insert into preparation_routes (id, location_id, category_id, station_id)
+      insert into station_claims (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},
         (select id from kitchen_stations
          where location_id = ${cfg.locationId} and is_default))`);

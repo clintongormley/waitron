@@ -604,7 +604,7 @@ declare module "@waitron/shared" {
      */
     "kitchen_notice.not_found": { noticeId: string };
     /**
-     * A line was fired but resolves no product- or category-level station and the venue has no
+     * A line was fired but no active exception or claim applies and the venue has no
      * default station. Firing fails loud rather than silently dropping food from the kitchen.
      * `locationId` names the misconfigured venue.
      */
@@ -1158,8 +1158,6 @@ declare module "@waitron/shared" {
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
     /** Raised by `raiseDishesNotSent` (`./dish-not-sent-alert.ts`). */
     "route.dish_not_sent": {
-      zoneId: string;
-      zoneName: string;
       dishes: string;
       workingOrderId: string;
       orderNumber: number;

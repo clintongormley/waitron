@@ -91,11 +91,9 @@ import {
   listCourses,
   listStations,
   setBumpMode,
-  setCategoryStation,
   setDefaultStation,
   setFireControl,
   setProductCourse,
-  setProductStation,
   updateCourse,
   updateStation,
   type BumpMode,
@@ -391,6 +389,45 @@ function parseThresholdMinutes(value: unknown, field: string): number | undefine
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 2_147_483_647)
     throw new AppError("management.request_invalid", { field });
   return value;
+}
+
+function parseStationThresholds(body: {
+  warmAfterMinutes?: unknown;
+  overdueAfterMinutes?: unknown;
+  forgottenAfterMinutes?: unknown;
+}):
+  | {
+      warmAfterMinutes: number;
+      overdueAfterMinutes: number;
+      forgottenAfterMinutes: number;
+    }
+  | undefined {
+  const warmAfterMinutes = parseThresholdMinutes(body.warmAfterMinutes, "warmAfterMinutes");
+  const overdueAfterMinutes = parseThresholdMinutes(
+    body.overdueAfterMinutes,
+    "overdueAfterMinutes",
+  );
+  const forgottenAfterMinutes = parseThresholdMinutes(
+    body.forgottenAfterMinutes,
+    "forgottenAfterMinutes",
+  );
+  if (
+    warmAfterMinutes === undefined &&
+    overdueAfterMinutes === undefined &&
+    forgottenAfterMinutes === undefined
+  )
+    return undefined;
+  if (
+    warmAfterMinutes === undefined ||
+    overdueAfterMinutes === undefined ||
+    forgottenAfterMinutes === undefined ||
+    warmAfterMinutes >= overdueAfterMinutes ||
+    overdueAfterMinutes >= forgottenAfterMinutes
+  )
+    throw new AppError("management.request_invalid", {
+      field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes",
+    });
+  return { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes };
 }
 
 /**
@@ -1620,6 +1657,9 @@ export function mountManagementApi(
         name?: unknown;
         displayOrder?: unknown;
         isDefault?: unknown;
+        warmAfterMinutes?: unknown;
+        overdueAfterMinutes?: unknown;
+        forgottenAfterMinutes?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1634,8 +1674,9 @@ export function mountManagementApi(
         isDefault = body.isDefault;
       }
       const { name } = body;
+      const thresholds = parseStationThresholds(body);
       const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createStation(tx, cfg, { name, displayOrder, isDefault }),
+        createStation(tx, cfg, { name, displayOrder, isDefault, thresholds }),
       );
       return c.json(result, 201);
     }),
@@ -1690,35 +1731,7 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "active" });
         patch.active = body.active;
       }
-      const warmAfterMinutes = parseThresholdMinutes(body.warmAfterMinutes, "warmAfterMinutes");
-      const overdueAfterMinutes = parseThresholdMinutes(
-        body.overdueAfterMinutes,
-        "overdueAfterMinutes",
-      );
-      const forgottenAfterMinutes = parseThresholdMinutes(
-        body.forgottenAfterMinutes,
-        "forgottenAfterMinutes",
-      );
-      if (
-        warmAfterMinutes !== undefined ||
-        overdueAfterMinutes !== undefined ||
-        forgottenAfterMinutes !== undefined
-      ) {
-        if (
-          warmAfterMinutes === undefined ||
-          overdueAfterMinutes === undefined ||
-          forgottenAfterMinutes === undefined ||
-          warmAfterMinutes >= overdueAfterMinutes ||
-          overdueAfterMinutes >= forgottenAfterMinutes
-        ) {
-          throw new AppError("management.request_invalid", {
-            field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes",
-          });
-        }
-        patch.warmAfterMinutes = warmAfterMinutes;
-        patch.overdueAfterMinutes = overdueAfterMinutes;
-        patch.forgottenAfterMinutes = forgottenAfterMinutes;
-      }
+      Object.assign(patch, parseStationThresholds(body));
       if (
         patch.name === undefined &&
         patch.displayOrder === undefined &&
@@ -1753,41 +1766,6 @@ export function mountManagementApi(
       return c.body(null, 204);
     }),
   );
-
-  // Routes a category, or a product (which overrides its category), to a station; `null` clears it.
-  // A malformed `:id` gets the verb's unknown-id no-op, inside `withVenueAuth` so the gate still runs.
-  const registerStationRoute = (
-    segment: string,
-    setStation: (
-      tx: Transaction,
-      cfg: TillConfig,
-      id: string,
-      stationId: string | null,
-    ) => Promise<void>,
-  ): void => {
-    app.put(`/management-api/${segment}/:id/station`, (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const cfg = requireVenueCfg(deps);
-        const id = c.req.param("id");
-        const body = await readJsonBody<{ stationId?: unknown }>(c);
-        if (typeof body.stationId !== "string" && body.stationId !== null) {
-          throw new AppError("management.request_invalid", { field: "stationId" });
-        }
-        const stationId = body.stationId;
-        if (stationId !== null && !isUuid(stationId)) {
-          throw new AppError("station.not_found", { stationId });
-        }
-        await withVenueAuth(deps, sessionId, async (tx) => {
-          if (!isUuid(id)) return;
-          await setStation(tx, cfg, id, stationId);
-        });
-        return c.body(null, 204);
-      }),
-    );
-  };
-  registerStationRoute("categories", setCategoryStation);
-  registerStationRoute("products", setProductStation);
 
   app.put("/management-api/bump-mode", (c) =>
     run(c, log, async () => {

@@ -1,3 +1,4 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -88,9 +89,14 @@ useVenueDb({
     terrazaZone = await inTx(v, (tx) => zoneNamed(tx, "Terraza", "table_tab"));
     counterCaña = await pricedInZone(v, v.counter.zoneId, "Caña", "3.50");
     // Agua is handed over at the bar, so it is never sent to the kitchen.
-    db.run(sql`
-      update preparation_routes set station_id = null, no_preparation = 1
-      where product_id = ${v.productId("Agua")}`);
+    await inTx(v, (tx) =>
+      createException(tx, v.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: v.productId("Agua"),
+        target: { kind: "no_preparation" },
+      }),
+    );
   },
 });
 
@@ -1045,12 +1051,11 @@ describe("the dishes of an open bill moved between service modes", () => {
         .insert(floorZones)
         .values({ locationId: v.cfg.locationId, name: `Barra ${name}` })
         .returning({ id: floorZones.id });
-      // Tarta alone and no routes written, so the suite's other routes stand.
+      // Offering Tarta here writes no prep-station rule; the suite's other rules remain.
       return offerProducts(tx, v.cfg, {
         zone: { zoneId: zone!.id },
         serviceMode: "ticket_then_pay",
         productIds: [v.productId("Tarta")],
-        routes: "none",
       });
     });
     const [orderId, walkUp] = [randomUUID(), randomUUID()];

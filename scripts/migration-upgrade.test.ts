@@ -44,8 +44,8 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * {@link ONE_ROW} names, and a singleton (`CHECK (id = 1)`), hold one row. The steps
  * {@link RESETS} lists cannot carry the rows, and the walk restarts from an empty database at each;
  * at one refused by a constraint, nothing else the step does to the rows is seen. Rows are counted,
- * not compared, so a migration that rewrites a value passes. And beyond the counts it asserts only
- * that each step does not throw, so a trigger a rebuild silently drops is not seen.
+ * not compared, so a migration that rewrites a value passes. After the final step it also pins
+ * the nine product triggers; other triggers dropped by a rebuild are not checked here.
  */
 
 interface JournalEntry {
@@ -207,6 +207,28 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
     held = new Map();
     await step();
   }
+  const connection = openRaw(venueDir);
+  try {
+    const names = connection
+      .prepare("select name from sqlite_master where type = 'trigger' and name like 'products_%'")
+      .all()
+      .map((row) => String(row.name));
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "products_variant_one_level_insert",
+        "products_variant_parent_fixed_update",
+        "products_id_fixed_update",
+        "products_ordering_check_insert",
+        "products_ordering_check_update",
+        "products_media_image_fk_insert",
+        "products_media_image_fk_update",
+        "products_media_image_fk_parent_delete",
+        "products_media_image_fk_parent_rename",
+      ]),
+    );
+  } finally {
+    connection.close();
+  }
   return held;
 }
 
@@ -248,6 +270,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   // Rebuilds `printers`; dropping the old one is refused while a non-cascading child holds rows.
   "core/0055_drop_printer_character_set": {
     refused: ["DROP TABLE `printers`", "FOREIGN KEY constraint failed"],
+  },
+  // The product rebuild refuses a non-cascading child after the category rebuild carried its rows.
+  "core/0060_drop_routing_station_columns": {
+    refused: ["DROP TABLE `products`", "FOREIGN KEY constraint failed"],
   },
   "catalogue/0018_sections_owned_prepare": {
     refused: ["DELETE FROM sections WHERE role = 'library'", "FOREIGN KEY constraint failed"],

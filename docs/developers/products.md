@@ -239,7 +239,7 @@ may have any number of variants, one included.
 ### What a variant reads from its parent
 
 **Every field a variant leaves blank reads its parent's, except its three names.** Among them its
-tax rate, station, course, description, image, pricing unit and allergen and dietary declarations
+tax rate, course, description, image, pricing unit and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
 `packages/catalogue/src/variant-fallback.ts`), and so is its main reporting category. Its unit is
@@ -361,12 +361,11 @@ and keeps the rest at their stored prices.
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own
 (_What a sold line freezes_, above), so reports can group it under its parent. The filed
-`sale_lines` row names the variant and its parent only as plain values, never as keys. In the kitchen it takes its parent's product-level
-preparation routes (a route can name only a top-level product, so a variant has none of its own)
-and the category routes of its effective category; its station, course, category, allergens and
-dietary labels are its effective values (`effectiveProductColumns`; `resolvePreparationRouteOutcomes`,
-`packages/venue-service/src/operations.ts`; `priceOrderLines`, `fireLines` and `readQueueSubItems`,
-`apps/server/src/working-order.ts`). The till splits a tab line by the unit precision the line
+`sale_lines` row names the variant and its parent only as plain values, never as keys. In the kitchen, a product exception naming the parent covers the variant. Otherwise its effective
+category determines the nearest claimed folder. Its course, category, allergens and dietary labels
+are its effective values (`effectiveProductColumns`; `packages/venue-service/src/routing.ts`;
+`priceOrderLines`, `fireLines` and `readQueueSubItems`, `apps/server/src/working-order.ts`). The
+till splits a tab line by the unit precision the line
 froze (`TabLine.unitPrecision`), since a variant is not one of the till's products.
 
 ### In the product editor
@@ -461,10 +460,9 @@ A variant shows its parent's main category as "Same as …". See
 
 ## One save, one transaction
 
-**Station and course are saved with the product.** `applyRouting` runs inside the same transaction the product write
-already opened (`apps/server/src/catalogue-api.ts`), so a station or course id the venue does not
-have rolls the whole product back rather than leaving a half-saved routing behind, and a brand-new
-product can be routed as you create it.
+**The course is saved with the product.** `applyRouting` runs inside the same transaction the product
+write already opened (`apps/server/src/catalogue-api.ts`), so a course id the venue does not have
+rolls the whole product back, and you can choose a course as you create the product.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the

@@ -1,3 +1,4 @@
+import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -5,8 +6,6 @@ import { selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { reorder } from "./reorder.js";
-import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { priceText } from "./form-fields.js";
@@ -193,15 +192,19 @@ export class VariantTable extends LitElement {
    * the new variants arrive. */
   #refocus: number | null = null;
 
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.#visible().map((row) => row.key),
-    move: (key, to) => this.#move(key, to),
-    label: (key) => this.#label(this.rows.find((row) => row.key === key)?.variant),
-    busy: () => this.busy,
-    get reorderLabel(): string {
-      return t("editor.reorder_variant");
-    },
-  } satisfies ReorderModel);
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.#visible().map((row) => row.key),
+      move: (key, to) => this.#move(key, to),
+      label: (key) => this.#label(this.rows.find((row) => row.key === key)?.variant),
+      busy: () => this.busy,
+      get reorderLabel(): string {
+        return t("editor.reorder_variant");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("action.reordered") },
+  );
 
   /** Puts focus on a row's actions trigger: the Edit button behind it cannot take focus while the
    * menu is closed. A row just drawn has a trigger only once its menu has rendered, so this waits

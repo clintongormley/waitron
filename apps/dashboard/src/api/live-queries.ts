@@ -161,6 +161,14 @@ export const QUERY_DEPENDENCIES = {
     // table, so neither is named here.
     "product_modifiers",
   ],
+  listMadeAt: [
+    "products",
+    "categories",
+    "category_details",
+    "station_claims",
+    "route_exceptions",
+    "kitchen_stations",
+  ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in
   // extras.ts). The two list reads also count what carries each list: `product_modifiers` for

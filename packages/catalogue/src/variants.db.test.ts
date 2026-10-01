@@ -92,7 +92,7 @@ async function fixture() {
 async function storedVariants(parentId: string) {
   const { rows } = await suite.db.execute<Record<string, unknown>>(sql`
     select id, parent_id, catalogue_id, variant_order, active, available, ordering, unit_price,
-      vat_class, pricing_unit, dietary_declarations, diet, description, category_id, station_id,
+      vat_class, pricing_unit, dietary_declarations, diet, description, category_id,
       course_id, image, allergens, manual_allergens, recipe_derivation, diet_derivation,
       diet_override
     from products where parent_id = ${parentId} order by variant_order`);
@@ -107,7 +107,6 @@ const INHERITING = {
   diet: null,
   description: null,
   category_id: null,
-  station_id: null,
   course_id: null,
   image: null,
   allergens: null,

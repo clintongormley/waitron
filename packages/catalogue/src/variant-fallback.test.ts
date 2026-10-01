@@ -5,7 +5,6 @@ import {
   CORE_MIGRATIONS,
   FOREIGN_KEY_VIOLATION,
   kitchenCourses,
-  kitchenStations,
   products,
   withTransaction,
 } from "@waitron/db";
@@ -69,9 +68,7 @@ interface Fixture {
   bottles: string;
   glass: string;
   largeGlass: string;
-  stationId: string;
   courseId: string;
-  ownStationId: string;
   ownCourseId: string;
   parentId: string;
   wine125: string;
@@ -97,13 +94,6 @@ beforeEach(async () => {
       { name: { en: "large glass" }, precision: 0, abbreviation: { en: "lg" } },
       "en",
     );
-    const [station, ownStation] = await tx
-      .insert(kitchenStations)
-      .values([
-        { locationId: venue.locationId, name: "Bar" },
-        { locationId: venue.locationId, name: "Cellar" },
-      ])
-      .returning({ id: kitchenStations.id });
     const [course, ownCourse] = await tx
       .insert(kitchenCourses)
       .values([
@@ -129,7 +119,6 @@ beforeEach(async () => {
     await tx
       .update(products)
       .set({
-        stationId: station!.id,
         courseId: course!.id,
         dietDerivation: PARENT_DIET_DERIVATION,
         recipeDerivation: PARENT_RECIPE_DERIVATION,
@@ -166,7 +155,6 @@ beforeEach(async () => {
         vatClass: "general",
         dietaryDeclarations: ["vegetarian"],
         image: "large.jpg",
-        stationId: ownStation!.id,
         courseId: ownCourse!.id,
         allergens: W175_PUBLISHED_ALLERGENS,
         manualAllergens: W175_MANUAL_ALLERGENS,
@@ -187,9 +175,7 @@ beforeEach(async () => {
       bottles: bottles.id,
       glass: glass.id,
       largeGlass: largeGlass.id,
-      stationId: station!.id,
       courseId: course!.id,
-      ownStationId: ownStation!.id,
       ownCourseId: ownCourse!.id,
       parentId: parent.id,
       wine125: wine125!.id,
@@ -468,7 +454,6 @@ describe("readProductEditor", () => {
     vatClass: "reduced",
     unitId: f.glass,
     primaryCategoryId: f.wines,
-    stationId: f.stationId,
     courseId: f.courseId,
     allergens: PARENT_ALLERGENS,
     dietaryDeclarations: ["vegan"],
@@ -486,7 +471,6 @@ describe("readProductEditor", () => {
       vatClass: null,
       unitId: null,
       primaryCategoryId: null,
-      stationId: null,
       courseId: null,
       allergens: null,
       dietaryDeclarations: null,
@@ -506,7 +490,6 @@ describe("readProductEditor", () => {
       vatClass: "general",
       unitId: f.largeGlass,
       primaryCategoryId: f.bottles,
-      stationId: f.ownStationId,
       courseId: f.ownCourseId,
       allergens: W175_MANUAL_ALLERGENS,
       dietaryDeclarations: ["vegetarian"],
@@ -711,7 +694,6 @@ describe("INHERITED_KEYS", () => {
         "manualAllergens",
         "pricingUnit",
         "recipeDerivation",
-        "stationId",
         "unitPrice",
         "vatClass",
       ].sort(),

@@ -1101,6 +1101,52 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(found).toMatchObject({ name, displayOrder: 2, isDefault: false, active: true });
   });
 
+  it("POST stores all timing thresholds atomically and rejects a partial or unordered set without a row", async () => {
+    const name = unique("Atomic");
+    const created = await req(
+      "/stations",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          displayOrder: 2,
+          warmAfterMinutes: 3,
+          overdueAfterMinutes: 8,
+          forgottenAfterMinutes: 12,
+        }),
+      },
+      managerCookie,
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const row = await suite.db.execute<{
+      warm_after_minutes: number;
+      overdue_after_minutes: number;
+      forgotten_after_minutes: number;
+    }>(
+      sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
+        from kitchen_stations where id = ${id}`,
+    );
+    expect(row.rows[0]).toMatchObject({
+      warm_after_minutes: 3,
+      overdue_after_minutes: 8,
+      forgotten_after_minutes: 12,
+    });
+    for (const thresholds of [
+      { warmAfterMinutes: 3 },
+      { warmAfterMinutes: 9, overdueAfterMinutes: 8, forgottenAfterMinutes: 12 },
+    ]) {
+      const rejectedName = unique("Rejected");
+      const rejected = await req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name: rejectedName, ...thresholds }) },
+        managerCookie,
+      );
+      expect(rejected.status).toBe(400);
+      expect((await listStations()).some((station) => station.name === rejectedName)).toBe(false);
+    }
+  });
+
   it("POST with a duplicate name → 409 station.name_taken", async () => {
     const name = unique("dup");
     await createStation(name);
@@ -1369,66 +1415,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("PUT /categories/:id/station and /products/:id/station set + clear the route; bad body/station → 400/404; a malformed target is a no-op", async () => {
-    const stationId = await createStation(unique("Route"));
-    const { categoryId, productId } = await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, {
-        name: unique("Carta"),
-      });
-      const category = await createCategory(tx, {
-        name: unique("Cat"),
-      });
-      const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
-        categoryId: category.id,
-        name: unique("Prod"),
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-      });
-      return { categoryId: category.id, productId: product.id };
-    });
-
-    const stationOf = async (
-      table: "categories" | "products",
-      id: string,
-    ): Promise<string | null> => {
-      // Two explicit reads rather than an interpolated table name: SQL is never built by concatenation.
-      const r =
-        table === "categories"
-          ? await suite.db.execute<{ station_id: string | null }>(
-              sql`select station_id from categories where id = ${id}`,
-            )
-          : await suite.db.execute<{ station_id: string | null }>(
-              sql`select station_id from products where id = ${id}`,
-            );
-      return r.rows[0]!.station_id;
-    };
-
-    for (const [base, table, targetId] of [
-      ["categories", "categories", categoryId],
-      ["products", "products", productId],
-    ] as const) {
-      const put = (body: unknown, id = targetId) =>
-        req(`/${base}/${id}/station`, { method: "PUT", body: JSON.stringify(body) }, managerCookie);
-
-      expect((await put({ stationId })).status).toBe(204);
-      expect(await stationOf(table, targetId)).toBe(stationId);
-      expect((await put({ stationId: null })).status).toBe(204);
-      expect(await stationOf(table, targetId)).toBeNull();
-      const badType = await put({ stationId: 5 });
-      expect(badType.status).toBe(400);
-      expect(await badType.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "stationId" } },
-      });
-      const badStation = await put({ stationId: "not-a-uuid" });
-      expect(badStation.status).toBe(404);
-      expect(await badStation.json()).toMatchObject({ error: { code: "station.not_found" } });
-      // A malformed TARGET id gets the verb's unknown-id no-op, a 204.
-      expect((await put({ stationId }, "not-a-uuid")).status).toBe(204);
-    }
-  });
-
   it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
     // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
@@ -1446,16 +1432,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       ),
       req(`/stations/${someId}`, { method: "DELETE" }, staffCookie),
       req(`/stations/${someId}/default`, { method: "POST" }, staffCookie),
-      req(
-        `/categories/${someId}/station`,
-        { method: "PUT", body: JSON.stringify({ stationId: null }) },
-        staffCookie,
-      ),
-      req(
-        `/products/${someId}/station`,
-        { method: "PUT", body: JSON.stringify({ stationId: null }) },
-        staffCookie,
-      ),
       req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, staffCookie),
     ];
     for (const res of await Promise.all(cases)) {
@@ -1476,16 +1452,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       ),
       req(`/stations/${someId}`, { method: "DELETE" }, undefined),
       req(`/stations/${someId}/default`, { method: "POST" }, undefined),
-      req(
-        `/categories/${someId}/station`,
-        { method: "PUT", body: JSON.stringify({ stationId: null }) },
-        undefined,
-      ),
-      req(
-        `/products/${someId}/station`,
-        { method: "PUT", body: JSON.stringify({ stationId: null }) },
-        undefined,
-      ),
       req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, undefined),
     ];
     for (const res of await Promise.all(cases)) {

@@ -3,29 +3,52 @@ import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { commands } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanup, mount as mountHtml } from "./test-helpers.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import { reorder } from "./reorder.js";
-import { setLocale } from "../i18n/t.js";
 
-afterEach(cleanupWidgets);
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateReducedMotion: (reducedMotion: "reduce" | "no-preference" | null) => Promise<void>;
+  }
+}
+
+afterEach(cleanup);
+
+const announcement = () => "{item} moved to position {index} of {total}";
+
+async function mountWidget<T extends LitElement>(
+  tag: string,
+  props: Partial<T>,
+): Promise<{ el: T; host: HTMLElement }> {
+  const host = await mountHtml(`<${tag}></${tag}>`);
+  const el = host as T;
+  Object.assign(el, props);
+  await el.updateComplete;
+  return { el, host: host.parentElement! };
+}
 
 @customElement("test-reorder-host")
 class TestReorderHost extends LitElement {
   static override styles = [ReorderController.styles];
   @property({ attribute: false }) items: { id: string; name: string; height?: number }[] = [];
   @property({ type: Boolean }) busy = false;
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.items.map((item) => item.id),
-    move: (id, to) => {
-      const from = this.items.findIndex((item) => item.id === id);
-      if (from < 0) return;
-      this.items = reorder(this.items, from, to);
-    },
-    label: (id) => this.items.find((item) => item.id === id)?.name ?? id,
-    busy: () => this.busy,
-    reorderLabel: "Reorder",
-  } satisfies ReorderModel);
+  announcementText = "{item} moved to position {index} of {total}";
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.items.map((item) => item.id),
+      move: (id, to) => {
+        const from = this.items.findIndex((item) => item.id === id);
+        if (from < 0) return;
+        this.items = reorder(this.items, from, to);
+      },
+      label: (id) => this.items.find((item) => item.id === id)?.name ?? id,
+      busy: () => this.busy,
+      reorderLabel: "Reorder",
+    } satisfies ReorderModel,
+    { announce: () => this.announcementText },
+  );
   override render() {
     return html`<table>
         <tbody>
@@ -76,21 +99,24 @@ it("labels each handle and marks it for the reorder test hook", async () => {
 
 it("moves a row down with the keyboard and announces its new position politely", async () => {
   const el = await mount();
-  setLocale("en");
-  try {
-    const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-a"]')!;
-    handle.focus();
-    handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    await el.updateComplete;
-    expect(order(el)).toEqual(["b", "a", "c"]);
-    const status = el.shadowRoot!.querySelector('[role="status"]')!;
-    expect(status.getAttribute("aria-live")).toBe("polite");
-    expect(status.textContent).toBe("One moved to position 2 of 3");
-    // The moved handle keeps focus so repeated presses continue the move.
-    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('[data-test="drag-a"]'));
-  } finally {
-    setLocale("es-ES");
-  }
+  const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-a"]')!;
+  handle.focus();
+  handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  const status = el.shadowRoot!.querySelector('[role="status"]')!;
+  expect(status.getAttribute("aria-live")).toBe("polite");
+  expect(status.textContent).toBe("One moved to position 2 of 3");
+  // The moved handle keeps focus so repeated presses continue the move.
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('[data-test="drag-a"]'));
+});
+
+it("uses the injected announcement in the live region", async () => {
+  const el = await mount();
+  el.announcementText = "Position {index}/{total}: {item}";
+  press(el, "a", "ArrowDown");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("Position 2/3: One");
 });
 
 it("leaves the order and the live region untouched at an end, on another key, and while busy", async () => {
@@ -705,26 +731,30 @@ class VolatileReorderHost extends LitElement {
   readonly moves: [string, number][] = [];
   readonly vias: ("key" | "pointer")[] = [];
   readonly drops: string[] = [];
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.items.map((item) => item.id),
-    move: (id, to, via) => {
-      this.moves.push([id, to]);
-      this.vias.push(via);
-      this.items = this.dropOnMove
-        ? this.items.filter((item) => item.id !== id)
-        : reorder(
-            this.items,
-            this.items.findIndex((item) => item.id === id),
-            to,
-          );
-    },
-    drop: (id) => {
-      this.drops.push(id);
-    },
-    label: (id) => this.items.find((item) => item.id === id)?.name ?? id,
-    busy: () => false,
-    reorderLabel: "Reorder",
-  } satisfies ReorderModel);
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.items.map((item) => item.id),
+      move: (id, to, via) => {
+        this.moves.push([id, to]);
+        this.vias.push(via);
+        this.items = this.dropOnMove
+          ? this.items.filter((item) => item.id !== id)
+          : reorder(
+              this.items,
+              this.items.findIndex((item) => item.id === id),
+              to,
+            );
+      },
+      drop: (id) => {
+        this.drops.push(id);
+      },
+      label: (id) => this.items.find((item) => item.id === id)?.name ?? id,
+      busy: () => false,
+      reorderLabel: "Reorder",
+    } satisfies ReorderModel,
+    { announce: announcement },
+  );
   override render() {
     return html`${
       this.items.length === 0
@@ -830,4 +860,60 @@ it("does not call drop for a key move", async () => {
   await el.updateComplete;
   expect(el.moves).toEqual([["b", 0]]);
   expect(el.drops).toEqual([]);
+});
+
+it("prevents arrow scrolling when the move is valid or at the boundary", async () => {
+  const el = await mount();
+  const handle = el.shadowRoot!.querySelector('[data-test="drag-a"]')!;
+  const atStart = new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true });
+  handle.dispatchEvent(atStart);
+  expect(atStart.defaultPrevented).toBe(true);
+  const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+  handle.dispatchEvent(down);
+  expect(down.defaultPrevented).toBe(true);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+});
+
+it("prevents selection when a pointer starts dragging and ignores other pointers", async () => {
+  const el = await mount();
+  const handle = el.shadowRoot!.querySelector('[data-test="drag-a"]')!;
+  const start = new PointerEvent("pointerdown", { pointerId: 1, bubbles: true, cancelable: true });
+  handle.dispatchEvent(start);
+  expect(start.defaultPrevented).toBe(true);
+  const other = new PointerEvent("pointerdown", { pointerId: 2, bubbles: true, cancelable: true });
+  handle.dispatchEvent(other);
+  expect(other.defaultPrevented).toBe(false);
+  pointer(document, "pointerup", 1);
+});
+
+it("ignores a key for a row that is no longer in the model", async () => {
+  const el = await mountVolatile();
+  el.items = el.items.filter((item) => item.id !== "a");
+  press(el, "a", "ArrowDown");
+  await el.updateComplete;
+  expect(el.moves).toEqual([]);
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("");
+});
+
+it("announces a row moved into the first position", async () => {
+  const el = await mount();
+  press(el, "b", "ArrowUp");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe(
+    "Two moved to position 1 of 3",
+  );
+});
+
+it("locates rows from viewport pointer coordinates when the table is offset down the page", async () => {
+  const el = await mount();
+  el.style.display = "block";
+  el.style.marginTop = "180px";
+  const body = el.shadowRoot!.querySelector("tbody")!;
+  expect(body.getBoundingClientRect().top).toBeGreaterThan(100);
+  pointer(handle(el, "a"), "pointerdown", 1);
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "c", "a"]);
+  pointer(document, "pointerup", 1);
 });

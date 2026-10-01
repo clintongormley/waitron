@@ -1,3 +1,4 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -18,7 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   departments,
   listStationNotices,
-  preparationRoutes,
+  stationClaims,
   writeEditSentLines,
 } from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -825,7 +826,7 @@ describe("readTabLines", () => {
 
   it("reads a no-preparation line that was released as sent, with no ticket state", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
@@ -964,8 +965,7 @@ describe("listTablesWithState (occupancy)", () => {
         values (${zone.id}, ${menuId})`);
       await tx.execute(sql`
         update zone_service_policies set default_menu_id = ${menuId} where zone_id = ${zone.id}`);
-      // `preparation_routes.id` is a `$defaultFn` generator.
-      await tx.insert(preparationRoutes).values({
+      await tx.insert(stationClaims).values({
         locationId: cfg.locationId,
         categoryId,
         stationId: null,
@@ -1120,10 +1120,15 @@ it("returns a tab line's stored staff names and options answers", async () => {
 });
 
 /** Route `productId` to no station: a bottled drink handed over at the bar. */
-async function routeToNoPreparation(productId: string): Promise<void> {
-  await db.execute(sql`
-    update preparation_routes set station_id = null, no_preparation = 1
-    where product_id = ${productId}`);
+async function routeToNoPreparation(cfg: TillConfig, productId: string): Promise<void> {
+  await withTransaction(db, (tx) =>
+    createException(tx, cfg, {
+      zoneId: null,
+      categoryId: null,
+      productId,
+      target: { kind: "no_preparation" },
+    }),
+  );
 }
 
 /** Each line of an order in `line_no` order: its product, when it was sent, and its ticket, if any. */
@@ -1168,7 +1173,7 @@ async function sentState(orderId: string): Promise<
 describe("sent_at: when a line is sent, and what the kitchen was asked to make", () => {
   it("stamps a routed line and a no-preparation line sent in one round; only the routed one has a ticket, at the quantity fired", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1188,7 +1193,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps neither line of a held course until the course fires, then both", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1210,7 +1215,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps a held course's no-route line when its routed line is sent by sendLines", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1229,7 +1234,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sending everything held stamps a held no-route line even when nothing routed is held beside it", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1249,7 +1254,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sending one held line of a course stamps the course's no-route line only once nothing routed in it is still held", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1279,7 +1284,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps a no-route line with no course at the round even when the round holds another line", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1649,7 +1654,7 @@ describe("with changes to sent items switched off", () => {
 
   it("still changes a no-preparation line that was released, which has no ticket item", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     await asApp(cfg, (tx) => writeEditSentLines(tx, false));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
@@ -1949,7 +1954,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("edits a held-course line and a no-route line freely, with no notice", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(aguaId);
+    await routeToNoPreparation(cfg, aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [

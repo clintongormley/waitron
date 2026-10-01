@@ -16,9 +16,9 @@ import type {
   OptionList,
   OptionListInput,
   Product,
+  MadeAt,
   ProductEditorInput,
   ProductEditorValue,
-  Station,
   Course,
   Unit,
   UnitInput,
@@ -97,7 +97,7 @@ export class CatalogueScreen extends LitElement {
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
   @state() private products: Product[] = [];
-  @state() private stations: Station[] = [];
+  @state() private madeAt: Record<string, MadeAt> = {};
   @state() private courses: Course[] = [];
   @state() private selectedCatalogueId = "";
   @state() private editorOpen = false;
@@ -200,9 +200,6 @@ export class CatalogueScreen extends LitElement {
         this.#queries.watch("listCatalogues", [], (value) => {
           this.catalogues = value;
         }),
-        this.#queries.watch("listStations", [], (value) => {
-          this.stations = value;
-        }),
         this.#queries.watch("listCourses", [], (value) => {
           this.courses = value;
         }),
@@ -216,6 +213,9 @@ export class CatalogueScreen extends LitElement {
   }
 
   async #reloadProducts(): Promise<void> {
+    await this.#queries.watch("listMadeAt", [], (value) => {
+      this.madeAt = value;
+    });
     if (!this.catalogues.length) {
       this.products = [];
       this.#queries.release("listProducts");
@@ -602,6 +602,7 @@ export class CatalogueScreen extends LitElement {
                 this.#url.write({ view: this.view === "all" ? "all" : null }, true);
               }}
               .products=${this.products}
+              .madeAt=${this.madeAt}
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
@@ -637,7 +638,6 @@ export class CatalogueScreen extends LitElement {
         .categories=${this.categories}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
-        .stations=${this.stations}
         .courses=${this.courses}
         .api=${this.api}
         @wt-submit=${(event: CustomEvent<{ value: ProductEditorInput }>) => void this.#save(event)}
@@ -766,8 +766,6 @@ function missingChoiceField(
   if (code === "category.not_found" && named("categoryId", submitted.primaryCategoryId))
     return "primary";
   if (code === "unit.not_found" && named("unitId", submitted.unitId)) return "unit";
-  if (code === "station.not_found" && named("stationId", submitted.stationId))
-    return "product-station";
   if (code === "course.not_found" && named("courseId", submitted.courseId)) return "product-course";
   if (code === "product.variant_not_found") {
     const index = submitted.variants.findIndex((variant) => named("variantId", variant.id));

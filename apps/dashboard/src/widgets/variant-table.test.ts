@@ -1,9 +1,9 @@
+import { reorder } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
-import { reorder } from "./reorder.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 

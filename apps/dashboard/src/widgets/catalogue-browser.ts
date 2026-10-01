@@ -11,6 +11,7 @@ import type {
   FolderSummary,
   DashboardApi,
   Product,
+  MadeAt,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
 import {
@@ -116,6 +117,7 @@ export class CatalogueBrowser extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) products: Product[] = [];
+  @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
@@ -579,6 +581,7 @@ export class CatalogueBrowser extends LitElement {
         }}
         .folders=${visible.folders}
         .products=${visible.products}
+        .madeAt=${this.madeAt}
         .showPath=${visible.showPath}
         .categories=${this.categories}
         .extraLists=${this.extraLists}
