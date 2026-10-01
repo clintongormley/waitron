@@ -120,14 +120,19 @@ it("shows the switch on another station with its stored on value", async () => {
 it("saves a switch change immediately and disables it while saving", async () => {
   let finish!: () => void;
   const updateStation = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
-  const el = await mount(api({ updateStation }));
+  const saved = { ...view, stations: [{ ...view.stations[0]!, showsRestOfOrder: true }] };
+  const el = await mount(
+    api({ updateStation, load: vi.fn().mockResolvedValueOnce(view).mockResolvedValue(saved) }),
+  );
   restSwitch(el).input.click();
   await settle(el);
   expect(updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
   expect(restSwitch(el).input.disabled).toBe(true);
+  expect(restSwitch(el).input.checked).toBe(true);
   finish();
   await settle(el);
   expect(restSwitch(el).input.disabled).toBe(false);
+  expect(restSwitch(el).input.checked).toBe(true);
 });
 
 it("lets another station save while the first station's switch is pending", async () => {

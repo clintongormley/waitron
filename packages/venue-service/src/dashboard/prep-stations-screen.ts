@@ -156,7 +156,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private claimError = "";
   @state() private claimField = "";
   @state() private busy = false;
-  @state() private stationSwitchBusy = new Set<string>();
+  @state() private stationSwitchBusy = new Map<string, boolean>();
   @state() private stationSwitchError: Record<string, { field: boolean; message: string }> = {};
   @state() private exceptionOrder: string[] = [];
   @state() private exceptionDraft: ExceptionInput = {
@@ -436,7 +436,7 @@ export class PrepStationsScreen extends LitElement {
   }
   async #saveRestOfOrder(station: PrepStation, checked: boolean) {
     if (this.stationSwitchBusy.has(station.id)) return;
-    this.stationSwitchBusy = new Set([...this.stationSwitchBusy, station.id]);
+    this.stationSwitchBusy = new Map([...this.stationSwitchBusy, [station.id, checked]]);
     const remaining = { ...this.stationSwitchError };
     delete remaining[station.id];
     this.stationSwitchError = remaining;
@@ -453,7 +453,7 @@ export class PrepStationsScreen extends LitElement {
         },
       };
     } finally {
-      const busy = new Set(this.stationSwitchBusy);
+      const busy = new Map(this.stationSwitchBusy);
       busy.delete(station.id);
       this.stationSwitchBusy = busy;
     }
@@ -727,7 +727,7 @@ export class PrepStationsScreen extends LitElement {
       <wt-switch
         name="showsRestOfOrder"
         label=${t("prep.shows_rest_of_order")}
-        .checked=${live(s.showsRestOfOrder)}
+        .checked=${live(this.stationSwitchBusy.get(s.id) ?? s.showsRestOfOrder)}
         .disabled=${this.stationSwitchBusy.has(s.id)}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
           event.stopPropagation();
