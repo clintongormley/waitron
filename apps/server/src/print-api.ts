@@ -69,6 +69,7 @@ import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
+import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
 
 export interface PrintApiDeps {
@@ -82,6 +83,8 @@ export interface PrintApiDeps {
   venueLocale: SupportedLocale;
   /** This node's advertised LAN addresses, for its self-enrolled print agent. */
   listIpv4?: () => string[];
+  /** The time a printer's test page shows; tests fix it. */
+  now?: () => Date;
 }
 
 const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
@@ -982,6 +985,44 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           deps.venueLocale,
         );
         return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
+      });
+      return c.json(result, 202);
+    }),
+  );
+
+  // Prints with the printer's SAVED settings, unlike the sample receipt below.
+  app.post("/management-api/printers/:id/print-test-page", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrinterId");
+      const result = await gated(sessionId, async (tx) => {
+        const [printer] = await tx
+          .select({
+            name: printers.name,
+            paperWidth: printers.paperWidth,
+            resolution: printers.resolution,
+          })
+          .from(printers)
+          .where(and(eq(printers.id, id), eq(printers.active, true)));
+        if (printer === undefined) throw new AppError("printer.not_found", { id });
+        const [venue] = await tx
+          .select({ timeZone: locations.timeZone })
+          .from(locations)
+          .where(eq(locations.id, deps.cfg.locationId));
+        const locale = await resolveSessionLocale(
+          tx,
+          sessionId,
+          c.req.header("Accept-Language"),
+          deps.venueLocale,
+        );
+        const payload = formatPrinterTestPage({
+          locale,
+          printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
+          printerName: printer.name,
+          now: (deps.now ?? (() => new Date()))(),
+          timeZone: venue!.timeZone,
+        });
+        return enqueuePrintJob(tx, deps.cfg, id, payload);
       });
       return c.json(result, 202);
     }),
