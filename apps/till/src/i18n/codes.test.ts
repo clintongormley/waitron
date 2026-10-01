@@ -340,3 +340,24 @@ it("says in both languages that a bill presented, paid or discarded is no longer
     "Esta cuenta ya no está abierta: se ha presentado, pagado o descartado",
   );
 });
+
+it("says what to do about each refusal of an unpaid departure, in both languages", () => {
+  const cases = {
+    "unpaid_departure.unfired_dishes": {
+      en: "A bill on this table holds items the kitchen is not making: not sent, on hold, or recalled. Cancel them first, then record the departure again",
+      es: "Una cuenta de esta mesa tiene artículos que cocina no está preparando: sin enviar, en espera o retirados. Cancélalos primero y vuelve a registrar la salida",
+    },
+    "unpaid_departure.bill_holds_payment": {
+      en: "A bill on this table already holds a payment, even if it was given back, so it cannot be left unpaid. Take the rest of that bill as a payment first",
+      es: "Una cuenta de esta mesa ya tiene un pago, aunque se haya devuelto, así que no se puede dejar sin pagar. Cobra primero lo que queda de esa cuenta",
+    },
+    "unpaid_departure.nothing_outstanding": {
+      en: "Nothing is left to pay at this table. Finish the table instead",
+      es: "No queda nada por pagar en esta mesa. Cierra la mesa",
+    },
+  };
+  for (const [code, text] of Object.entries(cases)) {
+    expect(codeMessage(code, "en")).toBe(text.en);
+    expect(codeMessage(code, "es")).toBe(text.es);
+  }
+});

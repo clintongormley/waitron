@@ -307,9 +307,9 @@ declare module "@waitron/shared" {
     /** A party still holds the table, so no party may be seated at it (`openTab`). */
     "tab.already_open": { tableId: string };
     /**
-     * A party verb found the party is not open — Finish, a new service command, or a bill action on
-     * a party's bill (`guardParty`) — or the id names no party, or a party id in a route is not
-     * a UUID. One code for all, as `tab.not_open` is.
+     * A party verb found the party is not open — Finish, a new service command, an unpaid
+     * departure, or a bill action on a party's bill (`guardParty`) — or the id names no party, or a
+     * party id in a route is not a UUID. One code for all, as `tab.not_open` is.
      */
     "party.not_open": { partyId: string };
     /**
@@ -325,6 +325,23 @@ declare module "@waitron/shared" {
      * is placed, or open with items on it: the table cannot be finished while a bill is unpaid.
      */
     "party.bill_outstanding": { partyId: string };
+    /**
+     * Record unpaid departure found no bill of the party's family still to pay — none presented,
+     * and none open with items on it. Finish table is the action then.
+     */
+    "unpaid_departure.nothing_outstanding": { partyId: string };
+    /**
+     * Record unpaid departure found a bill it would invoice — open, or presented with no invoice
+     * yet — holding a dish the kitchen is not making: never sent, held in its group or by its
+     * kitchen item, or recalled from the kitchen. Staff cancel it first.
+     */
+    "unpaid_departure.unfired_dishes": { workingOrderId: string };
+    /**
+     * Record unpaid departure found an open bill holding a payment, one given back in full
+     * included: collecting a presented bill refuses one that holds a payment (`collectOrder`,
+     * through `refuseBillWithPayments`), so the invoice issued now could not be collected later.
+     */
+    "unpaid_departure.bill_holds_payment": { workingOrderId: string };
     /**
      * The party's main bill was to leave while the party holds another bill that is open or
      * presented: it moves only as the party's last unpaid bill (spec §13 item 5). Split a table

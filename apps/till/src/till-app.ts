@@ -6,6 +6,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import {
   MONEY_SCALE,
+  compareDecimal,
   decimal,
   formatMoney,
   resolveActiveLocale,
@@ -85,7 +86,8 @@ import type {
   RefundNotice,
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
-import type { RefundRefusal } from "./widgets/bill-refund-dialog.js";
+import "./widgets/unpaid-departure-dialog.js";
+import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import {
   confirmationOf,
   moneyPlus,
@@ -96,6 +98,7 @@ import {
   refusalOf,
   submissionFor,
   unansweredAfter,
+  type DialogRefusal,
   type RefundAsk,
   type RefundSubmission,
   type Submission,
@@ -109,7 +112,7 @@ import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
-import { owing, paidInPart } from "./state/bill-state.js";
+import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
@@ -124,6 +127,8 @@ import type {
   BillPaymentView,
   BillRefundResult,
   CounterWaitingOrder,
+  UnpaidDeparture,
+  UnpaidDepartureRequest,
   DeviceStation,
   DraftSubmission,
   FloorZone,
@@ -214,7 +219,7 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 /** A handheld's screens, in order; `#onLoggedIn` lands it on `HANDHELD_FACES[1]`. */
 const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
-type RefreshList = "held" | "station" | "waiting";
+type RefreshList = "held" | "station" | "waiting" | "departures";
 
 /** How reading an adjusted order again ended. */
 type Reread = "read" | "unread" | "gone";
@@ -547,7 +552,17 @@ interface BillRefunding extends PayingOrder {
   suggested: string | null;
   terminal: boolean;
   asked: RefundAsk | null;
-  refusal: RefundRefusal | null;
+  refusal: DialogRefusal | null;
+  busy: boolean;
+}
+
+/** The unpaid departure dialog, opened from the refusal of Finish table on party `partyId`. */
+interface Departing {
+  id: number;
+  partyId: string;
+  /** The reason last pressed, which an approver's PIN is sent with. */
+  reason: string;
+  refusal: DialogRefusal | null;
   busy: boolean;
 }
 
@@ -1137,6 +1152,8 @@ export class TillApp extends LitElement {
   /** Every open working order in the venue, across tills. */
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
+  /** The bills parties left without paying whose invoice is still owed. */
+  @state() private unpaidDepartures: UnpaidDeparture[] = [];
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
@@ -1272,6 +1289,11 @@ export class TillApp extends LitElement {
   /** Each payment send. Only the one started last writes {@link #unansweredPayment}, so an earlier
    * operator's send answered late neither replaces nor clears a later one's. */
   #paymentSends = 0;
+  @state() private departing: Departing | null = null;
+  #departings = 0;
+  /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
+  @state() private departureApprovers?: StaffMember[];
+  @state() private departureApproverError: string | null = null;
   /** The open refund dialog, over the bill payment dialog. */
   @state() private billRefunding: BillRefunding | null = null;
   #billRefunds = 0;
@@ -1306,7 +1328,12 @@ export class TillApp extends LitElement {
   /** A list whose refresh failed after a successful write, with its automatic retry's countdown. */
   @state() private refreshRetries: Partial<Record<RefreshList, RefreshRetry>> = {};
   #refreshTimers = new Map<RefreshList, ReturnType<typeof setTimeout>>();
-  #refreshGeneration: Record<RefreshList, number> = { held: 0, station: 0, waiting: 0 };
+  #refreshGeneration: Record<RefreshList, number> = {
+    held: 0,
+    station: 0,
+    waiting: 0,
+    departures: 0,
+  };
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), tillPath);
 
@@ -1523,9 +1550,14 @@ export class TillApp extends LitElement {
     this.#restoreDestination();
     if (landingFace !== "floor") {
       // Counter-only data: a handheld lands on the floor, which shows neither.
-      await this.#refreshHeldOrders();
-      await this.#refreshStationQueue();
-      await this.#refreshWaiting();
+      const departures = this.#refreshDepartures();
+      try {
+        await this.#refreshHeldOrders();
+        await this.#refreshStationQueue();
+        await this.#refreshWaiting();
+      } finally {
+        await departures;
+      }
       // Loaded after the counter is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
         this.staff = await this.api.listStaff();
@@ -1562,11 +1594,16 @@ export class TillApp extends LitElement {
     return this.#refreshList(list, messageKey);
   }
 
+  /** Never throws: a failure is said in the list's own retry notice. */
+  #refreshDepartures(): Promise<void> {
+    return this.#refreshList("departures", "refresh.departures");
+  }
+
   /**
-   * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue` or
-   * `counterWaiting`) or
-   * start, change or end its retry, and {@link TillApp.#abandonListRefreshes} makes every earlier
-   * request stale. Without a `messageKey` a failure is also thrown to the caller.
+   * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue`,
+   * `counterWaiting` or `unpaidDepartures`) or start, change or end its retry, and
+   * {@link TillApp.#abandonListRefreshes} makes every earlier request stale. Without a `messageKey`
+   * a failure is also thrown to the caller.
    */
   async #refreshList(list: RefreshList, messageKey?: StringKey): Promise<void> {
     const request = ++this.#refreshGeneration[list];
@@ -1588,6 +1625,10 @@ export class TillApp extends LitElement {
     if (list === "waiting") {
       const waiting = await this.api.listCounterWaiting();
       return () => (this.counterWaiting = waiting);
+    }
+    if (list === "departures") {
+      const departures = await this.api.listUnpaidDepartures();
+      return () => (this.unpaidDepartures = departures);
     }
     const rows = await this.api.listWorkingOrders();
     return () => (this.heldOrders = rows);
@@ -1677,6 +1718,7 @@ export class TillApp extends LitElement {
     this.#refreshGeneration.held++;
     this.#refreshGeneration.station++;
     this.#refreshGeneration.waiting++;
+    this.#refreshGeneration.departures++;
     for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
     this.#refreshTimers.clear();
     this.refreshRetries = {};
@@ -4749,17 +4791,226 @@ export class TillApp extends LitElement {
       await this.#onTableRefusal(error);
       return;
     }
+    await this.#onTableClosed(party.id, visit, sent);
+  }
+
+  /** The party closed by Finish table or an unpaid departure leaves the screen as Finish leaves it. */
+  async #onTableClosed(partyId: string, visit: number, sent: Sent): Promise<void> {
     // Logout and a server switch leave `orderParty` set; a server switch leaves `#orderVisit` too,
     // so without this `#leaveTable` would unlock the till.
     // Unlike #hasLeftParty, an open under way does not drop the answer: an open that fails would
     // leave the finished party on screen.
-    if (sent.session !== this.#operatorSession || this.orderParty?.id !== party.id) return;
+    if (sent.session !== this.#operatorSession || this.orderParty?.id !== partyId) return;
     if (!this.#leftSince(visit)) {
       this.#leaveTable();
       return;
     }
     this.#forgetParty();
     await this.#refreshFloor();
+  }
+
+  /** Record unpaid departure, offered beside Take payment when Finish is refused: its dialog opens. */
+  #onRecordUnpaidDeparture(): void {
+    const party = this.orderParty;
+    if (party === null || this.departing !== null) return;
+    this.departing = {
+      id: ++this.#departings,
+      partyId: party.id,
+      reason: "",
+      refusal: null,
+      busy: false,
+    };
+  }
+
+  /** The bills the departure leaves unpaid: those still owing something, named as the table
+   * screen names them. */
+  #departingBills(): DepartingBill[] {
+    const party = this.orderParty?.displayName ?? "";
+    return shownBills(this.partyBills).flatMap((bill, index) =>
+      owing(bill) && compareDecimal(decimal(bill.outstanding), decimal("0")) > 0
+        ? [
+            {
+              workingOrderId: bill.workingOrderId,
+              name: billName(party, index),
+              outstanding: bill.outstanding,
+            },
+          ]
+        : [],
+    );
+  }
+
+  #departingNow(id: number): Departing | null {
+    return this.departing?.id === id ? this.departing : null;
+  }
+
+  #closeDeparting(): void {
+    this.departing = null;
+    this.#closeDepartureApprovers();
+  }
+
+  #closeDepartureApprovers(): void {
+    this.departureApprovers = undefined;
+    this.departureApproverError = null;
+  }
+
+  /** The reason confirmed: sent in the operator's own name first, as a refund is. */
+  async #onDepartureContinue(event: Event): Promise<void> {
+    const { reason } = (event as CustomEvent<{ reason: string }>).detail;
+    // The dialog's events come only while it is open. A press while a request is out is dropped.
+    const open = this.departing!;
+    if (open.busy) return;
+    await this.#sendDeparture({ ...open, reason });
+  }
+
+  /** The approver's PIN leaves in the request and is never kept. */
+  async #onDepartureApproverConfirm(event: Event): Promise<void> {
+    event.stopPropagation();
+    const override = (event as CustomEvent<{ personId: string; pin: string }>).detail;
+    // The PIN prompt is drawn only over an open departure dialog.
+    const open = this.departing!;
+    if (open.busy) return;
+    this.departureApproverError = null;
+    await this.#sendDeparture(open, { personId: override.personId, pin: override.pin });
+  }
+
+  /**
+   * Each press builds its request from the party as read now; one that gets no answer is sent
+   * again unchanged. On success the table leaves the screen as a finished one does, and the bills
+   * left unpaid are read again.
+   */
+  async #sendDeparture(
+    open: Departing,
+    override?: { personId: string; pin: string },
+  ): Promise<void> {
+    const party = this.orderParty;
+    if (party?.id !== open.partyId) {
+      this.#closeDeparting();
+      return;
+    }
+    const sending: Departing = { ...open, refusal: null, busy: true };
+    this.departing = sending;
+    const request: UnpaidDepartureRequest = {
+      expectedPartyRevision: party.revision,
+      reason: open.reason,
+      ...(override === undefined ? {} : { override }),
+    };
+    const visit = this.#orderVisit;
+    const sent = this.#sentNow();
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    let sends = 0;
+    try {
+      await resendUnanswered(
+        (signal) => {
+          sends++;
+          return this.api.recordUnpaidDeparture(party.id, request, { signal });
+        },
+        limit.signal,
+        () => sent.session === this.#operatorSession,
+      );
+    } catch (error) {
+      // The server closes the party in the departure's own transaction, so a resend that finds it
+      // closed most likely follows a first send that was recorded but whose answer was lost.
+      if (sends > 1 && refusalOf(error).code === "party.not_open") {
+        await this.#onDepartureRecorded(open.id, party.id, visit, sent);
+        if (sent.session === this.#operatorSession) this.errorKey = "departure.probably_recorded";
+        return;
+      }
+      await this.#onDepartureRefused(sending, error, override === undefined, sent);
+      return;
+    } finally {
+      limit.done();
+    }
+    await this.#onDepartureRecorded(open.id, party.id, visit, sent);
+  }
+
+  /** The dialog closes, the table leaves the screen as a finished one does, and the bills left
+   * unpaid are read again. */
+  async #onDepartureRecorded(
+    id: number,
+    partyId: string,
+    visit: number,
+    sent: Sent,
+  ): Promise<void> {
+    if (this.#departingNow(id) !== null) this.#closeDeparting();
+    await this.#onTableClosed(partyId, visit, sent);
+    if (sent.session === this.#operatorSession)
+      await this.#refreshAfterWrite("departures", "refresh.departures_after_record");
+  }
+
+  /** The people who can approve the departure in dialog `id` are read, and their PIN prompt opens. */
+  async #askDepartureApprover(id: number): Promise<void> {
+    try {
+      const approvers = await this.api.listUnpaidDepartureAuthorizers();
+      const now = this.#departingNow(id);
+      if (now === null) return;
+      this.departing = { ...now, busy: false };
+      this.departureApproverError = null;
+      this.departureApprovers = approvers;
+    } catch {
+      const now = this.#departingNow(id);
+      if (now !== null) this.departing = { ...now, refusal: { code: "approvers" }, busy: false };
+    }
+  }
+
+  /**
+   * Not permitted opens the approvers' PIN prompt; a refusal of the PIN shows there. A changed or
+   * closed party closes the dialog and is said as Finish says it, reloading the table (D19). Any
+   * other refusal stays in the dialog, and the party's bills are read again.
+   */
+  async #onDepartureRefused(
+    open: Departing,
+    error: unknown,
+    unapproved: boolean,
+    sent: Sent,
+  ): Promise<void> {
+    const now = this.#departingNow(open.id);
+    if (now === null) return;
+    const refusal = refusalOf(error);
+    if (unapproved && refusal.code === "authorization.not_permitted") {
+      await this.#askDepartureApprover(open.id);
+      return;
+    }
+    if (APPROVER_REFUSALS.has(refusal.code)) {
+      this.departureApproverError = refusal.code;
+      this.departing = { ...now, busy: false };
+      return;
+    }
+    if (isPartyOutOfDate(error) || refusal.code === "party.not_open") {
+      this.#closeDeparting();
+      if (!this.#hasLeftParty(open.partyId, sent)) await this.#onTableRefusal(error);
+      return;
+    }
+    this.#closeDepartureApprovers();
+    this.departing = { ...now, refusal, busy: false };
+    if (!this.#hasLeftParty(open.partyId, sent)) await this.#loadPartyBills();
+  }
+
+  /** The departure dialog and, over it, its approver's PIN prompt, whose events stop here so the
+   * drawer's override handlers on the wrapper never see them. */
+  #renderDeparting(): TemplateResult | typeof nothing {
+    const open = this.departing;
+    if (open === null) return nothing;
+    return html`<till-unpaid-departure-dialog
+        .bills=${this.#departingBills()}
+        .refusal=${open.refusal}
+        .busy=${open.busy}
+        @unpaid-departure-continue=${(event: Event) => void this.#onDepartureContinue(event)}
+        @unpaid-departure-close=${() => this.#closeDeparting()}
+      ></till-unpaid-departure-dialog>
+      ${
+        this.departureApprovers === undefined
+          ? nothing
+          : html`<till-supervisor-override-dialog
+              data-departure-approval
+              .authorizers=${this.departureApprovers}
+              .error=${this.departureApproverError}
+              @override-confirm=${(event: Event) => void this.#onDepartureApproverConfirm(event)}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                this.#closeDepartureApprovers();
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
   }
 
   /** The finished party's order is closed on every face: a till's drill, or a handheld's order tab. */
@@ -4834,6 +5085,7 @@ export class TillApp extends LitElement {
     this.basketRefresh = undefined;
     this.#closeAdjust();
     this.#closeBillPaying();
+    this.#closeDeparting();
     this.#operatorSession++;
   }
 
@@ -5521,6 +5773,7 @@ export class TillApp extends LitElement {
         .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
+        .unpaidDepartures=${this.unpaidDepartures}
         .tables=${this.tables}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.#defaultStationId()}
@@ -5554,6 +5807,7 @@ export class TillApp extends LitElement {
       .products=${tableTab ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
       .counterWaiting=${this.counterWaiting}
+      .unpaidDepartures=${this.unpaidDepartures}
       .stationQueue=${this.stationQueue}
       .defaultStationId=${this.#defaultStationId()}
       .busy=${this.submitting}
@@ -5755,6 +6009,7 @@ export class TillApp extends LitElement {
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @split-lines=${(event: Event) => void this.#onSplitLines(event)}
         @finish-table=${() => void this.#onFinishTable()}
+        @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onTakePayment(event)}
         @reprint-bill=${(event: Event) => void this.#onReprintBill(event)}
@@ -5797,7 +6052,7 @@ export class TillApp extends LitElement {
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
-        ${this.#renderRefreshNotice("waiting")}
+        ${this.#renderRefreshNotice("waiting")} ${this.#renderRefreshNotice("departures")}
         <!-- The waiting-for-promotion banner. On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
              server.waiting_promotion copy compactly here while the router reports no server is accepting
@@ -5818,7 +6073,7 @@ export class TillApp extends LitElement {
               ></till-supervisor-override-dialog>`
             : nothing
         }
-        ${this.#renderAdjusting()} ${this.#renderBillPaying()}
+        ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
         ${
           this.basketRefresh === undefined
             ? nothing

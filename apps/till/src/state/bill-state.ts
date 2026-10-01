@@ -1,4 +1,5 @@
 import type { PartyBill } from "../api/client.js";
+import { t } from "../i18n/t.js";
 
 /** A bill still to pay: open, or placed and not yet collected. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
@@ -12,4 +13,16 @@ export function owing(bill: Pick<PartyBill, "status">): boolean {
  */
 export function paidInPart(bill: { status?: PartyBill["status"]; hasPayments: boolean }): boolean {
   return bill.hasPayments && (bill.status === undefined || bill.status === "open");
+}
+
+/** The bills a party's screen lists: abandoned ones are left out, as nobody pays them. */
+export function shownBills(bills: readonly PartyBill[]): PartyBill[] {
+  return bills.filter((bill) => bill.status !== "abandoned");
+}
+
+/** A bill's name by its place in {@link shownBills}, under the party's display name. */
+export function billName(partyName: string, index: number): string {
+  return t("table.bill_of")
+    .replace("{party}", () => partyName)
+    .replace("{n}", String(index + 1));
 }

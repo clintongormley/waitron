@@ -128,10 +128,12 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
    taking a reason is done by lane B item B11a, Task 15, several payments on the till, has
    landed as lane B item B15 (#956; the server side landed as #721), and Task 16, counter
-   handover, has landed as lane B item B16 (#981; what it left open is in the B16 entry under A4). Left:
-   a table that leaves without paying (17).
-   **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
-   invoice on Q29, and printing the invoice before payment on Q27.
+   handover, has landed as lane B item B16 (#981; what it left open is in the B16 entry under A4).
+   Task 17, a table that leaves without paying, is built as lane B item B17, approved by the owner
+   on 2026-10-01 and ready to land (the B17 entry under A4).
+   **Send asesor Q27–Q29 now:** the owner decided Q28 without the asesor on 2026-10-01 and Task 17
+   is built on it, so Q28 is asked to confirm; how Task 11's discount appears on the invoice is
+   Q29, and printing the invoice before payment is Q27.
 
 2. **Build good screens for each kind of device, and retire canvases** (A4's A182, owner
    2026-10-01). The till, handheld, kitchen screen and pass are still built from stored canvases of
@@ -5028,6 +5030,99 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       loads the basket from `GET /api/working-orders/:id/placed`, which carries the order's lines,
       so the basket is believed to show their sum. Reported by B16's review fixer from reading; no
       test shows it.
+  - **Task 17, a table that leaves without paying, is built as lane B item B17** (2026-10-01,
+    approved by the owner on 2026-10-01; asesor Q28 decided by the owner without the asesor: the full
+    simplified invoice is issued when the table leaves). When Finish table is refused because a bill still owes, the till offers **Record unpaid
+    departure** beside Take payment. It needs the existing permission `sale.void`
+    (supervisor and up, or a supervisor's PIN; owner, 2026-10-01: no new permission) and a reason. Each owing bill with no invoice yet is
+    invoiced now for its full amount and filed; a bill already invoiced keeps its invoice. One row
+    per bill owing more than zero goes into the new append-only core table `unpaid_departures`
+    (amount still due, reason, who recorded it, who authorised it), and the party closes exactly
+    as Finish table closes it. No
+    receipt is printed and nothing is sent to the kitchen. The counter's held-orders card lists the
+    departures still unpaid under "Left without paying". Server:
+    `POST /api/parties/:id/unpaid-departure`, `GET /api/unpaid-departures`,
+    `GET /api/unpaid-departure-authorizers`. The owner's other answers of 2026-10-01: printing
+    no receipt is kept; a handheld may record a departure, gated on `sale.void` alone like any
+    till (the route does not call `assertNotHandheld`); and a party whose bills all owe nothing is
+    settled and closed by the departure rather than refused (the €0.00 Pay error is queued
+    separately). Open:
+    - **Known limit, kept by the owner's decision of 2026-10-01 — a bill holding a payment cannot
+      be left unpaid.** The departure
+      refuses a bill holding any bill payment, even one given back in full
+      (`unpaid_departure.bill_holds_payment`): its invoice would have to be settled in part, and
+      `settleSale` (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not
+      add up to the amount due. Such a table can only be finished by taking the rest as payment.
+    - **OPEN — collecting PART of the debt later is not built**, for the same reason. Collecting
+      it in full uses `POST /api/working-orders/:id/collect`, and the bill then leaves the list.
+    - **OPEN — a dish never sent, on hold or recalled blocks the departure**
+      (`unpaid_departure.unfired_dishes`); staff cancel it first.
+    - **OPEN — handhelds never see the list.** It sits in the counter's held-orders card, which the
+      default phone and tablet layouts lack. The owner kept the counter list as a stopgap
+      (2026-10-01) and wants a dashboard Orders screen listing every order, with an "unpaid"
+      filter, queued as a separate spec item.
+    - A bill that owes nothing once invoiced — one already invoiced whose credit notes bring it to
+      zero, or an open bill whose every line was given away — gets no departure row. The departure
+      invoices it (at 0.00, for the open bill) and settles it with no payment, as collecting a bill
+      that owes nothing settles it (`settleIssuedOwingNothing` in `apps/server/src/till-sale.ts`),
+      so no unsettled sale owing 0.00 is left behind. When every bill owes nothing the party closes
+      with no departure row at all, rather than being refused, because the obvious actions do not
+      close such a table: measured 2026-10-01, Pay on an open bill whose every line was given away
+      answers 500 (cash and manual card alike), and Finish table refuses it
+      `party.bill_outstanding`. Cancelling each given-away line and then finishing did close it
+      (measured the same day through the adjustments route), but that takes served dishes off the
+      bill, and whether the till offers a cancel on a given-away line was not checked.
+      `unpaid_departure.nothing_outstanding` is left for a party with no bill presented and none
+      open with items on it, which Finish table does not refuse as unpaid. `unpaid_departures`
+      refuses an amount of zero or less (`unpaid_departures_amount_ck`). The list of departures
+      shows what each invoice owes now, net of its credit notes, and leaves out one a credit note
+      has brought to nothing; the row keeps the amount owed when the party left. Cases in
+      `apps/server/src/unpaid-departure.test.ts` ("a bill that owes nothing", "refuses a party with
+      nothing outstanding, which Finish table then closes", and the list's credit-note cases).
+    - **OPEN — the till's departure dialog lists a presented bill credited to nothing as owing its
+      full amount, so staff confirm a debt the server does not record.** The dialog lists each bill
+      at what `GET /api/parties/:id/bills` says it owes, which is its lines' total less payments and
+      reads no credit note (`#departingBills` in `apps/till/src/till-app.ts` keeps every bill whose
+      figure is above 0). Measured 2026-10-01: an open bill whose every line was given away read
+      0.00 and is left out, but a presented bill credited to nothing read 18.00, its full amount.
+      The dialog then says every listed bill is recorded as unpaid and its button reads "Record
+      18.00 unpaid", while the server records no departure row for that bill and settles it. The
+      fix is for the dialog to show each invoice's amount due, its total plus its credit notes.
+    - **OPEN — Pay on an open bill whose every line was given away answers 500.**
+      `POST /api/sales` with a cash tender of 0.00 or a manual card tries to file the sale with a
+      tender of 0.00, which `tenders_amount_ck` refuses, and the bill stays open (measured
+      2026-10-01: `CHECK constraint failed: tenders_amount_ck`). Read from the till's code, not run: its Pay
+      confirm is enabled at 0.00 and sends that request. Pay goes through `payWorkingOrder` and
+      `fileImmediateSale` in `apps/server/src/till-sale.ts`, which no B17 commit changes.
+    - **OPEN — a bill presented without an invoice keeps the label it was placed with when the
+      departure invoices it.** Every other path that invoices such a bill saves the receipt label
+      (the party's name and tables) in the update that settles it; the departure leaves the bill
+      placed, and the placed-to-placed clause of `working_orders_enforce_transition` (latest in
+      `packages/db/drizzle/0056_placed_order_handover.sql`) requires the label to stay as it is.
+      Measured 2026-10-01: saving the label on such a bill made the departure answer 500; without
+      it the bill's label stayed null while the open bill invoiced beside it was given the
+      table's. Not measured: what its invoice's reprint and the debt list then show, both of which
+      read the stored label. For a bill the departure leaves placed, fixing it needs that trigger
+      to allow the label to change. A bill the departure settles because it owes nothing goes
+      through collect's settle-owing-nothing path (`settleIssuedOwingNothing` in
+      `apps/server/src/till-sale.ts`), which sets no label, although the trigger's
+      placed-to-settled clause allows one to be set. Whether a bill presented without an invoice can owe nothing was
+      not established: giving a line away on a presented bill is refused `tab.not_open` (measured
+      2026-10-01).
+  - **The service plan's acceptance checks (spec §12), swept against `main` plus B17 on
+    2026-10-01.** Each check has a test, is partly met with the rest already recorded in this
+    backlog, or is out of scope by the plan's D13. Two gaps were not recorded before:
+    - **The merged-party check of §12 item 9 uses a bill whose state is written by hand.** In
+      `apps/server/src/parties.test.ts` ("merged parties keep their bills") the unpaid €15.00 bill
+      is set to `placed` with no invoice filed and later set to `settled` directly
+      (`apps/server/src/testing/party-venue.ts`), so no test files that bill's invoice, merges its
+      party and collects it through `POST /api/working-orders/:id/collect`.
+      `apps/server/src/unpaid-departure.test.ts` builds a really invoiced bill on a party, which
+      such a test could reuse.
+    - **No permanent test lays the service screens out at phone and till widths in both themes
+      (§12 item 14).** The axe scans run in both themes, mostly at the browser's default size with
+      one block at 390 px (`apps/till/src/screens/till-table-order-screen.a11y.test.ts`); the
+      widths were checked by screenshots during each task, which nothing repeats.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
@@ -5070,10 +5165,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `dismissible`.
   - **Tasks left: 16 and 17** (2026-09-30; 10 to 14 have landed, and Task 15, the till side of
     Task 14, is built by lane B item B15). _(2026-10-01: Task 16 has landed as lane B item B16, #981; see
-    the B16 entry above. Task 17 is left.)_ The menus tasks that change the same order and till code
+    the B16 entry above. Task 17 is left.)_ _(Later on 2026-10-01: Task 17 is built as lane B item
+    B17, approved by the owner on 2026-10-01; see the B17 entry above.)_ The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
     plan's order among them: 16 after 10.
-  - **Task 17** (unpaid departure) also waits for asesor Q28.
+  - **Task 17** (unpaid departure) ~~also waits for asesor Q28~~ — built on the owner's Q28
+    decision of 2026-10-01 (B17 entry above).
   - **Asesor questions to send:**
     [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
     (money before the invoice, then a split; printing the invoice first),
@@ -12112,7 +12209,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | **Q14 (precuenta → amendment log)** | a printed pre-bill may oblige an amendment log | **Open** — the interpretive hinge |
 | Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
-| Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying waits | **send now** — service plan Task 17 waits on Q28 |
+| Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17) | **send now** — Q28 to confirm the owner's 2026-10-01 decision |
 | Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it | needs advisor before the correction screen is designed |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in

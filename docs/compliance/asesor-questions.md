@@ -9,6 +9,10 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
+On **2026-10-01** (lane B item B17): the owner decided **Q28** without the asesor — the full
+simplified invoice is issued when the table leaves, and a later payment is recorded against it —
+and leaving without paying is now built on that decision. Q28 stays open for the asesor to confirm. The standalone copy's section 1.8 (Q28) has not been updated for this.
+
 Later on **2026-09-30** (C90, owner decision that day): Q29's notes and parts (a), (c) and (e) now
 describe the new receipt. It prints each dish at its full price with each comp or discount on a line
 of its own beneath it, and a discount on the whole bill on a line of its own; the filed record is
@@ -758,7 +762,7 @@ this is the case where nothing is accepted and the debt stands.
 The software can either issue the simplified invoice anyway, for the full amount, and record it as
 unpaid; or issue nothing and keep the debt only in its own records until it is collected. We
 assume the first is the safe reading, and we will not build unpaid departure until this is
-answered.
+answered. *(2026-10-01: built on the owner's decision without the asesor — see below.)*
 
 > **(a)** Cuando un cliente abandona el restaurante sin pagar lo consumido, ¿debe el establecimiento
 > expedir igualmente la factura simplificada por el importe total de lo servido, aunque no se haya
@@ -767,6 +771,31 @@ answered.
 > **(b)** Si se cobra más tarde (en todo o en parte), ¿basta con registrar el cobro contra esa
 > factura? Si no se cobra nunca, ¿el único cauce para recuperar el IVA es la modificación de la base
 > imponible por créditos incobrables (artículo 80.Cuatro de la Ley del IVA)?
+
+**Owner decided without the asesor, 2026-10-01: yes to (a), and to the first half of (b).** When a table leaves without paying, the
+simplified invoice is issued for the full amount at that moment and filed like any other sale, and
+a later payment is recorded against that invoice. Nothing is held back from the fiscal chain until
+the money is collected. Recovering the VAT on a debt never collected (art. 80.Cuatro) is the
+venue's own business and is not built. The basis, quoted from the BOE consolidated texts fetched
+2026-10-01:
+
+- Ley 37/1992 (IVA), art. 75.Uno.2.º — the tax falls due «En las prestaciones de servicios, cuando
+  se presten, ejecuten o efectúen las operaciones gravadas»
+  (<https://www.boe.es/buscar/act.php?id=BOE-A-1992-28740>, last updated there 30/09/2026).
+- RD 1619/2012, art. 2.1 — an invoice must be issued «por las entregas de bienes y prestaciones de
+  servicios que realicen en el desarrollo de su actividad»; art. 11.1 — «Las facturas deberán ser
+  expedidas en el momento de realizarse la operación»
+  (<https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696>, last updated there 31/03/2026).
+
+Built on this decision (service plan Task 17, lane B item B17): **Record unpaid departure** on the
+till issues an invoice for the full amount for each unpaid bill not yet invoiced (a bill already
+invoiced keeps its invoice), files it, records what each invoice still owes, when it owes anything,
+with the reason, who recorded it and who authorised it (an invoice owing nothing is settled
+instead), and closes the table. Collecting the debt later in full uses
+the existing collect route; collecting PART of it is not built, because `settleSale`
+(`packages/core/src/settle-sale.ts`) refuses a second settlement of one invoice and a settlement
+whose payments do not add up to the amount due. The question stays open: if the asesor
+answers otherwise, this is what changes.
 
 ---
 
@@ -1687,13 +1716,14 @@ This records a question; no enquiry has been sent.
 ## Notes for the conversation
 
 - **Send first, 2026-09-30: Q27, Q28 and Q29** (the backlog's "send now"). They are about table
-  service, which is being built now. A table that leaves without paying (service plan Task 17) will
-  not be built until Q28 is answered, or until the owner decides without it. Q29 and most of Q27
-  describe features that are already built, so an answer against them may mean changing shipped
-  behaviour. **Q31** should be answered before the correction screen is designed.
+  service, which is being built now. A table that leaves without paying (service plan Task 17) is
+  built on the owner's decision without the asesor (2026-10-01: issue the full simplified invoice
+  when the table leaves; see Q28). Q29 and most of Q27 describe features that are already built,
+  so an answer against them may mean changing shipped behaviour. **Q31** should be answered before the correction screen is designed.
 - **Nothing here blocks the build any more.** As of 2026-07-27 this document is a list of things
   worth confirming, not things worth waiting for. If an asesor engagement slips, build anyway.
-  *(2026-09-30: one exception above. Task 17 waits on Q28 by the owner's choice.)*
+  *(2026-09-30: one exception above. Task 17 waits on Q28 by the owner's choice. 2026-10-01: no
+  longer — the owner decided Q28 without the asesor, and Task 17 is built on that decision.)*
 - **Q1 and Q2 are now moot / non-load-bearing** under server-as-SIF (#33) — the server is the SIF,
   so a till need not be one (Q1) and the SIF files its own records (Q2). They were demoted on
   inference before; the architecture change retires them outright. Don't lead with them any more.

@@ -103,6 +103,11 @@ export const en = {
   "waiting.hand_over": "Hand over",
   "waiting.hand_over_error": "Could not hand the order over, try again",
   "waiting.pay_error": "Could not open the order to take its payment, try again",
+  // Bills a party left unpaid, still owed
+  "departures.title": "Left without paying",
+  "departures.invoice": "Invoice {number}",
+  "departures.recorded_by": "Recorded by {name}",
+  "departures.recorded_approved": "Recorded by {name}, approved by {approver}",
   // Placing and prep
   "action.place": "Place order",
   "action.send_to_prep": "Send to prep",
@@ -618,6 +623,9 @@ export const en = {
     "The order was placed, but the list of waiting orders could not refresh.",
   "refresh.waiting_after_hand_over":
     "The order was handed over, but the list of waiting orders could not refresh.",
+  "refresh.departures": "The list of bills left unpaid could not refresh.",
+  "refresh.departures_after_record":
+    "The departure was recorded, but the list of bills left unpaid could not refresh.",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
   "refresh.retry_in": "Trying again in {n} seconds.",
   "refresh.retry_in_one": "Trying again in 1 second.",
@@ -762,6 +770,23 @@ export const en = {
   "bill_refund.approvers_failed": "Could not read who can approve this. Try again.",
   "bill_refund.unconfirmed":
     "The refund got no answer, so it may have been made. Check this bill's payments before trying again.",
+  // Record unpaid departure: the party left without paying
+  "departure.record": "Record unpaid departure",
+  "departure.title": "Record unpaid departure",
+  "departure.left_unpaid": "Left unpaid",
+  "departure.scope":
+    "Each of these bills not yet invoiced is invoiced now for its full amount, and every one is recorded as unpaid. No receipt is printed. The table is then finished, as Finish table would.",
+  "departure.reason": "Reason",
+  "departure.reason_invalid": "Say why the bill is left unpaid",
+  "departure.reason_long": "Keep the reason to 500 characters or fewer",
+  "departure.approval_next":
+    "If you cannot record this yourself, a supervisor or manager approves it with their PIN next.",
+  "departure.confirm": "Record {amount} unpaid",
+  "departure.approvers_failed": "Could not read who can approve this. Try again.",
+  "departure.unconfirmed":
+    "The departure got no answer, so it may have been recorded. Check the floor before trying again.",
+  "departure.probably_recorded":
+    "The first try got no answer and the table is now closed, so the departure was probably recorded. Check the Left without paying list.",
   "bill_refund.done_cash": "Given back: {amount}. Hand it over in cash.",
   "bill_refund.done_card": "Given back: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
@@ -927,6 +952,10 @@ export const es: Record<StringKey, string> = {
   "waiting.hand_over": "Entregar",
   "waiting.hand_over_error": "No se pudo entregar el pedido, inténtalo de nuevo",
   "waiting.pay_error": "No se pudo abrir el pedido para cobrarlo, inténtalo de nuevo",
+  "departures.title": "Se fueron sin pagar",
+  "departures.invoice": "Factura {number}",
+  "departures.recorded_by": "Registrado por {name}",
+  "departures.recorded_approved": "Registrado por {name}, autorizado por {approver}",
   "action.place": "Enviar pedido",
   "action.send_to_prep": "Enviar a cocina",
   "action.collect": "Entregar",
@@ -1409,6 +1438,9 @@ export const es: Record<StringKey, string> = {
     "El pedido se envió, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_hand_over":
     "El pedido se entregó, pero la lista de pedidos pendientes no se pudo actualizar.",
+  "refresh.departures": "La lista de cuentas sin pagar no se pudo actualizar.",
+  "refresh.departures_after_record":
+    "La salida se registró, pero la lista de cuentas sin pagar no se pudo actualizar.",
   "refresh.retry_in": "Se reintentará en {n} segundos.",
   "refresh.retry_in_one": "Se reintentará en 1 segundo.",
   "refresh.retrying": "Reintentando…",
@@ -1553,6 +1585,22 @@ export const es: Record<StringKey, string> = {
   "bill_refund.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "bill_refund.unconfirmed":
     "La devolución no obtuvo respuesta, así que puede que se haya hecho. Revisa los pagos de esta cuenta antes de volver a intentarlo.",
+  "departure.record": "Registrar salida sin pagar",
+  "departure.title": "Registrar salida sin pagar",
+  "departure.left_unpaid": "Sin pagar",
+  "departure.scope":
+    "Cada una de estas cuentas que aún no tenga factura se factura ahora por su importe completo, y todas quedan registradas como no pagadas. No se imprime ticket. Después se cierra la mesa, como con Cerrar mesa.",
+  "departure.reason": "Motivo",
+  "departure.reason_invalid": "Indica por qué queda sin pagar",
+  "departure.reason_long": "Usa 500 caracteres como mucho para el motivo",
+  "departure.approval_next":
+    "Si tú no puedes registrarlo, a continuación lo aprueba un responsable o encargado con su PIN.",
+  "departure.confirm": "Registrar {amount} sin pagar",
+  "departure.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
+  "departure.unconfirmed":
+    "La salida no obtuvo respuesta, así que puede que se haya registrado. Revisa el plano antes de volver a intentarlo.",
+  "departure.probably_recorded":
+    "El primer intento no obtuvo respuesta y la mesa ya está cerrada, así que la salida probablemente se registró. Revisa la lista Se fueron sin pagar.",
   "bill_refund.done_cash": "Devuelto: {amount}. Entrégalo en efectivo.",
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",

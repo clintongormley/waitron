@@ -51,6 +51,7 @@ const EXPECTED = [
   "sales",
   "tenders",
   "time_entries",
+  "unpaid_departures",
 ];
 
 /** What the modules declare, through the same call boot makes. */

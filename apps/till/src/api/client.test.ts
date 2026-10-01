@@ -21,6 +21,9 @@ import {
   type TableServiceStatus,
   type TableState,
   type TillMenuOffer,
+  type UnpaidDeparture,
+  type UnpaidDepartureRequest,
+  type UnpaidDepartureResult,
 } from "./client.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
@@ -2426,6 +2429,95 @@ describe("TillApi: a seated party", () => {
       code: "party.bill_outstanding",
       status: 409,
     });
+  });
+
+  it("recordUnpaidDeparture POSTs the revision, reason and override to the party's /unpaid-departure route", async () => {
+    const request: UnpaidDepartureRequest = {
+      expectedPartyRevision: 4,
+      reason: "Left without paying",
+      override: { personId: "sup-1", pin: "1234" },
+    };
+    const answer: UnpaidDepartureResult = {
+      state: "closed",
+      departures: [
+        {
+          id: "ud-1",
+          workingOrderId: "wo-1",
+          saleId: "s-1",
+          invoiceNumber: "F-0007",
+          amount: "30.00",
+        },
+      ],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const signal = new AbortController().signal;
+
+    await expect(
+      new TillApi("", fetchStub).recordUnpaidDeparture("v1", request, { signal }),
+    ).resolves.toEqual(answer);
+    expect(fetchStub).toHaveBeenCalledWith("/api/parties/v1/unpaid-departure", post(request));
+    expect(fetchStub.mock.calls[0]![1]).toMatchObject({ signal });
+  });
+
+  it("recordUnpaidDeparture surfaces a refusal as { code }", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "unpaid_departure.unfired_dishes",
+            params: { workingOrderId: "wo-1" },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).recordUnpaidDeparture("v1", {
+        expectedPartyRevision: 4,
+        reason: "Gone",
+      }),
+    ).rejects.toMatchObject({ code: "unpaid_departure.unfired_dishes", status: 409 });
+  });
+
+  it("listUnpaidDepartureAuthorizers GETs who may approve an unpaid departure", async () => {
+    const roster = [{ personId: "sup-1", displayName: "Responsable" }];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
+
+    const r = await new TillApi("", fetchStub).listUnpaidDepartureAuthorizers();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/unpaid-departure-authorizers",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(roster);
+  });
+
+  it("listUnpaidDepartures GETs the departures still owed", async () => {
+    const departures: UnpaidDeparture[] = [
+      {
+        id: "ud-1",
+        workingOrderId: "wo-1",
+        billLabel: null,
+        tableLabels: ["4", "5"],
+        saleId: "s-1",
+        invoiceNumber: "F-0007",
+        amount: "30.00",
+        reason: "Left without paying",
+        recordedByName: "Ana",
+        authorizedByName: "Luis",
+        recordedAt: "2026-10-01T21:30:00.000Z",
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(departures));
+
+    const r = await new TillApi("", fetchStub).listUnpaidDepartures();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/unpaid-departures",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(departures);
   });
 
   it("markTableCleared POSTs to the table's /cleared route with no body (empty 204 body)", async () => {

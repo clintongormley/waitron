@@ -135,6 +135,7 @@ export {
   tenders,
 } from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
+export { unpaidDepartures } from "./schema/unpaid-departures.js";
 export {
   billPaymentKind,
   billPaymentLines,

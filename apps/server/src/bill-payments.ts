@@ -433,7 +433,7 @@ function holdsMoney(payments: readonly PaymentMoney[]): boolean {
 /**
  * Refuse `bill.payments_received` for the first of these bills that holds money taken before its
  * invoice (design §4.5): discarding it (`abandonHeldOrder`), or discarding it as an emptied bill
- * when its table is finished (`finishTable`), would lose that money from the records.
+ * when its party closes (`closeParty`), would lose that money from the records.
  */
 export async function refuseBillHoldingMoney(
   tx: Transaction,

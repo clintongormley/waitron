@@ -16,6 +16,8 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
+import type { TillUnpaidDepartureDialog } from "./widgets/unpaid-departure-dialog.js";
+import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import type {
@@ -214,6 +216,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
+    listUnpaidDepartures: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
     listZones: vi.fn().mockResolvedValue([zone]),
     listStatuses: vi.fn().mockResolvedValue([]),
@@ -5886,5 +5889,350 @@ describe("till-app: Current orders", () => {
       "Only the next group to fire can be snoozed. Check the table before trying again",
     );
     expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
+  });
+});
+
+describe("till-app: recording an unpaid departure", () => {
+  const recorded = {
+    state: "closed",
+    departures: [
+      { id: "ud-1", workingOrderId: "wo-4", saleId: "s-4", invoiceNumber: "F-4", amount: "14.00" },
+      {
+        id: "ud-2",
+        workingOrderId: "wo-check",
+        saleId: "s-5",
+        invoiceNumber: "F-5",
+        amount: "30.00",
+      },
+    ],
+  };
+  const dialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>("till-unpaid-departure-dialog");
+  const approval = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>(
+      "till-supervisor-override-dialog[data-departure-approval]",
+    );
+
+  /** Finish is refused for an unpaid bill, and the refusal's Record unpaid departure is pressed. */
+  async function openDeparture(overrides: Record<string, unknown> = {}) {
+    const mounted = await mountApp({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      recordUnpaidDeparture: vi.fn().mockResolvedValue(recorded),
+      listUnpaidDepartureAuthorizers: vi
+        .fn()
+        .mockResolvedValue([{ personId: "sup-1", displayName: "Luis" }]),
+      ...overrides,
+    });
+    const order = await openMesa(mounted.el);
+    emit(order, "finish-table", {});
+    await flush(mounted.el);
+    const screen = tableOrder(mounted.el)!.shadowRoot!;
+    if (screen.querySelector("[data-drawer]") === null) {
+      screen.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await flush(mounted.el);
+    }
+    screen.querySelector<HTMLElement>("[data-finish-refusal] [data-record-departure]")!.click();
+    await flush(mounted.el);
+    return mounted;
+  }
+
+  async function typeReason(el: TillApp, reason: string): Promise<void> {
+    const input = dialog(el)!
+      .shadowRoot!.querySelector('wt-input[name="reason"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = reason;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+  }
+
+  async function confirmDeparture(el: TillApp): Promise<void> {
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-departure-confirm]")!.click();
+    await flush(el, 5);
+  }
+
+  it("opens over the table and shows each bill left unpaid, named as the table screen names it", async () => {
+    const { el } = await openDeparture();
+
+    expect(dialog(el)!.bills).toEqual([
+      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
+      { workingOrderId: "wo-check", name: "4 · Bill 2", outstanding: "30.00" },
+    ]);
+    expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+  });
+
+  it("refuses an empty reason without sending anything", async () => {
+    const { el } = await openDeparture();
+
+    await confirmDeparture(el);
+
+    expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+    expect(dialog(el)).not.toBeNull();
+  });
+
+  it("with the permission, sends the reason and the revision it read, and the table finishes as Finish leaves it", async () => {
+    const { el } = await openDeparture();
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+    const departureReads = vi.mocked(api.listUnpaidDepartures).mock.calls.length;
+
+    await typeReason(el, "  Ran off ");
+    await confirmDeparture(el);
+
+    expect(api.recordUnpaidDeparture).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.recordUnpaidDeparture).mock.calls[0]!.slice(0, 2)).toEqual([
+      "v1",
+      { expectedPartyRevision: 3, reason: "Ran off" },
+    ]);
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
+    expect(api.listUnpaidDepartures).toHaveBeenCalledTimes(departureReads + 1);
+  });
+
+  it("without the permission, asks a supervisor or manager for their PIN and sends it with the same reason", async () => {
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 })
+      .mockResolvedValue(recorded);
+    const { el } = await openDeparture({ recordUnpaidDeparture, openDrawer: vi.fn() });
+
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+
+    expect(api.listUnpaidDepartureAuthorizers).toHaveBeenCalledOnce();
+    expect(approval(el)!.authorizers).toEqual([{ personId: "sup-1", displayName: "Luis" }]);
+    emit(approval(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+    await flush(el, 5);
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
+    expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
+      "v1",
+      { expectedPartyRevision: 3, reason: "Ran off", override: { personId: "sup-1", pin: "4321" } },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(api.openDrawer).not.toHaveBeenCalled();
+  });
+
+  it("shows a wrong PIN in the PIN prompt, and sends nothing more", async () => {
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 })
+      .mockRejectedValueOnce({ code: "pin.invalid", status: 401 });
+    const { el } = await openDeparture({ recordUnpaidDeparture });
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+
+    emit(approval(el)!, "override-confirm", { personId: "sup-1", pin: "0000" });
+    await flush(el, 5);
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
+    expect(approval(el)!.error).toBe("pin.invalid");
+    expect(dialog(el)).not.toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
+  it.each(["unpaid_departure.unfired_dishes", "unpaid_departure.bill_holds_payment"])(
+    "keeps the dialog open with %s's own sentence, and reads the bills again",
+    async (code) => {
+      const { el } = await openDeparture({
+        recordUnpaidDeparture: vi
+          .fn()
+          .mockRejectedValue({ code, status: 409, workingOrderId: "wo-check" }),
+      });
+      const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+      await typeReason(el, "Ran off");
+      await confirmDeparture(el);
+
+      expect(dialog(el)!.refusal).toEqual({ code });
+      const bottom = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-form-actions",
+      )!;
+      expect(bottom.error).toBe(codeMessage(code));
+      expect(api.getPartyBills).toHaveBeenCalledTimes(billReads + 1);
+      expect(tableOrder(el)).not.toBeNull();
+    },
+  );
+
+  it("sends a fresh request on each press, with what the dialog holds then", async () => {
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "unpaid_departure.unfired_dishes", status: 409 })
+      .mockResolvedValue(recorded);
+    const { el } = await openDeparture({ recordUnpaidDeparture });
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+
+    await typeReason(el, "Ran off after the dessert was cancelled");
+    await confirmDeparture(el);
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
+    expect(recordUnpaidDeparture.mock.calls[1]![1]).toEqual({
+      expectedPartyRevision: 3,
+      reason: "Ran off after the dessert was cancelled",
+    });
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("sends the same request again when one gets no answer, and the table finishes", async () => {
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(recorded);
+    const { el } = await openDeparture({ recordUnpaidDeparture });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+    await expect.poll(() => tableOrder(el), { timeout: GIVE_UP_MS }).toBeNull();
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
+    expect(recordUnpaidDeparture.mock.calls[1]![1]).toEqual(
+      recordUnpaidDeparture.mock.calls[0]![1],
+    );
+  });
+
+  it("when another device changed the table first, closes, reloads, says what changed, and sends the new revision only when pressed again", async () => {
+    const moved = seated({}, { revision: 5, outstanding: "50.00" });
+    const reads = floorThat([mesa4, mesa7, mesa9], [moved, mesa7, mesa9]);
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
+      .mockResolvedValue(recorded);
+    const { el } = await openDeparture({
+      recordUnpaidDeparture,
+      getTablesState: reads.getTablesState,
+    });
+    reads.other.acted = true;
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledOnce();
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)!.party).toEqual(moved.party);
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(t("party.changed").replace("{table}", "4"));
+    expect(text).toContain(t("party.try_again"));
+
+    emit(tableOrder(el)!, "record-unpaid-departure", {});
+    await flush(el);
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+    expect(recordUnpaidDeparture).toHaveBeenLastCalledWith(
+      "v1",
+      { expectedPartyRevision: 5, reason: "Ran off" },
+      expect.anything(),
+    );
+  });
+
+  it("when a resend after a lost reply finds the table closed, says the departure was probably recorded, never to try again", async () => {
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce({ code: "party.not_open", status: 409 });
+    const { el } = await openDeparture({ recordUnpaidDeparture });
+    const departureReads = vi.mocked(api.listUnpaidDepartures).mock.calls.length;
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+    await expect.poll(() => tableOrder(el), { timeout: GIVE_UP_MS }).toBeNull();
+    await flush(el);
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
+    expect(dialog(el)).toBeNull();
+    expect(api.listUnpaidDepartures).toHaveBeenCalledTimes(departureReads + 1);
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(t("departure.probably_recorded"));
+    expect(text).not.toContain(codeMessage("party.not_open"));
+  });
+
+  it("when the first send finds the table closed, says the table changed, as Finish does", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
+    });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+  });
+
+  it("puts the server's refusal of the reason beside the reason", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", status: 400, field: "reason" }),
+    });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+
+    const field = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      'wt-input[name="reason"]',
+    )!;
+    expect(field.error).toBe(codeMessage("management.request_invalid"));
+  });
+
+  it("says who can approve it could not be read, and opens no PIN prompt", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi
+        .fn()
+        .mockRejectedValue({ code: "authorization.not_permitted", status: 403 }),
+      listUnpaidDepartureAuthorizers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+
+    expect(approval(el)).toBeNull();
+    const bottom = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!;
+    expect(bottom.error).toBe(t("departure.approvers_failed"));
+  });
+
+  it("says a departure whose resends all got no answer may have been recorded", async () => {
+    const recordUnpaidDeparture = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await openDeparture({ recordUnpaidDeparture });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+    const bottom = () =>
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+        .error;
+    await expect.poll(bottom, { timeout: GIVE_UP_MS }).toBe(t("departure.unconfirmed"));
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(3);
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
+  it("leaves out of the dialog a bill with nothing left to pay", async () => {
+    const empty: PartyBill = {
+      ...checkBill,
+      workingOrderId: "wo-empty",
+      total: "0.00",
+      outstanding: "0.00",
+    };
+    const { el } = await openDeparture({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, empty, checkBill]),
+    });
+
+    expect(dialog(el)!.bills).toEqual([
+      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
+      { workingOrderId: "wo-check", name: "4 · Bill 3", outstanding: "30.00" },
+    ]);
+  });
+
+  it("Cancel closes the dialog and sends nothing", async () => {
+    const { el } = await openDeparture();
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+    expect(tableOrder(el)!.finishRefused).toBe(true);
   });
 });

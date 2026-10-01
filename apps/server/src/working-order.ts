@@ -130,7 +130,7 @@ import type {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
-import { issueMoment } from "./issue-moment.js";
+import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { readUnsentDrafts } from "./order-drafts.js";
@@ -858,12 +858,20 @@ export async function priceStoredOrderForIssuance(
 /** Read a filed sale's invoice number ("A/1"); the fiscal record reference is regime-opaque and
  * carries none. */
 export async function readInvoiceNumber(tx: Transaction, saleId: SaleId): Promise<string> {
-  const [issued] = await tx
-    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+  return (await readInvoiceNumbers(tx, [saleId])).get(saleId)!;
+}
+
+/** {@link readInvoiceNumber} of each named sale, by sale id, in one read. */
+export async function readInvoiceNumbers(
+  tx: Transaction,
+  saleIds: readonly string[],
+): Promise<Map<string, string>> {
+  const issued = await tx
+    .select({ id: sales.id, code: invoiceSeries.code, number: sales.invoiceNumber })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .where(eq(sales.id, saleId));
-  return formatInvoiceNumber(issued!.code, issued!.number);
+    .where(inArray(sales.id, [...saleIds]));
+  return new Map(issued.map((row) => [row.id, formatInvoiceNumber(row.code, row.number)]));
 }
 
 /** Surcharge fields a VAT band may carry are dropped deliberately: the counter ticket carries base
@@ -2269,6 +2277,40 @@ export function isReleased(
     : line.ticketItemId !== null
       ? line.ticketFiredAt !== null
       : line.groupState !== null || line.sentAt !== null;
+}
+
+/**
+ * The named orders holding a dish the kitchen is not making: one never sent and holding no kitchen
+ * item ({@link unsentDishLines}), or one that is not released work ({@link isReleased}) — held in
+ * a group, or held or recalled by its kitchen item.
+ */
+export async function ordersWithUnfiredDish(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Set<string>> {
+  if (orderIds.length === 0) return new Set();
+  const lines = await tx
+    .select({
+      workingOrderId: workingOrderLines.workingOrderId,
+      sentAt: workingOrderLines.sentAt,
+      groupState: orderGroups.state,
+      ticketItemId: ticketItems.id,
+      ticketFiredAt: ticketItems.firedAt,
+    })
+    .from(workingOrderLines)
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(
+        inArray(workingOrderLines.workingOrderId, [...orderIds]),
+        isNull(workingOrderLines.parentLineId),
+      ),
+    );
+  return new Set(
+    lines
+      .filter((line) => (line.sentAt === null && line.ticketItemId === null) || !isReleased(line))
+      .map((line) => line.workingOrderId),
+  );
 }
 
 /** Serving needs released work ({@link isReleased}), else `group.line_held`. */
@@ -4583,38 +4625,18 @@ export async function placeOrder(
     // Only invoice-first files at placing, from the stored locked lines at the rates of the day it
     // is placed: the day its invoice is issued.
     let placeResult: PlaceOrderResult = { id, status: "placed" };
-    let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const order = await priceStoredOrderForIssuance(tx, id);
-      const { priced, clock } = issueMoment(deps.clock, await issuancePass(tx, cfg, id, order));
-      // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
-      // CONFIGURED register. The chain is keyed by the node, not the device.
-      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tillId: saleTillId,
-        nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
-        workingOrderId: brandWorkingOrderId(id),
-        locale: cfg.locale,
-        invoiceLocales: cfg.invoiceLocales,
-        total: priced.total,
-        lines: priced.lines,
-        vatBreakdown: priced.vatBreakdown,
-        clock,
+      const invoice = await priceForIssuance(tx, deps.clock, cfg, id);
+      const issued = await issueUnpaidInvoice(
+        tx,
+        deps.backend,
+        cfg,
+        invoice,
         operatorId,
-        // No tender and no settlement until `collectOrder` settles it.
-        settlement: { kind: "deferred" },
-      });
-      const ticket: TillSaleResult = {
-        ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-        ...(await readReceiptOrder(tx, cfg, id, { atIssuance: true })),
-        invoiceNumber: await readInvoiceNumber(tx, saleId),
-        issuedAt: fiscal.issuedAt.toISOString(),
-        total: priced.total,
-        qr: fiscal.verificationUrl ?? "",
-        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await receiptLines(tx, id, priced, order.identities)),
-        tender: { method: "unpaid" },
-      };
+        saleTillId,
+      );
+      const { saleId } = issued;
+      const ticket = await unpaidReceipt(tx, deps.backend, invoice, issued);
       placeResult = {
         id,
         status: "placed",
@@ -4624,35 +4646,128 @@ export async function placeOrder(
         qr: ticket.qr,
         vatBreakdown: ticket.vatBreakdown,
       };
-      issuedOrderLabel = ticket.orderLabel;
       await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket, saleId);
     }
 
-    await tx
-      .update(workingOrders)
-      .set({
-        status: "placed",
-        ...(issuedOrderLabel === undefined ? {} : { label: issuedOrderLabel }),
-      })
-      .where(eq(workingOrders.id, id));
-
-    // `capturedByTillId` is the CONFIGURED register, as in `cancelPlacedOrder`, so one order's
-    // placed/cancelled pair stays on the same register.
-    const now = deps.clock.now();
-    await appendOrderAmendment(tx, {
-      workingOrderId: id,
-      kind: "order_placed",
-      actorId: operatorId,
-      reason: null,
-      capturedByTillId: cfg.tillId,
-      capturedByNodeId: cfg.nodeId,
-      eventAt: now.instant,
-      eventOffsetMinutes: now.offsetMinutes,
-    });
+    await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
 
     await fireLines(tx, cfg, id, lines);
 
     return placeResult;
+  });
+}
+
+/** An order's invoice priced from its stored lines at the rates of today, its issue date. */
+export interface PricedInvoice extends IssueMoment {
+  id: string;
+  /** The working-order line each of `priced.lines` was priced from. */
+  identities: OrderLineIdentity[];
+}
+
+/** Price an order's invoice for {@link issueUnpaidInvoice}. Writes nothing. */
+export async function priceForIssuance(
+  tx: Transaction,
+  clock: TrustedClock,
+  cfg: TillConfig,
+  id: string,
+): Promise<PricedInvoice> {
+  const order = await priceStoredOrderForIssuance(tx, id);
+  return {
+    id,
+    identities: order.identities,
+    ...issueMoment(clock, await issuancePass(tx, cfg, id, order)),
+  };
+}
+
+/** An invoice {@link issueUnpaidInvoice} filed, and the order fields its receipt prints. */
+export interface IssuedInvoice {
+  saleId: SaleId;
+  fiscal: Awaited<ReturnType<typeof recordSale>>["fiscal"];
+  orderLabel: string | null;
+  orderNumber: number;
+}
+
+/**
+ * File the priced invoice with no tender and no settlement until `collectOrder` settles it, and,
+ * on an order still open, save the label it was issued under. A placed order's label can change
+ * only in the update that moves it to settled or abandoned (`working_orders_enforce_transition`).
+ * Prints nothing. `saleTillId` is the device's register on the fiscal record.
+ */
+export async function issueUnpaidInvoice(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: TillConfig,
+  invoice: PricedInvoice,
+  operatorId: string,
+  saleTillId: TillId,
+): Promise<IssuedInvoice> {
+  const { id, priced, clock } = invoice;
+  const { saleId, fiscal } = await recordSale(tx, backend, {
+    tillId: saleTillId,
+    nodeId: cfg.nodeId,
+    seriesId: cfg.seriesId,
+    workingOrderId: brandWorkingOrderId(id),
+    locale: cfg.locale,
+    invoiceLocales: cfg.invoiceLocales,
+    total: priced.total,
+    lines: priced.lines,
+    vatBreakdown: priced.vatBreakdown,
+    clock,
+    operatorId,
+    settlement: { kind: "deferred" },
+  });
+  const order = await readReceiptOrder(tx, cfg, id, { atIssuance: true });
+  await tx
+    .update(workingOrders)
+    .set({ label: order.orderLabel })
+    .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
+  return { saleId, fiscal, ...order };
+}
+
+/** The receipt of an invoice {@link issueUnpaidInvoice} filed. */
+async function unpaidReceipt(
+  tx: Transaction,
+  backend: FiscalBackend,
+  invoice: PricedInvoice,
+  issued: IssuedInvoice,
+): Promise<TillSaleResult> {
+  const { priced } = invoice;
+  return {
+    ...(await readReceiptIssuer(backend, tx, issued.saleId)),
+    orderLabel: issued.orderLabel,
+    orderNumber: issued.orderNumber,
+    invoiceNumber: await readInvoiceNumber(tx, issued.saleId),
+    issuedAt: issued.fiscal.issuedAt.toISOString(),
+    total: priced.total,
+    qr: issued.fiscal.verificationUrl ?? "",
+    vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+    ...(await receiptLines(tx, invoice.id, priced, invoice.identities)),
+    tender: { method: "unpaid" },
+  };
+}
+
+/** An open order becomes placed, and its `order_placed` amendment is appended. */
+export async function markOrderPlaced(
+  tx: Transaction,
+  clock: TrustedClock,
+  cfg: TillConfig,
+  id: string,
+  operatorId: string,
+): Promise<void> {
+  await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
+
+  // `capturedByTillId` is the CONFIGURED register, as in `cancelPlacedOrder`, so one order's
+  // placed/cancelled pair stays on the same register.
+  const now = clock.now();
+  await appendOrderAmendment(tx, {
+    workingOrderId: id,
+    kind: "order_placed",
+    actorId: operatorId,
+    reason: null,
+    capturedByTillId: cfg.tillId,
+    capturedByNodeId: cfg.nodeId,
+    eventAt: now.instant,
+    eventOffsetMinutes: now.offsetMinutes,
   });
 }
 

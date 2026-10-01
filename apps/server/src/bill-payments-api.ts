@@ -18,13 +18,16 @@ import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertDeviceCapability, requireSaleTillId, tryReadDevice } from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
-import { overridePinAttempts, parseDrawerOverride, resolveCardCollector } from "./till-api.js";
-import type { TillApiDeps } from "./till-api.js";
+import {
+  overridePinAttempts,
+  parseOverrideField,
+  parseReason,
+  resolveCardCollector,
+} from "./till-api.js";
+import type { Run, TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
-
-type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Response>;
 
 const MONEY = /^\d{1,12}(\.\d{1,2})?$/;
 
@@ -148,23 +151,8 @@ function parseRefund(body: Record<string, unknown>): BillRefundRequest {
   const appliedAmount = moneyField(body.appliedAmount, "appliedAmount");
   const tipAmount = moneyField(body.tipAmount, "tipAmount");
   if (!/[1-9]/.test(appliedAmount) && !/[1-9]/.test(tipAmount)) throw invalid("appliedAmount");
-  if (
-    typeof body.reason !== "string" ||
-    body.reason.trim().length === 0 ||
-    body.reason.length > 500
-  ) {
-    throw invalid("reason");
-  }
-  if (
-    body.override !== undefined &&
-    body.override !== null &&
-    (typeof body.override !== "object" || Array.isArray(body.override))
-  ) {
-    throw invalid("override");
-  }
-  const override = parseDrawerOverride(
-    body.override as { personId?: unknown; pin?: unknown } | null | undefined,
-  );
+  const reason = parseReason(body.reason);
+  const override = parseOverrideField(body.override);
   if (body.manualConfirmed !== undefined && typeof body.manualConfirmed !== "boolean") {
     throw invalid("manualConfirmed");
   }
@@ -172,7 +160,7 @@ function parseRefund(body: Record<string, unknown>): BillRefundRequest {
     submissionId,
     appliedAmount,
     tipAmount,
-    reason: body.reason.trim(),
+    reason,
     ...(override === undefined ? {} : { override }),
     ...(body.manualConfirmed === undefined ? {} : { manualConfirmed: body.manualConfirmed }),
   };

@@ -1602,6 +1602,17 @@ async function settleOwingNothing(
   workingOrderId: string,
   saleId: SaleId,
 ): Promise<TillSaleResult> {
+  await settleIssuedOwingNothing(tx, deps, workingOrderId, saleId);
+  return readSettledTicket(deps.backend, tx, cfg, workingOrderId);
+}
+
+/** {@link settleOwingNothing} without the ticket: an unpaid departure settles its bills owing nothing. */
+export async function settleIssuedOwingNothing(
+  tx: Transaction,
+  deps: Pick<TillSaleDeps, "clock" | "log">,
+  workingOrderId: string,
+  saleId: SaleId,
+): Promise<void> {
   const settledAt = deps.clock.now().instant.toISOString();
   await settleSale(tx, { saleId, tenders: [] });
   await tx
@@ -1609,7 +1620,6 @@ async function settleOwingNothing(
     .set({ status: "settled", settledAt })
     .where(eq(workingOrders.id, workingOrderId));
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
-  return readSettledTicket(deps.backend, tx, cfg, workingOrderId);
 }
 
 /**

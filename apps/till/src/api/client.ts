@@ -952,6 +952,41 @@ export interface BillRefundResult {
   balance: BillBalance;
 }
 
+/** `POST /api/parties/:id/unpaid-departure`: the party's guests left without paying. */
+export interface UnpaidDepartureRequest {
+  expectedPartyRevision: number;
+  reason: string;
+  override?: { personId: string; pin: string };
+}
+
+/** Each bill the departure left unpaid, with the invoice it owes on. */
+export interface UnpaidDepartureResult {
+  state: "closed";
+  departures: {
+    id: string;
+    workingOrderId: string;
+    saleId: string;
+    invoiceNumber: string;
+    amount: string;
+  }[];
+}
+
+/** `GET /api/unpaid-departures`: one bill a party left unpaid whose invoice is still owed. */
+export interface UnpaidDeparture {
+  id: string;
+  workingOrderId: string;
+  billLabel: string | null;
+  /** The tables the party held when it left. */
+  tableLabels: string[];
+  saleId: string;
+  invoiceNumber: string;
+  amount: string;
+  reason: string;
+  recordedByName: string | null;
+  authorizedByName: string | null;
+  recordedAt: string;
+}
+
 /** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
  * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid
  * and not handed over. `canHandOver` says whether {@link TillApi.markCollected} would accept it now. */
@@ -2213,6 +2248,35 @@ export class TillApi {
    */
   finishTable(partyId: string, expectedPartyRevision: number): Promise<{ state: "closed" }> {
     return this.#request(`/api/parties/${partyId}/finish`, "POST", { expectedPartyRevision });
+  }
+
+  /**
+   * The party's guests left without paying → `POST /api/parties/:partyId/unpaid-departure`: each
+   * bill still to pay with no invoice yet is invoiced for its full amount, each invoice still owing
+   * is recorded unpaid and one owing nothing is settled, and the party closes as Finish closes it.
+   * Refusals: the route in `apps/server/src/unpaid-departure-api.ts` and what it calls.
+   */
+  recordUnpaidDeparture(
+    partyId: string,
+    request: UnpaidDepartureRequest,
+    options: ReadOptions = {},
+  ): Promise<UnpaidDepartureResult> {
+    return this.#request(
+      `/api/parties/${partyId}/unpaid-departure`,
+      "POST",
+      request,
+      options.signal,
+    );
+  }
+
+  /** Who may approve an unpaid departure → `GET /api/unpaid-departure-authorizers`. */
+  listUnpaidDepartureAuthorizers(): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>("/api/unpaid-departure-authorizers", "GET");
+  }
+
+  /** The unpaid departures whose invoice is still owed, newest first → `GET /api/unpaid-departures`. */
+  listUnpaidDepartures(): Promise<UnpaidDeparture[]> {
+    return this.#request<UnpaidDeparture[]>("/api/unpaid-departures", "GET");
   }
 
   /** Free a table that needs clearing → `POST /api/tables/:tableId/cleared`. A table that does not

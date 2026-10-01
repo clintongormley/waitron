@@ -51,7 +51,7 @@ import {
   tableTargetStyles,
   type SeatedRead,
 } from "../widgets/table-targets.js";
-import { owing, paidInPart } from "../state/bill-state.js";
+import { billName, owing, paidInPart, shownBills } from "../state/bill-state.js";
 import {
   LINE_ADJUSTMENTS,
   billGross,
@@ -662,8 +662,11 @@ export class TillTableOrderScreen extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
-      .finish-refusal wt-button {
-        align-self: flex-end;
+      .finish-refusal-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
       }
 
       .status-options {
@@ -2835,16 +2838,12 @@ export class TillTableOrderScreen extends LitElement {
     >`;
   }
 
-  /** Abandoned bills are left out: nobody pays them. */
   #shownBills(): PartyBill[] {
-    return this.bills.filter((bill) => bill.status !== "abandoned");
+    return shownBills(this.bills);
   }
 
-  /** A bill's name by its place in {@link #shownBills}, under the party's display name. */
   #billName(index: number): string {
-    return t("table.bill_of")
-      .replace("{party}", () => this.party?.displayName ?? "")
-      .replace("{n}", String(index + 1));
+    return billName(this.party?.displayName ?? "", index);
   }
 
   #money(amount: string): string {
@@ -2870,18 +2869,28 @@ export class TillTableOrderScreen extends LitElement {
         this.finishRefused
           ? html`<div class="finish-refusal" role="alert" data-finish-refusal>
               <span>${codeMessage("party.bill_outstanding")}</span>
-              ${
-                firstUnpaid === undefined
-                  ? nothing
-                  : html`<wt-button
-                      size="sm"
-                      variant="primary"
-                      data-take-payment
-                      @click=${() => this.#takePayment(firstUnpaid)}
-                    >
-                      ${t("table.take_payment")}
-                    </wt-button>`
-              }
+              <div class="finish-refusal-actions">
+                ${
+                  firstUnpaid === undefined
+                    ? nothing
+                    : html`<wt-button
+                          size="sm"
+                          variant="primary"
+                          data-take-payment
+                          @click=${() => this.#takePayment(firstUnpaid)}
+                        >
+                          ${t("table.take_payment")}
+                        </wt-button>
+                        <wt-button
+                          size="sm"
+                          variant="secondary"
+                          data-record-departure
+                          @click=${() => this.#dispatch("record-unpaid-departure", {})}
+                        >
+                          ${t("departure.record")}
+                        </wt-button>`
+                }
+              </div>
             </div>`
           : nothing
       }

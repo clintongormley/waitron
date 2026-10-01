@@ -1,0 +1,296 @@
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
+import {
+  diningTables,
+  invoiceSeries,
+  nowIso,
+  parties,
+  partyTables,
+  saleSettlements,
+  saleVoids,
+  sales,
+  unpaidDepartures,
+  workingOrders,
+} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { formatInvoiceNumber } from "@waitron/core";
+import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
+import { authorize, persons } from "@waitron/identity";
+import type { Override, PinAttempts } from "@waitron/identity";
+import { AppError, decimalToCents, rawCentsToDecimal } from "@waitron/shared";
+import type { Decimal, SaleId, TillId } from "@waitron/shared";
+import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
+import { correctionsCents, readIssuedSales } from "./sale-due.js";
+import type { Logger } from "./logger.js";
+import type { TillConfig } from "./till-config.js";
+import { settleIssuedOwingNothing } from "./till-sale.js";
+import {
+  issueUnpaidInvoice,
+  markOrderPlaced,
+  ordersWithUnfiredDish,
+  priceForIssuance,
+  readInvoiceNumbers,
+  refusePaymentInFlight,
+} from "./working-order.js";
+import "./errors.js";
+
+export interface UnpaidDepartureRequest {
+  expectedPartyRevision: number;
+  /** Trimmed, 1 to 500 characters. */
+  reason: string;
+  override?: Override;
+}
+
+/** One bill left unpaid, as the departure answers it. */
+export interface RecordedDeparture {
+  id: string;
+  workingOrderId: string;
+  saleId: string;
+  invoiceNumber: string;
+  amount: string;
+}
+
+/**
+ * The party's guests left without paying: each invoice of its family's bills still to pay that
+ * still owes something gets one `unpaid_departures` row with the reason, who recorded it and who
+ * authorised it, and the party then closes as Finish table closes it ({@link closeParty}). Needs
+ * `sale.void` from the operator or the override.
+ *
+ * An open bill is invoiced now, as an invoice-first placing invoices it, without a receipt; a
+ * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
+ * A bill owing nothing once invoiced (its credit notes cancel its invoice, or every line was given
+ * away) gets no row and is settled as collecting it settles it ({@link settleIssuedOwingNothing}),
+ * so the party closes with no departure rows when every bill owes nothing (why: the B17 entry in
+ * docs/backlog.md).
+ *
+ * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill is still to pay
+ * ({@link billOwes}), which is no bill Finish table refuses as unpaid,
+ * `unpaid_departure.unfired_dishes` for a bill to be invoiced holding a dish the kitchen is not
+ * making ({@link ordersWithUnfiredDish}: never sent, held, or recalled), and
+ * `unpaid_departure.bill_holds_payment` for an open bill holding a payment, one given back in full
+ * included. A retry after the party has closed is `party.not_open`, as it is for Finish.
+ */
+export async function recordUnpaidDeparture(
+  tx: Transaction,
+  deps: { backend: FiscalBackend; clock: TrustedClock; log?: Logger },
+  cfg: TillConfig,
+  saleTillId: TillId,
+  partyId: string,
+  req: UnpaidDepartureRequest,
+  operator: { personId: string; sessionId: string; attempts: PinAttempts },
+): Promise<{ state: "closed"; departures: RecordedDeparture[] }> {
+  const { authorizedBy } = await authorize(
+    tx,
+    { sessionId: operator.sessionId, permission: "sale.void", override: req.override },
+    operator.attempts,
+  );
+  await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
+
+  const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
+  const owing = bills.filter(billOwes);
+  if (owing.length === 0) {
+    throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
+  }
+  const owingIds = owing.map((bill) => bill.workingOrderId);
+  const invoiced = await readIssuedSales(tx, owingIds);
+  const toInvoice = owing.filter((bill) => !invoiced.has(bill.workingOrderId));
+  const unfired = await ordersWithUnfiredDish(
+    tx,
+    toInvoice.map((bill) => bill.workingOrderId),
+  );
+  const firstUnfired = toInvoice.find((bill) => unfired.has(bill.workingOrderId));
+  if (firstUnfired !== undefined) {
+    throw new AppError("unpaid_departure.unfired_dishes", {
+      workingOrderId: firstUnfired.workingOrderId,
+    });
+  }
+  const open = owing.filter((bill) => bill.status === "open");
+  const openIds = new Set(open.map((bill) => bill.workingOrderId));
+  const holding = open.find((bill) => bill.hasPayments);
+  if (holding !== undefined) {
+    throw new AppError("unpaid_departure.bill_holds_payment", {
+      workingOrderId: holding.workingOrderId,
+    });
+  }
+  // What is left of the in-flight check once no bill holds a payment: a card at the reader for a
+  // whole bill, which marks the bill rather than writing a payment of it.
+  await refusePaymentInFlight(tx, [...openIds]);
+
+  const invoices = [];
+  for (const bill of toInvoice) {
+    invoices.push(await priceForIssuance(tx, deps.clock, cfg, bill.workingOrderId));
+  }
+  const due = new Map<string, Decimal>([
+    ...[...invoiced].map(([id, sale]) => [id, sale.amountDue] as const),
+    ...invoices.map((invoice) => [invoice.id, invoice.priced.total] as const),
+  ]);
+  const departing = owingIds.filter((id) => decimalToCents(due.get(id)!) > 0);
+
+  const saleOf = new Map<string, SaleId>([...invoiced].map(([id, sale]) => [id, sale.saleId]));
+  for (const invoice of invoices) {
+    const { saleId } = await issueUnpaidInvoice(
+      tx,
+      deps.backend,
+      cfg,
+      invoice,
+      operator.personId,
+      saleTillId,
+    );
+    saleOf.set(invoice.id, saleId);
+    if (openIds.has(invoice.id)) {
+      await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId);
+    }
+  }
+  for (const id of owingIds) {
+    if (decimalToCents(due.get(id)!) === 0) {
+      await settleIssuedOwingNothing(tx, deps, id, saleOf.get(id)!);
+    }
+  }
+
+  const departures =
+    departing.length === 0
+      ? []
+      : await insertDepartures(tx, departing, saleOf, due, {
+          partyId,
+          reason: req.reason,
+          recordedBy: operator.personId,
+          authorizedBy,
+          tillId: saleTillId,
+        });
+
+  const empty = bills
+    .filter((bill) => bill.status === "open" && bill.lines === 0)
+    .map((bill) => bill.workingOrderId);
+  const closed = await closeParty(tx, partyId, empty, operator.personId);
+  return { ...closed, departures };
+}
+
+/** One `unpaid_departures` row for each of `departing`, at what its invoice owes in `due`. */
+async function insertDepartures(
+  tx: Transaction,
+  departing: readonly string[],
+  saleOf: ReadonlyMap<string, SaleId>,
+  due: ReadonlyMap<string, Decimal>,
+  common: {
+    partyId: string;
+    reason: string;
+    recordedBy: string;
+    authorizedBy: string;
+    tillId: TillId;
+  },
+): Promise<RecordedDeparture[]> {
+  const numbers = await readInvoiceNumbers(
+    tx,
+    departing.map((id) => saleOf.get(id)!),
+  );
+  const recordedAt = nowIso();
+  const rows = await tx
+    .insert(unpaidDepartures)
+    .values(
+      departing.map((workingOrderId) => ({
+        ...common,
+        workingOrderId,
+        saleId: saleOf.get(workingOrderId)!,
+        amount: decimalToCents(due.get(workingOrderId)!),
+        recordedAt,
+      })),
+    )
+    .returning({ id: unpaidDepartures.id, workingOrderId: unpaidDepartures.workingOrderId });
+  const idOf = new Map(rows.map((row) => [row.workingOrderId, row.id]));
+  return departing.map((workingOrderId): RecordedDeparture => {
+    const saleId = saleOf.get(workingOrderId)!;
+    return {
+      id: idOf.get(workingOrderId)!,
+      workingOrderId,
+      saleId,
+      invoiceNumber: numbers.get(saleId)!,
+      amount: due.get(workingOrderId)!,
+    };
+  });
+}
+
+/** One unpaid departure whose invoice is still owed, as the till lists it. */
+export interface UnpaidDepartureView {
+  id: string;
+  workingOrderId: string;
+  billLabel: string | null;
+  /** The tables the party held when it left, in the order they joined it. */
+  tableLabels: string[];
+  saleId: string;
+  invoiceNumber: string;
+  amount: string;
+  reason: string;
+  recordedByName: string | null;
+  authorizedByName: string | null;
+  recordedAt: string;
+}
+
+/**
+ * The unpaid departures whose invoice is neither settled nor voided and still owes something, newest
+ * first, each with what its invoice owes now: its total net of its credit notes, as collecting it
+ * charges ({@link readIssuedSales}). An invoice a full invoice has since substituted stays listed:
+ * `listOutstandingSales` (packages/core/src/list-outstanding-sales.ts) likewise leaves out only the
+ * substitute.
+ */
+export async function listUnpaidDepartures(tx: Transaction): Promise<UnpaidDepartureView[]> {
+  const recorder = alias(persons, "recorder");
+  const authorizer = alias(persons, "authorizer");
+  const rows = await tx
+    .select({
+      id: unpaidDepartures.id,
+      partyId: unpaidDepartures.partyId,
+      workingOrderId: unpaidDepartures.workingOrderId,
+      billLabel: workingOrders.label,
+      saleId: unpaidDepartures.saleId,
+      seriesCode: invoiceSeries.code,
+      invoiceNumber: sales.invoiceNumber,
+      amountDue: sql<string>`cast(${sales.total} + ${correctionsCents} as text)`,
+      reason: unpaidDepartures.reason,
+      recordedByName: recorder.displayName,
+      authorizedByName: authorizer.displayName,
+      recordedAt: unpaidDepartures.recordedAt,
+    })
+    .from(unpaidDepartures)
+    .innerJoin(workingOrders, eq(workingOrders.id, unpaidDepartures.workingOrderId))
+    .innerJoin(sales, eq(sales.id, unpaidDepartures.saleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .leftJoin(saleSettlements, eq(saleSettlements.saleId, unpaidDepartures.saleId))
+    .leftJoin(saleVoids, eq(saleVoids.saleId, unpaidDepartures.saleId))
+    .leftJoin(recorder, eq(recorder.id, unpaidDepartures.recordedBy))
+    .leftJoin(authorizer, eq(authorizer.id, unpaidDepartures.authorizedBy))
+    .where(
+      and(
+        isNull(saleSettlements.id),
+        isNull(saleVoids.id),
+        sql`${sales.total} + ${correctionsCents} > 0`,
+      ),
+    )
+    .orderBy(desc(unpaidDepartures.recordedAt), desc(sql`${unpaidDepartures}.rowid`));
+  if (rows.length === 0) return [];
+
+  const partyIds = [...new Set(rows.map((row) => row.partyId))];
+  const tables = await tx
+    .select({ partyId: partyTables.partyId, label: diningTables.label })
+    .from(partyTables)
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .innerJoin(parties, eq(parties.id, partyTables.partyId))
+    // `closeParty` writes both `left_at` and `closed_at` from one timestamp.
+    .where(and(inArray(partyTables.partyId, partyIds), eq(partyTables.leftAt, parties.closedAt)))
+    .orderBy(partyTables.joinedAt, partyTables.id);
+  const tablesOf = new Map(partyIds.map((id) => [id, [] as string[]]));
+  for (const table of tables) tablesOf.get(table.partyId)!.push(table.label);
+
+  return rows.map((row) => ({
+    id: row.id,
+    workingOrderId: row.workingOrderId,
+    billLabel: row.billLabel,
+    tableLabels: tablesOf.get(row.partyId)!,
+    saleId: row.saleId,
+    invoiceNumber: formatInvoiceNumber(row.seriesCode, row.invoiceNumber),
+    amount: rawCentsToDecimal(row.amountDue),
+    reason: row.reason,
+    recordedByName: row.recordedByName,
+    authorizedByName: row.authorizedByName,
+    recordedAt: row.recordedAt,
+  }));
+}

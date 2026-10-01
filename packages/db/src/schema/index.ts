@@ -34,6 +34,7 @@ export * from "./working-order-counters.js";
 export * from "./bill-payments.js";
 export * from "./sales.js";
 export * from "./sale-voids.js";
+export * from "./unpaid-departures.js";
 export * from "./daily-closes.js";
 export * from "./incidents.js";
 export * from "./change-log.js";

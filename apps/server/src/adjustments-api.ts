@@ -1,4 +1,4 @@
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { ADJUSTMENT_ACTIONS, listAdjustmentReasons } from "@waitron/adjustments";
 import { withTransaction } from "@waitron/db";
@@ -32,12 +32,11 @@ import {
   parseDrawerOverride,
   requireRevision,
   requireTabParam,
+  type Run,
   type TillApiDeps,
 } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import "./errors.js";
-
-type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Response>;
 
 const NOTE_LIMIT = 500;
 

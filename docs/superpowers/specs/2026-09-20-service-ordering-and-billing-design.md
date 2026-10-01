@@ -500,7 +500,9 @@ here. Settled bills and the visit's history remain accessible after closure.
 **Unpaid departure waits for advisor Q28.** In a venue that issues the invoice at payment, no
 invoice exists when the table leaves, although the food was served. The working assumption is that
 the invoice is issued anyway, for the full amount, and recorded as unpaid; unpaid departure is not
-built until Q28 is answered or the owner decides without it.
+built until Q28 is answered or the owner decides without it. *(2026-10-01: built on the owner's
+decision without the asesor — see Q28 in
+[asesor-questions.md](../../compliance/asesor-questions.md).)*
 
 ## 9. Keep menu access separate from product use
 
