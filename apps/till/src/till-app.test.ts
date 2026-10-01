@@ -5739,6 +5739,55 @@ describe("till-app", () => {
       expect(parkOrder).toHaveBeenCalledOnce();
     });
 
+    it.each([
+      ["cash", "confirm-payment", { method: "cash", amount: "5" }, "recordSale"],
+      ["an integrated card", "collect-card", {}, "pay"],
+    ] as const)(
+      "Pay by %s at the order stage of a ticket_then_pay zone pays the open order and re-reads the kitchen queue",
+      async (_method, event, detail, route) => {
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+
+        emit(c, event, detail);
+        await flush(el);
+
+        expect(currentApi[route]).toHaveBeenCalledOnce();
+        expect(currentApi.placeOrder).not.toHaveBeenCalled();
+        expect(currentApi.collectOrder).not.toHaveBeenCalled();
+        expect(ticket(el)).not.toBeNull();
+        // once on entering the counter, once after the payment sent the dishes to the kitchen.
+        expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each([
+      ["cash", "confirm-payment", { method: "cash", amount: "5" }],
+      ["an integrated card", "collect-card", {}],
+    ] as const)(
+      "Pay by %s at the order stage of an invoice_first zone issues the invoice now, so the original receipt is offered",
+      async (_method, event, detail) => {
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            orderFlow: "invoice_first",
+            receiptPrintMode: "on_request",
+          }),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+
+        emit(c, event, detail);
+        await flush(el);
+
+        expect(ticket(el)!.originalReceiptAvailable).toBe(true);
+      },
+    );
+
     it("collect-order: settles the placed order and shows the ticket", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
