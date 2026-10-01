@@ -1474,7 +1474,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) built; A178b–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010; A178b–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1583,7 +1583,7 @@ leaving 6 of the spec's 9; the station field the spec lists for
 `<p class="error">` beside the field rather than through its `error` property, so it should move
 onto `error`.
 
-**A178a — DONE: A178a (this branch, feat/filled-fields-primitives).** The shared field primitives
+**A178a — DONE (#1010).** The shared field primitives
 draw the filled field: five colour tokens, whose contrast
 `packages/ui-core/src/tokens/colors.test.ts` holds, and five size tokens; one shared stylesheet, `fieldStyles`
 (`packages/ui-core/src/field-styles.ts`); `wt-input`, `wt-price-input` (which gains `invalid`) and
