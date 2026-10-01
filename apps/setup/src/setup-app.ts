@@ -36,6 +36,7 @@ import type {
   ConfigurationRequestDetail,
   RestoreRequestDetail,
 } from "./events.js";
+import type { CloudField } from "./screens/cloud-restore-screen.js";
 import type { ConnectField } from "./screens/connect-screen.js";
 import type { BucketField, RestoredVenue } from "./screens/restore-bucket-screen.js";
 import type { RestoreField } from "./screens/restore-screen.js";
@@ -206,6 +207,10 @@ const BUCKET_FIELD_PATHS: Record<string, BucketField> = {
   venueConfirmed: "venueConfirmed",
 };
 
+const CLOUD_FIELD_PATHS: Record<string, CloudField> = {
+  oldBoxGone: "oldBoxGone",
+};
+
 const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
   artifact: "restore.check.backup_file",
   recoveryKey: "restore.check.recovery_key",
@@ -217,6 +222,12 @@ const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
   environment: "restore_bucket.check.environment",
   oldBoxGone: "restore_bucket.check.old_box",
   venueConfirmed: "restore_bucket.check.venue",
+};
+
+/** Keyed by the field the refusal names; `pointId` is not a field the screen shows. */
+const CLOUD_FIELD_CHECKS: Record<CloudField | "pointId", StringKey> = {
+  pointId: "cloud_restore.check.point",
+  oldBoxGone: "cloud_restore.check.old_box",
 };
 
 function describeThrottle(params: Record<string, unknown> | undefined): Message {
@@ -449,6 +460,7 @@ export class SetupApp extends LitElement {
   @state() private rebuilt = false;
   @state() private cloudRecoveryView?: CloudRecoveryView;
   @state() private cloudRecoveryError?: Message;
+  @state() private cloudInvalidField?: CloudField;
   @state() private cloudRecoveryBusy = false;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
   @state() private cloudLiveSince?: string;
@@ -596,6 +608,7 @@ export class SetupApp extends LitElement {
     this.bucketVenue = undefined;
     this.bucketRequest = undefined;
     this.cloudRecoveryError = undefined;
+    this.cloudInvalidField = undefined;
     this.cloudLiveSince = undefined;
     this.cloudLiveUnknown = false;
     this.configurationError = undefined;
@@ -863,6 +876,7 @@ export class SetupApp extends LitElement {
     if (this.cloudRecoveryBusy) return;
     this.cloudRecoveryBusy = true;
     this.cloudRecoveryError = undefined;
+    this.cloudInvalidField = undefined;
     try {
       const { action, pointId, oldBoxGone } = event.detail;
       if (action === "restore") {
@@ -899,6 +913,11 @@ export class SetupApp extends LitElement {
         ) {
           this.cloudLiveSince = undefined;
           this.cloudLiveUnknown = true;
+        } else if (code === "setup.request_invalid") {
+          this.cloudInvalidField = refusedField(code, params, {}, CLOUD_FIELD_PATHS);
+          this.cloudRecoveryError = say(
+            refusedField(code, params, {}, CLOUD_FIELD_CHECKS) ?? "shell.cloud.request_invalid",
+          );
         } else {
           this.cloudRecoveryError = say(
             (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
@@ -1157,6 +1176,7 @@ export class SetupApp extends LitElement {
           data-test="screen-cloud-restore"
           .view=${this.cloudRecoveryView}
           .errorMessage=${this.cloudRecoveryError?.()}
+          .invalidField=${this.cloudInvalidField}
           .busy=${this.cloudRecoveryBusy}
           .liveSince=${this.cloudLiveSince}
           .liveUnknown=${this.cloudLiveUnknown}

@@ -134,4 +134,36 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
       cleanupWidgets();
     }
   });
+
+  it("has no axe violations with the server's refusal under the old-server tick box", async () => {
+    await page.viewport(375, 812);
+    const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
+      "setup-cloud-restore-screen",
+      {
+        view: {
+          requestId: "be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
+          code: "12345678",
+          openCloudUrl:
+            "https://cloud.example.test/recover#request=be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
+          expiresAt: "2026-09-24T12:00:00.000Z",
+          state: "approved",
+          point: {
+            id: "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8",
+            venueId: "fe78bc70-b66f-4b2f-970d-7acbd3739977",
+            capturedAt: "2026-09-24T10:00:00.000Z",
+            modules: { core: 1 },
+          },
+        },
+        liveUnknown: true,
+        errorMessage: "Check your answer about the old server.",
+        invalidField: "oldBoxGone",
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(
+      "Check your answer about the old server.",
+    );
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(375);
+    await expectNoA11yViolations(host);
+  });
 });

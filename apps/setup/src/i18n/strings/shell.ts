@@ -113,6 +113,8 @@ export const shellEn = {
     "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
   "shell.cloud.unavailable":
     "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
+  "shell.cloud.request_invalid":
+    "The server rejected the details. Check your entries, then try again.",
 
   "shell.configuration.could_not_open":
     "The configuration export could not be opened. Check the file and passphrase.",
@@ -236,6 +238,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta instantánea no es de un local de preparación o de demostración, y la recuperación desde Cloud solo restaura esos.",
   "shell.cloud.unavailable":
     "La recuperación desde Cloud no está disponible. Comprueba la conexión o si la solicitud ha caducado, e inténtalo de nuevo.",
+  "shell.cloud.request_invalid":
+    "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
 
   "shell.configuration.could_not_open":
     "No se ha podido abrir la exportación de configuración. Revisa el archivo y la contraseña de exportación.",

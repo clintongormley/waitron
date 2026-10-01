@@ -6807,6 +6807,15 @@ ongoing overhaul listed at the top of Track A.
   request expiry, then try again." (`shell.cloud.unavailable`), because `#onCloudRestoreAction` in
   `apps/setup/src/setup-app.ts` places no field and `CLOUD_ERROR_MESSAGES` has no
   `setup.request_invalid` entry. It predates A152; found in A152's review, read and not run.
+  _(2026-10-01, A160, #978: done — a refusal naming `oldBoxGone` now says "Check your answer about the
+  old server." under the old-server tick box (above Restore when that tick box is not shown); one
+  naming `pointId`, which is not a field the screen shows, says "Check the approved snapshot."
+  above Restore; one naming no field or any other field says "The server rejected the details.
+  Check your entries, then try again." above Restore; English and Spanish. Tests: the request-check
+  cases in "restoring a Cloud snapshot whose old server may still be running" in
+  `apps/setup/src/setup-app.test.ts`, "Cloud restore screen showing the server's refusal of a
+  detail" in `apps/setup/src/screens/cloud-restore-screen.test.ts`, and the old-server refusal case
+  in `apps/setup/src/screens/cloud-restore-screen.a11y.test.ts`.)_
   **Next action:** the other open points still wait for the owner to say which are worth doing.
 
 - **Every login failure is one answer — DONE (C95, #930, owner decision 2026-09-30).** The owner's rule:

@@ -3388,6 +3388,179 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     },
   );
 
+  const unavailable =
+    "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+
+  it("says to check the old-server tick box under it when the server's request check names it", async () => {
+    const restoreFromCloud = vi
+      .fn()
+      .mockRejectedValueOnce(live)
+      .mockRejectedValueOnce({
+        code: "setup.request_invalid",
+        params: { field: "oldBoxGone" },
+        status: 400,
+      });
+    const el = await approvedCloudApp({ restoreFromCloud });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    cloudRecoveryAction(el, "restore", pointId, true);
+    await flush(el);
+    const screen = await cloudScreen(el);
+    await screen.updateComplete;
+    const input = screen.shadowRoot!.querySelector("[data-test=old-box-gone]")!;
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(
+      "Check your answer about the old server.",
+    );
+    expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+    expect(screen.shadowRoot!.textContent).not.toContain(unavailable);
+    const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
+      disabled: boolean;
+    };
+    expect(button.disabled).toBe(false);
+    await vi.waitFor(() => expect(screen.shadowRoot!.activeElement).toBe(input));
+  });
+
+  it("says above Restore to check the old-server answer when that tick box is not on the screen", async () => {
+    const el = await approvedCloudApp({
+      restoreFromCloud: vi.fn().mockRejectedValue({
+        code: "setup.request_invalid",
+        params: { field: "oldBoxGone" },
+        status: 400,
+      }),
+    });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    const screen = await cloudScreen(el);
+    expect(await bottomOf(screen)).toBe("Check your answer about the old server.");
+    expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+  });
+
+  it("says above Restore to check the approved snapshot when the server's request check names the point", async () => {
+    const el = await approvedCloudApp({
+      restoreFromCloud: vi.fn().mockRejectedValue({
+        code: "setup.request_invalid",
+        params: { field: "pointId" },
+        status: 400,
+      }),
+    });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    const screen = await cloudScreen(el);
+    expect(await bottomOf(screen)).toBe("Check the approved snapshot.");
+    expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("p.error[id$='-error']")).toBeNull();
+    expect(screen.shadowRoot!.textContent).not.toContain(unavailable);
+    const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
+      disabled: boolean;
+    };
+    expect(button.disabled).toBe(false);
+  });
+
+  it("shows the old-server refusal again when the next Restore is refused the same way", async () => {
+    const refusal = {
+      code: "setup.request_invalid",
+      params: { field: "oldBoxGone" },
+      status: 400,
+    };
+    const restoreFromCloud = vi
+      .fn()
+      .mockRejectedValueOnce(unchecked)
+      .mockRejectedValueOnce(refusal)
+      .mockRejectedValueOnce(refusal);
+    const el = await approvedCloudApp({ restoreFromCloud });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    cloudRecoveryAction(el, "restore", pointId, true);
+    await flush(el);
+    let screen = await cloudScreen(el);
+    const sentence = "Check your answer about the old server.";
+    expect(screen.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(sentence);
+    for (const box of ["acknowledge", "old-box-gone"]) {
+      const input = screen.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${box}]`)!;
+      input.checked = true;
+      input.dispatchEvent(new Event("change"));
+      await screen.updateComplete;
+    }
+    expect(screen.shadowRoot!.querySelector("#old-box-gone-error")).toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+    await flush(el);
+    expect(restoreFromCloud).toHaveBeenLastCalledWith(pointId, true);
+    screen = await cloudScreen(el);
+    expect(screen.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(sentence);
+    expect(
+      screen.shadowRoot!.querySelector("[data-test=old-box-gone]")!.getAttribute("aria-invalid"),
+    ).toBe("true");
+  });
+
+  it("leaves no old-server refusal behind once the server accepts the next Restore", async () => {
+    const restoreFromCloud = vi
+      .fn()
+      .mockRejectedValueOnce(unchecked)
+      .mockRejectedValueOnce({
+        code: "setup.request_invalid",
+        params: { field: "oldBoxGone" },
+        status: 400,
+      })
+      .mockResolvedValueOnce({ restoreStaged: true, restarting: true });
+    const el = await approvedCloudApp({ restoreFromCloud });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    cloudRecoveryAction(el, "restore", pointId, true);
+    await flush(el);
+    expect((await cloudScreen(el)).shadowRoot!.querySelector("#old-box-gone-error")).not.toBeNull();
+    cloudRecoveryAction(el, "restore", pointId, true);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-cloud-restore]")).toBeNull();
+    expect(readState(el, ["cloudRecoveryError", "cloudInvalidField"])).toEqual({
+      cloudRecoveryError: undefined,
+      cloudInvalidField: undefined,
+    });
+  });
+
+  it.each([[{}], [{ field: "kit" }], [{ field: 5 }]])(
+    "says the server rejected the details when its request check names no field, or one other than oldBoxGone or pointId (%o)",
+    async (params) => {
+      const el = await approvedCloudApp({
+        restoreFromCloud: vi
+          .fn()
+          .mockRejectedValue({ code: "setup.request_invalid", params, status: 400 }),
+      });
+      cloudRecoveryAction(el, "restore", pointId, false);
+      await flush(el);
+      const screen = await cloudScreen(el);
+      expect(await bottomOf(screen)).toBe(
+        "The server rejected the details. Check your entries, then try again.",
+      );
+      expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+      expect(screen.shadowRoot!.querySelector("p.error[id$='-error']")).toBeNull();
+    },
+  );
+
+  describe("in Spanish", () => {
+    afterEach(() => setLocale("en-GB"));
+
+    it.each([
+      [{ field: "pointId" }, "Revisa la instantánea aprobada."],
+      [{ field: "oldBoxGone" }, "Revisa tu respuesta sobre el servidor anterior."],
+      [
+        {},
+        "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
+      ],
+    ])("says above Restore what the request check refused (%o)", async (params, sentence) => {
+      const el = await approvedCloudApp({
+        restoreFromCloud: vi
+          .fn()
+          .mockRejectedValue({ code: "setup.request_invalid", params, status: 400 }),
+      });
+      setLocale("es-ES");
+      cloudRecoveryAction(el, "restore", pointId, false);
+      await flush(el);
+      expect(await bottomOf(await cloudScreen(el))).toBe(sentence);
+    });
+  });
+
   it("shows only the latest old-server refusal on the Cloud path", async () => {
     const restoreFromCloud = vi
       .fn()
