@@ -560,7 +560,7 @@ describe("till-tender-pay", () => {
     expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
   });
 
-  it("Modes I/T at the order stage show Place + Hold, not Pay/Card", async () => {
+  it("Modes I/T at the order stage show Pay + Card beside Place + Hold", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -570,8 +570,8 @@ describe("till-tender-pay", () => {
     });
     expect(query(el, ".place")).not.toBeNull();
     expect(query(el, ".hold")).not.toBeNull();
-    expect(query(el, ".pay")).toBeNull();
-    expect(query(el, ".pay-card")).toBeNull();
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(query(el, ".pay-card")).not.toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("action.place"));
   });
 
@@ -586,6 +586,62 @@ describe("till-tender-pay", () => {
     expect(query(el, ".place")).not.toBeNull();
     expect(query(el, ".hold")).not.toBeNull();
   });
+
+  describe.each(["ticket_then_pay", "invoice_first"] as const)(
+    "a %s zone at the order stage, which sends to the kitchen without payment",
+    (mode) => {
+      async function mountOrderStage() {
+        const store = new WorkingOrderStore();
+        store.addProduct(cafe, "2"); // total 3.00
+        return mountWidget<TillTenderPay>("till-tender-pay", { store, mode, stage: "order" });
+      }
+
+      it("makes Pay the main action, with Card beside it and Place order and Hold as secondary", async () => {
+        const { el } = await mountOrderStage();
+        expect(query(el, ".pay")!.getAttribute("variant")).toBe("primary");
+        expect(query(el, ".pay")!.textContent).toContain(t("action.pay"));
+        expect(query(el, ".pay-card")).not.toBeNull();
+        expect(query(el, ".place")!.getAttribute("variant")).toBe("secondary");
+        expect(query(el, ".place")!.textContent).toContain(t("action.place"));
+        expect(query(el, ".hold")!.getAttribute("variant")).toBe("secondary");
+      });
+
+      it("pays the open order by cash with confirm-payment, not collect-order", async () => {
+        const { el } = await mountOrderStage();
+        const confirmSpy = vi.fn();
+        const collectSpy = vi.fn();
+        el.addEventListener("confirm-payment", (e) => confirmSpy((e as CustomEvent).detail));
+        el.addEventListener("collect-order", collectSpy);
+        click(el, ".pay");
+        await el.updateComplete;
+        await type(el, "5");
+        click(el, ".confirm");
+        expect(confirmSpy).toHaveBeenCalledWith({ method: "cash", amount: "5" });
+        expect(collectSpy).not.toHaveBeenCalled();
+      });
+
+      it("pays the open order by manual card with confirm-payment, not collect-order", async () => {
+        const { el } = await mountOrderStage();
+        const confirmSpy = vi.fn();
+        const collectSpy = vi.fn();
+        el.addEventListener("confirm-payment", (e) => confirmSpy((e as CustomEvent).detail));
+        el.addEventListener("collect-order", collectSpy);
+        click(el, ".pay-card");
+        await el.updateComplete;
+        click(el, ".confirm");
+        expect(confirmSpy).toHaveBeenCalledWith({ method: "card", amount: "3.00" });
+        expect(collectSpy).not.toHaveBeenCalled();
+      });
+
+      it("still places the order from the secondary Place order button", async () => {
+        const { el } = await mountOrderStage();
+        const placed = vi.fn();
+        el.addEventListener("place-order", placed);
+        click(el, ".place");
+        expect(placed).toHaveBeenCalledOnce();
+      });
+    },
+  );
 
   it("disables Place on an empty basket and while busy", async () => {
     const store = new WorkingOrderStore();

@@ -72,7 +72,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations in the idle Place view (Modes I/T, order stage)", async () => {
+  it("has no violations in the idle Pay view with Place order (Modes I/T, order stage)", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { host } = await mountWidget<TillTenderPay>(

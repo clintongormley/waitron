@@ -747,6 +747,29 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(payments[0]!.linkedToSale).toBe(true);
   });
 
+  it("an open ticket_then_pay counter order paid by card sends its dish once, and a replay sends nothing more", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const station = await defaultStationId(cfg);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    const { deps } = integratedDeps(cfg, suite.db);
+
+    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    expect(await preparationTicketCount(id)).toBe(1);
+    expect(await stationQueueOrderIds(station)).toEqual([id]);
+
+    const replay = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+    expect(replay.outcome).toBe("captured");
+    expect(await preparationTicketCount(id)).toBe(1);
+    expect(await saleCount(id)).toBe(1);
+  });
+
   it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2), records no handover, stays on the station queue", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
@@ -972,6 +995,19 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(payments[0]!.state).toBe("captured");
     expect(payments[0]!.externalRef).toBe(externalRef); // the EXISTING row, not a fresh one
     expect(payments[0]!.linkedToSale).toBe(true);
+  });
+
+  it("recovers a lost capture on an open ticket_then_pay counter order: sends its dish once", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { deps, client } = integratedDeps(cfg, suite.db);
+    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+
+    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    expect(client.lastCreateIntent).toBeUndefined();
+    expect(await saleCount(id)).toBe(1);
+    expect(await preparationTicketCount(id)).toBe(1);
   });
 
   it("recovers a lost capture whose product has since sold out: the card was charged, so it files", async () => {

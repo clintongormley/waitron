@@ -383,9 +383,8 @@ export async function leaveParty(
 
 /**
  * The open bill takes `zoneId`'s service context. A bill entering table service from another mode
- * has its unsent dishes, which a pay-first or invoice-first bill sends when it is paid (all but a
- * dish no station can take) or placed, sent now as a round is: table service sends a dish when it
- * is ordered, and none when the bill is paid. As placing does, the move is refused
+ * has its unsent dishes sent now, as a round is: table service sends a dish when it is ordered, and
+ * none when the bill is paid. As placing does, the move is refused
  * `product.unavailable` when one cannot be sold now.
  */
 async function adoptZone(

@@ -4978,12 +4978,37 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     lists the orders still waiting (sent, not paid; handed over, not paid; paid, not handed over)
     with Hand over and Pay. Server:
     `GET /api/orders/counter-waiting` and `GET /api/working-orders/:id/placed`. Open:
-    - **OPEN, queued as lane B item B26 (owner, 2026-10-01) — Pay is not the main action in a zone
-      that sends without payment.** The till keeps
-      "Place order" there. Making Pay the main action needs an open order's dishes sent to the
-      kitchen when it is paid in those modes, which today happens only for a pay-first order; that
-      would change the setup of "refuses a settled order that was never fired (ticket.not_fired)"
-      in `apps/server/src/working-order.pay-and-dispatch.test.ts`, so B16 left it.
+    - **DONE — Pay is the main action in a zone that sends without payment** (owner, 2026-10-01;
+      lane B item B26). At the order stage of a `ticket_then_pay` or `invoice_first` zone the till
+      shows Pay and Card first, then Place order and Hold as secondary actions. Paying an open
+      counter order there sends its unsent dishes to the kitchen in the payment's own transaction,
+      the way a pay-first order's are sent (`fireDishesAtPayment`, `apps/server/src/till-sale.ts`):
+      a zoned order's dish no station can take is skipped and raised as `route.dish_not_sent`, and
+      a later course's dish is held for its course, unstamped — unlike Place order, which stamps
+      every line sent. A table bill still sends nothing at payment. A settled order with no ticket is
+      still refused at handover (`ticket.not_fired`) when its only dishes need no preparation or
+      no station could take them. Paying an invoice-first order at the order stage issues its
+      invoice then, so the till offers its original receipt. Existing tests changed: the set-up
+      (not the assertions) of "refuses a settled order that was never fired (ticket.not_fired) —
+      nothing on the kitchen queue to hand over" in
+      `apps/server/src/working-order.pay-and-dispatch.test.ts`, approved by the owner in the item's
+      brief. AWAITING OWNER APPROVAL: the set-up (no `expect` line changed) of "sendToPrep stamps
+      the settled order's lines sent as it fires them" in
+      `apps/server/src/working-order.pay-and-dispatch.test.ts`; "fires the order to its station
+      queue and answers 200 with an empty body" and "fires a paid order whose product has since
+      sold out: a settled order's lines cannot be removed" in
+      `apps/server/src/till-api.fiscal-sale-paths.test.ts`; and "leaves out a handed-over paid
+      order, an open order, a table bill, an abandoned order and a paid order with nothing fired"
+      in `apps/server/src/counter-handover.test.ts`. AWAITING OWNER APPROVAL: "Modes I/T at the
+      order stage show Place + Hold, not Pay/Card" in `apps/till/src/widgets/tender-pay.test.ts`,
+      renamed "Modes I/T at the order stage show Pay + Card beside Place + Hold", now asserts Pay
+      and Card are shown where it asserted they were absent. Renamed only (body and assertions
+      unchanged): "has no violations in the idle Place view (Modes I/T, order stage)" in
+      `apps/till/src/widgets/tender-pay.a11y.test.ts`, now "has no violations in the idle Pay view
+      with Place order (Modes I/T, order stage)"; and the describe block "paying a pay-first order
+      whose dish no kitchen station can take" in `apps/server/src/till-api.unroutable-dish.test.ts`,
+      now "paying a pay-first order, or an open counter order in a zone that sends before payment,
+      whose dish no kitchen station can take" (its existing cases unchanged; one case added).
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
@@ -5720,7 +5745,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - A move between service modes sends no dish twice. A dish one mode left unsent is given to the
       kitchen by the next: at a move into table service from another mode, as a round is (a later
       course's dish held for its course), or when the pay-first bill is paid or the invoice-first one
-      placed. Paying a pay-first bill and placing an invoice-first one send only the dishes not yet sent, so a table bill
+      placed (2026-10-01, B26: a bill moved to an invoice-first or ticket-then-pay counter has left
+      its party, so paying it before it is placed sends them too). Paying a pay-first bill and placing an invoice-first one send only the dishes not yet sent, so a table bill
       whose dishes were sent can be moved to such a counter and still be paid (by cash, or by a
       card already at the reader when it moved) or placed, getting its one invoice. Before this
       fix the payment was refused `ticket.already_fired` after the card had been charged. An open

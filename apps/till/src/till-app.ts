@@ -2138,7 +2138,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Settles the basket (prepay). The ticket's lines come from the server result, so a rejection leaves
+   * Pays the basket: a prepay basket, or an open order at the order stage of a zone that sends to the
+   * kitchen without payment. The ticket's lines come from the server result, so a rejection leaves
    * the basket untouched on the counter.
    */
   async #onConfirmPayment(event: Event, retried = false): Promise<void> {
@@ -2152,6 +2153,7 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
+    const sendsToKitchen = this.#paySendsToKitchen();
     this.errorKey = undefined;
     let reachedFiscal = false;
     let paidMeanwhile = false;
@@ -2165,6 +2167,7 @@ export class TillApp extends LitElement {
       this.#showTicket(id);
       // A just-paid retrieved order must drop off the held list.
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+      if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
@@ -2207,6 +2210,9 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
+    const sendsToKitchen = this.#paySendsToKitchen();
+    // Paying an invoice-first order before it is placed issues its invoice now.
+    const invoiceIssuedNow = this.stage === "order" || this.#basketFlow() !== "invoice_first";
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     let reachedFiscal = false;
@@ -2228,8 +2234,9 @@ export class TillApp extends LitElement {
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        this.#showTicket(id, this.#basketFlow() !== "invoice_first");
+        this.#showTicket(id, invoiceIssuedNow);
         await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+        if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
         await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
       } else {
         this.cardOutcome = out.outcome;
@@ -2530,6 +2537,11 @@ export class TillApp extends LitElement {
   /** The mode the basket's pay controls and receipt follow. */
   #basketFlow(): OrderFlow {
     return this.collectFlow ?? this.orderFlow;
+  }
+
+  /** Paying an open order in a zone that sends to the kitchen without payment sends its dishes. */
+  #paySendsToKitchen(): boolean {
+    return this.stage === "order" && this.#basketFlow() !== "prepay";
   }
 
   /** The floor's station summary names the station to open; the station screen reads it from the

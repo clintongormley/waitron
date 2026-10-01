@@ -4813,7 +4813,10 @@ export async function cancelPlacedOrder(
   });
 }
 
-/** Fire a settled prepay order. The unique item-per-line constraint refuses a repeated fire. */
+/**
+ * Send a settled order's lines to the kitchen through `fireLines`. The unique item-per-line
+ * constraint refuses the send if any line already has a ticket item.
+ */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
@@ -4923,7 +4926,7 @@ async function sentUnpaidCounterOrder(
 }
 
 /** An order with no frozen mode takes the venue's order flow. */
-function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
+export function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
   return PAY_AFTER_SENDING.has(mode ?? cfg.orderFlow);
 }
 

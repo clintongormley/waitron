@@ -29,12 +29,13 @@ import { placeGroups } from "./order-groups.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { markCollected, parkOrder } from "./working-order.js";
 
-// A pay-first order is sent to the kitchen when it is paid. A dish no station can take (its route's
-// station switched off with no fallback, or no route at all) does not refuse the payment: the
-// money is taken and filed, that dish is not sent, and one `route.dish_not_sent` alert per sale
-// names it and the zone — or, if the database refuses that alert, a log line under that code does.
+// A pay-first order, or an open counter order in a zone that sends before payment, is sent to the
+// kitchen when it is paid. A zoned order's dish no station can take (its route's station switched
+// off with no fallback, or no route at all) does not refuse the payment: the money is taken and
+// filed, that dish is not sent, and one `route.dish_not_sent` alert per sale names it and the zone
+// — or, if the database refuses that alert, a log line under that code does.
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -293,7 +294,7 @@ function dishNotSent(workingOrderId: string, dishes: string, orderNumber: number
   };
 }
 
-describe("paying a pay-first order whose dish no kitchen station can take", () => {
+describe("paying a pay-first order, or an open counter order in a zone that sends before payment, whose dish no kitchen station can take", () => {
   it("sends a dish whose station is switched off to the next matching route whose station is on", async () => {
     const made = await dish("Steak");
     const closed = await station("Closed grill");
@@ -367,6 +368,46 @@ describe("paying a pay-first order whose dish no kitchen station can take", () =
     expect(await alertsFor(await saleOf(id))).toEqual([
       expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), null)),
     ]);
+  });
+
+  it("does the same for a counter order never sent in a zone that sends before payment, which then has nothing to hand over", async () => {
+    const made = await strandedDish("Croqueta");
+    const zoneId = await inTx(v, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: `Barra ticket ${randomUUID()}` })
+        .returning({ id: floorZones.id });
+      return (
+        await offerProducts(tx, v.cfg, {
+          zone: { zoneId: zone!.id },
+          serviceMode: "ticket_then_pay",
+          routes: "none",
+          productIds: [made.productId],
+        })
+      ).zoneId;
+    });
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+      operatorId: OPERATOR,
+    });
+
+    const res = await payCash(await enrolTill(), id);
+
+    expect(res.status).toBe(200);
+    expect(await statusOf(id)).toBe("settled");
+    expect(await kitchenItems(id)).toEqual([]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining({
+        code: "route.dish_not_sent",
+        params: expect.objectContaining({ zoneId, dishes: made.name }),
+      }),
+    ]);
+    await expect(markCollected({ db: suite.db }, v.cfg, id)).rejects.toMatchObject({
+      code: "ticket.not_fired",
+    });
   });
 
   it("sends the dishes a station can take and names only the others", async () => {

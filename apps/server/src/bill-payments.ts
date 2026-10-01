@@ -59,7 +59,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueBillPaymentDrawer, enqueueSaleReceipt } from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
 import {
-  firePrepayOrder,
+  fireDishesAtPayment,
   readBillTenderLines,
   readSettledTicket,
   readTenderBlock,
@@ -642,7 +642,7 @@ async function issueWhenFullyPaid(
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
   const notYet = { invoice: null, total: options.total };
   const [order] = await tx
-    .select({ status: workingOrders.status })
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.status !== "open") return notYet;
@@ -714,7 +714,7 @@ async function issueWhenFullyPaid(
     }
   }
 
-  const notSent = await firePrepayOrder(tx, cfg, workingOrderId);
+  const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, order.partyId);
   const settledAt = received
     .map((row) => row.receivedAt!)
     .reduce((latest, at) => (at > latest ? at : latest));

@@ -1036,6 +1036,71 @@ describe("the dishes of an open bill moved between service modes", () => {
     expect(tickets[0]!.firedAt).not.toBeNull();
   });
 
+  /** An unsent Tarta parked in a ticket_then_pay counter zone, then moved to a party at a table
+   *  with no zone, so the bill keeps the counter zone; and `walkUp`, the same dish parked in the
+   *  same zone with no party, whose payment shows the dish could have been sent. */
+  async function partyBillInTicketZone(name: string) {
+    const ticketZone = await inTx(v, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: `Barra ${name}` })
+        .returning({ id: floorZones.id });
+      // Tarta alone and no routes written, so the suite's other routes stand.
+      return offerProducts(tx, v.cfg, {
+        zone: { zoneId: zone!.id },
+        serviceMode: "ticket_then_pay",
+        productIds: [v.productId("Tarta")],
+        routes: "none",
+      });
+    });
+    const [orderId, walkUp] = [randomUUID(), randomUUID()];
+    for (const id of [orderId, walkUp]) {
+      await parkOrder({ db: v.db }, v.cfg, {
+        id,
+        zoneId: ticketZone.zoneId,
+        lines: [{ menuItemId: ticketZone.offerFor(v.productId("Tarta")), quantity: "1" }],
+        operatorId: OPERATOR,
+      });
+    }
+    const bare = await inTx(v, (tx) => createTable(tx, v.cfg, { label: `Mesa ${name}` }));
+
+    await move(orderId, { tableId: bare.id });
+    return { orderId, walkUp, zoneId: ticketZone.zoneId };
+  }
+
+  async function expectSentOnce(billId: string) {
+    expect((await billRow(v, billId)).status).toBe("settled");
+    const tickets = await ticketsOf(billId);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0]!.firedAt).not.toBeNull();
+  }
+
+  it("sends nothing when it pays a party's bill that keeps its send-before-payment counter zone at a table with no zone", async () => {
+    const { orderId, walkUp, zoneId } = await partyBillInTicketZone("ticket sin zona");
+    expect(await zoneOf(v, orderId)).toBe(zoneId);
+    expect((await billRow(v, orderId)).partyId).not.toBeNull();
+    expect(await ticketsOf(orderId)).toEqual([]);
+    await cashContribution(v, orderId, "15.00");
+    await cashContribution(v, walkUp, "15.00");
+
+    expect((await billRow(v, orderId)).status).toBe("settled");
+    expect(await ticketsOf(orderId)).toEqual([]);
+    await expectSentOnce(walkUp);
+  });
+
+  it("sends nothing when it pays, in full at the till, a party's bill that keeps its ticket_then_pay counter zone at a table with no zone", async () => {
+    const { orderId, walkUp, zoneId } = await partyBillInTicketZone("ticket sin zona, pago entero");
+    expect(await zoneOf(v, orderId)).toBe(zoneId);
+    expect((await billRow(v, orderId)).partyId).not.toBeNull();
+
+    await pay(v, orderId, "15.00");
+    await pay(v, walkUp, "15.00");
+
+    expect((await billRow(v, orderId)).status).toBe("settled");
+    expect(await ticketsOf(orderId)).toEqual([]);
+    await expectSentOnce(walkUp);
+  });
+
   it("does not send a table bill's sent dish again when it is paid at a pay-first counter", async () => {
     const ana = await seat(v, await v.table("Mesa envío 4"));
     await order(v, ana.tabId, "Burger");

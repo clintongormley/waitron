@@ -100,7 +100,8 @@ takes effect. Issuing the invoice takes one clock reading, prices every line's c
 force on that reading's local calendar date, and dates the invoice with the same reading
 (`issueMoment`, `apps/server/src/issue-moment.ts`). An order open across a change therefore pays the
 new rate, and publishing a menu early cannot bring a rate forward. Invoice-first issues at placing,
-so it takes the placing day's rate; an integrated card payment fixes its gross lines before the
+so it takes the placing day's rate, or, when the order is paid before it is placed, at payment,
+taking that day's rate; an integrated card payment fixes its gross lines before the
 reader and takes the rate when its record is issued after it (`finalizeCapture`,
 `apps/server/src/till-sale.ts`). The
 filed `sale_lines.vat_rate` is the percentage actually filed. A reprint or a replay rebuilds its
