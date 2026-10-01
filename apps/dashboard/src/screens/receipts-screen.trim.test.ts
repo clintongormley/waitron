@@ -18,6 +18,8 @@ const PREVIEW = {
     unsupported: false,
   },
   marks: { headerSubtitle: null, footerMessage: null },
+  paperWidth: "80mm",
+  paperWidths: ["80mm"],
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {

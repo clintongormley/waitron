@@ -24,6 +24,8 @@ const PREVIEW = {
     unsupported: false,
   },
   marks: { headerSubtitle: null, footerMessage: null },
+  paperWidth: "80mm",
+  paperWidths: ["80mm"],
 };
 function api(overrides: Record<string, unknown> = {}): DashboardApi {
   return {

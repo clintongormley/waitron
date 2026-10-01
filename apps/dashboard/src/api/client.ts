@@ -369,6 +369,10 @@ export interface BlockRange {
 export interface ReceiptPreview {
   preview: PrintJobPreview;
   marks: { headerSubtitle: BlockRange | null; footerMessage: BlockRange | null };
+  /** The width drawn at. */
+  paperWidth: PrintPaperWidth;
+  /** The widths of the location's tills' receipt printers, narrowest first; empty when none. */
+  paperWidths: PrintPaperWidth[];
 }
 
 export interface TestEmailAddress {
@@ -1977,10 +1981,11 @@ export class DashboardApi {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
   }
 
-  /** Draws a sample receipt with this trim; saves and prints nothing. */
-  previewReceipt(receipt: ReceiptConfig): Promise<ReceiptPreview> {
+  /** Draws a sample receipt with this trim, at the given paper width if any; saves and prints nothing. */
+  previewReceipt(receipt: ReceiptConfig, paperWidth?: PrintPaperWidth): Promise<ReceiptPreview> {
+    const width = paperWidth === undefined ? "" : `&paperWidth=${encodeURIComponent(paperWidth)}`;
     return this.#request<ReceiptPreview>(
-      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}`,
+      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}`,
       "GET",
     );
   }

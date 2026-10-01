@@ -21,6 +21,8 @@ function preview(config: ReceiptConfig): ReceiptPreview {
       headerSubtitle: config.headerSubtitle ? { start: 1, end: 2 } : null,
       footerMessage: null,
     },
+    paperWidth: "80mm",
+    paperWidths: ["80mm"],
   };
 }
 
@@ -116,6 +118,25 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     expect(
       el.shadowRoot!.querySelector("[data-mark=headerSubtitle]")!.hasAttribute("data-active"),
     ).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with the paper width dropdown shown", async () => {
+    const api = stubApi({
+      previewReceipt: vi.fn(async (config: ReceiptConfig): Promise<ReceiptPreview> => ({
+        ...preview(config),
+        paperWidths: ["58mm", "80mm"],
+      })),
+    });
+    const { el, host } = await mountWidget<ReceiptsScreen>(
+      "dashboard-receipts-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("select[name=paperWidth]")).not.toBeNull(),
+    );
     await expectNoA11yViolations(host);
   });
 

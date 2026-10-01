@@ -228,7 +228,7 @@ describe("GET /management-api/receipt-preview", () => {
     });
   });
 
-  it("takes the receipt printer of the till first by name when several tills have one", async () => {
+  it("takes the receipt printer of the till first by name when two tills' paper widths tie", async () => {
     await withPrinters(
       [
         { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
@@ -238,6 +238,147 @@ describe("GET /management-api/receipt-preview", () => {
         expect((await rendered({})).preview.widthDots).toBe(360);
       },
     );
+  });
+
+  describe("paper widths", () => {
+    const at = (query: string) =>
+      previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`).then(async (response) => {
+        expect(response.status).toBe(200);
+        return (await response.json()) as ReceiptPreviewResponse;
+      });
+
+    it("offers each width the location's receipt printers have, narrowest first, and draws at the one most tills use", async () => {
+      await withPrinters(
+        [
+          { till: "Barra", paperWidth: "58mm", resolution: "180dpi" },
+          { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+          { till: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
+        ],
+        async () => {
+          const result = await at("");
+          expect([result.paperWidths, result.paperWidth]).toEqual([["58mm", "80mm"], "80mm"]);
+          expect([result.preview.widthDots, result.preview.columns]).toEqual([576, 42]);
+        },
+      );
+    });
+
+    it("counts a printer two tills share once for each till", async () => {
+      await withPrinters(
+        [
+          { till: "Barra", paperWidth: "58mm", resolution: "180dpi" },
+          { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+        ],
+        async () => {
+          await withTransaction(suite.db, async (tx) => {
+            const [shared] = await tx
+              .select({ printerId: tills.receiptPrinterId })
+              .from(tills)
+              .where(eq(tills.name, "Caja 1"));
+            await tx.insert(tills).values({
+              locationId: venue.cfg.locationId,
+              name: "Caja 2",
+              receiptPrinterId: shared!.printerId,
+            });
+          });
+          expect((await at("")).paperWidth).toBe("80mm");
+        },
+      );
+    });
+
+    it("draws at the width asked for, at the resolution of that width's printer", async () => {
+      await withPrinters(
+        [
+          { till: "Barra", paperWidth: "58mm", resolution: "180dpi" },
+          { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+          { till: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
+        ],
+        async () => {
+          const result = await at("&paperWidth=58mm");
+          expect(result.paperWidth).toBe("58mm");
+          expect([result.preview.widthDots, result.preview.columns]).toEqual([360, 30]);
+        },
+      );
+    });
+
+    it("breaks a tie between widths by the till first by name, and says which width it drew", async () => {
+      await withPrinters(
+        [
+          { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+          { till: "Barra", paperWidth: "58mm", resolution: "180dpi" },
+        ],
+        async () => {
+          const result = await at("");
+          expect([result.paperWidths, result.paperWidth]).toEqual([["58mm", "80mm"], "58mm"]);
+        },
+      );
+    });
+
+    it("takes a width's resolution from the till first by name with that width", async () => {
+      await withPrinters(
+        [
+          { till: "Barra", paperWidth: "80mm", resolution: "180dpi" },
+          { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+          { till: "Caja 2", paperWidth: "58mm", resolution: "203dpi" },
+        ],
+        async () => {
+          const result = await at("&paperWidth=80mm");
+          expect(result.paperWidths).toEqual(["58mm", "80mm"]);
+          expect(result.preview.widthDots).toBe(512);
+          expect((await at("")).preview.widthDots).toBe(512);
+        },
+      );
+    });
+
+    it("offers one width when every receipt printer has it", async () => {
+      await withPrinters(
+        [{ till: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
+        async () => {
+          const result = await at("");
+          expect([result.paperWidths, result.paperWidth]).toEqual([["58mm"], "58mm"]);
+        },
+      );
+    });
+
+    it("offers no width, and draws at 80 mm, when the location has no receipt printer", async () => {
+      const result = await at("");
+      expect([result.paperWidths, result.paperWidth]).toEqual([[], "80mm"]);
+    });
+
+    it("leaves an inactive printer's width out", async () => {
+      await withPrinters(
+        [
+          { till: "Barra", paperWidth: "58mm", resolution: "203dpi", active: false },
+          { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+        ],
+        async () => {
+          const result = await at("");
+          expect([result.paperWidths, result.paperWidth]).toEqual([["80mm"], "80mm"]);
+        },
+      );
+    });
+
+    it("draws as if no width were asked for, and says which width it drew, when asked for a width no receipt printer has any more", async () => {
+      await withPrinters(
+        [{ till: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
+        async () => {
+          const result = await at("&paperWidth=80mm");
+          expect(result.paperWidth).toBe("58mm");
+          expect([result.preview.widthDots, result.preview.columns]).toEqual([384, 30]);
+        },
+      );
+    });
+
+    it.each([
+      ["a width that is not a paper width", "&paperWidth=99mm"],
+      ["an empty width", "&paperWidth="],
+      ["a width given twice", "&paperWidth=58mm&paperWidth=58mm"],
+    ])("refuses %s", async (_, query) => {
+      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "paperWidth" } },
+      });
+    });
   });
 
   it("formats the sample in the location's receipt language", async () => {
