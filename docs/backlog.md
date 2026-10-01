@@ -5725,7 +5725,7 @@ ongoing overhaul listed at the top of Track A.
   EN and ES for the sign-in steps and the passkey dialog) were taken before them, on 05974c855.
 
 - **A form in a modal stops at one standard width instead of running edge to edge (C105, owner
-  2026-09-30) — DONE (2026-10-01).** On a wide window the printer calibration wizard's selects and
+  2026-09-30) — DONE (2026-10-01, #965).** On a wide window the printer calibration wizard's selects and
   its "Print block" button ran the whole width of the modal. The owner chose one standard form width
   inside the one standard modal, rather than a narrow and a wide modal. `--wt-form-max-width`
   (36rem, 576px at the default text size) is that width: `wt-modal` hands it to its body, and every
