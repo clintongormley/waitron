@@ -1101,6 +1101,52 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(found).toMatchObject({ name, displayOrder: 2, isDefault: false, active: true });
   });
 
+  it("POST stores all timing thresholds atomically and rejects a partial or unordered set without a row", async () => {
+    const name = unique("Atomic");
+    const created = await req(
+      "/stations",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          displayOrder: 2,
+          warmAfterMinutes: 3,
+          overdueAfterMinutes: 8,
+          forgottenAfterMinutes: 12,
+        }),
+      },
+      managerCookie,
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const row = await suite.db.execute<{
+      warm_after_minutes: number;
+      overdue_after_minutes: number;
+      forgotten_after_minutes: number;
+    }>(
+      sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
+        from kitchen_stations where id = ${id}`,
+    );
+    expect(row.rows[0]).toMatchObject({
+      warm_after_minutes: 3,
+      overdue_after_minutes: 8,
+      forgotten_after_minutes: 12,
+    });
+    for (const thresholds of [
+      { warmAfterMinutes: 3 },
+      { warmAfterMinutes: 9, overdueAfterMinutes: 8, forgottenAfterMinutes: 12 },
+    ]) {
+      const rejectedName = unique("Rejected");
+      const rejected = await req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name: rejectedName, ...thresholds }) },
+        managerCookie,
+      );
+      expect(rejected.status).toBe(400);
+      expect((await listStations()).some((station) => station.name === rejectedName)).toBe(false);
+    }
+  });
+
   it("POST with a duplicate name → 409 station.name_taken", async () => {
     const name = unique("dup");
     await createStation(name);

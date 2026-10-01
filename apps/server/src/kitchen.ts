@@ -70,7 +70,16 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
 export async function createStation(
   tx: Transaction,
   cfg: TillConfig,
-  input: { name: string; displayOrder?: number; isDefault?: boolean },
+  input: {
+    name: string;
+    displayOrder?: number;
+    isDefault?: boolean;
+    thresholds?: {
+      warmAfterMinutes: number;
+      overdueAfterMinutes: number;
+      forgottenAfterMinutes: number;
+    };
+  },
 ): Promise<{ id: string }> {
   if (input.isDefault) {
     await clearDefault(tx, cfg);
@@ -83,6 +92,7 @@ export async function createStation(
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
         isDefault: input.isDefault ?? false,
+        ...input.thresholds,
       })
       .returning({ id: kitchenStations.id });
     return { id: row!.id };

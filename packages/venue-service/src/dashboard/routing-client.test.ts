@@ -55,11 +55,16 @@ it("writes station changes to core and claims to venue-service", async () => {
     target: { kind: "station", stationId: "bar" },
   });
   expect(request.mock.calls).toEqual([
-    ["/management-api/stations", "POST", { name: "Bar", displayOrder: 2 }],
     [
-      "/management-api/stations/new-bar",
-      "PATCH",
-      { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+      "/management-api/stations",
+      "POST",
+      {
+        name: "Bar",
+        displayOrder: 2,
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      },
     ],
     [
       "/management-api/stations/bar",
@@ -94,21 +99,29 @@ it("assigns an unfiled product through the prioritized assignment route", async 
   );
 });
 
-it("carries the created station id when its threshold patch fails", async () => {
-  const request = vi.fn(async (path: string, method: string) => {
-    if (path === "/management-api/stations" && method === "POST") return { id: "new-bar" };
-    if (path === "/management-api/stations/new-bar" && method === "PATCH")
-      throw { code: "management.request_invalid" };
-  });
+it("creates station and its timing thresholds with one POST", async () => {
+  const request = vi.fn(async () => ({ id: "new-bar" }));
   const api = new PrepStationsApi(request as DashboardRequest);
   await expect(
     api.createStation({
       name: "Bar",
-      displayOrder: 0,
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 10,
-      forgottenAfterMinutes: 15,
+      displayOrder: 2,
+      warmAfterMinutes: 3,
+      overdueAfterMinutes: 8,
+      forgottenAfterMinutes: 12,
     }),
-  ).rejects.toMatchObject({ createdStationId: "new-bar" });
-  expect(request).toHaveBeenCalledTimes(2);
+  ).resolves.toEqual({ id: "new-bar" });
+  expect(request.mock.calls).toEqual([
+    [
+      "/management-api/stations",
+      "POST",
+      {
+        name: "Bar",
+        displayOrder: 2,
+        warmAfterMinutes: 3,
+        overdueAfterMinutes: 8,
+        forgottenAfterMinutes: 12,
+      },
+    ],
+  ]);
 });

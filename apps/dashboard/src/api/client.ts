@@ -2091,6 +2091,9 @@ export class DashboardApi {
     name: string;
     displayOrder?: number;
     isDefault?: boolean;
+    warmAfterMinutes?: number;
+    overdueAfterMinutes?: number;
+    forgottenAfterMinutes?: number;
   }): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/stations", "POST", input);
   }

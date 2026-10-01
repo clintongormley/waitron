@@ -10,12 +10,11 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { RouteTarget } from "../routing.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
-import {
-  StationThresholdPatchError,
-  type PrepStation,
-  type PrepStationsApi,
-  type PrepStationsView,
-  type StationInput,
+import type {
+  PrepStation,
+  PrepStationsApi,
+  PrepStationsView,
+  StationInput,
 } from "./routing-client.js";
 import { t } from "./strings.js";
 
@@ -257,12 +256,7 @@ export class PrepStationsScreen extends LitElement {
       this.editor = undefined;
       await this.#load();
     } catch (e) {
-      if (e instanceof StationThresholdPatchError) {
-        this.editor = { kind: "station", id: e.createdStationId };
-        await this.#load();
-        this.error = t("prep.created_needs_thresholds");
-      } else if (codeOf(e) === "station.name_taken")
-        this.fieldError = { name: t("prep.name_taken") };
+      if (codeOf(e) === "station.name_taken") this.fieldError = { name: t("prep.name_taken") };
       else this.error = t("prep.save_error");
     } finally {
       this.busy = false;

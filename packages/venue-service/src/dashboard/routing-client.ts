@@ -21,14 +21,6 @@ export interface PrepStationsView {
   stationPrinters: { stationId: string; printerId: string }[];
   devices: { id: string; label: string; stationId: string | null; kind: string; active: boolean }[];
 }
-export class StationThresholdPatchError extends Error {
-  constructor(
-    readonly createdStationId: string,
-    cause: unknown,
-  ) {
-    super("Station created but thresholds could not be saved", { cause });
-  }
-}
 export type StationInput = {
   name: string;
   displayOrder: number;
@@ -70,20 +62,7 @@ export class PrepStationsApi {
     return { routing, stations, categories, zones, products, printers, stationPrinters, devices };
   }
   async createStation(input: StationInput): Promise<{ id: string }> {
-    const created = await this.request<{ id: string }>("/management-api/stations", "POST", {
-      name: input.name,
-      displayOrder: input.displayOrder,
-    });
-    try {
-      await this.request(`/management-api/stations/${created.id}`, "PATCH", {
-        warmAfterMinutes: input.warmAfterMinutes,
-        overdueAfterMinutes: input.overdueAfterMinutes,
-        forgottenAfterMinutes: input.forgottenAfterMinutes,
-      });
-    } catch (cause) {
-      throw new StationThresholdPatchError(created.id, cause);
-    }
-    return created;
+    return this.request<{ id: string }>("/management-api/stations", "POST", input);
   }
   updateStation(id: string, input: StationInput): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", input);

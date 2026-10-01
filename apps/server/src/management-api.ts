@@ -391,6 +391,45 @@ function parseThresholdMinutes(value: unknown, field: string): number | undefine
   return value;
 }
 
+function parseStationThresholds(body: {
+  warmAfterMinutes?: unknown;
+  overdueAfterMinutes?: unknown;
+  forgottenAfterMinutes?: unknown;
+}):
+  | {
+      warmAfterMinutes: number;
+      overdueAfterMinutes: number;
+      forgottenAfterMinutes: number;
+    }
+  | undefined {
+  const warmAfterMinutes = parseThresholdMinutes(body.warmAfterMinutes, "warmAfterMinutes");
+  const overdueAfterMinutes = parseThresholdMinutes(
+    body.overdueAfterMinutes,
+    "overdueAfterMinutes",
+  );
+  const forgottenAfterMinutes = parseThresholdMinutes(
+    body.forgottenAfterMinutes,
+    "forgottenAfterMinutes",
+  );
+  if (
+    warmAfterMinutes === undefined &&
+    overdueAfterMinutes === undefined &&
+    forgottenAfterMinutes === undefined
+  )
+    return undefined;
+  if (
+    warmAfterMinutes === undefined ||
+    overdueAfterMinutes === undefined ||
+    forgottenAfterMinutes === undefined ||
+    warmAfterMinutes >= overdueAfterMinutes ||
+    overdueAfterMinutes >= forgottenAfterMinutes
+  )
+    throw new AppError("management.request_invalid", {
+      field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes",
+    });
+  return { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes };
+}
+
 /**
  * Shape only: absent or `null` is `null`; otherwise an integer number in int4 range. The domain rule
  * is `validateInactivityTimeout`'s (`@waitron/layouts`), which the store applies.
@@ -1618,6 +1657,9 @@ export function mountManagementApi(
         name?: unknown;
         displayOrder?: unknown;
         isDefault?: unknown;
+        warmAfterMinutes?: unknown;
+        overdueAfterMinutes?: unknown;
+        forgottenAfterMinutes?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1632,8 +1674,9 @@ export function mountManagementApi(
         isDefault = body.isDefault;
       }
       const { name } = body;
+      const thresholds = parseStationThresholds(body);
       const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createStation(tx, cfg, { name, displayOrder, isDefault }),
+        createStation(tx, cfg, { name, displayOrder, isDefault, thresholds }),
       );
       return c.json(result, 201);
     }),
@@ -1688,35 +1731,7 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "active" });
         patch.active = body.active;
       }
-      const warmAfterMinutes = parseThresholdMinutes(body.warmAfterMinutes, "warmAfterMinutes");
-      const overdueAfterMinutes = parseThresholdMinutes(
-        body.overdueAfterMinutes,
-        "overdueAfterMinutes",
-      );
-      const forgottenAfterMinutes = parseThresholdMinutes(
-        body.forgottenAfterMinutes,
-        "forgottenAfterMinutes",
-      );
-      if (
-        warmAfterMinutes !== undefined ||
-        overdueAfterMinutes !== undefined ||
-        forgottenAfterMinutes !== undefined
-      ) {
-        if (
-          warmAfterMinutes === undefined ||
-          overdueAfterMinutes === undefined ||
-          forgottenAfterMinutes === undefined ||
-          warmAfterMinutes >= overdueAfterMinutes ||
-          overdueAfterMinutes >= forgottenAfterMinutes
-        ) {
-          throw new AppError("management.request_invalid", {
-            field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes",
-          });
-        }
-        patch.warmAfterMinutes = warmAfterMinutes;
-        patch.overdueAfterMinutes = overdueAfterMinutes;
-        patch.forgottenAfterMinutes = forgottenAfterMinutes;
-      }
+      Object.assign(patch, parseStationThresholds(body));
       if (
         patch.name === undefined &&
         patch.displayOrder === undefined &&

@@ -1,14 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
-import {
-  StationThresholdPatchError,
-  type PrepStationsApi,
-  type PrepStationsView,
-} from "./routing-client.js";
+import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
-import { t } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 afterEach(() => {
@@ -378,46 +373,4 @@ it("guards repeated Enter saves while a station write is pending and allows retr
   enter();
   await settle(el);
   expect(updateStation).toHaveBeenCalledTimes(2);
-});
-it("recovers from a failed create threshold patch by editing the created station", async () => {
-  const createdStationId = "terrace";
-  const createStation = vi
-    .fn()
-    .mockRejectedValue(
-      new StationThresholdPatchError(createdStationId, { code: "management.request_invalid" }),
-    );
-  const updateStation = vi.fn().mockResolvedValue(undefined);
-  const a = api({
-    createStation,
-    updateStation,
-    load: vi
-      .fn()
-      .mockResolvedValueOnce(view)
-      .mockResolvedValue({
-        ...view,
-        stations: [
-          ...view.stations,
-          { ...view.stations[0]!, id: createdStationId, name: "Terrace", isDefault: false },
-        ],
-      }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="new-station"]')!.click();
-  await settle(el);
-  q(el, '[data-test="name"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
-  );
-  q(el, '[data-test="save-station"]')!.click();
-  await settle(el);
-  expect(q(el, "wt-modal")?.getAttribute("heading")).toBe(t("prep.edit_station"));
-  q(el, '[data-test="save-station"]')!.click();
-  await settle(el);
-  expect(createStation).toHaveBeenCalledTimes(1);
-  expect(updateStation).toHaveBeenCalledWith(createdStationId, {
-    name: "Terrace",
-    displayOrder: 0,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  });
 });
