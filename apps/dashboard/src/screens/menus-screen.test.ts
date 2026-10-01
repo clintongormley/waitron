@@ -3772,6 +3772,72 @@ describe("home page", () => {
     expect(writeCalls(client)).toEqual(["replaceHomeTile"]);
   });
 
+  it.each([
+    { code: "server.internal", params: {}, field: false },
+    {
+      code: "menu.shortcut_unreachable",
+      params: { layoutId: "l-home", ref: { kind: "section", sectionId: "s-beer" } },
+      field: true,
+    },
+    {
+      code: "menu.shortcut_unreachable",
+      params: { layoutId: "l-home", ref: { kind: "section", sectionId: "s-other" } },
+      field: false,
+    },
+    { code: "menu_section.not_found", params: { sectionId: "s-beer" }, field: true },
+    { code: "menu_section.member_duplicate", params: { sectionId: "l-home" }, field: false },
+  ])(
+    "retains a refused replacement ($code, field=$field) at its picker and closes after success before a failed refresh",
+    async ({ code, params, field }) => {
+      const client = api({ replaceHomeTile: vi.fn().mockRejectedValue({ code, params }) });
+      const el = await mountHome(client);
+      const editor = homeEditor(el);
+      const list = editor.shadowRoot!.querySelector<
+        HTMLElementTagNameMap["dashboard-member-list-editor"]
+      >("dashboard-member-list-editor")!;
+      list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-chips"]')!.click();
+      await list.updateComplete;
+      const select = list.shadowRoot!.querySelector<HTMLSelectElement>(
+        'select[name="member-ref"]',
+      )!;
+      select.value = "section:s-beer";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await list.updateComplete;
+      const replaceButton = list
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+      replaceButton.focus();
+      replaceButton.click();
+      await vi.waitFor(() => expect(client.replaceHomeTile).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(editor.busy).toBe(false));
+      await list.updateComplete;
+      expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).not.toBeNull();
+      expect(select.value).toBe("section:s-beer");
+      const actions =
+        list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+          "wt-form-actions",
+        )!;
+      expect(actions.error).toBe(field ? t("form.fix_fields") : codeMessage(code));
+      if (field) {
+        expect(text(list.shadowRoot!.querySelector('[data-test="add-error"]'))).toBe(
+          codeMessage(code),
+        );
+        expect(list.shadowRoot!.activeElement).toBe(select);
+      }
+      expect(
+        list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!
+          .disabled,
+      ).toBe(false);
+      expect(q(el, '[data-test="home-error"]')).toBeNull();
+      client.replaceHomeTile.mockResolvedValue({} as SectionMember);
+      client.listHomeLayouts.mockRejectedValue({ code: "server.internal" });
+      list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+      await vi.waitFor(() => expect(client.replaceHomeTile).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
+      expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).toBeNull();
+    },
+  );
+
   it("keeps a late replacement refusal off another layout", async () => {
     const out = deferred<SectionMember>();
     const client = api({ replaceHomeTile: vi.fn(() => out.promise) });

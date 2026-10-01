@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { HomeLayout, HomeTile, MemberRef, SectionMember } from "../api/client.js";
 import type { TileRef } from "@waitron/catalogue/src/section-types.js";
-import "./member-list-editor.js";
+import { MemberListEditor } from "./member-list-editor.js";
 import { reorder } from "./reorder.js";
 import { t } from "../i18n/t.js";
 
@@ -18,6 +18,12 @@ import { t } from "../i18n/t.js";
  */
 @customElement("dashboard-home-layout-editor")
 export class HomeLayoutEditor extends LitElement {
+  replacementCompletion(memberId: string): (message: string, field?: boolean) => void {
+    return this.shadowRoot!.querySelector<MemberListEditor>(
+      "dashboard-member-list-editor",
+    )!.replacementCompletion(memberId);
+  }
+
   static override styles = [
     baseStyles,
     css`

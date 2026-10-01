@@ -309,8 +309,13 @@ it("previews a keyboard move at once, before the host confirms it", async () => 
   handle.focus();
   handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await el.updateComplete;
-  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks"]);
-  expect(tileNames(el, "till")).toEqual(["Burger", "Drinks"]);
+  for (const which of ["handheld", "till"]) {
+    expect(
+      [...q(el, `[data-test="preview-${which}"]`)!.children].map((cell) =>
+        cell.getAttribute("data-tile"),
+      ),
+    ).toEqual(["t-burger", "t-salad", "t-drinks"]);
+  }
 });
 
 it("names the layouts list after the menu", async () => {
@@ -482,4 +487,57 @@ it("cancels the picker when the same tile row has already been replaced by a ref
   await list.updateComplete;
   expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).toBeNull();
   expect(replacements).toEqual([]);
+});
+
+it("rechecks a required replacement after an invalid attempt and a removed passive choice", async () => {
+  const el = await mount();
+  const list = members(el);
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
+  await list.updateComplete;
+  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
+  const action =
+    list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!;
+  action.click();
+  await list.updateComplete;
+  for (const value of ["section:s-beer", ""]) {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await list.updateComplete;
+    expect(action.disabled).toBe(value === "");
+    expect(select.getAttribute("aria-invalid")).toBe(value === "" ? "true" : "false");
+  }
+  select.value = "section:s-beer";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await list.updateComplete;
+  el.sections = el.sections.filter((section) => section.id !== "s-beer");
+  await el.updateComplete;
+  await list.updateComplete;
+  expect(select.value).toBe("");
+  expect(action.disabled).toBe(true);
+  expect(select.getAttribute("aria-invalid")).toBe("true");
+  expect(select.required).toBe(true);
+  expect(text(list.shadowRoot!.querySelector(".field-label"))).toContain("*");
+});
+
+it("ignores an old replacement completion after cancellation and reopening the same row", async () => {
+  const el = await mount();
+  const list = members(el);
+  const open = async () => {
+    list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
+    await list.updateComplete;
+  };
+  await open();
+  const complete = el.replacementCompletion("t-salad");
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-cancel"]')!.click();
+  await list.updateComplete;
+  await open();
+  complete("Old refusal");
+  await list.updateComplete;
+  expect(
+    list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error,
+  ).toBe("");
+  complete("");
+  await list.updateComplete;
+  expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).not.toBeNull();
 });

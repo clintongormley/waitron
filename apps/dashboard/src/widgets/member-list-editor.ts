@@ -124,7 +124,6 @@ export class MemberListEditor extends LitElement {
         margin-top: var(--wt-space-4);
       }
       .replacement .field,
-      .replacement-summary,
       wt-form-actions {
         flex-basis: 100%;
       }
@@ -181,6 +180,30 @@ export class MemberListEditor extends LitElement {
   @property({ attribute: false }) replaceable: ReadonlySet<string> = new Set();
   @property() replacementScope = "";
   #replacementName = "";
+  #replacementGeneration = 0;
+  #focusReplacement = false;
+  @state() private replacementAttempted = false;
+  @state() private replacementError = "";
+  @state() private replacementFieldError = "";
+
+  replacementCompletion(memberId: string): (message: string, field?: boolean) => void {
+    const generation = this.#replacementGeneration;
+    return (message, field = false) => {
+      if (generation !== this.#replacementGeneration || this.replacing !== memberId) return;
+      if (message === "") {
+        this.replacing = null;
+        this.choice = "";
+        this.addError = false;
+        this.replacementAttempted = false;
+        this.replacementError = "";
+        this.replacementFieldError = "";
+      } else {
+        this.replacementError = field ? "" : message;
+        this.replacementFieldError = field ? message : "";
+        this.#focusReplacement = field;
+      }
+    };
+  }
   @state() private replacing: string | null = null;
   @state() private choice = "";
   @state() private addError = false;
@@ -213,6 +236,10 @@ export class MemberListEditor extends LitElement {
         target.ref.name !== this.#replacementName
       ) {
         this.replacing = null;
+        this.#replacementGeneration++;
+        this.replacementAttempted = false;
+        this.replacementError = "";
+        this.replacementFieldError = "";
         this.choice = "";
         this.addError = false;
       }
@@ -240,6 +267,15 @@ export class MemberListEditor extends LitElement {
       // A choice the list now holds, or that is now excluded, is no longer on offer.
       const offered = [...this.#offer.products, ...this.#offer.sections];
       if (!offered.some((choice) => choice.value === this.choice)) this.choice = "";
+      if (this.replacing !== null && this.replacementAttempted) this.addError = this.choice === "";
+    }
+  }
+
+  override updated(): void {
+    if (this.#focusReplacement && !this.busy) {
+      this.#focusReplacement = false;
+      if (this.replacing !== null && this.replacementFieldError)
+        this.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!.focus();
     }
   }
 
@@ -302,6 +338,11 @@ export class MemberListEditor extends LitElement {
   #add(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (this.replacing !== null) {
+      this.replacementAttempted = true;
+      this.replacementError = "";
+      this.replacementFieldError = "";
+    }
     const at = this.choice.indexOf(":");
     if (at < 0) {
       this.addError = true;
@@ -313,9 +354,8 @@ export class MemberListEditor extends LitElement {
     const ref: MemberRef = this.choice.startsWith("product:")
       ? { kind: "product", productId: id }
       : { kind: "section", sectionId: id };
-    this.choice = "";
     const memberId = this.replacing;
-    this.replacing = null;
+    if (memberId === null) this.choice = "";
     this.#emit(
       memberId === null ? "wt-member-add" : "wt-member-replace",
       memberId === null ? { ref } : { memberId, ref },
@@ -388,6 +428,10 @@ export class MemberListEditor extends LitElement {
                     event.stopPropagation();
                     if (this.busy) return;
                     (event.currentTarget as HTMLElement).closest("wt-row-actions")?.hide();
+                    this.#replacementGeneration++;
+                    this.replacementAttempted = false;
+                    this.replacementError = "";
+                    this.replacementFieldError = "";
                     this.replacing = member.id;
                     this.#replacementName = member.ref.kind === "missing" ? member.ref.name : "";
                     this.choice = "";
@@ -447,17 +491,21 @@ export class MemberListEditor extends LitElement {
       <div class=${this.replacing === null ? "add" : "add replacement"}>
         <label class="field">
           <span class="field-label"
-            >${this.replacing === null ? t("members.add_label") : t("action.replace")}</span
+            >${this.replacing === null ? t("members.add_label") : t("action.replace")}
+            ${this.replacing !== null ? html`<span aria-hidden="true">*</span>` : nothing}</span
           >
           <select
             name="member-ref"
+            ?required=${this.replacing !== null}
             .disabled=${this.busy}
-            aria-invalid=${this.addError ? "true" : "false"}
-            aria-describedby=${this.addError ? "member-add-error" : nothing}
+            aria-invalid=${this.addError || this.replacementFieldError ? "true" : "false"}
+            aria-describedby=${this.addError || this.replacementFieldError ? "member-add-error" : nothing}
             @change=${(event: Event) => {
               event.stopPropagation();
               this.choice = (event.target as HTMLSelectElement).value;
-              this.addError = false;
+              this.addError =
+                this.replacing !== null && this.replacementAttempted && this.choice === "";
+              this.replacementFieldError = "";
             }}
           >
             <option value="" .selected=${this.choice === ""}>
@@ -466,9 +514,8 @@ export class MemberListEditor extends LitElement {
             ${this.#group(t("members.products"), this.#offer.products)}
             ${this.sectionChoices ? this.#group(t("members.sections"), this.#offer.sections) : nothing}
           </select>
-          ${this.replacing !== null && this.addError ? html`<span class="error" id="member-add-error" data-test="add-error">${t("members.tile_choose_first")}</span>` : nothing}
+          ${this.replacing !== null && (this.addError || this.replacementFieldError) ? html`<span class="error" id="member-add-error" data-test="add-error">${this.addError ? t("members.tile_choose_first") : this.replacementFieldError}</span>` : nothing}
         </label>
-        ${this.replacing !== null && this.addError ? html`<p class="replacement-summary error" role="alert">${t("form.fix_fields")}</p>` : nothing}
         ${
           this.replacing === null
             ? html`<wt-button
@@ -477,7 +524,9 @@ export class MemberListEditor extends LitElement {
                 @click=${(event: Event) => this.#add(event)}
                 >${t("action.add")}</wt-button
               >`
-            : html`<wt-form-actions>
+            : html`<wt-form-actions
+                .error=${[this.replacementError, this.addError || this.replacementFieldError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+              >
                 <wt-button
                   slot="cancel"
                   variant="secondary"
@@ -485,6 +534,10 @@ export class MemberListEditor extends LitElement {
                   .disabled=${this.busy}
                   @click=${(event: Event) => {
                     event.stopPropagation();
+                    this.#replacementGeneration++;
+                    this.replacementAttempted = false;
+                    this.replacementError = "";
+                    this.replacementFieldError = "";
                     this.replacing = null;
                     this.choice = "";
                     this.addError = false;

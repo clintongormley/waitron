@@ -1276,7 +1276,11 @@ export class MenusScreen extends LitElement {
 
   /** Adds, removes and a new default hold `busy` until the layouts are read again. A tile write's
    * scope is its layout, as a move's is, so a move knows when another write to it waits behind. */
-  #homeWrite(scope: string, write: () => Promise<unknown>, replacement = false): void {
+  #homeWrite(
+    scope: string,
+    write: () => Promise<unknown>,
+    replacement?: (error?: unknown) => void,
+  ): void {
     const menuId = this.menuId!;
     this.homeError = null;
     this.busy = true;
@@ -1287,11 +1291,14 @@ export class MenusScreen extends LitElement {
         const shownLayout =
           this.homeLayouts?.find((layout) => layout.id === this.homeLayoutId)?.id ??
           this.homeLayouts?.[0]?.id;
-        if (this.menuId === menuId && (!replacement || shownLayout === scope))
-          this.homeError = codeMessage(codeOf(error));
+        if (this.menuId === menuId && (!replacement || shownLayout === scope)) {
+          if (replacement) replacement(error);
+          else this.homeError = codeMessage(codeOf(error));
+        }
         if (!replacement || this.menuId === menuId) this.busy = false;
         return;
       }
+      replacement?.();
       await this.#rereadHome(menuId);
       if (!replacement || this.menuId === menuId) this.busy = false;
     });
@@ -2006,7 +2013,29 @@ export class MenusScreen extends LitElement {
         ) => {
           event.stopPropagation();
           const { layoutId: id, memberId, ref } = event.detail;
-          this.#homeWrite(id, () => this.api.replaceHomeTile(id, memberId, ref), true);
+          const complete = (
+            event.currentTarget as HTMLElementTagNameMap["dashboard-home-layout-editor"]
+          ).replacementCompletion(memberId);
+          this.#homeWrite(
+            id,
+            () => this.api.replaceHomeTile(id, memberId, ref),
+            (error) => {
+              const code = codeOf(error);
+              const params = (
+                error as { params?: { ref?: MemberRef; sectionId?: string } } | undefined
+              )?.params;
+              const field =
+                (code === "menu.shortcut_unreachable" &&
+                  params?.ref?.kind === ref.kind &&
+                  (ref.kind === "product"
+                    ? params.ref.kind === "product" && params.ref.productId === ref.productId
+                    : params.ref.kind === "section" && params.ref.sectionId === ref.sectionId)) ||
+                (ref.kind === "section" &&
+                  (code === "menu_section.not_found" || code === "menu_section.wrong_role") &&
+                  params?.sectionId === ref.sectionId);
+              complete(error === undefined ? "" : codeMessage(code), field);
+            },
+          );
         }}
         @wt-tile-remove=${(event: CustomEvent<{ layoutId: string; memberId: string }>) => {
           event.stopPropagation();
