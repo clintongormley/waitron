@@ -1317,7 +1317,7 @@ rebuild of `dining_tables`, `parties` and `service_commands`),
 `packages/db/drizzle/0050_line_list_price_frozen.sql` (re-creates
 `working_order_lines_require_open_parent_update` with `list_unit_price_gross` in both
 unchanged-column lists),
-`packages/db/drizzle/0052_line_sent_after_close.sql` (re-creates
+`packages/db/drizzle/0053_line_sent_after_close.sql` (re-creates
 `working_order_lines_require_open_parent_update` with an exception for a line's first sent stamp),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql` and
@@ -1327,7 +1327,7 @@ unchanged-column lists),
 `0033_line_served_exception.sql` and `0038_main_bill_release.sql`, 2026-09-29 for
 `0042_placed_bill_moves.sql`, `0043_drop_triggers_before_rebuild.sql` and
 `0045_recreate_triggers_after_rebuild.sql`, 2026-09-30 for `0050_line_list_price_frozen.sql`, and
-2026-10-01 for `0052_line_sent_after_close.sql`)
+2026-10-01 for `0053_line_sent_after_close.sql`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript

@@ -53,7 +53,7 @@ import {
  * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
  * `working_order_lines_require_open_parent_update` is re-created again by
  * `packages/db/drizzle/0050_line_list_price_frozen.sql`, with `list_unit_price_gross` in its
- * unchanged-column lists, and by `packages/db/drizzle/0052_line_sent_after_close.sql`, which lets a
+ * unchanged-column lists, and by `packages/db/drizzle/0053_line_sent_after_close.sql`, which lets a
  * presented or paid bill's line take a first `sent_at`.
  * Some triggers ACT rather than refuse.
  * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,

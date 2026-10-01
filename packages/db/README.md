@@ -93,7 +93,7 @@ lines their kitchen group. `0043_drop_triggers_before_rebuild.sql` and
 `parties` and `service_commands`: the first drops `parties_clear_table_status` and `0038`'s two
 triggers, and the second re-creates them with the same text. `0050_line_list_price_frozen.sql`
 re-creates `working_order_lines_require_open_parent_update` with `list_unit_price_gross` among the
-columns a served mark or a group move must leave unchanged. `0052_line_sent_after_close.sql`
+columns a served mark or a group move must leave unchanged. `0053_line_sent_after_close.sql`
 re-creates it again, letting a presented (`placed`) or paid (`settled`) bill's line take a first `sent_at` with every
 other column unchanged. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
