@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, disabledStyles } from "../base-styles.js";
+import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
@@ -57,6 +57,7 @@ export class WtNumberStepper extends LitElement {
         padding: var(--wt-space-2);
         border-inline-width: 0;
         text-align: center;
+        text-overflow: ellipsis;
       }
 
       input::placeholder {
@@ -101,14 +102,13 @@ export class WtNumberStepper extends LitElement {
         margin-inline-start: var(--wt-space-1);
       }
 
-      .error,
-      .hint {
+      .error {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
       }
 
       .hint {
-        color: var(--wt-color-text-muted);
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -204,7 +204,7 @@ export class WtNumberStepper extends LitElement {
           name=${this.name || nothing}
           .value=${this.value}
           inputmode="numeric"
-          placeholder=${this.placeholder || nothing}
+          placeholder=${this.placeholder || this.hint || nothing}
           ?required=${this.required}
           ?disabled=${this.disabled}
           aria-label=${this.hideLabel && this.label ? this.label : nothing}

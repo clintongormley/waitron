@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
-import { baseStyles, disabledStyles } from "../base-styles.js";
+import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 /**
@@ -53,6 +53,7 @@ export class WtPriceInput extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         font: inherit;
+        text-overflow: ellipsis;
       }
 
       /* --end-border mirrors the input's own trailing border, which a unit button supplies. */
@@ -177,14 +178,13 @@ export class WtPriceInput extends LitElement {
         margin-inline-start: var(--wt-space-1);
       }
 
-      .error,
-      .hint {
+      .error {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
       }
 
       .hint {
-        color: var(--wt-color-text-muted);
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -195,7 +195,6 @@ export class WtPriceInput extends LitElement {
   @property() unit = "";
   @property() placeholder = "";
   @property() error = "";
-  /** A line of help under the field, which the amount is described by. */
   @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
@@ -291,7 +290,7 @@ export class WtPriceInput extends LitElement {
       name=${this.name || nothing}
       .value=${this.value}
       inputmode="decimal"
-      placeholder=${this.placeholder || nothing}
+      placeholder=${this.placeholder || this.hint || nothing}
       ?required=${this.required}
       ?disabled=${this.disabled}
       aria-label=${this.hideLabel && this.label ? this.label : nothing}
