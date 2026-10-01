@@ -356,8 +356,9 @@ export class TillTenderPay extends LitElement {
     this.view = "idle";
   }
 
+  /** At the order stage the tender pays an open order; only a placed one is collected. */
   #tenderEventName(): "confirm-payment" | "collect-order" {
-    return this.mode === "prepay" ? "confirm-payment" : "collect-order";
+    return this.mode !== "prepay" && this.stage === "collect" ? "collect-order" : "confirm-payment";
   }
 
   /** Guarded so a short tender can never be emitted, even if Confirm is force-clicked past its
@@ -471,35 +472,9 @@ export class TillTenderPay extends LitElement {
 
   #renderIdle() {
     const disabled = this.store.lineCount === 0 || this.busy;
-    if (this.mode !== "prepay" && this.stage === "order") return this.#renderIdlePlace(disabled);
     if (this.mode !== "prepay" && this.stage === "collect")
       return this.#renderIdleCollect(disabled);
-    return this.#renderIdlePay(disabled);
-  }
-
-  #renderIdlePlace(disabled: boolean) {
-    return html`
-      <div class="actions">
-        <wt-button
-          class="place"
-          variant="primary"
-          size="lg"
-          ?disabled=${disabled}
-          @click=${() => this.#place()}
-        >
-          ${t("action.place")}
-        </wt-button>
-        <wt-button
-          class="hold"
-          variant="secondary"
-          size="lg"
-          ?disabled=${disabled}
-          @click=${() => this.#startHolding()}
-        >
-          ${t("action.hold")}
-        </wt-button>
-      </div>
-    `;
+    return this.#renderIdlePay(disabled, this.mode !== "prepay");
   }
 
   /**
@@ -539,7 +514,8 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  #renderIdlePay(disabled: boolean) {
+  /** `withPlace`: a zone that sends to the kitchen without payment can still send it unpaid. */
+  #renderIdlePay(disabled: boolean, withPlace: boolean) {
     return html`
       ${this.#renderCardExtras()}
       <div class="actions">
@@ -553,6 +529,19 @@ export class TillTenderPay extends LitElement {
           ${t("action.pay")}
         </wt-button>
         ${this.#renderCardButton(disabled)}
+        ${
+          withPlace
+            ? html`<wt-button
+                class="place"
+                variant="secondary"
+                size="lg"
+                ?disabled=${disabled}
+                @click=${() => this.#place()}
+              >
+                ${t("action.place")}
+              </wt-button>`
+            : nothing
+        }
         <wt-button
           class="hold"
           variant="secondary"
