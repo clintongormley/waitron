@@ -593,3 +593,46 @@ describe("GET /api/orders/counter-waiting", () => {
     expect(answer.status).toBe(401);
   });
 });
+
+describe("GET /api/working-orders/:id/placed", () => {
+  const read = (id: string, cookie = venue.cookie) =>
+    send(venue.app, cookie, "GET", `/api/working-orders/${id}/placed`);
+
+  it("answers a counter order sent without payment as the open-order read answered it before it was sent", async () => {
+    const id = await parked("ticket_then_pay", "Tarta", "Caña");
+    const open = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
+    expect(open.status).toBe(200);
+    await placeOrder(deps(), venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+
+    const answer = await read(id);
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ ...open.json, revision: (await orderRow(id)).revision });
+    expect((answer.json.lines as unknown[]).length).toBe(2);
+  });
+
+  it("answers one that was handed over before it was paid", async () => {
+    const id = await placed("invoice_first", "Tarta");
+    await markCollected({ db: venue.db }, venue.cfg, id);
+    expect((await read(id)).status).toBe(200);
+  });
+
+  it("refuses an open, a paid, a table's and an unknown order alike (working_order.not_found)", async () => {
+    const open = await parked("ticket_then_pay", "Tarta");
+    const paid = await placed("ticket_then_pay", "Tarta");
+    await collectCash(paid);
+    const tableBill = await tabWith(venue, "Paella");
+    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId, venue.cfg.tillId);
+
+    for (const id of [open, paid, tableBill, randomUUID(), "not-a-uuid"]) {
+      const answer = await read(id);
+      expect(answer.status).toBe(404);
+      expect(answer.json.code).toBe("working_order.not_found");
+    }
+  });
+
+  it("requires a signed-in session", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    expect((await read(id, "")).status).toBe(401);
+  });
+});

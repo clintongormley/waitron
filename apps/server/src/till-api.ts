@@ -67,6 +67,7 @@ import {
   cancelPlacedOrder,
   fireCourse,
   getHeldOrder,
+  getPlacedCounterOrder,
   listExpoQueue,
   listCounterWaiting,
   listHeldOrders,
@@ -1222,6 +1223,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const order = await getHeldOrder({ db: deps.db }, deps.cfg, id);
       return c.json(order);
+    }),
+  );
+
+  app.get("/api/working-orders/:id/placed", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      return c.json(await getPlacedCounterOrder({ db: deps.db }, deps.cfg, id));
     }),
   );
 

@@ -3279,10 +3279,34 @@ export async function listHeldOrders(
 
 /** Read an open parked order anywhere in the venue, with the snapshots the till rebuilds its basket
  * from even when an offer has since been deactivated. */
-export async function getHeldOrder(
+export function getHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
+): Promise<HeldOrder> {
+  return readBasketOrder(deps, cfg, id, eq(workingOrders.status, "open"));
+}
+
+/** A counter order sent without payment, read as {@link getHeldOrder} reads an open one, so the till
+ * can take its payment. */
+export function getPlacedCounterOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+): Promise<HeldOrder> {
+  return readBasketOrder(
+    deps,
+    cfg,
+    id,
+    and(eq(workingOrders.status, "placed"), isNull(workingOrders.partyId))!,
+  );
+}
+
+async function readBasketOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  which: SQL,
 ): Promise<HeldOrder> {
   return withTransaction(deps.db, async (tx) => {
     const [order] = await tx
@@ -3293,7 +3317,7 @@ export async function getHeldOrder(
         revision: workingOrders.revision,
       })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
+      .where(and(eq(workingOrders.id, id), which));
 
     if (order === undefined) {
       throw new AppError("working_order.not_found", { workingOrderId: id });
