@@ -6,9 +6,8 @@ import {
   type ReactiveControllerHost,
   type TemplateResult,
 } from "lit";
-import { disabledStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-icon.js";
-import { t } from "../i18n/t.js";
+import { disabledStyles } from "./base-styles.js";
+import "./components/wt-icon.js";
 
 type ReorderHost = ReactiveControllerHost & { readonly shadowRoot: ShadowRoot | null };
 
@@ -76,6 +75,7 @@ export interface ReorderModel {
 export class ReorderController implements ReactiveController {
   readonly #host: ReorderHost;
   readonly #model: ReorderModel;
+  readonly #announceText: () => string;
   /** `grab` is how far below the row's top the pointer pressed; `y` is where the pointer is now. */
   #drag: { id: string; pointerId: number; grab: number; y: number } | null = null;
   /** Each row's id and vertical bounds, measured from the top of the table body so scrolling the
@@ -176,9 +176,10 @@ export class ReorderController implements ReactiveController {
     }
   `;
 
-  constructor(host: ReorderHost, model: ReorderModel) {
+  constructor(host: ReorderHost, model: ReorderModel, options: { announce: () => string }) {
     this.#host = host;
     this.#model = model;
+    this.#announceText = options.announce;
     host.addController(this);
   }
 
@@ -255,7 +256,7 @@ export class ReorderController implements ReactiveController {
     const order = this.#model.order();
     const index = order.indexOf(id);
     if (index < 0) return;
-    this.#announcement = t("action.reordered")
+    this.#announcement = this.#announceText()
       .replace("{item}", this.#model.label(id))
       .replace("{index}", String(index + 1))
       .replace("{total}", String(order.length));

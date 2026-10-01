@@ -1,3 +1,4 @@
+import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -13,8 +14,6 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { optionalTextFields, translations, type FieldContext } from "./form-fields.js";
-import { reorder } from "./reorder.js";
-import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import "./option-label-form.js";
 import type { DraftLabel } from "./option-label-form.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
@@ -121,15 +120,19 @@ export class OptionListForm extends LitElement {
    * carries its message with it. */
   @state() private serverErrors: Record<string, string> = {};
 
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.labels.map((label) => label.id),
-    move: (id, to) => this.#move(id, to),
-    label: (id) => this.labels.find((label) => label.id === id)!.name,
-    busy: () => this.busy,
-    get reorderLabel(): string {
-      return t("options.reorder");
-    },
-  } satisfies ReorderModel);
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.labels.map((label) => label.id),
+      move: (id, to) => this.#move(id, to),
+      label: (id) => this.labels.find((label) => label.id === id)!.name,
+      busy: () => this.busy,
+      get reorderLabel(): string {
+        return t("options.reorder");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("action.reordered") },
+  );
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (

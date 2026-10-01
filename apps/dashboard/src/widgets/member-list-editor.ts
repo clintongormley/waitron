@@ -1,3 +1,4 @@
+import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -8,8 +9,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel } from "./category-form.js";
-import { reorder } from "./reorder.js";
-import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import { t } from "../i18n/t.js";
 
 interface Choice {
@@ -208,16 +207,20 @@ export class MemberListEditor extends LitElement {
   #sectionNames = new Map<string, string>();
   #offer: { products: Choice[]; sections: Choice[] } = { products: [], sections: [] };
 
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.order.map((member) => member.id),
-    move: (id, to, via) => this.#move(id, to, via),
-    drop: (id) => this.#drop(id),
-    label: (id) => this.#name(this.order.find((member) => member.id === id)!),
-    busy: () => this.busy,
-    get reorderLabel(): string {
-      return t("members.reorder");
-    },
-  } satisfies ReorderModel);
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.order.map((member) => member.id),
+      move: (id, to, via) => this.#move(id, to, via),
+      drop: (id) => this.#drop(id),
+      label: (id) => this.#name(this.order.find((member) => member.id === id)!),
+      busy: () => this.busy,
+      get reorderLabel(): string {
+        return t("members.reorder");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("action.reordered") },
+  );
 
   override willUpdate(changed: PropertyValues): void {
     if (

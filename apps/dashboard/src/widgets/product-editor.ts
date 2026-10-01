@@ -1,3 +1,4 @@
+import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -33,8 +34,6 @@ import {
   textField,
   type FieldContext,
 } from "./form-fields.js";
-import { reorder } from "./reorder.js";
-import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { CategorySummary, DashboardApi } from "../api/client.js";
 import type { ProductModifierRef } from "@waitron/catalogue/src/product-types.js";
 import type {
@@ -396,22 +395,26 @@ export class ProductEditor extends LitElement {
   #rowsNow: Record<number, string> = {};
   #listNames: ReadonlyMap<string, string> = new Map();
 
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.draft.modifiers.map(modifierKey),
-    move: (key, to) => {
-      const from = this.draft.modifiers.findIndex((ref) => modifierKey(ref) === key);
-      if (from < 0 || from === to) return;
-      this.change("modifiers", reorder(this.draft.modifiers, from, to));
-    },
-    label: (key) => {
-      const ref = this.draft.modifiers.find((entry) => modifierKey(entry) === key);
-      return ref ? this.modifierLabel(ref) : t("editor.missing_choice");
-    },
-    busy: () => this.suspended,
-    get reorderLabel(): string {
-      return t("editor.reorder_modifier");
-    },
-  } satisfies ReorderModel);
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.draft.modifiers.map(modifierKey),
+      move: (key, to) => {
+        const from = this.draft.modifiers.findIndex((ref) => modifierKey(ref) === key);
+        if (from < 0 || from === to) return;
+        this.change("modifiers", reorder(this.draft.modifiers, from, to));
+      },
+      label: (key) => {
+        const ref = this.draft.modifiers.find((entry) => modifierKey(entry) === key);
+        return ref ? this.modifierLabel(ref) : t("editor.missing_choice");
+      },
+      busy: () => this.suspended,
+      get reorderLabel(): string {
+        return t("editor.reorder_modifier");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("action.reordered") },
+  );
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("extraLists") || changed.has("optionLists"))
