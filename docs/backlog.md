@@ -7258,7 +7258,7 @@ ongoing overhaul listed at the top of Track A.
   of its slots is full, fed by paired tills and signed-in routes rather than strangers; and each
   password throttle's counters take about 1.3 MiB once the first address is forgotten (arithmetic,
   not measured).
-  **Done since (2026-10-01, lane C's A159):** a password-reset request for a well-formed address
+  **Done since (2026-10-01, lane C's A159, #986):** a password-reset request for a well-formed address
   with no active or pending account now runs, against a person id nobody has, the statements
   `issueAccountAction` runs for an active account's password reset (read the person, delete its used
   or expired links, retire its live one, insert a link), then deletes the inserted row before
