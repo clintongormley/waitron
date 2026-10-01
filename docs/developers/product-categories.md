@@ -226,13 +226,16 @@ restore the products later. Before deleting a non-empty folder, choose what happ
 - **Move it up to the parent folder** keeps the products active and moves the folder's direct
   products and subfolders to its parent. For a top-level folder they move to the top level.
 - **Delete it too** removes the subtree and makes its products Inactive. The summary shows the
-  numbers of subfolders, products and kitchen routes affected.
+  numbers of subfolders, products and routing rules removed (folder claims and exceptions).
 
 An empty folder is deleted without confirmation. A folder's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
 to approve unknown contents. A refused action keeps its dialog open with a message at the bottom.
-Deleting a folder removes the preparation routes naming it. A variant whose own category is
-cleared falls back to its product's category.
+Deleting a folder removes its station claim and every exception naming it, because both tables
+have a cascading foreign key to `categories`. The summary counts those removed rules; it does
+not list products whose station would change. **Move to…** also has no routing preview. Check
+Prep Stations' tester after changing the folder tree. A variant whose own category is cleared
+uses its product's category for claims.
 
 ## API
 
