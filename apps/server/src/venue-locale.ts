@@ -1,9 +1,11 @@
 // No `import "./errors.js"`: this file throws no AppError code.
 import { eq } from "drizzle-orm";
 import { locations, readTenant, withTransaction, type Database } from "@waitron/db";
+import type { ReceiptLanguageRules } from "@waitron/country";
 import {
   resolveInstalledContentLanguageRules,
   resolveInstalledCountryLocale,
+  resolveInstalledReceiptLanguageRules,
 } from "@waitron/country-packs";
 import {
   FALLBACK_LOCALE,
@@ -54,4 +56,12 @@ export async function readVenueContentLanguageRules(
   params: { locationId: string },
 ): Promise<ContentLanguageRules> {
   return resolveInstalledContentLanguageRules(await readVenueGeography(db, params.locationId));
+}
+
+/** The receipt languages the venue's country pack offers, and the one its region fixes, if any. */
+export async function readVenueReceiptLanguageRules(
+  db: Database,
+  params: { locationId: string },
+): Promise<ReceiptLanguageRules> {
+  return resolveInstalledReceiptLanguageRules(await readVenueGeography(db, params.locationId));
 }

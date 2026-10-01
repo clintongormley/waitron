@@ -701,6 +701,12 @@ declare module "@waitron/shared" {
      * device.
      */
     "device.register_name_taken": Record<string, never>;
+    /** The venue's region fixes its receipt language; `language` is that fixed language, never the
+     * caller's value. */
+    "receipt.language_fixed": { field: "receiptLanguage"; language: string };
+    /** A receipt-language change refused because `count` orders at the location still have a line
+     * the till can write, which the line trigger refuses once its language key is stale. */
+    "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     /**
      * A request named a device binding id that matches no row. Checked by a read before the write in
      * `device.ts`, because this engine's foreign-key refusal does not say which key failed.

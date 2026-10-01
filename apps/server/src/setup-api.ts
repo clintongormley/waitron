@@ -7,6 +7,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
+  receiptLanguageRules,
   resolveFiscalJurisdiction,
 } from "@waitron/country";
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
@@ -374,7 +375,14 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
   if (timeZoneInput !== (area?.timeZone ?? country.defaultTimeZone)) {
     invalidRequest("location.timeZone");
   }
-  if (invoiceLocales.some((locale) => !country.invoiceLocales.includes(locale))) {
+  // One receipt language, among the pack's, and the region's own where it fixes one.
+  const receipt = receiptLanguageRules(country, area?.code);
+  const [receiptLanguage] = invoiceLocales;
+  if (
+    invoiceLocales.length !== 1 ||
+    !receipt.choices.includes(receiptLanguage!) ||
+    (receipt.fixed !== undefined && receiptLanguage !== receipt.fixed.locale)
+  ) {
     invalidRequest("location.invoiceLocales");
   }
 

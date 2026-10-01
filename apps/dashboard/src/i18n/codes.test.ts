@@ -383,3 +383,18 @@ it("says a required content language cannot be removed, in both languages", () =
     "La región del local exige ese idioma, así que no se puede quitar.",
   );
 });
+
+it("says why a receipt language cannot be changed, in both languages", () => {
+  expect(codeMessage("receipt.language_fixed", "en")).toBe(
+    "This venue's region fixes the receipt language, so another one cannot be chosen.",
+  );
+  expect(codeMessage("receipt.language_fixed", "es")).toBe(
+    "La región del local fija el idioma del recibo, así que no se puede elegir otro.",
+  );
+  expect(codeMessage("receipt.language_orders_open", "en")).toBe(
+    "Some orders were taken in the current receipt language and can still change. Try again once every order is paid and sent to the kitchen and every table is finished.",
+  );
+  expect(codeMessage("receipt.language_orders_open", "es")).toBe(
+    "Hay pedidos tomados en el idioma actual del recibo que aún pueden cambiar. Vuelve a intentarlo cuando todos estén cobrados y enviados a cocina y todas las mesas estén cerradas.",
+  );
+});

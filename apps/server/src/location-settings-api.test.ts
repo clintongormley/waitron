@@ -14,6 +14,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSale } from "./till-sale.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
+import { getCountryPack } from "@waitron/country-packs";
 
 /** The venue's invoice operation description, over the route. */
 // The full manifest, because the first case files a real fiscal record through `recordTillSale`.
@@ -269,6 +270,171 @@ describe("location invoice settings", () => {
       await suite.db.execute(
         sql`update locations set operation_description = 'Venta en establecimiento' where id = ${venue.cfg.locationId}`,
       );
+    }
+  });
+});
+
+describe("receipt language", () => {
+  const SPAIN_RECEIPT = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+  const CATALONIA = getCountryPack("ES")!.administrativeAreas.find(({ code }) => code === "08")!;
+  const PATH = "/management-api/receipt-language";
+
+  const read = (cookie = venue.managerCookie) => app().request(PATH, { headers: { cookie } });
+  const write = (body: unknown, cookie = venue.managerCookie) =>
+    app().request(PATH, {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const stored = async (): Promise<string[]> => {
+    const { rows } = await suite.db.execute<{ invoice_locales: string }>(
+      sql`select invoice_locales from locations where id = ${venue.cfg.locationId}`,
+    );
+    return JSON.parse(rows[0]!.invoice_locales) as string[];
+  };
+  /** The shared location placed in `province` with `invoiceLocales`, put back afterwards. */
+  async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
+    await suite.db.execute(
+      sql`update locations set province = ${province}, invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
+    );
+    try {
+      await fn();
+    } finally {
+      await suite.db.execute(
+        sql`update locations set province = 'Madrid', invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+      );
+    }
+  }
+
+  it("answers Barcelona's language, the pack's choices and why it is fixed", async () => {
+    expect(CATALONIA.fixedReceiptLocale?.locale).toBe("ca-ES");
+    await at("Barcelona", ["ca-ES"], async () => {
+      const response = await read();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        language: "ca-ES",
+        choices: SPAIN_RECEIPT,
+        fixed: { locale: "ca-ES", reason: CATALONIA.fixedReceiptLocale!.reason },
+      });
+    });
+  });
+
+  it("answers no fixed language for Madrid", async () => {
+    expect(await (await read()).json()).toEqual({
+      language: "es-ES",
+      choices: SPAIN_RECEIPT,
+      fixed: null,
+    });
+  });
+
+  it("refuses another language in Barcelona, naming the fixed one, and leaves the row alone", async () => {
+    await at("Barcelona", ["ca-ES"], async () => {
+      const response = await write({ language: "gl-ES" });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "receipt.language_fixed",
+          params: { field: "receiptLanguage", language: "ca-ES" },
+        },
+      });
+      expect(await stored()).toEqual(["ca-ES"]);
+    });
+  });
+
+  it("saves Galician for Madrid as the location's one language", async () => {
+    try {
+      expect((await write({ language: "gl-ES" })).status).toBe(204);
+      expect((await (await read()).json()).language).toBe("gl-ES");
+      expect(await stored()).toEqual(["gl-ES"]);
+    } finally {
+      await suite.db.execute(
+        sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+      );
+    }
+  });
+
+  it("writes one language over a two-language row", async () => {
+    await at("Madrid", ["es-ES", "ca-ES"], async () => {
+      expect((await write({ language: "es-ES" })).status).toBe(204);
+      expect(await stored()).toEqual(["es-ES"]);
+    });
+  });
+
+  it.each([
+    ["a language the pack does not offer", { language: "en-GB" }],
+    ["an empty language", { language: "" }],
+    ["a number", { language: 12 }],
+    ["a list", { language: ["gl-ES"] }],
+    ["a body without the field", {}],
+    ["a bare string", "gl-ES"],
+    ["null", null],
+  ])("refuses %s without writing", async (_label, body) => {
+    const response = await write(body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "receiptLanguage" } },
+    });
+    expect(await stored()).toEqual(["es-ES"]);
+  });
+
+  it("refuses English in Barcelona as a language the pack does not offer", async () => {
+    await at("Barcelona", ["ca-ES"], async () => {
+      const response = await write({ language: "en-GB" });
+      expect(response.status).toBe(400);
+      expect((await response.json()).error.code).toBe("management.request_invalid");
+    });
+  });
+
+  it("answers a Barcelona row stored in Spanish as it is, and accepts only Catalan over it", async () => {
+    await at("Barcelona", ["es-ES"], async () => {
+      expect(await (await read()).json()).toEqual({
+        language: "es-ES",
+        choices: SPAIN_RECEIPT,
+        fixed: { locale: "ca-ES", reason: CATALONIA.fixedReceiptLocale!.reason },
+      });
+      const refused = await write({ language: "gl-ES" });
+      expect(refused.status).toBe(400);
+      expect((await refused.json()).error.code).toBe("receipt.language_fixed");
+      expect(await stored()).toEqual(["es-ES"]);
+      expect((await write({ language: "ca-ES" })).status).toBe(204);
+      expect(await stored()).toEqual(["ca-ES"]);
+    });
+  });
+
+  it("answers a stored language outside the choices as it is", async () => {
+    await at("Madrid", ["en-GB"], async () => {
+      expect((await (await read()).json()).language).toBe("en-GB");
+    });
+  });
+
+  it("requires a session and configuration permission for reads and writes", async () => {
+    expect((await app().request(PATH)).status).toBe(401);
+    expect((await read(venue.staffCookie)).status).toBe(403);
+    const anonymous = await app().request(PATH, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ language: "gl-ES" }),
+    });
+    expect(anonymous.status).toBe(401);
+    expect((await write({ language: "gl-ES" }, venue.staffCookie)).status).toBe(403);
+    expect(await stored()).toEqual(["es-ES"]);
+  });
+
+  it("refuses a read and a write when the configured location does not exist", async () => {
+    const missing = app("no-such-location");
+    const answers = [
+      await missing.request(PATH, { headers: { cookie: venue.managerCookie } }),
+      await missing.request(PATH, {
+        method: "PUT",
+        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+        body: JSON.stringify({ language: "gl-ES" }),
+      }),
+    ];
+    for (const response of answers) {
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "locationId" } },
+      });
     }
   });
 });

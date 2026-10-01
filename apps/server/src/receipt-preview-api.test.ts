@@ -398,6 +398,47 @@ describe("GET /management-api/receipt-preview", () => {
     }
   });
 
+  describe("language", () => {
+    const at = async (query: string) => {
+      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+      expect(response.status).toBe(200);
+      return printedLines((await response.json()) as ReceiptPreviewResponse);
+    };
+    const labelled = (lines: string[], label: string) =>
+      lines.some((line) => line === label || line.startsWith(`${label} `));
+
+    it("draws the sample in a language asked for, whatever the location has saved", async () => {
+      const lines = await at("&language=gl-ES");
+      expect(labelled(lines, "Data")).toBe(true);
+      expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
+      expect(labelled(lines, "Fecha")).toBe(false);
+    });
+
+    it("follows the location's saved language when none is asked for", async () => {
+      await setLocationLanguages(["gl-ES"]);
+      try {
+        const lines = await at("");
+        expect(labelled(lines, "Data")).toBe(true);
+        expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
+      } finally {
+        await setLocationLanguages(["es-ES"]);
+      }
+      expect(labelled(await at(""), "Fecha")).toBe(true);
+    });
+
+    it.each([
+      ["a language the pack does not offer", "&language=en-GB"],
+      ["an empty language", "&language="],
+      ["a language given twice", "&language=gl-ES&language=gl-ES"],
+    ])("refuses %s", async (_, query) => {
+      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "language" } },
+      });
+    });
+  });
+
   it("marks a practice installation's receipt as a practice one, as its printed receipts are", async () => {
     expect((await rendered({}, { practiceMode: true })).preview.text).toContain(
       "PRUEBA - SIN COBRO REAL",

@@ -24,6 +24,7 @@ import {
 import { formatReceipt } from "./receipt-ticket.js";
 import { SAMPLE_SALE } from "./sample-receipt.js";
 import type { TillConfig } from "./till-config.js";
+import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 
 const run = createErrorBoundary(
   {
@@ -87,6 +88,18 @@ function optionalPaperWidth(given: string[] | undefined): PaperWidth | undefined
   return requireEnum(given[0], "paperWidth", printPaperWidth.enumValues);
 }
 
+/** A language to draw in other than the saved one: one of those the venue's pack offers. */
+function optionalLanguage(
+  given: string[] | undefined,
+  choices: readonly string[],
+): string | undefined {
+  if (given === undefined) return undefined;
+  if (given.length !== 1 || !choices.includes(given[0]!)) {
+    throw new AppError("management.request_invalid", { field: "language" });
+  }
+  return given[0];
+}
+
 /**
  * The setting to draw at: the asked-for width when a receipt printer has it, else the width most
  * tills print on, a tie going to the till first by name. A width's resolution is that of the till
@@ -109,8 +122,9 @@ function chooseSetting(settings: EscSetting[], asked: PaperWidth | undefined): E
 /**
  * A sample receipt drawn by the formatter a sale's receipt prints from, with unsaved trim. It
  * files, saves and enqueues nothing. A GET, so a dashboard refresh can ask for it passively; the
- * `receipt` parameter holds the JSON object a save sends as `receipt`, and an optional `paperWidth`
- * picks one of the widths an answer offers.
+ * `receipt` parameter holds the JSON object a save sends as `receipt`, an optional `paperWidth`
+ * picks one of the widths an answer offers, and an optional `language` draws in another of the
+ * receipt languages the venue may choose.
  */
 export function mountReceiptPreviewApi(
   app: Hono,
@@ -144,6 +158,10 @@ export function mountReceiptPreviewApi(
           language: await readReceiptLanguage(tx, deps.cfg.locationId),
         };
       });
+      const rules = await readVenueReceiptLanguageRules(deps.db, {
+        locationId: deps.cfg.locationId,
+      });
+      const locale = optionalLanguage(c.req.queries("language"), rules.choices) ?? language.locale;
       const printer = chooseSetting(settings, asked);
       const receipt = validateReceiptConfig(requested);
       const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
@@ -153,7 +171,7 @@ export function mountReceiptPreviewApi(
             result: SAMPLE_SALE,
             issuer,
             receipt: trim,
-            invoiceLocale: language.locale,
+            invoiceLocale: locale,
             printer,
             simulated: deps.cfg.practiceMode,
           }),

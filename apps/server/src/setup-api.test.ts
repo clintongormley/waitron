@@ -155,6 +155,8 @@ function demoBody(): Record<string, unknown> {
   };
 }
 
+const BARCELONA = { postalCode: "08001", city: "Barcelona", province: "Barcelona" };
+
 function liveBody(): Record<string, unknown> {
   return { ...demoBody(), mode: "live" };
 }
@@ -2679,6 +2681,43 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual(invalid("location.invoiceLocales"));
     expect(provision).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, Record<string, string>, string[]]>([
+    ["Spanish for Barcelona, whose receipts are fixed in Catalan", BARCELONA, ["es-ES"]],
+    ["English, which the country does not offer", {}, ["en-GB"]],
+    ["two receipt languages", BARCELONA, ["es-ES", "ca-ES"]],
+    ["two receipt languages outside Catalonia", {}, ["es-ES", "gl-ES"]],
+  ])("refuses %s", async (_label, place, invoiceLocales) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    Object.assign(asRec(asRec(body.venue).location), place, { invoiceLocales });
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(invalid("location.invoiceLocales"));
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, Record<string, string>, string[]]>([
+    ["Barcelona in Catalan", BARCELONA, ["ca-ES"]],
+    ["Madrid in Basque", {}, ["eu-ES"]],
+  ])("accepts %s as the one receipt language", async (_label, place, invoiceLocales) => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    Object.assign(asRec(asRec(body.venue).location), place, { invoiceLocales });
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(200);
+    expect(provisionRequests.map((req) => req.venue.location.invoiceLocales)).toEqual([
+      invoiceLocales,
+    ]);
   });
 
   it.each<[string, Record<string, unknown>]>([

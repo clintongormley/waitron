@@ -402,6 +402,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The receipt settings aren't valid",
     es: "Los ajustes del recibo no son válidos",
   },
+  "receipt.language_fixed": {
+    en: "This venue's region fixes the receipt language, so another one cannot be chosen.",
+    es: "La región del local fija el idioma del recibo, así que no se puede elegir otro.",
+  },
+  "receipt.language_orders_open": {
+    en: "Some orders were taken in the current receipt language and can still change. Try again once every order is paid and sent to the kitchen and every table is finished.",
+    es: "Hay pedidos tomados en el idioma actual del recibo que aún pueden cambiar. Vuelve a intentarlo cuando todos estén cobrados y enviados a cocina y todas las mesas estén cerradas.",
+  },
   "status.label_taken": {
     en: "A status with that name already exists",
     es: "Ya existe un estado con ese nombre",
