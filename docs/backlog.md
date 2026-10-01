@@ -6840,7 +6840,8 @@ ongoing overhaul listed at the top of Track A.
   approval routes no longer send for an approver; and the dashboard's
   password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
   is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
-  a flood of made-up addresses delays the sign-in of anyone it is not already tracking.
+  a flood of made-up addresses delays the sign-in of anyone it is not already tracking (no longer
+  true since A154, below).
   **Done since (2026-09-30, lane A's A153, #952):** the setup wizard's `shell.adopt.bundle_fetch_failed` sentence
   (`apps/setup/src/i18n/strings/shell.ts`, English and Spanish) no longer names a refused login among
   its causes, a refused login now arriving as `password.invalid` and showing
@@ -6850,6 +6851,20 @@ ongoing overhaul listed at the top of Track A.
   login the setup wizard's Connect form leaves the cursor where it was (an existing test pins that),
   while Reset and the dashboard sign-in move it to the password; the owner's rule covers marking
   fields, not the cursor, so whether Connect should match is the owner's call.
+  **Done since (2026-10-01, lane A's A154, #977):** the password throttle no longer refuses an address it
+  is not tracking because it is full. To make room it forgets the address it heard from longest ago
+  (never one whose sign-in is in progress), first copying that address's wrong-try count and any
+  wait still running into one of 65,536 counters picked by a secret. A counter holds one address's
+  count, marked with a 32-bit fingerprint of that address, and only an address carrying the same
+  fingerprint picks it up again; another address takes the counter over only once
+  it has been idle 15 minutes, or by having strictly more wrong tries than the count it holds, and a
+  successful sign-in clears the address's own counter. Measured 2026-10-01 by simulation through
+  the real code with a fake clock: after each flood tried (3,000, 20,000, 65,536 and 200,000 made-up addresses at one instant;
+  1,000, 16,384 and 50,000 a minute for 15 minutes, one wrong try each), each of 1000 fresh
+  addresses still got all three free tries. Still open: a real address with 4 wrong tries, once
+  forgotten, comes back with a fresh count if a made-up address with 5 wrong tries lands on its
+  counter. With 1,000, 10,000 and 50,000 such addresses sent within its 15 minutes, that happened
+  for 1, 31 and 106 of 200 random secrets. Both simulations are in the pull request's description.
 - **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, #934, owner
   2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
   the current password now carries a hidden, read-only `autocomplete="username"` field holding the

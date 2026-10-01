@@ -4,11 +4,9 @@ import { AppError } from "@waitron/shared";
 /**
  * An in-memory back-off on wrong PINs, keyed per slot and person (spec §5). The slot is the device
  * id at the till's PIN sign-in, `override:<till id>` for an approver's (manager's or supervisor's)
- * PIN typed at a till, `management` for the dashboard's two PIN attestation routes, and
- * `dashboard` for the dashboard's password throttle (`password-throttle.ts` in `apps/server`),
- * whose "person" is a hash of the email. It is NOT a database write, so wrong PINs add no write
- * load that could contend with the sale path. State is per-process; a restart clearing it only
- * ever RELAXES a throttle.
+ * PIN typed at a till, and `management` for the dashboard's two PIN attestation routes. It is NOT
+ * a database write, so wrong PINs add no write load that could contend with the sale path. State
+ * is per-process; a restart clearing it only ever RELAXES a throttle.
  */
 
 /** Wrong PINs allowed before any wait window opens. */
@@ -24,9 +22,7 @@ export const PIN_THROTTLE_IDLE_MS = 15 * 60_000;
  * ids would grow the map without end. The cap is per slot, so one slot's made-up ids can refuse
  * only that slot's new pairs: while a slot holds this many live entries each new pair is refused
  * with a {@link PIN_THROTTLE_FULL_RETRY_SECONDS} wait, and room returns only as the slot's entries
- * fall idle ({@link PIN_THROTTLE_IDLE_MS}). The password throttle keeps every key it tracks under
- * one slot and caps itself at 1000 (`password-throttle.ts` in `apps/server`), so
- * this must stay above that; nothing guards it.
+ * fall idle ({@link PIN_THROTTLE_IDLE_MS}).
  */
 export const PIN_THROTTLE_MAX_KEYS_PER_SLOT = 2_000;
 
@@ -58,6 +54,15 @@ function entryKey(slot: string, personId: string): string {
 
 function waitSecondsFor(fails: number): number {
   return Math.min(PIN_THROTTLE_MAX_WAIT_SECONDS, 2 ** (fails - PIN_THROTTLE_FREE_ATTEMPTS));
+}
+
+/** When a wait opened at `t` by the `fails`-th wrong try ends; `0` while inside the free attempts. */
+export function pinThrottleUnlockAt(fails: number, t: number): number {
+  return fails > PIN_THROTTLE_FREE_ATTEMPTS ? t + waitSecondsFor(fails) * 1000 : 0;
+}
+
+export function pinThrottleRetryAfterSeconds(unlockAt: number, t: number): number {
+  return Math.max(1, Math.ceil((unlockAt - t) / 1000));
 }
 
 export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
@@ -113,8 +118,9 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
         return;
       }
       if (t < entry.unlockAt) {
-        const retryAfterSeconds = Math.max(1, Math.ceil((entry.unlockAt - t) / 1000));
-        throw new AppError("pin.throttled", { retryAfterSeconds });
+        throw new AppError("pin.throttled", {
+          retryAfterSeconds: pinThrottleRetryAfterSeconds(entry.unlockAt, t),
+        });
       }
       // The window has elapsed: keep the streak so the NEXT wrong PIN escalates rather than resetting.
       touch(key, entry, t);
@@ -132,9 +138,7 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
       }
       entry.fails += 1;
       touch(key, entry, t);
-      if (entry.fails > PIN_THROTTLE_FREE_ATTEMPTS) {
-        entry.unlockAt = t + waitSecondsFor(entry.fails) * 1000;
-      }
+      entry.unlockAt = pinThrottleUnlockAt(entry.fails, t);
     },
 
     clear(slot: string, personId: string): void {
