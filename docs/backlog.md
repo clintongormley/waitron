@@ -194,8 +194,8 @@ Slice 3 needs slice 1. Slice 2 is independent of both. Several entries below are
 design, and each carries a dated note. **Slice 1 is in progress** on `feature/product-folders`,
 following the [approved plan](superpowers/plans/2026-09-30-product-folders-slice-1.md).
 The branch removes labels and category presentation fields and adds the bulk move/delete API;
-the folder browser, selection actions and native dragging are implemented and task-reviewed.
-Final Categories retirement, branch review and current-head CI remain before landing.
+the folder browser, selection actions, native dragging and Categories retirement are implemented
+and task-reviewed. Branch review and current-head CI remain before landing.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
