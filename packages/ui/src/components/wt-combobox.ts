@@ -398,9 +398,13 @@ export class WtCombobox extends LitElement {
   /** The list scrolls, so a moved active row has to be brought back into view once Lit has drawn it. */
   private async scrollActiveIntoView(): Promise<void> {
     await this.updateComplete;
-    if (this.activeIndex < 0) return;
+    this.scrollRowIntoView(this.activeIndex);
+  }
+
+  private scrollRowIntoView(index: number): void {
+    if (index < 0) return;
     this.shadowRoot
-      ?.getElementById(`${this.listboxId}-${this.activeIndex}`)
+      ?.getElementById(`${this.listboxId}-${index}`)
       ?.scrollIntoView({ block: "nearest" });
   }
 
@@ -538,7 +542,10 @@ export class WtCombobox extends LitElement {
     // microtask, still ahead of the frame this paints.
     await this.updateComplete;
     this.positionPopup();
-    await this.scrollActiveIntoView();
+    // A click shows the chosen row, as a select does, without making it active.
+    if (active === "none")
+      this.scrollRowIntoView(this.filteredOptions.findIndex((option) => this.isSelected(option)));
+    else await this.scrollActiveIntoView();
   }
 
   private async onTriggerClick(event: MouseEvent): Promise<void> {
@@ -591,9 +598,9 @@ export class WtCombobox extends LitElement {
 
   /** A press on the label while the list is open closes it (the popover's own light dismiss);
    * forwarding the click to the trigger would open it again straight away. The click is matched to
-   * its press by pointerId because a touch tap's click can arrive a task after its release. The
-   * dismissal leaves focus in the hidden search box, so it goes back to the trigger, as a select
-   * keeps it. */
+   * its press by pointerId because a touch tap's click can arrive a task after its release. Hiding
+   * the panel that held focus leaves no element of the component focused, with or without a search
+   * box, so focus goes back to the trigger, as a select keeps it. */
   private onLabelClick(event: PointerEvent): void {
     if (event.pointerId !== this.labelPressOnOpenList) return;
     event.preventDefault();

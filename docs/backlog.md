@@ -1574,8 +1574,8 @@ three kinds of test edit the move needs. The mockups are drawn at 14px in the sy
 is A179. The work lands in six pull requests, A178a to A178f, in order.
 
 **A178a — DONE: A178a (this branch, feat/filled-fields-primitives).** The shared field primitives
-draw the filled field: five colour and five structure tokens with their contrast held by
-`packages/ui-core/src/tokens/colors.test.ts`; one shared stylesheet, `fieldStyles`
+draw the filled field: five colour tokens, whose contrast
+`packages/ui-core/src/tokens/colors.test.ts` holds, and five size tokens; one shared stylesheet, `fieldStyles`
 (`packages/ui-core/src/field-styles.ts`); `wt-input`, `wt-price-input` (which gains `invalid`) and
 `wt-number-stepper` drawn in it; a new `wt-textarea`; and `wt-combobox` extended into the one
 dropdown — `search` modes, option icons, groups and action rows, `hint`, a `help` slot,

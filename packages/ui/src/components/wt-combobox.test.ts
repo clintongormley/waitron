@@ -557,6 +557,47 @@ test("keyboard navigation keeps the active option inside the scrolling list", as
   });
 });
 
+/** Holds that `row` lies inside the list's visible box. */
+function expectRowInView(el: WtCombobox, row: Element) {
+  const list = el.shadowRoot!.querySelector(".list")!;
+  const listBox = list.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  expect(list.scrollHeight, "the list scrolls").toBeGreaterThan(list.clientHeight);
+  expect(box.top).toBeGreaterThanOrEqual(listBox.top);
+  expect(box.bottom).toBeLessThanOrEqual(listBox.bottom);
+}
+
+for (const search of ["always", "never"] as const) {
+  test(`a click opens a list (search="${search}") scrolled to its chosen row, with no row active`, async () => {
+    const { el, trigger } = await mountWithManyOptions();
+    el.search = search;
+    el.value = "18";
+    await el.updateComplete;
+    await userEvent.click(trigger);
+    await vi.waitFor(() => {
+      const chosen = el.shadowRoot!.querySelector('.option[aria-selected="true"]')!;
+      expect(chosen.textContent!.trim()).toBe("Option 18");
+      expectRowInView(el, chosen);
+    });
+    expect(el.shadowRoot!.querySelector(".option.active")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[aria-activedescendant]")).toBeNull();
+  });
+}
+
+test("a click opens a multiple choice scrolled to its first chosen row, with no row active", async () => {
+  const { el, trigger } = await mountWithManyOptions();
+  el.multiple = true;
+  el.values = ["19", "10"];
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await vi.waitFor(() => {
+    const chosen = [...el.shadowRoot!.querySelectorAll('.option[aria-selected="true"]')];
+    expect(chosen.map((row) => row.textContent!.trim())).toEqual(["Option 10", "Option 19"]);
+    expectRowInView(el, chosen[0]!);
+  });
+  expect(el.shadowRoot!.querySelector(".option.active")).toBeNull();
+});
+
 function searchBox(el: WtCombobox): HTMLInputElement {
   return el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
 }

@@ -26,3 +26,19 @@ test("chooseOption picks a value the way a click on its row does: the value, a c
   expect(el.value).toBe("main");
   expect(el.shadowRoot!.querySelector(".trigger .value")!.textContent).toBe("Main course");
 });
+
+test("chooseOption resolves only once the element's update has completed", async () => {
+  let finish!: () => void;
+  const stub = Object.assign(document.createElement("div"), {
+    value: "",
+    updateComplete: new Promise<void>((resolve) => (finish = resolve)),
+  });
+  let done = false;
+  const picking = chooseOption(stub, "main").then(() => (done = true));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(stub.value).toBe("main");
+  expect(done).toBe(false);
+  finish();
+  await picking;
+  expect(done).toBe(true);
+});

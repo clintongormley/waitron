@@ -280,7 +280,8 @@ beside it: the Printers screen's `.field-row` does, for the calibration wizard's
 button beside the ruler's answer, and the section member list's `.add` row does, for its Add button, along with that row's
 `.error` line (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
 the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
-cases in `packages/ui/src/components/wt-modal.test.ts` (every shared field, a native select
+cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-combobox`,
+`wt-price-input`, `wt-number-stepper` and `wt-switch`, a native select
 field's label, select, hint and error, and the message at 1280px; the select below its label text
 at 1280px; wide content and the footer row at full width; each field at the
 body's width at 390px; each field at its container's width outside a modal); the calibration case in
@@ -366,7 +367,11 @@ the `.trigger` button for `wt-combobox`) — never an element that can overflow 
 in `fieldStyles`) takes `min-width: var(--wt-tap-min)` and `min-height: var(--wt-field-height)`
 (`wt-textarea` moves the floated label's share of that height into its field box's top padding),
 or `--wt-tap-min` in a compact field; `wt-number-stepper`'s two buttons are exactly `--wt-tap-min`
-square; the rest take `min-width` and `min-height` of `--wt-tap-min`.
+square; `wt-switch`'s `:host` and `.control` and `wt-price-input`'s unit button take `min-width` and
+`min-height` of `--wt-tap-min`. `wt-button` takes them at its default size and is exactly
+`--wt-tap-min` square with `shape="round"`, but its height depends on `size`: `size="lg"` is at
+least 1.4 × `--wt-tap-min` tall, and `size="sm"` only `--wt-space-6`, BELOW the tap target (its
+`min-width` stays `--wt-tap-min`).
 
 `min-width` is a floor, not a request: `wt-input`'s inner `<input>` sets both `width: 100%` (to
 fill its container) and `min-width: var(--wt-tap-min)`, so in a grid or flex cell narrower than
@@ -404,13 +409,14 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
 | `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden; and `pinned` — `"end"` — which, set on the last column, keeps it at the trailing edge of the table's box while the others scroll sideways), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `rowToggleLabel` (`(row, expanded) => string` — names each row's toggle in place of the two fixed labels), `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `rowSelectable` (`(row) => boolean` — leaves a row without a checkbox, for example a variant that moves with its product), `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-filter-change` — `detail: { filters: Record<string, string> }` (reports a filter you change, not one restored from storage); `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
-| `wt-combobox` | `options` (`{ value, label, icon?, group?, action? }[]`: `icon` is a registered `wt-icon` name drawn before the label and hidden from screen readers; consecutive options with the same `group` render under that heading, inside a `role="group"` the heading names, and the arrow keys step over the heading; an `action` row sends `wt-combobox-action` and never becomes the value or shows as chosen), `multiple`, `value`, `values`, `allowAdd` (`allow-add`), `label`, `name`, `placeholder`, `hint` (shown as the trigger's text while nothing is chosen unless `placeholder` is set, and always the trigger's description, before the error), `required`, `disabled`, `invalid`, `error`, `hide-label` (names the trigger with `label` but draws no label, and makes the field compact), `search` (`"always"`, the default; `"auto"`, which shows the search box only above `SEARCH_THRESHOLD`, 7, options; `"never"`; `allow-add` shows it whatever this says, because the new option is typed into it), `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel`; `help` slot. The one dropdown: the trigger is the control of the filled field box (Forms → "The field box"), showing the chosen option's label (cut with an ellipsis on one line) and a `chevron-down` icon inside its trailing padding; while nothing is chosen it shows the placeholder or hint, muted and italic, and with neither the label rests. While the list is open the field box drops its focus marking. The list's rows are at least `--wt-dropdown-row-height` tall and a hovered row paints `--wt-color-bg`; in a single choice the chosen row's label is bold, with a `check` icon at the row's trailing end (a multiple choice keeps its checkbox picture instead). The search box sits on `--wt-color-surface` with one `--wt-field-line-width` line of `--wt-color-primary` all round, `--wt-radius-md` corners and no focus ring, in an area that carries `--wt-shadow-1`. The consuming app registers the `chevron-down` and `check` icons. Its keyboard is described under the table | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }`; `wt-combobox-action` — `detail: { value: string }` (an action row was picked: the list closes and the value is left alone) |
+| `wt-combobox` | `options` (`{ value, label, icon?, group?, action? }[]`: `icon` is a registered `wt-icon` name drawn before the label and hidden from screen readers; consecutive options with the same `group` render under that heading, inside a `role="group"` the heading names, and the arrow keys step over the heading; an `action` row sends `wt-combobox-action` and never becomes the value or shows as chosen), `multiple`, `value`, `values`, `allowAdd` (`allow-add`), `label`, `name`, `placeholder`, `hint` (shown as the trigger's text while nothing is chosen unless `placeholder` is set, and always the trigger's description, before the error), `required`, `disabled`, `invalid`, `error`, `hide-label` (names the trigger with `label` but draws no label, and makes the field compact), `search` (`"always"`, the default; `"auto"`, which shows the search box only above `SEARCH_THRESHOLD`, 7, options; `"never"`; `allow-add` shows it whatever this says, because the new option is typed into it), `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel`; `help` slot. The one dropdown: the trigger is the control of the filled field box (Forms → "The field box"), showing the chosen option's label (cut with an ellipsis on one line) and a `chevron-down` icon at its trailing end; while nothing is chosen it shows the placeholder or hint, muted and italic, and with neither the label rests. While the list is open the field box drops its focus marking. The list's rows are at least `--wt-dropdown-row-height` tall and a hovered row paints `--wt-color-bg`; a chosen row's label is bold, and in a single choice the row also carries a `check` icon at its trailing end (a multiple choice shows its checkbox picture instead). A click opens the list scrolled so the chosen row (in a multiple choice, the first chosen row) is in view, without making it the active row. The search box sits on `--wt-color-surface` with one `--wt-field-line-width` line of `--wt-color-primary` all round, `--wt-radius-md` corners and no focus ring, in an area that carries `--wt-shadow-1`. The consuming app registers the `chevron-down` and `check` icons. Its keyboard is described under the table | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }`; `wt-combobox-action` — `detail: { value: string }` (an action row was picked: the list closes and the value is left alone) |
 | `wt-language-footer` | `active` (the code of the page's language; the parent sets it and the component never changes it), `loadLocales` (property; `() => Promise<{ code, label }[]>`, called on the first open and again after a failed load; defaults to `SUPPORTED_LOCALES`; one load at a time; while it is pending, a second press, Escape, or a press or focus outside cancels the opening, and a further press asks for it again). A page footer in the page's flow, never fixed, holding a `wt-button` named with the active language (from the loaded list, then `SUPPORTED_LOCALES`, then the bare code) whose menu of `menuitemradio` options opens upwards over what is above it. Opening focuses the checked option (or the first); ArrowDown and ArrowUp move between options and wrap, Home and End reach the ends; Escape closes it and returns focus to the trigger, and goes no further only when it closed the menu; a press or focus outside closes it without moving focus; `data-test` hooks `lang-trigger` and `lang-<code>` | `wt-locale-selected` — `detail: { code: string }`; a pick closes the menu and returns focus to the trigger |
 
 `wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
 Alt+ArrowDown, Enter and Space open the list with the chosen row active (the first row when nothing
-is chosen), and the key's default is prevented, so Enter in a form bound with `submitOnEnter`
-opens the list and submits nothing. A printable key on the closed trigger opens a list that has a search box
+is chosen), and the key's default is prevented, so the trigger button's own click on that key does
+not close the list again; in a form bound with `submitOnEnter`, Enter on the trigger opens the list
+and submits nothing (the "Enter on a closed trigger" case in `wt-combobox.test.ts`). A printable key on the closed trigger opens a list that has a search box
 with that character already searched for; on one without a search box it chooses the next option
 whose label starts with the typed text, without opening (the typed text starts again 500 ms after
 the last key, pressing one letter again steps on through the options starting with it, an action
@@ -425,7 +431,9 @@ prevented and its propagation stopped, so inside a `wt-dialog` it closes the lis
 dialog. Tab and Shift+Tab pick nothing, close
 the list and let focus move on, and focus leaving both the list and the trigger closes it. A press
 on the label of a closed dropdown opens the list; a press on the label while the list is open
-closes it and leaves focus on the trigger. The "No results" text sits outside the list box; the
+closes it and leaves focus on the trigger. Opened by a click, the list makes no row active (the
+first arrow press goes to the first row, or with ArrowUp the last) but scrolls the chosen row into
+view. The "No results" text sits outside the list box; the
 reason is in the code (`wt-combobox.ts`, the comment above it).
 
 Set a `wt-data-table` column’s `activatesRow: false` when it has an action separate from `rowClick`.
@@ -662,14 +670,17 @@ registerIcons({ check: "M2 8 L6 12 L14 4" });
 An unregistered `name` renders nothing — there is no broken-icon fallback markup. When a
 `packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
 trigger, for one), that name becomes part of the primitive's contract: every consuming app must
-register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
-`hamburger`, `kebab`, `chevron-down`, `check`, `gear`, `person`, `plus`, `minus`, `bin`, `grip`, `bell`, `close`, each a
-plain geometric shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (its header carries the
-Material Symbols attribution) and is registered once in `main.ts`. The till registers `chevron-down`
-and `check` (for `wt-combobox`) beside its `close` in `apps/till/src/till-app.ts`, and setup registers
-the same two in `apps/setup/src/setup-app.ts`; each app's `src/dropdown-icons.test.ts` mounts a
-`wt-combobox` with that app's registration and checks that its chevron and its chosen row's tick
-draw. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
+register it itself, or that primitive's icon silently disappears there. Each app's registration is
+the list of what it draws: the dashboard's set, each a plain geometric shape at the same 16x16
+viewBox, is `DASHBOARD_ICONS` in `apps/dashboard/src/icons.ts` (its header carries the Material
+Symbols attribution), registered once in `main.ts`; the till registers its own in
+`apps/till/src/till-app.ts` (and its station queue's notice icons in
+`apps/till/src/widgets/station-queue.ts`); setup registers its own in `apps/setup/src/setup-app.ts`.
+Each of the three includes `wt-combobox`'s `chevron-down` and `check`. Each app's
+`src/dropdown-icons.test.ts` mounts a `wt-combobox` and checks that its chevron and its chosen row's
+tick draw: the till's and setup's import the app module, so they check the app's own registration;
+the dashboard's registers `DASHBOARD_ICONS` itself, so it checks the icon set, not that `main.ts`
+registers it. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
 different things at different scales: hamburger opens the whole app's navigation (used once);
 kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
@@ -691,9 +702,9 @@ For folder deletion, read what every selected folder contains before enabling De
 Empty folders are deleted without asking; otherwise offer moving their contents up as the
 default, reversible choice.
 
-### Accessible, clickable labels (`wt-input`, `wt-switch`, `wt-combobox`)
+### Accessible, clickable labels (`wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`, `wt-switch`, `wt-combobox`)
 
-All three associate their visible `<label>` with the control through a real `for`/`id` pair —
+All of them associate their visible `<label>` with the control through a real `for`/`id` pair —
 not by wrapping the control inside the `<label>` — so the existing layout and font sizing stay
 untouched. A named `wt-input` or `wt-combobox` uses that semantic name for its `name` and `id`. An
 unnamed legacy input, an unnamed combobox and every `wt-switch` use a module-level counter
@@ -1437,7 +1448,8 @@ test("paints from the primary token", async () => {
   overrides on it (`host.style.setProperty(...)`) to prove a component reads a token rather than
   hardcoding a value.
 - `cleanup()` — removes every host mounted since the last call. Call it from `afterEach`.
-- `chooseOption(el, value)` — picks `value` on a `wt-combobox` the way a click on its row does: sets
+- `chooseOption(el, value)` — picks `value` on a single-choice `wt-combobox` the way a click on its
+  row does (it sets `value`, never `values`, so it cannot drive a `multiple` one): sets
   `value`, sends `wt-change` with `detail: { value }` (bubbling and composed), and awaits the
   render. It is for a screen test that used to set a native select's value; an app's test imports
   it as `@waitron/ui/src/test-helpers.js`. Its case is in `packages/ui/src/test-helpers.test.ts`.
@@ -1520,7 +1532,7 @@ message, required, disabled holding a value, with its label hidden, and with a h
 `wt-price-input` invalid with no message, resting, resting over a hidden currency sign and fixed
 unit, focused, and disabled with a fixed unit; `wt-number-stepper` resting, focused, invalid with no
 message, with a label longer than the box, and with its label hidden; `wt-combobox` closed with a
-value chosen, open with the chosen row ticked, with icons, with groups, with an action row and
+value chosen, open with the chosen row ticked, with icons, with groups, with an action row,
 without a search box, with focus back on the trigger, compact, with a hint shown as the
 placeholder, with a help button, disabled with a value chosen, and opened from the keyboard with
 and without a search box — verified 2026-10-01 by running
