@@ -1,4 +1,16 @@
 export const QUERY_DEPENDENCIES = {
+  routing: [
+    "station_claims",
+    "route_exceptions",
+    "kitchen_stations",
+    "categories",
+    "category_details",
+    "products",
+    "floor_zones",
+    "station_printers",
+    "printers",
+    "devices",
+  ],
   operations: [
     "departments",
     "zone_service_policies",

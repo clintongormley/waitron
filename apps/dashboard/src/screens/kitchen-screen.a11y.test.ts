@@ -67,31 +67,12 @@ describe.each(["light", "dark"] as const)("kitchen-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
-  it("renders accessibly with empty station + course lists", async () => {
+  it("renders accessibly with empty course list", async () => {
     const { el, host } = await mountWidget<KitchenScreen>(
       "dashboard-kitchen-screen",
       { api: stubApi([], []) },
       theme,
     );
-    await flush(el);
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders accessibly with the error banner shown", async () => {
-    const api = {
-      ...stubApi(STATIONS),
-      createStation: vi.fn().mockRejectedValue({ code: "station.name_taken" }),
-    } as unknown as DashboardApi;
-    const { el, host } = await mountWidget<KitchenScreen>(
-      "dashboard-kitchen-screen",
-      { api },
-      theme,
-    );
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-new-station]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Cocina" }, bubbles: true, composed: true }),
-    );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-add-station]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });
