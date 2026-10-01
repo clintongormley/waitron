@@ -192,9 +192,14 @@ slices, each with its own plan and pull request:
 
 Slice 3 needs slice 1. Slice 2 is independent of both. Several entries below are overtaken by this
 design, and each carries a dated note. Slice 1's plan is being built (campaign lane D, PF1).
-Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md) is written and
-reviewed twice; it also drops per-menu extras (owner, 2026-10-01). **Next action:** the owner
-approves slice 2's plan, then campaign lane E builds it (PF2b).
+Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
+per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
+four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
+([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), approved, lane D's PF3 after
+PF1); 3b, opening hours, by-hand open and close, fallbacks, and down-printer and dark-screen alerts
+([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), written and reviewed
+four times); 3c, split-off extras and what a ticket shows; 3d, watchers. **Next action:** the owner
+approves the 3b plan; then it is queued after 3a, and the 3c plan is written.
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside
