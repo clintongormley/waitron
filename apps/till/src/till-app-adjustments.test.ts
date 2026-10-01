@@ -1194,7 +1194,7 @@ describe("till-app: cancelling a dish", () => {
       expect(rows[1]!.querySelector(".line-total s")).toBeNull();
     });
 
-    it("cancels an extra of a dish being made as coming off the bill, not as binned", async () => {
+    it("cancels an extra of a dish being made as coming off the bill with the kitchen told, not as binned", async () => {
       const { el } = await mountApp({
         getTabLines: vi.fn().mockResolvedValue({
           lines: [{ ...pair, state: "preparing" }, extra],
@@ -1205,7 +1205,7 @@ describe("till-app: cancelling a dish", () => {
       const order = await openMesa4(el);
       await press(el, cancelButton(order, 2));
       const shown = dialog(el)!.shadowRoot!.textContent!;
-      expect(shown).toContain(t("table.cancel_sent"));
+      expect(shown).toContain(t("table.cancel_extra_told"));
       expect(shown).not.toContain(t("table.cancel_started"));
     });
 

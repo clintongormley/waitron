@@ -798,3 +798,140 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     expect(lines.slice(6, 8)).toEqual(["-1 x Steak with a very long", "     kitchen name indeed"]);
   });
 });
+
+describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
+  const at = new Date(2026, 7, 17, 14, 30);
+  const slip = {
+    stationName: "Cocina",
+    tableLabel: "Mesa 4",
+    orderNumber: "A-17",
+    at: at.toISOString(),
+  };
+  const burger: KitchenTicketItem = {
+    qty: "1.000",
+    name: "HAMB",
+    modifiers: ["Fries", "Salad x2"],
+    note: "well done",
+  };
+
+  // Fails if the slip loses the dish as it stands, the extra to take off, or the English words.
+  it("prints CHANGED, the dish with the extras it keeps, then the extra to take off", () => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          ...slip,
+          kind: "EXTRA CANCELLED",
+          held: false,
+          cancelledExtra: "Gherkins",
+          locale: "en-GB",
+          item: burger,
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** CHANGED ***",
+      "Cocina",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "1.000 x HAMB",
+      "  + Fries",
+      "  + Salad x2",
+      "  * well done",
+      "  CANCEL: Gherkins",
+      "",
+    ]);
+  });
+
+  it("prints HOLD CHANGED with the group for held work on a HOLD ticket", () => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          ...slip,
+          kind: "EXTRA CANCELLED",
+          held: true,
+          cancelledExtra: "Gherkins",
+          locale: "en-GB",
+          item: { ...burger, note: undefined, group: 2 },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** HOLD CHANGED ***",
+      "Cocina",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "GROUP 2",
+      "1.000 x HAMB",
+      "  + Fries",
+      "  + Salad x2",
+      "  CANCEL: Gherkins",
+      "",
+    ]);
+  });
+
+  it.each([
+    [false, "*** CAMBIADO ***"],
+    [true, "*** HOLD CAMBIADO ***"],
+  ])(
+    "prints its words in Spanish for a server whose language is Spanish (held: %s)",
+    (held, head) => {
+      const lines = printedLines(
+        formatCorrectionSlip(
+          {
+            ...slip,
+            kind: "EXTRA CANCELLED",
+            held,
+            cancelledExtra: "Pepinillos",
+            locale: "es-ES",
+            item: { qty: "1.000", name: "HAMB" },
+          },
+          KITCHEN_80,
+        ),
+      );
+      expect(lines[0]).toBe(head);
+      expect(lines).toContain("  QUITAR: Pepinillos");
+      expect(lines.join("\n")).not.toContain("CANCEL");
+    },
+  );
+
+  it("prints its words in English for a server in any other language", () => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          ...slip,
+          kind: "EXTRA CANCELLED",
+          held: false,
+          cancelledExtra: "Cornichons",
+          locale: "fr-FR",
+          item: { qty: "1.000", name: "HAMB" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines[0]).toBe("*** CHANGED ***");
+    expect(lines).toContain("  CANCEL: Cornichons");
+  });
+
+  it("wraps the extra to take off under its text on narrow paper, in the layout's character set", () => {
+    const bytes = formatCorrectionSlip(
+      {
+        ...slip,
+        kind: "EXTRA CANCELLED",
+        held: false,
+        cancelledExtra: "Jalapeños en vinagre con eneldo",
+        locale: "es-ES",
+        item: { qty: "1.000", name: "HAMB" },
+      },
+      KITCHEN_58,
+    );
+    const lines = printedLines(bytes);
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
+    expect(lines.slice(-3)).toEqual(["  QUITAR: Jalapeños en vinagre", "          con eneldo", ""]);
+    expect([...bytes]).toContain(0xa4); // ñ in code page 858
+    expect([...bytes]).not.toContain(0xf1);
+  });
+});

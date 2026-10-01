@@ -213,6 +213,10 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout
  * (now belongs to another table, `tableLabel`, where `movedFrom` names the table and order its ticket
  * had). For held work on a HOLD ticket: `HOLD CHANGED` (the item's quantity `added` to or `removed`
  * from its group) or `HOLD CANCELLED` (taken out of the order); these name the item's group.
+ * `EXTRA CANCELLED`: an extra taken off a dish the kitchen has, fired or `held` on a HOLD ticket,
+ * printing the dish as it now stands and then the extra to take off. Its header word and cancel
+ * line follow `locale`'s language (Spanish, else English); the `HOLD` prefix and `GROUP n` stay
+ * English.
  */
 export type CorrectionSlip = {
   stationName: string;
@@ -225,7 +229,25 @@ export type CorrectionSlip = {
   | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
   | { kind: "HOLD CHANGED"; direction: "added" | "removed" }
   | { kind: "HOLD CANCELLED" }
+  | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
 );
+
+const EXTRA_CANCELLED_WORDS = {
+  en: { changed: "CHANGED", cancel: "CANCEL:" },
+  es: { changed: "CAMBIADO", cancel: "QUITAR:" },
+} as const;
+
+function extraCancelledWords(locale: string) {
+  return locale.split("-")[0]!.toLowerCase() === "es"
+    ? EXTRA_CANCELLED_WORDS.es
+    : EXTRA_CANCELLED_WORDS.en;
+}
+
+function slipHeader(slip: CorrectionSlip): string {
+  if (slip.kind !== "EXTRA CANCELLED") return slip.kind;
+  const { changed } = extraCancelledWords(slip.locale);
+  return slip.held ? `HOLD ${changed}` : changed;
+}
 
 /**
  * Prints the item through {@link emitItem}, as a ticket does; a HOLD CHANGED slip prefixes it with
@@ -237,7 +259,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout
     for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
   };
 
-  b.line(`*** ${slip.kind} ***`);
+  text(`*** ${slipHeader(slip)} ***`);
   text(slip.stationName);
   if (slip.kind === "MOVED") {
     const { movedFrom } = slip;
@@ -255,6 +277,16 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout
   if (slip.item.group !== undefined) b.line(`GROUP ${slip.item.group}`);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   emitItem(b, slip.item, layout, sign);
+  if (slip.kind === "EXTRA CANCELLED") {
+    const prefix = `  ${extraCancelledWords(slip.locale).cancel} `;
+    for (const line of wrapText(
+      prepareText(`${prefix}${slip.cancelledExtra}`, layout.charset),
+      layout.columns,
+      prefix.length,
+    )) {
+      b.line(line);
+    }
+  }
 
   return b.feedAndCut().bytes();
 }

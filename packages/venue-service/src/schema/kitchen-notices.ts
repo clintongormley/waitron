@@ -44,6 +44,8 @@ export const kitchenNotices = table(
     movedTo: label("moved_to"),
     /** On a `changed` notice, whether the quantity was added to or taken from the work. */
     direction: kitchenNoticeDirection("direction"),
+    /** On a `changed` notice, the extra taken off the dish, as its kitchen paper printed it. */
+    cancelledExtra: label("cancelled_extra"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     acknowledgedAt: tsString("acknowledged_at"),
   },
@@ -68,6 +70,10 @@ export const kitchenNotices = table(
     check(
       "kitchen_notices_direction_kind_ck",
       sql`${t.kind} = 'changed' or ${t.direction} is null`,
+    ),
+    check(
+      "kitchen_notices_cancelled_extra_kind_ck",
+      sql`${t.kind} = 'changed' or ${t.cancelledExtra} is null`,
     ),
   ],
 );

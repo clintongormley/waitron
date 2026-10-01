@@ -10,6 +10,7 @@
 // `packages/catalogue/src/extras.ts`.
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   kitchenPrintJobLines,
   kitchenPrintJobs,
@@ -27,6 +28,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
@@ -69,6 +71,15 @@ function ticketName(text: Record<string, string>, locale: string): string {
   // The map is never empty: `unit_name` freezes a unit's abbreviation, and `createUnit` and
   // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `requireTranslations`.
   return Object.values(text)[0]!;
+}
+
+/**
+ * An extras child as its dish's kitchen paper prints it: its frozen staff name — the picked
+ * product's own — with ` x<n>` when the dish carries more than one of it each.
+ */
+function extraLabel(name: string, quantity: Decimal, dishQuantity: Decimal): string {
+  const perDish = perDishOptionQuantity(quantity, dishQuantity);
+  return perDish > 1 ? `${name} x${perDish}` : name;
 }
 
 interface PrinterMapping {
@@ -193,12 +204,8 @@ async function buildTicketItems(
   const modifiersByParent = new Map<string, string[]>();
   for (const child of childRows) {
     const parent = lineById.get(child.parentLineId!)!;
-    const perDish = perDishOptionQuantity(child.quantity, parent.quantity);
-    // An extras sub-line prints the staff name the child line froze — the picked product's own.
-    const name = child.name;
-    const label = perDish > 1 ? `${name} x${perDish}` : name;
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    names.push(label);
+    names.push(extraLabel(child.name, child.quantity, parent.quantity));
     modifiersByParent.set(child.parentLineId!, names);
   }
 
@@ -546,6 +553,7 @@ export interface CorrectionItem {
 type CorrectionChange =
   | { kind: "VOID" | "RECALLED" }
   | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
+  | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
   | HoldCorrection;
 
 /** A change to held work on a queued HOLD ticket: quantity `added` or `removed`, or cancelled. */
@@ -604,6 +612,97 @@ export async function enqueueHoldCorrections(
     change.kind === "HOLD CANCELLED" ? null : change.direction,
   );
   await printCorrectionSlips(tx, cfg, orderId, items, change);
+}
+
+/** An extra about to come off its dish, and the dish's kitchen item as the kitchen has it. */
+export interface CancelledExtra {
+  /** The extra as the dish's kitchen paper prints it. */
+  label: string;
+  dishLineId: string;
+  dishGroupId: string | null;
+  /** Null when the dish has no kitchen item. */
+  item: {
+    firedAt: string | null;
+    stationId: string | null;
+    state: TicketState;
+    firedQuantity: number;
+  } | null;
+}
+
+/** Read before the extra's line is deleted: it names the extra from the line. */
+export async function readCancelledExtra(
+  tx: Transaction,
+  extraLineId: string,
+): Promise<CancelledExtra> {
+  const extra = alias(workingOrderLines, "extra");
+  const [row] = await tx
+    .select({
+      name: extra.name,
+      quantity: extra.quantity,
+      dishLineId: workingOrderLines.id,
+      dishQuantity: workingOrderLines.quantity,
+      dishGroupId: workingOrderLines.groupId,
+      ticketItemId: ticketItems.id,
+      firedAt: ticketItems.firedAt,
+      stationId: ticketItems.stationId,
+      state: ticketItems.state,
+      firedQuantity,
+    })
+    .from(extra)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, extra.parentLineId))
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(eq(extra.id, extraLineId));
+  const found = row!;
+  return {
+    label: extraLabel(
+      found.name,
+      thousandthsToDecimal(found.quantity),
+      thousandthsToDecimal(found.dishQuantity),
+    ),
+    dishLineId: found.dishLineId,
+    dishGroupId: found.dishGroupId,
+    item:
+      found.ticketItemId === null
+        ? null
+        : {
+            firedAt: found.firedAt,
+            stationId: found.stationId,
+            state: found.state!,
+            firedQuantity: found.firedQuantity,
+          },
+  };
+}
+
+/**
+ * Record a `changed` notice on the dish naming `cancelledExtra`, then enqueue a slip of the dish as
+ * it now stands with the extra to take off, as {@link enqueueCorrectionSlips} enqueues a slip:
+ * headed CHANGED for fired work, or HOLD CHANGED with its group for an item carrying a `group`,
+ * held work on a queued HOLD ticket. Call it after the extra's line is deleted, so the slip prints
+ * the extras the dish keeps.
+ */
+export async function enqueueExtraCancelled(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  item: CorrectionItem,
+  cancelledExtra: string,
+): Promise<void> {
+  await VENUE_SERVICE.recordKitchenNotices(
+    tx,
+    cfg,
+    orderId,
+    [toNoticeItem(item)],
+    "changed",
+    null,
+    null,
+    cancelledExtra,
+  );
+  await printCorrectionSlips(tx, cfg, orderId, [item], {
+    kind: "EXTRA CANCELLED",
+    held: item.group !== undefined,
+    cancelledExtra,
+    locale: cfg.locale,
+  });
 }
 
 function toNoticeItem(item: CorrectionItem) {

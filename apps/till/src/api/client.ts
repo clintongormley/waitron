@@ -1169,6 +1169,8 @@ export interface KitchenNotice {
   movedTo: string | null;
   /** On a `changed` notice, whether `quantity` was added to the work or taken from it. */
   direction: "added" | "removed" | null;
+  /** On a `changed` notice, the extra taken off the dish. */
+  cancelledExtra: string | null;
   createdAt: string;
 }
 

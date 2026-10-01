@@ -111,6 +111,7 @@ const baseNotice: KitchenNotice = {
   wasStarted: true,
   movedTo: null,
   direction: null,
+  cancelledExtra: null,
   createdAt: "2026-08-17T10:10:00.000Z",
 };
 const notices: KitchenNotice[] = [

@@ -36,6 +36,8 @@ export interface KitchenNotice {
   movedTo: string | null;
   /** On a `changed` notice, whether the quantity was added to the work or taken from it. */
   direction: KitchenNoticeDirection | null;
+  /** On a `changed` notice, the extra taken off the dish. */
+  cancelledExtra: string | null;
   createdAt: string;
 }
 
@@ -59,7 +61,8 @@ const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
  * on the order is the caller's fault and throws a plain `Error`. `movedTo` is for a `moved` notice
  * only; on another kind only the table's check constraint `kitchen_notices_moved_to_ck` refuses
  * it, as the engine's constraint error rather than an `AppError`. `direction` is for a `changed`
- * one only (`kitchen_notice.invalid` otherwise, or for a value outside the two).
+ * one only (`kitchen_notice.invalid` otherwise, or for a value outside the two), and so is
+ * `cancelledExtra`, the extra taken off the dish (`kitchen_notice.invalid` otherwise).
  */
 export async function recordKitchenNotices(
   tx: Transaction,
@@ -69,12 +72,16 @@ export async function recordKitchenNotices(
   kind: KitchenNoticeKind,
   movedTo: string | null = null,
   direction: KitchenNoticeDirection | null = null,
+  cancelledExtra: string | null = null,
 ): Promise<void> {
   if (
     direction !== null &&
     (kind !== "changed" || !KITCHEN_NOTICE_DIRECTIONS.includes(direction))
   ) {
     throw new AppError("kitchen_notice.invalid", { field: "direction" });
+  }
+  if (cancelledExtra !== null && kind !== "changed") {
+    throw new AppError("kitchen_notice.invalid", { field: "cancelledExtra" });
   }
   if (items.length === 0) return;
   const [order] = await tx
@@ -151,6 +158,7 @@ export async function recordKitchenNotices(
         wasStarted: item.wasStarted,
         movedTo,
         direction,
+        cancelledExtra,
         createdAt,
       };
     }),
@@ -182,6 +190,7 @@ export async function listStationNotices(
       wasStarted: kitchenNotices.wasStarted,
       movedTo: kitchenNotices.movedTo,
       direction: kitchenNotices.direction,
+      cancelledExtra: kitchenNotices.cancelledExtra,
       createdAt: kitchenNotices.createdAt,
     })
     .from(kitchenNotices)

@@ -3152,7 +3152,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       decision.
     - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
     - `*** REPRINT ***` and `GROUP n` print in English. _(Task 6, 2026-09-27: so do `*** HOLD ***`,
-      `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_
+      `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_ _(B11g, 2026-10-01:
+      the extra-cancel slip is the one kind whose header word and cancel line follow the server's
+      locale (`WAITRON_TILL_LOCALE`, `es-ES` when unset), so by default a held slip reads
+      `*** HOLD CAMBIADO ***`, `GROUP n` and `QUITAR:`, mixed on one slip; every other slip stays
+      English.)_
     - A resend from the dashboard's Printers screen does not clear a table's printing problem, and
       there is no way to dismiss one: a detached or replaced printer leaves it showing. _(B6a,
       2026-09-28: a printer detached from the station now drops the problem, tested. A printer
@@ -3873,11 +3877,26 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         empty tables only, and #959 measured the row-carrying upgrade once, in a throwaway test.
         **Next action:** decide whether the upgrade guard should carry rows (it would serve every
         set, not only adjustments).
-      - **Cancelling an extra of a dish the kitchen already has tells the kitchen nothing** — no
-        VOID slip and no correction to a held ticket — as the cancel route this replaced did not
-        either; the till says the extra comes off the bill. **Next action:** if the owner wants
-        the kitchen told, print a correction slip naming the dish once its ticket has fired.
-        (Owner, 2026-09-30: yes — queued as lane B's B11g.)
+      - _Done by lane B item B11g (branch `feat/service-extra-cancel-slip`):_ cancelling an extra
+        of a fired dish, or of a held dish whose HOLD ticket was queued for printing, now records
+        a `changed` kitchen notice naming the extra and prints a CHANGED (or HOLD CHANGED) slip of
+        the dish as it now stands with a `CANCEL:` line; with the server's `locale` Spanish those
+        read CAMBIADO, HOLD CAMBIADO and `QUITAR:` (`apps/server/src/kitchen-ticket.ts`,
+        `tellKitchenOfCancelledExtra`,
+        `apps/server/src/working-order.ts`). Venue-service `0011` adds
+        `kitchen_notices.cancelled_extra` and `0012` rebuilds the table to add
+        `kitchen_notices_cancelled_extra_kind_ck`, which refuses a cancelled extra on a notice that
+        is not `changed`: two drizzle generations, because one copied the new column out of the
+        old table and failed `scripts/migration-upgrade.test.ts` with `no such column`. No foreign
+        key in any migration set points at `kitchen_notices`, and its only triggers are the change
+        feed's, removed before migrating and reinstalled at boot. A throwaway probe upgraded a
+        venue at `0010` holding a notice of each kind: every row read back equal,
+        `pragma foreign_key_check` returned nothing, the change feed's three triggers came back and
+        logged an update, and a cancelled extra on a `void` notice was refused by the new check.
+        Left open: for an extra of a held dish whose HOLD
+        ticket was queued, the kitchen is told but the till's cancel dialog still says only that it
+        comes off the bill, because the till cannot see whether the HOLD ticket was queued.
+        **Next action:** decide whether the till should be told that.
       - **An extra now counts its dish's percentage under a reason's per-line cap, and a dish the
         largest of its extras'.** So an extra added after its dish was discounted 30%, under a 50%
         cap, is refused a 30% discount of its own. This errs toward refusing; a review found no way

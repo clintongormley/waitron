@@ -528,6 +528,12 @@ export class TillStationQueue extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      .notice-extra {
+        flex-basis: 100%;
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
+
       /* Emphasis by weight and a border, so "started" never rests on colour. */
       .notice-started {
         padding: 0 var(--wt-space-2);
@@ -724,11 +730,17 @@ export class TillStationQueue extends LitElement {
     const sign = notice.direction === null ? "" : notice.direction === "added" ? "+" : "\u2212";
     const line = `${sign}${dishLine(notice, notice.lineName)}`;
     const acknowledge = t("station.notice.acknowledge");
-    const { movedTo } = notice;
+    const { movedTo, cancelledExtra } = notice;
+    // A replacer function, so a `$` in the name is never read as a pattern.
+    const extra =
+      cancelledExtra === null
+        ? null
+        : t("station.notice.cancelled_extra").replace("{extra}", () => cancelledExtra);
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
       <span class="notice-kind"><wt-icon name=${`notice-${notice.kind}`}></wt-icon>${kind}</span>
       <span class="notice-body">
         <span class="notice-line">${line}</span>
+        ${extra === null ? nothing : html`<span class="notice-extra">${extra}</span>`}
         <span class="notice-order">${notice.orderLabel}</span>
         ${
           notice.wasStarted
@@ -750,7 +762,7 @@ export class TillStationQueue extends LitElement {
       <wt-button
         data-acknowledge
         variant="secondary"
-        aria-label=${`${acknowledge}: ${kind} ${line}, ${notice.orderLabel}`}
+        aria-label=${`${acknowledge}: ${kind} ${line}, ${extra === null ? "" : `${extra}, `}${notice.orderLabel}`}
         @click=${() => this.#acknowledge(notice)}
       >
         ${acknowledge}

@@ -223,6 +223,7 @@ describe("recordKitchenNotices", () => {
         wasStarted: true,
         movedTo: null,
         direction: null,
+        cancelledExtra: null,
         createdAt: expect.any(String),
       },
     ]);
@@ -511,6 +512,32 @@ describe("recordKitchenNotices", () => {
       },
     );
 
+    it.each(["recalled", "void", "moved"] as const)(
+      "an extra taken off on a %s notice, which only a changed notice carries",
+      async (kind) => {
+        const v = await venue();
+        const order = await seedOrder(v.locationId, 1, null);
+        await expect(
+          inTx((tx) =>
+            recordKitchenNotices(
+              tx,
+              v.cfg,
+              order.orderId,
+              [item(order.burgerLineId, v.grill)],
+              kind,
+              null,
+              null,
+              "Gherkins",
+            ),
+          ),
+        ).rejects.toMatchObject({
+          code: "kitchen_notice.invalid",
+          params: { field: "cancelledExtra" },
+        });
+        expect(await db.select().from(kitchenNotices)).toEqual([]);
+      },
+    );
+
     it("a direction other than added or removed", async () => {
       const v = await venue();
       const order = await seedOrder(v.locationId, 1, null);
@@ -626,6 +653,53 @@ describe("recordKitchenNotices", () => {
     ]);
   });
 
+  // Fails if the extra a change took off the dish is not recorded, or not listed.
+  it("records and lists a changed notice with the extra taken off the dish, and none on the others", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 6, null);
+    const burger = [
+      {
+        workingOrderLineId: order.burgerLineId,
+        stationId: v.grill,
+        quantity: ONE,
+        wasStarted: true,
+      },
+    ];
+    await inTx(async (tx) => {
+      await recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        burger,
+        "changed",
+        null,
+        null,
+        "Gherkins",
+      );
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "added");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
+    });
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    expect(notices[0]).toEqual({
+      id: expect.any(String),
+      stationId: v.grill,
+      workingOrderId: order.orderId,
+      orderLabel: "#6",
+      kind: "changed",
+      lineName: "BRGR",
+      unitName: null,
+      soldInEach: false,
+      quantity: ONE,
+      note: "no onions",
+      wasStarted: true,
+      movedTo: null,
+      direction: null,
+      cancelledExtra: "Gherkins",
+      createdAt: expect.any(String),
+    });
+    expect(notices.map((notice) => notice.cancelledExtra)).toEqual(["Gherkins", null, null]);
+  });
+
   it("records a moved notice with the table the work moved to", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 9, null);
@@ -661,6 +735,7 @@ describe("recordKitchenNotices", () => {
         wasStarted: false,
         movedTo: "Mesa 7",
         direction: null,
+        cancelledExtra: null,
         createdAt: expect.any(String),
       },
     ]);

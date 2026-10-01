@@ -1123,6 +1123,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     wasStarted: false,
     movedTo: null,
     direction: null,
+    cancelledExtra: null,
     createdAt: "2026-08-17T10:10:00.000Z",
     ...overrides,
   });
@@ -1343,6 +1344,49 @@ describe("till-station-queue — kitchen notices strip", () => {
     expect(label).toContain(t("station.notice.void"));
     expect(label).toContain("1× Burger");
     expect(label).toContain("#5 · Mesa 4");
+  });
+
+  // Fails if a change that took an extra off a dish does not say which extra, on screen and to a
+  // screen reader.
+  it.each([
+    ["en-GB", "Cancel: Gherkins"],
+    ["es-ES", "Quitar: Gherkins"],
+  ])("names the extra a change took off the dish (%s)", async (locale, shown) => {
+    const previousLocale = currentLocale();
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups,
+        stationId: "st-1",
+        notices: [
+          notice({ id: "kn-extra", kind: "changed", cancelledExtra: "Gherkins" }),
+          notice({ id: "kn-plain", kind: "changed" }),
+        ],
+      });
+      const [extra, plain] = rows(el);
+      expect(extra!.querySelector(".notice-extra")!.textContent!.trim()).toBe(shown);
+      expect(t("station.notice.cancelled_extra").replace("{extra}", "Gherkins")).toBe(shown);
+      expect(plain!.querySelector(".notice-extra")).toBeNull();
+      const label = extra!.querySelector("[data-acknowledge]")!.getAttribute("aria-label")!;
+      expect(label).toContain(shown);
+      expect(plain!.querySelector("[data-acknowledge]")!.getAttribute("aria-label")).not.toContain(
+        t("station.notice.cancelled_extra").split("{extra}")[0]!,
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it("shows a cancelled extra's name exactly as sent, `$` sequences included", async () => {
+    const name = "Salsa $& $` $'";
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [notice({ kind: "changed", cancelledExtra: name })],
+    });
+    expect(rows(el)[0]!.querySelector(".notice-extra")!.textContent!.trim()).toBe(
+      t("station.notice.cancelled_extra").split("{extra}").join(name),
+    );
   });
 
   it("keeps the notices on screen when the queue itself is empty (a void can take the last item)", async () => {

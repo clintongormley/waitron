@@ -767,9 +767,8 @@ async function reprice(
 /**
  * Apply a cancellation, comp or discount to an open bill, a table's or a counter order, at most once
  * per submission id on the bill (plan D8): a cancel removes the part ({@link removeFromLine}),
- * telling the kitchen about a dish it had (an extra has no kitchen item of its own, so a cancelled
- * extra tells it nothing); a comp or a discount lowers the prices by plan D4 and D15, and tells the
- * kitchen nothing. It moves the bill's revision on, and its party's when it has one, and records one
+ * telling the kitchen about a dish it had, or about the dish a cancelled extra came off; a comp or a
+ * discount lowers the prices by plan D4 and D15, and tells the kitchen nothing. It moves the bill's revision on, and its party's when it has one, and records one
  * adjustment. The PIN never enters the recorded command. `venueLocale` is the venue's display
  * language, which names the reason for an operator with no language of their own. `attempts`, when
  * given, puts the approver's PIN under that wrong-PIN limit; it is kept apart from `args` because

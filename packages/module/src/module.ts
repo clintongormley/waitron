@@ -409,7 +409,8 @@ export interface VenueServiceContribution {
   readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;
   /** Records one kitchen notice per item, copying each line's kitchen name, unit, note and whether
    *  it was sold in Each as they stand now, so a caller removing a line records its notices first.
-   *  `direction` is for a `changed` notice only. */
+   *  `direction` and `cancelledExtra` (the extra taken off the dish) are for a `changed` notice
+   *  only. */
   recordKitchenNotices(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -423,6 +424,7 @@ export interface VenueServiceContribution {
     kind: "recalled" | "void" | "changed" | "moved",
     movedTo?: string | null,
     direction?: "added" | "removed" | null,
+    cancelledExtra?: string | null,
   ): Promise<void>;
   /** A station's unacknowledged notices, oldest first: the newest fifty of the business day. */
   listStationNotices(
@@ -444,6 +446,7 @@ export interface VenueServiceContribution {
       wasStarted: boolean;
       movedTo: string | null;
       direction: "added" | "removed" | null;
+      cancelledExtra: string | null;
       createdAt: string;
     }[]
   >;

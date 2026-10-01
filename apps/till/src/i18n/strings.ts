@@ -134,6 +134,8 @@ export const en = {
   "station.notice.started": "Started",
   // `{table}` is substituted at the call site.
   "station.notice.moved_to": "Moved to {table}",
+  // `{extra}` is substituted at the call site.
+  "station.notice.cancelled_extra": "Cancel: {extra}",
   "station.notice.acknowledge": "Got it",
   "station.acknowledge_error": "Could not clear the notice, try again",
   // `{time}` and `{ago}` are substituted at the call site, `{n}` by `countText`; `t()` does not
@@ -371,6 +373,7 @@ export const en = {
   "table.cancel_started": "The kitchen has started this — cancel and bin it?",
   "table.change_line": "Change",
   "table.cancel_sent": "It comes off the bill.",
+  "table.cancel_extra_told": "It comes off the bill, and the kitchen is told.",
   // Cancelling, giving away and discounting (service plan Task 11)
   "table.comp_line": "Give away",
   "table.discount_line": "Discount",
@@ -930,6 +933,7 @@ export const es: Record<StringKey, string> = {
   "station.notice.moved": "Movido",
   "station.notice.started": "Empezado",
   "station.notice.moved_to": "Movido a {table}",
+  "station.notice.cancelled_extra": "Quitar: {extra}",
   "station.notice.acknowledge": "Entendido",
   "station.acknowledge_error": "No se pudo quitar el aviso, inténtalo de nuevo",
   "station.stale": "Sin actualizaciones desde las {time}, {ago}",
@@ -1143,6 +1147,7 @@ export const es: Record<StringKey, string> = {
   "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",
   "table.change_line": "Cambiar",
   "table.cancel_sent": "Se quitará de la cuenta.",
+  "table.cancel_extra_told": "Se quitará de la cuenta y se avisará a cocina.",
   // Cancelling, giving away and discounting (service plan Task 11)
   "table.comp_line": "Invitar",
   "table.discount_line": "Descuento",
