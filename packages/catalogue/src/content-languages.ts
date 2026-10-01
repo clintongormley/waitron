@@ -70,6 +70,20 @@ export async function listContentTranslationGaps(
   language: string,
 ): Promise<{ kind: string; id: string; productId?: string }[]> {
   const code = contentLanguageCode(language);
+  return contentTranslationGapsIn(await readContentTranslationCandidates(tx), code);
+}
+
+export type ContentTranslationCandidate = {
+  kind: string;
+  id: string;
+  product_id: string | null;
+  translations: string;
+};
+
+/** Every row {@link listContentTranslationGaps} checks, with the map it checks, whatever the language. */
+export async function readContentTranslationCandidates(
+  tx: Transaction,
+): Promise<ContentTranslationCandidate[]> {
   // `product`, `variant`, `option_list`, `option_label`, `extra_list` and `menu_section` are the
   // kinds whose customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
   // them: absent is not a gap, only a partly filled map is. The unfiltered `unit` kind
@@ -80,12 +94,7 @@ export async function listContentTranslationGaps(
   // rows and the variant branch to the rest; otherwise each variant would be counted twice. An
   // Inactive (removed) variant is on no menu offer, so a language it lacks reaches no diner and must
   // not block a change of default.
-  const result = await tx.execute<{
-    kind: string;
-    id: string;
-    product_id: string | null;
-    translations: string;
-  }>(sql`
+  const result = await tx.execute<ContentTranslationCandidate>(sql`
     select 'product' as kind, id, null as product_id, customer_name as translations from products
       where parent_id is null and customer_name is not null and customer_name <> '{}'
     union all select 'unit' as kind, id, null, name as translations from units
@@ -101,7 +110,15 @@ export async function listContentTranslationGaps(
     union all select 'menu_section' as kind, id, null, names as translations
       from sections where role in ('section', 'menu_root') and names <> '{}'
   `);
-  return result.rows
+  return result.rows;
+}
+
+/** The candidates with no text in `code`, in the order they were read. */
+export function contentTranslationGapsIn(
+  candidates: readonly ContentTranslationCandidate[],
+  code: string,
+): { kind: string; id: string; productId?: string }[] {
+  return candidates
     .filter(
       (row) =>
         resolveContentText(JSON.parse(row.translations) as Record<string, string>, code, code) ===

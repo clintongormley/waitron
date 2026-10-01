@@ -4,6 +4,7 @@ export * from "./product-ordering.js";
 export * from "./units.js";
 export * from "./operations.js";
 export * from "./content-languages.js";
+export * from "./content-translation-report.js";
 export * from "./allergens.js";
 export * from "./derivation.js";
 export * from "./dietary.js";
