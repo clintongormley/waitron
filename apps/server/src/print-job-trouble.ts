@@ -15,8 +15,8 @@ const copy = alias(printJobs, "resend_copy");
  * drawer pulse never counts. The printer's alert and a table's printing problem both read this; the
  * printer's alert also leaves out jobs a succeeded Unpair ended (`printingAlertSource`,
  * apps/server/src/alert-sources.ts).
- * "After" is `rowid`, as in `readPrintProblems` (apps/server/src/kitchen-print.ts), since two jobs
- * can share a `created_at` to the millisecond.
+ * "After" is `rowid`, not `created_at`, which two jobs can share to the millisecond: SQLite gives a
+ * new row one more than the table's largest `rowid`, and no product code deletes `print_jobs` rows.
  */
 export function printJobInTrouble(now: Date): SQL {
   const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();

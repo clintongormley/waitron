@@ -2772,31 +2772,40 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     again does and sends a calibration test page, and the next pull hands out only that page;
     `apps/server/src/print-api.unpair-kitchen.test.ts`; and the worded reason in
     `apps/dashboard/src/screens/printers-screen.test.ts`.
-  - _2026-10-01 (A165): fixed — a printed resend now clears it; see A165's entry below._
   - **Left open, not checked:** a document job that runs out of attempts for any OTHER reason
     keeps the printer's `printer.jobs_waiting` alert up after it is reprinted, because the reprint
     makes a new job and the given-up one keeps matching (`apps/server/src/alert-sources.ts`). Found
     while reading A163's review, not run; believed to predate A163, history not checked. Queued
-    as A165 (owner, 2026-10-01: "queue it"), which reproduces it on `main` first.
+    as A165 (owner, 2026-10-01: "queue it"), which reproduces it on `main` first. _(2026-10-01,
+    A165: fixed for the Printers screen's Reprint only; the till's kitchen Reprint and a receipt
+    reprint still leave the printer's alert up — see A165's entry.)_
 - **A printed resend clears the printer's "stuck" alert for the job it copies (A165, owner
   2026-10-01: "queue it") — done (2026-10-01).** Reproduced on `main` first: a job that ran out of
   attempts, then a resend of it that printed, left the printer's `printer.jobs_waiting` alert up,
-  dated from the failed job. Nothing linked a resend to the job it copies: Resend
-  (`resendPrintJob`, `packages/printing/src/outbox.ts`) enqueued the same bytes as a new job.
+  dated from the failed job. Nothing linked a resend to the job it copies: the Printers screen's
+  Reprint button (`resendPrintJob`, `packages/printing/src/outbox.ts`) enqueued the same bytes as a
+  new job. Below, "resend" means that button, not the till's kitchen Reprint.
   - A new nullable `print_jobs.resend_of` column (core migration `0052_print_job_resend_of`, with
     an index) names the FIRST job of a resend chain, so a resend of a resend names the same job.
   - A job stops counting as in trouble once a resend in its chain queued AFTER it (by `rowid`) has
     printed (`printJobInTrouble`, `apps/server/src/print-job-trouble.ts`). Both readers of that
     test follow: the printer's alert and the table's printing problem. A job with no printed
     later copy still counts, so does a copy that ran out of attempts after an earlier copy printed.
-  - Not changed: the kitchen's Reprint and a receipt's reprint make new jobs through
+  - Not changed: the till's kitchen Reprint and a receipt's reprint make new jobs through
     `enqueuePrintJob`, which names no `resend_of`, so they clear no failed job in
-    `printJobInTrouble`; the table's printing problem keeps its own rule for the kitchen's Reprint
-    (`readPrintProblems`, `apps/server/src/kitchen-print.ts`). Read, not run.
+    `printJobInTrouble`; the table's printing problem keeps its own rule for the kitchen Reprint
+    (`readPrintProblems`, `apps/server/src/kitchen-print.ts`). Read, not run. So a kitchen ticket
+    or receipt that ran out of attempts and was then reprinted from the till still keeps the
+    printer's `printer.jobs_waiting` alert up. Left open, not queued yet.
+  - Decided: a resend that runs out of attempts after an earlier copy printed counts on the
+    printer's alert but is not a table printing problem — a resend is a byte-for-byte copy, so the
+    kitchen already has every dish on it, while the alert is about the printer's queue. Pinned by
+    the "stays clear when a resend of the printed copy then runs out of attempts" case in
+    `apps/server/src/print-problems.test.ts`.
   - Run: the resend cases in `apps/server/src/alert-sources.test.ts` and
     `apps/server/src/print-problems.test.ts`, and the chain case in
     `packages/printing/src/outbox.test.ts`; each part of the fix was deleted in turn and a case
-    failed.
+    failed. The new foreign key is listed in `scripts/schema-constraints.test.ts`.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,

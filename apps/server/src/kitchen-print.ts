@@ -1304,9 +1304,9 @@ export async function moveKitchenPrintLinks(
 /**
  * Give `toOrderId` a link to each of `fromOrderId`'s unprinted kitchen tickets that no printed
  * reprint has covered and that carried one of `lineIds`, which have just moved there off
- * `fromOrderId`, some or all of them, at that line's station. Both bills then show the problem, each
- * until its own Reprint prints, or until a Reprint of it would print nothing there
- * ({@link readPrintProblems}). The new links are written as {@link writeLinksAfter} writes them.
+ * `fromOrderId`, some or all of them, at that line's station. Both bills then show the problem until
+ * {@link readPrintProblems} clears it for each. The new links are written as {@link writeLinksAfter}
+ * writes them.
  */
 export async function copyKitchenPrintLinks(
   tx: Transaction,

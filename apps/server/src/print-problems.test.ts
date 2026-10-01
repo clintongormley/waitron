@@ -64,8 +64,9 @@ import { moveBill } from "./move-bill.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
-// and on its station's card, never refuses the next order, and clears once a reprint has printed, or
-// once a Reprint would print nothing on that printer for that station.
+// and on its station's card, never refuses the next order, and clears once a reprint has printed,
+// once a Reprint would print nothing on that printer for that station, or once a resend of it from
+// the Printers screen has printed.
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
