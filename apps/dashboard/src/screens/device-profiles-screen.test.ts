@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
@@ -73,17 +74,11 @@ function toggle(el: DeviceProfilesScreen, testId: string, checked: boolean) {
 }
 
 function selectCanvas(el: DeviceProfilesScreen, value: string) {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=profile-canvas]")!;
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  void chooseOption(el.shadowRoot!.querySelector("[data-test=profile-canvas]")!, value);
 }
 
 function selectFormFactor(el: DeviceProfilesScreen, value: string) {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-    "[data-test=profile-form-factor]",
-  )!;
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  void chooseOption(el.shadowRoot!.querySelector("[data-test=profile-form-factor]")!, value);
 }
 
 describe("device-profiles-screen list mode", () => {
@@ -226,11 +221,11 @@ describe("device-profiles-screen editor form", () => {
     const el = await mount(stubApi());
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
-    const options = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>(
-        "[data-test=profile-form-factor] option",
-      ),
-    ];
+    const options = (
+      el.shadowRoot!.querySelector("[data-test=profile-form-factor]") as unknown as {
+        options: { value: string; label: string }[];
+      }
+    ).options;
     expect(options.map((o) => o.value)).toEqual([
       "till",
       "phone-portrait",
@@ -239,7 +234,7 @@ describe("device-profiles-screen editor form", () => {
     ]);
     // The shipped locale is es-ES; the four values map to their localised labels (the "till" value is
     // the cash register — never the raw token).
-    const labels = options.map((o) => o.textContent!.trim());
+    const labels = options.map((o) => o.label.trim());
     expect(labels).toEqual([
       "Caja registradora",
       "Teléfono de mano",
@@ -601,6 +596,115 @@ describe("device-profiles-screen remaining edges", () => {
   });
 });
 
+type Combobox = HTMLElement & {
+  options: { value: string; label: string }[];
+  value: string;
+  label: string;
+  name: string;
+  placeholder: string;
+  search: string;
+  disabled: boolean;
+  error: string;
+};
+
+describe("device-profiles-screen fields", () => {
+  const box = (el: DeviceProfilesScreen, selector: string) =>
+    el.shadowRoot!.querySelector(`wt-combobox${selector}`) as Combobox | null;
+
+  it("picks the canvas and form factor from labelled dropdowns showing the profile's own", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+
+    const canvas = box(el, "[data-test=profile-canvas]")!;
+    expect(canvas.name).toBe("canvasId");
+    expect(canvas.label).toBe(t("device_profiles.canvas_label"));
+    expect(canvas.search).toBe("auto");
+    expect(canvas.placeholder).toBe(t("device_profiles.canvas_default"));
+    expect(canvas.options).toEqual([
+      { value: "", label: t("device_profiles.canvas_default") },
+      { value: "c1", label: "Counter till" },
+      { value: "c2", label: "Kitchen board" },
+    ]);
+    expect(canvas.value).toBe("c1");
+
+    const formFactor = box(el, "[data-test=profile-form-factor]")!;
+    expect(formFactor.name).toBe("formFactor");
+    expect(formFactor.label).toBe(t("device_profiles.form_factor"));
+    expect(formFactor.search).toBe("auto");
+    expect(formFactor.options.map((o) => o.value)).toEqual([
+      "till",
+      "phone-portrait",
+      "tablet-landscape",
+      "kds",
+    ]);
+    expect(formFactor.value).toBe("till");
+
+    await chooseOption(canvas, "c2");
+    await chooseOption(formFactor, "tablet-landscape");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+      "p1",
+      "Front counter",
+      "c2",
+      ["integrated-card-payment", "open-cash-drawer"],
+      "tablet-landscape",
+      null,
+    );
+  });
+
+  it("picks a menu's home page layout from a dropdown labelled with the menu, Default as its prompt", async () => {
+    let refuse!: (error: unknown) => void;
+    const api = stubApi({
+      getDeviceHomeLayouts: vi.fn().mockResolvedValue([
+        {
+          menuId: "m-lunch",
+          menuName: "Lunch",
+          layouts: [
+            { id: "l-home", name: "Home", isDefault: true },
+            { id: "l-counter", name: "Counter", isDefault: false },
+          ],
+          selectedLayoutId: null,
+          selectedRemoved: false,
+        },
+      ]),
+      setDeviceHomeLayout: vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() => expect(box(el, '[name="home-layout-m-lunch"]')).not.toBeNull());
+
+    const home = box(el, '[name="home-layout-m-lunch"]')!;
+    const fallback = t("device_profiles.home_default").replace("{name}", "Home");
+    expect(home.label).toBe("Lunch");
+    expect(home.search).toBe("auto");
+    expect(home.placeholder).toBe(fallback);
+    expect(home.options).toEqual([
+      { value: "", label: fallback },
+      { value: "l-counter", label: "Counter" },
+    ]);
+    expect(home.value).toBe("");
+    expect(home.error).toBe("");
+
+    await chooseOption(home, "l-counter");
+    await flush(el);
+    expect(api.setDeviceHomeLayout).toHaveBeenCalledWith("p1", "m-lunch", "l-counter");
+    expect(home.disabled).toBe(true);
+    refuse({ code: "menu.layout_not_found" });
+    await vi.waitFor(() => expect(home.error).toBe(codeMessage("menu.layout_not_found")));
+    expect(home.disabled).toBe(false);
+    expect(home.value).toBe("");
+  });
+});
+
 describe("device-profiles-screen home page layouts", () => {
   /** Lunch has three layouts and no choice; Dinner has one layout; Bar's choice was deleted;
    * Brunch's choice is its current default, by id. */
@@ -669,22 +773,26 @@ describe("device-profiles-screen home page layouts", () => {
     return el;
   }
 
-  function picker(el: DeviceProfilesScreen, menuId: string): HTMLSelectElement | null {
-    return el.shadowRoot!.querySelector<HTMLSelectElement>(`select[name="home-layout-${menuId}"]`);
+  function picker(el: DeviceProfilesScreen, menuId: string): Combobox | null {
+    return el.shadowRoot!.querySelector<Combobox>(`wt-combobox[name="home-layout-${menuId}"]`);
   }
 
   function options(el: DeviceProfilesScreen, menuId: string): [string, string, boolean][] {
-    return [...picker(el, menuId)!.options].map((option) => [
+    const box = picker(el, menuId)!;
+    return box.options.map((option) => [
       option.value,
-      option.textContent!.trim(),
-      option.selected,
+      option.label.trim(),
+      option.value === box.value,
     ]);
   }
 
+  /** The picker's own control, which carries its invalid state and what describes it. */
+  function control(el: DeviceProfilesScreen, menuId: string): HTMLElement {
+    return picker(el, menuId)!.shadowRoot!.querySelector<HTMLElement>(".trigger")!;
+  }
+
   async function choose(el: DeviceProfilesScreen, menuId: string, value: string): Promise<void> {
-    const select = picker(el, menuId)!;
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(picker(el, menuId)!, value);
     await flush(el);
   }
 
@@ -703,8 +811,7 @@ describe("device-profiles-screen home page layouts", () => {
       ["l-counter", "Counter", false],
       ["l-terrace", "Terrace", false],
     ]);
-    const label = picker(el, "m-lunch")!.closest("label")!;
-    expect(label.textContent).toContain("Lunch");
+    expect(picker(el, "m-lunch")!.label).toContain("Lunch");
   });
 
   it("saves a chosen layout, and Default clears the choice", async () => {
@@ -779,17 +886,19 @@ describe("device-profiles-screen home page layouts", () => {
     expect(picker(el, "m-lunch")!.disabled).toBe(true);
     refuse({ code: "menu.layout_not_found" });
     await vi.waitFor(() =>
-      expect(inHome(el, "#home-error-m-lunch")?.textContent?.trim()).toBe(
-        codeMessage("menu.layout_not_found"),
-      ),
+      expect(picker(el, "m-lunch")!.error.trim()).toBe(codeMessage("menu.layout_not_found")),
     );
     const select = picker(el, "m-lunch")!;
     expect(select.disabled).toBe(false);
     // The picker goes back to the choice that is still saved.
     expect(select.value).toBe("");
-    expect(select.getAttribute("aria-invalid")).toBe("true");
-    expect(select.getAttribute("aria-describedby")).toBe("home-error-m-lunch");
-    expect(picker(el, "m-bar")!.getAttribute("aria-invalid")).toBe("false");
+    expect(control(el, "m-lunch").getAttribute("aria-invalid")).toBe("true");
+    expect(
+      select
+        .shadowRoot!.getElementById(control(el, "m-lunch").getAttribute("aria-describedby")!)!
+        .textContent!.trim(),
+    ).toBe(codeMessage("menu.layout_not_found"));
+    expect(control(el, "m-bar").getAttribute("aria-invalid")).toBe("false");
   });
 
   it("clears a menu's refusal when a new choice for it is saved, leaving other menus' alone", async () => {
@@ -802,15 +911,15 @@ describe("device-profiles-screen home page layouts", () => {
     });
     const el = await edit(api);
     await choose(el, "m-lunch", "l-terrace");
-    await vi.waitFor(() => expect(inHome(el, "#home-error-m-lunch")).not.toBeNull());
+    await vi.waitFor(() => expect(picker(el, "m-lunch")!.error).not.toBe(""));
     await choose(el, "m-brunch", "l-kids");
-    await vi.waitFor(() => expect(inHome(el, "#home-error-m-brunch")).not.toBeNull());
+    await vi.waitFor(() => expect(picker(el, "m-brunch")!.error).not.toBe(""));
     await choose(el, "m-lunch", "l-counter");
     await vi.waitFor(() =>
       expect(inHome(el, "[data-test=home-saved]")?.textContent).toContain("Lunch"),
     );
-    expect(inHome(el, "#home-error-m-lunch")).toBeNull();
-    expect(inHome(el, "#home-error-m-brunch")).not.toBeNull();
+    expect(picker(el, "m-lunch")!.error).toBe("");
+    expect(picker(el, "m-brunch")!.error).not.toBe("");
   });
 
   it("sends one choice while one is out", async () => {
@@ -869,7 +978,7 @@ describe("device-profiles-screen home page layouts", () => {
     api.getDeviceHomeLayouts.mockRejectedValue(new Error("offline"));
     await choose(el, "m-lunch", "l-counter");
     await vi.waitFor(() => expect(inHome(el, "[data-test=home-load-error]")).not.toBeNull());
-    expect(inHome(el, "#home-error-m-lunch")).toBeNull();
+    expect(picker(el, "m-lunch")!.error).toBe("");
   });
 
   it("says the layouts could not be loaded, and tries again", async () => {
