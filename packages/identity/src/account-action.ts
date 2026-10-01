@@ -56,7 +56,8 @@ export interface IssuedAccountAction {
 
 /**
  * Issue a fresh action and invalidate any still-live predecessor of the same purpose. It also
- * deletes the person's used or expired actions of that purpose.
+ * deletes the person's used or expired actions of that purpose, so retiring a known person's link
+ * walks no history the unknown-address decoy lacks (A159 in `docs/backlog.md`).
  */
 export async function issueAccountAction(
   tx: Transaction,

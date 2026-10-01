@@ -358,7 +358,7 @@ describe("management account actions", () => {
       );
       expect(owner.rows).toEqual([]);
 
-      // A known address writes its link and removes nothing.
+      // A known address with no earlier links writes its link and removes nothing.
       await suite.db.execute(sql`delete from tmp_recovery_writes`);
       await run((tx) => requestAccountRecoveryAction(tx, { email: "decoy-known@x.com" }));
       const knownWrites = (

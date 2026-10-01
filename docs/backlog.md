@@ -7046,22 +7046,36 @@ ongoing overhaul listed at the top of Track A.
   (1.065 ms against 0.326 ms) was not re-run. Two reviewers then seeded a known person with 5,000
   and with 10,000 used reset links and measured, with only that change, 0.455 ms against 0.260 ms
   and 1.166 ms against 0.306 ms. So issuing a link now also deletes the person's used or expired
-  links of the same purpose, and after an issue the person holds at most two links of that purpose,
-  the new one and the one it retired; `issueAccountAction` is the only code that inserts a kept
-  link. Pinned by the "keeps a person's history of that purpose bounded" cases in
-  `packages/identity/src/account-action.test.ts`. Re-measured with 5,000 seeded, which the first
-  known request deletes: 0.443 ms against 0.460 ms, and 0.590 ms against 0.595 ms; with none seeded:
-  0.563 ms against 0.585 ms, and 0.510 ms against 0.524 ms. All on the same Mac; absolute times
-  differ between sessions, so compare within a run. What a later request or a copy of the database
-  shows: the table's row count is unchanged and a later query finds no row, but the database file is
-  not unchanged. A reviewer measured, with `secure_delete` at 0, the decoy's random person id and
-  token hash still present in the file after commit and checkpoint, and an unknown-address request
-  sometimes changing the file's page and free-page counts (265 to 266 pages, 1 to 2 free pages, rows
-  unchanged); nothing in those bytes is derived from the address. Still open: the email. With a
-  sender that reads in one transaction, as the product's reads the mail settings, and then sends
-  nothing, the second request still answered about 0.02 ms slower after a known address (0.283,
-  0.285 and 0.285 ms against 0.260, 0.266 and 0.262 ms). The real mail-server conversation, which
-  only a known address starts, was not measured, and no way to match it was tried.
+  links of the same purpose, for every purpose `issueAccountAction` issues (invitations and
+  email-change links as well as password resets), and after an issue the person holds at most two
+  links of that purpose, the new one and the one it retired; only the most recently retired link's
+  `used_at` survives per person and purpose. `issueAccountAction` is the only code that inserts a
+  kept link, and nothing reads a used or expired one: `inspectAccountAction`,
+  `completeAccountAction` and `confirmEmailChangeByCode` each require an unused, unexpired row, and
+  `packages/identity/src/staff.ts`, `packages/identity/src/profile.ts` and
+  `apps/server/src/break-glass-command.ts` only mark rows used. Pinned by the "keeps a person's
+  history of that purpose bounded" cases in `packages/identity/src/account-action.test.ts`.
+  Re-measured with 5,000 seeded, which the first known request deletes: 0.443 ms against 0.460 ms,
+  and 0.590 ms against 0.595 ms; with none seeded: 0.563 ms against 0.585 ms, and 0.510 ms against
+  0.524 ms. All on the same Mac; absolute times differ between sessions, so compare within a run.
+  Nothing pins that the decoy runs the same statements as a known address: the tests see its insert
+  and delete through triggers, but its read, its dead-link delete and its retire change no row, so
+  deleting any one of them left the `@waitron/identity` suite and `apps/server`'s two
+  `management-api` suites green (run 2026-10-01); only the timing script shows them. What a later
+  request or a copy of the database shows: the table's row count is unchanged and a later query
+  finds no row, but the database file is not unchanged. A reviewer measured, with `secure_delete` at
+  0, the decoy's random person id and token hash still present in the file's bytes after commit and
+  checkpoint, and an unknown-address request sometimes changing the `page_count` and
+  `freelist_count` pragmas (265 to 266 pages, 1 to 2 free pages, 17 rows before and after). It
+  follows, though it was not separately measured, that the freed record also still holds its
+  `created_at` and `expires_at` and a person id matching no account, so a copy of the database can
+  show that, and when, an unknown-address request happened; the row's values are taken from no part
+  of the address (read from `writeAndRemoveDecoyAction`, not measured), so not for which address.
+  Still open: the email. With a sender that reads in one transaction, as the product's reads the
+  mail settings, and then sends nothing, the second request still answered about 0.02 ms slower
+  after a known address (0.283, 0.285 and 0.285 ms against 0.260, 0.266 and 0.262 ms; measured
+  before links were deleted on issue; not re-run). The real mail-server conversation, which only a
+  known address starts, was not measured, and no way to match it was tried.
 - **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, #934, owner
   2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
   the current password now carries a hidden, read-only `autocomplete="username"` field holding the
