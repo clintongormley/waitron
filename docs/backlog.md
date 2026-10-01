@@ -3857,7 +3857,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
       line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.
       The till offers one of several of a dish with extras, and never offers part of a weighed
-      line: its give-away and discount dialog says the same sentence beside the action. A
+      line: its give-away and discount dialog says the same sentence beside the action _(2026-10-01:
+      above it since C97, #961 — `apps/till/src/widgets/adjustment-dialog.ts`)_. A
       give-away or a discount that would take nothing off — the line already free, or a discount
       too small to move any price — is now refused `adjustment.no_reduction`; before, every such
       case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
@@ -3877,7 +3878,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         empty tables only, and #959 measured the row-carrying upgrade once, in a throwaway test.
         **Next action:** decide whether the upgrade guard should carry rows (it would serve every
         set, not only adjustments).
-      - _Done by lane B item B11g (branch `feat/service-extra-cancel-slip`):_ cancelling an extra
+      - _Done by lane B item B11g (#963, merged 2026-10-01):_ cancelling an extra
         of a fired dish, or of a held dish whose HOLD ticket was queued for printing, now records
         a `changed` kitchen notice naming the extra and prints a CHANGED (or HOLD CHANGED) slip of
         the dish as it now stands with a `CANCEL:` line; with the server's `locale` Spanish those
