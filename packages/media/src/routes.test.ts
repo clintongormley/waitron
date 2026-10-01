@@ -73,8 +73,6 @@ function body() {
   const form = new FormData();
   form.set("file", new File([photo], "photo.jpg", { type: "image/jpeg" }));
   form.set("names", JSON.stringify({ fr: "Pain" }));
-  form.set("altText", JSON.stringify({ fr: "Une miche" }));
-  form.set("labels", JSON.stringify(["Food"]));
   return form;
 }
 describe("image routes", () => {
@@ -88,8 +86,6 @@ describe("image routes", () => {
     const first = (await created.json()) as { created: boolean; image: Record<string, unknown> };
     const duplicate = body();
     duplicate.set("names", JSON.stringify({ fr: "Nouveau nom" }));
-    duplicate.set("altText", JSON.stringify({ fr: "Autre description" }));
-    duplicate.set("labels", JSON.stringify(["Other"]));
     const reused = await app.request("/management-api/images", {
       method: "POST",
       headers,
@@ -126,11 +122,7 @@ describe("image routes", () => {
     const edited = await app.request(`/management-api/images/${image.id}`, {
       method: "PATCH",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        names: { fr: "Baguette" },
-        altText: { fr: "Une baguette" },
-        labels: [],
-      }),
+      body: JSON.stringify({ names: { fr: "Baguette" } }),
     });
     expect(edited.status).toBe(200);
     const removed = await app.request(`/management-api/images/${image.id}`, {
@@ -286,14 +278,11 @@ it("falls back to a 20 MiB upload limit when the host names none", async () => {
   });
 });
 
-it("reads labels and a limited page, and refuses an unknown id and malformed bodies", async () => {
+it("reads a limited page, and refuses an unknown id and malformed bodies", async () => {
   const { app, headers } = await fixture();
   expect(
     (await app.request("/management-api/images", { method: "POST", headers, body: body() })).status,
   ).toBe(201);
-  const labels = await app.request("/management-api/image-labels", { headers });
-  expect(labels.status).toBe(200);
-  expect(await labels.json()).toEqual({ labels: ["Food"] });
   const page = await app.request("/management-api/images?limit=1", { headers });
   expect(page.status).toBe(200);
   expect(((await page.json()) as { images: unknown[] }).images).toHaveLength(1);
@@ -354,4 +343,58 @@ it("requires a name in the shared fallback language when the venue configures no
     body: english,
   });
   expect(created.status).toBe(201);
+});
+
+it("stores a photo's name alone, and ignores alt text and labels a caller still sends, as it ignores any field it does not know", async () => {
+  const { app, headers } = await fixture();
+  const nameOnly = new FormData();
+  nameOnly.set("file", new File([photo], "photo.jpg", { type: "image/jpeg" }));
+  nameOnly.set("names", JSON.stringify({ fr: "Pain" }));
+  const created = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: nameOnly,
+  });
+  expect(created.status).toBe(201);
+  const { image } = (await created.json()) as { image: Record<string, unknown> & { id: string } };
+  expect(Object.keys(image).sort()).toEqual([
+    "createdAt",
+    "filename",
+    "id",
+    "names",
+    "updatedAt",
+    "usageCount",
+  ]);
+  const edited = await app.request(`/management-api/images/${image.id}`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      names: { fr: "Baguette" },
+      altText: { fr: "Une baguette" },
+      labels: ["Food"],
+    }),
+  });
+  expect(edited.status).toBe(200);
+  expect(await edited.json()).toEqual({
+    image: { ...image, names: { fr: "Baguette" }, updatedAt: expect.any(String) },
+  });
+  const stale = new FormData();
+  stale.set(
+    "file",
+    new File([await sampleImage({ width: 9, height: 6, format: "jpeg" })], "other.jpg", {
+      type: "image/jpeg",
+    }),
+  );
+  stale.set("names", JSON.stringify({ fr: "Miche" }));
+  stale.set("altText", JSON.stringify({ fr: "Une miche" }));
+  stale.set("labels", JSON.stringify(["Food"]));
+  const second = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: stale,
+  });
+  expect(second.status).toBe(201);
+  const stored = ((await second.json()) as { image: Record<string, unknown> }).image;
+  expect(stored).not.toHaveProperty("altText");
+  expect(stored).not.toHaveProperty("labels");
 });

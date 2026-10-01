@@ -48,7 +48,7 @@ export async function seedMedia(
     const bytes = await readFile(join(SRC_DIR, imageBasename));
     // Inside the caller's transaction, unlike the upload route: seeding runs before the venue sells.
     const image = await prepareImage(bytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
-    const { image: stored } = await uploadImage(tx, { image, names, altText: names, labels: [] });
+    const { image: stored } = await uploadImage(tx, { image, names });
     await tx.update(products).set({ image: stored.filename }).where(eq(products.id, productId));
   }
 }

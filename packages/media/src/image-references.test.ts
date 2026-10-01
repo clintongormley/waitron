@@ -51,9 +51,7 @@ interface Fixture {
 
 /** One image, one catalogue with a product, and one section. */
 async function fixture(db: Database): Promise<Fixture> {
-  await db
-    .insert(mediaImages)
-    .values({ filename: PRESENT, names: { en: "Bread" }, altText: {}, labels: [] });
+  await db.insert(mediaImages).values({ filename: PRESENT, names: { en: "Bread" } });
   const [menu] = await db.insert(catalogues).values({ name: "Lunch" }).returning({
     id: catalogues.id,
   });

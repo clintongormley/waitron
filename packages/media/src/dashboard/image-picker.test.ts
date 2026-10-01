@@ -10,17 +10,13 @@ afterEach(() => host?.remove());
 it("registers a generic picker that uses the injected dashboard request", async () => {
   host = document.createElement("div");
   document.body.append(host);
-  const request = vi
-    .fn()
-    .mockImplementation(async (path: string) =>
-      path.includes("image-labels") ? { labels: [] } : { images: [], total: 0 },
-    );
+  const request = vi.fn().mockResolvedValue({ images: [], total: 0 });
   render(html`<media-image-picker .request=${request}></media-image-picker>`, host);
   const picker = host.querySelector("media-image-picker") as ImagePicker;
   await picker.updateComplete;
   const library = picker.shadowRoot!.querySelector("dashboard-image-library") as ImageLibrary;
   await library.updateComplete;
-  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
   expect(library.picker).toBe(true);
   const selected = vi.fn();
   picker.addEventListener("select-image", selected);
@@ -32,23 +28,15 @@ it("registers a generic picker that uses the injected dashboard request", async 
 it("contributes the image library screen and localized navigation", async () => {
   host = document.createElement("div");
   document.body.append(host);
-  const request = vi
-    .fn()
-    .mockImplementation(async (path: string) =>
-      path.includes("image-labels") ? { labels: [] } : { images: [], total: 0 },
-    );
+  const request = vi.fn().mockResolvedValue({ images: [], total: 0 });
   const screen = MEDIA_DASHBOARD.create({ request });
   render(screen.render(), host);
   expect(MEDIA_DASHBOARD.screen.requiresPermission).toBe("image.manage");
   expect(MEDIA_DASHBOARD.strings.es["nav.images"]).toBe("Biblioteca de imágenes");
-  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
 });
 function libraryRequest() {
-  return vi
-    .fn()
-    .mockImplementation(async (path: string) =>
-      path.includes("image-labels") ? { labels: [] } : { images: [], total: 0 },
-    );
+  return vi.fn().mockResolvedValue({ images: [], total: 0 });
 }
 it("shows no library until it is given a request, then lists images through that request", async () => {
   host = document.createElement("div");
@@ -62,9 +50,12 @@ it("shows no library until it is given a request, then lists images through that
   await picker.updateComplete;
   expect(picker.shadowRoot!.querySelector("dashboard-image-library")).not.toBeNull();
   await vi.waitFor(() =>
-    expect(request).toHaveBeenCalledWith("/management-api/image-labels", "GET", undefined, {
-      passive: false,
-    }),
+    expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/management-api\/images\?/),
+      "GET",
+      undefined,
+      { passive: false },
+    ),
   );
 });
 it("refreshes the library from a replacement live-data source once the library has loaded again", async () => {

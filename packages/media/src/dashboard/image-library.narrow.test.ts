@@ -32,7 +32,6 @@ for (const theme of ["light", "dark"] as const) {
     const library = document.createElement("dashboard-image-library");
     library.api = {
       listImages: vi.fn().mockResolvedValue({ images: [], total: 0 }),
-      listLabels: vi.fn().mockResolvedValue({ labels: [] }),
     } as unknown as ImageApi;
     host.append(library);
     await library.updateComplete;
@@ -69,8 +68,6 @@ for (const theme of ["light", "dark"] as const) {
 const card = {
   filename: "one.jpg",
   names: { es: "Pan de pueblo con semillas", en: "Country bread with seeds" },
-  altText: {},
-  labels: ["Food"],
   createdAt: "2026-09-12T12:00:00Z",
   updatedAt: "2026-09-12T12:00:00Z",
   usageCount: 0,
@@ -85,7 +82,6 @@ async function mountLibrary(picker: boolean, theme: "light" | "dark") {
       images: [1, 2, 3, 4, 5, 6].map((n) => ({ ...card, id: `image-${n}` })),
       total: 6,
     }),
-    listLabels: vi.fn().mockResolvedValue({ labels: ["Food"] }),
   } as unknown as ImageApi;
   host.append(library);
   await library.updateComplete;

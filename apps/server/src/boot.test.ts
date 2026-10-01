@@ -2521,8 +2521,6 @@ describe("startServer, against a migrated venue directory", () => {
           {
             image: prepared,
             names: { en: "Bread", es: "Pan" },
-            altText: { en: "A loaf", es: "Una hogaza" },
-            labels: [],
           },
           { fallbackLanguage: "es" },
         );
@@ -3268,8 +3266,6 @@ describe("startServer — what a trading boot wires behind its management routes
         {
           image,
           names: { [current.defaultLanguage]: "Pan" },
-          altText: {},
-          labels: [],
         },
         { fallbackLanguage: current.defaultLanguage },
       ),

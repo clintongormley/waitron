@@ -15,7 +15,6 @@ import {
   readImage,
   readImageBytes,
   listImages,
-  listImageLabels,
   listImageUsages,
   updateImage,
   deleteImage,
@@ -56,8 +55,7 @@ function metadata(value: unknown): ImageMetadataInput {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     throw new AppError("image.invalid_metadata", {});
   const input = value as Record<string, unknown>;
-  if (!input.names || !input.altText || !input.labels)
-    throw new AppError("image.invalid_metadata", {});
+  if (!input.names) throw new AppError("image.invalid_metadata", {});
   return input as unknown as ImageMetadataInput;
 }
 export const MEDIA_ROUTES: ModuleRoutes = {
@@ -77,7 +75,6 @@ export const MEDIA_ROUTES: ModuleRoutes = {
         const query = c.req.query();
         const options: ListImagesOptions = {
           query: query.search,
-          label: query.label,
           sort: query.sort as ListImagesOptions["sort"],
           direction: query.direction as ListImagesOptions["direction"],
           language: query.language,
@@ -87,13 +84,6 @@ export const MEDIA_ROUTES: ModuleRoutes = {
         if (query.limit !== undefined) options.limit = Number(query.limit);
         return c.json(await gated(requireManagementSession(c), (tx) => listImages(tx, options)));
       }),
-    );
-    app.get("/management-api/image-labels", (c) =>
-      run(c, log, async () =>
-        c.json({
-          labels: await gated(requireManagementSession(c), (tx) => listImageLabels(tx)),
-        }),
-      ),
     );
     app.get("/management-api/images/:id", (c) =>
       run(c, log, async () => {
@@ -134,11 +124,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
           }
           const file = form.file;
           if (!(file instanceof File)) throw new AppError("image.invalid_metadata", {});
-          const input = metadata({
-            names: parseField(form.names),
-            altText: parseField(form.altText),
-            labels: parseField(form.labels),
-          });
+          const input = metadata({ names: parseField(form.names) });
           // Outside any transaction: see prepareImage.
           const image = await prepareImage(new Uint8Array(await file.arrayBuffer()), {
             maxUploadBytes,

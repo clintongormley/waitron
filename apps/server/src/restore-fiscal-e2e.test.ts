@@ -156,8 +156,6 @@ async function seedImage(db: Database): Promise<void> {
     .values({
       filename,
       names: { es: "Pan" },
-      altText: { es: "Una hogaza" },
-      labels: ["Food"],
     })
     .returning({ id: mediaImages.id });
   await db.insert(mediaImageData).values({ imageId: row!.id, bytes: BASELINE_MEDIA });
@@ -371,18 +369,17 @@ describe("fiscal restore, end to end", () => {
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );
       await withTransaction(db, async (tx) => {
-        // Through the table definitions: `names` and `labels` are JSON columns, and a raw
-        // `select` hands them back as the TEXT they are stored as, so the assertion below would
-        // be comparing a string with an object.
+        // Through the table definition: `names` is a JSON column, and a raw `select` hands it
+        // back as the TEXT it is stored as, so the assertion below would be comparing a string
+        // with an object.
         const images = await tx
           .select({
             filename: mediaImages.filename,
             names: mediaImages.names,
-            labels: mediaImages.labels,
           })
           .from(mediaImages);
         expect(images).toHaveLength(1);
-        expect(images[0]).toMatchObject({ names: { es: "Pan" }, labels: ["Food"] });
+        expect(images[0]).toMatchObject({ names: { es: "Pan" } });
         const restored = await readImageBytes(tx, images[0]!.filename);
         expect(restored?.bytes).toEqual(new Uint8Array(BASELINE_MEDIA));
       });

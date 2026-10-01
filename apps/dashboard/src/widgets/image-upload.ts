@@ -50,7 +50,7 @@ export class ImageUpload extends LitElement {
   /** Marks Choose image invalid, so `focusFirstInvalid` lands on it. */
   @property({ type: Boolean }) invalid = false;
   @state() private pickerOpen = false;
-  @state() private altText: Record<string, string> = {};
+  @state() private selectedNames: Record<string, string> = {};
   #selectedFilename: string | null = null;
   constructor() {
     super();
@@ -84,7 +84,7 @@ export class ImageUpload extends LitElement {
                 data-test="remove-image"
                 variant="secondary"
                 @click=${() => {
-                  this.altText = {};
+                  this.selectedNames = {};
                   this.#change(null);
                 }}
                 >${t("image.remove")}</wt-button
@@ -92,7 +92,7 @@ export class ImageUpload extends LitElement {
             : nothing
         }
       </div>
-      ${this.image ? html`<img class="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.altText : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
+      ${this.image ? html`<img class="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.selectedNames : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
       ${
         !this.image && this.inheritedImage
           ? html`<p class="hint" data-test="inherited-hint">${t("editor.inherited_image")}</p>
@@ -119,11 +119,11 @@ export class ImageUpload extends LitElement {
                 .request=${this.api?.imageLibraryRequest}
                 .liveData=${this.api?.liveData}
                 @select-image=${(
-                  event: CustomEvent<{ filename: string; altText: Record<string, string> }>,
+                  event: CustomEvent<{ filename: string; names: Record<string, string> }>,
                 ) => {
                   event.stopPropagation();
                   this.#selectedFilename = event.detail.filename;
-                  this.altText = event.detail.altText;
+                  this.selectedNames = event.detail.names;
                   this.#change(event.detail.filename);
                   this.#setOpen(false);
                 }}

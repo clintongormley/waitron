@@ -154,8 +154,6 @@ describe("configuration transfer archive", () => {
             id: "image",
             filename: "a".repeat(64) + ".png",
             names: { en: "Bread" },
-            alt_text: { en: "A loaf" },
-            labels: ["Food"],
           },
         ],
         media_image_data: [{ image_id: "image", bytes: "\\x89504e470d0a1a0a" }],
@@ -243,8 +241,6 @@ describe("configuration transfer database path", () => {
         {
           image: photo,
           names: { es: "Pan" },
-          altText: { es: "Una hogaza" },
-          labels: ["Food"],
         },
         {},
       );
@@ -765,11 +761,7 @@ it("transfers sections and their members, remapping ids, with a section's image"
     modules: ALL_MODULES,
   });
   const original = await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(
-      tx,
-      { image: photo, names: { es: "Bebidas" }, altText: { es: "Vasos" }, labels: [] },
-      {},
-    );
+    const { image } = await uploadImage(tx, { image: photo, names: { es: "Bebidas" } }, {});
     const menu = await createCatalogue(tx, { name: "Sections menu" });
     const water = await createProduct(tx, {
       catalogueId: menu.id,
@@ -839,6 +831,46 @@ it("transfers sections and their members, remapping ids, with a section's image"
   });
 });
 
+it("refuses a bundle whose photo still carries alt text and labels, as it refuses any column the venue lacks", async () => {
+  const photo = await samplePreparedImage({ width: 8 });
+  const source = await applyVenue(planVenue(venue("B44556677"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    uploadImage(tx, { image: photo, names: { es: "Pan" } }, {}),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-25T12:00:00Z"),
+    versions,
+  );
+  const [row] = transferred.tables.media_images!;
+  const stale = {
+    ...transferred,
+    tables: {
+      ...transferred.tables,
+      media_images: [
+        { ...row, alt_text: JSON.stringify({ es: "Una hogaza" }), labels: JSON.stringify([]) },
+      ],
+    },
+  };
+  await expect(
+    applyVenue(planVenue(venue("B77665544"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, stale, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "table:media_images" },
+  });
+});
+
 it("carries a device profile's home layout choice, remapped to the imported menu and layout", async () => {
   const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
     db: suite.db,
@@ -892,11 +924,7 @@ it("leaves publication behind, so an imported venue's menus arrive unpublished",
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(
-      tx,
-      { image: photo, names: { es: "Limonada" }, altText: { es: "Un vaso" }, labels: [] },
-      {},
-    );
+    const { image } = await uploadImage(tx, { image: photo, names: { es: "Limonada" } }, {});
     const menu = await createCatalogue(tx, { name: "Published menu" });
     const lemonade = await createProduct(tx, {
       catalogueId: menu.id,

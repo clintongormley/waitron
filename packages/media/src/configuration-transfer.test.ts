@@ -10,8 +10,6 @@ function tables() {
         id: "image-a",
         filename: `${createHash("sha256").update(bytes).digest("hex")}.jpg`,
         names: { en: "Bread" },
-        alt_text: { en: "Loaf" },
-        labels: ["Food"],
       },
     ],
     media_image_data: [{ image_id: "image-a", bytes: `\\x${bytes.toString("hex")}` }],
@@ -21,9 +19,9 @@ function tables() {
  * The shape a bundle really carries.
  *
  * `tables()` above stays readable — the metadata as objects — and this renders it the way
- * `exportConfigurationTables` does: `names`, `alt_text` and `labels` are one TEXT column holding
- * JSON (`packages/db/src/schema/columns.ts`), the export takes a raw `select *`, and nothing parses
- * them on the way into the bundle. A fixture in the object shape describes a bundle no venue
+ * `exportConfigurationTables` does: `names` is one TEXT column holding JSON
+ * (`packages/db/src/schema/columns.ts`), the export takes a raw `select *`, and nothing parses it on
+ * the way into the bundle. A fixture in the object shape describes a bundle no venue
  * produces.
  */
 function wire(input: ReturnType<typeof tables>) {
@@ -32,8 +30,6 @@ function wire(input: ReturnType<typeof tables>) {
     media_images: input.media_images.map((image) => ({
       ...image,
       names: JSON.stringify(image.names),
-      alt_text: JSON.stringify(image.alt_text),
-      labels: JSON.stringify(image.labels),
     })),
   };
 }
@@ -52,50 +48,38 @@ it("refuses metadata that is not the JSON text a raw read hands back", () => {
   broken.media_images[0]!.names = "{not json";
   expect(() => validateMediaConfiguration(broken)).toThrow();
 });
-it.each([
-  "mismatch",
-  "missing",
-  "extra",
-  "duplicate",
-  "type",
-  "hex",
-  "oversize",
-  "name",
-  "alt",
-  "labels",
-])("refuses corrupt image data: %s", (kind) => {
-  const input = tables();
-  if (kind === "mismatch") input.media_images[0]!.filename = "0".repeat(64) + ".jpg";
-  if (kind === "missing") input.media_image_data = [];
-  if (kind === "extra") input.media_images = [];
-  if (kind === "duplicate") input.media_image_data.push({ ...input.media_image_data[0]! });
-  if (kind === "type") input.media_image_data[0]!.bytes = "\\x010203";
-  if (kind === "hex") input.media_image_data[0]!.bytes = "\\xz123";
-  if (kind === "oversize")
-    input.media_image_data[0]!.bytes = "\\x" + "00".repeat(5 * 1024 * 1024 + 1);
-  if (kind === "name") input.media_images[0]!.names.en = " ";
-  if (kind === "alt") input.media_images[0]!.alt_text.en = " ";
-  if (kind === "labels") input.media_images[0]!.labels = ["Food", "food"];
-  expect(() => validateMediaConfiguration(wire(input))).toThrow();
-});
+it.each(["mismatch", "missing", "extra", "duplicate", "type", "hex", "oversize", "name"])(
+  "refuses corrupt image data: %s",
+  (kind) => {
+    const input = tables();
+    if (kind === "mismatch") input.media_images[0]!.filename = "0".repeat(64) + ".jpg";
+    if (kind === "missing") input.media_image_data = [];
+    if (kind === "extra") input.media_images = [];
+    if (kind === "duplicate") input.media_image_data.push({ ...input.media_image_data[0]! });
+    if (kind === "type") input.media_image_data[0]!.bytes = "\\x010203";
+    if (kind === "hex") input.media_image_data[0]!.bytes = "\\xz123";
+    if (kind === "oversize")
+      input.media_image_data[0]!.bytes = "\\x" + "00".repeat(5 * 1024 * 1024 + 1);
+    if (kind === "name") input.media_images[0]!.names.en = " ";
+    expect(() => validateMediaConfiguration(wire(input))).toThrow();
+  },
+);
 
 const otherBytes = Buffer.from([0xff, 0xd8, 0xff, 2]);
 /** `tables()` plus a second, equally valid image, so a refusal can come from two rows together. */
-function twoImages(secondLabels: string[] = ["Drink"]) {
+function twoImages() {
   const input = tables();
   input.media_images.push({
     id: "image-b",
     filename: `${createHash("sha256").update(otherBytes).digest("hex")}.jpg`,
     names: { en: "Juice" },
-    alt_text: { en: "A glass" },
-    labels: secondLabels,
   });
   input.media_image_data.push({ image_id: "image-b", bytes: `\\x${otherBytes.toString("hex")}` });
   return input;
 }
 const refused = expect.objectContaining({ code: "image.invalid_metadata" });
 
-it("accepts two valid images whose labels differ", () => {
+it("accepts two valid images", () => {
   expect(() => validateMediaConfiguration(wire(twoImages()))).not.toThrow();
 });
 
@@ -115,10 +99,6 @@ it.each(["id", "filename"])("refuses an image whose %s is not a string", (column
   const input = wire(tables());
   (input.media_images[0] as Record<string, unknown>)[column] = 42;
   expect(() => validateMediaConfiguration(input)).toThrow(refused);
-});
-
-it("refuses two images spelling one label with different case", () => {
-  expect(() => validateMediaConfiguration(wire(twoImages(["food"])))).toThrow(refused);
 });
 
 it.each([
