@@ -1,4 +1,4 @@
-import { resolveMakers } from "./routing-store.js";
+import { describeMakers, resolveMakers } from "./routing-store.js";
 import type { VenueServiceContribution } from "@waitron/module";
 import {
   copyOrderServiceContext,
@@ -39,6 +39,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listServiceZones,
   resolveZoneContext,
   resolveMakers,
+  describeMakers,
   listZoneOffers,
   menuState,
   resolveNewOrderZone,

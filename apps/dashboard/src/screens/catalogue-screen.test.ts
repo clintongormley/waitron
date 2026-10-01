@@ -219,6 +219,14 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listProducts: vi
       .fn()
       .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? products : [])),
+    listMadeAt: vi.fn().mockResolvedValue({
+      [products[0]!.id]: {
+        stationId: "bar",
+        stationName: "Bar",
+        noPreparation: false,
+        variesByZone: false,
+      },
+    }),
     getProductEditor: vi.fn().mockResolvedValue(value),
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
     updateProductEditor: vi.fn().mockResolvedValue(value),
@@ -268,6 +276,8 @@ describe("catalogue-screen", () => {
     expect(api.listCategories).toHaveBeenCalledOnce();
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
+    expect(api.listMadeAt).toHaveBeenCalledOnce();
+    expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });

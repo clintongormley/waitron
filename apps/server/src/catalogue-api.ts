@@ -101,6 +101,9 @@ import { isUuid } from "./till-session.js";
 import { setProductCourse } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { kitchenStations } from "@waitron/db";
+import { inArray } from "drizzle-orm";
 
 /** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface CatalogueApiDeps {
@@ -1103,6 +1106,44 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const session = requireManagementSession(c);
       return c.json(await gated(session, (tx) => listProducts(tx)));
+    }),
+  );
+  app.get("/management-api/products/made-at", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      return c.json(
+        await gated(session, async (tx) => {
+          const makers = await VENUE_SERVICE.describeMakers(tx, requireVenueCfg(deps));
+          const stationIds = [
+            ...new Set(
+              [...makers.values()].flatMap(({ route }) =>
+                route?.kind === "station" ? [route.stationId] : [],
+              ),
+            ),
+          ];
+          const names = new Map(
+            (stationIds.length
+              ? await tx
+                  .select({ id: kitchenStations.id, name: kitchenStations.name })
+                  .from(kitchenStations)
+                  .where(inArray(kitchenStations.id, stationIds))
+              : []
+            ).map(({ id, name }) => [id, name]),
+          );
+          return Object.fromEntries(
+            [...makers].map(([id, { route, variesByZone }]) => [
+              id,
+              {
+                stationId: route?.kind === "station" ? route.stationId : null,
+                stationName:
+                  route?.kind === "station" ? (names.get(route.stationId) ?? null) : null,
+                noPreparation: route?.kind === "no_preparation",
+                variesByZone,
+              },
+            ]),
+          );
+        }),
+      );
     }),
   );
   app.get("/management-api/catalogues/:id/products", (c) =>

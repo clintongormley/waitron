@@ -299,6 +299,11 @@ export interface VenueServiceContribution {
     zoneId: string | null,
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute | null>>;
+  /** Base maker for active products and variants, plus whether a zone-specific exception matches. */
+  describeMakers(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+  ): Promise<ReadonlyMap<string, { route: PreparationRoute | null; variesByZone: boolean }>>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
    *  the zone's active menus. With `menuItemIds`, only the offers it names are served. Each menu's home
    *  layout is the one `deviceProfileId` chose for it when the menu's live version holds it, and

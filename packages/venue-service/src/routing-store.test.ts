@@ -24,6 +24,7 @@ import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { chooseMaker, type RouteTarget } from "./routing.js";
 import {
+  describeMakers,
   createException,
   deleteException,
   explainRoute,
@@ -123,6 +124,30 @@ async function fixture(tx: Transaction) {
 const scoped = (fn: (tx: Transaction) => Promise<void>) => withTransaction(db, fn);
 
 describe("route explanation", () => {
+  it("describes active variants and zone-sensitive rules without a service zone", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
+      await createException(tx, f.cfg, {
+        zoneId: f.terrace,
+        categoryId: f.cocktails,
+        productId: null,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      const makers = await describeMakers(tx, f.cfg);
+      expect(makers.get(f.mojito)).toEqual({
+        route: { kind: "station", stationId: f.bar },
+        variesByZone: true,
+      });
+      expect(makers.get(f.variant)).toEqual({
+        route: { kind: "station", stationId: f.bar },
+        variesByZone: true,
+      });
+      expect(makers.get(f.bread)).toEqual({
+        route: { kind: "station", stationId: f.bar },
+        variesByZone: false,
+      });
+    }));
   it("names a matching exception, including a variant's parent product", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);

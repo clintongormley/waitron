@@ -509,6 +509,42 @@ export async function resolveMakers(
   return outcomes;
 }
 
+export async function describeMakers(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<ReadonlyMap<string, { route: RouteTarget | null; variesByZone: boolean }>> {
+  const rules = await loadRoutingRules(tx, cfg);
+  const rows = await tx
+    .select({
+      id: products.id,
+      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+      categoryId: effectiveProductColumns.categoryId,
+      parentActive: parentProducts.active,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .where(eq(products.active, true));
+  const result = new Map<string, { route: RouteTarget | null; variesByZone: boolean }>();
+  for (const row of rows) {
+    if (row.parentActive === false) continue;
+    const ancestors = folderAncestors(rules.parentOf, row.categoryId);
+    result.set(row.id, {
+      route: chooseMaker(
+        rules,
+        { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
+        null,
+      ).route,
+      variesByZone: rules.exceptions.some(
+        (exception) =>
+          exception.zoneId !== null &&
+          (exception.productId === null || exception.productId === row.routedId) &&
+          (exception.categoryId === null || ancestors.includes(exception.categoryId)),
+      ),
+    });
+  }
+  return result;
+}
+
 export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<RoutingModel> {
   const { rules, folders, stations } = await snapshot(tx, cfg);
   const neverMatches = unreachableExceptions(rules);

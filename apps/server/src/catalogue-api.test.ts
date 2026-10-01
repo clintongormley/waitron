@@ -24,6 +24,14 @@ import {
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { createCourse } from "./kitchen.js";
+import {
+  VENUE_SERVICE_MIGRATIONS,
+  createException,
+  setClaim,
+  createDepartment,
+  configureZone,
+} from "@waitron/venue-service";
+import { floorZones, kitchenStations } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -225,7 +233,12 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    CATALOGUE_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    VENUE_SERVICE_MIGRATIONS,
+  ],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
@@ -907,6 +920,67 @@ describe("mountCatalogueApi — labels", () => {
 });
 
 describe("mountCatalogueApi — products", () => {
+  it("GET /management-api/products/made-at names the base station and zone variation", async () => {
+    const app = mountApp();
+    const menu = await createCatalogueVia(app, `Made at ${crypto.randomUUID()}`);
+    const folder = async (name: string, parentId: string | null = null) => {
+      const response = await send(app, "POST", "/management-api/categories", {
+        body: { name, parentId },
+      });
+      return ((await response.json()) as { id: string }).id;
+    };
+    const drinks = await folder(`Drinks ${crypto.randomUUID()}`);
+    const cocktails = await folder(`Cocktails ${crypto.randomUUID()}`, drinks);
+    const create = async (name: string, categoryId: string | null) => {
+      const response = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId: menu,
+          categoryId,
+          name,
+          pricingUnit: "each",
+          unitPrice: "3",
+          vatClass: "general",
+        },
+      });
+      expect(response.status).toBe(201);
+      return ((await response.json()) as { id: string }).id;
+    };
+    const lager = await create("Lager", drinks);
+    const mojito = await create("Mojito", cocktails);
+    const bread = await create("Bread", null);
+    await withTransaction(suite.db, async (tx) => {
+      const cfg = venueCfg();
+      const [bar, cocktailBar] = await tx
+        .insert(kitchenStations)
+        .values([
+          { locationId: cfg.locationId, name: "Bar", isDefault: true },
+          { locationId: cfg.locationId, name: "Cocktail bar" },
+        ])
+        .returning();
+      await setClaim(tx, cfg, drinks, { kind: "station", stationId: bar!.id });
+      const [terrace] = await tx
+        .insert(floorZones)
+        .values({ locationId: cfg.locationId, name: "Terrace" })
+        .returning();
+      const department = await createDepartment(tx, cfg, {
+        name: "Dining",
+        defaultServiceMode: "table_tab",
+      });
+      await configureZone(tx, cfg, { zoneId: terrace!.id, departmentId: department.id });
+      await createException(tx, cfg, {
+        zoneId: terrace!.id,
+        categoryId: cocktails,
+        productId: null,
+        target: { kind: "station", stationId: cocktailBar!.id },
+      });
+    });
+    const response = await send(app, "GET", "/management-api/products/made-at");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body[lager]).toMatchObject({ stationName: "Bar", variesByZone: false });
+    expect(body[mojito]).toMatchObject({ stationName: "Bar", variesByZone: true });
+    expect(body[bread]).toMatchObject({ stationName: "Bar", variesByZone: false });
+  });
   it("GET /management-api/catalogues/:id/products → 200 (empty for a fresh catalogue)", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Empty catalogue");

@@ -9,6 +9,7 @@ import { ProductList } from "./product-list.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("es"));
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
 // a choice one test makes would otherwise be restored into the next one.
 beforeEach(() => {
@@ -111,6 +112,26 @@ function product(
 }
 
 describe("product-list", () => {
+  it("shows the made-at station, zone variation, and tester link", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "lager" }), product({ id: "mojito" })],
+      madeAt: {
+        lager: { stationId: "bar", stationName: "Bar", noPreparation: false, variesByZone: false },
+        mojito: {
+          stationId: "cocktail",
+          stationName: "Cocktail bar",
+          noPreparation: false,
+          variesByZone: true,
+        },
+      },
+    });
+    const root = await tableRoot(el);
+    expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
+    const cell = cellUnder(root, "mojito", "Made at");
+    expect(cell.textContent).toContain("Cocktail bar · varies by service zone");
+    expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/mojito");
+  });
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
@@ -148,6 +169,7 @@ describe("product-list", () => {
       ]),
     ).toEqual([
       ["reporting-category", true],
+      ["made-at", true],
       ["price", true],
       ["modifiers", true],
       ["ordering", true],

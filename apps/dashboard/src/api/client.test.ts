@@ -46,6 +46,18 @@ describe("DashboardApi", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+  it("reads the products' made-at descriptions", async () => {
+    const makers = {
+      lager: { stationId: "bar", stationName: "Bar", noPreparation: false, variesByZone: false },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(makers));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listMadeAt()).toEqual(makers);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/products/made-at",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
   it("uses the discovery, adoption and separate reader-management routes", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
