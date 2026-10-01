@@ -7,6 +7,18 @@ import "./wt-tabs.js";
 
 afterEach(cleanup);
 describe.each(["light", "dark"] as const)("tabs accessibility (%s)", (theme) => {
+  test("an action beside the tablist is named and separate from its tabs", async () => {
+    const el = (await mountThemed(
+      '<wt-tabs label="Venue operations"><div slot="actions"><button>Add department</button></div><p slot="status">Ready for service</p></wt-tabs>',
+      theme,
+    )) as WtTabs;
+    el.items = [{ key: "status", label: "Status" }];
+    await el.updateComplete;
+    const actionSlot = el.shadowRoot!.querySelector('slot[name="actions"]')!;
+    expect(actionSlot.closest('[role="tablist"]')).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   test("both selected states have named, associated tabs and panels", async () => {
     const el = (await mountThemed(
       '<wt-tabs label="Venue operations"><p slot="status">Ready for service</p><p slot="menus">Manage menus</p></wt-tabs>',

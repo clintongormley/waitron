@@ -716,6 +716,16 @@ export class ProfileScreen extends LitElement {
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => this.#selectTab(event)}
       >
+        <div slot="actions">
+          <wt-button
+            data-test="add-passkey"
+            variant="primary"
+            ?hidden=${this.activeTab !== "security"}
+            ?disabled=${this.busy}
+            @click=${() => this.#edit("passkey")}
+            >${t("staff.add_passkey")}</wt-button
+          >
+        </div>
         <div slot="details">
           <div class="row">
             <span class="field-label">${t("person.display_name")}</span>
@@ -795,13 +805,6 @@ export class ProfileScreen extends LitElement {
 
           <div class="action-row">
             <span class="field-value">${t("profile.passkeys")}</span>
-            <wt-button
-              data-test="add-passkey"
-              class="card-action accent-primary"
-              ?disabled=${this.busy}
-              @click=${() => this.#edit("passkey")}
-              >${t("action.add")}</wt-button
-            >
           </div>
           ${
             p.passkeys.length === 0

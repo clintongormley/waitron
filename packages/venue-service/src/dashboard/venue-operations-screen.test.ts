@@ -177,6 +177,38 @@ async function type(el: VenueOperationsScreen, name: string, value: string) {
 }
 
 describe("venue operations screen", () => {
+  it("puts each tab's available Add actions beside the tablist", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await selectTab(el, "departments");
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-department"]')).not.toBeNull();
+    expect(find(el, '[data-test="new-department"]')!.checkVisibility()).toBe(true);
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
+    await selectTab(el, "routing");
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-route"]')).not.toBeNull();
+    expect(find(el, '[data-test="new-route"]')!.checkVisibility()).toBe(true);
+    expect(tabs.querySelector('[slot="routing"] [data-test="new-route"]')).toBeNull();
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).not.toBeNull();
+    expect(find(el, '[data-test="new-assignment-z1"]')!.checkVisibility()).toBe(true);
+    expect(tabs.querySelector('[slot="zones"] [data-test="new-assignment-z1"]')).toBeNull();
+  });
+
+  it("disables Make available when a floor zone has no service zone", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z2");
+    const button = find(el, '[data-test="new-assignment-z2"]')!;
+    expect(button).not.toBeNull();
+    expect(button.hasAttribute("disabled")).toBe(true);
+  });
+
   it("shows a load error when the venue configuration request fails", async () => {
     const api = {
       load: vi.fn().mockRejectedValue(new Error("offline")),

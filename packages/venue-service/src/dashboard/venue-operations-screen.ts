@@ -424,10 +424,49 @@ export class VenueOperationsScreen extends LitElement {
       .emptyMessage=${t("venue.no_rows")}
     ></wt-data-table>`;
   }
-  #toolbar(label: string, actions: Action[]) {
-    return html`<div class="toolbar">
-      <h2>${label}</h2>
-      ${this.#actions(label, actions)}
+  #toolbar(label: string) {
+    return html`<div class="toolbar"><h2>${label}</h2></div>`;
+  }
+  #tabAction(action: Action) {
+    return html`<wt-button
+      variant="primary"
+      data-test=${action.key}
+      ?disabled=${this.busy || action.disabled === true}
+      @click=${(event: Event) => {
+        this.#opener = event.currentTarget as HTMLElement;
+        action.run();
+      }}
+      >${action.label}</wt-button
+    >`;
+  }
+  #tabActions() {
+    const model = this.model!;
+    const zone = model.floorZones.find((row) => row.id === this.zoneId);
+    return html`<div slot="actions">
+      ${
+        this.view === "departments"
+          ? html`${this.#tabAction({ key: "new-department", label: t("venue.add_department"), run: () => this.#open({ kind: "department" }) })}${this.#tabAction({ key: "new-hours", label: t("venue.add_hours"), disabled: model.departments.length === 0, run: () => this.#open({ kind: "hours" }) })}`
+          : nothing
+      }
+      ${
+        this.view === "routing"
+          ? this.#tabAction({
+              key: "new-route",
+              label: t("venue.add_route"),
+              run: () => this.#open({ kind: "route" }),
+            })
+          : nothing
+      }
+      ${
+        this.view === "zones" && zone
+          ? this.#tabAction({
+              key: `new-assignment-${zone.id}`,
+              label: t("venue.make_available"),
+              disabled: !model.zones.some((row) => row.id === zone.id),
+              run: () => this.#open({ kind: "assignment", zoneId: zone.id }),
+            })
+          : nothing
+      }
     </div>`;
   }
   #confirm(name: string, action: () => Promise<unknown>): void {
@@ -474,7 +513,7 @@ export class VenueOperationsScreen extends LitElement {
   #departments() {
     const model = this.model!;
     return html`<section>
-      ${this.#toolbar(t("venue.departments"), [{ key: "new-department", label: t("venue.add_department"), run: () => this.#open({ kind: "department" }) }])}
+      ${this.#toolbar(t("venue.departments"))}
       ${this.#table(
         "departments",
         "waitron.venue.departments.table",
@@ -527,7 +566,7 @@ export class VenueOperationsScreen extends LitElement {
         ],
         (row) => row.id,
       )}
-      ${this.#toolbar(t("venue.hours"), [{ key: "new-hours", label: t("venue.add_hours"), disabled: model.departments.length === 0, run: () => this.#open({ kind: "hours" }) }])}
+      ${this.#toolbar(t("venue.hours"))}
       ${this.#table(
         "hours",
         "waitron.venue.hours.table",
@@ -655,7 +694,7 @@ export class VenueOperationsScreen extends LitElement {
       )}
       ${
         zone
-          ? html` ${this.#toolbar(`${zone.name}: ${t("venue.menus")}`, [{ key: `new-assignment-${zone.id}`, label: t("venue.make_available"), disabled: !model.zones.some((z) => z.id === zone.id), run: () => this.#open({ kind: "assignment", zoneId: zone.id }) }])}
+          ? html` ${this.#toolbar(`${zone.name}: ${t("venue.menus")}`)}
             ${this.#table(
               "zone-menus",
               "waitron.venue.zone-menus.table",
@@ -719,7 +758,7 @@ export class VenueOperationsScreen extends LitElement {
   #routing() {
     const model = this.model!;
     return html`<section>
-      ${this.#toolbar(t("venue.routing"), [{ key: "new-route", label: t("venue.add_route"), run: () => this.#open({ kind: "route" }) }])}
+      ${this.#toolbar(t("venue.routing"))}
       ${this.#table(
         "preparation-routes",
         "waitron.venue.routes.table",
@@ -1162,6 +1201,7 @@ export class VenueOperationsScreen extends LitElement {
                 ]}
                 @wt-tab-change=${this.#selectView}
               >
+                ${this.#tabActions()}
                 <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>

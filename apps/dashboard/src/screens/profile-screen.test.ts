@@ -189,6 +189,20 @@ describe("your profile", () => {
     ).toBe("https://restaurant.example/privacy");
     await expectNoA11yViolations(host);
   });
+
+  it("shows Add passkey beside the Security tab and not inside its panel", async () => {
+    const { el } = await mount();
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    expect(el.shadowRoot!.querySelector('[data-test="add-passkey"]')!.checkVisibility()).toBe(
+      false,
+    );
+    tabs.shadowRoot!.querySelector<HTMLElement>('[role="tab"][data-key="security"]')!.click();
+    await flush(el);
+    expect(tabs.querySelector('[slot="actions"] [data-test="add-passkey"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="security"] [data-test="add-passkey"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="add-passkey"]')!.checkVisibility()).toBe(true);
+  });
+
   it("shows why the initial load failed, not just a bare Reload button", async () => {
     const { el } = await mount({
       getProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),

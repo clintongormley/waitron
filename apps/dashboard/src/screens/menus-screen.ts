@@ -310,11 +310,6 @@ export class MenusScreen extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
       }
-      .list-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
       wt-data-table::part(name) {
         overflow-wrap: anywhere;
         text-align: start;
@@ -1806,38 +1801,41 @@ export class MenusScreen extends LitElement {
           this.#openSection(event.detail.sectionId);
         }}
       ></dashboard-member-list-editor>
-      <div class="list-actions">
-        <wt-button
-          data-test="new-section"
-          variant="secondary"
-          .disabled=${this.busy}
-          @click=${() => this.#openNewSection()}
-          >${t("menus.new_section")}</wt-button
-        >
-        <wt-button
-          data-test="include-menu"
-          variant="secondary"
-          .disabled=${this.busy}
-          @click=${() => {
-            this.includingMenu = this.#here();
-            this.includeAttempted = false;
-            this.includedRoot = "";
-            this.includeError = "";
-          }}
-          >${t("menus.include_menu")}</wt-button
-        >
-        <wt-button
-          data-test="open-add-products"
-          variant="secondary"
-          .disabled=${this.busy}
-          @click=${() => {
-            this.addProductsError = null;
-            this.addingProducts = this.#here();
-          }}
-          >${t("sections.add_products")}</wt-button
-        >
-      </div>
     </section>`;
+  }
+
+  #renderListActions() {
+    return html`<div slot="actions">
+      <wt-button
+        data-test="new-section"
+        variant="secondary"
+        .disabled=${this.busy}
+        @click=${() => this.#openNewSection()}
+        >${t("menus.new_section")}</wt-button
+      >
+      <wt-button
+        data-test="include-menu"
+        variant="secondary"
+        .disabled=${this.busy}
+        @click=${() => {
+          this.includingMenu = this.#here();
+          this.includeAttempted = false;
+          this.includedRoot = "";
+          this.includeError = "";
+        }}
+        >${t("menus.include_menu")}</wt-button
+      >
+      <wt-button
+        data-test="open-add-products"
+        variant="secondary"
+        .disabled=${this.busy}
+        @click=${() => {
+          this.addProductsError = null;
+          this.addingProducts = this.#here();
+        }}
+        >${t("sections.add_products")}</wt-button
+      >
+    </div>`;
   }
 
   #renderStructure() {
@@ -2312,6 +2310,7 @@ export class MenusScreen extends LitElement {
           this.#url.write({ view: event.detail.value });
         }}
       >
+        ${this.view === "structure" && this.structure !== null ? this.#renderListActions() : nothing}
         <div slot="structure">${this.#renderStructure()}</div>
         <div slot="prices" class="prices">${this.#renderPrices()}</div>
         <div slot="home" class="home">${this.#renderHome()}</div>

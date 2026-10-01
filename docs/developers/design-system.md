@@ -1487,12 +1487,13 @@ Give each tab a stable key, a localized label and a matching named slot:
 ```ts
 html`<wt-tabs
   label="Venue operations"
-  .items=${[{ key: "status", label: "Status" }, { key: "zones", label: "Service zones" }]}
+  .items=${[{ key: "status", label: "Status" }, { key: "departments", label: "Departments" }]}
   .value=${this.view}
   @wt-tab-change=${this.selectView}
 >
+  <div slot="actions">${this.view === "departments" ? this.renderAddDepartment() : nothing}</div>
   <section slot="status">${this.renderStatus()}</section>
-  <section slot="zones">${this.renderZones()}</section>
+  <section slot="departments">${this.renderDepartments()}</section>
 </wt-tabs>`;
 ```
 
@@ -1508,11 +1509,16 @@ select the first and last tab. The tab strip scrolls on narrow screens. Hidden p
 mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
+If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This
+places the action beside the tabs and outside the tab list's accessibility role. At phone width,
+the tabs and a group of actions scroll separately, so the action area stays on screen when the tabs
+scroll. Keep actions for other tabs out of sight until their tab is selected.
+
 Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a
 hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it
 needs the icon that means "more options here," not "open navigation" (see "Icons" below) — with a
-label that identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table
-heading, and Edit, Delete or domain-specific actions in each row's menu. A screen may instead
+label that identifies the row, such as `Actions: Restaurant`. On a page without tabs, put Create in
+a menu beside the table heading. Put Edit, Delete or domain-specific actions in each row's menu. A screen may instead
 offer Create as a round icon-only `wt-button` (`shape="round"` with the `plus` icon and an
 `aria-label`) beside the heading — but **no screen does today**, and no dashboard control uses
 `shape="round"` at all, so read this as a permission rather than a pattern with a home. The menu

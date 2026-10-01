@@ -778,6 +778,23 @@ describe("guided printer calibration", () => {
 });
 
 describe("printer configuration tabs", () => {
+  it("keeps each Add action beside the tablist only on its tab", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const tabs = q(el, "wt-tabs")!;
+    await selectTab(el, "printers");
+    expect(tabs.querySelector('[slot="actions"] [data-test="open-add-printer"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="printers"] [data-test="open-add-printer"]')).toBeNull();
+    expect(q(el, '[data-test="open-add-printer"]')!.checkVisibility()).toBe(true);
+    await selectTab(el, "agents");
+    expect(tabs.querySelector('[slot="actions"] [data-test="open-add-agent"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="agents"] [data-test="open-add-agent"]')).toBeNull();
+    expect(q(el, '[data-test="open-add-agent"]')!.checkVisibility()).toBe(true);
+    expect(q(el, '[data-test="open-add-printer"]')!.checkVisibility()).toBe(false);
+  });
+
   it.each([
     [[], [], "agents"],
     [[{ ...agents[0]!, active: false }], printers, "agents"],

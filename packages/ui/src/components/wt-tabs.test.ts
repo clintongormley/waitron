@@ -220,6 +220,49 @@ test("uses theme tokens, touch targets and scrolls within a narrow container", a
   expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(220);
 });
 
+test("keeps a tab action visible beside a scrolling tablist at phone width", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Venue operations"><button slot="actions">Add route</button><div slot="status">Ready</div></wt-tabs>`,
+  )) as WtTabs;
+  el.items = items;
+  host.style.width = "220px";
+  await el.updateComplete;
+
+  const action = el.querySelector<HTMLButtonElement>('button[slot="actions"]')!;
+  const tablist = el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+  const tabs = buttons(el);
+  const hostRect = el.getBoundingClientRect();
+  const actionRect = action.getBoundingClientRect();
+  const tablistRect = tablist.getBoundingClientRect();
+  expect(actionRect.width).toBeGreaterThan(0);
+  expect(actionRect.left).toBeGreaterThanOrEqual(tablistRect.right - 1);
+  expect(actionRect.right).toBeLessThanOrEqual(hostRect.right + 1);
+  expect(actionRect.top).toBeLessThan(tablistRect.bottom);
+  expect(tablist.scrollWidth).toBeGreaterThan(tablist.clientWidth);
+  expect(tablist.querySelector('button[slot="actions"]')).toBeNull();
+  expect(tabs).toHaveLength(3);
+});
+
+test("bounds several actions within their own scrolling area at phone width", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Menu"><div slot="actions"><button>Add a new section</button><button>Include another menu</button><button>Add products to this section</button></div><div slot="structure">Content</div></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [
+    { key: "structure", label: "Structure" },
+    { key: "prices", label: "Prices" },
+    { key: "preview", label: "Preview" },
+  ];
+  host.style.width = "390px";
+  await el.updateComplete;
+  const actions = el.shadowRoot!.querySelector<HTMLElement>(".tab-actions")!;
+  const tablist = el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+  const hostRect = el.getBoundingClientRect();
+  const actionRect = actions.getBoundingClientRect();
+  expect(actionRect.right).toBeLessThanOrEqual(hostRect.right + 1);
+  expect(tablist.clientWidth).toBeGreaterThanOrEqual(195);
+  expect(actions.scrollWidth).toBeGreaterThan(actions.clientWidth);
+});
+
 test("renders nothing until it is given tabs", async () => {
   const el = (await mountThemed('<wt-tabs label="Venue operations"></wt-tabs>')) as WtTabs;
   expect(el.shadowRoot!.querySelector('[role="tablist"]')).toBeNull();
