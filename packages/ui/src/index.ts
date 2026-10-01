@@ -78,7 +78,7 @@ export { UrlStateController, type UrlPathConfig } from "./url-state.js";
 
 export { WtRowActions } from "./components/wt-row-actions.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";
-export { WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
+export { DROPDOWN_ICONS, WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
 
 export { readableTextColor, isHexColor, CATEGORY_PALETTE } from "./category-color.js";
 

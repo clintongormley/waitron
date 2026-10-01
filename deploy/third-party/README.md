@@ -61,9 +61,9 @@ header is the only part of this notice that reaches `/etc/apparmor.d`.
 The dashboard, till and setup web apps, served from `/app/web/` in the image, carry icon paths
 adapted from Google's Material Symbols icon set (<https://fonts.google.com/icons>), Copyright
 Google, licensed under the Apache License, Version 2.0: some of the dashboard's icons in
-`apps/dashboard/src/icons.ts`, and the `check` icon `apps/till/src/till-app.ts` and
-`apps/setup/src/setup-app.ts` register for the dropdown. Each of those files says so beside the
-paths.
+`apps/dashboard/src/icons.ts`, and the dropdown's `check` icon in `DROPDOWN_ICONS`
+(`packages/ui/src/components/wt-combobox.ts`), which all three apps register. Each of those two
+files says so beside the paths.
 
 - `licenses/Apache-2.0.txt` is that licence.
 

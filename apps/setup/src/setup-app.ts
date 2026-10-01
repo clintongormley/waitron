@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { baseStyles, registerIcons } from "@waitron/ui";
+import { DROPDOWN_ICONS, baseStyles, registerIcons } from "@waitron/ui";
 import waitronLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
@@ -323,12 +323,7 @@ function describeConnectionFailure(error: unknown): ConnectionFailure {
   return { message: say("shell.connection.unreachable"), canRetry: true };
 }
 
-// wt-combobox draws `chevron-down` and `check`, which its consuming app registers. `check` is
-// adapted from Google's Material Symbols (Apache License 2.0, https://fonts.google.com/icons).
-registerIcons({
-  "chevron-down": "M4.9 5.7L8 8.8L11.1 5.7L12 6.7L8 10.7L4 6.7Z",
-  check: "M6.37 12L2.57 8.2L3.52 7.25L6.37 10.1L12.48 3.98L13.43 4.93Z",
-});
+registerIcons(DROPDOWN_ICONS);
 
 /**
  * The wizard's root. It owns the injected {@link SetupApi} and the request {@link SetupApp.draft}

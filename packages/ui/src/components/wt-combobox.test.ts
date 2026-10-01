@@ -2,7 +2,12 @@ import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-combobox.js";
-import { SEARCH_THRESHOLD, type ComboboxOption, type WtCombobox } from "./wt-combobox.js";
+import {
+  DROPDOWN_ICONS,
+  SEARCH_THRESHOLD,
+  type ComboboxOption,
+  type WtCombobox,
+} from "./wt-combobox.js";
 import { registerIcons } from "./wt-icon.js";
 import "./wt-dialog.js";
 import type { WtDialog } from "./wt-dialog.js";
@@ -2564,3 +2569,19 @@ for (const search of ["always", "never"] as const) {
     }
   });
 }
+
+test("DROPDOWN_ICONS holds a path that draws for the chevron and for the tick", () => {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  svg.append(path);
+  document.body.append(svg);
+  try {
+    expect(Object.keys(DROPDOWN_ICONS).sort()).toEqual(["check", "chevron-down"]);
+    for (const [name, d] of Object.entries(DROPDOWN_ICONS)) {
+      path.setAttribute("d", d);
+      expect(path.getTotalLength(), name).toBeGreaterThan(0);
+    }
+  } finally {
+    svg.remove();
+  }
+});
