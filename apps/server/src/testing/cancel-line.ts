@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
+import { expect } from "vitest";
 import {
   adjustmentReasons,
   createAdjustmentReason,
@@ -10,6 +11,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { applyAdjustment } from "../adjustments-apply.js";
 import type { TillConfig } from "../till-config.js";
+import { send, type BillVenue } from "./bill-venue.js";
 
 const OPERATOR = "cccccccc-0000-4000-8000-0000000000c1";
 
@@ -25,13 +27,25 @@ export const CANCEL_REASON: AdjustmentReasonInput = {
   noteRequired: false,
 };
 
-/** {@link CANCEL_REASON}'s id, created the first time a database is asked for it. */
-export async function cancelReasonId(tx: Transaction): Promise<string> {
+/** A reason that allows giving a line away, applied by anyone with no approval and no note. */
+export const GIVE_AWAY_REASON: AdjustmentReasonInput = {
+  ...CANCEL_REASON,
+  name: "Given away in a test",
+  actions: ["comp"],
+};
+
+/** `reason`'s id, created the first time a database is asked for it. */
+async function reasonIdOf(tx: Transaction, reason: AdjustmentReasonInput): Promise<string> {
   const [found] = await tx
     .select({ id: adjustmentReasons.id })
     .from(adjustmentReasons)
-    .where(eq(adjustmentReasons.name, CANCEL_REASON.name));
-  return found?.id ?? (await createAdjustmentReason(tx, CANCEL_REASON)).id;
+    .where(eq(adjustmentReasons.name, reason.name));
+  return found?.id ?? (await createAdjustmentReason(tx, reason)).id;
+}
+
+/** {@link CANCEL_REASON}'s id, created the first time a database is asked for it. */
+export function cancelReasonId(tx: Transaction): Promise<string> {
+  return reasonIdOf(tx, CANCEL_REASON);
 }
 
 /** A person with `id`, added (at the default role) when no person has that id: an adjustment is
@@ -119,4 +133,19 @@ export async function cancelLine(
     },
     cfg.locale,
   );
+}
+
+/** Gives away line `lineNo` of the bill in full through the adjustment route, under
+ * {@link GIVE_AWAY_REASON}. */
+export async function giveAway(venue: BillVenue, billId: string, lineNo: number): Promise<void> {
+  const reasonId = await withTransaction(venue.db, (tx) => reasonIdOf(tx, GIVE_AWAY_REASON));
+  const body = await cancelBody(venue.db, billId, lineNo);
+  const given = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/adjustments`,
+    { ...body, reasonId, action: "comp" },
+  );
+  expect(given.status).toBe(200);
 }

@@ -18,7 +18,6 @@ import {
   unpaidDepartures,
   workingOrders,
 } from "@waitron/db";
-import { createAdjustmentReason } from "@waitron/adjustments";
 import {
   listOutstandingSales,
   recordCorrection,
@@ -49,7 +48,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { listUnpaidDepartures } from "./unpaid-departure.js";
-import { cancelBody } from "./testing/cancel-line.js";
+import { cancelBody, giveAway } from "./testing/cancel-line.js";
 import "./errors.js";
 
 // Record unpaid departure (spec §8; service plan Task 17; owner's Q28 decision of 2026-10-01): an
@@ -246,39 +245,6 @@ async function credit(billId: string, base: string, total: string): Promise<void
       authz: { sessionId: session.id },
     });
   });
-}
-
-/** Gives away line `lineNo` of the bill in full, under a reason anyone may apply unapproved. */
-async function giveAway(billId: string, lineNo: number): Promise<void> {
-  const reasonId = await inTx(venue, async (tx) => {
-    const [found] = venue.db.all<{ id: string }>(
-      sql`select id from adjustment_reasons where name = 'Given away in a test'`,
-    );
-    return (
-      found?.id ??
-      (
-        await createAdjustmentReason(tx, {
-          name: "Given away in a test",
-          names: {},
-          actions: ["comp"],
-          maxPercentBp: null,
-          maxAmount: null,
-          applyRole: "staff",
-          approverRole: "staff",
-          noteRequired: false,
-        })
-      ).id
-    );
-  });
-  const body = await cancelBody(venue.db, billId, lineNo);
-  const given = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/working-orders/${billId}/adjustments`,
-    { ...body, reasonId, action: "comp" },
-  );
-  expect(given.status).toBe(200);
 }
 
 function nextInvoiceNumbers(): { id: string; next: number }[] {
@@ -669,7 +635,7 @@ describe("a bill that owes nothing", () => {
 
   it("invoices and settles an open bill whose every line was given away, beside a bill it records", async () => {
     const ana = await seatedWith(venue, "Caña");
-    await giveAway(ana.tabId, 1);
+    await giveAway(venue, ana.tabId, 1);
     const luis = await seatedWith(venue, "Botella tinto");
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
@@ -723,7 +689,7 @@ describe("a bill that owes nothing", () => {
 
   it("closes a party whose only owing bill was given away in full, invoicing it at 0.00 and settling it", async () => {
     const party = await seatedWith(venue, "Caña");
-    await giveAway(party.tabId, 1);
+    await giveAway(venue, party.tabId, 1);
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),
@@ -969,7 +935,7 @@ describe("a departure sent together with a payment or Finish table on the same p
     "closes a party whose only bill was given away in full once when Finish table is sent too, with %s",
     async (_, first) => {
       const party = await seatedWith(venue, "Caña");
-      await giveAway(party.tabId, 1);
+      await giveAway(venue, party.tabId, 1);
       const revision = revisionOf(party.partyId);
 
       const [departed, finished] = await together(

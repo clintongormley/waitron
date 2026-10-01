@@ -526,7 +526,8 @@ export async function payWorkingOrder(
 /**
  * Give the kitchen the dishes paying sends ({@link fireDishesAtPayment}), file the sale
  * ({@link fileImmediateSale}), and once the sale exists raise the alert naming any dish no station
- * could take. `partyId` is the order's party as the caller read it, or `undefined` to read it here.
+ * could take. `partyId` is the order's party as the caller read it, or `null` for an order the
+ * caller has just created.
  */
 async function fireAndFileSale(
   tx: Transaction,
@@ -535,7 +536,7 @@ async function fireAndFileSale(
   workingOrderId: string,
   tender: TillTender | null,
   order: GrossOrder,
-  partyId: string | null | undefined,
+  partyId: string | null,
   operatorId?: string,
 ): Promise<TillSaleResult> {
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, partyId);
@@ -826,7 +827,11 @@ async function payIntegrated(
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt })
+      .select({
+        status: workingOrders.status,
+        attemptAt: workingOrders.paymentAttemptAt,
+        partyId: workingOrders.partyId,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
@@ -899,14 +904,24 @@ async function payIntegrated(
         : await priceStoredOrderForIssuance(tx, req.id);
     const wasPlaced = locked?.status === "placed";
     if (compareDecimal(order.gross.total, ZERO) === 0) {
-      // Nothing to charge, so the reader is not asked and no tip is taken; a malformed one is still
-      // refused. A placed order's dishes were sent when it was placed.
+      // Nothing to charge, so the reader is not asked and no tip is taken; called only to refuse a
+      // malformed tip when tips are on. A placed order's dishes were sent when it was placed, and a
+      // walk-up is created with no party.
       tipOf(cfg, req);
       return {
         kind: "owes-nothing" as const,
         ticket: wasPlaced
           ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, operatorId)
-          : await fireAndFileSale(tx, deps, cfg, req.id, null, order, undefined, operatorId),
+          : await fireAndFileSale(
+              tx,
+              deps,
+              cfg,
+              req.id,
+              null,
+              order,
+              locked?.partyId ?? null,
+              operatorId,
+            ),
       };
     }
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
