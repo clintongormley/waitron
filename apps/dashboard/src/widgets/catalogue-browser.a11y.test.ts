@@ -65,6 +65,13 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
             { id: "d", name: "Drinks", parentId: null },
             { id: "b", name: "Beer", parentId: "d" },
           ],
+          routing: {
+            claims: [],
+            exceptions: [],
+            unassigned: { folders: [], products: [] },
+            defaultStationId: null,
+            stations: [],
+          },
           folderId: state === "folder" ? "b" : null,
           view: state === "all" ? "all" : "folders",
         },

@@ -241,8 +241,15 @@ four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
 [#1004](https://github.com/clintongormley/waitron/pull/1004)). Prep Stations now edits folder claims and ordered
 exceptions, previews routing changes and tests a product's maker. Products link to that tester;
 till default service zones are set on Venue operations. The old preparation-route table and
-product/category station fields are removed. 3b, opening hours, by-hand open and close, fallbacks
-(a real replacement; a station with none is a
+product/category station fields are removed.
+
+**PF3b — done in this change:** On Products, a folder with no active own or inherited station
+claim or folder-wide exception shows a red asterisk. Its accessible name and tooltip explain the
+missing kitchen routing rule in English and Spanish. A default station does not clear the warning
+because its dishes reach that station only after folder rules fail. A switched-off station's claim
+does not clear it; an active claim inherited from a parent does.
+
+3b, opening hours, by-hand open and close, fallbacks (a real replacement; a station with none is a
 dead end, and the till asks the waiter where to make such a dish, or to remove it, before sending or
 taking payment), and down-printer and dark-screen alerts
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner on

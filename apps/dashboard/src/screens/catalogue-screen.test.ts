@@ -227,6 +227,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
         variesByZone: false,
       },
     }),
+    getFolderRouting: vi.fn().mockResolvedValue({
+      claims: [],
+      exceptions: [],
+      unassigned: { folders: [], products: [] },
+      defaultStationId: null,
+      stations: [],
+    }),
     getProductEditor: vi.fn().mockResolvedValue(value),
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
     updateProductEditor: vi.fn().mockResolvedValue(value),
@@ -277,6 +284,8 @@ describe("catalogue-screen", () => {
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
     expect(api.listMadeAt).toHaveBeenCalledOnce();
+    expect(api.getFolderRouting).toHaveBeenCalledOnce();
+    expect(list(el).routing).toMatchObject({ claims: [], defaultStationId: null });
     expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();

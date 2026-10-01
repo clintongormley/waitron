@@ -169,6 +169,13 @@ export const QUERY_DEPENDENCIES = {
     "route_exceptions",
     "kitchen_stations",
   ],
+  getFolderRouting: [
+    "categories",
+    "station_claims",
+    "kitchen_stations",
+    "route_exceptions",
+    "products",
+  ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in
   // extras.ts). The two list reads also count what carries each list: `product_modifiers` for
