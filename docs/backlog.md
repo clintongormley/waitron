@@ -6658,13 +6658,11 @@ ongoing overhaul listed at the top of Track A.
   chose, which probably means setup asking; do it when there is a second region or country to be wrong
   about. The hard-code is in `packages/catalogue/src/provisioning.ts` and names this entry. Receipt
   languages are a separate setting and already follow the province.
-- **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
-  the Products overhaul. Decide how a
-  product's labels (menus spec §10.5; category memberships are gone since 2026-09-25) select one or
-  more preparation/printing destinations, how matching rules combine and how duplicate output is
-  prevented. Keep reporting attribution separate so one
-  sale is counted once. The overhaul retains the current routing path; its reporting-category
-  choice does not settle this later routing design.
+- **Folder-driven routing to multiple printers/destinations** (owner, 2026-09-30): the
+  [approved routing design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)
+  replaces the former label-driven proposal. Prep stations claim folders, with ordered exceptions
+  and fallbacks; slice 3 remains unbuilt. Slice 1 retains the current direct-category routing until
+  that slice lands. Reporting attribution stays separate so one sale is counted once.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; department hours and calendar exceptions; workforce
   assignments; immutable department attribution and reporting; batched readiness and offer queries;

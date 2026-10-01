@@ -352,7 +352,7 @@ it("renames a root folder without adopting the current folder", async () => {
     expect(el.api.updateCategory).toHaveBeenCalledWith("d", { name: "Beverages", parentId: null }),
   );
 });
-it("keeps a refused folder save open with a field error and allows retry", async () => {
+it("keeps a refused folder save open with a field error", async () => {
   const el = await mountBrowser({ folderId: "d" });
   vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.invalid" });
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();

@@ -31,12 +31,16 @@ async function fixture() {
   const refresh = vi.fn(async () => {});
   const focus = vi.fn();
   const accept = vi.fn(
-    (kind: "unit" | "category", value: { id: string; name: Record<string, string> }) => {
-      if (kind === "unit") el.units = [...el.units, { ...value, abbreviation: {} }];
+    (kind: "unit" | "category", value: { id: string; name: string | Record<string, string> }) => {
+      if (kind === "unit")
+        el.units = [
+          ...el.units,
+          { ...value, name: value.name as Record<string, string>, abbreviation: {} },
+        ];
       if (kind === "category")
         el.categories = [
           ...el.categories,
-          { id: value.id, name: value.name.en ?? "", parentId: null },
+          { id: value.id, name: value.name as string, parentId: null },
         ];
       el.selectRelated(kind, value.id);
     },
@@ -54,7 +58,10 @@ it.each(["unit", "category"] as const)(
     const fx = await fixture();
     fx.controller.open(kind);
     fx.refresh.mockRejectedValueOnce(new Error("offline"));
-    const saved = { id: crypto.randomUUID(), name: { en: "New choice" } };
+    const saved = {
+      id: crypto.randomUUID(),
+      name: kind === "unit" ? { en: "New choice" } : "New choice",
+    };
     await fx.controller.submit(async () => saved);
     expect(fx.controller.kind).toBeNull();
     expect(fx.controller.error).toBeNull();
@@ -93,11 +100,11 @@ it("retains a failed child and drops a duplicate submit while the write is pendi
 it("does not attach a late write to a different product or release its child gate", async () => {
   const fx = await fixture();
   fx.controller.open("category");
-  const request = deferred<{ id: string; name: Record<string, string> }>();
+  const request = deferred<{ id: string; name: string }>();
   const saving = fx.controller.submit(() => request.promise);
   fx.controller.reset();
   fx.controller.open("unit");
-  request.resolve({ id: crypto.randomUUID(), name: { en: "Old category" } });
+  request.resolve({ id: crypto.randomUUID(), name: "Old category" });
   await saving;
   expect(fx.controller.kind).toBe("unit");
   expect(fx.accept).not.toHaveBeenCalled();

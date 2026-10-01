@@ -1,4 +1,5 @@
 import { userEvent } from "vitest/browser";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import {
@@ -57,13 +58,15 @@ it("renders one name field holding the name, and excludes self and descendants f
   expect(combo.options.map((o) => o.value)).toEqual([""]);
 });
 it("renders exactly one name field whatever content languages the venue has enabled", async () => {
-  // `languages` is what the form took when it had a field per language; it is ignored now.
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    languages: { defaultLanguage: "es", languages: ["es", "en", "fr"] },
-  } as Partial<CategoryForm>);
-  expect(el.shadowRoot!.querySelectorAll('wt-input[name="name"]')).toHaveLength(1);
-  expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(1);
+  const before = currentContentLanguages();
+  try {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es", "en", "fr"] });
+    const { el } = await mountWidget<CategoryForm>("dashboard-category-form", { open: true });
+    expect(el.shadowRoot!.querySelectorAll('wt-input[name="name"]')).toHaveLength(1);
+    expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(1);
+  } finally {
+    setContentLanguages(before);
+  }
 });
 it("names a parent option by the path of names down to it", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
