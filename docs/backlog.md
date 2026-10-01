@@ -4793,22 +4793,28 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       a discard refused `bill.payments_received` says "This order still holds money from a
       payment. Give it back before discarding the order" (`held.discard_holds_money` in
       `apps/till/src/i18n/strings.ts`), and one refused `order.payment_in_flight` shows that
-      code's own till text; every other refusal still shows `held.stale`. A refusal for an order
-      the refreshed held list no longer holds (for example one settled on another till through
-      bill payments, whose payments the server still counts as money) shows `held.stale`, because
-      the server checks money before it checks the order is still open. Measured 2026-10-01 with a
-      throwaway server case: a bill paid in full in cash through bill payments was `settled`, and
-      `DELETE /api/working-orders/:id` on it answered 409 `bill.payments_received`. If a newer
-      read of the held list is still under way when the discard's own read finishes, the check
-      reads the list from before it, and a settled order still shows the money text. The server
-      and its codes are unchanged. Guards: the two "discard-order: refused …" cases and the case
-      for an order the refreshed list no longer holds in `apps/till/src/till-app.test.ts`, and the
-      wording pinned in `apps/till/src/i18n/strings.test.ts`.
-    - **OPEN — a discard refused `bill.refund_in_progress` still says "That order is no longer
-      available".** The server refuses a discard while a card refund on the order is pending; B23
-      left that code on `held.stale`. The server answer is pinned by the `abandon` write in
-      `lockedWrites` in `apps/server/src/bill-refunds.card.test.ts`. **Next action:** decide
-      whether the discard shows `bill.refund_in_progress`'s own till text.
+      code's own till text; every other refusal still shows `held.stale` (B24, below, gives
+      `bill.refund_in_progress` its own text too). A refusal for an order
+      the refreshed held list no longer holds shows `held.stale`. At B23 the server checked money
+      before it checked the order was still open, so a settled bill that had taken payments
+      answered `bill.payments_received`; B24 (below) reversed that order on the server. Guards:
+      "discard-order: refused for an order still holding money, says to give it back, and
+      refreshes", "discard-order: refused while a card payment is under way, says so in that
+      code's own words, and refreshes" and the case for an order the refreshed list no longer
+      holds in `apps/till/src/till-app.test.ts`, and the wording pinned in
+      `apps/till/src/i18n/strings.test.ts`.
+    - **DONE — a discard refused for a pending card refund says so, and the server checks a
+      discarded order is still open before it checks for money** (lane B item B24, 2026-10-01; the
+      owner's "queue it" to both of B23's FYI points). On the till, a discard refused
+      `bill.refund_in_progress` shows that code's own till text instead of `held.stale`. On the
+      server, `abandonHeldOrder` (`apps/server/src/working-order.ts`) now reads the order's status
+      first and answers `working_order.not_open` for an order that is not open, before the card
+      payment, refund and money checks; a closed bill that held money answered
+      `bill.payments_received` before. B23's till check on the refreshed held list stays: it still
+      shows `held.stale` for an order another till closes after the server's answer, and removing
+      it would mean deleting its case. Guards: "discard-order: refused while a card refund is
+      pending …" in `apps/till/src/till-app.test.ts`, and "answers working_order.not_open, not its
+      money, when discarding a bill already closed" in `apps/server/src/bill-payments.test.ts`.
     - **OPEN — the generic "received more than the bill" text also answers a comp or discount.**
       The till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer
       items, or refund the difference first") is on `main`, and the adjustment dialog shows it

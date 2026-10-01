@@ -963,8 +963,8 @@ describe("parkOrder", () => {
     const lines = [{ productId: cafeId, quantity: "1" }];
 
     await parkProducts(cfg, { id, lines });
-    // Abandon it: `abandonHeldOrder` is a conditional open→abandoned UPDATE, so the row PERSISTS (status
-    // 'abandoned'), not a delete — a re-park's id still PK-collides, but the committed row is no longer open.
+    // Abandon it: the row PERSISTS (status 'abandoned'), not a delete — a re-park's id still
+    // PK-collides, but the committed row is no longer open.
     await abandonHeldOrder({ db }, cfg, id);
 
     // The re-park collides on the committed (now abandoned) row. Not being `open`, it is NOT a replayable
@@ -2319,7 +2319,6 @@ describe("abandonHeldOrder", () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
-    // The conditional UPDATE reaches the foreign-node open order and abandons it like the node's own.
     await expect(abandonHeldOrder({ db }, cfg, foreign)).resolves.toBeUndefined();
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, foreign));
     expect(wo).toMatchObject({ status: "abandoned", settledAt: null });
