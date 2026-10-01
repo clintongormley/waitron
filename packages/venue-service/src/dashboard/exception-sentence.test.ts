@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
-import { setLocale } from "@waitron/dashboard-kit";
+import { registerCatalogue, setLocale } from "@waitron/dashboard-kit";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import type { RouteException } from "../routing.js";
 import { exceptionSentence } from "./exception-sentence.js";
 
@@ -20,7 +21,10 @@ const base: RouteException = {
   productId: null,
   target: { kind: "station", stationId: "bar" },
 };
-afterEach(() => setLocale("en"));
+afterEach(() => {
+  registerCatalogue(VENUE_SERVICE_STRINGS);
+  setLocale("en");
+});
 for (const [locale, shape, exception, expected] of [
   [
     "en",
@@ -64,3 +68,19 @@ for (const [locale, shape, exception, expected] of [
     expect(exceptionSentence({ ...base, ...exception } as RouteException, names)).toBe(expected);
   });
 }
+
+it("takes the sentence words and structure from the translation catalogue", () => {
+  setLocale("en");
+  registerCatalogue({
+    en: {
+      "prep.everything": "All items",
+      "prep.exception_from_zone": " in {zone}",
+      "prep.no_preparation": "No maker",
+      "prep.exception_sentence": "{what}{zone} => {target}",
+    },
+    es: {},
+  });
+  expect(
+    exceptionSentence({ ...base, zoneId: "terrace", target: { kind: "no_preparation" } }, names),
+  ).toBe("All items in Terrace => No maker");
+});

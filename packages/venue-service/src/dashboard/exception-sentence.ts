@@ -1,4 +1,4 @@
-import { currentLocale } from "@waitron/dashboard-kit";
+import { t } from "./strings.js";
 import type { RouteException } from "../routing.js";
 
 export interface ExceptionNames {
@@ -9,24 +9,22 @@ export interface ExceptionNames {
 }
 
 export function exceptionSentence(exception: RouteException, names: ExceptionNames): string {
-  const spanish = currentLocale().startsWith("es");
   const find = (rows: readonly { id: string; name: string }[], id: string) =>
     rows.find((row) => row.id === id)?.name ?? id;
   const what = exception.categoryId
     ? find(names.categories, exception.categoryId).split(" › ").at(-1)!
     : exception.productId
       ? find(names.products, exception.productId)
-      : spanish
-        ? "Todo"
-        : "Everything";
+      : t("prep.everything");
   const zone = exception.zoneId
-    ? ` ${spanish ? "desde" : "from"} ${find(names.zones, exception.zoneId)}`
+    ? t("prep.exception_from_zone").replace("{zone}", find(names.zones, exception.zoneId))
     : "";
   const target =
     exception.target.kind === "no_preparation"
-      ? spanish
-        ? "Sin preparación"
-        : "No preparation"
+      ? t("prep.no_preparation")
       : find(names.stations, exception.target.stationId);
-  return `${what}${zone} → ${target}`;
+  return t("prep.exception_sentence")
+    .replace("{what}", what)
+    .replace("{zone}", zone)
+    .replace("{target}", target);
 }

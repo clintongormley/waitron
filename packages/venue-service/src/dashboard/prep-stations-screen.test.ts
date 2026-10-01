@@ -575,3 +575,30 @@ it("edits an existing exception without changing its position", async () => {
   });
   expect(a.reorderExceptions).not.toHaveBeenCalled();
 });
+
+it("offers only active stations for a new exception and names a switched-off edit target", async () => {
+  const changed: PrepStationsView = {
+    ...exceptionView,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "old", name: "Old bar", active: false, isDefault: false },
+    ],
+  };
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(changed) }));
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  const choice = q(el, '[data-test="exception-target"]') as HTMLElement & {
+    options: { value: string; label: string }[];
+  };
+  expect(choice.options.map((o) => o.value)).toEqual(["bar", "no_preparation"]);
+  q(el, '[slot="cancel"]')!.click();
+  await settle(el);
+  const editEl = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
+  q(editEl, '[data-test="edit-exception-b"]')!.click();
+  await settle(editEl);
+  const edited = q(editEl, '[data-test="exception-target"]') as HTMLElement & {
+    options: { value: string; label: string }[];
+  };
+  expect(edited.options.map((o) => o.value)).toContain("old");
+  expect(edited.shadowRoot!.querySelector(".trigger .value")!.textContent).toContain("Old bar");
+});

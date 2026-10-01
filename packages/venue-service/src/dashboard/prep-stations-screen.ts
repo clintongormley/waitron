@@ -428,6 +428,17 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
+  #exceptionTargetOptions() {
+    const active = (this.view?.stations ?? [])
+      .filter((station) => station.active)
+      .map((station) => ({ value: station.id, label: station.name }));
+    const selected = this.exceptionTarget;
+    const previous =
+      selected && selected !== NO_PREPARATION && !active.some((option) => option.value === selected)
+        ? [{ value: selected, label: `${this.#stationName(selected)} (${t("prep.switched_off")})` }]
+        : [];
+    return [...active, ...previous, { value: NO_PREPARATION, label: t("prep.no_preparation") }];
+  }
   #exceptionOptions() {
     return [
       { value: "", label: t("prep.everything") },
@@ -651,7 +662,7 @@ export class PrepStationsScreen extends LitElement {
                     name="target"
                     label=${t("prep.made_at")}
                     required
-                    .options=${this.#targetOptions()}
+                    .options=${this.#exceptionTargetOptions()}
                     .value=${this.exceptionTarget}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => {
                       this.exceptionTarget = e.detail.value;
