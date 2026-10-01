@@ -176,6 +176,32 @@ export function businessDayOf(
   return new Date(shifted).toISOString().slice(0, 10);
 }
 
+export interface VenueMoment {
+  readonly businessDay: string;
+  readonly weekday: number;
+  readonly timeOfDay: string;
+}
+
+/** The venue's wall-clock weekday and time, and its business day, at `instant`; `null` for unreadable clock settings. */
+export function venueMomentAt(
+  instant: Date,
+  clock: { timeZone: string; dayCutover: string },
+): VenueMoment | null {
+  try {
+    validateTimeZone(clock.timeZone);
+    validateCutover(clock.dayCutover);
+  } catch {
+    return null;
+  }
+
+  const wall = new Date(wallClockMs(instant.getTime(), clock.timeZone));
+  return {
+    businessDay: businessDayOf(instant, clock),
+    weekday: wall.getUTCDay(),
+    timeOfDay: wall.toISOString().slice(11, 16),
+  };
+}
+
 /** A location's zone and business-day cutover, the cutover as the `"HH:MM"` this file reads. */
 export async function readLocationClock(
   tx: Transaction,
