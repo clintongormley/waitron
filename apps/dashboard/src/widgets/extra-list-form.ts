@@ -79,14 +79,6 @@ export class ExtraListForm extends LitElement {
           flex-basis: 100%;
           min-width: 0;
           overflow-wrap: anywhere;
-          min-height: 0;
-          padding: var(--wt-space-1) 0 0;
-          border: 0;
-          background: none;
-        }
-        td wt-price-input::part(amount) {
-          border-start-end-radius: var(--wt-radius-md);
-          border-end-end-radius: var(--wt-radius-md);
         }
       }
       .required,
