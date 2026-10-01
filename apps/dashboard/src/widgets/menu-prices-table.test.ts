@@ -2143,3 +2143,94 @@ it("opens Resolve without widening the table or displacing its prices", async ()
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(root.querySelector("table")!.getBoundingClientRect().width).toBeCloseTo(before, 0);
 });
+
+it.each([
+  [
+    "en-GB",
+    "€4.00",
+    "Where Lemonade's price on this menu comes from",
+    "This menu sets €4.00. Without it: €3.00, the product's own price.",
+  ],
+  [
+    "es-ES",
+    "4,00 €",
+    "De dónde viene el precio de Lemonade en esta carta",
+    "Esta carta fija 4,00 €. Sin él: 3,00 €, el precio propio del producto.",
+  ],
+])(
+  "explains the scalar product override instead of its sizes' prices (%s)",
+  async (locale, price, label, explanation) => {
+    setLocale(locale);
+    try {
+      const priced = {
+        ...lemonade,
+        override: "4.00",
+        variants: [
+          { variantId: "v-small", price: null, offered: null },
+          { variantId: "v-large", price: "14.00", offered: null },
+        ],
+        combined: {
+          ...lemonade.combined,
+          price: {
+            state: "decided",
+            value: "4.00",
+            source: { kind: "own" },
+            otherwise: {
+              state: "decided",
+              value: "3.00",
+              source: { kind: "product" },
+              otherwise: null,
+            },
+          },
+          variants: [
+            {
+              variantId: "v-small",
+              price: {
+                state: "decided",
+                value: "6.00",
+                source: { kind: "product" },
+                otherwise: null,
+              },
+              offered: lemonade.combined.offered,
+            },
+            {
+              variantId: "v-large",
+              price: {
+                state: "decided",
+                value: "14.00",
+                source: { kind: "own" },
+                otherwise: {
+                  state: "decided",
+                  value: "12.00",
+                  source: { kind: "product" },
+                  otherwise: null,
+                },
+              },
+              offered: lemonade.combined.offered,
+            },
+          ],
+        },
+      } as MenuPriceRow;
+      const el = await mount({ rows: [priced] });
+      const menu = cell(el, "menu-price", "mi-lemonade");
+      expect(visibleText(menu)).toBe(price);
+      const tip = menu.querySelector("wt-help-tooltip")!;
+      expect(tip.getAttribute("aria-label")).toBe(label);
+      await tip.updateComplete;
+      tip.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+      await tip.updateComplete;
+      expect(tip.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect(tip.textContent!.trim()).toBe(explanation);
+      const aggregate = await mount({ rows: [{ ...priced, override: null }] });
+      const aggregateCell = cell(aggregate, "menu-price", "mi-lemonade");
+      expect(visibleText(aggregateCell)).toBe(t("menu_prices.variant_overrides"));
+      expect(aggregateCell.querySelector("wt-help-tooltip")!.textContent!.trim()).toBe(
+        locale === "en-GB"
+          ? "Small: €6.00. The product's own price. Large: €14.00. This menu sets €14.00. Without it: €12.00, the product's own price."
+          : "Small: 6,00 €. El precio propio del producto. Large: 14,00 €. Esta carta fija 14,00 €. Sin él: 12,00 €, el precio propio del producto.",
+      );
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);

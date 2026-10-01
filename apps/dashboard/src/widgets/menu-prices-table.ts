@@ -375,7 +375,9 @@ export class MenuPricesTable extends LitElement {
 
   #tip(line: Line, key: "before" | "menu" | "charged", content: unknown) {
     const settings =
-      line.variant === null && line.item.variants.length
+      line.variant === null &&
+      line.item.variants.length &&
+      (key !== "menu" || line.item.override === null)
         ? line.item.variants.map((variant) => ({
             variant,
             setting: this.#priceSetting({ item: line.item, variant }),
