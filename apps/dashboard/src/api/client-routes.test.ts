@@ -118,6 +118,22 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads the venue's content-language rules from the management route", async () => {
+    const rules = {
+      required: ["ca", "es"],
+      official: ["es", "ca", "gl", "eu"],
+      foreignLanguageNotice: { minimumForeign: 1, text: { en: "One foreign language." } },
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(rules));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getContentLanguageRules()).resolves.toEqual(rules);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/content-language-rules", "GET", undefined],
+    ]);
+  });
+
   it("lists a unit's products and reassigns them, sending a null target for Each", async () => {
     const using = [{ id: "prod-1", name: "Olives" }];
     const fetchImpl = vi

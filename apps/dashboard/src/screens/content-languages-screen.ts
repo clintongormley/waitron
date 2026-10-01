@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { capitaliseFirst, type ContentLanguages } from "@waitron/shared";
+import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { baseStyles, formMessage, formMessageStyles, setContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -63,6 +63,14 @@ export class ContentLanguagesScreen extends LitElement {
       .note {
         margin: var(--wt-space-2) 0 var(--wt-space-3);
       }
+      .warning {
+        max-width: 60ch;
+        margin: var(--wt-space-4) 0 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+      }
       .button-group {
         display: flex;
         flex-wrap: wrap;
@@ -89,6 +97,7 @@ export class ContentLanguagesScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @state() private config: ContentLanguages | null = null;
+  @state() private rules: ContentLanguageRules | null = null;
   @state() private loadFailed = false;
   @state() private adding = false;
   @state() private busy = false;
@@ -113,6 +122,9 @@ export class ContentLanguagesScreen extends LitElement {
   async #load(): Promise<void> {
     this.loadFailed = false;
     try {
+      await this.#queries.watch("getContentLanguageRules", [], (rules) => {
+        this.rules = rules;
+      });
       await this.#queries.watch("getContentLanguages", [], (value) => {
         this.#reads += 1;
         this.config = value;
@@ -154,7 +166,18 @@ export class ContentLanguagesScreen extends LitElement {
     }
   }
 
-  #renderConfig(config: ContentLanguages) {
+  #renderNotice(config: ContentLanguages, rules: ContentLanguageRules) {
+    const notice = rules.foreignLanguageNotice;
+    if (!notice) return nothing;
+    const foreign = config.languages.filter((code) => !rules.official.includes(code)).length;
+    if (foreign >= notice.minimumForeign) return nothing;
+    const text = notice.text[currentLocale().split("-")[0]!] ?? notice.text["en"];
+    return text
+      ? html`<p class="warning" data-test="foreign-language-notice">${text}</p>`
+      : nothing;
+  }
+
+  #renderConfig(config: ContentLanguages, rules: ContentLanguageRules) {
     const locale = currentLocale();
     const names = new Intl.DisplayNames([locale], { type: "language" });
     const name = (code: string) => capitaliseFirst(names.of(code)!, locale);
@@ -163,18 +186,28 @@ export class ContentLanguagesScreen extends LitElement {
       .filter((code) => code !== config.defaultLanguage)
       .map((code) => ({ code, name: name(code) }))
       .sort((a, b) => collator.compare(a.name, b.name));
-    return html`<wt-card>
+    const required = (code: string) => rules.required.includes(code);
+    const requiredMeta = (code: string) =>
+      required(code)
+        ? html`<span class="field-meta">${t("content_languages.required")}</span>`
+        : nothing;
+    return html`${this.#renderNotice(config, rules)}
+      <wt-card>
         <ul data-test="languages" aria-label=${t("content_languages.enabled")}>
           <li class="action-row">
             <div class="text">
               <span class="field-value">${name(config.defaultLanguage)}</span>
               <span class="field-meta">${t("content_languages.default")}</span>
+              ${requiredMeta(config.defaultLanguage)}
             </div>
           </li>
           ${others.map(
             ({ code, name }) =>
               html`<li class="action-row">
-                <span class="field-value">${name}</span>
+                <div class="text">
+                  <span class="field-value">${name}</span>
+                  ${requiredMeta(code)}
+                </div>
                 <div class="button-group">
                   <wt-button
                     data-test=${`set-default-${code}`}
@@ -185,19 +218,23 @@ export class ContentLanguagesScreen extends LitElement {
                     @click=${() => void this.#save(code, config.languages)}
                     >${t("content_languages.set_default")}</wt-button
                   >
-                  <wt-button
-                    data-test=${`remove-${code}`}
-                    variant="secondary"
-                    class="card-action accent-danger"
-                    ?disabled=${this.busy}
-                    aria-label=${`${t("content_languages.remove")}: ${name}`}
-                    @click=${() =>
-                      void this.#save(
-                        config.defaultLanguage,
-                        config.languages.filter((language) => language !== code),
-                      )}
-                    >${t("content_languages.remove")}</wt-button
-                  >
+                  ${
+                    required(code)
+                      ? nothing
+                      : html`<wt-button
+                          data-test=${`remove-${code}`}
+                          variant="secondary"
+                          class="card-action accent-danger"
+                          ?disabled=${this.busy}
+                          aria-label=${`${t("content_languages.remove")}: ${name}`}
+                          @click=${() =>
+                            void this.#save(
+                              config.defaultLanguage,
+                              config.languages.filter((language) => language !== code),
+                            )}
+                          >${t("content_languages.remove")}</wt-button
+                        >`
+                  }
                 </div>
               </li>`,
           )}
@@ -220,6 +257,7 @@ export class ContentLanguagesScreen extends LitElement {
       <dashboard-add-content-language
         .open=${this.adding}
         .config=${config}
+        .official=${rules.official}
         .save=${this.#saveAdded}
         @languages-closed=${() => {
           this.adding = false;
@@ -243,8 +281,8 @@ export class ContentLanguagesScreen extends LitElement {
           : nothing
       }
       ${
-        this.config
-          ? this.#renderConfig(this.config)
+        this.config && this.rules
+          ? this.#renderConfig(this.config, this.rules)
           : this.loadFailed
             ? nothing
             : html`<p role="status">${t("content_languages.loading")}</p>`

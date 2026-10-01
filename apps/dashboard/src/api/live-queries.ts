@@ -24,6 +24,8 @@ const MENU_PUBLICATION_READS = [
 /** Dependencies describe the read model, independently of which operation changes it. */
 export const QUERY_DEPENDENCIES = {
   getContentLanguages: ["content_languages"],
+  // The server works the rules out once at boot, so no table change moves them.
+  getContentLanguageRules: [],
   listPrinters: ["printers", "print_jobs"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],

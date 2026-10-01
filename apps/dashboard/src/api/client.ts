@@ -5,7 +5,7 @@ import type {
   Place,
 } from "@waitron/catalogue/src/menu-combine-types.js";
 export type { Setting, CombinedOffer, ValueSource, Place };
-import type { ContentLanguages } from "@waitron/shared";
+import type { ContentLanguageRules, ContentLanguages } from "@waitron/shared";
 
 /**
  * Most types below are hand-kept copies of the server's JSON shapes, so nothing compares them with
@@ -1558,6 +1558,10 @@ export class DashboardApi {
 
   getContentLanguages(): Promise<ContentLanguages> {
     return this.#request<ContentLanguages>("/api/content-languages", "GET");
+  }
+
+  getContentLanguageRules(): Promise<ContentLanguageRules> {
+    return this.#request<ContentLanguageRules>("/management-api/content-language-rules", "GET");
   }
 
   updateContentLanguages(config: ContentLanguages): Promise<void> {

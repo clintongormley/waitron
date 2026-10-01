@@ -7,12 +7,24 @@ import type { ContentLanguagesScreen } from "./content-languages-screen.js";
 
 const LOADED = () => Promise.resolve({ defaultLanguage: "es", languages: ["es", "ca", "en"] });
 
+const NO_RULES = { required: [], official: [] };
+const VALENCIA = {
+  required: ["ca", "es"],
+  official: ["es", "ca", "gl", "eu"],
+  foreignLanguageNotice: {
+    minimumForeign: 1,
+    text: { en: "Offer one foreign language too.", es: "Ofrece también un idioma extranjero." },
+  },
+};
+
 function stubApi(
   read: () => Promise<unknown>,
   save: () => Promise<void> = () => Promise.resolve(),
+  rules: unknown = NO_RULES,
 ): DashboardApi {
   return {
     getContentLanguages: vi.fn(read),
+    getContentLanguageRules: vi.fn().mockResolvedValue(rules),
     updateContentLanguages: vi.fn(save),
   } as unknown as DashboardApi;
 }
@@ -36,6 +48,39 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders required languages and the foreign-language notice accessibly", async () => {
+    const { el, host } = await mountWidget<ContentLanguagesScreen>(
+      "dashboard-content-languages-screen",
+      {
+        api: stubApi(
+          () => Promise.resolve({ defaultLanguage: "es", languages: ["es", "ca"] }),
+          undefined,
+          VALENCIA,
+        ),
+      },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=foreign-language-notice]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the Add language dialog with the official languages grouped accessibly", async () => {
+    const { el, host } = await mountWidget<ContentLanguagesScreen>(
+      "dashboard-content-languages-screen",
+      { api: stubApi(LOADED, undefined, VALENCIA) },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-language]")!.click();
+    await flush(el);
+    const add = el.shadowRoot!.querySelector<AddContentLanguageDialog>(
+      "dashboard-add-content-language",
+    )!;
+    expect(add.shadowRoot!.querySelectorAll("optgroup")).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
 

@@ -3,22 +3,35 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { AddContentLanguageDialog } from "./add-content-language.js";
-import { t } from "../i18n/t.js";
+import { contentLanguageChoices } from "@waitron/shared";
+import { en, es } from "../i18n/strings.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("es-ES");
+});
 
 const CONFIG = { defaultLanguage: "es", languages: ["es", "en"] };
 
 async function mount(
   save: AddContentLanguageDialog["save"] = vi.fn().mockResolvedValue(undefined),
+  official?: readonly string[],
 ) {
   return mountWidget<AddContentLanguageDialog>("dashboard-add-content-language", {
     open: true,
     config: CONFIG,
     save,
+    ...(official ? { official } : {}),
   });
 }
+
+const OFFICIAL = ["es", "ca", "gl", "eu"];
+const group = (el: AddContentLanguageDialog, index: number) =>
+  field(el).querySelectorAll("optgroup")[index]!;
+const codesIn = (parent: ParentNode) =>
+  [...parent.querySelectorAll("option")].map((option) => option.value);
 
 const field = (el: AddContentLanguageDialog) =>
   el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
@@ -40,6 +53,78 @@ async function bottomOf(el: AddContentLanguageDialog): Promise<string | null> {
 
 const disabled = (el: AddContentLanguageDialog, action: string): boolean =>
   el.shadowRoot!.querySelector(`[data-test="${action}"]`)!.hasAttribute("disabled");
+
+describe("add content language dialog: official languages first", () => {
+  it("lists the official languages not yet enabled in a group of their own, then every other language in a second group, each alphabetical", async () => {
+    const { el } = await mount(undefined, OFFICIAL);
+    const options = [...field(el).options];
+    expect(options[0]!.value).toBe("");
+    expect(options[0]!.parentElement).toBe(field(el));
+    expect(field(el).querySelectorAll("optgroup")).toHaveLength(2);
+    expect(group(el, 0).label).toBe(t("content_languages.official_group"));
+    expect(group(el, 1).label).toBe(t("content_languages.other_group"));
+    expect(codesIn(group(el, 0))).toEqual(["ca", "eu", "gl"]);
+    expect([...group(el, 0).querySelectorAll("option")].map((o) => o.textContent!.trim())).toEqual([
+      "Catalán",
+      "Euskera",
+      "Gallego",
+    ]);
+    const others = contentLanguageChoices(currentLocale())
+      .map(({ code }) => code)
+      .filter((code) => !["es", "en", "ca", "eu", "gl"].includes(code));
+    expect(codesIn(group(el, 1))).toEqual(others);
+    expect(codesIn(field(el))).toEqual(["", "ca", "eu", "gl", ...others]);
+  });
+
+  it("names the two groups in each UI language", () => {
+    expect(en["content_languages.official_group"]).toBe("Official languages");
+    expect(es["content_languages.official_group"]).toBe("Idiomas oficiales");
+    expect(en["content_languages.other_group"]).toBe("Other languages");
+    expect(es["content_languages.other_group"]).toBe("Otros idiomas");
+  });
+
+  it("orders the official group by the English names in English", async () => {
+    setLocale("en-GB");
+    const { el } = await mount(undefined, OFFICIAL);
+    expect([...group(el, 0).querySelectorAll("option")].map((o) => o.textContent!.trim())).toEqual([
+      "Basque",
+      "Catalan",
+      "Galician",
+    ]);
+  });
+
+  it("keeps one flat list when there are no official languages", async () => {
+    const { el } = await mount();
+    expect(field(el).querySelectorAll("optgroup")).toHaveLength(0);
+    expect(codesIn(field(el))).toEqual([
+      "",
+      ...contentLanguageChoices(currentLocale())
+        .map(({ code }) => code)
+        .filter((code) => !["es", "en"].includes(code)),
+    ]);
+  });
+
+  it("keeps one flat list when every official language is already enabled", async () => {
+    const { el } = await mount(undefined, ["es", "en"]);
+    expect(field(el).querySelectorAll("optgroup")).toHaveLength(0);
+  });
+
+  it("saves an official language chosen from its group, and keeps it chosen through a live refresh", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mount(save, OFFICIAL);
+    await choose(el, "gl");
+    el.config = { defaultLanguage: "es", languages: ["es", "en", "de"] };
+    await el.updateComplete;
+    expect(field(el).value).toBe("gl");
+    click(el, "save-language");
+    await vi.waitFor(() =>
+      expect(save).toHaveBeenCalledWith({
+        defaultLanguage: "es",
+        languages: ["es", "en", "de", "gl"],
+      }),
+    );
+  });
+});
 
 describe("add content language dialog", () => {
   it("holds only a required language list, offering the languages not yet enabled with a capital letter", async () => {

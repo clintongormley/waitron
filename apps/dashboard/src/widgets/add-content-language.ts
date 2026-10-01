@@ -31,6 +31,8 @@ export class AddContentLanguageDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ attribute: false }) config!: ContentLanguages;
   @property({ attribute: false }) save!: (config: ContentLanguages) => Promise<void>;
+  /** Offered first, in a group of their own, when any is not yet enabled. */
+  @property({ attribute: false }) official: readonly string[] = [];
   @state() private language = "";
   @state() private busy = false;
   @state() private attempted = false;
@@ -83,6 +85,9 @@ export class AddContentLanguageDialog extends LitElement {
     const choices = contentLanguageChoices(currentLocale()).filter(
       ({ code }) => !this.config.languages.includes(code),
     );
+    const official = choices.filter(({ code }) => this.official.includes(code));
+    const option = ({ code, name }: { code: string; name: string }) =>
+      html`<option value=${code} .selected=${code === this.language}>${name}</option>`;
     return html`<wt-modal
       .open=${this.open}
       heading=${t("content_languages.add")}
@@ -109,7 +114,16 @@ export class AddContentLanguageDialog extends LitElement {
           <option value="" .selected=${this.language === ""}>
             ${t("content_languages.choose")}
           </option>
-          ${choices.map(({ code, name }) => html`<option value=${code} .selected=${code === this.language}>${name}</option>`)}
+          ${
+            official.length === 0
+              ? choices.map(option)
+              : html`<optgroup label=${t("content_languages.official_group")}>
+                    ${official.map(option)}
+                  </optgroup>
+                  <optgroup label=${t("content_languages.other_group")}>
+                    ${choices.filter(({ code }) => !this.official.includes(code)).map(option)}
+                  </optgroup>`
+          }
         </select>
       </label>
       ${missing ? html`<p class="error" id="language-error">${t("content_languages.choose")}</p>` : nothing}

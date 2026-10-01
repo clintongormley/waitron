@@ -156,6 +156,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Enter the required text in the site's default language.",
     es: "Introduce el texto obligatorio en el idioma predeterminado del sitio.",
   },
+  "content.language_required": {
+    en: "This venue's region requires that language, so it cannot be removed.",
+    es: "La región del local exige ese idioma, así que no se puede quitar.",
+  },
   "content.default_missing": {
     en: "Some products, units, menu sections, modifiers or images need translating before this can become the default language.",
     es: "Debes traducir algunos productos, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
