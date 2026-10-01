@@ -8,7 +8,9 @@ import { printers } from "./printers.js";
 
 /**
  * The cash-drawer audit log: one row per drawer open. The kick itself is a separate `drawer` print
- * job; printing a receipt never opens the drawer (CLAUDE.md §5).
+ * job; printing a receipt never opens the drawer (CLAUDE.md §5). A `card_slip` open is a hand-keyed
+ * card payment's, so the slip goes in the drawer; it names the sale or, before the invoice, the bill
+ * payment.
  *
  * No trigger refuses an update or a delete: the table is declared with `classify()`, not
  * `appendOnly()`, in `../classification.ts`.
@@ -35,6 +37,7 @@ export const drawerOpens = table(
       "calibration",
       "bill_payment",
       "bill_refund",
+      "card_slip",
     ] as const).notNull(),
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
@@ -52,7 +55,7 @@ export const drawerOpens = table(
     check("drawer_opens_reason_ck", enumCheck(t.reason)),
     check(
       "drawer_opens_target_ck",
-      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.tillId} is null and ${t.saleId} is null and ${t.billPaymentId} is null) or (${t.reason} in ('bill_payment', 'bill_refund') and ${t.tillId} is not null and ${t.billPaymentId} is not null and ${t.saleId} is null) or (${t.reason} in ('cash_sale', 'manual') and ${t.tillId} is not null and ${t.billPaymentId} is null)`,
+      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.tillId} is null and ${t.saleId} is null and ${t.billPaymentId} is null) or (${t.reason} in ('bill_payment', 'bill_refund') and ${t.tillId} is not null and ${t.billPaymentId} is not null and ${t.saleId} is null) or (${t.reason} in ('cash_sale', 'manual') and ${t.tillId} is not null and ${t.billPaymentId} is null) or (${t.reason} = 'card_slip' and ${t.tillId} is not null and (${t.saleId} is null) <> (${t.billPaymentId} is null))`,
     ),
   ],
 );
