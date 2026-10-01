@@ -1409,8 +1409,11 @@ new dropdown primitive, since a native list cannot be restyled; the plan should 
 file and move each onto a primitive rather than restyle it in place — **or add a primitive where none
 fits** (owner, 2026-10-01: "if there are screens drawing their own fields then they should be
 updated to use the primitives … or to add a primitive"). The same change adds that as a standing
-rule to `docs/developers/design-system.md` → Forms: a screen does not draw its own form field. Things
-to settle in the spec:
+rule to `docs/developers/design-system.md` → Forms: a screen does not draw its own form field —
+and, once the moves are done, a root guard that fails on a native `<select>`, `<textarea>` or text
+`<input>` in screen code outside the primitives (CLAUDE.md §7: a written rule with standing
+violations needs a guard), stating its own blind spots in the same line. Things to settle in the
+spec:
 
 - **It fits the existing hint rule.** A field's hint is already its placeholder (CLAUDE.md §3,
   Forms; `hint` is shown inside the empty field). Point 6 adds: where a field has no hint, the label
