@@ -2,8 +2,8 @@
 
 The box image carries software written by others under their own licences. This folder is
 copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream,
-the Iosevka font printed text is drawn from, and the Moby template the print agent's AppArmor
-profile is copied from; the npm packages bundled
+the Iosevka font printed text is drawn from, the Moby template the print agent's AppArmor
+profile is copied from, and the Material Symbols icons the web apps carry; the npm packages bundled
 into the server, the web apps and the print-agent have no notice file yet (`docs/backlog.md`).
 The print-agent image, built by the same `deploy/Dockerfile`, does not carry this folder; its own
 `/app/third-party/` holds the notices of its Python, described below.
@@ -53,6 +53,17 @@ copied from Moby's `docker-default` template, `apparmor/template.go` in
 Copyright The Moby Authors, licensed under the Apache License, Version 2.0. The profile's own header
 says so and gives the licence's address, <https://www.apache.org/licenses/LICENSE-2.0>, because that
 header is the only part of this notice that reaches `/etc/apparmor.d`.
+
+- `licenses/Apache-2.0.txt` is that licence.
+
+## Material Symbols icons
+
+The dashboard, till and setup web apps, served from `/app/web/` in the image, carry icon paths
+adapted from Google's Material Symbols icon set (<https://fonts.google.com/icons>), Copyright
+Google, licensed under the Apache License, Version 2.0: some of the dashboard's icons in
+`apps/dashboard/src/icons.ts`, and the `check` icon `apps/till/src/till-app.ts` and
+`apps/setup/src/setup-app.ts` register for the dropdown. Each of those files says so beside the
+paths.
 
 - `licenses/Apache-2.0.txt` is that licence.
 

@@ -8,7 +8,7 @@ import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../
 /**
  * The unit button's visible text is its accessible name, so an empty `unit` leaves it nameless.
  * `fixed-unit` shows the unit as text instead, for a field whose unit is not chosen here. The
- * amount box is the `amount` part and a fixed unit the `unit` part. A non-empty `locale` draws the
+ * amount input is the `amount` part and a fixed unit the `unit` part. A non-empty `locale` draws the
  * euro sign inside the amount box, on the side that locale writes it, as the `currency` part.
  */
 @customElement("wt-price-input")

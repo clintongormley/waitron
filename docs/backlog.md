@@ -1490,7 +1490,7 @@ What it touches: every text-field primitive — `wt-input` (`packages/ui-core/sr
 `wt-price-input`, `wt-number-stepper`, `wt-combobox` — the shared native-dropdown styles
 (`selectStyles`, `packages/ui/src/base-styles.ts`; A173 is the same control), textareas a screen
 styles itself (the product editor's descriptions), and `docs/developers/design-system.md` → Forms
-and the primitives table, which is the UI contract and describes today's label-above-a-bordered-box
+and the primitives table, which is the UI contract and described, until A178a, the label-above-a-bordered-box
 look. **The change lives in the shared primitives** (owner, 2026-10-01), so every screen built on
 them changes with them. What does not follow by itself is markup a screen writes directly. Counted
 by `grep` on 2026-10-01 across `apps/dashboard/src`, `apps/setup/src` and `packages/*/src`, test

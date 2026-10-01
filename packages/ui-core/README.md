@@ -1,8 +1,8 @@
 # Shared account controls
 
 Use `@waitron/ui-core` for account-form controls in Waitron and Waitron Cloud.
-It contains the button, input, card, icon, spinner, form actions and error summary,
-plus theme tokens and keyboard helpers. Application authentication and validation
+It contains the button, input, textarea, card, icon, spinner, form actions and error
+summary, plus theme tokens, the shared field styles (`fieldStyles`) and keyboard helpers. Application authentication and validation
 stay in your application.
 
 The package is private. Registry publication is a separate release step; this

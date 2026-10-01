@@ -5,7 +5,7 @@ import type { WtCombobox } from "./components/wt-combobox.js";
 
 afterEach(cleanup);
 
-test("chooseOption picks a value the way a click on its row does: the value, a composed wt-change, the label on the trigger", async () => {
+test("chooseOption sets the value and sends the composed wt-change a row click sends; the trigger shows the label", async () => {
   const el = (await mountInShadowRoot(
     '<wt-combobox label="Course" search="never"></wt-combobox>',
   )) as WtCombobox;

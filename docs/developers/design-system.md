@@ -763,9 +763,12 @@ primitive that can otherwise end up with no accessible name explicitly forwards 
   drawing the red bottom line, so a screen reader user gets the same signal a sighted user gets
   from the line.
 - `wt-combobox`: declares the same `@property({ attribute: "aria-label" }) override ariaLabel` as
-  `wt-button` and binds it onto the inner `.trigger` button whenever there is no visible `label` to
-  point `aria-labelledby` at. The same fallback names the panel's search `<input>`, so a combobox
-  named only by a forwarded `aria-label` does not leave its search box called just "Search".
+  `wt-button` and binds it onto the inner `.trigger` button when `label` is empty. The same
+  fallback names the panel's search `<input>`, so a combobox named only by a forwarded
+  `aria-label` does not leave its search box called just "Search". With `hide-label` and a
+  `label`, the trigger is named by `label` and the host's `aria-label` is not used.
+- `hide-label` with a `label` names the control from `label` (its `aria-label`) in `wt-input`,
+  `wt-textarea`, `wt-price-input`, `wt-number-stepper` and `wt-combobox`.
 
 ### Hit targets must not overflow their container
 
@@ -1450,10 +1453,10 @@ test("paints from the primary token", async () => {
   overrides on it (`host.style.setProperty(...)`) to prove a component reads a token rather than
   hardcoding a value.
 - `cleanup()` — removes every host mounted since the last call. Call it from `afterEach`.
-- `chooseOption(el, value)` — picks `value` on a single-choice `wt-combobox` the way a click on its
-  row does (it sets `value`, never `values`, so it cannot drive a `multiple` one): sets
-  `value`, sends `wt-change` with `detail: { value }` (bubbling and composed), and awaits the
-  render. It is for a screen test that used to set a native select's value; an app's test imports
+- `chooseOption(el, value)` — picks `value` on a single-choice `wt-combobox` (it sets `value`,
+  never `values`, so it cannot drive a `multiple` one): sets `value`, sends the `wt-change` a
+  click on a row sends, with `detail: { value }` (bubbling and composed), and awaits the render.
+  Unlike a click, it neither closes the list nor moves focus to the trigger. It is for a screen test that used to set a native select's value; an app's test imports
   it as `@waitron/ui/src/test-helpers.js`. Its case is in `packages/ui/src/test-helpers.test.ts`.
 
 ### Accessibility testing (axe)
@@ -1486,7 +1489,7 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
 - `mountThemed(html, theme?)` — `mount()`, plus paints the host's own `background` from
   `--wt-color-bg` (exactly what `packages/ui/index.html`'s `.panel { background: var(--wt-color-bg) }`
   does) and, if `theme` is passed, sets `data-theme="light"|"dark"` on the host. Without the painted
-  background, a component with no background of its own (e.g. `wt-input`'s `<label>`) would be
+  background, a component with no background of its own (e.g. `wt-switch`'s `<label>`) would be
   contrast-checked against the browser's default white page background regardless of theme —
   meaningless for dark mode.
 - `expectNoA11yViolations(context)` — runs the full default axe ruleset against `context` (almost
