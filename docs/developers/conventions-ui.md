@@ -105,6 +105,12 @@ dispensing it. Persist the tendered cash and reconstruct the same ticket; keep d
 fresh settlement path. Regression: `apps/server/src/till-api.receipt.test.ts`, “replays and reprints
 the original cash handed over and change”.
 
+A hand-keyed card opens the drawer too, for its slip (B30), on the same fresh path only. Its replay
+cases, the “a replay opens nothing more” sale and collect cases in
+`apps/server/src/till-api.fiscal-sale-paths.test.ts` and the “once only on a resend” case in
+`apps/server/src/bill-payments-api.test.ts`, each failed when the drawer was also opened on a replay
+(2026-10-01).
+
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 
 Close the editor after the write succeeds, then refresh the list separately; retaining a create form

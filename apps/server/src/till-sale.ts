@@ -63,7 +63,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import type { TillConfig } from "./till-config.js";
 import {
-  enqueueCashSaleDrawer,
+  enqueueSaleDrawer,
   enqueueOriginalReceipt,
   enqueueReceiptReprint,
   enqueueSaleReceipt,
@@ -751,7 +751,7 @@ async function fileImmediateSale(
   };
 
   await enqueueSaleReceipt(tx, cfg, ticket, saleId);
-  if (taken?.method === "cash") await enqueueCashSaleDrawer(tx, cfg, saleId, operatorId);
+  if (taken !== null) await enqueueSaleDrawer(tx, cfg, saleId, taken.method, operatorId);
   return ticket;
 }
 
@@ -1658,9 +1658,7 @@ export async function collectOrder(
       await clearBillRequestIfPaid(tx, req.id, deps.log);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-      if (req.tender.method === "cash") {
-        await enqueueCashSaleDrawer(tx, cfg, outstanding.saleId, operatorId);
-      }
+      await enqueueSaleDrawer(tx, cfg, outstanding.saleId, req.tender.method, operatorId);
       return ticket;
     }
 

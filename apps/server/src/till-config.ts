@@ -34,7 +34,7 @@ export interface TillConfig {
    * practice warning; fiscal values and hashes never depend on it.
    */
   practiceMode?: boolean;
-  /** Request-derived drawer eligibility; handheld cash sales never open a linked till's drawer. */
+  /** Request-derived drawer eligibility; a handheld's payments never open a linked till's drawer. */
   allowCashDrawer?: boolean;
   /**
    * Read from the till's location row by `readOrderFlow`, not the environment — which is why
