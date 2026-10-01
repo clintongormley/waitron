@@ -206,13 +206,17 @@ any routing rules attached to them. Confirmation is shown when selected folders 
 or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved (owner, 2026-10-01). PF2b Tasks 1–10 are implemented and independently
-reviewed. The branch is rebased over slice 1 and name-only photos; migration upgrade failures,
-branch finishing and landing remain pending. The whole-branch review reproduced two
-upgrade failures: the chronological guard refuses library-section deletion before referencing
-menu details are emptied, and a complete upgrade from media0004 refuses a trigger drop in
-shipped media0005. The runner is parked for an explicit migration decision; no guard or shipped
-SQL exception was inferred. After landing, reset each dev venue
-with `wa-wt reset demo <name>`: library sections and their placements disappear, menu switched-off
+reviewed. The branch is rebased over slice 1 and name-only photos; branch finishing and landing
+remain pending. The owner accepted a venue reset for catalogue0018's library-section deletion
+and the complete upgrade from media0004 that refuses a trigger drop in shipped media0005
+(2026-10-01). Catalogue0018 now has an authorised `RESETS` entry matching its foreign-key
+refusal; shipped SQL is unchanged. Running `pnpm exec vitest run scripts/migration-upgrade.test.ts`
+after that entry reaches catalogue0020 and refuses the copied sections with
+`NOT NULL constraint failed: __new_sections.owner_menu_id`. That newly reached step needs a
+separate decision; it has no reset entry. The walk reaches media0005 before catalogue0018
+without a media0005 refusal, so no media reset entry was added.
+After landing, reset each dev venue with `wa-wt reset demo <worktree-name>` and reset the
+owner's box too: library sections and their placements disappear, menu switched-off
 settings clear, and stored variant switches become explicit on decisions. Per-menu extras are
 retired; menu extras follow product-level attachments and settings. Reload tills running the older
 build before using the new published document.

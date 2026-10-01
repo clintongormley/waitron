@@ -1184,6 +1184,56 @@ describe("previewMenu", () => {
 });
 
 describe("combined menu publication", () => {
+  it.each([
+    { offered: true, variantOffered: true, refused: true },
+    { offered: true, variantOffered: false, refused: false },
+    { offered: false, variantOffered: true, refused: false },
+    { offered: false, variantOffered: false, refused: false },
+  ])(
+    "gates a variant price clash when product offered=$offered and variant offered=$variantOffered",
+    async ({ offered, variantOffered, refused }) => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app(async (tx) => {
+        await addMember(tx, f.dinnerRoot, product(f.lemonade));
+        await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lemonade), {
+          offered,
+        });
+        await setMenuVariants(
+          tx,
+          await offerOf(tx, f.dinner, f.lemonade),
+          [{ variantId: f.large, price: null, offered: variantOffered }],
+          f.dinner,
+        );
+        await setMenuVariants(
+          tx,
+          await offerOf(tx, f.drinksMenu, f.lemonade),
+          [{ variantId: f.large, price: "4.20" }],
+          f.drinksMenu,
+        );
+      });
+      const preview = await app((tx) => previewMenu(tx, f.dinner));
+      expect(
+        preview.clashes.map(({ productId, variantId, field }) => ({ productId, variantId, field })),
+      ).toEqual(refused ? [{ productId: f.lemonade, variantId: f.large, field: "price" }] : []);
+      const before = await versionRows();
+      const publications = await fx.db.select().from(menuPublications);
+      const images = await fx.db.select().from(menuVersionImages);
+      if (refused) {
+        await expect(publish(f.dinner)).rejects.toMatchObject({
+          code: "menu.clashes_unresolved",
+          params: { menuId: f.dinner, count: 1 },
+        });
+        expect(await versionRows()).toEqual(before);
+        expect(await fx.db.select().from(menuPublications)).toEqual(publications);
+        expect(await fx.db.select().from(menuVersionImages)).toEqual(images);
+      } else {
+        const published = await publish(f.dinner);
+        expect(published.number).toBe(2);
+        expect((await versionRows()).length).toBe(before.length + 1);
+      }
+    },
+  );
   it("inherits included prices, refuses clashes without writing, and attributes the included edit", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.dinner);
