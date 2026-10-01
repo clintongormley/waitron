@@ -5696,7 +5696,9 @@ ongoing overhaul listed at the top of Track A.
   shares a line with something else, the screen places the message itself: the dashboard's sign-in
   steps show it above the list of other ways to sign in and the buttons (`formMessage`, now exported
   from `@waitron/ui`), and the Add printer dialog's address check lets its button row take the
-  panel's full width while it has a message. A dialog with more than one action row in its footer
+  panel's full width while it has a message. _(2026-10-01, C105: in a `wt-modal` the form's message,
+  and the Printers screen's rows of fields including the Add printer address check, now stop at
+  `--wt-form-max-width`; see the C105 entry.)_ A dialog with more than one action row in its footer
   shows every row's message, joined; a dialog opened with a footer row's message already present
   scrolls it into view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
   message scrolled into view when it appears. None of these scrolls happens when the message changes

@@ -321,7 +321,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot. The message of a `wt-form-actions` placed directly in the `footer` slot shows at the end of the body instead, every such row's message joined, and is scrolled into view when it changes and when the dialog opens; a `wt-form-actions` in the body keeps its own message, which the dialog scrolls into view when it changes. Neither is scrolled to when it changes from an `input` event inside the dialog until a zero-delay timer the dialog then sets has run | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors`. Retiring: a form no longer shows a summary (see Forms); no product form uses it any more; it is deleted once its remaining users, listed in `docs/backlog.md`, are gone | — |
-| `wt-form-actions` | `error` (the form's one message about a failed submission: shown on its own line above the buttons, full width and aligned to the start, announced as an alert, painted `--wt-color-danger`); `showError` (property only, default `true`; `wt-dialog` turns it off for each row directly in its footer and shows the message itself); `cancel`, `secondary`, and default slots. The same module exports `formMessage(message)` and `formMessageStyles`, which draw that message for a screen that has to place it itself; a shadow root using `formMessage` includes `formMessageStyles` | `wt-form-error` — `detail: { message: string }` (whenever `error` changes) |
+| `wt-form-actions` | `error` (the form's one message about a failed submission: shown on its own line above the buttons, full width (in a `wt-modal`, no wider than `--wt-form-max-width`) and aligned to the start, announced as an alert, painted `--wt-color-danger`); `showError` (property only, default `true`; `wt-dialog` turns it off for each row directly in its footer and shows the message itself); `cancel`, `secondary`, and default slots. The same module exports `formMessage(message)` and `formMessageStyles`, which draw that message for a screen that has to place it itself; a shadow root using `formMessage` includes `formMessageStyles` | `wt-form-error` — `detail: { message: string }` (whenever `error` changes) |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
@@ -1190,7 +1190,7 @@ it read as a visually different app from the wide table screens next to it; anch
 same edge and varying only the width does not. `backup-screen.ts` and `receipt-screen.ts` already
 follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
 screen positioned beside the sidebar any more; it's a modal, bounded by `--wt-modal-max-width`
-like any other. The one legitimate exception among actual screens is a full-page one with no
+like any other, and its fields stop at `--wt-form-max-width`. The one legitimate exception among actual screens is a full-page one with no
 sidebar at all, like the login screen — centering a freestanding form with nothing to anchor to is
 the normal, expected treatment there.
 
@@ -1352,7 +1352,11 @@ New primitives require an axe test covering every meaningfully distinct accessib
    ...), in both light and dark themes. Before trusting it, break the component's accessibility on
    purpose (remove an `aria-label`, unassociate a label) and confirm the test actually goes red,
    then restore the fix.
-6. Add it to the workbench and to the table above.
+6. If it's a form field, give its host `max-width: var(--wt-field-max-width)`, so it stops at the
+   form width in a `wt-modal`, and add a test that sets `--wt-field-max-width` on the `host` and
+   asserts the field's width follows it (`packages/ui-core/src/components/wt-input.test.ts` does).
+   Nothing else checks that a new field reads it.
+7. Add it to the workbench and to the table above.
 
 ## Workbench
 
