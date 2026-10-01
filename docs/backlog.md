@@ -6988,18 +6988,22 @@ ongoing overhaul listed at the top of Track A.
   network) 200 times each, known answered at a median 0.307 ms against 0.091 ms. It now answers 202
   first and does the lookup, the write and the email afterwards, logging a failure as
   `account_action.request_failed` (A147, #942): re-measured the same way, 0.025 ms against 0.026 ms.
-  Still open: that later work still shows in the answer time of a second password-reset request for
-  the same address sent as soon as the first answered (other routes, and requests sent later, were
-  not measured); the owner chose on 2026-09-30 to close it by giving an unknown address equivalent
-  background database work, queued as A159. Measured 2026-09-30
-  on a Mac: a separate Node process sent pairs of password-reset requests over loopback HTTP to the
-  management routes served by `@hono/node-server`, both requests of a pair for the SAME address, the
-  first to a newly mounted copy of the routes (fresh rate-limit and repeat-request state) and the
-  second, sent as soon as the first answered, to that same copy; every answer was 202. After 40
-  warm-up pairs, 200 pairs of each kind, interleaved: the first request answered at a median
-  0.864 ms for a known address against 0.862 ms for an unknown one, and the second at 1.065 ms
-  against 0.326 ms. In the control the route did no later work at all (no lookup, write or email):
-  the second request answered at 0.251 ms against 0.258 ms. Refusals thrown in `apps/server`
+  A second request for the same address, sent as soon as the first answered, still answered more
+  slowly after a known address, because the known address's token write ran on the same server
+  (A147 measured 1.065 ms against 0.326 ms over loopback HTTP). Done (A159): an unknown address now
+  runs the same statements against a person id nobody has, inserting a reset-link row and deleting
+  it before commit with the foreign key checked at commit (`writeAndRemoveDecoyAction`,
+  `packages/identity/src/account-action.ts`), so its commit writes too and leaves no row.
+  Measured 2026-10-01 on a Mac (Node v26.7.0): a separate Node process sent pairs over loopback HTTP
+  to the routes served by `@hono/node-server`, a fresh copy of the routes per pair, 40 warm-up pairs
+  then 200 of each kind interleaved, the database a `useVenueDb` venue. With no email sender, the
+  second request answered at a median 0.276 and 0.280 ms after a known address against 0.119 and
+  0.116 ms after an unknown one before the change, and 0.258, 0.282 and 0.259 ms against 0.260,
+  0.285 and 0.257 ms after it. Still open: the email. With a sender that reads in one transaction,
+  as the product's reads the mail settings, and then sends nothing, the second request still
+  answered about 0.02 ms slower after a known address (0.283, 0.285 and 0.285 ms against 0.260,
+  0.266 and 0.262 ms); the real mail-server conversation, which only a known address starts, was not
+  measured, and matching it would mean an unknown address talking to the mail server. Refusals thrown in `apps/server`
   itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
   (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
   approval routes no longer send for an approver; and the dashboard's

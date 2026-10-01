@@ -1,5 +1,12 @@
 import "./errors.js";
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { indexViolated, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -315,12 +322,52 @@ export async function requestAccountRecoveryAction(
         inArray(persons.status, ["active", "pending"]),
       ),
     );
-  if (person === undefined) return null;
+  if (person === undefined) {
+    await writeAndRemoveDecoyAction(tx, input.now ?? new Date());
+    return null;
+  }
   return issueAccountAction(tx, {
     personId: person.id,
     purpose: person.status === "pending" ? "invitation" : "password_reset",
     now: input.now,
   });
+}
+
+/**
+ * The statements `issueAccountAction` runs for a known address, against a person id nobody has,
+ * with the row removed before commit, so an unknown address's commit writes too and a request
+ * queued behind it waits about as long (measured: A159 in `docs/backlog.md`). The foreign key is
+ * checked at commit, when the row is already gone.
+ */
+async function writeAndRemoveDecoyAction(tx: Transaction, now: Date): Promise<void> {
+  const personId = randomUUID();
+  const nowIso = now.toISOString();
+  await tx.run(sql`pragma defer_foreign_keys = on`);
+  await tx.select({ email: persons.email }).from(persons).where(eq(persons.id, personId));
+  await tx
+    .update(managementAccountActions)
+    .set({ usedAt: nowIso })
+    .where(
+      and(
+        eq(managementAccountActions.personId, personId),
+        eq(managementAccountActions.purpose, "password_reset"),
+        isNull(managementAccountActions.usedAt),
+      ),
+    );
+  const [row] = await tx
+    .insert(managementAccountActions)
+    .values({
+      personId,
+      purpose: "password_reset",
+      targetEmail: null,
+      tokenHash: hashToken(randomBytes(32).toString("base64url")),
+      codeHash: null,
+      codeExpiresAt: null,
+      createdAt: nowIso,
+      expiresAt: new Date(now.getTime() + ACCOUNT_ACTION_TTL_MS.password_reset).toISOString(),
+    })
+    .returning({ id: managementAccountActions.id });
+  await tx.delete(managementAccountActions).where(eq(managementAccountActions.id, row!.id));
 }
 
 export async function completeAccountAction(
