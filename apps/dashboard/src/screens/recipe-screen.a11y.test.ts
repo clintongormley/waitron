@@ -1,4 +1,5 @@
 import { afterEach, describe, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./recipe-screen.js";
 import type { RecipeScreen } from "./recipe-screen.js";
@@ -79,9 +80,7 @@ async function flush(el: RecipeScreen): Promise<void> {
 }
 
 function selectValue(el: RecipeScreen, testId: string, value: string): void {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${testId}]`)!;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  void chooseOption(el.shadowRoot!.querySelector(`[data-test=${testId}]`)!, value);
 }
 
 afterEach(cleanupWidgets);
