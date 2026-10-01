@@ -2913,7 +2913,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `printedOrResent`, each failed at least one of the four resend cases. The new foreign key is
     listed in `scripts/schema-constraints.test.ts`.
 - **Receipts and kitchen tickets print their text as images, and the calibration wizard loses its
-  character-set step (C107, owner 2026-09-30) — DONE (2026-10-01, #PR).** Why: in C106 the same
+  character-set step (C107, owner 2026-09-30) — DONE (2026-10-01, #974).** Why: in C106 the same
   receipt sent as text printed correctly on the owner's Bluetooth printer and as garbage on the
   network one ("Café" came out "Cafш"), while the same receipt sent as images printed correctly on
   both. The owner chose images with no text mode at all, and the font Iosevka Term Bold.
