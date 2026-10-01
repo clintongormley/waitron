@@ -420,6 +420,7 @@ export class ContentLanguagesScreen extends LitElement {
           options: reasons.map((reason) => ({ value: reason, label: t(`content_gaps.${reason}`) })),
         },
       },
+      // A real link rather than `rowClick`, so a row can be opened in a new tab.
       {
         key: "open",
         label: t("content_gaps.open"),

@@ -7,13 +7,13 @@ import type {
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
-} from "./content-language-types.js";
+} from "./content-translation-report-types.js";
 export type {
   LanguageTranslationGaps,
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
-} from "./content-language-types.js";
+} from "./content-translation-report-types.js";
 
 const KIND_ORDER: readonly TranslationGapKind[] = [
   "product",
@@ -39,12 +39,12 @@ type NamedRow = {
 
 /**
  * For each enabled language, in the configuration's order, what has no customer-facing name in it.
- * A `partial` gap is exactly what {@link listContentTranslationGaps} reports for that language; a
- * non-default language also lists what has no customer-facing name at all (`absent`), which shows
- * the staff name there. An extras list's own name reaches no order or receipt, so an absent one is
- * never listed, and a unit has no staff name to stand in for its own. Nothing that cannot be ordered is listed:
- * a deleted product or its variants, a switched-off options or extras list or its options, or what
- * a switched-off menu owns.
+ * A `partial` gap is one {@link listContentTranslationGaps} reports for that language, less the
+ * left-out rows below; a non-default language also lists what has no customer-facing name at all
+ * (`absent`), which shows the staff name there. An extras list's own name reaches no order or
+ * receipt, so an absent one is never listed, and a unit has no staff name to stand in for its own.
+ * Left out: a deleted product, a removed variant or any variant of a deleted product, a switched-off
+ * options or extras list or its options, or what a switched-off menu owns.
  */
 export async function listTranslationGapReport(
   tx: Transaction,

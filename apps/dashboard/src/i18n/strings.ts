@@ -244,7 +244,7 @@ export const en = {
   "content_languages.load_error": "Content languages could not be loaded.",
   "content_languages.retry": "Try again",
   "content_languages.help":
-    "Choose the languages for products, menus, online content and image descriptions. Missing translations use your default language.",
+    "Choose the languages for products, menus, online content and image names. Missing translations use your default language.",
   "content_languages.default": "Default language",
   "content_languages.enabled": "Enabled languages",
   "content_languages.add": "Add language",
@@ -258,7 +258,7 @@ export const en = {
   "content_languages.other_group": "Other languages",
   "content_gaps.title": "Missing translations",
   "content_gaps.help":
-    "For each content language, the customer-facing names that have no text in it. Only partly translated names stop a language becoming the default. Image descriptions are checked when the default changes, but are not listed here.",
+    "For each content language, the customer-facing names that have no text in it. Only partly translated names stop a language becoming the default. Image names are checked when the default changes, but are not listed here.",
   "content_gaps.loading": "Loading missing translations…",
   "content_gaps.load_error": "Missing translations could not be loaded.",
   "content_gaps.count": "{count} missing",
@@ -2185,7 +2185,7 @@ export const es: Record<StringKey, string> = {
   "content_languages.load_error": "No se pudieron cargar los idiomas del contenido.",
   "content_languages.retry": "Reintentar",
   "content_languages.help":
-    "Elige los idiomas de productos, cartas, contenido online y descripciones de imágenes. Si falta una traducción, se utiliza el idioma predeterminado.",
+    "Elige los idiomas de productos, cartas, contenido online y nombres de imágenes. Si falta una traducción, se utiliza el idioma predeterminado.",
   "content_languages.default": "Idioma predeterminado",
   "content_languages.enabled": "Idiomas disponibles",
   "content_languages.add": "Añadir idioma",
@@ -2199,7 +2199,7 @@ export const es: Record<StringKey, string> = {
   "content_languages.other_group": "Otros idiomas",
   "content_gaps.title": "Traducciones que faltan",
   "content_gaps.help":
-    "Para cada idioma del contenido, los nombres para el cliente que no tienen texto en ese idioma. Solo los nombres traducidos a medias impiden que un idioma pase a ser el predeterminado. Las descripciones de las imágenes se comprueban al cambiar el idioma predeterminado, pero no aparecen aquí.",
+    "Para cada idioma del contenido, los nombres para el cliente que no tienen texto en ese idioma. Solo los nombres traducidos a medias impiden que un idioma pase a ser el predeterminado. Los nombres de las imágenes se comprueban al cambiar el idioma predeterminado, pero no aparecen aquí.",
   "content_gaps.loading": "Cargando las traducciones que faltan…",
   "content_gaps.load_error": "No se pudieron cargar las traducciones que faltan.",
   "content_gaps.count": "{count} sin traducir",

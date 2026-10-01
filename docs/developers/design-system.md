@@ -1570,6 +1570,11 @@ while the module validates its keys. The Menus screen (`/manage/menus`) puts the
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
 `apps/dashboard/src/navigation.ts`).
+The Modifiers screen's `/manage/modifiers/view/<extras|options>/list/<id>` opens that list's editor
+once the screen has loaded its lists (`dashboardPath`, `apps/dashboard/src/navigation.ts`). An id
+the selected tab's lists do not hold opens nothing and is dropped from the address without adding a
+Back stop; closing the editor, with Cancel or a save, drops it the same way. Changing tab drops it
+too and, like any tab change, adds a Back stop.
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,
 zones and saved canvas tabs extend those paths, such as `/manage/floor/view/plano/zone/<id>`.

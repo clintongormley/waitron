@@ -1388,13 +1388,16 @@ third changes all five.
   whether it is still a gap once English falls back to the Spanish name is a decision to make
   with the owner before building. "Main language" here means the venue's default content
   language.
-  _(Correction 2026-10-01, C122: measured, the receipt and the printed allergen sheet already fall
-  back to the main language's customer-facing name, so "a blank name in any language falls back
-  straight to Name" and "English would show the staff name" above are wrong for them. Default
+  _(Correction 2026-10-01, C122: measured, the receipt already falls back to the main language's
+  customer-facing name, so "a blank name in any language falls back straight to Name" and "English
+  would show the staff name" above are wrong for it. Default
   Spanish, a product whose customer-facing name is `{es}` only: a Catalan and an English receipt
   both printed its Spanish name, and an option's receipt text did the same (a direct call to
   `customerOptionSnapshotLabels`); only a thing with no customer-facing name at all printed Name.
-  So this hint already matches the receipt. The till's buttons and basket show Name in every case.
+  So this hint already matches the receipt while the main language's customer-facing name has
+  text. When it has none but another language does, the hint would show Name and the receipt prints a
+  blank goods line (the OPEN entry "A customer-facing name with no text in the default language
+  prints a blank goods line", under A9). The till's buttons and basket show Name in every case.
   Receipts: the C122 entry under A9.)_
 
 Each hint follows the field it copies as the owner types: change Name and the blank fields' hints
@@ -7918,9 +7921,9 @@ ongoing overhaul listed at the top of Track A.
     by itself when something is missing and gets a note with the count. Categories are not listed:
     they have one plain name.
   - Which names count: the customer-facing name only; staff and kitchen names are plain text with no
-    language (`docs/developers/products.md`, "The three names"). "Partly translated" is exactly
+    language (`docs/developers/products.md`, "The three names"). "Partly translated" is
     `listContentTranslationGaps`'s gap for that language, the only kind that blocks a change of
-    default; "No customer-facing name" is listed under every language except the default (never
+    default, less the left-out rows below; "No customer-facing name" is listed under every language except the default (never
     for an extras list, whose name reaches no receipt). Deleted products and their variants,
     switched-off lists and their options, and what a switched-off menu owns are left out of the
     list. One read implementation: `listTranslationGapReport` runs `listContentTranslationGaps`'s
@@ -7938,7 +7941,7 @@ ongoing overhaul listed at the top of Track A.
     staff name. The till's buttons and basket always show the staff name; a menu section's tab with
     names `{es}` showed the Spanish name under default Spanish and the internal name under default
     Catalan. The kitchen name has no language, so nothing is missing from the kitchen.
-  - Left out: image descriptions. They come from the media module through the
+  - Left out: image names. They come from the media module through the
     `contentTranslations` seat, which carries only a kind and an id; naming or linking them from
     the generic screen would break the module boundary (`scripts/module-seams.test.ts`), so widening
     the seat is its own change. The page says they are checked on a change of default but not

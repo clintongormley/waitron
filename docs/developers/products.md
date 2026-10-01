@@ -222,10 +222,11 @@ at all, marked **No customer-facing name**, because there the staff name is show
 absent extras list name is never listed: it reaches no receipt). Under the default language an
 absent name is not listed, because the staff name stands as that language's text. Each row shows the
 staff name — a unit, which has none, shows its name in the default language, or any text it has —
-and links to the screen that edits it. That list leaves out a deleted product and its variants, a
-switched-off options or extras list and its options, and what a switched-off menu owns; the
-default-change check above still counts them. Image descriptions (the media module's contribution)
-are checked on a change of default but are not in the list.
+and links to the screen that edits it. That list leaves out a deleted product, a removed variant
+and every variant of a deleted product, a switched-off options or extras list and its options, and
+what a switched-off menu owns; the default-change check above still counts all of them except a
+removed variant, which it skips too. Image names (the media module's contribution) are checked on
+a change of default but are not in the list.
 
 ## Variants
 

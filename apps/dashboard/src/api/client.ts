@@ -63,7 +63,7 @@ import type {
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
-} from "@waitron/catalogue/src/content-language-types.js";
+} from "@waitron/catalogue/src/content-translation-report-types.js";
 export type { LanguageTranslationGaps, TranslationGap, TranslationGapKind, TranslationGapReason };
 import type {
   MenuPriceRow,
