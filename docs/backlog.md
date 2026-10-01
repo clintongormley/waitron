@@ -1381,6 +1381,50 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
   languages; a table with no Add action keeps just the sentence.
 
+**Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
+OPEN, needs a spec.** The owner, showing Home Assistant's device dialog, likes:
+
+1. the field is marked out by a background fill with a subtle line along its bottom, not a border
+   all round;
+2. the field's name sits inside that fill, small, at the top left;
+3. the field being edited is marked by a blue bottom line, and its name turns blue too;
+4. a hint is clearly told apart from a value that has been filled in;
+5. a dropdown's options are very clear (a roomy list of rows, an icon where there is one, a search
+   box at the top);
+6. with no other hint, the field's name IS the hint, drawn in the empty field, and it moves up to
+   the top left, small, once there is a value (or the field is focused).
+
+What it touches: every text-field primitive — `wt-input` (`packages/ui-core/src/components/wt-input.ts`),
+`wt-price-input`, `wt-number-stepper`, `wt-combobox` — the shared native-dropdown styles
+(`selectStyles`, `packages/ui/src/base-styles.ts`; A173 is the same control), textareas a screen
+styles itself (the product editor's descriptions), and `docs/developers/design-system.md` → Forms
+and the primitives table, which is the UI contract and describes today's label-above-a-bordered-box
+look. Things to settle in the spec:
+
+- **It fits the existing hint rule.** A field's hint is already its placeholder (CLAUDE.md §3,
+  Forms; `hint` is shown inside the empty field). Point 6 adds: where a field has no hint, the label
+  stands in the empty field; where it has one (A172's name hints, for example), the label sits small
+  at the top and the hint shows in the field. The label must stay a real `<label>` — only its
+  position moves — and the required marker moves with it.
+- **Point 5 cannot be done with a native `<select>`**: its open list is drawn by the browser and
+  operating system and takes almost no styling. Clear options mean the dashboard's dropdowns become a
+  list the app draws itself (`wt-combobox` already draws its own), which brings the keyboard and
+  screen-reader behaviour of a list box with it.
+- **Telling the field apart from the page.** Where the fill or the bottom line is the only thing
+  showing where a field is, it needs a contrast of at least 3:1 against what is around it (WCAG 2.2,
+  1.4.11, non-text contrast). Today's border colour, `--wt-color-border` `#d6d9e0`, computes to
+  1.41:1 against white and 1.32:1 against the page background `#f7f7f8` (WCAG's relative-luminance
+  formula, run 2026-10-01), so
+  a "subtle" line in that colour would not pass; the fill and line need new tokens in both themes,
+  checked by the axe tests each primitive already carries.
+- **Scope:** the dashboard and setup screens, and whether the till follows (its dropdown styles are
+  separate on purpose, `apps/till/src/select-styles.ts`). A175 (search fields' corners) and A169
+  (the folding section) should be built to the same look, or after it.
+
+**Next action:** brainstorm → spec, starting from mockups of one field in each state (empty, empty
+with a hint, focused, filled, error, required, disabled) and one dropdown open, in Waitron's
+tokens, light and dark.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
