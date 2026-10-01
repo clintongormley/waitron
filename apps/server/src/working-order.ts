@@ -4585,36 +4585,14 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const order = await priceStoredOrderForIssuance(tx, id);
-      const { priced, clock } = issueMoment(deps.clock, await issuancePass(tx, cfg, id, order));
-      // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
-      // CONFIGURED register. The chain is keyed by the node, not the device.
-      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tillId: saleTillId,
-        nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
-        workingOrderId: brandWorkingOrderId(id),
-        locale: cfg.locale,
-        invoiceLocales: cfg.invoiceLocales,
-        total: priced.total,
-        lines: priced.lines,
-        vatBreakdown: priced.vatBreakdown,
-        clock,
+      const { saleId, ticket } = await issueUnpaidInvoice(
+        tx,
+        deps,
+        cfg,
+        id,
         operatorId,
-        // No tender and no settlement until `collectOrder` settles it.
-        settlement: { kind: "deferred" },
-      });
-      const ticket: TillSaleResult = {
-        ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-        ...(await readReceiptOrder(tx, cfg, id, { atIssuance: true })),
-        invoiceNumber: await readInvoiceNumber(tx, saleId),
-        issuedAt: fiscal.issuedAt.toISOString(),
-        total: priced.total,
-        qr: fiscal.verificationUrl ?? "",
-        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await receiptLines(tx, id, priced, order.identities)),
-        tender: { method: "unpaid" },
-      };
+        saleTillId,
+      );
       placeResult = {
         id,
         status: "placed",
@@ -4628,31 +4606,91 @@ export async function placeOrder(
       await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket, saleId);
     }
 
-    await tx
-      .update(workingOrders)
-      .set({
-        status: "placed",
-        ...(issuedOrderLabel === undefined ? {} : { label: issuedOrderLabel }),
-      })
-      .where(eq(workingOrders.id, id));
-
-    // `capturedByTillId` is the CONFIGURED register, as in `cancelPlacedOrder`, so one order's
-    // placed/cancelled pair stays on the same register.
-    const now = deps.clock.now();
-    await appendOrderAmendment(tx, {
-      workingOrderId: id,
-      kind: "order_placed",
-      actorId: operatorId,
-      reason: null,
-      capturedByTillId: cfg.tillId,
-      capturedByNodeId: cfg.nodeId,
-      eventAt: now.instant,
-      eventOffsetMinutes: now.offsetMinutes,
-    });
+    await markOrderPlaced(tx, deps.clock, cfg, id, operatorId, issuedOrderLabel);
 
     await fireLines(tx, cfg, id, lines);
 
     return placeResult;
+  });
+}
+
+/**
+ * File the order's invoice from its stored lines at the rates of today, its issue date, with no
+ * tender and no settlement until `collectOrder` settles it, and answer the sale and the receipt it
+ * would print. Prints nothing itself. `saleTillId` is the device's register on the fiscal record.
+ */
+export async function issueUnpaidInvoice(
+  tx: Transaction,
+  deps: Pick<TillSaleDeps, "backend" | "clock">,
+  cfg: TillConfig,
+  id: string,
+  operatorId: string,
+  saleTillId: TillId,
+): Promise<{ saleId: SaleId; ticket: TillSaleResult }> {
+  const order = await priceStoredOrderForIssuance(tx, id);
+  const { priced, clock } = issueMoment(deps.clock, await issuancePass(tx, cfg, id, order));
+  // The fiscal record's `till_id` is the DEVICE till, while the `order_placed` amendment records
+  // the box's CONFIGURED register. The chain is keyed by the node, not the device.
+  const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+    tillId: saleTillId,
+    nodeId: cfg.nodeId,
+    seriesId: cfg.seriesId,
+    workingOrderId: brandWorkingOrderId(id),
+    locale: cfg.locale,
+    invoiceLocales: cfg.invoiceLocales,
+    total: priced.total,
+    lines: priced.lines,
+    vatBreakdown: priced.vatBreakdown,
+    clock,
+    operatorId,
+    settlement: { kind: "deferred" },
+  });
+  const ticket: TillSaleResult = {
+    ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+    ...(await readReceiptOrder(tx, cfg, id, { atIssuance: true })),
+    invoiceNumber: await readInvoiceNumber(tx, saleId),
+    issuedAt: fiscal.issuedAt.toISOString(),
+    total: priced.total,
+    qr: fiscal.verificationUrl ?? "",
+    vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+    ...(await receiptLines(tx, id, priced, order.identities)),
+    tender: { method: "unpaid" },
+  };
+  return { saleId, ticket };
+}
+
+/**
+ * An open order becomes placed, taking `label` when one is given, and its `order_placed` amendment
+ * is appended.
+ */
+export async function markOrderPlaced(
+  tx: Transaction,
+  clock: TrustedClock,
+  cfg: TillConfig,
+  id: string,
+  operatorId: string,
+  label: string | null | undefined,
+): Promise<void> {
+  await tx
+    .update(workingOrders)
+    .set({
+      status: "placed",
+      ...(label === undefined ? {} : { label }),
+    })
+    .where(eq(workingOrders.id, id));
+
+  // `capturedByTillId` is the CONFIGURED register, as in `cancelPlacedOrder`, so one order's
+  // placed/cancelled pair stays on the same register.
+  const now = clock.now();
+  await appendOrderAmendment(tx, {
+    workingOrderId: id,
+    kind: "order_placed",
+    actorId: operatorId,
+    reason: null,
+    capturedByTillId: cfg.tillId,
+    capturedByNodeId: cfg.nodeId,
+    eventAt: now.instant,
+    eventOffsetMinutes: now.offsetMinutes,
   });
 }
 

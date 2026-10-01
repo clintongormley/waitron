@@ -148,6 +148,7 @@ import {
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
+import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 
@@ -352,6 +353,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "party.not_open": 409,
   "party.out_of_date": 409,
   "party.bill_outstanding": 409,
+  "unpaid_departure.nothing_outstanding": 409,
+  "unpaid_departure.unsent_dishes": 409,
+  "unpaid_departure.bill_part_paid": 409,
   "party.main_bill_stays": 409,
   "submission.id_reused": 409,
   "draft.taken_over": 409,
@@ -483,7 +487,7 @@ export function requireRevision(
 }
 
 /** A non-UUID names no party, so it gets the absent party's `party.not_open`. */
-function requirePartyParam(id: string): string {
+export function requirePartyParam(id: string): string {
   if (!isUuid(id)) {
     throw new AppError("party.not_open", { partyId: id });
   }
@@ -800,6 +804,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
   mountBillPaymentsApi(app, deps, log, run, pinThrottle);
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
+  mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it, and the shift records the device's own till rather than `cfg.tillId`.

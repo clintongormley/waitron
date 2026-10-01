@@ -492,22 +492,36 @@ export async function finishTable(
     throw new AppError("party.bill_outstanding", { partyId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
+  return closeParty(tx, partyId, empty, args.operatorId);
+}
+
+/**
+ * Close a party that owes nothing more: its empty open bills `emptyBillIds` are abandoned, its
+ * drafts discarded, and it leaves its tables ({@link leaveForClearing}). Finish table and an unpaid
+ * departure both end here.
+ */
+export async function closeParty(
+  tx: Transaction,
+  partyId: string,
+  emptyBillIds: readonly string[],
+  operatorId: string,
+): Promise<{ state: "closed" }> {
   // An emptied bill can still hold a tip its refunded payment kept (design §2.3, §4.5).
-  await refuseBillHoldingMoney(tx, empty);
-  if (empty.length > 0) {
+  await refuseBillHoldingMoney(tx, emptyBillIds);
+  if (emptyBillIds.length > 0) {
     await tx
       .update(workingOrders)
       .set({ status: "abandoned" })
-      .where(inArray(workingOrders.id, empty));
+      .where(inArray(workingOrders.id, [...emptyBillIds]));
   }
 
-  await discardPartyDrafts(tx, partyId, args.operatorId);
+  await discardPartyDrafts(tx, partyId, operatorId);
 
   const at = nowIso();
   const tables = await memberTables(tx, partyId);
   await tx
     .update(parties)
-    .set({ state: "closed", closedAt: at, closedBy: args.operatorId })
+    .set({ state: "closed", closedAt: at, closedBy: operatorId })
     .where(eq(parties.id, partyId));
   await leaveForClearing(tx, tables, at);
   return { state: "closed" };
