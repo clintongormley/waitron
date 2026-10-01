@@ -6,6 +6,21 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { PrintJobPreview, PrintPreviewBlock } from "../api/client.js";
 import { t } from "../i18n/t.js";
+import {
+  DOTS_PER_COLUMN,
+  columnsFor,
+  textGrid,
+  type PaperWidth,
+} from "@waitron/printing/src/layout.js";
+
+const PAPER_WIDTHS: readonly PaperWidth[] = ["58mm", "80mm"];
+
+/** The dots across the printer's line, which the preview's paper stands for. */
+function lineDots({ columns, dpi }: PrintJobPreview): number {
+  const paperWidth = PAPER_WIDTHS.find((width) => columnsFor(width) === columns);
+  if (paperWidth === undefined) return columns * DOTS_PER_COLUMN;
+  return textGrid(paperWidth, dpi === 203 ? "203dpi" : "180dpi").widthDots;
+}
 
 @customElement("dashboard-print-job-preview")
 export class PrintJobPreviewDialog extends LitElement {
@@ -56,7 +71,6 @@ export class PrintJobPreviewDialog extends LitElement {
         display: block;
         max-width: 100%;
         height: auto;
-        image-rendering: pixelated;
       }
       .cut {
         border: 0;
@@ -95,7 +109,7 @@ export class PrintJobPreviewDialog extends LitElement {
     return url;
   }
 
-  #renderBlock(block: PrintPreviewBlock) {
+  #renderBlock(block: PrintPreviewBlock, widthDots: number) {
     switch (block.kind) {
       case "text":
         return html`<pre data-kind="text" data-align=${block.align ?? nothing}>${block.text}</pre>`;
@@ -112,8 +126,8 @@ export class PrintJobPreviewDialog extends LitElement {
           data-kind="image"
           data-align=${block.align ?? nothing}
           src=${this.#bitmapUrl(block)}
-          style=${`width:${block.width / 12}ch`}
-          alt=${block.qrData === undefined ? t("printers.preview_image") : `${t("printers.preview_qr_data")}: ${block.qrData}`}
+          style=${`width:${(block.width / widthDots) * 100}%`}
+          alt=${block.qrData === undefined ? (block.text ?? "") : `${t("printers.preview_qr_data")}: ${block.qrData}`}
         />`;
     }
   }
@@ -129,6 +143,7 @@ export class PrintJobPreviewDialog extends LitElement {
 
   override render() {
     const preview = this.preview;
+    const widthDots = preview ? lineDots(preview) : 0;
     return html`
       <wt-modal .open=${this.open} heading=${t("printers.preview_title")} @wt-close=${this.#close}>
         <p>${t("printers.preview_notice")}</p>
@@ -146,7 +161,7 @@ export class PrintJobPreviewDialog extends LitElement {
                         aria-label=${t("printers.preview_paper")}
                       >
                         <div class="paper" style=${`width:${preview.columns}ch`}>
-                          ${preview.blocks.map((block) => this.#renderBlock(block))}
+                          ${preview.blocks.map((block) => this.#renderBlock(block, widthDots))}
                         </div>
                       </div>`
                     : nothing

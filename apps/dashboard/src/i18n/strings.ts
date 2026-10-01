@@ -312,9 +312,8 @@ export const en = {
   "printers.preview_title": "Print job preview",
   "printers.preview_paper": "Receipt paper",
   "printers.preview_cut": "Paper cut",
-  "printers.preview_image": "Printed graphic",
   "printers.preview_notice":
-    "Approximate paper layout of the stored job. Fonts, character encoding and printer settings can change the printed result.",
+    "Approximate paper layout of the stored job. The printer’s own settings can change the printed result.",
   "printers.preview_qr_data": "QR code content",
   "printers.preview_graphics_omitted": "Some images could not be shown.",
   "printers.preview_incomplete": "Some content could not be previewed.",
@@ -2209,9 +2208,8 @@ export const es: Record<StringKey, string> = {
   "printers.preview_title": "Vista previa de impresión",
   "printers.preview_paper": "Papel del recibo",
   "printers.preview_cut": "Corte de papel",
-  "printers.preview_image": "Gráfico impreso",
   "printers.preview_notice":
-    "Diseño aproximado del trabajo guardado. Las fuentes, la codificación y los ajustes de la impresora pueden cambiar el resultado impreso.",
+    "Diseño aproximado del trabajo guardado. Los ajustes de la propia impresora pueden cambiar el resultado impreso.",
   "printers.preview_qr_data": "Contenido del código QR",
   "printers.preview_graphics_omitted": "No se han podido mostrar algunas imágenes.",
   "printers.preview_incomplete": "No se ha podido mostrar parte del contenido.",

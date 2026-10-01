@@ -217,7 +217,7 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-it("sizes the paper's text area to the printer's columns and images in the same character units", async () => {
+it("sizes the paper's text area to the printer's columns and images in proportion to its line", async () => {
   const { el } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
     open: true,
     preview: {
@@ -248,4 +248,60 @@ it("sizes the paper's text area to the printer's columns and images in the same 
   const img = paper.querySelector("img")!;
   expect(Math.abs(img.getBoundingClientRect().width - contentWidth / 2)).toBeLessThanOrEqual(1);
   expect(el.shadowRoot!.querySelector("select")).toBeNull();
+});
+
+it.each([
+  // 80 mm at 203 dpi draws 576 dots across; 58 mm at 180 dpi draws 360.
+  [42, 203, 576],
+  [30, 180, 360],
+  // A column count no paper width has: 12 dots a column.
+  [32, 203, 384],
+])(
+  "shows a %i-column, %i dpi job's %i-dot bands across the whole paper, and narrower images in proportion",
+  async (columns, dpi, widthDots) => {
+    const band = (width: number) => ({
+      kind: "image" as const,
+      width,
+      height: 28,
+      data: btoa("\0".repeat((width / 8) * 28)),
+    });
+    const { el } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
+      open: true,
+      preview: {
+        ...preview,
+        columns,
+        dpi,
+        qrData: [],
+        blocks: [band(widthDots), band(widthDots / 2), band(576)],
+      },
+    });
+    await el.shadowRoot!.querySelector<WtModal>("wt-modal")!.updateComplete;
+    const paper = el.shadowRoot!.querySelector<HTMLElement>(".paper")!;
+    const [full, half, ruler] = [...paper.querySelectorAll("img")];
+    await Promise.all([full!.decode(), half!.decode(), ruler!.decode()]);
+    const contentWidth = parseFloat(getComputedStyle(paper).width);
+    expect(Math.abs(full!.getBoundingClientRect().width - contentWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(half!.getBoundingClientRect().width - contentWidth / 2)).toBeLessThanOrEqual(1);
+    // A band wider than the printer's line (the width ruler) stays on the paper.
+    expect(ruler!.getBoundingClientRect().width).toBeLessThanOrEqual(contentWidth + 1);
+  },
+);
+
+it("gives a band drawn from a line of text that text as its alternative, and other images none", async () => {
+  const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
+    open: true,
+    preview: {
+      ...preview,
+      text: "Total 12.50\n\n",
+      qrData: [],
+      blocks: [
+        { kind: "image", width: 8, height: 2, data: "gAE=", text: "Total 12.50" },
+        { kind: "image", width: 8, height: 2, data: "gAE=", text: "" },
+        { kind: "image", width: 8, height: 2, data: "gAE=" },
+      ],
+    },
+  });
+  const alts = [...el.shadowRoot!.querySelectorAll("img")].map((img) => img.getAttribute("alt"));
+  expect(alts).toEqual(["Total 12.50", "", ""]);
+  await expectNoA11yViolations(host);
 });
