@@ -227,7 +227,9 @@ lane D's PF6 and PF7, each landing on its own when green (3c-3 was amended after
 dish made at the till is never moved or re-routed, and now also waits for 3c-1). 3d, watchers
 ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): named watchers on Prep Stations that
 screens and printers attach to, each with its own Done, Away unchanged, and the "one ticket per
-order" printer setting retired (owner, 2026-10-01); it awaits the owner's approval.
+order" printer setting retired (owner, 2026-10-01); approved and queued as lane E's PF8, after
+3c-3 lands. After approval the owner ruled that a dish made at the till is never held and the till
+lists what to make ("Make now"); 3c-1, 3c-2, 3c-3 and 3d were amended to match.
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside
