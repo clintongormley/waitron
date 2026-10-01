@@ -84,6 +84,12 @@ useVenueDb({
         pin: SUPERVISOR_PIN,
       });
     });
+    // Every station prints to the receipt printer, so a fire is seen as kitchen print jobs.
+    db.run(sql`
+      insert into station_printers (station_id, printer_id)
+      select distinct k.id, t.receipt_printer_id from kitchen_stations k, tills t
+      where t.receipt_printer_id is not null
+    `);
     const [staffSession, ...device] = venue.cookie.split("; ");
     supervisorCookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
     noDeviceCookie = staffSession!;
@@ -148,10 +154,14 @@ async function needsClearingSince(tableId: string): Promise<string | null> {
 }
 
 /** Nothing of the refused departure was written: no invoice, no record, the party still open. */
-async function expectNothingWritten(partyId: string, billId: string): Promise<void> {
+async function expectNothingWritten(
+  partyId: string,
+  billId: string,
+  billStatus: "open" | "placed" = "open",
+): Promise<void> {
   expect(registroCount(venue, billId)).toBe(0);
   expect(await departuresOf(billId)).toEqual([]);
-  expect(await statusOf(venue, billId)).toBe("open");
+  expect(await statusOf(venue, billId)).toBe(billStatus);
   expect((await partyState(partyId)).state).toBe("open");
 }
 
@@ -276,6 +286,44 @@ describe("recording that a table left without paying", () => {
     } finally {
       await inTx(venue, (tx) => writeClearingWorkflow(tx, false));
     }
+  });
+
+  it("writes nothing for the kitchen: no ticket item, no kitchen ticket, no print job", async () => {
+    const counts = () =>
+      venue.db.all<{ items: number; kitchen: number; prints: number }>(sql`
+        select (select count(*) from ticket_items) as items,
+               (select count(*) from kitchen_print_jobs) as kitchen,
+               (select count(*) from print_jobs) as prints
+      `)[0];
+    const atStart = counts();
+    const party = await seatedWith(venue, "Botella tinto");
+    const before = counts();
+    // The control: sending the dish is seen by all three counts.
+    expect(before!.items).toBeGreaterThan(atStart!.items);
+    expect(before!.kitchen).toBeGreaterThan(atStart!.kitchen);
+    expect(before!.prints).toBeGreaterThan(atStart!.prints);
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: party.revision,
+      reason: REASON,
+    });
+
+    expect(answer.status).toBe(200);
+    expect(counts()).toEqual(before);
+  });
+
+  it("refuses a request from no device, which has no till to file on, and writes nothing", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    const supervisorWithoutDevice = supervisorCookie.split("; ")[0]!;
+
+    const answer = await depart(
+      party.partyId,
+      { expectedPartyRevision: party.revision, reason: REASON },
+      supervisorWithoutDevice,
+    );
+
+    expect(answer).toMatchObject({ status: 401, json: { code: "device.unauthorized" } });
+    await expectNothingWritten(party.partyId, party.tabId);
   });
 
   it("prints no receipt, and the bill's receipt can still be printed again", async () => {
@@ -567,6 +615,71 @@ describe("what is refused", () => {
     expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
   });
 
+  it("refuses a bill holding a dish recalled from the kitchen, and writes nothing", async () => {
+    const party = await seatedWith(venue, "Botella tinto", "Caña");
+    const recalled = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/lines/recall`,
+      { lineNos: [2] },
+    );
+    expect(recalled.status).toBe(200);
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
+    });
+    await expectNothingWritten(party.partyId, party.tabId);
+  });
+
+  it("refuses a presented bill with no invoice yet holding a dish whose group is still held, and writes nothing", async () => {
+    const party = await seatedWith(venue);
+    const ordered = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party.revision,
+        groups: [
+          {
+            lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
+            release: "fire",
+          },
+          { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
+        ],
+      },
+    );
+    expect(ordered.status).toBe(200);
+    const placed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/place`,
+    );
+    expect(placed.status).toBe(200);
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
+    expect(await salesOf(party.tabId)).toEqual([]);
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
+    });
+    await expectNothingWritten(party.partyId, party.tabId, "placed");
+  });
+
   it("refuses a bill holding a payment, and writes nothing", async () => {
     const party = await seatedWith(venue, "Botella tinto");
     const paid = await send(
@@ -593,7 +706,10 @@ describe("what is refused", () => {
 
     expect(answer).toMatchObject({
       status: 409,
-      json: { code: "unpaid_departure.bill_part_paid", params: { workingOrderId: party.tabId } },
+      json: {
+        code: "unpaid_departure.bill_holds_payment",
+        params: { workingOrderId: party.tabId },
+      },
     });
     await expectNothingWritten(party.partyId, party.tabId);
   });

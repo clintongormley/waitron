@@ -331,9 +331,9 @@ declare module "@waitron/shared" {
      */
     "unpaid_departure.nothing_outstanding": { partyId: string };
     /**
-     * Record unpaid departure found an open bill holding a dish the kitchen was never told to make:
-     * never sent, or in a group or kitchen item still held. The guests were never served it; staff
-     * cancel it first.
+     * Record unpaid departure found a bill it would invoice — open, or presented with no invoice
+     * yet — holding a dish the kitchen was never told to make: never sent, or in a group or kitchen
+     * item still held. The guests were never served it; staff cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**
@@ -341,7 +341,7 @@ declare module "@waitron/shared" {
      * included: collecting a presented bill refuses one that holds a payment (`collectOrder`,
      * through `refuseBillWithPayments`), so the invoice issued now could not be collected later.
      */
-    "unpaid_departure.bill_part_paid": { workingOrderId: string };
+    "unpaid_departure.bill_holds_payment": { workingOrderId: string };
     /**
      * The party's main bill was to leave while the party holds another bill that is open or
      * presented: it moves only as the party's last unpaid bill (spec §13 item 5). Split a table

@@ -57,9 +57,9 @@ export interface RecordedDeparture {
  * An open bill is invoiced now, as an invoice-first placing invoices it, without a receipt; a
  * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
  * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill is owed,
- * `unpaid_departure.unfired_dishes` for an open bill holding a dish the kitchen was never told to
- * make (never sent, or held), and
- * `unpaid_departure.bill_part_paid` for an open bill holding a payment. A retry after the party has
+ * `unpaid_departure.unfired_dishes` for a bill to be invoiced holding a dish the kitchen was never
+ * told to make (never sent, or held), and `unpaid_departure.bill_holds_payment` for an open bill
+ * holding a payment, one given back in full included. A retry after the party has
  * closed is `party.not_open`, as it is for Finish.
  */
 export async function recordUnpaidDeparture(
@@ -83,8 +83,11 @@ export async function recordUnpaidDeparture(
   if (owing.length === 0) {
     throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
   }
-  const open = owing.filter((bill) => bill.status === "open");
-  for (const bill of open) {
+  const owingIds = owing.map((bill) => bill.workingOrderId);
+  const invoiced = await readIssuedSales(tx, owingIds);
+  // Every bill invoiced here, open or presented without an invoice: never invoice an unfired dish.
+  const toInvoice = owing.filter((bill) => !invoiced.has(bill.workingOrderId));
+  for (const bill of toInvoice) {
     if (
       (await unsentDishLines(tx, bill.workingOrderId)).length > 0 ||
       (await holdsUnreleasedDish(tx, bill.workingOrderId))
@@ -93,11 +96,13 @@ export async function recordUnpaidDeparture(
         workingOrderId: bill.workingOrderId,
       });
     }
-    if (bill.hasPayments) {
-      throw new AppError("unpaid_departure.bill_part_paid", {
-        workingOrderId: bill.workingOrderId,
-      });
-    }
+  }
+  const open = owing.filter((bill) => bill.status === "open");
+  const holding = open.find((bill) => bill.hasPayments);
+  if (holding !== undefined) {
+    throw new AppError("unpaid_departure.bill_holds_payment", {
+      workingOrderId: holding.workingOrderId,
+    });
   }
   // What is left of the in-flight check once no bill holds a payment: a card at the reader for a
   // whole bill, which marks the bill rather than writing a payment of it.
@@ -106,10 +111,7 @@ export async function recordUnpaidDeparture(
     open.map((bill) => bill.workingOrderId),
   );
 
-  const owingIds = owing.map((bill) => bill.workingOrderId);
-  const invoiced = await readIssuedSales(tx, owingIds);
-  for (const bill of owing) {
-    if (invoiced.has(bill.workingOrderId)) continue;
+  for (const bill of toInvoice) {
     const { ticket } = await issueUnpaidInvoice(
       tx,
       deps,
@@ -221,6 +223,7 @@ export async function listUnpaidDepartures(tx: Transaction): Promise<UnpaidDepar
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
+    // `closeParty` writes both `left_at` and `closed_at` from one timestamp.
     .where(and(inArray(partyTables.partyId, partyIds), eq(partyTables.leftAt, parties.closedAt)))
     .orderBy(partyTables.joinedAt, partyTables.id);
   const tablesOf = new Map(partyIds.map((id) => [id, [] as string[]]));
