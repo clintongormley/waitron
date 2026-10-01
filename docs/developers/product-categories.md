@@ -67,6 +67,9 @@ Malformed ids answer `shared.invalid_id` (400); a malformed body answers
 unknown section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`).
 `menu_section.wrong_role` (409, `sectionId`, `role`) refuses presentation edits or deletes of roots
 and layouts, structure writes into a layout, and a member ref to anything other than a menu root.
+It also refuses removing or replacing a member that references an owned section, naming that
+section's id and `role: "section"`. Delete the section through `DELETE /management-api/sections/:id`, using the
+owned section's id.
 `menu_section.member_cycle` (409, `sectionId`, `childSectionId`) refuses a loop of inclusions,
 including a menu containing itself. `menu_section.member_duplicate` (409, `sectionId`) refuses
 an already-held target. `menu_section.membership_invalid` (400) refuses missing or variant product
