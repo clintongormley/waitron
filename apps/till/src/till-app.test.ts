@@ -8959,21 +8959,27 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     expect(tenderPay(el).stage).toBe("order");
   });
 
-  it("a Pay whose read failed without a refusal says the order could not be read, not that it is gone", async () => {
-    const { el, c } = await counterWaiting({
-      ...invoiceFirst,
-      listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
-      retrievePlacedOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-    });
-    const own = c.store.id;
+  it.each([
+    ["without a refusal", new TypeError("Failed to fetch")],
+    ["with a refusal other than not found", { code: "server.internal" }],
+  ])(
+    "a Pay whose read failed %s says the order could not be opened, not that it is gone",
+    async (_how, failure) => {
+      const { el, c } = await counterWaiting({
+        ...invoiceFirst,
+        listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+        retrievePlacedOrder: vi.fn().mockRejectedValue(failure),
+      });
+      const own = c.store.id;
 
-    pressPay(el, "wo-sent");
-    await flush(el);
+      pressPay(el, "wo-sent");
+      await flush(el);
 
-    expect(c.store.id).toBe(own);
-    expect(alert(el)!.textContent).toContain(t("waiting.pay_error"));
-    expect(alert(el)!.textContent).not.toContain(t("held.stale"));
-  });
+      expect(c.store.id).toBe(own);
+      expect(alert(el)!.textContent).toContain(t("waiting.pay_error"));
+      expect(alert(el)!.textContent).not.toContain(t("held.stale"));
+    },
+  );
 
   it("collecting a waiting order reads the kitchen queue again, so the order leaves the counter's prep-queue card", async () => {
     const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
@@ -9014,11 +9020,21 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   });
 
   it.each([
-    ["handed over", () => Promise.resolve(), "refresh.waiting_after_hand_over"],
-    ["refused", () => Promise.reject({ code: "server.internal" }), "refresh.waiting"],
+    [
+      "handed over",
+      "that the order was handed over",
+      () => Promise.resolve(),
+      "refresh.waiting_after_hand_over",
+    ],
+    [
+      "refused",
+      "only that the list could not refresh",
+      () => Promise.reject({ code: "server.internal" }),
+      "refresh.waiting",
+    ],
   ] as const)(
-    "a waiting list that cannot be read after the kitchen queue's Collect was %s says so in that Collect's words",
-    async (_how, markCollected, key) => {
+    "a waiting list that cannot be read after the kitchen queue's Collect was %s says %s",
+    async (_how, _says, markCollected, key) => {
       const { el, c } = await counterWaiting({
         ...invoiceFirst,
         markCollected: vi.fn(markCollected),
@@ -9035,6 +9051,26 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       expect(notice.textContent).toContain(t(key));
     },
   );
+
+  it("the waiting list is read again after the kitchen queue's Collect when the kitchen queue cannot be", async () => {
+    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
+    const listCounterWaiting = vi.fn().mockResolvedValueOnce([paidOrder]).mockResolvedValue([]);
+    const { el, c } = await counterWaiting({
+      ...invoiceFirst,
+      getStationQueue,
+      listCounterWaiting,
+    });
+    expect(waitingList(el)!.orders).toEqual([paidOrder]);
+    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(c, "mark-collected", { orderId: "wo-paid" });
+    await flush(el);
+
+    expect(listCounterWaiting).toHaveBeenCalledTimes(2);
+    expect(waitingList(el)).toBeNull();
+    const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="station"]')!;
+    expect(notice.textContent).toContain(t("refresh.station_after_hand_over"));
+  });
 
   it("the basket takes no edit while Pay's read is out", async () => {
     const read = heldRead();

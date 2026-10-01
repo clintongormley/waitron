@@ -4856,10 +4856,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       sets the order's handover time when none was set, so the order leaves the kitchen queue, but
       the till re-reads the queue after a collect only when the collect was opened from the waiting
       list, so the counter's prep-queue card can keep showing the order until the queue is next
-      read. Re-reading it after every collect makes an existing case read
-      the queue four times where it asserts three: "a switch to a prepay zone ends a kitchen-queue
-      retry, and that retry's late failure does not bring the notice back"
-      (`apps/till/src/till-app.test.ts`), so B16 left it.
+      read. Re-reading it after every collect would also stop an existing case proving what its
+      title says: "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late
+      failure does not bring the notice back" (`apps/till/src/till-app.test.ts`). The collect's
+      re-read would supersede the retry's request, so the retry's late failure would be ignored
+      whether or not the zone switch's own re-read superseded it. Tried 2026-10-01: with the
+      zone switch changed to end the retry without re-reading the queue, the case fails on the
+      notice coming back; with a re-read after every collect as well, it fails only on its call
+      count (four reads where it asserts three). So B16 left it.
     - **OPEN — completed orders cannot be looked up.** The plan's "completed orders stay reachable"
       was not built: no till or dashboard screen lists completed orders (the dashboard's Sales
       screen shows totals).
@@ -10122,10 +10126,13 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    location.** The TENANT half of this item is retired — there is no tenant column, so a by-id read
    has no tenant clause to be missing (`CLAUDE.md` §3) — but the location half is untouched and is
    NOT covered by item 3, which names a different set of verbs. All four are in
-   `apps/server/src/working-order.ts` and were read on 2026-09-16 rather than inferred:
-   `handOver`, the handover the collect route reaches through `handOverOrder` (`markCollected` is a
-   wrapper only tests call), uses its `TillConfig` only to read a placed order's service mode
-   (since B16, 2026-10-01), and selects and updates on `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
+   `apps/server/src/working-order.ts` and were read rather than inferred, `handOver` on 2026-10-01
+   and the other three on 2026-09-16: `handOver`, which `POST /api/orders/:id/collect` reaches
+   through `handOverOrder` (`markCollected` is a wrapper only tests call; the fiscal
+   `POST /api/working-orders/:id/collect` does not reach it), selects and updates on
+   `eq(workingOrders.id, id)`. It uses its `TillConfig` (since B16, 2026-10-01) only to read a
+   placed order's service mode, through `findOrderServiceContext`, which filters by
+   `cfg.locationId`, falling back to `cfg.orderFlow` when that finds none; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
    only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, nor does
    `priceStoredOrder`, which calls it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`,
    which the filing sites in `till-sale.ts` and `working-order.ts` call. Named by function rather than by line, because the line numbers

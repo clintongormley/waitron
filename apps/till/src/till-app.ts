@@ -1142,8 +1142,9 @@ export class TillApp extends LitElement {
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
   #payWaitingRequest = 0;
-  /** Each pay, card payment, place, collect or hold sent from the counter basket, and each bill
-   * payment opened on it. */
+  /** Each pay, card payment, place, collect or hold sent from the counter basket, and each request to
+   * open a bill payment on it that {@link TillApp.#onCounterBillPay} does not ignore outright, whether
+   * or not the dialog then opens. */
   #counterSends = 0;
   /** The service mode of the waiting order the collect stage was opened on: its own, not the till's
    * zone's. Unset when the basket holds anything else. */
@@ -2394,9 +2395,16 @@ export class TillApp extends LitElement {
     } catch {
       this.errorKey = "station.collect_error";
     }
-    await this.#refreshStationQueue();
-    if (collected) await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
-    else await this.#refreshWaiting();
+    if (collected) {
+      await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
+      return;
+    }
+    try {
+      await this.#refreshStationQueue();
+    } finally {
+      await this.#refreshWaiting();
+    }
   }
 
   /**

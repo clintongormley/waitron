@@ -915,7 +915,7 @@ describe("TillApi", () => {
     );
   });
 
-  it("markCollected POSTs an empty object to the order's /collect route — the Mode-P handover (empty 200 body)", async () => {
+  it("markCollected POSTs an empty object to the order's /collect route — the counter handover (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(new TillApi("", fetchStub).markCollected("wo1")).resolves.toBeUndefined();

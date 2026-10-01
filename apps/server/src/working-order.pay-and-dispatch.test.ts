@@ -2192,7 +2192,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
   });
 });
 
-describe("markCollected (Mode-P kitchen-handover marker)", () => {
+describe("markCollected (the counter handover)", () => {
   // A Mode-P (prepay) order pays and fires at order, walks queued → preparing → ready, then is
   // HANDED OVER — markCollected stamps `collected_at`, and it drops off listStationQueue. Until that
   // stamp, a ready order stays on the queue.
