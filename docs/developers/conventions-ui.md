@@ -466,8 +466,9 @@ each number comes from; 576 is unmeasured), and its text sits on a grid of 30 co
 and 42 on 80mm whatever the resolution, centred in the picture. Text is passed through `prepareText`
 before it is measured, which turns a character the table cannot draw into a fixed replacement, the
 same character without its accents, or `?`, and through `wrapText`/`labelAmountLines` before it is
-printed, so one character is one column. Receipts and category sales pages also set the printer's
-print area to the picture's width (`printArea`, `GS L` and `GS W`). The calibration ruler page
+printed, so one character is one column. Receipts, category sales pages and the printer test page
+(`apps/server/src/printer-test-page.ts`) also set the printer's print area to the picture's width
+(`printArea`, `GS L` and `GS W`). The calibration ruler page
 (`apps/server/src/test-page.ts`) is the exception to both: whatever the printer, it sets a print
 area of 576 dots and draws its captions 360 dots wide. Whether a job made of pictures still needs a
 print area has not been measured. The fiscal QR is a raster image too, its dot size chosen per

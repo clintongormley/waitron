@@ -42,6 +42,8 @@ import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
+import { formatPrinterTestPage } from "./printer-test-page.js";
+import { opensDrawer, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -135,6 +137,7 @@ function mountApp(
     venueLocale?: SupportedLocale;
     listIpv4?: () => string[];
     log?: Logger;
+    now?: () => Date;
   } = {},
 ): Hono {
   const app = new Hono();
@@ -150,6 +153,7 @@ function mountApp(
       enrolRateLimiter: opts.enrolRateLimiter,
       venueLocale: opts.venueLocale ?? "es-ES",
       listIpv4: opts.listIpv4,
+      ...(opts.now === undefined ? {} : { now: opts.now }),
     },
     opts.log ?? noopLog,
   );
@@ -1779,6 +1783,171 @@ describe("mountPrintApi — management: test-print", () => {
       ]);
     },
   );
+});
+
+describe("mountPrintApi — management: print-test-page", () => {
+  // 13:05 UTC is 14:05 in the Canaries and 15:05 in Madrid, so the hour shows which zone was used.
+  const NOW = new Date("2026-10-01T13:05:00.000Z");
+
+  async function withVenueTimeZone<T>(timeZone: string, fn: () => Promise<T>): Promise<T> {
+    const [before] = await suite.db
+      .select({ timeZone: locations.timeZone })
+      .from(locations)
+      .where(eq(locations.id, locationId));
+    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, locationId));
+    try {
+      return await fn();
+    } finally {
+      await suite.db
+        .update(locations)
+        .set({ timeZone: before!.timeZone })
+        .where(eq(locations.id, locationId));
+    }
+  }
+
+  async function savedPrinter(
+    app: Hono,
+    host: string,
+    name: string,
+    patch: Record<string, unknown>,
+  ): Promise<string> {
+    const id = await createNetworkPrinter(app, host, 9100, name);
+    const res = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: patch,
+    });
+    expect(res.status).toBe(204);
+    return id;
+  }
+
+  async function jobsFor(
+    printerId: string,
+  ): Promise<{ id: string; kind: string; payload: Uint8Array }[]> {
+    const rows = await suite.db
+      .select({ id: printJobs.id, kind: printJobs.kind, payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId));
+    return rows.map((row) => ({ ...row, payload: new Uint8Array(row.payload) }));
+  }
+
+  it.each([
+    { acceptLanguage: "en-GB,en;q=0.9", locale: "en-GB", dateTime: "1 Oct 2026, 14:05" },
+    { acceptLanguage: "es-ES,es;q=0.9", locale: "es-ES", dateTime: "1 oct 2026, 14:05" },
+  ] as const)(
+    "enqueues one document job drawn at the printer's saved setting ($locale)",
+    async ({ acceptLanguage, locale, dateTime }) => {
+      const app = mountApp({ now: () => NOW });
+      const printerId = await savedPrinter(app, "10.0.0.120", `Página ${locale}`, {
+        paperWidth: "58mm",
+        resolution: "203dpi",
+      });
+      const res = await withVenueTimeZone("Atlantic/Canary", async () =>
+        app.request(`/management-api/printers/${printerId}/print-test-page`, {
+          method: "POST",
+          headers: { cookie: managerCookie, "accept-language": acceptLanguage },
+        }),
+      );
+      expect(res.status).toBe(202);
+      const body = (await res.json()) as { jobId: string };
+      expect(body).toEqual({ jobId: body.jobId });
+      const jobs = await jobsFor(printerId);
+      expect(jobs.map(({ id, kind }) => ({ id, kind }))).toEqual([
+        { id: body.jobId, kind: "document" },
+      ]);
+      expect([...jobs[0]!.payload]).toEqual([
+        ...formatPrinterTestPage({
+          locale,
+          printer: { paperWidth: "58mm", resolution: "203dpi" },
+          printerName: `Página ${locale}`,
+          now: NOW,
+          timeZone: "Atlantic/Canary",
+        }),
+      ]);
+      const text = printedLines(jobs[0]!.payload).join("\n");
+      expect(text).toContain(`Página ${locale}`);
+      expect(text).toContain("58mm · 203dpi");
+      expect(text).toContain(dateTime);
+    },
+  );
+
+  it("follows the printer's saved paper width: a 58mm and an 80mm printer differ", async () => {
+    const app = mountApp({ now: () => NOW });
+    const narrow = await savedPrinter(app, "10.0.0.121", "Estrecha", {
+      paperWidth: "58mm",
+      resolution: "203dpi",
+    });
+    const wide = await savedPrinter(app, "10.0.0.122", "Ancha", {
+      paperWidth: "80mm",
+      resolution: "203dpi",
+    });
+    const widths = async (printerId: string): Promise<Set<number>> => {
+      const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+        cookie: managerCookie,
+      });
+      expect(res.status).toBe(202);
+      const [job] = await jobsFor(printerId);
+      return new Set(
+        printedCommands(job!.payload)
+          .filter((command) => command.text !== undefined)
+          .map((command) => command.widthDots!),
+      );
+    };
+    expect(await widths(narrow)).toEqual(new Set([384]));
+    expect(await widths(wide)).toEqual(new Set([576]));
+  });
+
+  it("sends no drawer pulse, even to a printer with a cash drawer attached", async () => {
+    const app = mountApp();
+    const printerId = await savedPrinter(app, "10.0.0.123", "Con cajón", { hasCashDrawer: true });
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(202);
+    const jobs = await jobsFor(printerId);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.kind).toBe("document");
+    expect(opensDrawer(jobs[0]!.payload)).toBe(false);
+  });
+
+  it("refuses an unknown or a deactivated printer with 404 printer.not_found", async () => {
+    const app = mountApp();
+    const deactivated = await createNetworkPrinter(app, "10.0.0.124", 9100, "Apagada");
+    const off = await send(app, "POST", `/management-api/printers/${deactivated}/deactivate`, {
+      cookie: managerCookie,
+    });
+    expect(off.status).toBe(204);
+    for (const id of [randomUUID(), deactivated]) {
+      const res = await send(app, "POST", `/management-api/printers/${id}/print-test-page`, {
+        cookie: managerCookie,
+      });
+      expect(res.status, id).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    }
+    expect(await jobsFor(deactivated)).toEqual([]);
+  });
+
+  it("refuses a malformed id with 400", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", "/management-api/printers/not-a-uuid/print-test-page", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("refuses no session with 401 and a staff session with 403", async () => {
+    const app = mountApp();
+    const printerId = await createNetworkPrinter(app, "10.0.0.125", 9100, "Sin sesión");
+    const path = `/management-api/printers/${printerId}/print-test-page`;
+    const anonymous = await send(app, "POST", path);
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const staff = await send(app, "POST", path, { cookie: staffCookie });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await jobsFor(printerId)).toEqual([]);
+  });
 });
 
 describe("mountPrintApi — management: recent jobs", () => {

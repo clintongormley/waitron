@@ -2376,6 +2376,13 @@ export class DashboardApi {
     );
   }
 
+  printTestPage(printerId: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/management-api/printers/${printerId}/print-test-page`,
+      "POST",
+    );
+  }
+
   testPrinterDrawer(printerId: string): Promise<{ jobId: string }> {
     return this.#request<{ jobId: string }>(
       `/management-api/printers/${printerId}/test-drawer`,

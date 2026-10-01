@@ -7579,3 +7579,127 @@ describe("A job ended because its printer was unpaired", () => {
     }
   });
 });
+
+describe("Print test page in a printer's row menu", () => {
+  const sel = (test: string) => `[data-test="${test}"]`;
+  const isDisabled = (el: PrintersScreen, test: string) =>
+    q(el, sel(test))!.hasAttribute("disabled");
+
+  async function mounted(overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi(overrides);
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    return { api, el };
+  }
+
+  it("sits after Edit and prints the page for that printer at once", async () => {
+    const { api, el } = await mounted({
+      printTestPage: vi.fn().mockResolvedValue({ jobId: "page-1" }),
+    });
+    const menu = q(el, sel("print-test-page-p1"))!.closest("dashboard-row-actions")!;
+    expect(
+      [...menu.querySelectorAll<HTMLElement>("wt-button")].map((button) => button.dataset.test),
+    ).toEqual(["edit-printer-p1", "print-test-page-p1", "deactivate-printer-p1"]);
+    expect(text(el, sel("print-test-page-p1"))).toBe(t("printers.print_test_page"));
+    expect(isDisabled(el, "print-test-page-p1")).toBe(false);
+
+    q(el, sel("print-test-page-p1"))!.click();
+    await flush(el);
+    expect(api.printTestPage).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(q(el, "wt-modal[open], wt-dialog[open]")).toBeNull();
+  });
+
+  it("is shown disabled for a switched-off printer, and pressing it sends nothing", async () => {
+    const { api, el } = await mounted({ printTestPage: vi.fn() });
+    await filterPrinters(el, "all");
+    expect(isDisabled(el, "print-test-page-p2")).toBe(true);
+    q(el, sel("print-test-page-p2"))!.click();
+    await flush(el);
+    expect(api.printTestPage).not.toHaveBeenCalled();
+  });
+
+  it("cannot be pressed a second time while the first request is on its way", async () => {
+    let answer!: (value: { jobId: string }) => void;
+    const { api, el } = await mounted({
+      printTestPage: vi.fn().mockReturnValue(
+        new Promise<{ jobId: string }>((resolve) => {
+          answer = resolve;
+        }),
+      ),
+    });
+    q(el, sel("print-test-page-p1"))!.click();
+    await flush(el);
+    expect(isDisabled(el, "print-test-page-p1")).toBe(true);
+    q(el, sel("print-test-page-p1"))!.click();
+    await flush(el);
+    expect(api.printTestPage).toHaveBeenCalledOnce();
+
+    answer({ jobId: "page-1" });
+    await flush(el);
+    expect(isDisabled(el, "print-test-page-p1")).toBe(false);
+  });
+
+  it("says the page was sent to the printer in a notice that fades", async () => {
+    const { el } = await mounted({
+      printTestPage: vi.fn().mockResolvedValue({ jobId: "page-1" }),
+    });
+    expect(q(el, sel("print-test-page-notice"))).toBeNull();
+    q(el, sel("print-test-page-p1"))!.click();
+    await flush(el);
+
+    const notice = q(el, sel("print-test-page-notice")) as HTMLElement & { duration: number };
+    expect(notice.localName).toBe("wt-notice");
+    expect(notice.textContent!.trim()).toBe(
+      t("printers.test_page_sent").replace("{name}", "Cocina"),
+    );
+    expect(notice.duration).toBeGreaterThan(0);
+    expect(q(el, "[role=alert]")).toBeNull();
+
+    notice.dispatchEvent(
+      new CustomEvent("wt-notice-gone", { bubbles: true, composed: true, detail: {} }),
+    );
+    await flush(el);
+    expect(q(el, sel("print-test-page-notice"))).toBeNull();
+  });
+
+  it("gives a second success a notice of its own, which counts its time afresh", async () => {
+    const { el } = await mounted({
+      printTestPage: vi.fn().mockResolvedValue({ jobId: "page-1" }),
+    });
+    q(el, sel("print-test-page-p1"))!.click();
+    await flush(el);
+    const first = q(el, sel("print-test-page-notice"));
+    q(el, sel("print-test-page-p1"))!.click();
+    await flush(el);
+    const second = q(el, sel("print-test-page-notice"));
+    expect(second).not.toBeNull();
+    expect(second).not.toBe(first);
+  });
+
+  it("shows a refusal's own message as an alert, not as a notice that fades", async () => {
+    const { el } = await mounted({
+      printTestPage: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    q(el, sel("print-test-page-p1"))!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")!.textContent).toContain(
+      codeMessage("printer.not_found", currentLocale()),
+    );
+    expect(q(el, sel("print-test-page-notice"))).toBeNull();
+    expect(isDisabled(el, "print-test-page-p1")).toBe(false);
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "is named differently from the calibration wizard's ruler button (%s)",
+    (locale) => {
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        expect(t("printers.print_test_page")).not.toBe(t("printers.ruler_print"));
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+});

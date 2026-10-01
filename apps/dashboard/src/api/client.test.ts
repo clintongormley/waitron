@@ -2520,6 +2520,16 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
+  it("printTestPage POSTs the printer's test-page route and returns its job", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "j11" }, true, 202));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.printTestPage("p1")).toEqual({ jobId: "j11" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/print-test-page", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
   it("sampleReceipt POSTs the draft paper width and resolution", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "j10" }, true, 202));
     const api = new DashboardApi("", fetchImpl);
