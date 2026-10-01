@@ -23,6 +23,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "product", productId: "p-burger" },
           name: "Burger",
           reachable: true,
+          missingName: null,
         },
         {
           memberId: "t-drinks",
@@ -30,6 +31,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "section", sectionId: "s-drinks" },
           name: "Drinks",
           reachable: true,
+          missingName: null,
         },
         {
           memberId: "t-salad",
@@ -37,6 +39,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "product", productId: "p-salad" },
           name: "Salad",
           reachable: false,
+          missingName: "Salad",
         },
       ],
     },
@@ -51,6 +54,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "product", productId: "p-lemonade" },
           name: "Lemonade",
           reachable: true,
+          missingName: null,
         },
       ],
     },
@@ -311,4 +315,23 @@ it("names the layouts list after the menu", async () => {
   expect(q(el, '[data-test="layouts"]')!.getAttribute("aria-label")).toBe(
     t("home.layouts_label").replace("{menu}", "Lunch Menu"),
   );
+});
+
+it("keeps a missing tile in the editable list by its recorded name, with remove and reorder", async () => {
+  const rows = layouts();
+  rows[0]!.tiles[1] = {
+    memberId: "t-missing",
+    position: 1,
+    ref: { kind: "missing", name: "Drinks › Beer" },
+    name: "Drinks › Beer",
+    missingName: "Drinks › Beer",
+    reachable: false,
+  };
+  const el = await mount({ layouts: rows });
+  const list = members(el);
+  const row = list.shadowRoot!.querySelector('[data-member="t-missing"]')!;
+  expect(text(row.querySelector('[data-test="name"]'))).toContain("Drinks › Beer");
+  expect(row.querySelector('[data-test="remove-t-missing"]')).not.toBeNull();
+  expect(list.members.map((m) => m.id)).toEqual(["t-burger", "t-missing", "t-salad"]);
+  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks › Beer", "Salad"]);
 });

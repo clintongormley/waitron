@@ -1,5 +1,8 @@
 import {
   addMember,
+  addShortcut,
+  deleteSection,
+  listHomeLayouts,
   createCatalogue,
   createHomeLayout,
   deviceHomeLayouts,
@@ -980,7 +983,10 @@ it("leaves publication behind, so an imported venue's menus arrive unpublished",
       .select({ id: catalogues.id })
       .from(catalogues)
       .where(eq(catalogues.name, "Published menu"));
-    expect((await menuStatus(tx, [menu!.id])).get(menu!.id)).toEqual({ state: "unpublished" });
+    expect((await menuStatus(tx, [menu!.id])).get(menu!.id)).toEqual({
+      state: "unpublished",
+      clashes: 0,
+    });
     expect(await tx.select().from(menuVersions)).toEqual([]);
     // The working menu came across whole, so publishing it on the new venue has something to show.
     expect((await readMenuStructure(tx, menu!.id)).nodes).toHaveLength(1);
@@ -1086,4 +1092,62 @@ it("leaves a table's clearing state behind", async () => {
   for (const row of rows) {
     expect(row).not.toHaveProperty("needs_clearing_since");
   }
+});
+
+it("round-trips missing home slots alongside live tiles with fresh ids and unchanged positions", async () => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Missing slots" });
+    const root = (await readMenuStructure(tx, menu.id)).rootSectionId;
+    const beer = await createSectionIn(tx, root, { internalName: "Beer" });
+    const water = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Water",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+    await addMember(tx, root, { kind: "product", productId: water.id });
+    const [home] = await listHomeLayouts(tx, menu.id);
+    const tile = await addShortcut(tx, home!.id, { kind: "section", sectionId: beer.id });
+    await addShortcut(tx, home!.id, { kind: "product", productId: water.id });
+    await deleteSection(tx, beer.id);
+    return { menu: menu.id, tile: tile.id, home: home!.id };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-25T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const [menu] = await tx.select().from(catalogues).where(eq(catalogues.name, "Missing slots"));
+    const [home] = await listHomeLayouts(tx, menu!.id);
+    expect(menu!.id).not.toBe(original.menu);
+    expect(home!.id).not.toBe(original.home);
+    expect(home!.tiles[0]!.memberId).not.toBe(original.tile);
+    expect(
+      home!.tiles.map((tile) => [tile.position, tile.ref.kind, tile.name, tile.missingName]),
+    ).toEqual([
+      [0, "missing", "Missing slots › Beer", "Missing slots › Beer"],
+      [1, "product", "Water", null],
+    ]);
+    const preview = await previewMenu(tx, menu!.id);
+    expect(preview.document.homeLayouts[0]!.tiles[0]).toEqual({ kind: "empty" });
+    expect(preview.warnings).toEqual([
+      { kind: "shortcut_missing", layoutName: "Home", name: "Missing slots › Beer" },
+    ]);
+  });
 });

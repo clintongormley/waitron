@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, disabledStyles, selectStyles } from "@waitron/ui";
-import type { MemberRef, SectionMember } from "@waitron/catalogue/src/section-types.js";
+import type { MemberRef, SectionMember, TileRef } from "@waitron/catalogue/src/section-types.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { byLabel } from "./category-form.js";
@@ -17,16 +17,18 @@ interface Choice {
 
 /** A member's staff-facing name, or a placeholder when the product or section is not known here. */
 export function memberName(
-  ref: MemberRef,
+  ref: TileRef,
   productNames: ReadonlyMap<string, string>,
   sectionNames: ReadonlyMap<string, string>,
 ): string {
+  if (ref.kind === "missing") return ref.name;
   const name =
     ref.kind === "product" ? productNames.get(ref.productId) : sectionNames.get(ref.sectionId);
   return name ?? t("members.missing");
 }
 
-export function memberKindLabel(ref: MemberRef): string {
+export function memberKindLabel(ref: TileRef): string {
+  if (ref.kind === "missing") return t("members.missing");
   return t(ref.kind === "product" ? "members.kind_product" : "members.kind_section");
 }
 
@@ -137,7 +139,7 @@ export class MemberListEditor extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) members: SectionMember[] = [];
+  @property({ attribute: false }) members: SectionMember<TileRef>[] = [];
   @property({ attribute: false }) products: { id: string; name: string }[] = [];
   @property({ attribute: false }) sections: { id: string; internalName: string }[] = [];
   /** Sections the picker leaves out, such as ones that would contain this list. The server still
@@ -153,7 +155,7 @@ export class MemberListEditor extends LitElement {
   /** A line of text shown under a member's name, by member id. */
   @property({ attribute: false }) notes: ReadonlyMap<string, string> = new Map();
   /** The members in display order, which a move rewrites before the host confirms it. */
-  @state() private order: SectionMember[] = [];
+  @state() private order: SectionMember<TileRef>[] = [];
   @state() private choice = "";
   @state() private addError = false;
   #productNames = new Map<string, string>();
@@ -193,14 +195,16 @@ export class MemberListEditor extends LitElement {
     }
   }
 
-  #name(member: SectionMember): string {
+  #name(member: SectionMember<TileRef>): string {
     return memberName(member.ref, this.#productNames, this.#sectionNames);
   }
 
   #choices(): { products: Choice[]; sections: Choice[] } {
     const held = new Set(
-      this.order.map(({ ref }) =>
-        ref.kind === "product" ? `product:${ref.productId}` : `section:${ref.sectionId}`,
+      this.order.flatMap(({ ref }) =>
+        ref.kind === "missing"
+          ? []
+          : [ref.kind === "product" ? `product:${ref.productId}` : `section:${ref.sectionId}`],
       ),
     );
     const excluded = new Set(this.excludeSectionIds.map((id) => `section:${id}`));
@@ -264,7 +268,7 @@ export class MemberListEditor extends LitElement {
   }
 
   #action(
-    member: SectionMember,
+    member: SectionMember<TileRef>,
     name: "open" | "remove",
     text: string,
     detail: Record<string, unknown>,
@@ -282,7 +286,7 @@ export class MemberListEditor extends LitElement {
     >`;
   }
 
-  #row(member: SectionMember) {
+  #row(member: SectionMember<TileRef>) {
     const name = this.#name(member);
     const { ref } = member;
     return html`<tr data-member=${member.id}>

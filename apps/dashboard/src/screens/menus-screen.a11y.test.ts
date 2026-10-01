@@ -129,7 +129,7 @@ function api(state: State): DashboardApi {
           alsoOn: ["Dinner Menu"],
         },
       ],
-      warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
+      warnings: [{ kind: "shortcut_missing", layoutName: "Home", name: "Lager" }],
       status: {
         state: "changed",
         clashes: 0,

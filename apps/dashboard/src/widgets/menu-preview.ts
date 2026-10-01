@@ -425,7 +425,7 @@ export class MenuPreviewPanel extends LitElement {
         ${warnings.map(
           (warning) =>
             html`<li>
-              ${fill("menu_preview.shortcut_omitted", {
+              ${fill("menu_preview.shortcut_missing", {
                 name: warning.name,
                 layout: warning.layoutName,
               })}

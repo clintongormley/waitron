@@ -3675,7 +3675,7 @@ describe("publishing a menu", () => {
     expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
   });
 
-  it("lists a shortcut that publishing would leave out as a warning", async () => {
+  it("warns about a shortcut that publishing keeps as an empty slot", async () => {
     const app = mountApp();
     const { menuId } = await menuWithProduct(app);
     const offMenu = `Fuera ${crypto.randomUUID()}`;
@@ -3688,7 +3688,7 @@ describe("publishing a menu", () => {
       .insert(sectionMembers)
       .values({ sectionId: details!.layoutId, position: 0, productId });
     expect((await preview(app, menuId)).warnings).toEqual([
-      { kind: "shortcut_omitted", layoutName: expect.any(String), name: offMenu },
+      { kind: "shortcut_missing", layoutName: expect.any(String), name: offMenu },
     ]);
   });
 
@@ -4531,6 +4531,43 @@ describe("mountCatalogueApi — home layouts", () => {
     );
     return { menuId, soup, soupName, elsewhere, drinks: drinks.id, drinksName, rootSectionId };
   }
+
+  it("replaces a deleted section tile in place and gates/refuses invalid replacements", async () => {
+    const app = mountApp();
+    const m = await menuWithTargets(app);
+    const [home] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
+    const tile = await json<{ id: string }>(
+      await send(app, "POST", tilesOf(home!.id), { body: { ref: section(m.drinks) } }),
+      201,
+    );
+    expect((await send(app, "DELETE", `/management-api/sections/${m.drinks}`)).status).toBe(204);
+    const replace = `${tilesOf(home!.id)}/${tile.id}/replace`;
+    const body = { ref: product(m.soup) };
+    expect((await send(app, "POST", replace, { body, cookie: null })).status).toBe(401);
+    expect((await send(app, "POST", replace, { body, cookie: staffCookie })).status).toBe(403);
+    const refusal = await send(app, "POST", replace, { body: { ref: product(m.elsewhere) } });
+    expect(refusal.status).toBe(409);
+    expect(await refusal.json()).toMatchObject({ error: { code: "menu.shortcut_unreachable" } });
+    const result = await json(await send(app, "POST", replace, { body }), 200);
+    expect(result).toEqual({ id: tile.id, position: 0, ref: product(m.soup) });
+    expect(
+      (await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200))[0]!.tiles,
+    ).toEqual([
+      {
+        memberId: tile.id,
+        position: 0,
+        ref: product(m.soup),
+        name: m.soupName,
+        reachable: true,
+        missingName: null,
+      },
+    ]);
+    const malformed = await send(app, "POST", replace, {
+      body: { ref: { kind: "missing", name: "X" } },
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  });
 
   it("lists, creates, duplicates, renames, deletes and sets the default layout", async () => {
     const app = mountApp();

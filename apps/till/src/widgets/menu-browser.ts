@@ -347,6 +347,7 @@ export class TillMenuBrowser extends LitElement {
   /** The button for a section or product the index holds, else nothing; `path` is where a section
    * opens beneath. */
   #tile(ref: DocumentTile, path: string[], index: MenuIndex): TemplateResult | typeof nothing {
+    if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       const section = index.sections.get(ref.sectionId);
       return section === undefined

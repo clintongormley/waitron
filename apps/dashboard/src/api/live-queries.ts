@@ -130,7 +130,7 @@ export const QUERY_DEPENDENCIES = {
   getMenuPreview: MENU_PUBLICATION_READS,
   // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default, the
   // section graph, and each tile's name.
-  listHomeLayouts: ["menu_details", "sections", "section_members", "products"],
+  listHomeLayouts: ["menu_details", "sections", "section_members", "products", "catalogues"],
   // `deviceHomeLayouts` (the same file).
   getDeviceHomeLayouts: ["device_profile_home_layouts", "sections", "menu_details", "catalogues"],
   listCategories: ["categories", "category_details"],

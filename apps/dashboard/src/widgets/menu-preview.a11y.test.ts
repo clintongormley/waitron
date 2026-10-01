@@ -41,7 +41,7 @@ const changes: MenuPreview = {
       source: "included_menu",
     },
   ],
-  warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lemonade" }],
+  warnings: [{ kind: "shortcut_missing", layoutName: "Home", name: "Lemonade" }],
   status: live,
   document: menuDocument(
     [

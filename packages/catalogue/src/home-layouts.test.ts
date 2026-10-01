@@ -19,11 +19,14 @@ import {
   listHomeLayouts,
   moveShortcut,
   removeShortcut,
+  replaceShortcut,
   renameHomeLayout,
   resolveDeviceHomeLayouts,
   setDefaultHomeLayout,
   setDeviceHomeLayout,
 } from "./home-layouts.js";
+import { membersOf } from "./section-members.js";
+import { readSection } from "./sections.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import {
   deactivateCatalogue,
@@ -31,7 +34,7 @@ import {
   listMenuOffers,
   updateMenuItem,
 } from "./operations.js";
-import { addMember, removeMember } from "./sections.js";
+import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
 import { deviceProfileHomeLayouts } from "./schema/home-layouts.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
 import { sectionMembers, sections } from "./schema/sections.js";
@@ -217,6 +220,182 @@ describe("home layouts", () => {
 });
 
 describe("home tiles", () => {
+  it("keeps deleted subsection tiles in every menu's layout with their owned paths", async () => {
+    const f = await menusFixture(fx.db);
+    const nested = await app((tx) => createSectionIn(tx, f.beer, { internalName: "Bottles" }));
+    const home = await defaultLayout(f.lunch);
+    const other = await defaultLayout(f.dinner);
+    await app(async (tx) => {
+      await addShortcut(tx, home, product(f.lemonade));
+      await addShortcut(tx, home, section(f.beer));
+      await addShortcut(tx, home, product(f.soup));
+      await addShortcut(tx, home, section(nested.id));
+      await addShortcut(tx, other, section(nested.id));
+      await addShortcut(tx, other, section(f.beer));
+    });
+    const [dinnerInclusion] = await fx.db
+      .select()
+      .from(sectionMembers)
+      .where(
+        and(
+          eq(sectionMembers.sectionId, f.dinnerRoot),
+          eq(sectionMembers.childSectionId, f.drinks),
+        ),
+      );
+    await app((tx) => removeMember(tx, f.dinnerRoot, dinnerInclusion!.id));
+    const otherBefore = (await app((tx) => listHomeLayouts(tx, f.dinner)))[0]!.tiles.map((t) => [
+      t.memberId,
+      t.position,
+    ]);
+    const before = (await app((tx) => listHomeLayouts(tx, f.lunch)))[0]!.tiles.map((t) => [
+      t.memberId,
+      t.position,
+    ]);
+    await app((tx) => deleteSection(tx, f.beer));
+    const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
+    expect(layout!.tiles.map((t) => [t.memberId, t.position])).toEqual(before);
+    expect(layout!.tiles.map((t) => [t.position, t.ref, t.missingName, t.reachable])).toEqual([
+      [0, product(f.lemonade), null, true],
+      [1, { kind: "missing", name: "Drinks › Beer" }, "Drinks › Beer", false],
+      [2, product(f.soup), null, true],
+      [3, { kind: "missing", name: "Drinks › Beer › Bottles" }, "Drinks › Beer › Bottles", false],
+    ]);
+    expect(
+      (await app((tx) => listHomeLayouts(tx, f.dinner)))[0]!.tiles.map((t) => [
+        t.memberId,
+        t.position,
+      ]),
+    ).toEqual(otherBefore);
+    expect(
+      (await app((tx) => listHomeLayouts(tx, f.dinner)))[0]!.tiles.map((t) => t.missingName),
+    ).toEqual(["Drinks › Beer › Bottles", "Drinks › Beer"]);
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.document.homeLayouts[0]!.tiles).toEqual([
+      product(f.lemonade),
+      { kind: "empty" },
+      product(f.soup),
+      { kind: "empty" },
+    ]);
+    expect(
+      (await app((tx) => listMenuOffers(tx, [f.lunch]))).map((offer) => offer.productId).sort(),
+    ).toEqual([f.lemonade, f.soup].sort());
+    expect(preview.warnings).toEqual([
+      { kind: "shortcut_missing", layoutName: "Home", name: "Drinks › Beer" },
+      { kind: "shortcut_missing", layoutName: "Home", name: "Drinks › Beer › Bottles" },
+    ]);
+  });
+
+  it("duplicates, moves, replaces and removes missing tiles without losing their positions", async () => {
+    const f = await menusFixture(fx.db);
+    const home = await defaultLayout(f.lunch);
+    await app((tx) => addShortcut(tx, home, product(f.lemonade)));
+    const beer = await app((tx) => addShortcut(tx, home, section(f.beer)));
+    await app((tx) => addShortcut(tx, home, product(f.soup)));
+    await app((tx) => deleteSection(tx, f.beer));
+    expect(
+      (await app((tx) => membersOf(tx, home, "home_layout"))).map((member) => member.ref),
+    ).toEqual([product(f.lemonade), { kind: "missing", name: "Drinks › Beer" }, product(f.soup)]);
+    expect((await app((tx) => readSection(tx, home))).members.map((member) => member.ref)).toEqual([
+      product(f.lemonade),
+      product(f.soup),
+    ]);
+    const copy = await app((tx) => duplicateHomeLayout(tx, home, "Copy"));
+    const read = async (id: string) =>
+      (await app((tx) => listHomeLayouts(tx, f.lunch))).find((l) => l.id === id)!;
+    expect((await read(copy.id)).tiles.map((t) => t.ref)).toEqual([
+      product(f.lemonade),
+      { kind: "missing", name: "Drinks › Beer" },
+      product(f.soup),
+    ]);
+    const moved = await app((tx) => moveShortcut(tx, home, beer.id, 2));
+    expect(moved.map((t) => [t.position, t.ref])).toEqual([
+      [0, product(f.lemonade)],
+      [1, product(f.soup)],
+      [2, { kind: "missing", name: "Drinks › Beer" }],
+    ]);
+    const replaced = await app((tx) => replaceShortcut(tx, home, beer.id, section(f.drinks)));
+    expect(replaced).toEqual({ id: beer.id, position: 2, ref: section(f.drinks) });
+    expect((await read(home)).tiles[2]!.missingName).toBeNull();
+    const copiedMissing = (await read(copy.id)).tiles[1]!;
+    await app((tx) => removeShortcut(tx, copy.id, copiedMissing.memberId));
+    expect((await read(copy.id)).tiles.map((t) => [t.position, t.ref])).toEqual([
+      [0, product(f.lemonade)],
+      [1, product(f.soup)],
+    ]);
+  });
+
+  it("retains existing section targets with the owning menu path when an inclusion is removed", async () => {
+    const f = await menusFixture(fx.db);
+    const home = await defaultLayout(f.lunch);
+    await app((tx) => addShortcut(tx, home, section(f.beer)));
+    await app((tx) => addShortcut(tx, home, product(f.lager)));
+    const [edge] = await fx.db
+      .select()
+      .from(sectionMembers)
+      .where(
+        and(eq(sectionMembers.sectionId, f.lunchRoot), eq(sectionMembers.childSectionId, f.drinks)),
+      );
+    await app((tx) => removeMember(tx, f.lunchRoot, edge!.id));
+    const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
+    expect(layout!.tiles.map((t) => [t.ref, t.missingName, t.reachable])).toEqual([
+      [section(f.beer), "Drinks › Beer", false],
+      [product(f.lager), "Lager", false],
+    ]);
+    expect((await app((tx) => previewMenu(tx, f.lunch))).document.homeLayouts[0]!.tiles).toEqual([
+      { kind: "empty" },
+      { kind: "empty" },
+    ]);
+    await app((tx) => addMember(tx, f.lunchRoot, section(f.drinks)));
+    expect(
+      (await app((tx) => listHomeLayouts(tx, f.lunch)))[0]!.tiles.map((t) => t.missingName),
+    ).toEqual([null, null]);
+  });
+
+  it("keeps structural shortcuts through an inactive inclusion but publishes empty slots", async () => {
+    const f = await menusFixture(fx.db);
+    const home = await defaultLayout(f.lunch);
+    await app((tx) => addShortcut(tx, home, section(f.drinks)));
+    await app((tx) => addShortcut(tx, home, section(f.beer)));
+    expect((await app((tx) => previewMenu(tx, f.lunch))).document.homeLayouts[0]!.tiles).toEqual([
+      section(f.drinks),
+      section(f.beer),
+    ]);
+    await app((tx) => deactivateCatalogue(tx, f.drinksMenu));
+    await app((tx) => addShortcut(tx, home, product(f.lager)));
+    const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
+    expect(layout!.tiles.every((t) => t.reachable && t.missingName === null)).toBe(true);
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.document.homeLayouts[0]!.tiles).toEqual([
+      { kind: "empty" },
+      { kind: "empty" },
+      { kind: "empty" },
+    ]);
+    expect(preview.warnings.map((w) => w.name)).toEqual(["Drinks", "Beer", "Lager"]);
+  });
+
+  it("refuses unreachable, duplicate, missing and variant replacements without changing the tile", async () => {
+    const f = await menusFixture(fx.db);
+    const home = await defaultLayout(f.lunch);
+    const tile = await app((tx) => addShortcut(tx, home, product(f.soup)));
+    await app((tx) => addShortcut(tx, home, product(f.lemonade)));
+    for (const [ref, code] of [
+      [product(f.burger), "menu.shortcut_unreachable"],
+      [product(f.lemonade), "menu_section.member_duplicate"],
+      [section(MISSING), "menu_section.not_found"],
+      [product(f.large), "menu_section.membership_invalid"],
+    ] as const) {
+      expect(await codeOf(() => app((tx) => replaceShortcut(tx, home, tile.id, ref)))).toBe(code);
+    }
+    expect(
+      await codeOf(() => app((tx) => replaceShortcut(tx, home, MISSING, product(f.soup)))),
+    ).toBe("menu_section.not_found");
+    expect(await tileRefs(home)).toEqual([
+      { position: 0, ref: product(f.soup) },
+      { position: 1, ref: product(f.lemonade) },
+    ]);
+    expect(await app((tx) => replaceShortcut(tx, home, tile.id, product(f.soup)))).toEqual(tile);
+  });
+
   it("accepts a product or included menu section the menu reaches, however deep", async () => {
     const f = await menusFixture(fx.db);
     const home = await defaultLayout(f.lunch);
@@ -246,7 +425,7 @@ describe("home tiles", () => {
     expect(await tileRefs(home)).toEqual([]);
   });
 
-  it("accepts a product the menu has switched off, and publishing leaves it out with a warning", async () => {
+  it("accepts a product the menu has switched off, and publishing keeps an empty slot with a warning", async () => {
     const f = await menusFixture(fx.db);
     const home = await defaultLayout(f.lunch);
     const [offer] = await fx.db
@@ -260,9 +439,9 @@ describe("home tiles", () => {
     expect(layout!.tiles).toMatchObject([{ ref: product(f.soup), reachable: true }]);
     const preview = await app((tx) => previewMenu(tx, f.lunch));
     expect(preview.warnings).toEqual([
-      { kind: "shortcut_omitted", layoutName: "Home", name: "Soup" },
+      { kind: "shortcut_missing", layoutName: "Home", name: "Soup" },
     ]);
-    expect(preview.document.homeLayouts[0]!.tiles).toEqual([]);
+    expect(preview.document.homeLayouts[0]!.tiles).toEqual([{ kind: "empty" }]);
   });
 
   it("accepts product tiles on an inactive menu, reached by its structure", async () => {
@@ -277,8 +456,8 @@ describe("home tiles", () => {
       [product(f.lager), true],
     ]);
     expect((await app((tx) => previewMenu(tx, f.lunch))).warnings).toEqual([
-      { kind: "shortcut_omitted", layoutName: "Home", name: "Soup" },
-      { kind: "shortcut_omitted", layoutName: "Home", name: "Lager" },
+      { kind: "shortcut_missing", layoutName: "Home", name: "Soup" },
+      { kind: "shortcut_missing", layoutName: "Home", name: "Lager" },
     ]);
   });
 
@@ -290,7 +469,7 @@ describe("home tiles", () => {
     const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
     expect(layout!.tiles).toMatchObject([{ ref: product(f.lager), reachable: true }]);
     expect((await app((tx) => previewMenu(tx, f.lunch))).warnings).toEqual([
-      { kind: "shortcut_omitted", layoutName: "Home", name: "Lager" },
+      { kind: "shortcut_missing", layoutName: "Home", name: "Lager" },
     ]);
   });
 
@@ -401,8 +580,22 @@ describe("home tiles", () => {
     const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
     // The staff name and the internal name, never the customer-facing ones.
     expect(layout!.tiles).toEqual([
-      { memberId: soup.id, position: 0, ref: product(f.soup), name: "Soup", reachable: false },
-      { memberId: drinks.id, position: 1, ref: section(f.drinks), name: "Drinks", reachable: true },
+      {
+        memberId: soup.id,
+        position: 0,
+        ref: product(f.soup),
+        name: "Soup",
+        reachable: false,
+        missingName: "Soup",
+      },
+      {
+        memberId: drinks.id,
+        position: 1,
+        ref: section(f.drinks),
+        name: "Drinks",
+        reachable: true,
+        missingName: null,
+      },
     ]);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.soup)));
     expect((await app((tx) => listHomeLayouts(tx, f.lunch)))[0]!.tiles[0]!.reachable).toBe(true);

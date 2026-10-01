@@ -254,7 +254,7 @@ describe("buildMenuDocument", () => {
     ).rejects.toMatchObject({ code: "catalogue.not_found" });
   });
 
-  it("leaves a shortcut whose target is not on the menu out of the layout, and reports it (D13)", async () => {
+  it("keeps an empty slot for a shortcut whose target is not on the menu, and reports it", async () => {
     const f = await menusFixture(fx.db);
     const layout = await defaultLayout(f.lunch);
     await addTile(layout, { productId: f.lemonade });
@@ -264,7 +264,9 @@ describe("buildMenuDocument", () => {
     const { document, omittedShortcuts } = await app((tx) => buildMenuDocument(tx, f.lunch));
     expect(document.homeLayouts[0]!.tiles).toEqual([
       { kind: "product", productId: f.lemonade },
+      { kind: "empty" },
       { kind: "section", sectionId: f.beer },
+      { kind: "empty" },
     ]);
     expect(omittedShortcuts).toEqual([
       { layoutId: layout, ref: product(f.burger) },

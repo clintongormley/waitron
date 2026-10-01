@@ -4,10 +4,12 @@ export type SectionRole = "section" | "menu_root" | "home_layout";
 export type MemberRef =
   { kind: "product"; productId: string } | { kind: "section"; sectionId: string };
 
-export interface SectionMember {
+export type TileRef = MemberRef | { kind: "missing"; name: string };
+
+export interface SectionMember<Ref extends TileRef = MemberRef> {
   id: string;
   position: number;
-  ref: MemberRef;
+  ref: Ref;
 }
 
 export interface SectionDetails {
@@ -39,7 +41,8 @@ export interface SectionInput {
 export interface HomeTile {
   memberId: string;
   position: number;
-  ref: MemberRef;
+  ref: TileRef;
+  missingName: string | null;
   /** A product's staff name, or a section's internal name. */
   name: string;
   /** Whether the menu's working structure reaches the target, by membership alone. */

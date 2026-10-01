@@ -198,6 +198,7 @@ export interface ZoneHomeLayout {
   readonly tiles: readonly (
     | { readonly kind: "product"; readonly productId: string }
     | { readonly kind: "section"; readonly sectionId: string }
+    | { readonly kind: "empty" }
   )[];
 }
 

@@ -63,7 +63,9 @@ export interface DocumentList {
 }
 
 export type DocumentTile =
-  { kind: "product"; productId: string } | { kind: "section"; sectionId: string };
+  | { kind: "product"; productId: string }
+  | { kind: "section"; sectionId: string }
+  | { kind: "empty" };
 
 export interface DocumentLayout {
   id: string;
@@ -81,7 +83,7 @@ export interface MenuDocument {
   root: DocumentList;
   /** Keyed by menu-item id: one per distinct product the menu offers. */
   offers: Record<string, FrozenOffer>;
-  /** The default first; a shortcut whose target is not in the document is left out (D13). */
+  /** The default first; a shortcut whose target is not in the document is an empty slot. */
   homeLayouts: DocumentLayout[];
   defaultHomeLayoutId: string;
 }
@@ -183,7 +185,7 @@ export interface MenuPreview {
   clashes: MenuClash[];
   hash: string;
   changes: MenuChange[];
-  warnings: { kind: "shortcut_omitted"; layoutName: string; name: string }[];
+  warnings: { kind: "shortcut_missing"; layoutName: string; name: string }[];
   /** The menu's publication state, as `menuStatus` answers it. */
   status: MenuStatus;
   /** What the publish would make live. */

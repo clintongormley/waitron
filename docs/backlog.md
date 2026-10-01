@@ -662,7 +662,9 @@ as removed with "Use the default". Choices are stored in the catalogue's new
 its target, whether or not the product is switched on, active, or the menu active; publishing still
 leaves such a tile out and Preview warns (D13). _2026-09-30: publishing is to keep an empty slot
 in the tile's place instead, so later tiles do not move
-([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4.5)._ **Upgrading** (measured: the new catalogue migration
+([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4.5). 2026-10-01: PF2b
+Task 5 implements the document and API contract and preserves deleted section slots; the till
+slot rendering and the full missing-target editor remain Tasks 6 and 9. Landing is pending._ **Upgrading** (measured: the new catalogue migration
 applied over a database at main's migration state with rows in place): it adds one table and the rows
 survive. **Left open, none blocking:** nothing on a till reads the
 layouts or the device's choice yet — that is Task 9, which also resolves a deleted layout against the

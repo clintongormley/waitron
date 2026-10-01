@@ -36,6 +36,7 @@ import {
   deleteHomeLayout,
   setDefaultHomeLayout,
   addShortcut,
+  replaceShortcut,
   removeShortcut,
   moveShortcut,
   type MemberRef,
@@ -634,6 +635,15 @@ function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const position =
         body.position === undefined ? undefined : numberField(body.position, "position");
       return c.json(await gated(session, (tx) => addShortcut(tx, id, ref, position)), 201);
+    }),
+  );
+  app.post(`${tile}/replace`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      const held = memberId(c);
+      const ref = memberRef((await readJsonBody<{ ref?: unknown }>(c)).ref);
+      return c.json(await gated(session, (tx) => replaceShortcut(tx, id, held, ref)));
     }),
   );
   app.delete(tile, (c) =>

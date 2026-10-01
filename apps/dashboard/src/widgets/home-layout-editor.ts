@@ -6,6 +6,7 @@ import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layo
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { HomeLayout, HomeTile, MemberRef, SectionMember } from "../api/client.js";
+import type { TileRef } from "@waitron/catalogue/src/section-types.js";
 import "./member-list-editor.js";
 import { reorder } from "./reorder.js";
 import { t } from "../i18n/t.js";
@@ -178,7 +179,7 @@ export class HomeLayoutEditor extends LitElement {
    * confirms it, so the preview follows the list. */
   @state() private order: HomeTile[] = [];
   #current: HomeLayout | null = null;
-  #members: SectionMember[] = [];
+  #members: SectionMember<TileRef>[] = [];
   #products: { id: string; name: string }[] = [];
   #sections: { id: string; internalName: string }[] = [];
   #notes: ReadonlyMap<string, string> = new Map();

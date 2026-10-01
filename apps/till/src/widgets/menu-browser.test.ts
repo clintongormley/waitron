@@ -295,6 +295,22 @@ describe("till-menu-browser", () => {
       expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Drinks (EN)", "Agua"]);
     });
 
+    it("accepts an empty shortcut while keeping the neighboring actions usable", async () => {
+      const { el } = await mount({
+        menu: lunch({
+          homeLayouts: [
+            {
+              id: "lay-home",
+              name: "Home",
+              tiles: [productTile("water"), { kind: "empty" }, sectionTile("sec-drinks")],
+            },
+          ],
+        }),
+      });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Agua", "Drinks (EN)"]);
+      expect(names(entries(el, "structure"))).toContain("Agua");
+    });
+
     it("shows no shortcuts, and still the structure, for a menu with no layouts", async () => {
       const { el } = await mount({ menu: lunch({ homeLayouts: [] }) });
       expect(entries(el, "shortcuts")).toEqual([]);

@@ -5,18 +5,31 @@ import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
 import { sectionMembers } from "./schema/sections.js";
 import { toSectionMember, type SectionGraph } from "./section-graph.js";
-import type { MemberRef, SectionMember } from "./section-types.js";
+import type { MemberRef, SectionMember, TileRef } from "./section-types.js";
 import "./errors.js";
 
 export const memberOrder = [asc(sectionMembers.position), asc(sectionMembers.id)];
 
-export async function membersOf(tx: Transaction, sectionId: string): Promise<SectionMember[]> {
+export function membersOf(tx: Transaction, sectionId: string): Promise<SectionMember[]>;
+export function membersOf(
+  tx: Transaction,
+  sectionId: string,
+  role: "home_layout",
+): Promise<SectionMember<TileRef>[]>;
+export async function membersOf(
+  tx: Transaction,
+  sectionId: string,
+  role?: "home_layout",
+): Promise<SectionMember<TileRef>[]> {
   const rows = await tx
     .select()
     .from(sectionMembers)
     .where(eq(sectionMembers.sectionId, sectionId))
     .orderBy(...memberOrder);
-  return rows.map(toSectionMember);
+  const members = rows.map(toSectionMember);
+  return role === "home_layout"
+    ? members
+    : members.filter((member) => member.ref.kind !== "missing");
 }
 
 export function nameOf(value: unknown, field: string): string {
@@ -25,23 +38,23 @@ export function nameOf(value: unknown, field: string): string {
   return name;
 }
 
-export function sameRef(a: MemberRef, b: MemberRef): boolean {
+export function sameRef(a: TileRef, b: MemberRef): boolean {
   return a.kind === "product"
     ? b.kind === "product" && a.productId === b.productId
-    : b.kind === "section" && a.sectionId === b.sectionId;
+    : a.kind === "section" && b.kind === "section" && a.sectionId === b.sectionId;
 }
 
 export function refColumns(ref: MemberRef) {
   return ref.kind === "product"
-    ? { productId: ref.productId, childSectionId: null }
-    : { productId: null, childSectionId: ref.sectionId };
+    ? { productId: ref.productId, childSectionId: null, missingName: null }
+    : { productId: null, childSectionId: ref.sectionId, missingName: null };
 }
 
-export function heldMember(
-  members: readonly SectionMember[],
+export function heldMember<Ref extends TileRef>(
+  members: readonly SectionMember<Ref>[],
   sectionId: string,
   memberId: string,
-): SectionMember {
+): SectionMember<Ref> {
   const member = members.find((candidate) => candidate.id === memberId);
   if (!member) throw new AppError("menu_section.not_found", { sectionId, memberId });
   return member;
@@ -61,7 +74,7 @@ export async function checkRef(
   graph: SectionGraph,
   sectionId: string,
   ref: MemberRef,
-  replacing?: SectionMember,
+  replacing?: SectionMember<TileRef>,
 ): Promise<void> {
   if (ref?.kind === "section" && typeof ref.sectionId === "string") {
     const role = graph.role(ref.sectionId);
@@ -72,24 +85,27 @@ export async function checkRef(
   } else if (ref?.kind !== "product" || !(await allTopLevelProducts(tx, [ref.productId]))) {
     throw new AppError("menu_section.membership_invalid", {});
   }
-  if (graph.children(sectionId).some((member) => member !== replacing && sameRef(member.ref, ref)))
+  if (graph.tiles(sectionId).some((member) => member !== replacing && sameRef(member.ref, ref)))
     throw new AppError("menu_section.member_duplicate", { sectionId });
 }
 
-export async function renumber(tx: Transaction, ordered: readonly SectionMember[]): Promise<void> {
+export async function renumber(
+  tx: Transaction,
+  ordered: readonly SectionMember<TileRef>[],
+): Promise<void> {
   for (const [position, member] of ordered.entries())
     if (member.position !== position)
       await tx.update(sectionMembers).set({ position }).where(eq(sectionMembers.id, member.id));
 }
 
-export function nextPosition(members: readonly SectionMember[]): number {
+export function nextPosition(members: readonly SectionMember<TileRef>[]): number {
   return Math.max(-1, ...members.map((member) => member.position)) + 1;
 }
 
 export async function insertMember(
   tx: Transaction,
   sectionId: string,
-  members: readonly SectionMember[],
+  members: readonly SectionMember<TileRef>[],
   ref: MemberRef,
   position?: number,
 ): Promise<SectionMember> {
@@ -98,7 +114,7 @@ export async function insertMember(
     .insert(sectionMembers)
     .values({ sectionId, position: at, ...refColumns(ref) })
     .returning();
-  const added = toSectionMember(row!);
+  const added: SectionMember = { id: row!.id, position: row!.position, ref };
   if (position !== undefined) {
     const ordered = [...members];
     ordered.splice(at, 0, added);
@@ -123,7 +139,7 @@ export async function writeMembers(
 export async function deleteMember(
   tx: Transaction,
   sectionId: string,
-  members: readonly SectionMember[],
+  members: readonly SectionMember<TileRef>[],
   memberId: string,
 ): Promise<void> {
   heldMember(members, sectionId, memberId);
@@ -134,13 +150,13 @@ export async function deleteMember(
   );
 }
 
-export async function moveMemberTo(
+export async function moveMemberTo<Ref extends TileRef>(
   tx: Transaction,
   sectionId: string,
-  members: readonly SectionMember[],
+  members: readonly SectionMember<Ref>[],
   memberId: string,
   to: number,
-): Promise<SectionMember[]> {
+): Promise<SectionMember<Ref>[]> {
   const member = heldMember(members, sectionId, memberId);
   requireIndex(to, "to");
   const ordered = members.filter((candidate) => candidate !== member);

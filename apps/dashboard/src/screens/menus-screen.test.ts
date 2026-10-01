@@ -357,7 +357,7 @@ function lunchPreview(): MenuPreview {
         alsoOn: ["Dinner Menu"],
       },
     ],
-    warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
+    warnings: [{ kind: "shortcut_missing", layoutName: "Home", name: "Lager" }],
     status: statuses()["menu-lunch"]!,
     document: lunchDocument(),
   };
@@ -408,6 +408,7 @@ function homeLayouts(): HomeLayout[] {
     ref,
     name,
     reachable: memberId !== "t-chips",
+    missingName: memberId === "t-chips" ? name : null,
   });
   return [
     {

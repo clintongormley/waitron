@@ -101,7 +101,11 @@ it.each([
   ],
   // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default from
   // `menu_details`, the section graph, and each tile's name from `products` or `sections`.
-  ["listHomeLayouts", ["menu-1"], ["menu_details", "sections", "section_members", "products"]],
+  [
+    "listHomeLayouts",
+    ["menu-1"],
+    ["menu_details", "sections", "section_members", "products", "catalogues"],
+  ],
   // `deviceHomeLayouts` (the same file): every menu by name, each menu's layouts, and the choices.
   [
     "getDeviceHomeLayouts",

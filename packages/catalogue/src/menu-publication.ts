@@ -233,11 +233,6 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
   return fields === undefined || fields.some((field) => fieldsOf(b.change)!.includes(field));
 }
 
-/**
- * What publishing the menu would change, each change naming its source, the shortcuts the publish
- * would leave out (D13), and the menu's publication state. `hash` is what `publishMenu` must be
- * handed back.
- */
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
   const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
   const mine = menus.get(menuId);
@@ -372,13 +367,12 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   };
 }
 
-/** The omitted shortcuts, named: a section's name is already read, and a product's is read here. */
 async function shortcutWarnings(
   tx: Transaction,
   document: MenuDocument,
   omitted: readonly OmittedShortcut[],
   sectionNames: ReadonlyMap<string, string>,
-): Promise<{ kind: "shortcut_omitted"; layoutName: string; name: string }[]> {
+): Promise<{ kind: "shortcut_missing"; layoutName: string; name: string }[]> {
   const productIds = omitted.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
   const productNames = new Map<string, string>();
   for (const batch of batches(productIds))
@@ -389,10 +383,14 @@ async function shortcutWarnings(
       productNames.set(row.id, row.name);
   const layoutNames = new Map(document.homeLayouts.map((layout) => [layout.id, layout.name]));
   return omitted.map(({ layoutId, ref }) => ({
-    kind: "shortcut_omitted",
+    kind: "shortcut_missing",
     layoutName: layoutNames.get(layoutId)!,
     name:
-      ref.kind === "product" ? productNames.get(ref.productId)! : sectionNames.get(ref.sectionId)!,
+      ref.kind === "missing"
+        ? ref.name
+        : ref.kind === "product"
+          ? productNames.get(ref.productId)!
+          : sectionNames.get(ref.sectionId)!,
   }));
 }
 

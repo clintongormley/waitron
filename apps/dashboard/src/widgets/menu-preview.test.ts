@@ -481,11 +481,11 @@ it("lists an omitted shortcut as a warning that does not block publishing", asyn
   const el = await mount({
     preview: preview(
       [{ kind: "layout_changed", layoutId: "l-home", name: "Home", source: "this_menu" }],
-      [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lemonade" }],
+      [{ kind: "shortcut_missing", layoutName: "Home", name: "Lemonade" }],
     ),
   });
   expect(items(el, "warnings")).toEqual([
-    t("menu_preview.shortcut_omitted").replace("{name}", "Lemonade").replace("{layout}", "Home"),
+    t("menu_preview.shortcut_missing").replace("{name}", "Lemonade").replace("{layout}", "Home"),
   ]);
   expect(text(q(el, '[data-test="warnings-note"]'))).toBe(t("menu_preview.warnings_note"));
   expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(false);

@@ -215,7 +215,7 @@ describe("publishMenu", () => {
     ).rejects.toMatchObject({ code: "catalogue.not_found" });
   });
 
-  it("leaves an unreachable shortcut out and still publishes (D13)", async () => {
+  it("keeps empty slots for unreachable shortcuts and still publishes", async () => {
     const f = await menusFixture(fx.db);
     const [details] = await fx.db.select().from(menuDetails).where(eq(menuDetails.menuId, f.lunch));
     await fx.db.insert(sectionMembers).values([
@@ -225,12 +225,16 @@ describe("publishMenu", () => {
     ]);
     const preview = await app((tx) => previewMenu(tx, f.lunch));
     expect(preview.warnings).toEqual([
-      { kind: "shortcut_omitted", layoutName: "Home", name: "Burger" },
-      { kind: "shortcut_omitted", layoutName: "Home", name: "Mains" },
+      { kind: "shortcut_missing", layoutName: "Home", name: "Burger" },
+      { kind: "shortcut_missing", layoutName: "Home", name: "Mains" },
     ]);
     await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"));
     const live = await app((tx) => readLiveDocuments(tx, [f.lunch]));
-    expect(live.get(f.lunch)!.document.homeLayouts[0]!.tiles).toEqual([product(f.soup)]);
+    expect(live.get(f.lunch)!.document.homeLayouts[0]!.tiles).toEqual([
+      { kind: "empty" },
+      product(f.soup),
+      { kind: "empty" },
+    ]);
   });
 });
 

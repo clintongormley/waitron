@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -7,6 +7,7 @@ import { findContentTranslationGap } from "./content-languages.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
   loadSectionGraph,
+  sectionPathName,
   menusContaining,
   wouldCreateCycle,
   type SectionGraph,
@@ -212,14 +213,28 @@ export async function deleteSection(tx: Transaction, id: string): Promise<void> 
       if (ref.kind === "section" && graph.role(ref.sectionId) === "section") collect(ref.sectionId);
   };
   collect(id);
+  for (const target of descendants)
+    for (const parent of graph.parents(target))
+      if (graph.role(parent) === "home_layout")
+        await tx
+          .update(sectionMembers)
+          .set({
+            productId: null,
+            childSectionId: null,
+            missingName: sectionPathName(graph, target),
+          })
+          .where(
+            and(eq(sectionMembers.sectionId, parent), eq(sectionMembers.childSectionId, target)),
+          );
   await tx.delete(sections).where(inArray(sections.id, [...descendants]));
   for (const parent of graph.parents(id))
-    await renumber(
-      tx,
-      graph
-        .children(parent)
-        .filter((member) => !(member.ref.kind === "section" && member.ref.sectionId === id)),
-    );
+    if (graph.role(parent) !== "home_layout")
+      await renumber(
+        tx,
+        graph
+          .children(parent)
+          .filter((member) => !(member.ref.kind === "section" && member.ref.sectionId === id)),
+      );
   await onStructureChanged(tx, menus, graph);
 }
 

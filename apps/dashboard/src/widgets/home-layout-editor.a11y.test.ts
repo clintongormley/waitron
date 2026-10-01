@@ -20,6 +20,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "product", productId: "p-burger" },
           name: "Burger",
           reachable: true,
+          missingName: null,
         },
         {
           memberId: "t-drinks",
@@ -27,6 +28,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "section", sectionId: "s-drinks" },
           name: "Drinks",
           reachable: true,
+          missingName: null,
         },
         {
           memberId: "t-salad",
@@ -34,6 +36,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "product", productId: "p-salad" },
           name: "Salad",
           reachable: false,
+          missingName: "Salad",
         },
       ],
     },

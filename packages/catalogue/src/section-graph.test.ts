@@ -226,3 +226,26 @@ describe("the graph's own reads", () => {
     expect(graph.parents("lunch")).toEqual([]);
   });
 });
+
+it("reads missing rows only as layout tiles, keeping structural walks and placements unchanged", () => {
+  const graph = buildSectionGraph(
+    [root("lunch", "menu-lunch"), { id: "layout", role: "home_layout", ownerMenuId: "menu-lunch" }],
+    [
+      ...list("lunch", ["p:soup"]),
+      {
+        id: "missing",
+        sectionId: "layout",
+        position: 0,
+        productId: null,
+        childSectionId: null,
+        missingName: "Drinks › Beer",
+      },
+    ],
+  );
+  expect(graph.tiles("layout")).toEqual([
+    { id: "missing", position: 0, ref: { kind: "missing", name: "Drinks › Beer" } },
+  ]);
+  expect(graph.children("layout")).toEqual([]);
+  expect(reachableFrom(graph, "lunch")).toEqual({ products: ["soup"], sections: new Set() });
+  expect(placementsByProduct(graph, "lunch")).toEqual(new Map([["soup", [["lunch"]]]]));
+});

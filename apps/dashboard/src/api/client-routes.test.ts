@@ -690,7 +690,7 @@ describe("DashboardApi routes", () => {
           source: "this_menu" as const,
         },
       ],
-      warnings: [{ kind: "shortcut_omitted" as const, layoutName: "Home", name: "Burger" }],
+      warnings: [{ kind: "shortcut_missing" as const, layoutName: "Home", name: "Burger" }],
     };
     const fetchImpl = vi
       .fn()

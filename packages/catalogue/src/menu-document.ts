@@ -14,7 +14,7 @@ import { sections } from "./schema/sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { MenuOffer } from "./menu-types.js";
-import type { MemberRef } from "./section-types.js";
+import type { TileRef } from "./section-types.js";
 import type {
   DocumentLayout,
   DocumentMember,
@@ -38,7 +38,7 @@ export const MENU_DOCUMENT_FORMAT = 2;
 
 export interface OmittedShortcut {
   layoutId: string;
-  ref: MemberRef;
+  ref: TileRef;
 }
 
 interface BuiltMenu {
@@ -210,11 +210,16 @@ export async function buildMenuDocuments(
       ...layouts.filter((layout) => layout.id !== row.defaultHomeLayoutId),
     ].map((layout): DocumentLayout => {
       const tiles: DocumentTile[] = [];
-      for (const { ref } of loaded.children(layout.id)) {
+      for (const { ref } of loaded.tiles(layout.id)) {
         const onThisMenu =
-          ref.kind === "product" ? onMenu.has(ref.productId) : reachedSections.has(ref.sectionId);
-        if (onThisMenu) tiles.push(ref);
-        else omittedShortcuts.push({ layoutId: layout.id, ref });
+          ref.kind === "product"
+            ? onMenu.has(ref.productId)
+            : ref.kind === "section" && reachedSections.has(ref.sectionId);
+        if (ref.kind !== "missing" && onThisMenu) tiles.push(ref);
+        else {
+          tiles.push({ kind: "empty" });
+          omittedShortcuts.push({ layoutId: layout.id, ref });
+        }
       }
       return { id: layout.id, name: layout.internalName, tiles };
     });
@@ -263,7 +268,6 @@ export async function buildMenuDocuments(
   return { graph: loaded, menus, sectionNames };
 }
 
-/** The document the menu's working state would publish, and the shortcuts it leaves out (D13). */
 export async function buildMenuDocument(tx: Transaction, menuId: string): Promise<BuiltMenu> {
   const built = (await buildMenuDocuments(tx, [menuId])).menus.get(menuId);
   if (built === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
@@ -802,7 +806,8 @@ export function diffEntries(
         next,
         prev,
       ).includedMenu;
-    const { section: _section, ...publicChange } = change as MenuChange & { section?: string };
+    const publicChange = { ...change } as MenuChange & { section?: string };
+    delete publicChange.section;
     entries.push(
       section === undefined ? { change: publicChange } : { change: publicChange, section },
     );
