@@ -743,7 +743,8 @@ describe("GET /api/orders/counter-waiting", () => {
       {
         id: paidUnfired,
         zoneId: zones.ticket_then_pay,
-        lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+        // Caña goes to no station, so paying sends nothing and the order has nothing fired.
+        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
         tender: { method: "cash", amount: "50.00" },
       },
       venue.operatorId,

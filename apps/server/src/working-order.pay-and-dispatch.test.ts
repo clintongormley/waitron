@@ -68,6 +68,7 @@ import {
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
+import { preparationRoutes } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -2091,6 +2092,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   it("sendToPrep stamps the settled order's lines sent as it fires them", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
+    // With no route any station can take, paying leaves the dish unsent; its route is restored
+    // before `sendToPrep`, which then sends what the payment could not.
+    const routes = await withdrawRoutes(cfg);
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,
@@ -2111,6 +2115,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       ).map((row) => row.sentAt);
     expect(await ticketStateOf(id)).toBeNull();
     expect(await sentAt()).toEqual([null]);
+    await restoreRoutes(routes);
 
     await sendToPrep({ db: suite.db }, cfg, id);
 
@@ -2186,6 +2191,18 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
     expect(expoB.map((o) => o.orderId)).toEqual([idA, idB]);
   });
 });
+
+/** Remove the location's preparation routes, answering them for {@link restoreRoutes}. */
+async function withdrawRoutes(cfg: TillConfig) {
+  return suite.db
+    .delete(preparationRoutes)
+    .where(eq(preparationRoutes.locationId, cfg.locationId))
+    .returning();
+}
+
+async function restoreRoutes(routes: (typeof preparationRoutes.$inferSelect)[]): Promise<void> {
+  await suite.db.insert(preparationRoutes).values(routes);
+}
 
 /** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
 async function kitchenPrinter(cfg: TillConfig): Promise<string> {
