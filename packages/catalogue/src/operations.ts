@@ -580,8 +580,6 @@ async function offersOn(
     includeSwitchedOff: true,
   });
   if (offered.length === 0) return [];
-  // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
-  // this offer publishes, while the order stays the product's own.
   const offeredByItem = await readOfferedModifiers(
     tx,
     offered.map((row) => ({ productId: row.productId, menuItemId: row.id })),

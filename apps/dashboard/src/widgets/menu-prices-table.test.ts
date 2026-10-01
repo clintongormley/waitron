@@ -367,7 +367,7 @@ it("puts each placement on its own line and paints the notes muted, through the 
   expect(muted).not.toBe(getComputedStyle(row(el, "mi-burger")!).color);
 });
 
-it("names a section or category the library no longer holds as missing, and a product with no reporting category as uncategorised", async () => {
+it("names a missing section or category, and a product with no reporting category as uncategorised", async () => {
   const el = await mount({
     rows: [
       { ...lager, categoryId: null, placements: [["s-gone"]] },

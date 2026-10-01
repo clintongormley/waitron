@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+_2026-10-01: [slice 2 plan](2026-09-30-menus-include-menus-slice-2.md) replaces the library model and Sections screen with menu-owned
+sections and included menus. Its published format is 2, with empty Home slots and combined
+price/on-off decisions. This historical plan retains its original routes, shapes and instructions._
+
 **Goal:** Let a venue build menus out of shared, ordered, nestable menu sections. Each menu gets its
 own price overrides and a published version that the tills sell from, until the owner publishes the
 menu again. Handhelds and tills get a home page: search, a shortcut grid chosen per device, and the
@@ -288,6 +292,8 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   - Adding, moving or removing anything on a menu never changes a product's reporting category or
     its route.
 - **D5. `menu_items` stays, as one settings row per product a menu's working structure reaches.**
+  _2026-10-01: [slice 2 plan](2026-09-30-menus-include-menus-slice-2.md) replaces `active` with nullable `offered`, resets an unreachable
+  offer to no own price or switch, and removes per-menu extras. The original decision follows._
   - `syncMenuOffers(tx, menuIds)` runs after every structure write, in the same transaction.
     Reachability is by MEMBERSHIP alone: every top-level product the menu's root reaches, active or
     not. So deleting a product (`active=false`) and restoring it keeps its menu prices; only a
@@ -542,6 +548,9 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   search, home tiles and section views. Spec §5 wants buttons in predictable positions during
   service. Today the server filters unavailable products out; from Task 7 it serves them marked.
 - **D13. Shortcuts and their targets.**
+  _2026-10-01: [slice 2 plan](2026-09-30-menus-include-menus-slice-2.md) replaces omission with an empty published slot, allows tiles into
+  included menus, and preserves deleted section targets for Remove or Replace. The original
+  decision and its Tasks 6/8 instructions follow._
   - A shortcut may only be added for a product or library section the menu's working structure
     reaches (`menu.shortcut_unreachable`).
   - If its target later leaves the working menu, the Home page tab marks the tile "Not on this menu",
@@ -588,7 +597,9 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
 - **D18. The menu editor moves to `apps/dashboard`**, as a core screen in the "Products and recipes"
   navigation group. The venue-operations Menus tab is deleted in Task 5. Assigning menus to zones
   stays in its Zones tab.
-- **D19. Per-offer extras overrides keep their storage and get no UI.** They are reset by D5 and
+- **D19. Per-offer extras overrides keep their storage and get no UI.**
+  _2026-10-01: per-menu extras are removed by [slice 2 plan](2026-09-30-menus-include-menus-slice-2.md) (owner decision, 2026-09-30);
+  menu offers use their products' attached lists. The original decision follows._ They are reset by D5 and
   frozen in the document (D6), exactly as the code holds them today.
 - **D21. Configuration transfer leaves publication out.**
   - The import deletes and re-inserts every declared table and remaps only ids held in top-level

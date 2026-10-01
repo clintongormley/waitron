@@ -165,7 +165,7 @@ describe("placementMenus", () => {
     expect(dinner!.sections).toEqual([]);
   });
 
-  it("leaves out a menu with no structure, and marks a section the library list lacks", () => {
+  it("leaves out a menu with no structure, and marks a section the loaded list lacks", () => {
     const [lunch, ...rest] = placementMenus(menus, [
       {
         ...structures[0]!,
@@ -381,7 +381,7 @@ describe("dashboard-add-to-menus", () => {
     expect(boxes(el, "m-lunch", "s-starters")[0]!.checked).toBe(false);
   });
 
-  it("explains shared sections only when a menu has one", async () => {
+  it("explains menu sharing only when a menu is included elsewhere", async () => {
     const shared = await mount();
     expect(root(shared).textContent).toContain(t("add_to_menus.shared_note"));
     const alone = await mount({

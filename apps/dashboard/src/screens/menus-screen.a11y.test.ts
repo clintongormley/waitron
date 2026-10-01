@@ -276,7 +276,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     },
   );
 
-  it("accessible expanded shared section being edited", async () => {
+  it("accessible expanded owned section being edited", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     const tree = q(el, "dashboard-menu-structure-tree");
     tree.shadowRoot!.querySelector<HTMLElement>('[data-test="toggle-m-drinks"]')!.click();

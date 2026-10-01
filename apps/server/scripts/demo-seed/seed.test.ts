@@ -249,10 +249,11 @@ describe("seedDemoRestaurant", () => {
     expect(read.menus.map((m) => m.name).sort()).toEqual([
       "Casa Delgado",
       "Deli takeaway",
+      "Drinks",
       "Menú del Día",
     ]);
     // Every menu is published as seeded, so a till sells it (D17).
-    expect(read.menuStates).toEqual(["current", "current", "current"]);
+    expect(read.menuStates).toEqual(["current", "current", "current", "current"]);
     expect(read.departments).toEqual([
       {
         name: "Deli",
@@ -307,12 +308,16 @@ describe("seedDemoRestaurant", () => {
       { department_name: "Restaurant and bar", days: 7 },
     ]);
     expect(read.stations).toEqual(["Deli counter", "Downstairs bar", "Kitchen", "Upstairs bar"]);
-    // Casa Delgado sets no menu price, so it charges the product's own 11.00; Menú del Día sets
-    // its own 9.00.
     expect(read.negroniOffers).toEqual([
       {
         product_id: expect.any(String),
         menu_name: "Casa Delgado",
+        gross_price: null,
+        unit_price: 1100,
+      },
+      {
+        product_id: expect.any(String),
+        menu_name: "Drinks",
         gross_price: null,
         unit_price: 1100,
       },

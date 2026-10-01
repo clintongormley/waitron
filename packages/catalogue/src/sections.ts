@@ -131,14 +131,14 @@ async function checkListRef(
     });
 }
 
-/** Any section by id, a menu's own lists included. */
+/** Any list by id; Home omits missing members. Use listHomeLayouts for its complete tiles. */
 export async function readSection(tx: Transaction, id: string): Promise<SectionDetails> {
   const [row] = await tx.select(details).from(sections).where(eq(sections.id, id));
   if (!row) throw new AppError("menu_section.not_found", { sectionId: id });
   return { ...row, members: await membersOf(tx, id) };
 }
 
-/** Any section's members, a menu's own lists included. */
+/** A list's members; Home omits missing members. Use listHomeLayouts for its complete tiles. */
 export async function listMembers(tx: Transaction, sectionId: string): Promise<SectionMember[]> {
   const [row] = await tx
     .select({ id: sections.id })

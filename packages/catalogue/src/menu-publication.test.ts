@@ -932,7 +932,7 @@ describe("previewMenu", () => {
     ]);
   });
 
-  it("names a renamed Drinks as the shared section's change, also on Dinner", async () => {
+  it("names an included Drinks menu's rename, also on Dinner", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);

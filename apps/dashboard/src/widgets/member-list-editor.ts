@@ -34,7 +34,6 @@ export function memberKindLabel(ref: TileRef): string {
   return t(ref.kind === "product" ? "members.kind_product" : "members.kind_section");
 }
 
-/** Each section's id mapped to the library sections that hold it directly. */
 export type SectionParents = ReadonlyMap<string, readonly string[]>;
 
 export function sectionParents(
@@ -48,8 +47,6 @@ export function sectionParents(
   return parents;
 }
 
-/** The section and every library section holding it, however deep: adding any of them to it would
- * make a loop. The server refuses one anyway; this keeps a picker from offering it. */
 export function sectionsHolding(parents: SectionParents, sectionId: string): string[] {
   const found = new Set([sectionId]);
   const pending = [sectionId];

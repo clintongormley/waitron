@@ -210,7 +210,6 @@ export class MenuPricesTable extends LitElement {
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   @property({ type: Boolean }) loading = false;
   @property({ type: Boolean }) failed = false;
-  /** The section library, for each placement's internal names. */
   @property({ attribute: false }) sections: SectionDetails[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   /** The products with their variants, for each variant's name and own price. */

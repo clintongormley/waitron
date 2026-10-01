@@ -153,9 +153,10 @@ prices and modifier answers. Later catalogue edits apply to new selections. The 
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with a custom unit, two variants, a separate kitchen name
-and direct dietary declarations. The demo menus set no price
-of their own for anything except the Negroni, at 9.00 on the Menú del Día, so everything else,
-including each coffee variant, sells at its own price. The demo sirloin carries a seeded options
+and direct dietary declarations. Casa Delgado and Menú del Día include a
+**Drinks** menu as a folder. Drinks prices Caña at 3.00 instead of its product price of 2.80; both
+including menus inherit that price. Menú del Día sets its own Negroni price of 9.00. The coffee
+variants keep their own prices. The demo sirloin carries a seeded options
 list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras list, so
 nothing in it shows an extra being added to a dish.
 

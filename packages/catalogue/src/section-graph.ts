@@ -23,7 +23,7 @@ export interface MemberRow {
 
 /** Every section and every membership, held in memory for one operation. */
 export interface SectionGraph {
-  /** A list's members by position, a tie sorted by member id. */
+  /** Structural members by position; Home is empty here. Use tiles for its complete view. */
   children(sectionId: string): SectionMember[];
   tiles(layoutId: string): SectionMember<TileRef>[];
   /** The lists that hold this section directly. */

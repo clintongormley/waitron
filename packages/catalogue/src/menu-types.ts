@@ -52,7 +52,7 @@ export interface MenuOffer extends MenuItem {
   dietaryDeclarations: DietaryLabel[];
   courseId: string | null;
   /** The ordered extras and options lists this OFFER puts in front of a diner — see
-   * {@link OfferedModifier}. Each extras entry is the version this menu offer publishes. */
+   * {@link OfferedModifier}. */
   offeredModifiers: OfferedModifier[];
   /** The product's ACTIVE variants in the one variant order; an Inactive one is left
    * out. A variant is only ever listed here, under its parent's offer, never as an offer itself. */

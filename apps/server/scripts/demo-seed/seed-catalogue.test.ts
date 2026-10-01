@@ -1,5 +1,5 @@
 /**
- * `seedCatalogues`: the three demo menus, each category routed to its preparation station, the
+ * `seedCatalogues`: the demo menus, each category routed to its preparation station, the
  * default menu, and the image→product map the media and sales steps read.
  */
 
@@ -15,6 +15,7 @@ import {
   listAccessibleCatalogues,
   listAvailableProducts,
   listMenuOffers,
+  menuPrices,
   sections as sectionsTable,
   readContentLanguages,
   readMenuStructure,
@@ -75,21 +76,60 @@ async function provisionVenue(): Promise<{ locationId: string }> {
 }
 
 describe("seedCatalogues", () => {
-  it("builds each menu's top level from its own sections named after its categories", async () => {
+  it("includes Drinks as a folder in both restaurant menus", async () => {
+    const { locationId } = await provisionVenue();
+    const read = await withTransaction(suite.db, async (tx) => {
+      const { menuIds } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const restaurant = await readMenuStructure(tx, menuIds.restaurant);
+      const lunch = await readMenuStructure(tx, menuIds.lunch);
+      return { restaurant, lunch, drinksId: menuIds.drinks };
+    });
+    for (const structure of [read.restaurant, read.lunch]) {
+      const drinks = structure.nodes.find((node) => node.internalName === "Drinks");
+      expect(drinks?.includedMenuId).toBe(read.drinksId);
+      expect(drinks?.children?.map((node) => node.internalName)).toEqual(["Drinks"]);
+    }
+  });
+
+  it("charges Drinks' beer price through the restaurant menu with its inherited source", async () => {
+    const { locationId } = await provisionVenue();
+    const read = await withTransaction(suite.db, async (tx) => {
+      const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const beerId = productsByImage.get("cana-cerveza.png")!;
+      return {
+        price: (await menuPrices(tx, menuIds.restaurant)).find((row) => row.productId === beerId),
+        drinksId: menuIds.drinks,
+      };
+    });
+    expect(read.price?.productPrice).toBe("2.80");
+    expect(read.price?.override).toBeNull();
+    expect(read.price?.effectivePrice).toBe("3.00");
+    expect(read.price?.combined.price).toMatchObject({
+      state: "decided",
+      value: "3.00",
+      source: { kind: "menu", menuId: read.drinksId, menuName: "Drinks", from: { kind: "own" } },
+    });
+  });
+
+  it("keeps each menu's own sections beside its included Drinks folder", async () => {
     const { locationId } = await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
       const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
       const sections = await tx.select().from(sectionsTable);
-      const library = new Map(sections.map((row) => [row.id, row.internalName]));
+      const sectionNames = new Map(sections.map((row) => [row.id, row.internalName]));
       const topLevel = async (menuId: string) =>
         (await readMenuStructure(tx, menuId)).nodes.map(({ ref }) =>
-          ref.kind === "section" ? library.get(ref.sectionId) : ref.productId,
+          ref.kind === "section" ? sectionNames.get(ref.sectionId) : ref.productId,
         );
       const negroni = productsByImage.get("negroni.png")!;
       const lunchNegroni = (await listMenuOffers(tx, [menuIds.lunch])).find(
         (offer) => offer.productId === negroni,
       );
+      const drinks = await readMenuStructure(tx, menuIds.drinks);
+      const drinksSection = drinks.nodes[0]!.ref;
+      if (drinksSection.kind !== "section") throw new Error("Drinks has no drinks section");
       return {
+        drinksPath: [drinks.rootSectionId, drinksSection.sectionId],
         negroni,
         internalNames: sections.map((row) => row.internalName),
         lunchNames: sections
@@ -102,14 +142,17 @@ describe("seedCatalogues", () => {
       };
     });
     expect(read.restaurant).toEqual(["Tapas", "Sharing plates", "Mains", "Desserts", "Drinks"]);
-    expect(read.lunch).toEqual(["Starters", "Mains", read.negroni]);
+    expect(read.lunch).toEqual(["Starters", "Mains", "Drinks", read.negroni]);
     expect(read.internalNames.filter((name) => name === "Mains")).toHaveLength(2);
     expect(read.lunchNames).toEqual([
       ["Starters", { en: "Starters", es: "Primeros" }],
       ["Mains", { en: "Mains", es: "Segundos" }],
     ]);
     expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves"]);
-    expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00", placements: [[]] });
+    expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00" });
+    expect(read.lunchNegroni?.placements).toContainEqual([]);
+    expect(read.lunchNegroni?.placements).toContainEqual(read.drinksPath);
+    expect(read.lunchNegroni?.placements).toHaveLength(2);
   });
 
   it("names each menu's top level after the menu, the provisioned one included", async () => {
@@ -245,7 +288,12 @@ describe("seedCatalogues", () => {
       };
     });
 
-    expect(res.menus.map((m) => m.name)).toEqual(["Casa Delgado", "Deli takeaway", "Menú del Día"]);
+    expect(res.menus.map((m) => m.name)).toEqual([
+      "Casa Delgado",
+      "Deli takeaway",
+      "Drinks",
+      "Menú del Día",
+    ]);
     expect(res.menus.find((m) => m.name === "Casa Delgado")!.isDefault).toBe(true);
     expect(res.menus.find((m) => m.name === "Menú del Día")!.isDefault).toBe(false);
     expect(res.contentLanguages).toEqual({
@@ -255,7 +303,7 @@ describe("seedCatalogues", () => {
 
     expect(res.products.length).toBeGreaterThan(35);
     const menuNames = new Set(res.products.map((p) => p.catalogueName));
-    expect(menuNames).toEqual(new Set(["Casa Delgado", "Menú del Día", "Deli takeaway"]));
+    expect(menuNames).toEqual(new Set(["Casa Delgado", "Menú del Día", "Deli takeaway", "Drinks"]));
 
     expect(res.products.some((p) => p.name === "Sliced Iberian ham (per kg)")).toBe(true);
     expect(res.products.some((p) => p.name === "Mixed salad")).toBe(true);
@@ -306,7 +354,9 @@ describe("seedCatalogues", () => {
       },
     ]);
 
-    expect(res.out.productsByImage.size).toBe(res.products.length);
+    expect(res.out.productsByImage.size).toBe(
+      new Set(res.products.map((product) => product.id)).size,
+    );
     const hamId = res.out.productsByImage.get("jamon-iberico.png");
     expect(hamId).toBeDefined();
     expect(res.products.some((p) => p.id === hamId)).toBe(true);

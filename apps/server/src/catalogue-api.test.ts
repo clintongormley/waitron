@@ -4517,8 +4517,6 @@ describe("mountCatalogueApi — home layouts", () => {
   const layoutsOf = (menuId: string) => `/management-api/catalogues/${menuId}/home-layouts`;
   const tilesOf = (layoutId: string) => `/management-api/home-layouts/${layoutId}/tiles`;
 
-  /** A menu offering one product on its top level and holding one library section, and a product
-   * it does not reach. */
   async function menuWithTargets(app: Hono) {
     const menuId = await createCatalogueVia(app, `Layouts ${crypto.randomUUID()}`);
     const soupName = `Soup ${crypto.randomUUID()}`;

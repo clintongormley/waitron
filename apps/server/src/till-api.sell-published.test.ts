@@ -125,7 +125,6 @@ interface Lunch {
   extraLemon: { productId: string; listId: string };
   /** Burger's "Punto" options list; `poco` is one of its labels. */
   punto: { listId: string; poco: string };
-  /** A library section on Lunch holding Flan, which no basket here orders from. */
   postresId: string;
   flanId: string;
 }

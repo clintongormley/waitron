@@ -244,7 +244,7 @@ describe("creating a menu", () => {
 });
 
 describe("a menu offers what its structure reaches", () => {
-  it("offers a section's products in order, and a product added to a shared section on every menu using it", async () => {
+  it("offers an included menu's products in order on every menu using it", async () => {
     const f = await fixture();
     await app(async (tx) => {
       await addMember(tx, f.drinks, product(f.lemonade));
@@ -270,7 +270,7 @@ describe("a menu offers what its structure reaches", () => {
     }
   });
 
-  it("writes every menu's rows inside the transaction that changed a shared section", async () => {
+  it("writes every including menu's rows inside the transaction that changed the included menu", async () => {
     const f = await fixture();
     await app(async (tx) => {
       await addMember(tx, f.lunchRoot, section(f.drinks));

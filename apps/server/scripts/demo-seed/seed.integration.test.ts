@@ -142,6 +142,7 @@ describe("demo seed end-to-end", () => {
     expect(read.menus.map((m) => m.name)).toEqual([
       "Casa Delgado",
       "Deli takeaway",
+      "Drinks",
       "Menú del Día",
     ]);
     expect(read.menus[0]!.isDefault).toBe(true);

@@ -337,7 +337,7 @@ thrower, and the demo seed that function's only caller outside tests. The code a
 **Menus Task 4 (the Menus screen), landed as #664 (2026-09-26):** **Products and recipes → Menus**
 (`/manage/menus`) lists, creates and renames menus; a menu's Structure tab shows and edits its whole
 tree; and creating a product on the Products screen ends with an optional "Add to menus" step.
-2026-10-01: slice 2 Task 7 moves New section here and menu create/rename to the full details form: internal name, customer names, image and colour. The old internal-name-only and Sections-screen editing residuals below are closed.
+2026-10-01: slice 2 Task 7 moves New section here and menu create/rename to the full details form: internal name, customer names, image and colour. The old internal-name-only and Sections-screen editing residuals below are closed. The `librarySectionUsages` comparison below names a removed API.
 Left, none blocking (the blank-name create is DONE, lane C's C9: refused as the rename is, with
 `management.request_invalid` naming `name`): "New section here" asks only for the internal name, so
 a section's customer names, image and colour are still edited on the Sections screen; which
@@ -666,8 +666,8 @@ its target, whether or not the product is switched on, active, or the menu activ
 leaves such a tile out and Preview warns (D13). _2026-09-30: publishing is to keep an empty slot
 in the tile's place instead, so later tiles do not move
 ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4.5). 2026-10-01: PF2b
-Task 5 implements the document and API contract and preserves deleted section slots; the till
-slot rendering and the full missing-target editor remain Tasks 6 and 9. Landing is pending._ **Upgrading** (measured: the new catalogue migration
+Tasks 5, 6 and 9 implement the empty-slot document, till rendering and missing-target editor,
+including Remove, Replace and reordering. The focused checks pass; landing is pending._ **Upgrading** (measured: the new catalogue migration
 applied over a database at main's migration state with rows in place): it adds one table and the rows
 survive. **Left open, none blocking:** nothing on a till reads the
 layouts or the device's choice yet — that is Task 9, which also resolves a deleted layout against the
