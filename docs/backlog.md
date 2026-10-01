@@ -203,12 +203,15 @@ Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), w
 per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
 ([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), approved, lane D's PF3 after
-PF1); 3b, opening hours, by-hand open and close, fallbacks, and down-printer and dark-screen alerts
-([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), written and reviewed
-four times); 3c, split-off extras, what a ticket shows, and sending one dish to another station
-from the till (any waiter, closed stations included, when sending or after) plus re-routing a held
-dish whose station closed before it was released (owner, 2026-10-01); 3d, watchers. **Next action:** the owner
-approves the 3b plan; then it is queued after 3a, and the 3c plan is written.
+PF1); 3b, opening hours, by-hand open and close, fallbacks (a real replacement; a station with none is a
+dead end, and the till asks the waiter where to make such a dish, or to remove it, before sending or
+taking payment), and down-printer and dark-screen alerts
+([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner on
+2026-10-01, lands on its own when green); 3c, split-off extras, what a ticket shows, "Make at" on any
+dish before sending, moving a dish to another station after it is sent (any waiter), and re-routing
+a held dish whose station closed before it was released (owner, 2026-10-01); 3d, watchers. **Next
+action:** 3a is queued as lane D's PF3, and 3b goes after it (the owner is choosing whether to move
+both to a lane with more allowance left); the 3c and 3d plans are written next.
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside
