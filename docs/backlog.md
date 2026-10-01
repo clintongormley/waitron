@@ -4242,6 +4242,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       transfer cases for a bill holding money in `apps/till/src/till-app-bill-payments.test.ts`; the
       two wordings pinned in `apps/till/src/i18n/codes.test.ts` and
       `apps/till/src/i18n/strings.test.ts`.
+    - **DONE — discarding a parked order that holds money, or has a card payment under way, says
+      so on the till** (lane B item B23, 2026-10-01; the owner's "(a) queue it"). Before, every
+      refused discard on the counter said "That order is no longer available" (`held.stale`). Now
+      a discard refused `bill.payments_received` says "This order still holds money from a
+      payment. Give it back before discarding the order" (`held.discard_holds_money` in
+      `apps/till/src/i18n/strings.ts`), and one refused `order.payment_in_flight` shows that
+      code's own till text; every other refusal still shows `held.stale`. The server and its codes
+      are unchanged. Guards: the two "discard-order: refused …" cases in
+      `apps/till/src/till-app.test.ts`, and the wording pinned in
+      `apps/till/src/i18n/strings.test.ts`.
+    - **OPEN — a discard refused `bill.refund_in_progress` still says "That order is no longer
+      available".** The server refuses a discard while a card refund on the order is pending
+      (measured 2026-10-01 with a throwaway case calling `abandonHeldOrder` on a bill with a
+      pending refund: it answered `bill.refund_in_progress`); B23 left that code on `held.stale`.
+      No committed test pins that answer. **Next action:** decide whether the discard shows
+      `bill.refund_in_progress`'s own till text, and pin the server answer if so.
     - **OPEN — the generic "received more than the bill" text also answers a comp or discount.**
       The till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer
       items, or refund the difference first") is on `main`, and the adjustment dialog shows it

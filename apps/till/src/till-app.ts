@@ -475,6 +475,12 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
 }
 
+function discardError(error: unknown): CounterError {
+  if (isPaymentsReceived(error)) return "held.discard_holds_money";
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "order.payment_in_flight" ? { code } : "held.stale";
+}
+
 /** An adjustment dialog: where it was opened, the bill and the revision its lines were read at
  * when it opened, the order visit it opened on (on the counter, the operator session), and the
  * server's last answer. */
@@ -2583,14 +2589,15 @@ export class TillApp extends LitElement {
     return said && failure === "held.stale" ? "gone" : "unread";
   }
 
-  /** A discard already made on another till is a non-fatal `held.stale`; the list refreshes on both paths. */
+  /** A discard refused because the order holds money, or has a card payment under way, says so;
+   * any other refusal shows `held.stale`. The list refreshes on every path. */
   async #onDiscardOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     this.errorKey = undefined;
     try {
       await this.api.abandonWorkingOrder(id);
-    } catch {
-      this.errorKey = "held.stale";
+    } catch (error) {
+      this.errorKey = discardError(error);
     }
     await this.#refreshHeldOrders();
   }
