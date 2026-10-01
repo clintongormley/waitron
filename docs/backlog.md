@@ -4864,17 +4864,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     lists the orders still waiting (sent, not paid; handed over, not paid; paid, not handed over)
     with Hand over and Pay. Server:
     `GET /api/orders/counter-waiting` and `GET /api/working-orders/:id/placed`. Open:
-    - **OPEN — Pay is not the main action in a zone that sends without payment.** The till keeps
+    - **OPEN, queued as lane B item B26 (owner, 2026-10-01) — Pay is not the main action in a zone
+      that sends without payment.** The till keeps
       "Place order" there. Making Pay the main action needs an open order's dishes sent to the
       kitchen when it is paid in those modes, which today happens only for a pay-first order; that
       would change the setup of "refuses a settled order that was never fired (ticket.not_fired)"
       in `apps/server/src/working-order.pay-and-dispatch.test.ts`, so B16 left it.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
-      B25, PR to follow). Paying a placed counter order records the payment only: it stays on the
+      B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
       kitchen queue's Collect) records the handover time. An order handed over before it was paid
-      keeps that time. Three existing cases outside the owner-approved list were changed and
-      await the owner's approval: "a placed order paid without a handover is not handed over by
+      keeps that time. Three existing cases outside the first owner-approved list were changed, and
+      the owner approved them on 2026-10-01: "a placed order paid without a handover is not handed over by
       the payment" in `apps/server/src/counter-handover.test.ts`, and "Mode T: after collectOrder
       the order holds one sale and no handover, and stays on its station queue" and "Mode I: after
       collectOrder the order holds one sale and no handover, and stays on its station queue" in
