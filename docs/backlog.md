@@ -7615,7 +7615,7 @@ ongoing overhaul listed at the top of Track A.
 ### A8. Receipts
 
 - **One "Receipts" settings page, with a live preview (C116, owner 2026-10-01) — done (2026-10-01,
-  branch `feat/receipts-settings-page`).** It replaces the dashboard's "Receipt" and "Location
+  #989).** It replaces the dashboard's "Receipt" and "Location
   invoices" pages (one Settings entry, managers only). The two old addresses are gone, with no
   redirect: a search of the apps, packages, scripts and docs on 2026-10-01 found them named only
   by the dashboard's own nav and its tests.
@@ -7637,6 +7637,11 @@ ongoing overhaul listed at the top of Track A.
     is out is sent once, as it then stands, when it returns.
   - One Save sends both settings. If one is refused, the other is still saved, the refusal is
     shown where it belongs (under its field, or at the bottom), and no "Saved" message appears.
+  - Still open: C121 (a preview the page sends because someone else saved keeps an unattended
+    page signed in) and C120 (a location whose tills print on different paper widths previews only
+    one) are queued in lane C. No test pins what the two removed addresses, `/manage/receipt` and
+    `/manage/location-settings`, open now; a reading of the router says the overview page, which
+    nobody has run — #993 added that test for `/manage/sections`.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
