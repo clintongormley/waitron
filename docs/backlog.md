@@ -1406,7 +1406,11 @@ files left out: 38 files contain a native `<select>`, 3 a `<textarea>`, and up t
 that is not marked as a checkbox, radio, file, range, colour or hidden field (an upper bound: an
 `<input>` whose `type` sits on a later line is counted too). The `<select>`s each need moving to the
 new dropdown primitive, since a native list cannot be restyled; the plan should list the rest file by
-file and move each onto a primitive rather than restyle it in place. Things to settle in the spec:
+file and move each onto a primitive rather than restyle it in place — **or add a primitive where none
+fits** (owner, 2026-10-01: "if there are screens drawing their own fields then they should be
+updated to use the primitives … or to add a primitive"). The same change adds that as a standing
+rule to `docs/developers/design-system.md` → Forms: a screen does not draw its own form field. Things
+to settle in the spec:
 
 - **It fits the existing hint rule.** A field's hint is already its placeholder (CLAUDE.md §3,
   Forms; `hint` is shown inside the empty field). Point 6 adds: where a field has no hint, the label
