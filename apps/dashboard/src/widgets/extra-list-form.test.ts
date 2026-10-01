@@ -86,6 +86,17 @@ const addons: ExtraList = {
   ],
 };
 
+/** The picker offers no product the list holds, so a duplicate comes only from a list the form is
+ * given. */
+const baconTwice: ExtraList = {
+  ...addons,
+  id: "44444444-4444-4444-8444-444444444444",
+  items: [
+    { id: BACON_ITEM, productId: BACON, maxQuantity: 1, preselected: false, price: null },
+    { id: EGG_ITEM, productId: BACON, maxQuantity: 1, preselected: false, price: null },
+  ],
+};
+
 const languages = { defaultLanguage: "en", languages: ["en", "es"] };
 
 async function mount(props: Partial<ExtraListForm> = {}) {
@@ -128,11 +139,16 @@ function picker(el: ExtraListForm): HTMLElementTagNameMap["wt-combobox"] {
   )!;
 }
 
-async function addItem(el: ExtraListForm, name: string): Promise<void> {
+async function openPicker(el: ExtraListForm): Promise<HTMLElementTagNameMap["wt-combobox"]> {
   const combobox = picker(el);
   await combobox.updateComplete;
   combobox.shadowRoot!.querySelector<HTMLElement>("button.trigger")!.click();
   await combobox.updateComplete;
+  return combobox;
+}
+
+async function addItem(el: ExtraListForm, name: string): Promise<void> {
+  const combobox = await openPicker(el);
   const option = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
     (row) => row.textContent!.trim() === name,
   );
@@ -341,12 +357,9 @@ it("refuses an active list with no products, and saves the same list once it is 
 });
 
 it("refuses the same product offered twice, beside the second row and in the bottom message", async () => {
-  const { el, host } = await mount();
+  const { el, host } = await mount({ value: baconTwice });
   const submitted = record(host);
 
-  await type(el, "name", "Add-ons");
-  await addItem(el, "Bacon");
-  await addItem(el, "Bacon");
   await click(el, "save");
 
   expect(submitted).toEqual([]);
@@ -459,7 +472,7 @@ it("names a product it was given no row for rather than rendering an empty cell"
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").placeholder).toBe("");
 });
 
-it("offers every product it was given, and adds nothing until one is chosen", async () => {
+it("offers every product it was given to an empty list, and adds nothing until one is chosen", async () => {
   const { el } = await mount();
 
   expect(picker(el).options).toEqual([
@@ -473,6 +486,73 @@ it("offers every product it was given, and adds nothing until one is chosen", as
   await addItem(el, "Bacon");
   expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1);
   expect(picker(el).value).toBe("");
+});
+
+it("leaves out of the picker every product a new list already holds", async () => {
+  const { el } = await mount();
+
+  await addItem(el, "Bacon");
+
+  expect(picker(el).options).toEqual([{ value: EGG, label: "Fried egg" }]);
+});
+
+it("leaves out of the picker every product an edited list already holds", async () => {
+  const { el } = await mount({ value: { ...addons, items: [addons.items[0]!] } });
+
+  expect(picker(el).options).toEqual([{ value: EGG, label: "Fried egg" }]);
+});
+
+it("offers a removed row's product again", async () => {
+  const { el } = await mount({ value: addons });
+
+  await click(el, "remove-item-0");
+
+  expect(picker(el).options).toEqual([{ value: BACON, label: "Bacon" }]);
+  await addItem(el, "Bacon");
+  expect(text(el, "item-1-product")).toBe("Bacon");
+});
+
+it("says every product is already on the list once none is left to add, in English and Spanish", async () => {
+  const expected = {
+    en: "Every product is already on the list.",
+    es: "Todos los productos ya están en la lista.",
+  };
+  for (const locale of ["en", "es"] as const) {
+    setLocale(locale);
+    try {
+      const { el } = await mount({ value: addons });
+      const combobox = await openPicker(el);
+
+      expect(combobox.options, locale).toEqual([]);
+      expect(combobox.shadowRoot!.querySelector(".empty")!.textContent!.trim(), locale).toBe(
+        expected[locale],
+      );
+
+      await click(el, "remove-item-1");
+      expect(picker(el).noResultsLabel, locale).toBe(t("extras.no_products_found"));
+    } finally {
+      setLocale("en");
+      cleanupWidgets();
+    }
+  }
+});
+
+it("keeps the no-match sentence when it was given no products at all", async () => {
+  const { el } = await mount({ products: [] });
+
+  expect(picker(el).noResultsLabel).toBe(t("extras.no_products_found"));
+});
+
+it("says no product matches when a search finds none while products are left to add", async () => {
+  const { el } = await mount({ value: { ...addons, items: [addons.items[0]!] } });
+  const combobox = await openPicker(el);
+
+  await userEvent.type(combobox.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "zzz");
+  await combobox.updateComplete;
+
+  expect(combobox.shadowRoot!.querySelector(".empty")!.textContent!.trim()).toBe(
+    t("extras.no_products_found"),
+  );
 });
 
 it("emits one wt-cancel, and neither event while it is saving", async () => {
@@ -530,8 +610,8 @@ it("paints its own error text with the danger token and keeps the row controls t
   const error = el.shadowRoot!.querySelector<HTMLElement>('[data-test="items-error"]')!;
   expect(getComputedStyle(error).color).toBe("rgb(13, 14, 15)");
 
-  await addItem(el, "Bacon");
-  await addItem(el, "Bacon");
+  el.value = baconTwice;
+  await el.updateComplete;
   await click(el, "save");
   const duplicate = el.shadowRoot!.querySelector<HTMLElement>(
     '[data-test="item-1-product-error"]',

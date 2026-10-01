@@ -133,9 +133,6 @@ export class ExtraListForm extends LitElement {
     languages: ["en"],
   };
   @property({ attribute: false }) value: ExtraList | null = null;
-  /** A product already on the list stays in the picker, because hiding it would make a manager's
-   * search for it come back empty with no reason given, where offering it again produces the
-   * duplicate refusal below, which says what is wrong. */
   @property({ attribute: false }) products: Product[] = [];
   /** The server's refusal, keyed by the field path `parseExtraListInput` reports. */
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
@@ -619,6 +616,10 @@ export class ExtraListForm extends LitElement {
   }
 
   #itemsSection(errors: Record<string, string>) {
+    // A list holds each product once (`extra_list_items_list_product_uq`), so one it holds already
+    // is not offered again.
+    const listed = new Set(this.items.map((item) => item.productId));
+    const offered = this.products.filter((product) => !listed.has(product.id));
     return html`${this.#reorder.liveRegion()}
       <div class="table-wrap" tabindex="0" role="region" aria-label=${t("extras.items")}>
         <table>
@@ -653,9 +654,13 @@ export class ExtraListForm extends LitElement {
           label=${t("extras.product")}
           placeholder=${t("extras.choose_product")}
           searchPlaceholder=${t("extras.search_product")}
-          noResultsLabel=${t("extras.no_products_found")}
+          noResultsLabel=${
+            offered.length === 0 && this.products.length > 0
+              ? t("extras.all_products_listed")
+              : t("extras.no_products_found")
+          }
           .disabled=${this.busy}
-          .options=${this.products.map((product) => ({ value: product.id, label: product.name }))}
+          .options=${offered.map((product) => ({ value: product.id, label: product.name }))}
           .value=${this.pick}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
