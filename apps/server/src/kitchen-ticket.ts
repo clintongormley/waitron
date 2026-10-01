@@ -1,8 +1,9 @@
 /**
  * Formats kitchen tickets and correction slips into ESC/POS bytes. Pure: no state, no database.
  *
- * A `station` ticket is one station's copy, a flat list under the station's name. An `order` ticket
- * is the pass copy: every fired item grouped under its station's name.
+ * A `station` ticket is one station's copy, a flat list under the station's name that may end with
+ * the rest of the order. An `order` ticket is the pass copy: every fired item grouped under its
+ * station's name.
  *
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
@@ -32,6 +33,15 @@ export interface KitchenTicketStation {
   items: KitchenTicketItem[];
 }
 
+/** One item of the order at another station, as a station's own ticket lists it. */
+export interface OtherStationItem {
+  qty: number | string;
+  unit?: string;
+  name: string;
+  stationName: string;
+  held: boolean;
+}
+
 /**
  * `firedAt` prints as local HH:MM. A `reprint` opens with `*** REPRINT ***`; a `mark` opens with
  * `*** HOLD ***` (held work printed in advance) or `*** FIRE ***` (that work released).
@@ -44,6 +54,7 @@ export type KitchenTicket = { reprint?: boolean; mark?: "HOLD" | "FIRE" } & (
       orderNumber: string;
       firedAt: Date;
       items: KitchenTicketItem[];
+      alsoOnOrder?: { locale: string; items: OtherStationItem[] };
     }
   | {
       scope: "order";
@@ -189,6 +200,17 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
 
   if (ticket.scope === "station") {
     emitList(ticket.items);
+    if (ticket.alsoOnOrder !== undefined && ticket.alsoOnOrder.items.length > 0) {
+      const { heading, held } = alsoOnOrderWords(ticket.alsoOnOrder.locale);
+      text(`-- ${heading} --`);
+      for (const item of ticket.alsoOnOrder.items) {
+        const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+        const line = `${prefix}${item.name} — ${item.stationName}${item.held ? ` ${held}` : ""}`;
+        for (const part of wrapText(prepareText(line), columns, prepareText(prefix).length)) {
+          b.line(part);
+        }
+      }
+    }
   } else {
     for (const station of ticket.stations) {
       text(station.stationName);
@@ -229,10 +251,21 @@ const EXTRA_CANCELLED_WORDS = {
   es: { changed: "CAMBIADO", cancel: "QUITAR:" },
 } as const;
 
+const ALSO_ON_ORDER_WORDS = {
+  en: { heading: "Also on this order (not for this station)", held: "(on hold)" },
+  es: { heading: "También en este pedido (no para esta estación)", held: "(en espera)" },
+} as const;
+
+function ticketLanguage(locale: string): "en" | "es" {
+  return locale.split("-")[0]!.toLowerCase() === "es" ? "es" : "en";
+}
+
+function alsoOnOrderWords(locale: string) {
+  return ALSO_ON_ORDER_WORDS[ticketLanguage(locale)];
+}
+
 function extraCancelledWords(locale: string) {
-  return locale.split("-")[0]!.toLowerCase() === "es"
-    ? EXTRA_CANCELLED_WORDS.es
-    : EXTRA_CANCELLED_WORDS.en;
+  return EXTRA_CANCELLED_WORDS[ticketLanguage(locale)];
 }
 
 function slipHeader(slip: CorrectionSlip): string {
