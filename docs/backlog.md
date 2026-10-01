@@ -6779,7 +6779,7 @@ approved.
   migrating, and its `scripts/migration-upgrade.test.ts`
   walks one database through every shipped migration in date order, with the change feed installed
   between steps.
-  - **A164: the upgrade guard carries rows — DONE (2026-10-01, owner: "queue it").** After each
+  - **A164: the upgrade guard carries rows — DONE (#970, 2026-10-01, owner: "queue it").** After each
     step `scripts/migration-upgrade.test.ts` tops every table up to two rows (one where `ONE_ROW`
     or a singleton CHECK says so), the second repeating the first, where its constraints allow, except in its key and in each unique index over plain columns, and fails a step that refuses them or
     leaves a table that still exists holding fewer. Shown by three planted migrations (a `not null` column with no
