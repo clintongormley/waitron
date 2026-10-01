@@ -2940,7 +2940,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the printer's setting when none does. Its text, which tests read too, is read back from those
     pictures.
   - **Upgrading a venue that has used its printers refuses to start.** The generated migration
-    (`packages/db/drizzle/0053_drop_printer_character_set.sql`) rebuilds the `printers` table. Run
+    (`packages/db/drizzle/0054_drop_printer_character_set.sql`) rebuilds the `printers` table. Run
     on 2026-10-01 against a database migrated to the step before it, with one printer: with nothing
     else pointing at the printer it applied; with one row in any of `print_jobs`, `station_printers`,
     `tills` (its receipt printer), `devices` (its receipt printer) or `drawer_opens` pointing at it,
@@ -7037,7 +7037,7 @@ approved.
     drawer-open records when it took that migration would have lost them — inferred, not run on a
     box. Whether the owner's box held any then was not checked. Runtime: about 8.1 seconds
     before, 9.9 after (three runs each, locally). _(2026-10-01, C107: `RESETS` now lists eight; C107
-    added core `0053_drop_printer_character_set`.)_
+    added core `0054_drop_printer_character_set`.)_
 
   What it still does not cover, each needed before a real venue is live:
   - **Rows.** _(2026-10-01: synthetic rows DONE by A164, above.)_ The guard now carries two

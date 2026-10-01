@@ -246,7 +246,7 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
     refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
   },
   // Rebuilds `printers`; dropping the old one is refused while a non-cascading child holds rows.
-  "core/0053_drop_printer_character_set": {
+  "core/0054_drop_printer_character_set": {
     refused: ["DROP TABLE `printers`", "FOREIGN KEY constraint failed"],
   },
 };
