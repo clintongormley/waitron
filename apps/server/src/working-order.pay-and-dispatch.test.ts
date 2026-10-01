@@ -2258,9 +2258,11 @@ describe("markCollected (the counter handover)", () => {
   it("refuses a settled order that was never fired (ticket.not_fired) — nothing on the kitchen queue to hand over", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
-    // A walk-up in a ticket-then-pay zone settled through the direct pay primitive has no ticket item
-    // (only a pay-first order's dishes are sent at payment), so there is nothing on any station
-    // display to hand over.
+    // Paying sends the walk-up's dishes, but a no-preparation dish is given no ticket item, so an
+    // order of it alone has nothing on any station display to hand over.
+    await suite.db.execute(sql`
+      update preparation_routes set station_id = null, no_preparation = 1
+      where product_id = ${cafe.id}`);
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,
