@@ -9,7 +9,7 @@ const approved: UnpaidDeparture = {
   id: "ud-1",
   workingOrderId: "wo-1",
   billLabel: "Ana",
-  tableLabels: ["4", "5"],
+  tableLabels: ["Terraza 3", "Terraza 4"],
   saleId: "s-1",
   invoiceNumber: "F-0007",
   amount: "30.00",
@@ -24,7 +24,7 @@ const ownRecord: UnpaidDeparture = {
   id: "ud-2",
   workingOrderId: "wo-2",
   billLabel: null,
-  tableLabels: ["9"],
+  tableLabels: ["Mesa 9"],
   invoiceNumber: "F-0008",
   amount: "12.50",
   reason: "Ran off",
@@ -69,7 +69,7 @@ describe("till-unpaid-departures", () => {
 
     expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe(t("departures.title"));
     const row = rowOf(el, "ud-1");
-    expect(text(row, "tables")).toBe("Tables 4, 5");
+    expect(text(row, "tables")).toBe("Terraza 3, 4");
     expect(text(row, "bill")).toBe("Ana");
     expect(text(row, "invoice")).toBe("Invoice F-0007");
     expect(text(row, "amount")).toBe(formatMoney("30.00", "en"));
@@ -78,12 +78,12 @@ describe("till-unpaid-departures", () => {
     expect(text(row, "when")).toBe(at(approved.recordedAt, "en"));
   });
 
-  it("names one table in the singular, leaves out a bill with no label, and says nothing of approval when the recorder approved it", async () => {
+  it("names a single table by its label, leaves out a bill with no label, and says nothing of approval when the recorder approved it", async () => {
     const { el } = await mountWidget<TillUnpaidDepartures>("till-unpaid-departures", {
       departures: [ownRecord],
     });
     const row = rowOf(el, "ud-2");
-    expect(text(row, "tables")).toBe("Table 9");
+    expect(text(row, "tables")).toBe("Mesa 9");
     expect(row.querySelector("[data-departure-bill]")).toBeNull();
     expect(text(row, "who")).toBe("Recorded by Luis");
   });
@@ -95,7 +95,7 @@ describe("till-unpaid-departures", () => {
     });
     const row = rowOf(el, "ud-1");
     expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Se fueron sin pagar");
-    expect(text(row, "tables")).toBe("Mesas 4, 5");
+    expect(text(row, "tables")).toBe("Terraza 3, 4");
     expect(text(row, "invoice")).toBe("Factura F-0007");
     expect(text(row, "amount")).toBe(formatMoney("30.00", "es"));
     expect(text(row, "who")).toBe("Registrado por Marta, autorizado por Luis");

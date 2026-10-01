@@ -9533,19 +9533,23 @@ describe("the bills parties left without paying", () => {
     expect(counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")).toBeNull();
   });
 
-  it("reads them again whenever the waiting orders are read again", async () => {
+  it("are not read again when a counter sale or a hand over reads the waiting orders again", async () => {
     const { el } = await mountApp();
-    await toCounter(el);
+    const c = await toCounter(el);
     const reads = vi.mocked(currentApi.listUnpaidDepartures).mock.calls.length;
     const waitingReads = vi.mocked(currentApi.listCounterWaiting).mock.calls.length;
 
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(currentApi.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 1);
+
     emit(counter(el)!, "hand-over-order", { id: "wo-sent" });
     await flush(el);
+    expect(currentApi.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 2);
 
-    expect(vi.mocked(currentApi.listCounterWaiting).mock.calls.length).toBeGreaterThan(
-      waitingReads,
-    );
-    expect(currentApi.listUnpaidDepartures).toHaveBeenCalledTimes(reads + 1);
+    expect(currentApi.listUnpaidDepartures).toHaveBeenCalledTimes(reads);
   });
 
   it("reads them without waiting for the waiting orders' answer", async () => {

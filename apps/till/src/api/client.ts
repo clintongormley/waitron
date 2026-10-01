@@ -2253,9 +2253,7 @@ export class TillApi {
   /**
    * The party's guests left without paying → `POST /api/parties/:partyId/unpaid-departure`: every
    * bill still to pay is invoiced in full and left unpaid, and the party closes as Finish closes it.
-   * Rejects, among others, `authorization.not_permitted`, `pin.invalid`,
-   * `unpaid_departure.unfired_dishes`, `unpaid_departure.bill_holds_payment`,
-   * `unpaid_departure.nothing_outstanding`, `party.not_open` and `party.out_of_date`.
+   * Refusals: the route in `apps/server/src/unpaid-departure-api.ts` and what it calls.
    */
   recordUnpaidDeparture(
     partyId: string,

@@ -87,8 +87,7 @@ import type {
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
 import "./widgets/unpaid-departure-dialog.js";
-import type { DepartingBill, DepartureRefusal } from "./widgets/unpaid-departure-dialog.js";
-import type { RefundRefusal } from "./widgets/bill-refund-dialog.js";
+import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import {
   confirmationOf,
   moneyPlus,
@@ -99,6 +98,7 @@ import {
   refusalOf,
   submissionFor,
   unansweredAfter,
+  type DialogRefusal,
   type RefundAsk,
   type RefundSubmission,
   type Submission,
@@ -552,7 +552,7 @@ interface BillRefunding extends PayingOrder {
   suggested: string | null;
   terminal: boolean;
   asked: RefundAsk | null;
-  refusal: RefundRefusal | null;
+  refusal: DialogRefusal | null;
   busy: boolean;
 }
 
@@ -562,7 +562,7 @@ interface Departing {
   partyId: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
-  refusal: DepartureRefusal | null;
+  refusal: DialogRefusal | null;
   busy: boolean;
 }
 
@@ -1550,9 +1550,14 @@ export class TillApp extends LitElement {
     this.#restoreDestination();
     if (landingFace !== "floor") {
       // Counter-only data: a handheld lands on the floor, which shows neither.
-      await this.#refreshHeldOrders();
-      await this.#refreshStationQueue();
-      await this.#refreshWaiting();
+      const departures = this.#refreshDepartures();
+      try {
+        await this.#refreshHeldOrders();
+        await this.#refreshStationQueue();
+        await this.#refreshWaiting();
+      } finally {
+        await departures;
+      }
       // Loaded after the counter is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
         this.staff = await this.api.listStaff();
@@ -1589,16 +1594,9 @@ export class TillApp extends LitElement {
     return this.#refreshList(list, messageKey);
   }
 
-  /** The bills left unpaid are shown beside the waiting orders, so they are read whenever those
-   * are, alongside them, each list keeping its own failure handling. */
-  async #refreshList(list: RefreshList, messageKey?: StringKey): Promise<void> {
-    if (list !== "waiting") return this.#refreshOneList(list, messageKey);
-    const departures = this.#refreshOneList("departures", "refresh.departures");
-    try {
-      await this.#refreshOneList(list, messageKey);
-    } finally {
-      await departures;
-    }
+  /** Never throws: a failure is said in the list's own retry notice. */
+  #refreshDepartures(): Promise<void> {
+    return this.#refreshList("departures", "refresh.departures");
   }
 
   /**
@@ -1607,7 +1605,7 @@ export class TillApp extends LitElement {
    * {@link TillApp.#abandonListRefreshes} makes every earlier request stale. Without a `messageKey`
    * a failure is also thrown to the caller.
    */
-  async #refreshOneList(list: RefreshList, messageKey?: StringKey): Promise<void> {
+  async #refreshList(list: RefreshList, messageKey?: StringKey): Promise<void> {
     const request = ++this.#refreshGeneration[list];
     let install: () => void;
     try {
@@ -4983,14 +4981,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.#closeDepartureApprovers();
-    this.departing = {
-      ...now,
-      refusal: {
-        code: refusal.code,
-        ...(refusal.field === undefined ? {} : { field: refusal.field }),
-      },
-      busy: false,
-    };
+    this.departing = { ...now, refusal, busy: false };
     if (!this.#hasLeftParty(open.partyId, sent)) await this.#loadPartyBills();
   }
 

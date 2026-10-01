@@ -8,18 +8,16 @@ import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { BillPaymentView } from "../api/client.js";
-import { moneyPlus, refundableOf, typedAmount, type RefundAsk } from "../state/bill-payment.js";
-
-/** A refusal's code and the request field it names. The app's own codes: `network`, a refund that
- * got no answer; `approvers`, a list of who can approve that could not be read. */
-export interface RefundRefusal {
-  code: string;
-  field?: string;
-}
+import {
+  REASON_MAX,
+  moneyPlus,
+  refundableOf,
+  typedAmount,
+  type DialogRefusal,
+  type RefundAsk,
+} from "../state/bill-payment.js";
 
 type Field = "amount" | "reason";
-
-const REASON_MAX = 500;
 
 /**
  * Gives back one payment of a bill: the whole of what is left of it, its tip included, or part of
@@ -111,7 +109,7 @@ export class TillBillRefundDialog extends LitElement {
   @property({ attribute: false }) payment!: BillPaymentView;
   /** A card keyed on a separate terminal: staff give it back on that terminal, then confirm. */
   @property({ type: Boolean }) terminal = false;
-  @property({ attribute: false }) refusal: RefundRefusal | null = null;
+  @property({ attribute: false }) refusal: DialogRefusal | null = null;
   @property({ type: Boolean }) busy = false;
   /** An amount offered as the part to give back, when this payment can give that part: the
    * dialog opens on it. */
@@ -122,7 +120,7 @@ export class TillBillRefundDialog extends LitElement {
   @state() private reason = "";
   @state() private attempted = false;
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
-  @state() private shownRefusal: RefundRefusal | null = null;
+  @state() private shownRefusal: DialogRefusal | null = null;
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
@@ -209,7 +207,7 @@ export class TillBillRefundDialog extends LitElement {
     return aboutAmount && this.#part() ? "amount" : null;
   }
 
-  #refusalText(refusal: RefundRefusal): string {
+  #refusalText(refusal: DialogRefusal): string {
     if (refusal.code === "network") return t("bill_refund.unconfirmed");
     if (refusal.code === "approvers") return t("bill_refund.approvers_failed");
     return codeMessage(refusal.code);

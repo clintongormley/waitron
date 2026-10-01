@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { moneyPlus } from "../state/bill-payment.js";
+import { REASON_MAX, moneyPlus, type DialogRefusal } from "../state/bill-payment.js";
 
 /** One bill the departure leaves unpaid, named as the table screen names it. */
 export interface DepartingBill {
@@ -15,15 +15,6 @@ export interface DepartingBill {
   name: string;
   outstanding: string;
 }
-
-/** A refusal's code and the request field it names. The app's own codes: `network`, a departure
- * that got no answer; `approvers`, a list of who can approve that could not be read. */
-export interface DepartureRefusal {
-  code: string;
-  field?: string;
-}
-
-const REASON_MAX = 500;
 
 /**
  * Records that a party left without paying (spec §8): it shows the bills it leaves unpaid and what
@@ -82,14 +73,14 @@ export class TillUnpaidDepartureDialog extends LitElement {
   ];
 
   @property({ attribute: false }) bills: DepartingBill[] = [];
-  @property({ attribute: false }) refusal: DepartureRefusal | null = null;
+  @property({ attribute: false }) refusal: DialogRefusal | null = null;
   @property({ type: Boolean }) busy = false;
 
   @state() private reason = "";
   @state() private attempted = false;
   /** The refusal still shown: it goes when the reason changes, if it named the reason, or at the
    * next request. */
-  @state() private shownRefusal: DepartureRefusal | null = null;
+  @state() private shownRefusal: DialogRefusal | null = null;
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
@@ -115,7 +106,7 @@ export class TillUnpaidDepartureDialog extends LitElement {
     return refusal?.code === "management.request_invalid" && refusal.field === "reason";
   }
 
-  #refusalText(refusal: DepartureRefusal): string {
+  #refusalText(refusal: DialogRefusal): string {
     if (refusal.code === "network") return t("departure.unconfirmed");
     if (refusal.code === "approvers") return t("departure.approvers_failed");
     return codeMessage(refusal.code);

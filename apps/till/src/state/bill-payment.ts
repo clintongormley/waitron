@@ -167,6 +167,17 @@ export function unansweredAfter<S>(sent: S, error?: unknown): S | null {
  * with the field it names and, for a tip the venue does not take, the most a card can be charged.
  * A request that `changes` the bill and got no answer is `network`, as it may have been made.
  */
+/** A refusal's code and the request field it names, as the refund and unpaid departure dialogs
+ * show it. The app's own codes: `network`, a request that got no answer; `approvers`, a list of who
+ * can approve that could not be read. */
+export interface DialogRefusal {
+  code: string;
+  field?: string;
+}
+
+/** The longest reason a refund or an unpaid departure is sent with. */
+export const REASON_MAX = 500;
+
 export function refusalOf(error: unknown, changes = true): PayRefusal {
   if (changes && isNetworkFailure(error)) return { code: "network" };
   const refused = error as { code?: unknown; field?: unknown; chargeable?: unknown };

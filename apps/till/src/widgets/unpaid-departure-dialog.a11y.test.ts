@@ -1,11 +1,8 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./unpaid-departure-dialog.js";
-import type {
-  DepartingBill,
-  DepartureRefusal,
-  TillUnpaidDepartureDialog,
-} from "./unpaid-departure-dialog.js";
+import type { DialogRefusal } from "../state/bill-payment.js";
+import type { DepartingBill, TillUnpaidDepartureDialog } from "./unpaid-departure-dialog.js";
 
 const bills: DepartingBill[] = [
   { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
@@ -14,7 +11,7 @@ const bills: DepartingBill[] = [
 
 afterEach(cleanupWidgets);
 
-const states: [string, { refusal: DepartureRefusal | null; busy: boolean; pressed: boolean }][] = [
+const states: [string, { refusal: DialogRefusal | null; busy: boolean; pressed: boolean }][] = [
   ["empty", { refusal: null, busy: false, pressed: false }],
   ["with the reason missing", { refusal: null, busy: false, pressed: true }],
   [

@@ -105,8 +105,6 @@ export const en = {
   "waiting.pay_error": "Could not open the order to take its payment, try again",
   // Bills a party left unpaid, still owed
   "departures.title": "Left without paying",
-  "departures.table": "Table {tables}",
-  "departures.tables": "Tables {tables}",
   "departures.invoice": "Invoice {number}",
   "departures.recorded_by": "Recorded by {name}",
   "departures.recorded_approved": "Recorded by {name}, approved by {approver}",
@@ -955,8 +953,6 @@ export const es: Record<StringKey, string> = {
   "waiting.hand_over_error": "No se pudo entregar el pedido, inténtalo de nuevo",
   "waiting.pay_error": "No se pudo abrir el pedido para cobrarlo, inténtalo de nuevo",
   "departures.title": "Se fueron sin pagar",
-  "departures.table": "Mesa {tables}",
-  "departures.tables": "Mesas {tables}",
   "departures.invoice": "Factura {number}",
   "departures.recorded_by": "Registrado por {name}",
   "departures.recorded_approved": "Registrado por {name}, autorizado por {approver}",

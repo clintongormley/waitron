@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, partyTablesName } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import type { UnpaidDeparture } from "../api/client.js";
 
@@ -58,13 +58,6 @@ export class TillUnpaidDepartures extends LitElement {
 
   @property({ attribute: false }) departures: UnpaidDeparture[] = [];
 
-  #tables(labels: readonly string[]): string {
-    return t(labels.length === 1 ? "departures.table" : "departures.tables").replace(
-      "{tables}",
-      () => labels.join(", "),
-    );
-  }
-
   #who(departure: UnpaidDeparture): string | null {
     const name = departure.recordedByName;
     if (name === null) return null;
@@ -87,7 +80,7 @@ export class TillUnpaidDepartures extends LitElement {
     const who = this.#who(departure);
     return html`<div class="departure" data-departure=${departure.id}>
       <div class="head">
-        <span data-departure-tables>${this.#tables(departure.tableLabels)}</span>
+        <span data-departure-tables>${partyTablesName(departure.tableLabels)}</span>
         <span data-departure-amount>${formatMoney(departure.amount, currentLocale())}</span>
       </div>
       ${
