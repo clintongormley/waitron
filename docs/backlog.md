@@ -1234,17 +1234,17 @@ open style drawing the section as a bordered box with the header sitting on its 
 - the title moves right when it opens, by the header's added side margin and padding;
 - a border appears only when it opens.
 
-The owner's suggestion, not yet decided: closed, show the section's current values; open, show the
-form. **This changes a written rule:** `docs/developers/design-system.md` → "A collapsed disclosure
-is a borderless heading with a chevron … When it opens, one rounded border encloses the body and the
-heading sits across that border like a legend" describes exactly the look being reported, so the fix
-rewrites that paragraph too. The owner's direction (2026-10-01): _"perhaps the names box doesn't
-actually need a border, maybe just a top and bottom line, or margin to delineate the area, or
-something"_ — so drop the enclosing box, and mark the section off with a line above and below, or
-with spacing alone. **Next action:** settle with the owner what open and closed should look
-like (heading and chevron fixed in place either way), and what "current values" means for each user
-— three names for the names sections; the product editor's sections already show a one-line
-`summary` today.
+**Decided (owner, 2026-10-01, choosing mockup B of
+[the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)):** no border and no lines — the
+section is set apart by spacing above and below alone. The heading and chevron stay exactly where
+they are in both states, the chevron always at the right-hand end of the row. Closed, the section
+shows its current values on a line under the heading (for the customer-facing names, each language's
+name after its code, e.g. "ES ¿Cómo la quiere hecha? · EN How would you like it cooked?"); open, it
+shows the form instead. The product editor's sections keep the one-line `summary` they show today,
+in the same place under the heading. **This changes a written rule:**
+`docs/developers/design-system.md` → "A collapsed disclosure is a borderless heading with a chevron
+… When it opens, one rounded border encloses the body and the heading sits across that border like
+a legend" describes the look being replaced, so the fix rewrites that paragraph too.
 
 **The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — OPEN.**
 Both in the editor for one options list, `apps/dashboard/src/widgets/option-list-form.ts`, and the
@@ -1253,13 +1253,14 @@ window it opens for one option, `apps/dashboard/src/widgets/option-label-form.ts
 - **Clicking an option's name should open its "Edit option" window.** Today the name is plain text
   in the row (`#labelRow`); only the row menu's Edit opens the window (`#openEditor`). The Default
   radio button and the row menu in the same row must keep their own clicks.
-- **The "Edit option" window should open with its "Customer and kitchen names" section already
-  expanded** — owner: _"it's the only thing on that screen"_ besides the name and the Available
-  switch. Today it starts collapsed like every `wt-disclosure`. "Add option" opens the same window
-  and starts expanded too (owner, 2026-10-01: "yes"). **This is an
-  exception to a written rule:** `docs/developers/design-system.md` → "Sections always start
-  collapsed", which the change must update to name the exception and why. Related: A169 redraws
-  the same section, and A171 splits it in two.
+- **The "Edit option" window shows the customer-facing names without folding them** — owner: _"it's
+  the only thing on that screen"_ besides the name and the Available switch. Today they sit in a
+  `wt-disclosure` that starts collapsed. **Decided (owner, 2026-10-01, mockup D2 of
+  [the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)):** no fold at all in this
+  window — the fields sit under a plain "Customer-facing names" heading, always shown, in the
+  order Name, Kitchen name (A171), the customer-facing names, Available. "Add option" opens the same
+  window and looks the same (owner, 2026-10-01: "yes"). The design-system rule "Sections always
+  start collapsed" is untouched, because this window no longer has a section that folds.
 
 **The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171,
 owner 2026-10-01: "i think we should separate kitchen name from customer facing names
@@ -1269,13 +1270,47 @@ names" section with the customer-facing name in each language: an options list
 extras list (`extra-list-form.ts`). The product editor already keeps them apart — the kitchen name
 is in its "Kitchen" section with station and course, the customer-facing names under
 "Descriptors" (`product-editor.ts`) — and the variant form (`variant-form.ts`) has no section but
-shows the kitchen name as its own field directly above the customer-facing names. **Next action:**
-settle where the kitchen name goes in the three editors (its own section, or a plain field
-always on show), then apply it, keeping the product editor and variant form consistent with it.
-Done together with A169 and A170, which redraw and pre-open the section being split: after the
-split, A170's "starts expanded" applies to whatever holds the names in the option window. The
-section heading strings (`options.names_section`, `extras.names_section` in
-`apps/dashboard/src/i18n/strings.ts`, English and Spanish) change with it.
+shows the kitchen name as its own field directly above the customer-facing names. **Decided
+(owner, 2026-10-01, mockup B):** in the three editors the kitchen name is a plain field, always
+shown, directly under Name; only the customer-facing names stay in the folding section, now headed
+"Customer-facing names". The product editor and the variant form already keep the two apart and are
+left as they are. Done together with A169 and A170. The section heading strings
+(`options.names_section`, `extras.names_section` in `apps/dashboard/src/i18n/strings.ts`, English
+and Spanish) change with it.
+
+**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — OPEN.**
+The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
+language name hint should be the name field, and the secondary languages should be the main
+language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while
+the field is blank. Wanted, in every editor holding these names — products, variants, options
+lists, options and extras lists:
+
+- **Kitchen name:** the hint is the current Name. This matches what is used today: a blank kitchen
+  name falls back to Name (`docs/developers/products.md`, "Each name falls back on its own").
+- **Customer-facing name, main language:** the hint is the current Name. Also matches today's
+  fallback.
+
+Today the options list, option and extras list editors (`option-list-form.ts`,
+`option-label-form.ts`, `extra-list-form.ts`) already hint Name in the kitchen name AND in every
+language's customer-facing name; the product editor (`product-editor.ts`) and the variant form
+(`variant-form.ts`) hint neither. So the first two bullets are new work only in those two, and the
+third changes all five.
+- **Customer-facing name, every other language:** the hint is the main language's customer-facing
+  name (and Name, if that is blank too). **This does NOT match what happens today**, where a
+  blank name in any language falls back straight to Name, never to the main language's name
+  (`customerPresentationText`, `packages/catalogue/src/product-presentation.ts`; for options,
+  `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`). A hint
+  must not show text the customer will never see, so this part needs the fallback itself to
+  change to blank → main language's customer-facing name → Name, for every surface that
+  reads these names (receipt, till, menus), plus `docs/developers/products.md`. The translation
+  gap report (`listContentTranslationGaps`, `packages/catalogue/src/content-languages.ts`) counts
+  "Spanish filled, English blank" as a gap today because English would show the staff name;
+  whether it is still a gap once English falls back to the Spanish name is a decision to make
+  with the owner before building. "Main language" here means the venue's default content
+  language.
+
+Each hint follows the field it copies as the owner types: change Name and the blank fields' hints
+change with it.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
