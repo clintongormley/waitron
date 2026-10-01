@@ -1,5 +1,5 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
@@ -15,13 +15,6 @@ export interface CategoryInput {
   name: string;
   parentId?: string | null;
 }
-/** Where a deleted category's products and direct children go. An absent key takes the default: the
- * deleted category's parent, which for a top-level category is none (Uncategorised, or the top level). */
-export interface CategoryReassignment {
-  productsTo?: string | null;
-  childrenTo?: string | null;
-}
-
 const columns = {
   id: categories.id,
   name: categories.name,
@@ -114,92 +107,23 @@ export async function updateCategory(
     .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId } });
   return readCategory(tx, id);
 }
-/** Every category below `id` in the tree, at any depth; not `id` itself. */
-async function descendantsOf(tx: Transaction, id: string): Promise<Set<string>> {
-  const { rows } = await tx.execute<{ id: string }>(sql`
-    with recursive below(id) as (
-      select category_id from category_details where parent_id = ${id}
-      union
-      select d.category_id from category_details d join below on d.parent_id = below.id
-    )
-    select id from below`);
-  return new Set(rows.map((row) => row.id));
-}
-export async function deleteCategory(
-  tx: Transaction,
-  id: string,
-  reassign: CategoryReassignment = {},
-): Promise<void> {
-  const category = await readCategory(tx, id); // 404s an absent id
-  const productsTo = reassign.productsTo === undefined ? category.parentId : reassign.productsTo;
-  const childrenTo = reassign.childrenTo === undefined ? category.parentId : reassign.childrenTo;
-  if (productsTo === id) throw new AppError("category.reassign_invalid", { field: "productsTo" });
-  if (childrenTo === id) throw new AppError("category.reassign_invalid", { field: "childrenTo" });
-  if (productsTo !== null) await readCategory(tx, productsTo);
-  if (childrenTo !== null) {
-    await readCategory(tx, childrenTo);
-    if ((await descendantsOf(tx, id)).has(childrenTo))
-      throw new AppError("category.reassign_invalid", { field: "childrenTo" });
-  }
+export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
+  const category = await readCategory(tx, id);
   // No lock: one write transaction runs on the venue file at a time, so no concurrent route insert
   // can slip between these steps; see the note above `listCategories`.
   await tx
     .update(products)
-    .set({ categoryId: productsTo, updatedAt: now() })
+    .set({ categoryId: category.parentId, updatedAt: now() })
     .where(eq(products.categoryId, id));
   // Clears the RESTRICT parent key before the delete below.
   await tx
     .update(categoryDetails)
-    .set({ parentId: childrenTo })
+    .set({ parentId: category.parentId })
     .where(eq(categoryDetails.parentId, id));
   if (await tablePresent(tx, "preparation_routes"))
     await tx.execute(sql`delete from preparation_routes where category_id = ${id}`);
   // category_details cascades via its FK.
   await tx.delete(categories).where(eq(categories.id, id));
-}
-export interface CategoryDependants {
-  /** Every product, variants included, whose OWN main category is this one. */
-  products: { id: string; name: string }[];
-  children: { id: string; name: string }[];
-  parentId: string | null;
-  routes: { id: string; station: string | null; zone: string | null }[];
-}
-/** What deleting a category would touch — the preview behind the delete confirmation. */
-export async function categoryDependants(tx: Transaction, id: string): Promise<CategoryDependants> {
-  const category = await readCategory(tx, id); // 404s an absent id
-  const productRows = await tx
-    .select({ id: products.id, name: products.name })
-    .from(products)
-    .where(eq(products.categoryId, id))
-    .orderBy(products.id);
-  const childRows = await tx
-    .select({ id: categories.id, name: categories.name })
-    .from(categoryDetails)
-    .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
-    .where(eq(categoryDetails.parentId, id))
-    .orderBy(categories.id);
-  // Raw SQL, because this joins two other modules' tables by name.
-  const routes: CategoryDependants["routes"] = [];
-  if (await tablePresent(tx, "preparation_routes")) {
-    const routeRows = await tx.execute<{ id: string; station: string | null; zone: string | null }>(
-      sql`
-      select pr.id,
-             case when pr.no_preparation then null else ks.name end as station,
-             fz.name as zone
-      from preparation_routes pr
-      left join kitchen_stations ks on ks.id = pr.station_id
-      left join floor_zones fz on fz.id = pr.zone_id
-      where pr.category_id = ${id}
-      order by pr.id`,
-    );
-    routes.push(...routeRows.rows);
-  }
-  return {
-    products: productRows,
-    children: childRows,
-    parentId: category.parentId,
-    routes,
-  };
 }
 /** Are these all distinct top-level products? A repeat leaves the count short, as an absent id does. */
 export async function allTopLevelProducts(
@@ -239,53 +163,4 @@ export async function setMainReportingCategory(
     .set({ categoryId, updatedAt: now() })
     .where(eq(products.id, product.id));
   return { primaryCategoryId: categoryId };
-}
-/**
- * Make this category the main category of every listed product, moving each from wherever it was.
- * Resubmitting a product already here is safe and changes nothing but its `updated_at`.
- */
-export async function addProductsToCategory(
-  tx: Transaction,
-  categoryId: string,
-  productIds: string[],
-): Promise<void> {
-  await readCategory(tx, categoryId); // 404s an absent category
-  if (!Array.isArray(productIds) || productIds.some((id) => !isUuid(id)))
-    throw new AppError("category.membership_invalid", {});
-  if (productIds.length === 0) return;
-  if (!(await allTopLevelProducts(tx, productIds)))
-    throw new AppError("category.membership_invalid", {});
-  await tx
-    .update(products)
-    .set({ categoryId, updatedAt: now() })
-    .where(inArray(products.id, productIds));
-}
-export interface CategoryProduct {
-  id: string;
-  name: string;
-  active: boolean;
-  primaryCategoryId: string | null;
-}
-/**
- * The top-level products whose main category is this one — or, with `includeDescendants`, this one
- * or any category below it.
- */
-export async function listCategoryProducts(
-  tx: Transaction,
-  categoryId: string,
-  opts: { includeDescendants?: boolean } = {},
-): Promise<CategoryProduct[]> {
-  await readCategory(tx, categoryId);
-  const ids = [categoryId];
-  if (opts.includeDescendants) ids.push(...(await descendantsOf(tx, categoryId)));
-  return tx
-    .select({
-      id: products.id,
-      name: products.name,
-      active: products.active,
-      primaryCategoryId: products.categoryId,
-    })
-    .from(products)
-    .where(and(inArray(products.categoryId, ids), isTopLevelProduct))
-    .orderBy(products.id);
 }

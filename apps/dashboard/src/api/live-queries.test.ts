@@ -124,12 +124,6 @@ it.each([
     ],
   ],
   ["getReportPrinters", [], ["printers"]],
-  // "Below it too" walks `category_details`' parent links (`listCategoryProducts`, categories.ts).
-  [
-    "listCategoryProducts",
-    ["c1", { includeDescendants: true }],
-    ["categories", "category_details", "products"],
-  ],
 ] as const)(
   "subscribes %s to exactly the tables its read selects from",
   async (name, args, types) => {

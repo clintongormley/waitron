@@ -16,14 +16,9 @@ import {
   writeContentLanguages,
   validateContentTranslations,
   createCatalogue,
-  addProductsToCategory,
-  categoryDependants,
   createCategory,
   readCategory,
   updateCategory,
-  deleteCategory,
-  setMainReportingCategory,
-  listCategoryProducts,
   listSections,
   listMembers,
   readSection,
@@ -51,7 +46,6 @@ import {
   type SectionInput,
   type SectionPatch,
   type CategoryInput,
-  type CategoryReassignment,
   createProduct,
   listCatalogues,
   listCataloguesForLocation,
@@ -222,7 +216,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "catalogue.not_found": 404,
   "category.not_found": 404,
   "category.invalid": 400,
-  "category.reassign_invalid": 400,
   "menu_item.not_found": 404,
   // A menu offer asked for a variant, which follows its parent onto the menu instead.
   "menu_item.variant_not_allowed": 400,
@@ -1103,71 +1096,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json(await gated(session, (tx) => updateCategory(tx, id, input)));
     }),
   );
-  // An optional body says where the products and subcategories go; an absent key, or no body at
-  // all, takes `deleteCategory`'s default.
-  app.delete("/management-api/categories/:id", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      const body = await readJsonBody<Record<string, unknown>>(c);
-      const reassign: CategoryReassignment = {};
-      for (const field of ["productsTo", "childrenTo"] as const) {
-        if (body[field] !== undefined) reassign[field] = nullOrUuid(body[field], field);
-      }
-      await gated(session, (tx) => deleteCategory(tx, id, reassign));
-      return c.body(null, 204);
-    }),
-  );
-  // What deleting this category would touch — the preview the dashboard's delete confirmation reads.
-  app.get("/management-api/categories/:id/dependants", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      return c.json(await gated(session, (tx) => categoryDependants(tx, id)));
-    }),
-  );
-  app.get("/management-api/categories/:id/products", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      const includeDescendants = c.req.query("descendants") === "1";
-      return c.json(
-        await gated(session, (tx) => listCategoryProducts(tx, id, { includeDescendants })),
-      );
-    }),
-  );
-  // The body screen checks SHAPE only; whether each id names a product, and whether the selection
-  // repeats one, is `addProductsToCategory`'s `category.membership_invalid`.
-  app.post("/management-api/categories/:id/products", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      const body = await readJsonBody<{ productIds?: unknown }>(c);
-      if (!Array.isArray(body.productIds) || body.productIds.some((v) => typeof v !== "string"))
-        throw new AppError("management.request_invalid", { field: "productIds" });
-      const productIds = body.productIds.map((pid) => requireUuidParam(pid as string, "ProductId"));
-      await gated(session, (tx) => addProductsToCategory(tx, id, productIds));
-      return c.body(null, 204);
-    }),
-  );
   app.get("/management-api/products", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       return c.json(await gated(session, (tx) => listProducts(tx)));
     }),
   );
-  // A variant's id answers as an unknown id here: `setMainReportingCategory`'s default scope finds
-  // only a product with no parent.
-  app.put("/management-api/products/:id/categories", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "ProductId");
-      const body = await readJsonBody<{ primaryCategoryId?: unknown }>(c);
-      const categoryId = nullOrUuid(body.primaryCategoryId, "primaryCategoryId");
-      return c.json(await gated(session, (tx) => setMainReportingCategory(tx, id, categoryId)));
-    }),
-  );
-
   app.get("/management-api/catalogues/:id/products", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

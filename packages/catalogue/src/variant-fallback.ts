@@ -21,7 +21,7 @@ import { productUnits } from "./schema/units.js";
  * may be blank, in the variant list (`ProductVariant.unitPrice`) and in the menu price chain
  * (`readOfferVariants`), and the product editor (`readProductEditor`) reads a variant's own price,
  * VAT class and dietary declarations raw, blanks included. Reads keyed on a product's main
- * category (`listCategoryProducts`, `categoryDependants`) read each row's OWN `category_id`.
+ * category read each row's OWN `category_id`.
  */
 
 /** A `products` row with no parent: a product in its own right, never a variant. */

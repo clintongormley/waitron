@@ -63,14 +63,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a parent outside this category and its descendants.",
     es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
   },
-  "category.membership_invalid": {
-    en: "Some of the chosen products cannot be moved here. Refresh the list and try again.",
-    es: "Algunos de los productos elegidos no se pueden mover aquí. Actualiza la lista e inténtalo de nuevo.",
-  },
-  "category.reassign_invalid": {
-    en: "Choose a place outside this category and its subcategories.",
-    es: "Elige un destino fuera de esta categoría y de sus subcategorías.",
-  },
   "menu_section.not_found": {
     en: "This section, or the item in it, no longer exists. Refresh the list.",
     es: "Esta sección, o el elemento que contiene, ya no existe. Actualiza la lista.",

@@ -11,12 +11,10 @@ declare module "@waitron/shared" {
     /** A category's name is blank once trimmed. */
     "category.invalid": { field: "name" };
     "category.parent_cycle": Record<string, never>;
-    "category.membership_invalid": Record<string, never>;
     /**
      * A category delete names somewhere its products or subcategories cannot go: the category being
      * deleted, or, for `childrenTo`, a category below it.
      */
-    "category.reassign_invalid": { field: "productsTo" | "childrenTo" };
     /** A sale line's classification snapshot names a category that does not exist, holds
      * an empty name, repeats a category in its chain, or ends at a category that is not the
      * product's main reporting category. */

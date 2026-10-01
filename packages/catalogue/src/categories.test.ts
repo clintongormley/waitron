@@ -11,7 +11,6 @@ import {
   updateCategory,
   deleteCategory,
   setMainReportingCategory,
-  listCategoryProducts,
 } from "./categories.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 
@@ -62,8 +61,21 @@ describe("category authoring", () => {
     });
     expect(listed).not.toHaveProperty("categoryIds");
     expect(listed).not.toHaveProperty("labelIds");
-    expect(await app((tx) => listCategoryProducts(tx, food.id))).toEqual([]);
-    expect(await app((tx) => listCategoryProducts(tx, drinks.id))).toEqual([
+    expect(
+      await app((tx) =>
+        listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === food.id)),
+      ),
+    ).toEqual([]);
+    expect(
+      (await app((tx) => listProducts(tx)))
+        .filter((p) => p.primaryCategoryId === drinks.id)
+        .map(({ id, name, active, primaryCategoryId }) => ({
+          id,
+          name,
+          active,
+          primaryCategoryId,
+        })),
+    ).toEqual([
       {
         id: product.id,
         name: product.name,
@@ -89,9 +101,11 @@ describe("category authoring", () => {
     await expect(app((tx) => setMainReportingCategory(tx, missing, food.id))).rejects.toMatchObject(
       { code: "product.not_found", params: { productId: missing } },
     );
-    expect(await app((tx) => listCategoryProducts(tx, food.id))).toMatchObject([
-      { id: product.id, primaryCategoryId: food.id },
-    ]);
+    expect(
+      await app((tx) =>
+        listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === food.id)),
+      ),
+    ).toMatchObject([{ id: product.id, primaryCategoryId: food.id }]);
   });
   it("rejects deep cycles, and a delete moves children and products to the parent by default", async () => {
     const { app, food, drinks, product } = await fixture();
@@ -106,9 +120,11 @@ describe("category authoring", () => {
     await app((tx) => setMainReportingCategory(tx, product.id, child.id));
     await app((tx) => deleteCategory(tx, child.id));
     expect((await app((tx) => readCategory(tx, leaf.id))).parentId).toBe(food.id);
-    expect(await app((tx) => listCategoryProducts(tx, food.id))).toMatchObject([
-      { id: product.id, primaryCategoryId: food.id },
-    ]);
+    expect(
+      await app((tx) =>
+        listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === food.id)),
+      ),
+    ).toMatchObject([{ id: product.id, primaryCategoryId: food.id }]);
     // A top-level category's products become Uncategorised and its children top-level.
     await app((tx) => deleteCategory(tx, food.id));
     expect((await app((tx) => readCategory(tx, leaf.id))).parentId).toBeNull();
@@ -166,7 +182,11 @@ it("updateProduct's categoryId sets the main category, with no membership coupli
     ]),
   );
   await app((tx) => updateProduct(tx, product.id, { categoryId: null }));
-  expect(await app((tx) => listCategoryProducts(tx, drinks.id))).toMatchObject([{ id: second.id }]);
+  expect(
+    await app((tx) =>
+      listProducts(tx).then((rows) => rows.filter((p) => p.primaryCategoryId === drinks.id)),
+    ),
+  ).toMatchObject([{ id: second.id }]);
   await expect(
     app((tx) => updateProduct(tx, product.id, { categoryId: crypto.randomUUID() })),
   ).rejects.toMatchObject({ code: "category.not_found" });

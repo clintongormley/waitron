@@ -553,7 +553,7 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("uses the category hierarchy and main-category endpoints with their response shapes", async () => {
+  it("reads and updates a category and lists the library products", async () => {
     const category = { id: "cat1", name: "Entrantes", parentId: null };
     const product = {
       id: "p1",
@@ -571,79 +571,23 @@ describe("DashboardApi", () => {
       dietOverride: null,
       image: null,
     };
-    const listed = { id: "p1", name: "Croquetas", active: true, primaryCategoryId: "cat1" };
-    const below = { id: "p2", name: "Flan", active: true, primaryCategoryId: "cat2" };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(category))
       .mockResolvedValueOnce(jsonResponse({ ...category, name: "Comida" }))
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse([listed]))
-      .mockResolvedValueOnce(jsonResponse([listed, below]))
-      .mockResolvedValueOnce(jsonResponse([product]))
-      .mockResolvedValueOnce(jsonResponse({ primaryCategoryId: null }));
+      .mockResolvedValueOnce(jsonResponse([product]));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getCategory("cat1")).toEqual(category);
     expect(await api.updateCategory("cat1", { name: "Comida" })).toEqual({
       ...category,
       name: "Comida",
     });
-    await api.deleteCategory("cat1");
-    await api.deleteCategory("cat1", { productsTo: "cat0", childrenTo: null });
-    expect(await api.listCategoryProducts("cat1")).toEqual([listed]);
-    expect(await api.listCategoryProducts("cat1", { includeDescendants: true })).toEqual([
-      listed,
-      below,
-    ]);
     expect(await api.listLibraryProducts()).toEqual([product]);
-    expect(await api.setMainCategory("p1", null)).toEqual({ primaryCategoryId: null });
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
       ["/management-api/categories/cat1", "GET", undefined],
       ["/management-api/categories/cat1", "PATCH", JSON.stringify({ name: "Comida" })],
-      ["/management-api/categories/cat1", "DELETE", undefined],
-      [
-        "/management-api/categories/cat1",
-        "DELETE",
-        JSON.stringify({ productsTo: "cat0", childrenTo: null }),
-      ],
-      ["/management-api/categories/cat1/products", "GET", undefined],
-      ["/management-api/categories/cat1/products?descendants=1", "GET", undefined],
       ["/management-api/products", "GET", undefined],
-      [
-        "/management-api/products/p1/categories",
-        "PUT",
-        JSON.stringify({ primaryCategoryId: null }),
-      ],
     ]);
-  });
-
-  it("getCategoryDependants GETs the dependants for the delete confirmation", async () => {
-    const dependants = {
-      products: [{ id: "p1", name: "Croquetas" }],
-      children: [{ id: "cat2", name: { es: "Postres" } }],
-      parentId: "cat0",
-      routes: [{ id: "r1", station: "bar", zone: null }],
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(dependants));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.getCategoryDependants("cat1")).toEqual(dependants);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/cat1/dependants", {
-      method: "GET",
-      credentials: "include",
-    });
-  });
-
-  it("addProductsToCategory POSTs the product ids to the category's products route", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.addProductsToCategory("cat1", ["p1", "p2"])).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/cat1/products", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ productIds: ["p1", "p2"] }),
-    });
   });
 
   it("uses the canonical unit collection and item routes", async () => {

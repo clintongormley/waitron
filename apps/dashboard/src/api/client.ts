@@ -284,26 +284,6 @@ export interface FolderSummary {
   products: number;
   routes: number;
 }
-export interface CategoryDependants {
-  /** Every product whose own main category is this one, variants included. */
-  products: { id: string; name: string }[];
-  children: { id: string; name: string }[];
-  parentId: string | null;
-  routes: { id: string; station: string | null; zone: string | null }[];
-}
-/** Where a deleted category's products and subcategories go; null is Uncategorised or the top
- * level, and an absent key takes the server's default, the deleted category's parent. */
-export interface CategoryReassignment {
-  productsTo?: string | null;
-  childrenTo?: string | null;
-}
-export interface CategoryProduct {
-  id: string;
-  name: string;
-  active: boolean;
-  primaryCategoryId: string | null;
-}
-
 export interface Unit {
   id: string;
   name: Record<string, string>;
@@ -1725,36 +1705,9 @@ export class DashboardApi {
   updateCategory(id: string, input: Partial<CategoryInput>): Promise<CategorySummary> {
     return this.#request(`/management-api/categories/${id}`, "PATCH", input);
   }
-  deleteCategory(id: string, reassign?: CategoryReassignment): Promise<void> {
-    return this.#request(`/management-api/categories/${id}`, "DELETE", reassign);
-  }
-  listCategoryProducts(
-    id: string,
-    options: { includeDescendants?: boolean } = {},
-  ): Promise<CategoryProduct[]> {
-    const query = options.includeDescendants ? "?descendants=1" : "";
-    return this.#request(`/management-api/categories/${id}/products${query}`, "GET");
-  }
-  getCategoryDependants(id: string): Promise<CategoryDependants> {
-    return this.#request(`/management-api/categories/${id}/dependants`, "GET");
-  }
-  /** Sets every listed product's main category to this one, moving it from wherever it was. */
-  addProductsToCategory(id: string, productIds: string[]): Promise<void> {
-    return this.#request(`/management-api/categories/${id}/products`, "POST", { productIds });
-  }
   listLibraryProducts(): Promise<Product[]> {
     return this.#request("/management-api/products", "GET");
   }
-  /** A null category makes the product Uncategorised. */
-  setMainCategory(
-    productId: string,
-    categoryId: string | null,
-  ): Promise<{ primaryCategoryId: string | null }> {
-    return this.#request(`/management-api/products/${productId}/categories`, "PUT", {
-      primaryCategoryId: categoryId,
-    });
-  }
-
   listUnits(): Promise<Unit[]> {
     return this.#request<Unit[]>("/management-api/units", "GET");
   }

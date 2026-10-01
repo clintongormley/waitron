@@ -226,14 +226,6 @@ it("has English and Spanish copy for every code in the bucket-copy routes' statu
   }
 });
 
-it("has a sentence for the category reassignment refusal", () => {
-  for (const code of ["category.reassign_invalid"]) {
-    expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
-    expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
-    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
-  }
-});
-
 it("has English and Spanish copy for each menu section code", () => {
   for (const code of [
     "menu_section.not_found",

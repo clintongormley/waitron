@@ -4139,7 +4139,6 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     });
 
   it.each([
-    ["categories", "dashboard-categories-screen"],
     ["sections", "dashboard-sections-screen"],
     ["menus", "dashboard-menus-screen"],
     ["location-settings", "dashboard-location-settings-screen"],
@@ -4341,6 +4340,13 @@ describe("the nav search", () => {
     expect(layout(el).classList.contains("drawer-open")).toBe(true);
   }
 
+  it("has no Categories screen", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "Categories");
+    expect(shownItems(el)).toEqual([]);
+    expect(el.shadowRoot!.querySelector("[data-test=nav-categories]")).toBeNull();
+  });
+
   it("is a named search box at the top of the nav", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     const box = searchBox(el);
@@ -4364,8 +4370,8 @@ describe("the nav search", () => {
 
   it("ignores accents, so a Spanish label is found typed without them", async () => {
     const el = await mountSession(sessionIn("es-ES"));
-    await search(el, "CATEGORIAS");
-    expect(shownItems(el)).toEqual(["nav-categories"]);
+    await search(el, "DIAGNOSTICO");
+    expect(shownItems(el)).toEqual(["nav-diagnostics"]);
     await search(el, "impresion");
     expect(shownItems(el)).toEqual(["nav-printing-rules"]);
   });
@@ -4410,7 +4416,7 @@ describe("the nav search", () => {
     );
     // "Menus" is a manager page; its group's name holds the term, so the group's other pages show.
     await search(el, "Menus");
-    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-categories", "nav-units"]);
+    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-units"]);
     await search(el, "Diagnostics");
     expect(shownItems(el)).toEqual([]);
     // Bookings is enabled for the venue, but this session lacks its permission.

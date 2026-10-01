@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { floorZones, kitchenStations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -16,7 +16,7 @@ import "./errors.js";
 
 /**
  * The catalogue routes over the FULL migration manifest, so venue-service's `preparation_routes`
- * exists and `categoryDependants` takes its optional-table branch. `catalogue-api.test.ts` migrates
+ * exists. `catalogue-api.test.ts` migrates
  * core + catalogue + identity only and covers the absent-table arm.
  */
 const LOCALE = "es-ES";
@@ -192,94 +192,6 @@ async function createProduct(
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("category dependants and bulk add", () => {
-  it("reads a category's preparation routes and cascades them away on delete", async () => {
-    const v = await setupVenue();
-    const app = mountApp();
-    const categoryId = await createCategory(app, v.managerCookie, "Frituras");
-    // Fixture rows, seeded through the table definitions for the `$defaultFn` reason `setupVenue`
-    // states.
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ locationId: v.locationId, name: "Terraza" })
-      .returning({ id: floorZones.id });
-    const [station] = await suite.db
-      .insert(kitchenStations)
-      .values({ locationId: v.locationId, name: "Plancha" })
-      .returning({ id: kitchenStations.id });
-    const [routed] = await suite.db
-      .insert(preparationRoutes)
-      .values({
-        locationId: v.locationId,
-        zoneId: zone!.id,
-        categoryId,
-        stationId: station!.id,
-      })
-      .returning({ id: preparationRoutes.id });
-    // `no_preparation` routes report a null station — the read's `case` arm.
-    const [direct] = await suite.db
-      .insert(preparationRoutes)
-      .values({ locationId: v.locationId, categoryId, noPreparation: true })
-      .returning({ id: preparationRoutes.id });
-
-    const res = await send(
-      app,
-      "GET",
-      `/management-api/categories/${categoryId}/dependants`,
-      v.managerCookie,
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      routes: { id: string; station: string | null; zone: string | null }[];
-      products: unknown[];
-      children: unknown[];
-      parentId: string | null;
-    };
-    const byId = <T extends { id: string }>(rows: T[]): T[] =>
-      [...rows].sort((a, b) => a.id.localeCompare(b.id));
-    expect(byId(body.routes)).toEqual(
-      byId([
-        { id: routed!.id, station: "Plancha", zone: "Terraza" },
-        { id: direct!.id, station: null, zone: null },
-      ]),
-    );
-    expect(body).toMatchObject({ products: [], children: [], parentId: null });
-
-    expect(
-      (await send(app, "DELETE", `/management-api/categories/${categoryId}`, v.managerCookie))
-        .status,
-    ).toBe(204);
-    const left = await suite.db.execute(
-      sql`select 1 from preparation_routes where category_id = ${categoryId}`,
-    );
-    expect(left.rows).toHaveLength(0);
-  });
-
-  it("bulk-adds products to a category", async () => {
-    const v = await setupVenue();
-    const app = mountApp();
-    const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
-    const categoryId = await createCategory(app, v.managerCookie, "Tapas");
-    const first = await createProduct(app, v.managerCookie, catalogueId, "Croquetas");
-    const second = await createProduct(app, v.managerCookie, catalogueId, "Boquerones");
-    const path = `/management-api/categories/${categoryId}/products`;
-
-    expect(
-      (await send(app, "POST", path, v.managerCookie, { productIds: [first, second] })).status,
-    ).toBe(204);
-    // Each product's main category is now this one.
-    const reporting = await suite.db.execute<{ category_id: string | null }>(
-      sql`select category_id from products
-          where id in (${first}, ${second})`,
-    );
-    expect(reporting.rows.map((r) => r.category_id)).toEqual([categoryId, categoryId]);
-    // A staff session holds no `person.manage`, so the gate refuses the write.
-    expect((await send(app, "POST", path, v.staffCookie, { productIds: [first] })).status).toBe(
-      403,
-    );
-  });
-});
-
 describe("Catalogue API — option groups, gates, by-id FKs", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results
@@ -429,15 +341,11 @@ describe("sections and the reporting and routing they do not touch", () => {
     const productId = await createProduct(app, v.managerCookie, catalogueId, "Agua");
     expect(
       (
-        await send(
-          app,
-          "POST",
-          `/management-api/categories/${categoryId}/products`,
-          v.managerCookie,
-          {
-            productIds: [productId],
-          },
-        )
+        await send(app, "POST", "/management-api/folders/move", v.managerCookie, {
+          productIds: [productId],
+          categoryIds: [],
+          to: categoryId,
+        })
       ).status,
     ).toBe(204);
     await suite.db.insert(preparationRoutes).values([

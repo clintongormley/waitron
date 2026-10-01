@@ -19,7 +19,7 @@ import {
 } from "./variants.js";
 import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
 import { createUnit, EACH_UNIT } from "./units.js";
-import { addProductsToCategory, createCategory, setMainReportingCategory } from "./categories.js";
+import { createCategory, setMainReportingCategory } from "./categories.js";
 
 /**
  * Variants against a real database, plus the pure selection core. A variant is a `products` row
@@ -452,12 +452,8 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     await expect(
       app((tx) => setMainReportingCategory(tx, f.variantId, f.categoryId)),
     ).rejects.toMatchObject(notFound(f.variantId));
-    await expect(
-      app((tx) => addProductsToCategory(tx, f.categoryId, [f.variantId])),
-    ).rejects.toMatchObject({ code: "category.membership_invalid" });
     expect((await storedVariants(f.parentId))[0]).toMatchObject({ category_id: null });
 
-    await app((tx) => addProductsToCategory(tx, f.categoryId, [f.parentId]));
     await expect(
       app((tx) => setMainReportingCategory(tx, f.parentId, f.categoryId)),
     ).resolves.toEqual({ primaryCategoryId: f.categoryId });
