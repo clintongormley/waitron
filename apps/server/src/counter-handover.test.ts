@@ -386,7 +386,9 @@ describe("paying a counter order sent without payment, before it is handed over"
       expect(await stationQueuesListing(id)).toEqual({ listing: 0, stations: 1 });
     },
   );
+});
 
+describe("paying a pay-first counter order", () => {
   it("a pay-first order paid by card before it was sent records no handover, and stays waiting and on its station queue", async () => {
     const id = randomUUID();
     const out = await payWorkingOrderIntegrated(

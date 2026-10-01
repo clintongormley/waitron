@@ -4869,13 +4869,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       B25, PR to follow). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
       kitchen queue's Collect) records the handover time. An order handed over before it was paid
-      keeps that time. Three existing assertions outside the owner-approved list were changed and
+      keeps that time. Three existing cases outside the owner-approved list were changed and
       await the owner's approval: "a placed order paid without a handover is not handed over by
-      the payment" in `apps/server/src/counter-handover.test.ts`, and "Mode T: collectOrder files
-      the sale once and records no handover, so the order stays on its station queue" and "Mode I:
-      collectOrder files nothing new and records no handover, so the order stays on its station
-      queue" in `apps/server/src/working-order.pay-and-dispatch.test.ts`. Guards: "paying a counter
-      order sent without payment, before it is handed over" in
+      the payment" in `apps/server/src/counter-handover.test.ts`, and "Mode T: after collectOrder
+      the order holds one sale and no handover, and stays on its station queue" and "Mode I: after
+      collectOrder the order holds one sale and no handover, and stays on its station queue" in
+      `apps/server/src/working-order.pay-and-dispatch.test.ts`. Guards: "paying a counter order
+      sent without payment, before it is handed over" and "paying a pay-first counter order" in
       `apps/server/src/counter-handover.test.ts`.
     - **OPEN — the kitchen queue's Collect sends no submission id**, on the station screen and on
       the counter's prep-queue card, so a Collect resent after a lost reply is refused

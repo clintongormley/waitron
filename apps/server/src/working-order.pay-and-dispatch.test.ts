@@ -1774,7 +1774,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // The counter COLLECT is a payment, not a handover: a paid counter order stays on its station queue
   // until it is handed over. Both modes are pinned: Mode T settles through `fileImmediateSale`, Mode I
   // through the direct settle UPDATE.
-  it("Mode T: collectOrder files the sale once and records no handover, so the order stays on its station queue", async () => {
+  it("Mode T: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
@@ -1815,7 +1815,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await ticketStateOf(id)).toBe("queued");
   });
 
-  it("Mode I: collectOrder files nothing new and records no handover, so the order stays on its station queue", async () => {
+  it("Mode I: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
