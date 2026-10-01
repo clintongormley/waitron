@@ -393,12 +393,27 @@ it("selects folders and products but never variants", async () => {
   ).toBeNull();
   expect(count(el)).toBe("2 selected");
 });
-it.each(["cancel-selection", "folder", "view", "search", "filter"])(
+it("leaves selection mode on Cancel and restores the ordinary toolbar with no selected keys", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  await press(el, "cancel-selection");
+  expect((await tableOf(el)).selectable).toBe(false);
+  expect(count(el)).toBeUndefined();
+  for (const action of ["select", "new-folder", "view-folders", "view-all"])
+    expect(el.shadowRoot!.querySelector(`[data-test="${action}"]`), action).not.toBeNull();
+  await press(el, "select");
+  expect(count(el)).toBe("0 selected");
+  expect(
+    (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
+      'tr[data-row-key="bread"] input[type="checkbox"]',
+    )!.checked,
+  ).toBe(false);
+});
+it.each(["folder", "view", "search", "filter"])(
   "clears selection on %s and keeps selection mode on",
   async (trigger) => {
     const el = await mountBrowser();
     await selectKeys(el, ["bread"]);
-    if (trigger === "cancel-selection") await press(el, trigger);
     if (trigger === "folder") el.folderId = "d";
     if (trigger === "view") el.view = "all";
     if (trigger === "search") await typeSearch(el, "bread");
@@ -609,6 +624,32 @@ it("shows a spinner and blocks confirmation while summaries are pending", async 
   resolve([{ id: "d", folders: 1, products: 2, routes: 0 }]);
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
   expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
+});
+
+it("keeps the captured Delete request when Cancel exits selection during the summary read", async () => {
+  const el = await mountBrowser();
+  let resolve!: (
+    value: { id: string; folders: number; products: number; routes: number }[],
+  ) => void;
+  vi.mocked(el.api.summariseFolders).mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await press(el, "cancel-selection");
+  expect((await tableOf(el)).selectable).toBe(false);
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  resolve([{ id: "f", folders: 0, products: 0, routes: 0 }]);
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["f"] },
+      "move_up",
+    ),
+  );
+  expect(dialog(el)).toBeNull();
 });
 
 it("can move after cancelling a failed delete summary", async () => {

@@ -578,8 +578,9 @@ or the nav toggle looking like just another row's overflow menu.
 When you need to act on several rows together, give the list a **Select** button. Show
 checkboxes only while selecting, with an action bar for the selected count, actions and
 **Cancel**. Clear the selection when you navigate, search or change a table filter, so an
-action cannot apply to rows you have just hidden. Cancel clears the selection and leaves
-selection mode on.
+action cannot apply to rows you have just hidden. Cancel clears the selection and exits
+selection mode, restoring the ordinary toolbar. It does not cancel a Delete you have
+already requested.
 
 For example, selecting Drinks and Bread shows **2 selected** and lets you move both in one
 step. Confirm destructive actions in a `wt-modal` with a `danger` button. Keep a refused

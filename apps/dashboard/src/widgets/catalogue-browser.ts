@@ -466,7 +466,10 @@ export class CatalogueBrowser extends LitElement {
                 <wt-button
                   data-test="cancel-selection"
                   variant="secondary"
-                  @click=${() => (this.selected = [])}
+                  @click=${() => {
+                    this.selected = [];
+                    this.selecting = false;
+                  }}
                   >${t("folders.cancel_selection")}</wt-button
                 >
               </div>`
