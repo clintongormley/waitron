@@ -212,8 +212,8 @@ any routing rules attached to them. Confirmation is shown when selected folders 
 or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved (owner, 2026-10-01). PF2b Tasks 1–10 are implemented and independently
-reviewed. The branch is rebased over slice 1 and name-only photos; branch finishing and landing
-remain pending. The owner accepted a venue reset for catalogue0018's library-section deletion
+reviewed. Slice 2 landed in [#993](https://github.com/clintongormley/waitron/pull/993).
+The owner accepted a venue reset for catalogue0018's library-section deletion
 and the complete upgrade from media0004 that refuses a trigger drop in shipped media0005
 (2026-10-01). Catalogue0018 now has an authorised `RESETS` entry matching its foreign-key
 refusal; shipped SQL is unchanged. The owner also authorised reset entries for catalogue0020
@@ -221,7 +221,7 @@ and catalogue0021 (2026-10-01), matching their observed `NOT NULL` refusals. Wit
 `pnpm exec vitest run scripts/migration-upgrade.test.ts` passes its chronological walk.
 The walk reaches media0005 before catalogue0018 without a media0005 refusal, so no media reset
 entry was added.
-After landing, reset each dev venue with `wa-wt reset demo <worktree-name>` and reset the
+Reset each dev venue with `wa-wt reset demo <worktree-name>` and reset the
 owner's box too: library sections and their placements disappear, menu switched-off
 settings clear, and stored variant switches become explicit on decisions. Per-menu extras are
 retired; menu extras follow product-level attachments and settings. Reload tills running the older
@@ -694,7 +694,7 @@ leaves such a tile out and Preview warns (D13). _2026-09-30: publishing is to ke
 in the tile's place instead, so later tiles do not move
 ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4.5). 2026-10-01: PF2b
 Tasks 5, 6 and 9 implement the empty-slot document, till rendering and missing-target editor,
-including Remove, Replace and reordering. The focused checks pass; landing is pending._ **Upgrading** (measured: the new catalogue migration
+including Remove, Replace and reordering; they landed in [#993](https://github.com/clintongormley/waitron/pull/993)._ **Upgrading** (measured: the new catalogue migration
 applied over a database at main's migration state with rows in place): it adds one table and the rows
 survive. **Left open, none blocking:** nothing on a till reads the
 layouts or the device's choice yet — that is Task 9, which also resolves a deleted layout against the
