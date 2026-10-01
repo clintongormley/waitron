@@ -1,7 +1,9 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone } from "../api/client.js";
 import { FloorScreen } from "./floor-screen.js";
@@ -85,9 +87,7 @@ function type(el: FloorScreen, sel: string, value: string): void {
 }
 
 function selectValue(el: FloorScreen, sel: string, value: string): void {
-  const node = q(el, sel) as HTMLSelectElement;
-  node.value = value;
-  node.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  void chooseOption(q(el, sel)!, value);
 }
 
 describe("floor-screen", () => {
@@ -154,6 +154,31 @@ describe("floor-screen", () => {
     await flush(el);
     expect(api.updateTable).toHaveBeenCalledWith("t1", { zoneId: "z1" });
     expect(api.listTables).toHaveBeenCalledTimes(2);
+  });
+
+  it("picks a table's zone from a dropdown labelled with the field, prompting No zone while it has none", async () => {
+    const api = stubApi({}, TWO_ZONES, TWO_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    const zone = q(el, "wt-combobox[data-test=table-zone-t1]") as HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      label: string;
+      placeholder: string;
+      name: string;
+    };
+    expect(zone.name).toBe("table-zone");
+    expect(zone.label).toBe(t("floor.table_zone"));
+    expect(zone.placeholder).toBe(t("floor.no_zone"));
+    expect(zone.options).toEqual([
+      { value: "", label: t("floor.no_zone") },
+      { value: "z1", label: "Comedor" },
+      { value: "z2", label: "Terraza" },
+    ]);
+    expect(zone.value).toBe("");
+    await chooseOption(zone, "z2");
+    await flush(el);
+    expect(api.updateTable).toHaveBeenCalledWith("t1", { zoneId: "z2" });
   });
 
   it("offers no blank clear option once a table has a zone (the select can never show a fake unassigned state)", async () => {

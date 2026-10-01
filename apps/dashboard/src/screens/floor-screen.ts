@@ -13,11 +13,11 @@ import {
   floorTrayStyles,
   isTableZoneless,
   resolveActiveTabKey,
-  selectStyles,
   toFloorTable,
 } from "@waitron/ui";
 import type { FloorCanvasCopy, FloorTable, PlacementChange, PlacementClear } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
@@ -51,7 +51,6 @@ interface EditableTable {
 export class FloorScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     floorTrayStyles,
     css`
       :host {
@@ -91,12 +90,6 @@ export class FloorScreen extends LitElement {
         gap: var(--wt-space-3);
         align-items: flex-end;
         flex-wrap: wrap;
-      }
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        color: var(--wt-color-text);
       }
       .new {
         display: flex;
@@ -318,9 +311,9 @@ export class FloorScreen extends LitElement {
     }
   }
 
-  #onAssignZone(id: string, event: Event): void {
+  #onAssignZone(id: string, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const zoneId = (event.target as HTMLSelectElement).value;
+    const zoneId = event.detail.value;
     if (zoneId === "") return;
     void this.#assignZone(id, zoneId);
   }
@@ -393,7 +386,6 @@ export class FloorScreen extends LitElement {
   }
 
   #renderTable(tbl: EditableTable): TemplateResult {
-    const selected = tbl.zoneId ?? "";
     return html`<li data-test="table-row-${tbl.id}">
       <wt-card>
         <div class="row">
@@ -421,25 +413,23 @@ export class FloorScreen extends LitElement {
               });
             }}
           ></wt-input>
-          <label class="field"
-            >${t("floor.table_zone")}
-            <select
-              data-test="table-zone-${tbl.id}"
-              @change=${(e: Event) => this.#onAssignZone(tbl.id, e)}
-            >
-              ${
-                // Offered only while the table has no zone: the table update takes no null `zoneId`,
-                // so a blank on an assigned table would show it cleared while the server kept the zone.
-                tbl.zoneId === null
-                  ? html`<option value="" selected>${t("floor.no_zone")}</option>`
-                  : nothing
-              }
-              ${this.zones.map(
-                (z) =>
-                  html`<option value=${z.id} .selected=${z.id === selected}>${z.name}</option>`,
-              )}
-            </select>
-          </label>
+          <wt-combobox
+            data-test="table-zone-${tbl.id}"
+            name="table-zone"
+            label=${t("floor.table_zone")}
+            search="auto"
+            placeholder=${t("floor.no_zone")}
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            .options=${[
+              // Offered only while the table has no zone: the table update takes no null `zoneId`,
+              // so a blank on an assigned table would show it cleared while the server kept the zone.
+              ...(tbl.zoneId === null ? [{ value: "", label: t("floor.no_zone") }] : []),
+              ...this.zones.map((z) => ({ value: z.id, label: z.name })),
+            ]}
+            .value=${tbl.zoneId ?? ""}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onAssignZone(tbl.id, e)}
+          ></wt-combobox>
           <wt-button
             variant="primary"
             size="sm"
