@@ -14,6 +14,7 @@ import type {
   TableSignal,
 } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
+import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
@@ -5122,6 +5123,19 @@ export interface StationQueueItem {
   band: TimingBand;
 }
 
+/** One item of the order at another station, shown in this station's card. */
+export interface ElsewhereItem {
+  id: string;
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  unitPrecision: number | null;
+  soldInEach: boolean;
+  stationName: string;
+  state: TicketState;
+  held: boolean;
+}
+
 /** One order's lines at a station. `queuedAt` is its OLDEST line's. */
 export interface StationQueueGroup {
   orderId: string;
@@ -5137,6 +5151,8 @@ export interface StationQueueGroup {
    *  `JOBS_WAITING_MS`, or was given up on (`listPrintProblems`). */
   printProblem?: true;
   items: StationQueueItem[];
+  /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
+  elsewhere?: ElsewhereItem[];
   thresholds: StationThresholds;
 }
 
@@ -5255,6 +5271,7 @@ function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]
 /**
  * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected
  * order drops out; items are not filtered by state, so a `ready` line stays until its order collects.
+ * When the station shows the rest of the order, each card also carries its unserved items at other stations.
  */
 export async function listStationQueue(
   tx: Transaction,
@@ -5290,6 +5307,7 @@ export async function listStationQueue(
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      showsRestOfOrder: kitchenStations.showsRestOfOrder,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
@@ -5318,13 +5336,20 @@ export async function listStationQueue(
     rows.map((row) => row.workingOrderLineId),
   );
 
+  const orderIds = [...new Set(rows.map((row) => row.orderId))];
+  const showsRestOfOrder = rows[0]?.showsRestOfOrder ?? false;
+  const rest: Map<string, RestOfOrderItem[]> = showsRestOfOrder
+    ? await readRestOfOrder(tx, orderIds)
+    : new Map();
+  const restSoldInEach = showsRestOfOrder
+    ? await VENUE_SERVICE.readLinesSoldInEach(
+        tx,
+        [...rest.values()].flatMap((items) => items.map((item) => item.workingOrderLineId)),
+      )
+    : new Set<string>();
+
   const nowMs = Date.now();
-  const printProblems = await ordersWithPrintProblem(
-    tx,
-    stationId,
-    [...new Set(rows.map((row) => row.orderId))],
-    new Date(nowMs),
-  );
+  const printProblems = await ordersWithPrintProblem(tx, stationId, orderIds, new Date(nowMs));
   // The Map keeps insertion order, so groups come out oldest-first.
   const groups = new Map<string, StationQueueGroup>();
   for (const row of rows) {
@@ -5344,6 +5369,24 @@ export async function listStationQueue(
         ...optional("party", queueParty(row)),
         ...optional("printProblem", printProblems.has(row.orderId) ? true : undefined),
         items: [],
+        ...optional(
+          "elsewhere",
+          showsRestOfOrder
+            ? (rest.get(row.orderId) ?? [])
+                .filter((item) => item.stationId !== stationId)
+                .map((item) => ({
+                  id: item.ticketItemId,
+                  name: item.name,
+                  quantity: item.quantity,
+                  unitName: item.unitName,
+                  unitPrecision: item.unitPrecision,
+                  soldInEach: restSoldInEach.has(item.workingOrderLineId),
+                  stationName: item.stationName,
+                  state: item.state,
+                  held: item.held,
+                }))
+            : undefined,
+        ),
         thresholds,
       };
       groups.set(row.orderId, group);

@@ -1196,6 +1196,19 @@ export interface StationQueueCourse {
   displayOrder: number;
 }
 
+/** One item of the order at another station, shown in this station's card. */
+export interface ElsewhereItem {
+  id: string;
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  unitPrecision: number | null;
+  soldInEach: boolean;
+  stationName: string;
+  state: TicketState;
+  held: boolean;
+}
+
 /** What a kitchen notice tells a station: a line recalled, voided, changed or moved to another
  *  table after it was sent. */
 export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
@@ -1252,6 +1265,8 @@ export interface StationQueueGroup {
    *  server's `JOBS_WAITING_MS`, or was given up on. */
   printProblem?: true;
   items: StationQueueItem[];
+  /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
+  elsewhere?: ElsewhereItem[];
   /** This station's order-timing thresholds. Every group from one call shares them; they ride
    *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
    *  (`classifyBand`, `@waitron/shared`). */

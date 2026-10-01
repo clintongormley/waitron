@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, deviceProfiles, printers, withTransaction } from "@waitron/db";
+import { devices, deviceProfiles, kitchenStations, printers, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -752,6 +752,30 @@ describe("Device API — the device-guarded routes", () => {
     expect((await afterRevoke.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device.unauthorized" },
     });
+  });
+
+  it("carries the rest of the order in an enabled kitchen device's station queue", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const other = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+    );
+    const { orderId, items } = await fireOrder(venue);
+    await moveItemToStation(items[1]!, other.id);
+    await suite.db
+      .update(kitchenStations)
+      .set({ showsRestOfOrder: true })
+      .where(eq(kitchenStations.id, venue.defaultStationId));
+    const { jar } = await enrolKds(app, venue, venue.defaultStationId);
+
+    const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      station: { queue: { orderId: string; elsewhere?: { id: string; stationName: string }[] }[] };
+    };
+    expect(body.station.queue.find((group) => group.orderId === orderId)?.elsewhere).toEqual([
+      expect.objectContaining({ id: items[1], stationName: "Fría" }),
+    ]);
   });
 
   it("the device routes refuse a missing / malformed cookie with 401 device.unauthorized", async () => {
