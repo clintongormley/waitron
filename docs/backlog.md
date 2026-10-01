@@ -2315,15 +2315,18 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
-**Printer paper width, resolution and character set — LANDED #367.** The printer editor stores
-paper width, resolution and character set per printer, and all documents format to them.
+**Printer paper width, resolution and character set — LANDED #367.** The printer editor stores paper
+width, resolution and character set per printer, and all documents format to them. _(2026-10-01,
+C107: the character-set step and code pages are gone; text prints as images. A printer's layout
+settings are now paper width and resolution alone.)_
 
 **Setup refinements — LANDED #380.** Add opens a prefilled naming dialog and printed instructions
 follow the user's language; development servers no longer advertise `waitron.local`.
 
 **Printer calibration follow-up — LANDED #388.** Encoding and the `ESC t` table number are
 independent printer settings, and the editor prints a clearly simulated sample receipt with unsaved
-settings.
+settings. _(2026-10-01, C107: the character-set step and code pages are gone; text prints as images.
+Neither setting exists any more.)_
 
 **Calibration wizard, drawer auditing and receipt layout — LANDED #689:** a calibration wizard
 replaces the combined calibration editor, starts with tables 0–15, offers further ranges and
@@ -2334,13 +2337,15 @@ status filter, one-click disable, links to each print agent's setup page and the
 each printer, and the print-agent list its own remembered Active/Revoked/All filter (#704). On the
 owner's NT-806 the finder matched at W-11 and 8-14, and PC858/table 14 printed Spanish text and euro
 amounts correctly. Why these table numbers differ from the supplied manual remains unknown; do not
-use them as defaults for other printers.
+use them as defaults for other printers. _(2026-10-01, C107: the character-set step and code pages
+are gone; text prints as images. The wizard no longer prints tables or a finder.)_
 
-**Calibration and status follow-up — LANDED #699:** four calibration steps separate the
-cash-drawer question from the receipt test, finder codes use `nn-W`/`nn-8`, and clicking a printer
-opens its status and connection details. Bluetooth scans show progress and report failures, but real
-Bluetooth discovery and delivery remain hardware-unverified; the per-device Bluetooth delivery
-connection was built later by A140 (below).
+**Calibration and status follow-up — LANDED #699:** four calibration steps separate the cash-drawer
+question from the receipt test, finder codes use `nn-W`/`nn-8`, and clicking a printer opens its
+status and connection details. Bluetooth scans show progress and report failures, but real Bluetooth
+discovery and delivery remain hardware-unverified; the per-device Bluetooth delivery connection was
+built later by A140 (below). _(2026-10-01, C107: the character-set step and code pages are gone;
+text prints as images. The wizard has three steps, opening on a width ruler, and no finder codes.)_
 
 - **The setup-page link is unproven on the box.** The print agent now builds it from
   `WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
@@ -2349,15 +2354,20 @@ connection was built later by A140 (below).
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
   no drawer sensor; the audit row is the request.
 
-- **Every printer saved before this change must be recalibrated** through the printer editor's test
-  flow. Rows still carrying the old `pc858` setting were deliberately not converted: this repository
-  forbids data-migration code until Waitron is in production, so a stale row prints the wrong accented
-  characters until someone runs the test page against that printer and saves the answers.
-- **Adding a language to the venue also means adding its printer calibration entry.** The character
-  set list is derived from the database enum, and the calibration samples, finder candidates and
-  setting labels are exhaustive over the locale list, so a new locale fails to compile until its entry
-  exists. English and Spanish deliberately share one profile today; a language needing Cyrillic (the
-  worked example was Ukrainian) has to add and test its own encoding path rather than inherit one.
+- **Every printer saved before this change must be recalibrated — RETIRED (2026-10-01, C107).** It
+  was about rows still holding the old `pc858` character setting; printers no longer store a
+  character setting at all, so no saved row can print the wrong accented characters.
+- **Adding a language to the venue also means adding its printer captions, and a language written
+  outside the Latin letters means widening the font table** (rewritten 2026-10-01, C107; it was
+  about the character-set list and the finder). The width ruler's captions are exhaustive over the
+  locale list (`CAPTIONS` in `apps/server/src/test-page.ts`), so a new locale fails to compile until
+  its captions exist. Printed letters come from a table holding U+0020–U+007E, U+00A0–U+017F and the
+  rest of Windows-1252's letters and signs (`packages/printing/scripts/build-glyph-table.mjs`);
+  anything else prints as `?` unless dropping its accent leaves a letter the table holds
+  (`prepareText`, `packages/printing/src/text.ts`, which also prints U+202F as a space) — measured
+  2026-10-01, `prepareText("Привіт Ελλάδα Café")` gives `?????? ?????? Café`. A language needing
+  Cyrillic or Greek needs the table regenerated with a wider range, if the font has those letters
+  (not checked).
 - **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
   whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
   QR size is meant to count the code's blank border or only its dark squares.
@@ -2366,7 +2376,9 @@ connection was built later by A140 (below).
   printer's own width setting also contributed was not tested. The formatter now sets a zero left
   margin and a 360-dot print area before centring. Byte-level tests pin those commands; the preview
   test establishes only that its parser continues past them, not that the selected width fits the
-  paper. The corrected paper output has not yet been printed.
+  paper. The corrected paper output has not yet been printed. _(2026-10-01, C107: text now prints as
+  images, and the print area is the image's width — 360 or 384 dots on 58 mm paper, 512 or 576 on
+  80 mm; whether an image job needs a print area at all is unmeasured.)_
 - **Follow-up (ruling C): the preview no longer shows the QR link as text** for a raster receipt —
   only the earlier, now-unused native-QR path did that. A possible fix is to carry the link alongside
   the print job so the preview can still show it as text.
@@ -2759,7 +2771,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - Add again (Add a printer, on a switched-off registration) still switches the printer on before
     it opens calibration, because a switched-off printer refuses test prints (`enqueuePrintJob`,
     `packages/printing/src/outbox.ts`) and calibration prints; calibration opens for the same
-    record with its saved paper width, resolution, character table and drawer. Closing the wizard
+    record with its saved paper width, resolution, character table and drawer (2026-10-01, C107: there
+    is no character table any more). Closing the wizard
     without saving now switches it off again. Leaving the Printers screen mid-wizard asks the server
     to switch it off (`disconnectedCallback`); if that request fails nothing reports it and the
     printer stays on. Closing the browser tab mid-wizard does not switch it off. Saving leaves it on. This
@@ -2895,6 +2908,58 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `readUncoveredLinks`, one at a time, and dropping the resend's own `status = 'done'` in
     `printedOrResent`, each failed at least one of the four resend cases. The new foreign key is
     listed in `scripts/schema-constraints.test.ts`.
+- **Receipts and kitchen tickets print their text as images, and the calibration wizard loses its
+  character-set step (C107, owner 2026-09-30) — DONE (2026-10-01, #PR).** Why: in C106 the same
+  receipt sent as text printed correctly on the owner's Bluetooth printer and as garbage on the
+  network one ("Café" came out "Cafш"), while the same receipt sent as images printed correctly on
+  both. The owner chose images with no text mode at all, and the font Iosevka Term Bold.
+  - Every line of every printout (receipts, kitchen tickets, payment slips, category sales pages,
+    the sample receipt and the calibration pages) is drawn on the server as a picture and sent with
+    `GS v 0`, one picture per line. The letters come from a table of pictures made once from Iosevka
+    Term Bold 34.9.0 (`packages/printing/src/glyphs.ts`); the box carries that table, not the font
+    file, and the font's licence ships at `/app/third-party/iosevka/`. Each picture is as wide as the
+    printer's line for its paper width and resolution (360, 384, 512 or 576 dots), and the text keeps
+    its 30 columns on 58 mm paper and 42 on 80 mm, centred in the picture, so no layout changed. The
+    QR code, the feed, the cut and the drawer pulse are the printer commands they were. How it works,
+    with pointers: `docs/developers/conventions-ui.md`, "Printed documents take the printer's own
+    layout settings".
+  - Printers no longer store a character set or a character table: the two columns, their API
+    fields, the dashboard's Advanced text settings and the character-table test page are gone.
+  - The calibration wizard has three steps. The first prints a width ruler, a picture 576 dots wide
+    with a mark every 8 dots and the numbers 360, 384, 512 and 576, and asks for the last number
+    fully visible, which sets the paper width; the resolution is still read from the size of the QR
+    code's black square, and a re-run keeps what is saved. If the two answers disagree, one line
+    says so and the save is not blocked. Then the sample receipt, then the cash drawer.
+  - The print preview shows the printed pictures themselves, at their width on the printer's paper,
+    and its text, which tests read too, is read back from those pictures.
+  - **Upgrading a venue that has used its printers refuses to start.** The generated migration
+    (`packages/db/drizzle/0053_drop_printer_character_set.sql`) rebuilds the `printers` table. Run
+    on 2026-10-01 against a database migrated to the step before it, with one printer: with nothing
+    else pointing at the printer it applied; with one row in any of `print_jobs`, `station_printers`,
+    `tills` (its receipt printer), `devices` (its receipt printer) or `drawer_opens` pointing at it,
+    `applyMigrations` threw `migrations.apply_failed` at ``DROP TABLE `printers` `` with "FOREIGN KEY
+    constraint failed", and every row and the core migration record were as before, so the whole
+    core step rolled back. A box applies migrations as it starts (`apps/server/src/boot.ts`), so a
+    box whose venue has printed anything will not start on this version until its venue is reset
+    (read from the code, not run on a box). Pre-live, there is no data migration (CLAUDE.md §3); the
+    owner's box has printers.
+  - Open:
+    - The box's timings are owed, and so are the owner's photographs of a receipt, a kitchen ticket,
+      the ruler page and a sample receipt on both printers (what to time:
+      `docs/developers/testing-guide.md`, "How long a job of pictures takes to print on the box is
+      not measured").
+    - Whether a job of pictures still needs the print area (`GS L`/`GS W`) that receipts and category
+      pages send is not measured.
+    - At 203 dpi a line could hold 32 columns on 58 mm paper (384 ÷ 12) and 48 on 80 mm (576 ÷ 12);
+      it keeps 30 and 42.
+    - The 28-dot line cuts letters: by the generator's own report, 67 of its characters lose at
+      least one dot that was half inside the letter, most of them accented capitals losing the top
+      of the accent. Measured 2026-10-01 with a copy of the generator: a 30-dot line with the
+      baseline 24 dots down leaves 3 (ď, ĥ, ŉ), and 31 or 32 dots still leave those 3.
+    - The preview reads at most 1 MiB of a job: about 770 lines at 384 dots wide, about 500 at
+      576. A deep category sales page printed about 1,000 lines in a test, so its preview is cut short.
+    - What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
+      measured; the preview shrinks a picture wider than the printer's line instead of cutting it.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
@@ -5969,7 +6034,9 @@ ongoing overhaul listed at the top of Track A.
   modal's full width, the footer buttons do not move, and at 390px wide nothing changes. The
   Printers screen's row of fields takes the same width, so "Print block" stays beside its select.
   Fields on pages and in a `wt-dialog` outside a modal are unchanged.
-  `docs/developers/design-system.md` → "Structure" records the standard. Left open: a
+  `docs/developers/design-system.md` → "Structure" records the standard. _(2026-10-01, C107: the
+  wizard has no "Print block" button or "Advanced text settings" any more; its width-ruler row holds
+  the cap.)_ Left open: a
   `wt-disclosure`'s heading row (the calibration wizard's "Advanced text settings") and a screen's
   own paragraphs still run the modal's full width; the product editor's description `<textarea>`,
   which the screen styles itself, is not capped; the content-languages editor's rows of enabled

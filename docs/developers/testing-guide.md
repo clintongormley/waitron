@@ -773,6 +773,26 @@ Not measured: a venue's own sale rate, several sellers at once, and the box's ow
 The owner chose on 2026-09-30 to leave both routine checkpoints at Litestream's defaults, so neither
 setting shipped (`docs/backlog.md`, A130's entry).
 
+## How long a job of pictures takes to print on the box is not measured
+
+Since 2026-10-01 (C107) every printed line is sent as a `GS v 0` picture rather than as text
+(`docs/developers/conventions-ui.md`, "Printed documents take the printer's own layout settings").
+No suite times a real printer, and the box's own timings are OWED: a kitchen ticket of 40 or more
+lines and a receipt, each sent to the owner's Bluetooth printer through
+`apps/print-agent/src/rfcomm-send.py` and to the network printer over TCP, timed to the printer's
+answer to a `GS r 1` sent after the job (C106: _"the printer answers it only after the print data
+before it"_). Record them here when they are taken.
+
+The only measurement so far is C106's, on the owner's Mac, not the box, with Menlo rather than the
+font the box draws with. In the queue entry's own words: _"The same 36-line Spanish receipt, 32
+columns: as text (ESC t 16, cp1252) 946 bytes; as `GS v 0` images at 384 dots wide, one 24-dot band
+per line, Menlo 20 px, 38,292 bytes. … Two runs each: text 2.72 s and 2.74 s to the answer; image
+2.19 s and 2.19 s, its bytes sent in 0.86–0.87 s (about 44 KB/s)."_ That was the Bluetooth printer,
+driven through IOBluetooth by a Swift sender. The network printer, the same two jobs over TCP:
+_"text 946 bytes, answer after 1.50 s; image 38,292 bytes, answer after 1.53 s."_ C106 also lists
+what it did not measure: _"80 mm paper (576 dots = 1.5× the image bytes); the box's Linux path
+(`apps/print-agent/src/rfcomm-send.py`); a long kitchen ticket; a busy radio."_
+
 **What a test run prints**
 
 ## Vitest hides a passing test's console output under an AI agent

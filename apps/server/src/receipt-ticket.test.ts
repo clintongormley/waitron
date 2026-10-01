@@ -210,7 +210,6 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
       expect(s).toContain("VERI*FACTU");
 
-      // Digits only: the € glyph and the amount/€ separator vary by character set and ICU build.
       expect(s).toContain("12,10"); // line 1 gross
       expect(s).toContain("8,80"); // line 2 gross
       expect(s).toContain("10,00"); // base 21%
@@ -523,10 +522,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect([...bytes.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
   });
 
-  it("normalises the amount/€ separator to an ASCII space (0x20), not NBSP/NNBSP", () => {
-    // `Intl.NumberFormat("es-ES")` separates amount and € with a no-break space (U+00A0 or U+202F),
-    // and this printer's wpc1252 table can encode U+00A0, so `prepareText` keeps it; `formatMoney`
-    // must rewrite it.
+  it("prints a blank between the amount and the € sign", () => {
+    // A no-break space is drawn exactly like a space, so the read-back cannot tell them apart and
+    // this case passes with `formatMoney`'s rewrite deleted; `receipt-money.test.ts` is what fails.
     const s = decodeTicket(
       formatReceipt({
         result: FILED_SALE,
@@ -536,10 +534,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         printer: PRINTER_80,
       }),
     );
-    // No non-break space survives to the decoded text (neither U+00A0 nor U+202F): the byte-exact
-    // decode reads byte 0xA0 back as U+00A0, so a separator left in place by `formatMoney` is caught.
     expect(s).not.toMatch(/[\u00a0\u202f]/u);
-    // The character right after the TOTAL amount is a plain ASCII space (0x20), never `/` or U+00A0.
     const idx = s.indexOf("20,90");
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(s[idx + "20,90".length]).toBe(" ");
