@@ -1352,6 +1352,35 @@ half-circle at each end): every table's search (`.table-search`,
 take `var(--wt-radius-md)` (8px), the radius every other text field uses, so the focus ring
 follows it too. Small; no guard checks a field's radius.
 
+**An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
+— OPEN.** The owner, on the Extras tab with no lists: _"The "No extras lists to show" could be
+inset a bit. How could we improve the styling?"_ Today, when a table has no rows at all,
+`wt-data-table` stops drawing the table — no header row, no border — and leaves the message as a
+bare muted paragraph flush with the left edge (`render()`, the `rows.length === 0` branch, and the
+`.message` rule, `packages/ui/src/components/wt-data-table.ts`). **Decided (owner, 2026-10-01,
+choosing the second of two looks offered):** when nothing exists yet, the table draws a padded box
+with the table's own border and corners, holding the screen's empty sentence (A177) and the
+screen's Add button under it, centred. The table does not know a screen's Add button today, so it
+needs a place for the screen to put one (a slot or similar), in the shared table so every screen
+gets it. With A174 the same Add button also sits on the tab row; showing it in both places on an
+empty screen is intended. The "nothing matches" case (A177) keeps the table's toolbar and gets the
+same padded box without a button.
+
+**One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177, owner
+2026-10-01) — OPEN.** `wt-data-table` already separates two cases: nothing exists (`emptyMessage`)
+and rows exist but the search or a filter hides all of them (`noMatchesMessage`); about 25 screens
+pass their own text for each, in mixed shapes ("No users found.", "No canvases yet" without a full
+stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
+
+- **Nothing matches:** one fixed sentence in the shared table, the same on every screen, naming
+  both causes — e.g. "Nothing matches your search or filters." — in English and Spanish; the
+  per-screen `*.no_matches` strings go. Read from the code, not yet reproduced: `#visibleRows`
+  applies the filters and the search together, so today a FILTER that hides every row shows the
+  screen's "… match your search" text even when nothing was searched.
+- **Nothing yet:** stays specific to the screen, in one pattern — "No extras lists yet." — with the
+  Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
+  languages; a table with no Add action keeps just the sentence.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
