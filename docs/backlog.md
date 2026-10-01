@@ -205,7 +205,8 @@ The owner confirmed on 2026-10-01 that deleting only empty folders remains immed
 any routing rules attached to them. Confirmation is shown when selected folders contain products
 or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
-per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
+per-menu extras, is approved (owner, 2026-10-01). PF2b Tasks 1–4 are implemented and independently
+reviewed; Tasks 5–10 and landing are pending. Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
 ([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), approved, lane D's PF3 after
 PF1); 3b, opening hours, by-hand open and close, fallbacks (a real replacement; a station with none is a
