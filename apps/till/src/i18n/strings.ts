@@ -777,7 +777,7 @@ export const en = {
   "departure.title": "Record unpaid departure",
   "departure.left_unpaid": "Left unpaid",
   "departure.scope":
-    "Each of these bills is invoiced now, in full, and recorded as unpaid. No receipt is printed. The table is then finished, as Finish table would.",
+    "Each of these bills not yet invoiced is invoiced now for its full amount, and every one is recorded as unpaid. No receipt is printed. The table is then finished, as Finish table would.",
   "departure.reason": "Reason",
   "departure.reason_invalid": "Say why the bill is left unpaid",
   "departure.reason_long": "Keep the reason to 500 characters or fewer",
@@ -787,6 +787,8 @@ export const en = {
   "departure.approvers_failed": "Could not read who can approve this. Try again.",
   "departure.unconfirmed":
     "The departure got no answer, so it may have been recorded. Check the floor before trying again.",
+  "departure.probably_recorded":
+    "The first try got no answer and the table is now closed, so the departure was probably recorded. Check the Left without paying list.",
   "bill_refund.done_cash": "Given back: {amount}. Hand it over in cash.",
   "bill_refund.done_card": "Given back: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
@@ -1591,7 +1593,7 @@ export const es: Record<StringKey, string> = {
   "departure.title": "Registrar salida sin pagar",
   "departure.left_unpaid": "Sin pagar",
   "departure.scope":
-    "Cada una de estas cuentas se factura ahora por completo y queda registrada como no pagada. No se imprime ticket. Después se cierra la mesa, como con Cerrar mesa.",
+    "Cada una de estas cuentas que aún no tenga factura se factura ahora por su importe completo, y todas quedan registradas como no pagadas. No se imprime ticket. Después se cierra la mesa, como con Cerrar mesa.",
   "departure.reason": "Motivo",
   "departure.reason_invalid": "Indica por qué queda sin pagar",
   "departure.reason_long": "Usa 500 caracteres como mucho para el motivo",
@@ -1601,6 +1603,8 @@ export const es: Record<StringKey, string> = {
   "departure.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "departure.unconfirmed":
     "La salida no obtuvo respuesta, así que puede que se haya registrado. Revisa el plano antes de volver a intentarlo.",
+  "departure.probably_recorded":
+    "El primer intento no obtuvo respuesta y la mesa ya está cerrada, así que la salida probablemente se registró. Revisa la lista Se fueron sin pagar.",
   "bill_refund.done_cash": "Devuelto: {amount}. Entrégalo en efectivo.",
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",

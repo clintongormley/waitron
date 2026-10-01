@@ -51,7 +51,7 @@ import {
   tableTargetStyles,
   type SeatedRead,
 } from "../widgets/table-targets.js";
-import { owing, paidInPart } from "../state/bill-state.js";
+import { billName, owing, paidInPart, shownBills } from "../state/bill-state.js";
 import {
   LINE_ADJUSTMENTS,
   billGross,
@@ -2838,16 +2838,12 @@ export class TillTableOrderScreen extends LitElement {
     >`;
   }
 
-  /** Abandoned bills are left out: nobody pays them. */
   #shownBills(): PartyBill[] {
-    return this.bills.filter((bill) => bill.status !== "abandoned");
+    return shownBills(this.bills);
   }
 
-  /** A bill's name by its place in {@link #shownBills}, under the party's display name. */
   #billName(index: number): string {
-    return t("table.bill_of")
-      .replace("{party}", () => this.party?.displayName ?? "")
-      .replace("{n}", String(index + 1));
+    return billName(this.party?.displayName ?? "", index);
   }
 
   #money(amount: string): string {

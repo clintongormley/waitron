@@ -6125,6 +6125,106 @@ describe("till-app: recording an unpaid departure", () => {
     );
   });
 
+  it("when a resend after a lost reply finds the table closed, says the departure was probably recorded, never to try again", async () => {
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce({ code: "party.not_open", status: 409 });
+    const { el } = await openDeparture({ recordUnpaidDeparture });
+    const departureReads = vi.mocked(api.listUnpaidDepartures).mock.calls.length;
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+    await expect.poll(() => tableOrder(el), { timeout: GIVE_UP_MS }).toBeNull();
+    await flush(el);
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
+    expect(dialog(el)).toBeNull();
+    expect(api.listUnpaidDepartures).toHaveBeenCalledTimes(departureReads + 1);
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(t("departure.probably_recorded"));
+    expect(text).not.toContain(codeMessage("party.not_open"));
+  });
+
+  it("when the first send finds the table closed, says the table changed, as Finish does", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
+    });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+  });
+
+  it("puts the server's refusal of the reason beside the reason", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", status: 400, field: "reason" }),
+    });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+
+    const field = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      'wt-input[name="reason"]',
+    )!;
+    expect(field.error).toBe(codeMessage("management.request_invalid"));
+  });
+
+  it("says who can approve it could not be read, and opens no PIN prompt", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi
+        .fn()
+        .mockRejectedValue({ code: "authorization.not_permitted", status: 403 }),
+      listUnpaidDepartureAuthorizers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+
+    expect(approval(el)).toBeNull();
+    const bottom = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!;
+    expect(bottom.error).toBe(t("departure.approvers_failed"));
+  });
+
+  it("says a departure whose resends all got no answer may have been recorded", async () => {
+    const recordUnpaidDeparture = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await openDeparture({ recordUnpaidDeparture });
+    await typeReason(el, "Ran off");
+
+    await confirmDeparture(el);
+    const bottom = () =>
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+        .error;
+    await expect.poll(bottom, { timeout: GIVE_UP_MS }).toBe(t("departure.unconfirmed"));
+
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(3);
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
+  it("leaves out of the dialog a bill with nothing left to pay", async () => {
+    const empty: PartyBill = {
+      ...checkBill,
+      workingOrderId: "wo-empty",
+      total: "0.00",
+      outstanding: "0.00",
+    };
+    const { el } = await openDeparture({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, empty, checkBill]),
+    });
+
+    expect(dialog(el)!.bills).toEqual([
+      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
+      { workingOrderId: "wo-check", name: "4 · Bill 3", outstanding: "30.00" },
+    ]);
+  });
+
   it("Cancel closes the dialog and sends nothing", async () => {
     const { el } = await openDeparture();
 

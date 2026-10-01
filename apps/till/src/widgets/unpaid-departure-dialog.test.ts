@@ -80,7 +80,7 @@ describe("till-unpaid-departure-dialog: what it will do", () => {
     const el = await mount();
 
     expect(text(root(el).querySelector("[data-departure-scope]"))).toBe(
-      "Cada una de estas cuentas se factura ahora por completo y queda registrada como no pagada. No se imprime ticket. Después se cierra la mesa, como con Cerrar mesa.",
+      "Cada una de estas cuentas que aún no tenga factura se factura ahora por su importe completo, y todas quedan registradas como no pagadas. No se imprime ticket. Después se cierra la mesa, como con Cerrar mesa.",
     );
     expect(text(confirm(el))).toBe(`Registrar ${money("44.00")} sin pagar`);
   });

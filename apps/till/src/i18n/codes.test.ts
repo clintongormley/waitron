@@ -344,8 +344,8 @@ it("says in both languages that a bill presented, paid or discarded is no longer
 it("says what to do about each refusal of an unpaid departure, in both languages", () => {
   const cases = {
     "unpaid_departure.unfired_dishes": {
-      en: "A bill on this table holds items the kitchen was never told to make: not sent, or still on hold. Cancel them first, then record the departure again",
-      es: "Una cuenta de esta mesa tiene artículos que cocina no ha recibido: sin enviar o todavía en espera. Anúlalos primero y vuelve a registrar la salida",
+      en: "A bill on this table holds items the kitchen is not making: not sent, on hold, or recalled. Cancel them first, then record the departure again",
+      es: "Una cuenta de esta mesa tiene artículos que cocina no está preparando: sin enviar, en espera o retirados. Cancélalos primero y vuelve a registrar la salida",
     },
     "unpaid_departure.bill_holds_payment": {
       en: "A bill on this table already holds a payment, even if it was given back, so it cannot be left unpaid. Take the rest of that bill as a payment first",

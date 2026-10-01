@@ -6,6 +6,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import {
   MONEY_SCALE,
+  compareDecimal,
   decimal,
   formatMoney,
   resolveActiveLocale,
@@ -111,7 +112,7 @@ import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
-import { owing, paidInPart } from "./state/bill-state.js";
+import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
@@ -1588,18 +1589,24 @@ export class TillApp extends LitElement {
     return this.#refreshList(list, messageKey);
   }
 
-  /**
-   * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue` or
-   * `counterWaiting`) or
-   * start, change or end its retry, and {@link TillApp.#abandonListRefreshes} makes every earlier
-   * request stale. Without a `messageKey` a failure is also thrown to the caller.
-   */
+  /** The bills left unpaid are shown beside the waiting orders, so they are read whenever those
+   * are, alongside them, each list keeping its own failure handling. */
   async #refreshList(list: RefreshList, messageKey?: StringKey): Promise<void> {
-    await this.#refreshOneList(list, messageKey);
-    // The bills left unpaid are shown beside the waiting orders and read whenever those are.
-    if (list === "waiting") await this.#refreshOneList("departures", "refresh.departures");
+    if (list !== "waiting") return this.#refreshOneList(list, messageKey);
+    const departures = this.#refreshOneList("departures", "refresh.departures");
+    try {
+      await this.#refreshOneList(list, messageKey);
+    } finally {
+      await departures;
+    }
   }
 
+  /**
+   * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue`,
+   * `counterWaiting` or `unpaidDepartures`) or start, change or end its retry, and
+   * {@link TillApp.#abandonListRefreshes} makes every earlier request stale. Without a `messageKey`
+   * a failure is also thrown to the caller.
+   */
   async #refreshOneList(list: RefreshList, messageKey?: StringKey): Promise<void> {
     const request = ++this.#refreshGeneration[list];
     let install: () => void;
@@ -4817,24 +4824,21 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** The bills still to pay, named by their place among the bills the table screen shows. */
+  /** The bills the departure leaves unpaid: those still owing something, named as the table
+   * screen names them. */
   #departingBills(): DepartingBill[] {
-    const name = this.orderParty?.displayName ?? "";
-    return this.partyBills
-      .filter((bill) => bill.status !== "abandoned")
-      .flatMap((bill, index) =>
-        owing(bill)
-          ? [
-              {
-                workingOrderId: bill.workingOrderId,
-                name: t("table.bill_of")
-                  .replace("{party}", () => name)
-                  .replace("{n}", String(index + 1)),
-                outstanding: bill.outstanding,
-              },
-            ]
-          : [],
-      );
+    const party = this.orderParty?.displayName ?? "";
+    return shownBills(this.partyBills).flatMap((bill, index) =>
+      owing(bill) && compareDecimal(decimal(bill.outstanding), decimal("0")) > 0
+        ? [
+            {
+              workingOrderId: bill.workingOrderId,
+              name: billName(party, index),
+              outstanding: bill.outstanding,
+            },
+          ]
+        : [],
+    );
   }
 
   #departingNow(id: number): Departing | null {
@@ -4895,20 +4899,42 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    let sends = 0;
     try {
       await resendUnanswered(
-        (signal) => this.api.recordUnpaidDeparture(party.id, request, { signal }),
+        (signal) => {
+          sends++;
+          return this.api.recordUnpaidDeparture(party.id, request, { signal });
+        },
         limit.signal,
         () => sent.session === this.#operatorSession,
       );
     } catch (error) {
+      // The server closes the party in the departure's own transaction, so a resend that finds it
+      // closed most likely follows a first send that was recorded but whose answer was lost.
+      if (sends > 1 && refusalOf(error).code === "party.not_open") {
+        await this.#onDepartureRecorded(open.id, party.id, visit, sent);
+        if (sent.session === this.#operatorSession) this.errorKey = "departure.probably_recorded";
+        return;
+      }
       await this.#onDepartureRefused(sending, error, override === undefined, sent);
       return;
     } finally {
       limit.done();
     }
-    if (this.#departingNow(open.id) !== null) this.#closeDeparting();
-    await this.#onTableClosed(party.id, visit, sent);
+    await this.#onDepartureRecorded(open.id, party.id, visit, sent);
+  }
+
+  /** The dialog closes, the table leaves the screen as a finished one does, and the bills left
+   * unpaid are read again. */
+  async #onDepartureRecorded(
+    id: number,
+    partyId: string,
+    visit: number,
+    sent: Sent,
+  ): Promise<void> {
+    if (this.#departingNow(id) !== null) this.#closeDeparting();
+    await this.#onTableClosed(partyId, visit, sent);
     if (sent.session === this.#operatorSession)
       await this.#refreshAfterWrite("departures", "refresh.departures_after_record");
   }

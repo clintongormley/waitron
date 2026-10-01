@@ -9548,6 +9548,24 @@ describe("the bills parties left without paying", () => {
     expect(currentApi.listUnpaidDepartures).toHaveBeenCalledTimes(reads + 1);
   });
 
+  it("reads them without waiting for the waiting orders' answer", async () => {
+    let answerWaiting!: (orders: CounterWaitingOrder[]) => void;
+    const { el } = await mountApp({
+      listCounterWaiting: vi.fn(
+        () => new Promise<CounterWaitingOrder[]>((resolve) => (answerWaiting = resolve)),
+      ),
+      listUnpaidDepartures: vi.fn().mockResolvedValue([departure]),
+    });
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+
+    expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+    answerWaiting([]);
+    await flush(el);
+    expect(departuresList(el)!.departures).toEqual([departure]);
+  });
+
   it("a failed read of the list says so and offers to try again", async () => {
     const { el } = await mountApp({
       listUnpaidDepartures: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
