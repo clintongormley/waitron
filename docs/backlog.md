@@ -238,7 +238,7 @@ click-path screenshot. Check restored selection visibility before changing the s
 Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
 ([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), **built 2026-10-01**, branch
-`feat/prep-station-rules`; PR pending). Prep Stations now edits folder claims and ordered
+`feat/prep-station-rules`; [PR #1004](https://github.com/clintongormley/waitron/pull/1004)). Prep Stations now edits folder claims and ordered
 exceptions, previews routing changes and tests a product's maker. Products link to that tester;
 till default service zones are set on Venue operations. The old preparation-route table and
 product/category station fields are removed. 3b, opening hours, by-hand open and close, fallbacks
