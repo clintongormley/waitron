@@ -199,7 +199,7 @@ What the cap covers of a field's label, hint and error depends on how the field 
   (the select's top 187px, the text's bottom 215px). The select labels in the modals read for C105
   are block, grid or flex; no inline one was found, but nothing checks for one.
 
-Nothing outside a `wt-modal` sets `--wt-field-max-width`, so a field on a page, or in a `wt-dialog`
+Outside a `wt-modal`, `--wt-field-max-width` is the theme root's `none`, so a field on a page, or in a `wt-dialog`
 that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
 inside a modal's body inherits the cap. Page forms are bounded by their screen's own column instead
 (the setup wizard's raised column, and the `max-width` of screens such as backup, receipt and sign-in),
@@ -210,8 +210,8 @@ A screen that styles its own native controls, or writes a field's label outside 
 the same variable on the element that wraps each field, so the label text, the control and the
 field's error stop together: the profile screen's `.select-field` (the Language label, select and
 error in the edit details modal), the adjustments reasons screen's `.select-field` (each role
-select with its `<label for>` and error, in the reason editor), every `label` the venue operations
-screen draws (each holds one field's text and control, and its error when it has one), and the
+select with its `<label for>` and error, in the reason editor), every `label` in the venue operations
+screen's editor modals (each holds one field's text and control, and its error when it has one), and the
 content-languages editor's two select labels and their `.error` lines. A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print block"
@@ -732,8 +732,8 @@ it stays on the bottom left (the sign-in code step is an exception; see the logi
 secondary action that belongs beside the primary action goes in the `secondary` slot. The row's
 message runs from the form's left edge only when the row is the form's full width. Where the row
 shares a line with something else, show the message with `formMessage` directly before that line,
-as the sign-in steps do, or let the row take the full width while it has a message, as the Add
-printer dialog's address check does.
+as the sign-in steps do, or let the row take the full width (in a `wt-modal`, the form width) while
+it has a message, as the Add printer dialog's address check does.
 
 ```ts
 html`

@@ -5731,8 +5731,9 @@ ongoing overhaul listed at the top of Track A.
   (36rem, 576px at the default text size) is that width: `wt-modal` hands it to its body, and every
   shared field (`wt-input`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`, `wt-switch`, a
   native select styled by `selectStyles` together with a label that wraps it) and the form's message
-  line stop at it, as do the native controls the profile, adjustments reasons, venue operations and
-  content-languages screens style themselves. Tables, previews and other wide content keep the
+  line stop at it, as do the fields the profile, venue operations and content-languages screens style
+  themselves, the adjustments reasons screen's role fields, whose label sits outside the select, and
+  the section member list's add row and its error. Tables, previews and other wide content keep the
   modal's full width, the footer buttons do not move, and at 390px wide nothing changes. The
   Printers screen's row of fields takes the same width, so "Print block" stays beside its select.
   Fields on pages and in a `wt-dialog` outside a modal are unchanged.
