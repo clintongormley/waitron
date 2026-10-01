@@ -1,4 +1,4 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { afterEach, expect, it } from "vitest";
@@ -12,7 +12,7 @@ afterEach(cleanupWidgets);
 @customElement("test-reorder-host")
 class TestReorderHost extends LitElement {
   static override styles = [ReorderController.styles];
-  @property({ attribute: false }) items: { id: string; name: string }[] = [];
+  @property({ attribute: false }) items: { id: string; name: string; height?: number }[] = [];
   @property({ type: Boolean }) busy = false;
   readonly #reorder = new ReorderController(this, {
     order: () => this.items.map((item) => item.id),
@@ -34,7 +34,7 @@ class TestReorderHost extends LitElement {
             (item) =>
               html`<tr data-choice=${item.id}>
                 <td>${this.#reorder.handle(item.id)}</td>
-                <td>${item.name}</td>
+                <td style=${item.height ? `height: ${item.height}px` : nothing}>${item.name}</td>
               </tr>`,
           )}
         </tbody>
@@ -53,7 +53,7 @@ const three = () => [
   { id: "b", name: "Two" },
   { id: "c", name: "Three" },
 ];
-async function mount(items = three(), busy = false) {
+async function mount(items: TestReorderHost["items"] = three(), busy = false) {
   return (await mountWidget<TestReorderHost>("test-reorder-host", { items, busy })).el;
 }
 function order(el: TestReorderHost) {
@@ -181,6 +181,106 @@ function row(el: LitElement, id: string): HTMLElement {
 function handle(el: LitElement, id: string): HTMLElement {
   return el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)!;
 }
+
+function near(actual: number, expected: number, tolerance = 1): void {
+  expect(actual, `expected ${actual} within ${tolerance}px of ${expected}`).toBeGreaterThanOrEqual(
+    expected - tolerance,
+  );
+  expect(actual, `expected ${actual} within ${tolerance}px of ${expected}`).toBeLessThanOrEqual(
+    expected + tolerance,
+  );
+}
+function box(el: LitElement, id: string): DOMRect {
+  return row(el, id).getBoundingClientRect();
+}
+
+it("moves the dragged row by exactly as far as the pointer has moved, part way between two rows", async () => {
+  const el = await mount();
+  const before = box(el, "a");
+  const centre = before.top + before.height / 2;
+  pointer(handle(el, "a"), "pointerdown", 1, centre);
+  pointer(document, "pointermove", 1, centre + 0.4 * before.height);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  near(box(el, "a").top - before.top, 0.4 * before.height);
+  pointer(document, "pointerup", 1);
+});
+
+it("keeps the row under the same point of the pointer after it changes place", async () => {
+  const el = await mount();
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.top + 0.3 * a.height);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  near(box(el, "a").top, b.top - 0.2 * a.height);
+  pointer(document, "pointerup", 1);
+});
+
+it("holds the dragged row against the edge of the list when the pointer leaves it", async () => {
+  const el = await mount();
+  const a = box(el, "a");
+  const c = box(el, "c");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, c.bottom + 500);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  near(box(el, "a").bottom, c.bottom);
+  pointer(document, "pointerup", 1);
+  await el.updateComplete;
+  pointer(handle(el, "c"), "pointerdown", 2, c.top + c.height / 2);
+  pointer(document, "pointermove", 2, a.top - 500);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  near(box(el, "c").top, a.top);
+  pointer(document, "pointerup", 2);
+});
+
+it("puts the released row back in its slot", async () => {
+  const { el, host } = await mountWidget<TestReorderHost>("test-reorder-host", { items: three() });
+  host.style.setProperty("--wt-duration-move", "0s");
+  const before = box(el, "a");
+  const centre = before.top + before.height / 2;
+  pointer(handle(el, "a"), "pointerdown", 1, centre);
+  pointer(document, "pointermove", 1, centre + 0.4 * before.height);
+  pointer(document, "pointerup", 1);
+  await el.updateComplete;
+  expect(box(el, "a").toJSON()).toEqual(before.toJSON());
+});
+
+it("keeps the order still while the pointer moves inside a taller row it has not yet passed", async () => {
+  const el = await mount([
+    { id: "a", name: "One", height: 50 },
+    { id: "b", name: "Two", height: 150 },
+    { id: "c", name: "Three", height: 50 },
+  ]);
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  for (const offset of [5, 6, 7, 8]) {
+    pointer(document, "pointermove", 1, b.top + offset);
+    await el.updateComplete;
+    expect(order(el), `${offset}px into the taller row`).toEqual(["a", "b", "c"]);
+  }
+  pointer(document, "pointermove", 1, b.bottom - 10);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  pointer(document, "pointerup", 1);
+});
+
+it("leaves the dragged row where it is when another pointer moves", async () => {
+  const el = await mount();
+  const a = box(el, "a");
+  const centre = a.top + a.height / 2;
+  pointer(handle(el, "a"), "pointerdown", 1, centre);
+  pointer(document, "pointermove", 1, centre + 0.4 * a.height);
+  const top = box(el, "a").top;
+  pointer(document, "pointermove", 2, centre + 1000);
+  await el.updateComplete;
+  expect(box(el, "a").top).toBe(top);
+  pointer(document, "pointerup", 1);
+});
 
 it("marks the row being dragged, and clears it on release", async () => {
   const el = await mount();

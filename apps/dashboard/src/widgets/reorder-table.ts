@@ -34,6 +34,11 @@ function releasePageCursor(): void {
   document.body.style.removeProperty(DRAG_CURSOR);
 }
 
+/** How far a transform currently draws the row from where it rests, mid-transition included. */
+function offsetY(row: Element): number {
+  return new DOMMatrixReadOnly(getComputedStyle(row).transform).m42;
+}
+
 export interface ReorderModel {
   /** Row ids in current display order, top to bottom. The tbody renders one `<tr>` per id in this
    * order — the invariant the pointer geometry relies on. */
@@ -51,7 +56,8 @@ export interface ReorderModel {
 export class ReorderController implements ReactiveController {
   readonly #host: ReorderHost;
   readonly #model: ReorderModel;
-  #drag: { id: string; pointerId: number } | null = null;
+  /** `grab` is how far below the row's top the pointer pressed; `y` is where the pointer is now. */
+  #drag: { id: string; pointerId: number; grab: number; y: number } | null = null;
   /** Each row's id and vertical bounds, measured from the top of the table body so scrolling the
    * host does not move them. The id is a SCREEN SNAPSHOT taken at measurement time: the i-th `<tr>`
    * is `order()[i]` only while the rendered DOM matches the data, so binding the id here — rather
@@ -61,7 +67,7 @@ export class ReorderController implements ReactiveController {
   #refocus: string | null = null;
   #announcement = "";
   /** Relies on the host keying its rows (`repeat` by id), so this element moves with the row. */
-  #draggedRow: Element | null = null;
+  #draggedRow: HTMLTableRowElement | null = null;
 
   static readonly styles: CSSResult = css`
     .handle {
@@ -87,6 +93,8 @@ export class ReorderController implements ReactiveController {
     }
     /* A lifted row, marked by the controller while a pointer drag is in progress. */
     tr[data-dragging] {
+      position: relative;
+      z-index: 1;
       background: var(--wt-color-surface-lifted);
       box-shadow: var(--wt-shadow-2);
     }
@@ -143,6 +151,7 @@ export class ReorderController implements ReactiveController {
   hostUpdated(): void {
     // A render can move rows, so the next move re-measures.
     this.#rowBounds = null;
+    if (this.#drag !== null) this.#follow(this.#drag);
     const id = this.#refocus;
     if (id === null) return;
     this.#refocus = null;
@@ -208,9 +217,11 @@ export class ReorderController implements ReactiveController {
     if (this.#model.busy() || this.#drag !== null) return;
     // Keep the press from selecting the row's text or starting the browser's own drag.
     event.preventDefault();
-    this.#drag = { id, pointerId: event.pointerId };
-    this.#draggedRow = (event.currentTarget as HTMLElement).closest("tr");
-    this.#draggedRow?.setAttribute("data-dragging", "");
+    const row = (event.currentTarget as HTMLElement).closest("tr")!;
+    this.#draggedRow = row;
+    const grab = event.clientY - row.getBoundingClientRect().top;
+    this.#drag = { id, pointerId: event.pointerId, grab, y: event.clientY };
+    row.setAttribute("data-dragging", "");
     holdPageCursor();
     document.addEventListener("pointermove", this.#onPointerMove);
     document.addEventListener("pointerup", this.#onPointerEnd);
@@ -220,7 +231,9 @@ export class ReorderController implements ReactiveController {
   readonly #onPointerMove = (event: PointerEvent): void => {
     const drag = this.#drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
-    const over = this.#rowAt(event.clientY);
+    drag.y = event.clientY;
+    this.#follow(drag);
+    const over = this.#rowAt(event.clientY, drag.id);
     if (over === null || over === drag.id) return;
     this.#model.move(drag.id, this.#model.order().indexOf(over), "pointer");
   };
@@ -238,6 +251,7 @@ export class ReorderController implements ReactiveController {
   #endDrag(): void {
     if (this.#drag !== null) releasePageCursor();
     this.#draggedRow?.removeAttribute("data-dragging");
+    this.#draggedRow?.style.removeProperty("transform");
     this.#draggedRow = null;
     this.#drag = null;
     this.#rowBounds = null;
@@ -246,16 +260,40 @@ export class ReorderController implements ReactiveController {
     document.removeEventListener("pointercancel", this.#onPointerEnd);
   }
 
-  #rowAt(clientY: number): string | null {
+  #follow(drag: { grab: number; y: number }): void {
+    const row = this.#draggedRow!;
+    if (!row.isConnected) return;
+    const box = row.getBoundingClientRect();
+    const rest = box.top - offsetY(row);
+    const body = row.parentElement!.getBoundingClientRect();
+    const dy = Math.min(
+      Math.max(drag.y - drag.grab - rest, body.top - rest),
+      body.bottom - box.height - rest,
+    );
+    row.style.transform = `translateY(${dy}px)`;
+  }
+
+  /** The row the dragged one should take the place of, or null. Moving onto a row below, the pointer
+   * must be within the dragged row's height of that row's bottom (onto a row above, of its top), so
+   * a short row pushed into a tall one does not swap back and forth on every pixel. */
+  #rowAt(clientY: number, draggedId: string): string | null {
     const body = this.#host.shadowRoot?.querySelector("tbody");
     if (!body) return null;
     const origin = body.getBoundingClientRect().top;
     const snapshot = this.#model.order();
+    // Where each row RESTS, not where it is drawn: the dragged row is drawn under the pointer.
     this.#rowBounds ??= [...body.querySelectorAll("tr")].map((row, index) => {
       const box = row.getBoundingClientRect();
-      return { id: snapshot[index]!, top: box.top - origin, bottom: box.bottom - origin };
+      const top = box.top - origin - offsetY(row);
+      return { id: snapshot[index]!, top, bottom: top + box.height };
     });
     const y = clientY - origin;
-    return this.#rowBounds.find((row) => y >= row.top && y <= row.bottom)?.id ?? null;
+    const over = this.#rowBounds.find((row) => y >= row.top && y <= row.bottom);
+    if (over === undefined) return null;
+    const dragged = this.#rowBounds.find((row) => row.id === draggedId);
+    if (dragged === undefined) return over.id;
+    const height = dragged.bottom - dragged.top;
+    const crossed = over.top > dragged.top ? y >= over.bottom - height : y <= over.top + height;
+    return crossed ? over.id : null;
   }
 }
