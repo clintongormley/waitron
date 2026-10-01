@@ -6865,6 +6865,12 @@ ongoing overhaul listed at the top of Track A.
   forgotten, comes back with a fresh count if a made-up address with 5 wrong tries lands on its
   counter. With 1,000, 10,000 and 50,000 such addresses sent within its 15 minutes, that happened
   for 1, 31 and 106 of 200 random secrets. Both simulations are in the pull request's description.
+  Also left by A154's review, not changed: a clock that jumps backwards keeps an address a little past
+  its 15 idle minutes (stricter, never looser; the PIN back-off does the same); the PIN back-off
+  (`packages/identity/src/pin-throttle.ts`) still refuses every new person for 60 seconds while one
+  of its slots is full, fed by paired tills and signed-in routes rather than strangers; and each
+  password throttle's counters take about 1.3 MiB once the first address is forgotten (arithmetic,
+  not measured).
 - **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, #934, owner
   2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
   the current password now carries a hidden, read-only `autocomplete="username"` field holding the
