@@ -16,6 +16,7 @@ const STATIONS: Station[] = [
     displayOrder: 0,
     isDefault: true,
     active: true,
+    showsRestOfOrder: false,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,

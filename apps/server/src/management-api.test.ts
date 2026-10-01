@@ -1083,7 +1083,14 @@ describe("/management-api/stations (KDS-1 config)", () => {
   }
 
   async function listStations(): Promise<
-    { id: string; name: string; displayOrder: number; isDefault: boolean; active: boolean }[]
+    {
+      id: string;
+      name: string;
+      displayOrder: number;
+      isDefault: boolean;
+      active: boolean;
+      showsRestOfOrder: boolean;
+    }[]
   > {
     return (await (await req("/stations", { method: "GET" }, managerCookie)).json()) as {
       id: string;
@@ -1091,6 +1098,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       displayOrder: number;
       isDefault: boolean;
       active: boolean;
+      showsRestOfOrder: boolean;
     }[];
   }
 
@@ -1099,6 +1107,13 @@ describe("/management-api/stations (KDS-1 config)", () => {
     const id = await createStation(name, { displayOrder: 2 });
     const found = (await listStations()).find((s) => s.id === id);
     expect(found).toMatchObject({ name, displayOrder: 2, isDefault: false, active: true });
+  });
+
+  it("lists a new station with the rest of the order switch off", async () => {
+    const id = await createStation(unique("Rest default"));
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      showsRestOfOrder: false,
+    });
   });
 
   it("POST stores all timing thresholds atomically and rejects a partial or unordered set without a row", async () => {
@@ -1253,6 +1268,38 @@ describe("/management-api/stations (KDS-1 config)", () => {
     );
     expect(malformed.status).toBe(404);
     expect(await malformed.json()).toMatchObject({ error: { code: "station.not_found" } });
+  });
+
+  it("PATCH with only the rest of the order switch saves it and GET lists it", async () => {
+    const id = await createStation(unique("Rest enabled"));
+    const response = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ showsRestOfOrder: true }) },
+      managerCookie,
+    );
+    expect(response.status).toBe(204);
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      showsRestOfOrder: true,
+    });
+  });
+
+  it("PATCH refuses a non-boolean rest of the order switch", async () => {
+    const id = await createStation(unique("Rest invalid"));
+    const response = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ showsRestOfOrder: "yes" }) },
+      managerCookie,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "showsRestOfOrder" },
+      },
+    });
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      showsRestOfOrder: false,
+    });
   });
 
   it("PATCH body screens: array → body; non-string name; non-boolean active — the station is left as it was", async () => {

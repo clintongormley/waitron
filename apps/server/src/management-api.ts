@@ -1703,6 +1703,7 @@ export function mountManagementApi(
         name?: unknown;
         displayOrder?: unknown;
         active?: unknown;
+        showsRestOfOrder?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
@@ -1714,6 +1715,7 @@ export function mountManagementApi(
         name?: string;
         displayOrder?: number;
         active?: boolean;
+        showsRestOfOrder?: boolean;
         warmAfterMinutes?: number;
         overdueAfterMinutes?: number;
         forgottenAfterMinutes?: number;
@@ -1731,11 +1733,17 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "active" });
         patch.active = body.active;
       }
+      if (body.showsRestOfOrder !== undefined) {
+        if (typeof body.showsRestOfOrder !== "boolean")
+          throw new AppError("management.request_invalid", { field: "showsRestOfOrder" });
+        patch.showsRestOfOrder = body.showsRestOfOrder;
+      }
       Object.assign(patch, parseStationThresholds(body));
       if (
         patch.name === undefined &&
         patch.displayOrder === undefined &&
         patch.active === undefined &&
+        patch.showsRestOfOrder === undefined &&
         // The all-or-nothing validation above never leaves warmAfterMinutes undefined while the other
         // two thresholds are set, so this alone correctly proxies "no threshold field in this patch".
         patch.warmAfterMinutes === undefined

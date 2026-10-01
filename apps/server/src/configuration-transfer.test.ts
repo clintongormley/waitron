@@ -36,6 +36,7 @@ import {
   categories,
   deviceProfiles,
   diningTables,
+  kitchenStations,
   printAgents,
   printers,
   products,
@@ -1060,6 +1061,42 @@ it("transfers the venue's limit on a bill's total discount", async () => {
   expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual({
     maxBillDiscountBp: 4000,
   });
+});
+
+it("transfers a station's rest of the order switch", async () => {
+  const source = await applyVenue(planVenue(venue("B13572469"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values({
+      locationId: source.locationId,
+      name: "Pase",
+      showsRestOfOrder: true,
+    }),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-01T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_stations).toContainEqual(
+    expect.objectContaining({ name: "Pase", shows_rest_of_order: 1 }),
+  );
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ showsRestOfOrder: kitchenStations.showsRestOfOrder })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.name, "Pase"));
+  expect(imported).toEqual([{ showsRestOfOrder: true }]);
 });
 
 it("leaves a table's clearing state behind", async () => {

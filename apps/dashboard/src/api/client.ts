@@ -467,6 +467,7 @@ export interface Station {
   displayOrder: number;
   isDefault: boolean;
   active: boolean;
+  showsRestOfOrder: boolean;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -2121,6 +2122,7 @@ export class DashboardApi {
       name?: string;
       displayOrder?: number;
       active?: boolean;
+      showsRestOfOrder?: boolean;
       warmAfterMinutes?: number;
       overdueAfterMinutes?: number;
       forgottenAfterMinutes?: number;
