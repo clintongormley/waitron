@@ -397,7 +397,12 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
   });
   expect(second.status).toBe(201);
   const stored = ((await second.json()) as { image: Record<string, unknown> }).image;
-  expect(stored).not.toHaveProperty("altText");
-  expect(stored).not.toHaveProperty("labels");
-  expect(stored).not.toHaveProperty("extra");
+  expect(Object.keys(stored).sort()).toEqual([
+    "createdAt",
+    "filename",
+    "id",
+    "names",
+    "updatedAt",
+    "usageCount",
+  ]);
 });
