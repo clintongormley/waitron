@@ -146,7 +146,7 @@ Menus**.
 Create reusable extras lists and options lists on the two tabs of **Modifiers**, then attach them in
 the product's own **Modifiers** section, in the order you want. See
 [Reuse choices across your products](modifiers.md) for what each kind holds, its defaults and
-limits, and menu-specific extra prices.
+limits, and extra prices.
 
 When you park or complete an order, Waitron saves the chosen product and variant names, kitchen name,
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,

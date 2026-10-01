@@ -145,7 +145,7 @@ function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue
 
 const V1 = catalogue("v1", [offer("offer-lemonade", "Lemonade", "3.00"), burgerOffer()]);
 
-const NOTHING: MenuUnavailable = { products: [], optionLabels: [], extraItems: [] };
+const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
@@ -389,12 +389,8 @@ describe("the unavailable set", () => {
       "extra_unavailable",
     ],
     [
-      "an extras item its offer switched off",
-      {
-        extraItems: [
-          { menuItemId: "offer-burger", extraListId: "list-extras", productId: "cheese" },
-        ],
-      },
+      "an extras product made Unavailable",
+      { products: ["cheese"] },
       {
         extras: [
           {

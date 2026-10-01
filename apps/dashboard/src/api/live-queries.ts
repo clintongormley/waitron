@@ -7,8 +7,6 @@ const MENU_PUBLICATION_READS = [
   "extra_list_items",
   "extra_lists",
   "menu_details",
-  "menu_item_extra_items",
-  "menu_item_extra_lists",
   "menu_item_variant_overrides",
   "menu_items",
   "menu_publications",
@@ -147,10 +145,10 @@ export const QUERY_DEPENDENCIES = {
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in
   // extras.ts). The two list reads also count what carries each list: `product_modifiers` for
-  // both, and `menu_item_extra_lists` for extras. The single-list reads count nothing.
+  // both. The single-list reads count nothing.
   listOptionLists: ["option_lists", "option_labels", "product_modifiers"],
   getOptionList: ["option_lists", "option_labels"],
-  listExtraLists: ["extra_lists", "extra_list_items", "product_modifiers", "menu_item_extra_lists"],
+  listExtraLists: ["extra_lists", "extra_list_items", "product_modifiers"],
   getExtraList: ["extra_lists", "extra_list_items"],
   listDeviceProfiles: ["device_profiles", "devices", "canvases"],
   getDeviceProfile: ["device_profiles", "canvases"],

@@ -20,7 +20,6 @@ import {
   readMenuStructure,
   readSection,
   sections,
-  setMenuItemExtraLists,
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -647,7 +646,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
         minPicks: 0,
         maxPicks: 2,
         active: true,
-        items: [{ productId: shot.id, maxQuantity: 3, preselected: true, price: "1.50" }],
+        items: [{ productId: shot.id, maxQuantity: 3, preselected: true, price: "0.90" }],
       },
       "es",
     );
@@ -657,17 +656,12 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       { kind: "extras", id: extraList.id },
       { kind: "options", id: withDefault.id },
     ]);
-    const offer = await addProductToMenu(tx, {
+    await addProductToMenu(tx, {
       menuId: menu.id,
       productId: product.id,
       grossPrice: "2.75",
     });
-    // An extras list reaches a menu offer only when the offer PUBLISHES it (`readMenuExtras`,
-    // packages/catalogue/src/offered-modifiers.ts), and this offer republishes the shot at its own
-    // price rather than the list's 1.50.
-    await setMenuItemExtraLists(tx, offer.id, [
-      { listId: extraList.id, items: [{ productId: shot.id, price: "0.90", available: true }] },
-    ]);
+
     // A menu that sets no price of its own: blank has to arrive blank, not as zero.
     const tea = await createProduct(tx, {
       catalogueId: menu.id,
@@ -697,8 +691,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
   expect(transferred.tables.extra_lists).toHaveLength(1);
   expect(transferred.tables.extra_list_items).toHaveLength(1);
   expect(transferred.tables.product_modifiers).toHaveLength(2);
-  expect(transferred.tables.menu_item_extra_lists).toHaveLength(1);
-  expect(transferred.tables.menu_item_extra_items).toHaveLength(1);
   await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -725,7 +717,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     expect(extraLists[0]!.items[0]).toMatchObject({
       maxQuantity: 3,
       preselected: true,
-      price: "1.50",
+      price: "0.90",
     });
     expect(extraLists[0]!.items[0]!.productId).not.toBe(original.shotId);
     const shot = await tx.execute<{ ordering: string }>(

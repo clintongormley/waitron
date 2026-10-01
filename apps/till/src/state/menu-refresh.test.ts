@@ -120,7 +120,7 @@ function variant(id: string, unitPrice: string, overrides: Partial<LiveVariant> 
   };
 }
 
-const NOTHING = { products: [], optionLabels: [], extraItems: [] };
+const NOTHING = { products: [], optionLabels: [] };
 
 const burger = offer({
   id: "offer-burger",
@@ -150,9 +150,8 @@ describe("withUnavailable", () => {
       }),
     ];
     const [greyBurger, greyWine, soup] = withUnavailable(loaded, {
-      products: ["cheese", "bottle"],
+      products: ["cheese", "bottle", "bacon"],
       optionLabels: ["rare"],
-      extraItems: [{ menuItemId: "offer-soup", extraListId: "list-extras", productId: "bacon" }],
     });
 
     // Burger was loaded sold out and the set no longer lists it.
@@ -162,7 +161,7 @@ describe("withUnavailable", () => {
       extras!.kind === "extras" && extras.items.map((i) => [i.productId, i.available]),
     ).toEqual([
       ["cheese", false],
-      ["bacon", true],
+      ["bacon", false],
     ]);
     expect(cooked!.kind === "options" && cooked.labels.map((l) => [l.id, l.available])).toEqual([
       ["rare", false],
@@ -173,7 +172,7 @@ describe("withUnavailable", () => {
       ["glass", true],
       ["bottle", false],
     ]);
-    // Bacon is switched off on the soup's offer only; the burger's bacon stays.
+    // The same Unavailable product is unavailable on every offer.
     const [soupExtras] = soup!.offeredModifiers;
     expect(soupExtras!.kind === "extras" && soupExtras.items[0]!.available).toBe(false);
   });

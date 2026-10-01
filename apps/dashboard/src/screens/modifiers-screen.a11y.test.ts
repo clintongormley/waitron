@@ -36,7 +36,7 @@ const extraList: ExtraListRow = {
   maxPicks: 1,
   active: true,
   items: [],
-  usage: { products: 1, menus: 1 },
+  usage: { products: 1 },
 };
 
 function api(state: "empty" | "populated" | "failed"): DashboardApi {

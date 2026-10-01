@@ -1,40 +1,24 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
-import { catalogues, products, type Transaction } from "@waitron/db";
+import { eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
-import { menuItems } from "./schema/menu.js";
-import { reachableMenuItem } from "./menu-structure.js";
-import {
-  extraListItems,
-  extraLists,
-  menuItemExtraItems,
-  menuItemExtraLists,
-  productModifiers,
-} from "./schema/extras.js";
+import { extraListItems, extraLists, productModifiers } from "./schema/extras.js";
 import {
   parseExtraListInput,
-  parseMenuExtraPublications,
   type ExtraList,
   type ExtraListItem,
   type ExtraListInput,
-  type MenuExtraPublication,
 } from "./extra-contract.js";
 import type { ExtraListDependants, ExtraListRow } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { parentsWithActiveVariants } from "./variants.js";
 import "./errors.js";
 
-/**
- * What one of this extra costs on a line: the menu offer's price if that offer set one, else the
- * list item's own, else the product's `unitPrice`. Only null and undefined fall through —
- * `"0.00"` is a price a venue chose. `undefined` back means nothing can price it.
- */
 export function resolveExtraPrice(
   item: ExtraListItem,
   product: { unitPrice: string } | undefined,
-  menuPrice?: string | null,
 ): string | undefined {
-  return menuPrice ?? item.price ?? product?.unitPrice;
+  return item.price ?? product?.unitPrice;
 }
 
 // A list's `sort` is never written from a body (`parseExtraListInput` accepts no such key), so every
@@ -99,15 +83,10 @@ export async function listExtraLists(tx: Transaction): Promise<ExtraListRow[]> {
     .from(productModifiers)
     .where(isNotNull(productModifiers.extraListId))
     .groupBy(productModifiers.extraListId);
-  const menuCounts = await tx
-    .select({ listId: menuItemExtraLists.listId, count: sql<number>`count(*)` })
-    .from(menuItemExtraLists)
-    .groupBy(menuItemExtraLists.listId);
   const byProducts = new Map(productCounts.map((row) => [row.listId, row.count]));
-  const byMenus = new Map(menuCounts.map((row) => [row.listId, row.count]));
   return withAll.map((list) => ({
     ...list,
-    usage: { products: byProducts.get(list.id) ?? 0, menus: byMenus.get(list.id) ?? 0 },
+    usage: { products: byProducts.get(list.id) ?? 0 },
   }));
 }
 
@@ -275,28 +254,6 @@ async function writeItems(
   }
 }
 
-/**
- * Remove the per-menu overrides of products this list no longer offers. Nothing in the database does
- * it: `menu_item_extra_items` carries no foreign key into `extra_list_items` (schema/extras.ts).
- * Without this, dropping a product from a list and adding it back would resurrect an old override.
- * `notInArray` with an EMPTY array matches every row, so an emptied list loses all its overrides.
- */
-async function dropStaleMenuOverrides(
-  tx: Transaction,
-  extraListId: string,
-  input: ExtraListInput,
-): Promise<void> {
-  await tx.delete(menuItemExtraItems).where(
-    and(
-      eq(menuItemExtraItems.listId, extraListId),
-      notInArray(
-        menuItemExtraItems.productId,
-        input.items.map((item) => item.productId),
-      ),
-    ),
-  );
-}
-
 /** The only write path here that reads no EXISTING list row, because the id is minted below. */
 export async function createExtraList(
   tx: Transaction,
@@ -327,151 +284,17 @@ export async function updateExtraList(
   await validateNames(tx, input, fallbackLanguage);
   await tx.update(extraLists).set(listValues(input)).where(eq(extraLists.id, extraListId));
   await writeItems(tx, extraListId, input);
-  // Only here, and not in {@link createExtraList}: that path mints the list id a statement earlier,
-  // so no menu offer can hold an override against it yet.
-  await dropStaleMenuOverrides(tx, extraListId, input);
   return getExtraList(tx, extraListId);
 }
 
 export async function deleteExtraList(tx: Transaction, extraListId: string): Promise<void> {
   await assertExtraListForWrite(tx, extraListId);
-  // The list's items, its menu publications and their per-item overrides all go with it by ON DELETE
-  // CASCADE. No open-order check: an order's child line records the list's id with no foreign key
-  // into it.
   await tx.delete(extraLists).where(eq(extraLists.id, extraListId));
-}
-
-/**
- * Every published list exists. In id order, so `extras.not_found` names the lowest unknown id; no
- * test pins which.
- */
-async function assertPublishedListsExist(
-  tx: Transaction,
-  publications: MenuExtraPublication[],
-): Promise<void> {
-  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
-  for (const listId of publications.map((publication) => publication.listId).sort())
-    await assertExtraListForWrite(tx, listId);
-}
-
-/**
- * Every list the body publishes is one the dish's PRODUCT carries in `product_modifiers`, refused as
- * `extras.invalid` naming the publication's position. The database refuses nothing here:
- * `menu_item_extra_lists` has no key into `product_modifiers`. Nothing refuses an offer that
- * publishes none of its product's lists; whether anything should is open. ONE grouped query.
- */
-async function assertProductCarries(
-  tx: Transaction,
-  productId: string,
-  publications: MenuExtraPublication[],
-): Promise<void> {
-  if (publications.length === 0) return;
-  const rows = await tx
-    .select({ extraListId: productModifiers.extraListId })
-    .from(productModifiers)
-    .where(
-      and(
-        eq(productModifiers.productId, productId),
-        inArray(
-          productModifiers.extraListId,
-          publications.map((publication) => publication.listId),
-        ),
-      ),
-    );
-  const held = new Set(rows.map((row) => row.extraListId));
-  const at = publications.findIndex((publication) => !held.has(publication.listId));
-  if (at !== -1) throw new AppError("extras.invalid", { field: `lists.${at}.listId` });
-}
-
-/** A list-and-product pair as one key, joined by a byte no uuid can contain. */
-const offeredKey = (listId: string, productId: string) => `${listId}\u0000${productId}`;
-
-/**
- * Every overridden product is one its list offers, refused as `extras.invalid` with the item's
- * position. The database would accept it: a menu row carries no key into `extra_list_items`
- * (schema/extras.ts). ONE grouped query.
- */
-async function assertProductsOffered(
-  tx: Transaction,
-  publications: MenuExtraPublication[],
-): Promise<void> {
-  const overriding = publications.filter((publication) => publication.items.length > 0);
-  if (overriding.length === 0) return;
-  const rows = await tx
-    .select({ listId: extraListItems.listId, productId: extraListItems.productId })
-    .from(extraListItems)
-    .where(
-      inArray(
-        extraListItems.listId,
-        overriding.map((publication) => publication.listId),
-      ),
-    );
-  const offered = new Set(rows.map((row) => offeredKey(row.listId, row.productId)));
-  for (const publication of overriding) {
-    const stray = publication.items.find(
-      (item) => !offered.has(offeredKey(publication.listId, item.productId)),
-    );
-    if (stray) throw new AppError("extras.invalid", { field: `${stray.field}.productId` });
-  }
-}
-
-/**
- * Replace what one menu offer publishes: which extras lists it carries, in which order
- * (`display_order` is the position in `lists`), and how it narrows and reprices each one.
- *
- * **An item row is an OVERRIDE, not a publication.** A list item with no row here is offered on this
- * menu at its own resolved price; a row replaces that price when it carries one, and withdraws the
- * item when `available` is false.
- */
-export async function setMenuItemExtraLists(
-  tx: Transaction,
-  menuItemId: string,
-  lists: unknown,
-): Promise<void> {
-  const offerId = menuItemId.toLowerCase();
-  const offer = await reachableMenuItem(tx, offerId);
-  if (offer === undefined) throw new AppError("menu_item.not_found", { menuItemId });
-  const publications = parseMenuExtraPublications(lists);
-  await assertPublishedListsExist(tx, publications);
-  // Carrying the list comes first: a body that publishes a list the dish does not have is wrong
-  // about the list, whatever its overrides then say.
-  await assertProductCarries(tx, offer.productId, publications);
-  await assertProductsOffered(tx, publications);
-
-  // The offer's item rows cascade with its list rows, so this one delete clears both tables for this
-  // offer and no row the body keeps can collide with a row it is replacing.
-  await tx.delete(menuItemExtraLists).where(eq(menuItemExtraLists.menuItemId, offerId));
-  if (publications.length === 0) return;
-  await tx.insert(menuItemExtraLists).values(
-    publications.map((publication, displayOrder) => ({
-      menuItemId: offerId,
-      listId: publication.listId,
-      displayOrder,
-    })),
-  );
-  const items = publications.flatMap((publication) =>
-    publication.items.map((item) => ({
-      menuItemId: offerId,
-      listId: publication.listId,
-      productId: item.productId,
-      price: item.price === null ? null : stringToCents(item.price),
-      available: item.available,
-    })),
-  );
-  if (items.length > 0) await tx.insert(menuItemExtraItems).values(items);
 }
 
 // The shape lives in `modifier-list-types.ts`, the browser-safe leaf the dashboard imports.
 export type { ExtraListDependants } from "./modifier-list-types.js";
 
-/**
- * What deleting this list would touch — read by the dashboard's Used by popup and its delete
- * confirmation: the products that carry it and the menu offers that publish it, each detached by
- * the delete rather than blocking it. No order is consulted: an order's child line records the
- * list's id with no foreign key into it, so the delete does not touch it. A menu publication has no
- * name of its own, so it is identified by the menu item's id, its product's staff name and its
- * menu's name.
- */
 export async function extraListDependants(
   tx: Transaction,
   extraListId: string,
@@ -484,13 +307,5 @@ export async function extraListDependants(
     .innerJoin(products, eq(products.id, productModifiers.productId))
     .where(eq(productModifiers.extraListId, extraListId))
     .orderBy(products.name, products.id);
-  const menus = await tx
-    .select({ id: menuItems.id, name: products.name, menuName: catalogues.name })
-    .from(menuItemExtraLists)
-    .innerJoin(menuItems, eq(menuItems.id, menuItemExtraLists.menuItemId))
-    .innerJoin(products, eq(products.id, menuItems.productId))
-    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
-    .where(eq(menuItemExtraLists.listId, extraListId))
-    .orderBy(menuItems.id);
-  return { products: carrying, menus };
+  return { products: carrying };
 }

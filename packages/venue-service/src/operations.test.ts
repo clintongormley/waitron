@@ -19,7 +19,6 @@ import {
   menuDocumentHash,
   publishMenu,
   readMenuStructure,
-  setMenuItemExtraLists,
   setProductVariants,
   updateMenuItem,
   updateOptionList,
@@ -1805,7 +1804,7 @@ async function seedTwoMenuVenue() {
     ]);
     const lemonadeOffer = (await addProductToMenu(tx, { menuId: dinner.id, productId: lemonade }))
       .id;
-    await setMenuItemExtraLists(tx, lemonadeOffer, [{ listId: extrasList, items: [] }]);
+
     const burgerOffer = (await addProductToMenu(tx, { menuId: dinner.id, productId: burger })).id;
     await allowMenuInZone(tx, cfg, venue.diningZone, dinner.id, { displayOrder: 1 });
     return {
@@ -2162,7 +2161,7 @@ describe("zone offers from the published menus", () => {
       const before = await menuState(tx, venue.diningZone);
       expect({ ...before, menus: before.menus.map(stateVersionOf) }).toEqual({
         menus,
-        unavailable: { products: [], optionLabels: [], extraItems: [] },
+        unavailable: { products: [], optionLabels: [] },
       });
 
       await updateProduct(tx, venue.burger, { available: false });
@@ -2208,33 +2207,19 @@ describe("zone offers from the published menus", () => {
         },
         "en",
       );
-      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
-        {
-          listId: venue.extrasList,
-          items: [{ productId: venue.extraLemon, price: null, available: false }],
-        },
-        { listId: sides, items: [{ productId: venue.burger, price: null, available: false }] },
-      ]);
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
       // The zone's menus, their live versions, then products, option labels and extras items.
-      expect(prepared).toHaveBeenCalledTimes(5);
+      expect(prepared).toHaveBeenCalledTimes(4);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
-        extraItems: [
-          {
-            menuItemId: venue.lemonadeOffer,
-            productId: venue.extraLemon,
-            extraListId: venue.extrasList,
-          },
-        ],
       });
       await expect(menuState(tx, UNKNOWN_ID)).resolves.toEqual({
         menus: [],
-        unavailable: { products: [], optionLabels: [], extraItems: [] },
+        unavailable: { products: [], optionLabels: [] },
       });
     });
   });
@@ -2302,43 +2287,6 @@ describe("zone offers from the published menus", () => {
       const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       expect(sqlOf.filter((text) => /from "menu_publications"/.test(text))).toHaveLength(1);
       expect(sqlOf.filter((text) => /from "zone_menus"/.test(text))).toHaveLength(1);
-    });
-  });
-
-  it("names the list of a withdrawn extras item, so the same product in another list stays offered", async () => {
-    const venue = await seedTwoMenuVenue();
-    await scoped(async (tx) => {
-      const garnish = (
-        await createExtraList(
-          tx,
-          { name: "Garnish", minPicks: 0, maxPicks: 1, items: [{ productId: venue.extraLemon }] },
-          "en",
-        )
-      ).id;
-      await writeProductModifiers(tx, venue.lemonade, [
-        { kind: "extras", id: venue.extrasList },
-        { kind: "extras", id: garnish },
-        { kind: "options", id: venue.iceList },
-      ]);
-      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
-        { listId: venue.extrasList, items: [] },
-        { listId: garnish, items: [] },
-      ]);
-      await publish(tx, venue.dinner);
-      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
-        {
-          listId: venue.extrasList,
-          items: [{ productId: venue.extraLemon, price: null, available: false }],
-        },
-        { listId: garnish, items: [] },
-      ]);
-      expect((await menuState(tx, venue.diningZone)).unavailable.extraItems).toEqual([
-        {
-          menuItemId: venue.lemonadeOffer,
-          productId: venue.extraLemon,
-          extraListId: venue.extrasList,
-        },
-      ]);
     });
   });
 });

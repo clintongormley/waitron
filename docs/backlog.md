@@ -1165,25 +1165,11 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   rather than describing extra prices that are not seeded. **Next action:** seed one extras list on
   a demo dish, with a menu-offer price that differs from the product's own, which is what the
   removed text used to illustrate.
-- **A menu item created today offers its product's options lists and none of its extras lists, and
-  the function that would publish one has NO non-test caller.** Options need no publication, so they
-  always travel; an extras list reaches an offer only through `setMenuItemExtraLists`
-  (`packages/catalogue/src/extras.ts`), and there is no management route to it. `createMenuItem`
-  (`packages/catalogue/src/operations.ts`) used to auto-seed a new offer with the product's active
-  option groups, and Task 13 removed that with the old model; the new model has no twin, and did not
-  have one before either. Pinned by "omits an extras list the
-  offer does not publish, and keeps the options list"
-  (`packages/catalogue/src/offered-modifiers.test.ts`). **Next action:** decide whether a new menu
-  item should inherit its product's extras lists by default, or whether publication stays explicit
-  and a route is built for it.
-- **Are per-menu extras worth keeping at all? (owner, 2026-09-26: "I'm not sure it is worth the
-  effort.")** A menu can carry its own version of a product's extras lists, with its own prices and
-  availability (`menu_item_extra_lists`, `menu_item_extra_items`); the menus plan keeps them (its
-  D5), and the Modifiers screen's "Used by" popup shows them as menu rows. Options lists have no such
-  per-menu version. Dropping per-menu extras would remove two tables, `setMenuItemExtraLists`, the
-  menu rows in `extraListDependants`, and whatever the menus publish copies from them (not traced);
-  it would also settle the item above. **Next action:** the owner decides keep or drop; if drop, it is a menus-plan
-  change, coordinated with lane C.
+- **CLOSED 2026-10-01: a menu item carries its product's extras and options lists.** Per-menu
+  extras were dropped (owner decision 2026-09-30). A menu offer uses the list item's price, else
+  the extra product's own price; publishing freezes those choices and prices.
+- **CLOSED 2026-10-01: are per-menu extras worth keeping?** Owner decision 2026-09-30: drop them.
+  The two tables, publication API and menu rows in Used by are removed.
 
 **Extras and Options editors — owner review fixes (2026-09-26), campaign lane A items A64–A67 —
 LANDED (A67 last, #718).** The owner's review of the Modifiers screen: Active/Inactive in place of "In use", a Used
@@ -1203,6 +1189,8 @@ options list that always has a default.
   picker, 1024px wide on a 1280px screen, puts each price at the far end of a 1024px row, well
   away from its name (which adds to the "prices are not a column" item in the till layout pass,
   under A4). The stepper's button names were text with a `{label}` slot; A66 made them functions.
+- **2026-10-01 update:** per-menu extras were dropped (owner decision, 2026-09-30). Used by now
+  counts and lists products only; the A65 entry below records the earlier screen.
 - **A65 (the list tables and the Used by popup) — LANDED, #716.** Both tabs'
   Status column and its filter read Active / Inactive; each editor's on/off switch shares the
   "Active" string, so its label now reads "Active" where it read "In use". A new Used by column
@@ -2093,6 +2081,10 @@ What extras lists left open, and what #449 found on the way:
   that sentence was narrowed in #449; this one was left, being pre-existing and out of scope.
 - **The design's stated reason for `min_picks`/`max_picks` is false.** The spelling stands, and a
   dated pointer on the design document says only the reason was wrong.
+**2026-10-01: per-menu extras were dropped (owner decision 2026-09-30).** The historical
+per-menu publication, override and Used by claims below describe the removed path. Current menu
+offers carry product extras; Used by counts and lists products only.
+
 - **An extras list's `dependants` fills its two sides from two different tables.** The plan's
   Task 5 added the per-menu publication row, which options lists do not have, so
   `extraListDependants` (`packages/catalogue/src/extras.ts`) reads the menus a delete would touch
@@ -2127,6 +2119,10 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   transfer pickers (`apps/till/src/screens/till-table-order-screen.ts`), so nothing offers it an
   action it cannot take; whether the drawer should also INDENT it is a display question nobody has
   decided. Deliberately left as it is.
+**2026-10-01: per-menu extras were dropped (owner decision 2026-09-30).** The historical
+per-menu publication, override and Used by claims below describe the removed path. Current menu
+offers carry product extras; Used by counts and lists products only.
+
 - **A published-but-DETACHED extras list is offered by nothing and demanded by the validator, and
   nothing cleans the publication up.** The two sides read different sets on ONE of the three reads
   that build those maps — the MENU-OFFER extras read, which is the read this scenario uses. The
@@ -2243,6 +2239,10 @@ What the product attachment (#456, the plan's Task 6) left behind:
   guards the shape; it is worth looking for in any new racing test.
 - **`scripts/spawn-timeout-budget.test.ts` was failing healthy runs of itself** — fixed in #456; the
   scan it describes has since been retired, and the guard reads `scripts/` alone again.
+
+**2026-10-01: per-menu extras were dropped (owner decision 2026-09-30).** The historical
+per-menu publication, override and Used by claims below describe the removed path. Current menu
+offers carry product extras; Used by counts and lists products only.
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 

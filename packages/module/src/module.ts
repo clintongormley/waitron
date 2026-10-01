@@ -239,12 +239,6 @@ export interface ZoneUnavailable {
   readonly products: readonly string[];
   /** Every option label that is unavailable, or deleted since the version was published. */
   readonly optionLabels: readonly string[];
-  /** Every extras item an offer has switched off, in the list it is switched off in. */
-  readonly extraItems: readonly {
-    readonly menuItemId: string;
-    readonly productId: string;
-    readonly extraListId: string;
-  }[];
 }
 
 /** A zone's live menu versions with the layout the device shows for each, and what they hold that

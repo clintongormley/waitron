@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray, type SQL } from "drizzle-orm";
+import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
-import { menuItemExtraItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels } from "./schema/options.js";
 import { sections } from "./schema/sections.js";
@@ -350,12 +349,7 @@ interface LiveRows {
   products: Map<string, LiveProductRow>;
   /** Each option label the offers name that still exists, with its availability. */
   labels: Map<string, boolean>;
-  /** Every extras item an offer has switched off, by {@link itemKey}. */
-  withdrawn: Set<string>;
 }
-
-const itemKey = (menuItemId: string, listId: string, productId: string) =>
-  `${menuItemId}\u0000${listId}\u0000${productId}`;
 
 /** A product can be sold now. */
 const sellable = (row: LiveProductRow) => row.active && row.available;
@@ -367,19 +361,15 @@ const labelAvailable = (rows: LiveRows, labelId: string) => rows.labels.get(labe
 async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Promise<LiveRows> {
   const productIds = new Set<string>();
   const labelIds = new Set<string>();
-  const withExtras: string[] = [];
   for (const offer of offers) {
     productIds.add(offer.productId);
     for (const variant of offer.variants) productIds.add(variant.id);
-    let carriesExtras = false;
     for (const entry of offer.offeredModifiers)
       if (entry.kind === "extras")
         for (const item of entry.items) {
           productIds.add(item.productId);
-          carriesExtras = true;
         }
       else for (const label of entry.labels) labelIds.add(label.id);
-    if (carriesExtras) withExtras.push(offer.id);
   }
 
   const productRows = new Map<string, LiveProductRow>();
@@ -404,26 +394,12 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
       .from(optionLabels)
       .where(inArray(optionLabels.id, batch)))
       labels.set(row.id, row.available);
-  const withdrawn = new Set<string>();
-  for (const batch of batches(withExtras))
-    for (const row of await tx
-      .select({
-        menuItemId: menuItemExtraItems.menuItemId,
-        listId: menuItemExtraItems.listId,
-        productId: menuItemExtraItems.productId,
-      })
-      .from(menuItemExtraItems)
-      .where(
-        and(inArray(menuItemExtraItems.menuItemId, batch), eq(menuItemExtraItems.available, false)),
-      ))
-      withdrawn.add(itemKey(row.menuItemId, row.listId, row.productId));
-  return { products: productRows, labels, withdrawn };
+  return { products: productRows, labels };
 }
 
 /**
  * Each product, variant or extras item's product the documents' offers name that is Inactive or
- * Unavailable, each option label they name that is unavailable or deleted, and each extras item an
- * offer has switched off in its list.
+ * Unavailable, and each option label they name that is unavailable or deleted.
  */
 export async function readUnavailable(
   tx: Transaction,
@@ -433,10 +409,6 @@ export async function readUnavailable(
   const rows = await readLiveRows(tx, offers);
   const unsellableProducts = new Set<string>();
   const labels = new Set<string>();
-  const extraItems = new Map<
-    string,
-    { menuItemId: string; productId: string; extraListId: string }
-  >();
   const unsellable = (productId: string) => {
     const row = rows.products.get(productId);
     if (row !== undefined && !sellable(row)) unsellableProducts.add(productId);
@@ -450,19 +422,11 @@ export async function readUnavailable(
       } else
         for (const item of entry.items) {
           unsellable(item.productId);
-          const key = itemKey(offer.id, entry.id, item.productId);
-          if (rows.withdrawn.has(key))
-            extraItems.set(key, {
-              menuItemId: offer.id,
-              productId: item.productId,
-              extraListId: entry.id,
-            });
         }
   }
   return {
     products: [...unsellableProducts],
     optionLabels: [...labels],
-    extraItems: [...extraItems.values()],
   };
 }
 
@@ -537,9 +501,7 @@ export async function applyLiveFields(
                     : [
                         {
                           ...item,
-                          available:
-                            sellable(row) &&
-                            !rows.withdrawn.has(itemKey(offer.id, entry.id, item.productId)),
+                          available: sellable(row),
                         },
                       ];
                 }),

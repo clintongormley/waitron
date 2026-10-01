@@ -4,12 +4,9 @@ import type { Transaction } from "@waitron/db";
 import {
   addProducts,
   createCatalogue,
-  menuItemExtraLists,
   menuItems,
-  readProductModifiers,
   requireMenuRoot,
   resolveAccessibleCatalogueIds,
-  setMenuItemExtraLists,
 } from "@waitron/catalogue";
 import type { ServiceMode } from "@waitron/module";
 import {
@@ -81,28 +78,6 @@ export async function offerProducts(
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
-  const modifiers = await readProductModifiers(tx, productIds);
-  const withoutExtras: string[] = [];
-  for (const productId of productIds) {
-    const extras = (modifiers.get(productId.toLowerCase()) ?? []).filter(
-      (ref) => ref.kind === "extras",
-    );
-    const offerId = offerByProduct.get(productId)!;
-    if (extras.length === 0) withoutExtras.push(offerId);
-    else
-      await setMenuItemExtraLists(
-        tx,
-        offerId,
-        extras.map((ref) => ({ listId: ref.id, items: [] })),
-      );
-  }
-  // What `setMenuItemExtraLists` writes for an offer publishing no list, in one statement: its
-  // reachability check, a whole-graph read per call, is settled by `placeOnTopLevel` above.
-  if (withoutExtras.length > 0)
-    await tx
-      .delete(menuItemExtraLists)
-      .where(inArray(menuItemExtraLists.menuItemId, withoutExtras));
-
   if ((options.routes ?? "mirror-legacy") === "mirror-legacy") {
     await mirrorLegacyRoutes(tx, cfg, productIds);
   }

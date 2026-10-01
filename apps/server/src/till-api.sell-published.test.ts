@@ -35,7 +35,6 @@ import {
   renameHomeLayout,
   requireMenuRoot,
   setDeviceHomeLayout,
-  setMenuItemExtraLists,
   updateExtraList,
   updateMenuItem,
   updateProduct,
@@ -228,7 +227,7 @@ async function setupLunch(): Promise<Lunch> {
     await assignCatalogueToLocation(tx, venue.locationId, lunch.id);
     const lemonadeOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: lemonade.id });
     const burgerOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: burger.id });
-    await setMenuItemExtraLists(tx, lemonadeOffer.id, [{ listId: lemon.id, items: [] }]);
+
     const postres = await createSection(tx, { internalName: "Postres" });
     const rootId = await requireMenuRoot(tx, lunch.id);
     await addMember(tx, rootId, { kind: "section", sectionId: postres.id });
@@ -522,7 +521,7 @@ describe("the extras a line picks are priced from the published version", () => 
     expect(((await response.json()) as { total: string }).total).toBe("3.50");
   });
 
-  it("refuses an extra made unavailable, or withdrawn from the offer, after publishing", async () => {
+  it("refuses an extra made unavailable after publishing", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
     await withTransaction(suite.db, (tx) =>
@@ -532,22 +531,6 @@ describe("the extras a line picks are priced from the published version", () => 
     const soldOut = await pay(v, [withLemon(v)]);
     expect(soldOut.status).toBe(400);
     expect(await soldOut.json()).toMatchObject({
-      error: { code: "extras.invalid", params: { field: "productId" } },
-    });
-    await withTransaction(suite.db, (tx) =>
-      updateProduct(tx, v.extraLemon.productId, { available: true }),
-    );
-    await withTransaction(suite.db, (tx) =>
-      setMenuItemExtraLists(tx, v.lemonade.offerId, [
-        {
-          listId: v.extraLemon.listId,
-          items: [{ productId: v.extraLemon.productId, price: null, available: false }],
-        },
-      ]),
-    );
-    const withdrawn = await pay(v, [withLemon(v)]);
-    expect(withdrawn.status).toBe(400);
-    expect(await withdrawn.json()).toMatchObject({
       error: { code: "extras.invalid", params: { field: "productId" } },
     });
     expect(await written()).toEqual(before);
@@ -627,7 +610,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         { kind: "options", id: v.punto.listId },
         { kind: "extras", id: toppings.id },
       ]);
-      await setMenuItemExtraLists(tx, v.burger.offerId, [{ listId: toppings.id, items: [] }]);
+
       const offer = await addProductToMenu(tx, { menuId: v.menuId, productId: bacon.id });
       return { productId: bacon.id, offerId: offer.id, toppingsId: toppings.id };
     });
@@ -855,7 +838,6 @@ describe("GET /api/menu-state", () => {
     unavailable: {
       products: string[];
       optionLabels: string[];
-      extraItems: { menuItemId: string; productId: string; extraListId: string }[];
     };
   };
   /** The answer, each menu narrowed to its version: the layout fields have their own cases. */
@@ -865,7 +847,7 @@ describe("GET /api/menu-state", () => {
     const body = (await response.json()) as MenuState;
     return { ...body, menus: body.menus.map(({ menuId, versionId }) => ({ menuId, versionId })) };
   };
-  const nothing = { products: [], optionLabels: [], extraItems: [] };
+  const nothing = { products: [], optionLabels: [] };
 
   it("lists a product made unavailable without moving the version, and clears it when restored", async () => {
     const v = await setupLunch();
@@ -888,32 +870,18 @@ describe("GET /api/menu-state", () => {
     expect((await state(v)).unavailable).toEqual(nothing);
   });
 
-  it("lists an option label and a per-offer extras item switched off, and clears them", async () => {
+  it("lists an unavailable option label and extras product, and clears them", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
     const setPoco = (available: boolean) =>
       suite.db.update(optionLabels).set({ available }).where(eq(optionLabels.id, v.punto.poco));
     const setLemon = (available: boolean) =>
-      withTransaction(suite.db, (tx) =>
-        setMenuItemExtraLists(tx, v.lemonade.offerId, [
-          {
-            listId: v.extraLemon.listId,
-            items: [{ productId: v.extraLemon.productId, price: null, available }],
-          },
-        ]),
-      );
+      withTransaction(suite.db, (tx) => updateProduct(tx, v.extraLemon.productId, { available }));
     await setPoco(false);
     await setLemon(false);
     expect((await state(v)).unavailable).toEqual({
-      products: [],
+      products: [v.extraLemon.productId],
       optionLabels: [v.punto.poco],
-      extraItems: [
-        {
-          menuItemId: v.lemonade.offerId,
-          productId: v.extraLemon.productId,
-          extraListId: v.extraLemon.listId,
-        },
-      ],
     });
     await setPoco(true);
     await setLemon(true);

@@ -79,61 +79,12 @@ function id(value: unknown, field: string): string {
 }
 /**
  * A price in the product-price shape, normalised to two decimals; null means "inherit". Exported
- * because the same rule decides a list item's price here and a MENU offer's override of it
- * (`setMenuItemExtraLists`, extras.ts): one body, so the two prices a diner can be charged cannot
- * drift apart.
+ * for list item validation.
  */
 export function extraPrice(value: unknown, field: string): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string" || !isProductPrice(value)) invalid(field);
   return toScale(decimal(value), 2);
-}
-
-/**
- * One published list as a body sends it, normalised: ids lower-cased, prices in the stored shape,
- * and each item carrying the field path a refusal about it should name.
- */
-export interface MenuExtraPublication {
-  listId: string;
-  items: { productId: string; price: string | null; available: boolean; field: string }[];
-}
-
-/**
- * What one menu offer publishes, as `setMenuItemExtraLists` (extras.ts) takes it: the lists it
- * carries, in the order the editor sent, each with the overrides that narrow and reprice it.
- *
- * These checks are the only refusal of a bad `available` flag: its column coerces any value to a
- * boolean rather than throwing. Duplicates — one list published twice, one product overridden
- * twice within a list — are refused here too, so the refusal names the offending position.
- */
-export function parseMenuExtraPublications(value: unknown): MenuExtraPublication[] {
-  if (!Array.isArray(value)) invalid("lists");
-  const seenLists = new Set<string>();
-  return value.map((entry, index): MenuExtraPublication => {
-    const field = `lists.${index}`;
-    const row = record(entry, field);
-    keys(row, ["listId", "items"], field);
-    const listId = id(row.listId, `${field}.listId`);
-    if (seenLists.has(listId)) invalid(`${field}.listId`);
-    seenLists.add(listId);
-    if (!Array.isArray(row.items)) invalid(`${field}.items`);
-    const seenProducts = new Set<string>();
-    const items = row.items.map((each, at) => {
-      const itemField = `${field}.items.${at}`;
-      const item = record(each, itemField);
-      keys(item, ["productId", "price", "available"], itemField);
-      const productId = id(item.productId, `${itemField}.productId`);
-      if (seenProducts.has(productId)) invalid(`${itemField}.productId`);
-      seenProducts.add(productId);
-      return {
-        productId,
-        price: extraPrice(item.price, `${itemField}.price`),
-        available: bool(item.available, `${itemField}.available`, true),
-        field: itemField,
-      };
-    });
-    return { listId, items };
-  });
 }
 
 export function parseExtraListInput(value: unknown): ExtraListInput {

@@ -39,11 +39,10 @@ it("unwraps the option- and extras-list envelopes and sends the authoring bodies
     id: "e1",
     ...extraInput,
     items: [{ id: "i1", ...extraInput.items[0]! }],
-    usage: { products: 0, menus: 1 },
+    usage: { products: 0 },
   };
   const extraDependants: ExtraListDependants = {
     products: [],
-    menus: [{ id: "m1", name: "Burger", menuName: "Lunch" }],
   };
 
   const fetchImpl = vi

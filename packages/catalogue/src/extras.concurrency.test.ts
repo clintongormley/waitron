@@ -4,8 +4,8 @@ import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
-import { createExtraList, getExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
-import { readMenuExtras } from "./extra-projection.js";
+import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
+import { readProductExtras } from "./extra-projection.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { racePair } from "../test/fixtures.js";
 
@@ -23,9 +23,7 @@ function refusalCode(reason: unknown): unknown {
 
 /** The two products the lists below offer, filled by the setup. */
 const breads: { sourdough: string; rye: string } = { sourdough: "", rye: "" };
-/** The one menu offer the publication tests save against — a sandwich, in one section. */
-let offer = "";
-/** The sandwich itself. `setMenuItemExtraLists` refuses a list this product does not carry. */
+/** The one menu offer the publication tests save against — a dish, in one section. */
 let dish = "";
 
 // `useVenueDb` empties every data table after each test, so the products are re-made per test.
@@ -47,22 +45,20 @@ beforeEach(async () => {
       await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
-        name: "sandwich",
+        name: "dish",
         unitId: null,
         unitPrice: "7.00",
         vatClass: "reduced",
       })
     ).id;
-    const menuItem = await addProductToMenu(tx, {
+    await addProductToMenu(tx, {
       menuId: catalogue.id,
       productId: dish,
       grossPrice: "7.00",
     });
-    offer = menuItem.id;
   });
 });
 
-/** The sandwich carries this list, which `setMenuItemExtraLists` requires before it publishes. */
 const carries = (tx: Transaction, listId: string) =>
   writeProductModifiers(tx, dish, [{ kind: "extras", id: listId }]);
 
@@ -199,7 +195,6 @@ it("leaves out a list item whose product has gone", async () => {
       "en",
     );
     await carries(tx, created.id);
-    await setMenuItemExtraLists(tx, offer, [{ listId: created.id, items: [] }]);
   });
 
   // The product key is `ON DELETE RESTRICT`, so the state is written with foreign keys off.
@@ -210,11 +205,11 @@ it("leaves out a list item whose product has gone", async () => {
     suite.db.execute(sql`pragma foreign_keys = on`);
   }
 
-  const published = await withTransaction(suite.db, (tx) => readMenuExtras(tx, [offer]));
+  const published = await withTransaction(suite.db, (tx) => readProductExtras(tx, [dish]));
 
   // An item nothing can price cannot be sold, so it is not offered — never present with `undefined`
   // where the type promises a price.
-  const items = published.get(offer)![0]!.items;
+  const items = published.get(dish)![0]!.items;
   expect(items.map((item) => [item.productId, item.price])).toEqual([[breads.rye, "1.00"]]);
   expect(items.every((item) => typeof item.price === "string")).toBe(true);
 });

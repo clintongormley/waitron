@@ -671,11 +671,9 @@ it("protects the photo of a product a live menu version offers only as an extra"
     createCatalogue,
     createExtraList,
     createProduct,
-    menuItems,
     previewMenu,
     publishMenu,
     readMenuStructure,
-    setMenuItemExtraLists,
     updateProduct,
     writeProductModifiers,
   } = await import("@waitron/catalogue");
@@ -705,11 +703,7 @@ it("protects the photo of a product a live menu version offers only as an extra"
     await writeProductModifiers(tx, lemonade.id, [{ kind: "extras", id: list.id }]);
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
     await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
-    const [offer] = await tx
-      .select({ id: menuItems.id })
-      .from(menuItems)
-      .where(eq(menuItems.productId, lemonade.id));
-    await setMenuItemExtraLists(tx, offer!.id, [{ listId: list.id, items: [] }]);
+
     const first = await publish(tx, menu.id);
     // The working state lets go; the live version still shows the photo.
     await updateProduct(tx, lemon.id, { image: null });

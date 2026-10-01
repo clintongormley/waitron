@@ -747,9 +747,6 @@ class ZoneOfferIndex {
     const key = JSON.stringify([
       [...unavailable.products].sort(),
       [...unavailable.optionLabels].sort(),
-      unavailable.extraItems
-        .map((item) => `${item.menuItemId} ${item.extraListId} ${item.productId}`)
-        .sort(),
     ]);
     if (key === this.#unavailableKey) return false;
     this.#unavailableKey = key;

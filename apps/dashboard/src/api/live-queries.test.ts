@@ -69,11 +69,7 @@ it.each([
   // packages/catalogue/src/options.ts, `listExtraLists` in extras.ts).
   ["listOptionLists", [], ["option_lists", "option_labels", "product_modifiers"]],
   ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
-  [
-    "listExtraLists",
-    [],
-    ["extra_lists", "extra_list_items", "product_modifiers", "menu_item_extra_lists"],
-  ],
+  ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   ["listLibraryProducts", [], ["products"]],
   // `listSections` and `librarySectionUsages` (packages/catalogue/src/sections.ts); the usages

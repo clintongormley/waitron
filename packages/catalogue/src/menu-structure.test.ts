@@ -16,10 +16,9 @@ import {
   updateProduct,
 } from "./operations.js";
 import { listContentTranslationGaps } from "./content-languages.js";
-import { createExtraList, setMenuItemExtraLists } from "./extras.js";
+import { createExtraList } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
-import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
@@ -137,21 +136,11 @@ async function settingsOf(tx: Transaction, menuId: string, productId: string) {
     })
     .from(menuItemVariantOverrides)
     .where(eq(menuItemVariantOverrides.menuItemId, row.id));
-  const extraLists = await tx
-    .select({ listId: menuItemExtraLists.listId })
-    .from(menuItemExtraLists)
-    .where(eq(menuItemExtraLists.menuItemId, row.id));
-  const extraItems = await tx
-    .select({ productId: menuItemExtraItems.productId, price: menuItemExtraItems.price })
-    .from(menuItemExtraItems)
-    .where(eq(menuItemExtraItems.menuItemId, row.id));
   return {
     id: row.id,
     grossPrice: row.grossPrice,
     active: row.active,
     variantOverrides,
-    extraLists,
-    extraItems,
   };
 }
 
@@ -372,7 +361,7 @@ describe("a menu offers what its structure reaches", () => {
 describe("a product that leaves a menu starts fresh there", () => {
   /**
    * Review Focus 4: Lemonade under Favourites and Drinks on Lunch, with a Lunch price, a Lunch
-   * price for its Large variant and a Lunch extras publication. Dinner holds Lemonade at its top
+   * price for its Large variant. The product carries Ice extras. Dinner holds Lemonade at its top
    * level with a price of its own, which nothing below may touch.
    */
   async function lemonadeOnLunch() {
@@ -393,9 +382,7 @@ describe("a product that leaves a menu starts fresh there", () => {
       ]);
       const ice = await createExtraList(tx, { name: "Ice", items: [{ productId: f.water }] }, "en");
       await writeProductModifiers(tx, f.lemonade, [{ kind: "extras", id: ice.id }]);
-      await setMenuItemExtraLists(tx, lunchItem.id, [
-        { listId: ice.id, items: [{ productId: f.water, price: "0.20", available: true }] },
-      ]);
+
       return {
         lunch: await settingsOf(tx, f.lunch, f.lemonade),
         dinner: await settingsOf(tx, f.dinner, f.lemonade),
@@ -405,8 +392,6 @@ describe("a product that leaves a menu starts fresh there", () => {
       grossPrice: 250,
       active: true,
       variantOverrides: [{ variantId: f.large, price: 300, offered: true }],
-      extraLists: [{ listId: expect.any(String) }],
-      extraItems: [{ productId: f.water, price: 20 }],
     });
     return { f, settings };
   }
@@ -431,8 +416,6 @@ describe("a product that leaves a menu starts fresh there", () => {
       grossPrice: null,
       active: true,
       variantOverrides: [],
-      extraLists: [],
-      extraItems: [],
     });
     expect(after.dinner).toEqual(before.dinner);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
@@ -443,9 +426,9 @@ describe("a product that leaves a menu starts fresh there", () => {
     expect(offer.variants).toEqual([
       expect.objectContaining({ id: f.large, menuPrice: null, unitPrice: "3.50" }),
     ]);
-    // An offer publishes an extras list only through its own `menu_item_extra_lists` row, and a
-    // fresh one has none.
-    expect(offer.offeredModifiers).toEqual([]);
+    expect(offer.offeredModifiers).toMatchObject([
+      { kind: "extras", name: "Ice", items: [{ productId: f.water }] },
+    ]);
   }
 
   it("keeps everything while another path still reaches the product", async () => {
@@ -599,7 +582,6 @@ describe("a menu's own switch for a product", () => {
       (tx: Transaction) => updateMenuItem(tx, f.dinner, item.id, { grossPrice: "1.00" }),
       (tx: Transaction) =>
         setMenuVariants(tx, item.id, [{ variantId: f.large, price: "1.00", offered: true }]),
-      (tx: Transaction) => setMenuItemExtraLists(tx, item.id, []),
     ])
       await expect(app(write)).rejects.toMatchObject({ code: "menu_item.not_found" });
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toMatchObject({

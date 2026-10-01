@@ -13,7 +13,7 @@ import {
   listMenuOffers,
   updateProduct,
 } from "./operations.js";
-import { createExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
+import { createExtraList, updateExtraList } from "./extras.js";
 import { createOptionList, updateOptionList } from "./options.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { setProductVariants } from "./variants.js";
@@ -108,8 +108,7 @@ beforeEach(async () => {
 
 /**
  * Bacon is priced by the list item (1.50, over the product's 3.00), cheese has to borrow its
- * product's own 2.00, and olives is the list item again (0.75, over 1.25) — the three rungs of the
- * fallback chain below a menu offer.
+ * product's own 2.00, and olives is the list item again (0.75, over 1.25).
  */
 const toppings = () => ({
   name: "Toppings staff",
@@ -122,15 +121,6 @@ const toppings = () => ({
     { productId: ids.cheese },
     { productId: ids.olives, price: "0.75" },
   ],
-});
-
-const sauces = () => ({
-  name: "Sauces staff",
-  customerName: { en: "Pick a sauce" },
-  kitchenName: "SAUCE",
-  minPicks: 0,
-  maxPicks: 1,
-  items: [{ productId: ids.olives }],
 });
 
 const cooked = () => ({
@@ -332,55 +322,28 @@ describe("what a product offers", () => {
 });
 
 describe("what a menu offer publishes", () => {
-  it("replaces each extras list with the offer's own narrowed, repriced version", async () => {
+  it("offers every extras list the product carries, at the list's prices, beside its options", async () => {
     await run(async (tx) => {
-      const seeded = await attach(tx, ["options", "extras"]);
-      await setMenuItemExtraLists(tx, offerId, [
+      await updateProduct(tx, ids.bacon, { unitPrice: "0.50" });
+      const attached = await attach(tx, ["extras", "options"]);
+      await updateExtraList(
+        tx,
+        attached.extrasId,
         {
-          listId: seeded.extrasId,
-          items: [
-            { productId: ids.bacon, price: "1.00" },
-            { productId: ids.cheese, available: false },
-          ],
+          ...toppings(),
+          items: [{ productId: ids.bacon, price: "0.40" }],
         },
-      ]);
+        "en",
+      );
     });
-
-    const offered = await run(async (tx) => {
-      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
-    });
-
-    const list = offered.get(offerId)![1]!;
+    const offer = (await run((tx) => listMenuOffers(tx, [catalogueId]))).find(
+      (entry) => entry.productId === ids.burger,
+    )!;
+    expect(offer.offeredModifiers.map((entry) => entry.kind)).toEqual(["extras", "options"]);
+    const extras = offer.offeredModifiers.find((entry) => entry.kind === "extras")!;
     expect(
-      list.kind === "extras" && list.items.map((item) => [item.productId, item.price]),
-    ).toEqual([
-      [ids.bacon, "1.00"],
-      [ids.olives, "0.75"],
-    ]);
-  });
-
-  it("omits an extras list the offer does not publish, and keeps the options list", async () => {
-    const seeded = await run(async (tx) => {
-      const attached = await attach(tx, ["options", "extras"]);
-      const second = await createExtraList(tx, sauces(), "en");
-      await writeProductModifiers(tx, ids.burger, [
-        { kind: "options", id: attached.optionsId },
-        { kind: "extras", id: attached.extrasId },
-        { kind: "extras", id: second.id },
-      ]);
-      // Only the second list is published on this offer.
-      await setMenuItemExtraLists(tx, offerId, [{ listId: second.id, items: [] }]);
-      return { ...attached, secondId: second.id };
-    });
-
-    const offered = await run(async (tx) => {
-      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
-    });
-
-    expect(offered.get(offerId)!.map((entry) => [entry.kind, entry.id])).toEqual([
-      ["options", seeded.optionsId],
-      ["extras", seeded.secondId],
-    ]);
+      extras.kind === "extras" && extras.items.map((item) => [item.productId, item.price]),
+    ).toEqual([[ids.bacon, "0.40"]]);
   });
 });
 
@@ -391,13 +354,7 @@ describe("an extra the till cannot sell", () => {
   it("leaves out an item whose product is Unavailable or Inactive, on both paths", async () => {
     const seeded = await run(async (tx) => {
       const attached = await attach(tx, ["extras"]);
-      // The offer publishes all three items, so the offer path has the same list to narrow.
-      await setMenuItemExtraLists(tx, offerId, [
-        {
-          listId: attached.extrasId,
-          items: [{ productId: ids.bacon }, { productId: ids.cheese }, { productId: ids.olives }],
-        },
-      ]);
+
       await updateProduct(tx, ids.bacon, { available: false });
       await updateProduct(tx, ids.cheese, { active: false });
       return attached;
@@ -428,12 +385,7 @@ describe("an extra that is a parent with Active variants", () => {
   it("leaves out an item whose product has an Active variant, on both paths", async () => {
     const seeded = await run(async (tx) => {
       const attached = await attach(tx, ["extras"]);
-      await setMenuItemExtraLists(tx, offerId, [
-        {
-          listId: attached.extrasId,
-          items: [{ productId: ids.bacon }, { productId: ids.cheese }, { productId: ids.olives }],
-        },
-      ]);
+
       const variant = (name: string, available: boolean, active: boolean) => ({
         name,
         customerName: null,
@@ -493,13 +445,9 @@ describe("listAvailableProducts and listMenuOffers", () => {
     expect(available.find((product) => product.id === ids.olives)!.offeredModifiers).toEqual([]);
   });
 
-  it("listMenuOffers carries the menu-resolved walk", async () => {
+  it("listMenuOffers carries the product-resolved walk", async () => {
     const seeded = await run(async (tx) => {
-      const attached = await attach(tx, ["options", "extras"]);
-      await setMenuItemExtraLists(tx, offerId, [
-        { listId: attached.extrasId, items: [{ productId: ids.bacon, price: "1.00" }] },
-      ]);
-      return attached;
+      return attach(tx, ["options", "extras"]);
     });
 
     const offers = await run(async (tx) => {
@@ -512,7 +460,7 @@ describe("listAvailableProducts and listMenuOffers", () => {
       ["extras", seeded.extrasId],
     ]);
     const list = walk[1]!;
-    expect(list.kind === "extras" && list.items[0]!.price).toBe("1.00");
+    expect(list.kind === "extras" && list.items[0]!.price).toBe("1.50");
   });
 });
 
@@ -523,7 +471,6 @@ describe("one shared resolution for a set of dishes", () => {
     await run(async (tx) => {
       await attach(tx, ["options", "extras"]);
     });
-    const menuExtras = vi.spyOn(extraProjection, "readMenuExtras");
     const productExtras = vi.spyOn(extraProjection, "readProductExtras");
     const attachments = vi.spyOn(productModifiers, "readProductModifiers");
     const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
@@ -543,16 +490,12 @@ describe("one shared resolution for a set of dishes", () => {
     // read would show up here as a second call.
     expect(attachments).toHaveBeenCalledTimes(1);
     expect(productExtras.mock.calls[0]![2]).toBe(await attachments.mock.results[0]!.value);
-    // No dish names a menu offer, so the menu-side read is never reached.
-    expect(menuExtras).not.toHaveBeenCalled();
   });
 
-  it("reads the menu side alone for dishes ordered through an offer", async () => {
+  it("reads the product side once for dishes ordered through an offer", async () => {
     await run(async (tx) => {
-      const attached = await attach(tx, ["options", "extras"]);
-      await setMenuItemExtraLists(tx, offerId, [{ listId: attached.extrasId, items: [] }]);
+      await attach(tx, ["options", "extras"]);
     });
-    const menuExtras = vi.spyOn(extraProjection, "readMenuExtras");
     const productExtras = vi.spyOn(extraProjection, "readProductExtras");
     const attachments = vi.spyOn(productModifiers, "readProductModifiers");
     const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
@@ -564,10 +507,9 @@ describe("one shared resolution for a set of dishes", () => {
       ]);
     });
 
-    expect(menuExtras).toHaveBeenCalledTimes(1);
     expect(attachments).toHaveBeenCalledTimes(1);
     expect(optionLists).toHaveBeenCalledTimes(1);
-    // Every dish names an offer, so the product-side extras read is never reached.
-    expect(productExtras).not.toHaveBeenCalled();
+
+    expect(productExtras).toHaveBeenCalledTimes(1);
   });
 });

@@ -25,7 +25,6 @@ import {
   getExtraList,
   listExtraLists,
   resolveExtraPrice,
-  setMenuItemExtraLists,
   updateExtraList,
 } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
@@ -357,12 +356,11 @@ describe("extra list CRUD", () => {
     expect(await run((tx) => listExtraLists(tx))).toEqual([]);
   });
 
-  it("reports no products or menus holding a list", async () => {
+  it("reports no products holding a list", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
 
     expect(await run((tx) => extraListDependants(tx, created.id))).toEqual({
       products: [],
-      menus: [],
     });
   });
 
@@ -396,11 +394,9 @@ describe("extra list CRUD", () => {
       { id: dishes[0], name: "sandwich" },
       { id: dishes[1], name: "toastie" },
     ]);
-    // Nothing publishes it on a menu: the two sides are separate reads, and this file has no menu.
-    expect(dependants.menus).toEqual([]);
   });
 
-  it("lists each extras list with how many products and menu entries carry it", async () => {
+  it("counts each product carrying an extras list once across menu offers", async () => {
     const carried = await run((tx) => createExtraList(tx, breadList(), "en"));
     const idle = await run((tx) => createExtraList(tx, { ...breadList(), name: "Idle" }, "en"));
     const elsewhere = await run((tx) =>
@@ -424,12 +420,9 @@ describe("extra list CRUD", () => {
       const sandwich = await dish("sandwich", carried.id);
       const toastie = await dish("toastie", carried.id);
       await dish("soup", elsewhere.id);
-      // Three menu entries of carrying dishes; the two on Lunch publish the list and the one on
-      // Dinner does not. So the count of entries is 2, of menus 1, and of every entry of a carrying
-      // dish 3.
+
       for (const productId of [sandwich, toastie]) {
-        const entry = await addProductToMenu(tx, { menuId: lunch.id, productId });
-        await setMenuItemExtraLists(tx, entry.id, [{ listId: carried.id, items: [] }]);
+        await addProductToMenu(tx, { menuId: lunch.id, productId });
       }
       await addProductToMenu(tx, { menuId: dinner.id, productId: sandwich });
     });
@@ -437,9 +430,9 @@ describe("extra list CRUD", () => {
     const rows = await run((tx) => listExtraLists(tx));
 
     const usage = (id: string) => rows.find((row) => row.id === id)!.usage;
-    expect(usage(carried.id)).toEqual({ products: 2, menus: 2 });
-    expect(usage(elsewhere.id)).toEqual({ products: 1, menus: 0 });
-    expect(usage(idle.id)).toEqual({ products: 0, menus: 0 });
+    expect(usage(carried.id)).toEqual({ products: 2 });
+    expect(usage(elsewhere.id)).toEqual({ products: 1 });
+    expect(usage(idle.id)).toEqual({ products: 0 });
   });
 
   it("refuses to read an id that names no list", async () => {

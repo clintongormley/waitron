@@ -40,7 +40,6 @@ import {
   createProduct,
   readContentLanguages,
   updateOptionList,
-  setMenuItemExtraLists,
   updateMenuItem,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -3409,10 +3408,6 @@ async function modifierOfferFixture() {
       grossPrice: "1.75",
     });
 
-    // What the ORDER path answers: an extras list the offer republishes at its own price, and an
-    // options list the product carries. The cheese's three names carry DIFFERENT text, so a line
-    // freezing the wrong one of them fails (CLAUDE.md §3), and its own 9.00 unit price is the price
-    // a child line would show if the offer's 0.35 were never read.
     const cheese = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,
       categoryId: null,
@@ -3432,13 +3427,11 @@ async function modifierOfferFixture() {
         minPicks: 0,
         maxPicks: 2,
         active: true,
-        items: [{ productId: cheese.id, maxQuantity: 2, preselected: false, price: "9.00" }],
+        items: [{ productId: cheese.id, maxQuantity: 2, preselected: false, price: "0.35" }],
       },
       cfg.locale,
     );
-    // Carried by the product and NEVER published on the offer, so an offer line answering it is
-    // answering something that dish does not offer here.
-    const unpublishedList = await createExtraList(
+    const secondExtrasList = await createExtraList(
       tx,
       {
         name: "Extras sin publicar",
@@ -3478,19 +3471,17 @@ async function modifierOfferFixture() {
     );
     await writeProductModifiers(tx, product.id, [
       { kind: "extras", id: extrasList.id },
-      { kind: "extras", id: unpublishedList.id },
+      { kind: "extras", id: secondExtrasList.id },
       { kind: "options", id: prepList.id },
     ]);
-    await setMenuItemExtraLists(tx, offer.id, [
-      { listId: extrasList.id, items: [{ productId: cheese.id, price: "0.35", available: true }] },
-    ]);
+
     await publishWorkingMenu(tx, aguaProduct.catalogueId);
     return {
       product,
       offer,
       cheese,
       extrasList,
-      unpublishedList,
+      secondExtrasList,
       prepList,
       defaultLanguage,
     };
@@ -3514,7 +3505,7 @@ async function modifierOfferFixture() {
       labelKitchenName: "Frío kitchen",
     },
   ];
-  /** The child line as the held-order read hands it back: the OFFER's price, per-dish picks, and
+  /** The child line as the held-order read hands it back: the list's price, per-dish picks, and
    * the list the pick was taken from. */
   const parkedExtras = [
     {
@@ -3555,7 +3546,7 @@ describe("canonical modifier HTTP serialization", () => {
   it("publishes every mode, parks explicit answers and prices published extras exactly", async () => {
     const f = await modifierOfferFixture();
     // What the offer PUBLISHES: the extras list at the offer's own 0.35, the options list the
-    // product carries, and not the list the product carries unpublished.
+
     const offers = await f.app.request("/api/default-service-zone/offers", { headers: f.headers });
     expect(offers.status).toBe(200);
     const offerBody = (await offers.json()) as {
@@ -3564,6 +3555,7 @@ describe("canonical modifier HTTP serialization", () => {
     const published = offerBody.offers.find((offer) => offer.id === f.offer.id)!;
     expect(published.offeredModifiers.map((entry) => [entry.kind, entry.id])).toEqual([
       ["extras", f.extrasList.id],
+      ["extras", f.secondExtrasList.id],
       ["options", f.prepList.id],
     ]);
     expect(published.offeredModifiers[0]).toMatchObject({
@@ -3641,7 +3633,7 @@ describe("canonical modifier HTTP serialization", () => {
     );
   });
 
-  it("refuses an unpublished list, an unknown list and a withdrawn label through the working-order request", async () => {
+  it("accepts every carried extras list and refuses an unknown list or withdrawn label through the working-order request", async () => {
     const f = await modifierOfferFixture();
     const park = (line: Record<string, unknown>) =>
       f.app.request("/api/working-orders", {
@@ -3653,17 +3645,13 @@ describe("canonical modifier HTTP serialization", () => {
         }),
       });
 
-    // A list the PRODUCT carries but this offer does not publish is not on offer here.
-    const unpublished = await park({
+    const carried = await park({
       extras: [
         ...f.answers.extras,
-        { listId: f.unpublishedList.id, picks: [{ productId: f.cheese.id, quantity: 1 }] },
+        { listId: f.secondExtrasList.id, picks: [{ productId: f.cheese.id, quantity: 1 }] },
       ],
     });
-    expect(unpublished.status, await unpublished.clone().text()).toBe(400);
-    expect(await unpublished.json()).toMatchObject({
-      error: { code: "extras.invalid", params: { field: "listId" } },
-    });
+    expect(carried.status, await carried.clone().text()).toBe(200);
 
     // A list id nothing attaches to this dish at all.
     const unknown = await park({

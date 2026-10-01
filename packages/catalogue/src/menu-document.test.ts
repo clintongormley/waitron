@@ -22,13 +22,11 @@ import * as vatRates from "./vat-rates.js";
 import { deactivateProduct, renameCatalogue, updateMenuItem, updateProduct } from "./operations.js";
 import { addMember, moveMember, removeMember, updateSection } from "./sections.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
-import { setMenuItemExtraLists } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { extraListItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";
-import { menuItemExtraItems } from "./schema/extras.js";
 
 const fx = useCatalogueDb();
 
@@ -181,12 +179,6 @@ describe("buildMenuDocument", () => {
     await app(async (tx) => {
       await tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, WITH_ICE));
       await updateProduct(tx, f.extraLemon, { available: false });
-      await tx.insert(menuItemExtraItems).values({
-        menuItemId: await offerOf(tx, f.dinner, f.lemonade),
-        listId: f.extrasList,
-        productId: f.extraLemon,
-        available: false,
-      });
     });
     for (const menuId of [f.lunch, f.dinner]) {
       const document = await build(menuId);
@@ -345,16 +337,6 @@ describe("menuDocumentHash", () => {
       "the extra's ordering",
       (tx, f) => updateProduct(tx, f.extraLemon, { ordering: "not_sold_separately" }),
     ],
-    [
-      "whether the offer withdraws the extra",
-      async (tx, f) =>
-        tx.insert(menuItemExtraItems).values({
-          menuItemId: await offerOf(tx, f.dinner, f.lemonade),
-          listId: f.extrasList,
-          productId: f.extraLemon,
-          available: false,
-        }),
-    ],
   ];
 
   it.each(unchanged)("does not move when %s changes", async (_, change) => {
@@ -463,13 +445,8 @@ describe("applyLiveFields", () => {
       await updateProduct(tx, f.soup, { categoryId: null });
       await updateProduct(tx, f.large, { available: false });
       await updateProduct(tx, f.lager, { active: false });
+      await updateProduct(tx, f.extraLemon, { available: false });
       await tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, WITH_ICE));
-      await tx.insert(menuItemExtraItems).values({
-        menuItemId: await offerOf(tx, f.dinner, f.lemonade),
-        listId: f.extrasList,
-        productId: f.extraLemon,
-        available: false,
-      });
     });
     const live = await app((tx) => applyLiveFields(tx, [lunch, dinner]));
     const lunchOffers = live.get(f.lunch)!;
@@ -498,16 +475,15 @@ describe("applyLiveFields", () => {
     const [extras, options] = lemonade.offeredModifiers;
     if (extras?.kind !== "extras" || options?.kind !== "options") throw new Error("lists");
     expect(extras.items).toMatchObject([
-      { productId: f.extraLemon, available: true, vatClass: "reduced" },
+      { productId: f.extraLemon, available: false, vatClass: "reduced" },
     ]);
+    const dinnerExtras = live.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!
+      .offeredModifiers[0]!;
+    expect(dinnerExtras.kind === "extras" && dinnerExtras.items[0]!.available).toBe(false);
     expect(options.labels.map((label) => [label.name, label.available])).toEqual([
       ["No ice", true],
       ["With ice", false],
     ]);
-    // Withdrawn from Dinner's offer alone.
-    const dinnerLemonade = live.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!;
-    const dinnerExtras = dinnerLemonade.offeredModifiers[0]!;
-    expect(dinnerExtras.kind === "extras" && dinnerExtras.items[0]!.available).toBe(false);
   });
 
   it("serves the VAT class the version froze, whatever each product's class is now", async () => {
@@ -880,9 +856,7 @@ describe("diffMenuDocuments", () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: f.extrasList }]);
-      await setMenuItemExtraLists(tx, await offerOf(tx, f.lunch, f.soup), [
-        { listId: f.extrasList, items: [] },
-      ]);
+
       await addMember(tx, f.lunchRoot, product(f.extraLemon));
     });
     const live = await build(f.lunch);

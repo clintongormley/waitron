@@ -2777,7 +2777,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     try {
       const state = (versionId: string) => ({
         menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
-        unavailable: { products: [], optionLabels: [], extraItems: [] },
+        unavailable: { products: [], optionLabels: [] },
       });
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
       savedBy(ALEX, "Alex", "offer-beer");
@@ -2835,7 +2835,7 @@ describe("till-app: other people's drafts and taking one over", () => {
 describe("till-app: a menu published while a table's draft is open (D9)", () => {
   const state = (versionId: string, soldOut: string[] = []) => ({
     menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
-    unavailable: { products: soldOut, optionLabels: [], extraItems: [] },
+    unavailable: { products: soldOut, optionLabels: [] },
   });
 
   beforeEach(() => {
@@ -3519,7 +3519,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     menus: [
       { menuId: "lunch", versionId: "v1", homeLayoutId: "layout-home", layoutFallback: null },
     ],
-    unavailable: { products: soldOut, optionLabels: [], extraItems: [] },
+    unavailable: { products: soldOut, optionLabels: [] },
   });
 
   async function saved(el: TillApp): Promise<void> {
@@ -3852,7 +3852,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     });
     const at = (versionId: string) => ({
       menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
-      unavailable: { products: [], optionLabels: [], extraItems: [] },
+      unavailable: { products: [], optionLabels: [] },
     });
     const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");
 

@@ -190,8 +190,6 @@ export interface MenuUnavailable {
   products: string[];
   /** Every option label that is unavailable, or deleted since the version was published. */
   optionLabels: string[];
-  /** Every extras item an offer has switched off, in the list it is switched off in. */
-  extraItems: { menuItemId: string; extraListId: string; productId: string }[];
 }
 
 /**

@@ -36,7 +36,7 @@ import {
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
-import { createExtraList, getExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
+import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { addMember, createSection, moveMember, removeMember, updateSection } from "./sections.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
@@ -762,15 +762,17 @@ describe("menuStatus", () => {
           "en",
         );
         await writeProductModifiers(tx, f.lemonade, [
-          { kind: "extras", id: f.extrasList },
           { kind: "extras", id: lunchExtras.id },
           { kind: "options", id: f.iceList },
         ]);
-        await setMenuItemExtraLists(tx, await offerOf(tx, f.lunch, f.lemonade), [
-          { listId: lunchExtras.id, items: [] },
-        ]);
       });
       await publish(f.lunch);
+      await app((tx) =>
+        writeProductModifiers(tx, f.lemonade, [
+          { kind: "extras", id: f.extrasList },
+          { kind: "options", id: f.iceList },
+        ]),
+      );
       await publish(f.dinner);
       await app(async (tx) => {
         await deactivateProduct(tx, f.soup);

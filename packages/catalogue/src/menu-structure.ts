@@ -3,7 +3,6 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
-import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
@@ -160,8 +159,6 @@ export async function syncMenuOffers(
       await tx
         .delete(menuItemVariantOverrides)
         .where(inArray(menuItemVariantOverrides.menuItemId, batch));
-      await tx.delete(menuItemExtraItems).where(inArray(menuItemExtraItems.menuItemId, batch));
-      await tx.delete(menuItemExtraLists).where(inArray(menuItemExtraLists.menuItemId, batch));
       await tx
         .update(menuItems)
         .set({ grossPrice: null, active: true })

@@ -31,7 +31,6 @@ export interface OptionList {
   labels: OptionLabel[];
 }
 
-/** A list as the list read returns it: `products` counts the products carrying it. */
 export interface OptionListRow extends OptionList {
   usage: { products: number };
 }
@@ -73,10 +72,8 @@ export interface ExtraList {
   items: ExtraListItem[];
 }
 
-/** A list as the list read returns it: `products` counts the products carrying it, and `menus` the
- * menu entries publishing it — one menu offering the list on two dishes counts twice. */
 export interface ExtraListRow extends ExtraList {
-  usage: { products: number; menus: number };
+  usage: { products: number };
 }
 
 export type ExtraListItemInput = Omit<ExtraListItem, "id"> & { id?: string };
@@ -90,5 +87,4 @@ export interface OptionListDependants {
 /** What deleting an extras list would touch — see `extraListDependants` (extras.ts). */
 export interface ExtraListDependants {
   products: { id: string; name: string }[];
-  menus: { id: string; name: string; menuName: string }[];
 }

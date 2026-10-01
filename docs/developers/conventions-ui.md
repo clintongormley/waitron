@@ -70,8 +70,8 @@ line holds, by value. The helper this replaces, `sameModifierSelections`, no lon
 
 **Neither side's ORDER is part of the comparison either, and the reason is worth carrying.** Both
 sides are built in the order the dish OFFERS its answers, which reads as a fixed thing and is not
-one: it is a stored position, and three columns hold parts of it, each re-numbered from the body of
-whatever save writes it. `docs/developers/modifiers.md` lists all three with what writes each. So a
+one: it is a stored position in `product_modifiers.sort` and `extra_list_items.sort`, re-numbered
+from the body of each save. `docs/developers/modifiers.md` lists what writes each. So a
 line parked before one of those saves keeps the OLD order while the rebuilt side comes back in the
 new one — and a comparison pairing the two up position by position reads that as a changed answer.
 That is why the pairing is order-independent (`sameOptionSelections`, and for extras
@@ -88,8 +88,8 @@ new pick, priced now; an unchanged pick keeps its child at its own list's stored
 `docs/developers/modifiers.md` has the detail.
 
 What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
-a quantity-only edit" raises the offer's price and the extra's price underneath the edit and asserts
-the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
+a quantity-only edit" raises the offer's price and the extra list item's price, republishes the
+menus, and asserts the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
 two options lists change places" and "keeps each extras child on its own row when two extras lists
 change places" do the same across a reorder; "keeps an extra's list and stored price on a quantity-only
 edit when two lists offer it" pins the list pairing; "prices a pick now when it moves to another list

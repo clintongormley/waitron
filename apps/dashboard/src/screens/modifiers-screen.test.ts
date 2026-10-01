@@ -123,10 +123,10 @@ const extraList: ExtraListRow = {
     { id: "i1", productId: BREAD, maxQuantity: 1, preselected: true, price: null },
     { id: "i2", productId: RYE, maxQuantity: 1, preselected: false, price: "0.50" },
   ],
-  usage: { products: 2, menus: 1 },
+  usage: { products: 2 },
 };
 
-const noExtraDependants: ExtraListDependants = { products: [], menus: [] };
+const noExtraDependants: ExtraListDependants = { products: [] };
 const noOptionDependants: OptionListDependants = { products: [] };
 
 function api(overrides: Partial<DashboardApi> = {}) {
@@ -481,16 +481,16 @@ describe("in English", () => {
     expect(extras.shadowRoot.textContent).not.toContain("In use");
   });
 
-  it("says how many products and menu items carry each list, and Not used at zero", async () => {
+  it("says how many products carry each list, and Not used at zero", async () => {
     const el = await mount(
       api({
         listExtraLists: vi
           .fn()
           .mockResolvedValue([
             extraList,
-            { ...extraList, id: "e2", name: "Sauces", usage: { products: 1, menus: 0 } },
-            { ...extraList, id: "e3", name: "Toppings", usage: { products: 0, menus: 2 } },
-            { ...extraList, id: "e4", name: "Dips", usage: { products: 0, menus: 0 } },
+            { ...extraList, id: "e2", name: "Sauces", usage: { products: 1 } },
+            { ...extraList, id: "e3", name: "Toppings", usage: { products: 0 } },
+            { ...extraList, id: "e4", name: "Dips", usage: { products: 0 } },
           ]),
         listOptionLists: vi
           .fn()
@@ -504,9 +504,9 @@ describe("in English", () => {
     await vi.waitFor(() =>
       expect(table(el, "extra-lists").shadowRoot.textContent).toContain("Toppings"),
     );
-    expect(await usedByText(el, "extra-lists", "Breads")).toBe("2 products · 1 menu item");
+    expect(await usedByText(el, "extra-lists", "Breads")).toBe("2 products");
     expect(await usedByText(el, "extra-lists", "Sauces")).toBe("1 product");
-    expect(await usedByText(el, "extra-lists", "Toppings")).toBe("2 menu items");
+    expect(await usedByText(el, "extra-lists", "Toppings")).toBe("Not used");
     expect(await usedByText(el, "extra-lists", "Dips")).toBe("Not used");
     expect(await usedByText(el, "option-lists", "Doneness")).toBe("2 products");
     expect(await usedByText(el, "option-lists", "Milk")).toBe("1 product");
@@ -525,11 +525,11 @@ describe("in English", () => {
     const extras = table(el, "extra-lists").columns.find((column) => column.key === "usedBy")!;
     const options = table(el, "option-lists").columns.find((column) => column.key === "usedBy")!;
     expect(extras.label).toBe(t("modifiers.used_by"));
-    // 1 product and 3 menu items sorts AFTER 2 products and 1 menu item: the total, not products.
-    expect(extras.sortValue!(extraList as never)).toBe(3);
-    expect(extras.sortValue!({ ...extraList, usage: { products: 1, menus: 3 } } as never)).toBe(4);
+
+    expect(extras.sortValue!(extraList as never)).toBe(2);
+    expect(extras.sortValue!({ ...extraList, usage: { products: 1 } } as never)).toBe(1);
     expect(options.sortValue!(optionList as never)).toBe(2);
-    expect(extras.searchValue!(extraList as never)).toBe("2 products · 1 menu item");
+    expect(extras.searchValue!(extraList as never)).toBe("2 products");
     expect(options.searchValue!(optionList as never)).toBe("2 products");
     // "Not used" is what the cell shows at zero, so it is what a search finds.
     expect(options.searchValue!({ ...optionList, usage: { products: 0 } } as never)).toBe(
@@ -547,7 +547,7 @@ describe("in English", () => {
     const count = extras.shadowRoot.querySelector<HTMLElement>('[data-test="used-by-extra-e1"]')!;
     expect(count.localName).toBe("wt-button");
     expect(count.getAttribute("variant")).toBe("ghost");
-    expect(count.textContent!.trim()).toBe("2 products · 1 menu item");
+    expect(count.textContent!.trim()).toBe("2 products");
     count.click();
     await el.updateComplete;
     expect(detailModal(el).open).toBe(true);
@@ -575,12 +575,12 @@ describe("in English", () => {
       };
     };
     expect(named("e1")).toEqual({
-      name: "Used by Breads: 2 products · 1 menu item",
-      text: "2 products · 1 menu item",
+      name: "Used by Breads: 2 products",
+      text: "2 products",
     });
     expect(named("e2")).toEqual({
-      name: "Used by Sauces: 2 products · 1 menu item",
-      text: "2 products · 1 menu item",
+      name: "Used by Sauces: 2 products",
+      text: "2 products",
     });
   });
 
@@ -603,71 +603,35 @@ describe("in English", () => {
 
   // The table never narrows a column below its content, so on a phone each count and each menu
   // row's menu go on a line of their own rather than widening what scrolls sideways.
-  it("stacks the counts, and a menu row's menu under its dish, only on a phone-width screen", async () => {
+  it("keeps its product count aligned at phone width", async () => {
     const [width, height] = [window.innerWidth, window.innerHeight];
-    const el = await mount(
-      api({
-        getExtraListDependants: vi.fn().mockResolvedValue({
-          products: [],
-          menus: [{ id: "mn1", name: "White bread", menuName: "Lunch" }],
-        }),
-      }),
-    );
-    await clickInTable(el, "extra-lists", "used-by-extra-e1");
-    const usage = table(el, "list-usage");
-    await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Lunch"));
-    const shown = (found: Table, part: string) =>
-      [...found.shadowRoot.querySelectorAll(`[part="${part}"]`)].map(
-        (node) => getComputedStyle(node).display,
-      );
+    const el = await mount();
     try {
-      await page.viewport(1280, 900);
-      expect(window.innerWidth).toBe(1280);
-      const extras = table(el, "extra-lists");
-      expect(shown(extras, "used-by-count")).toEqual(["inline", "inline"]);
-      expect(shown(extras, "used-by-separator")).toEqual(["inline"]);
-      expect(shown(usage, "usage-menu")).toEqual(["inline"]);
-      expect(shown(usage, "usage-separator")).toEqual(["inline"]);
-      const wideMenu = usage.shadowRoot.querySelector('[part="usage-menu"]')!;
-      expect(getComputedStyle(wideMenu).color).toBe(
-        getComputedStyle(wideMenu.parentElement!).color,
-      );
       await page.viewport(390, 844);
-      expect(window.innerWidth).toBe(390);
-      expect(shown(extras, "used-by-count")).toEqual(["block", "block"]);
-      // A button centres its text; the stacked counts line up with the column instead.
+      const extras = table(el, "extra-lists");
+      await vi.waitFor(() =>
+        expect(extras.shadowRoot.querySelector('[data-test="used-by-extra-e1"]')).not.toBeNull(),
+      );
       const button = extras.shadowRoot
         .querySelector('[data-test="used-by-extra-e1"]')!
         .shadowRoot!.querySelector("button")!;
       expect(getComputedStyle(button).textAlign).toBe("start");
-      expect(shown(extras, "used-by-separator")).toEqual(["none"]);
-      expect(shown(usage, "usage-menu")).toEqual(["block"]);
-      expect(shown(usage, "usage-separator")).toEqual(["none"]);
-      // On its own line the menu's name is muted, so it does not read as the dish's name wrapping.
-      const menu = usage.shadowRoot.querySelector('[part="usage-menu"]')!;
-      expect(getComputedStyle(menu).color).not.toBe(getComputedStyle(menu.parentElement!).color);
+      expect(
+        extras.shadowRoot.querySelector('[data-test="used-by-extra-e1"]')!.textContent!.trim(),
+      ).toBe("2 products");
     } finally {
       await page.viewport(width, height);
     }
   });
 
   it.each([
-    ["extras", "product_modifiers", "extra-lists", "listExtraLists", "3 products · 1 menu item"],
-    [
-      "extras",
-      "menu_item_extra_lists",
-      "extra-lists",
-      "listExtraLists",
-      "3 products · 1 menu item",
-    ],
+    ["extras", "product_modifiers", "extra-lists", "listExtraLists", "3 products"],
     ["options", "product_modifiers", "option-lists", "listOptionLists", "3 products"],
   ] as const)(
     "refreshes the %s Used by count when only %s changes",
     async (_kind, type, testId, read, expected) => {
       const background = api({
-        listExtraLists: vi
-          .fn()
-          .mockResolvedValue([{ ...extraList, usage: { products: 3, menus: 1 } }]),
+        listExtraLists: vi.fn().mockResolvedValue([{ ...extraList, usage: { products: 3 } }]),
         listOptionLists: vi.fn().mockResolvedValue([{ ...optionList, usage: { products: 3 } }]),
       });
       const liveData = new LiveData();
@@ -691,18 +655,14 @@ it("counts in Spanish, with the singular forms", async () => {
         .fn()
         .mockResolvedValue([
           extraList,
-          { ...extraList, id: "e2", name: "Sauces", usage: { products: 1, menus: 2 } },
-          { ...extraList, id: "e3", name: "Dips", usage: { products: 0, menus: 0 } },
+          { ...extraList, id: "e2", name: "Sauces", usage: { products: 1 } },
+          { ...extraList, id: "e3", name: "Dips", usage: { products: 0 } },
         ]),
     }),
   );
   await vi.waitFor(() => expect(table(el, "extra-lists").shadowRoot.textContent).toContain("Dips"));
-  expect(await usedByText(el, "extra-lists", "Breads")).toBe(
-    "2 productos · 1 elemento de la carta",
-  );
-  expect(await usedByText(el, "extra-lists", "Sauces")).toBe(
-    "1 producto · 2 elementos de la carta",
-  );
+  expect(await usedByText(el, "extra-lists", "Breads")).toBe("2 productos");
+  expect(await usedByText(el, "extra-lists", "Sauces")).toBe("1 producto");
   expect(await usedByText(el, "extra-lists", "Dips")).toBe("Sin usar");
   // "Usado en Breads" would read as used inside the list; the popup asks where the list is used.
   expect(t("modifiers.used_by")).toBe("Usado en");
@@ -712,7 +672,7 @@ it("counts in Spanish, with the singular forms", async () => {
     '[data-test="used-by-extra-e1"]',
   )!;
   expect(count.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
-    "Dónde se usa Breads: 2 productos · 1 elemento de la carta",
+    "Dónde se usa Breads: 2 productos",
   );
 });
 
@@ -950,7 +910,6 @@ it("opens a Used by modal listing the products and menu items that carry the lis
   const client = api({
     getExtraListDependants: vi.fn().mockResolvedValue({
       products: [{ id: "p1", name: "Hamburguesa" }],
-      menus: [{ id: "mn1", name: "White bread", menuName: "Lunch" }],
     }),
   });
   const el = await mount(client);
@@ -961,36 +920,14 @@ it("opens a Used by modal listing the products and menu items that carry the lis
   expect(client.getExtraListDependants).toHaveBeenCalledWith("e1");
   const usage = table(el, "list-usage");
   await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Hamburguesa"));
-  expect(usage.shadowRoot.textContent).toContain("White bread — Lunch");
-  expect(usage.rows).toEqual([
-    { id: "p1", name: "Hamburguesa", type: "product" },
-    { id: "mn1", name: "White bread", menuName: "Lunch", type: "menu" },
-  ]);
+  expect(usage.rows).toEqual([{ id: "p1", name: "Hamburguesa", type: "product" }]);
   expect(usage.searchable).toBe(true);
-  expect(usage.columns.find((column) => column.key === "type")?.filter).toBeTruthy();
+  expect(usage.columns.map((column) => column.key)).toEqual(["name"]);
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="detail-edit"]')!.click();
   await el.updateComplete;
   expect(modal.open).toBe(false);
   expect(extraForm(el).open).toBe(true);
   expect(extraForm(el).value).toEqual(extraList);
-});
-
-it("filters an extras list's Used by table by item type", async () => {
-  const client = api({
-    getExtraListDependants: vi.fn().mockResolvedValue({
-      products: [{ id: "p1", name: "Hamburguesa" }],
-      menus: [{ id: "mn1", name: "Tostada", menuName: "Menú del día" }],
-    }),
-  });
-  const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-extra-e1");
-  const usage = table(el, "list-usage");
-  await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Hamburguesa"));
-  const filter = usage.shadowRoot.querySelector<HTMLSelectElement>('[name="type-filter"]')!;
-  filter.value = "menu";
-  filter.dispatchEvent(new Event("change", { bubbles: true }));
-  await vi.waitFor(() => expect(usage.shadowRoot.textContent).not.toContain("Hamburguesa"));
-  expect(usage.shadowRoot.textContent).toContain("Tostada — Menú del día");
 });
 
 it("lists only products in an options list's Used by table, with no Type column", async () => {
@@ -1015,7 +952,6 @@ it("lists only products in an options list's Used by table, with no Type column"
     { id: "p1", name: "Solomillo", type: "product" },
     { id: "p2", name: "Entrecot", type: "product" },
   ]);
-  expect(usage.shadowRoot.textContent).not.toContain(t("modifiers.usage_type.menu"));
   expect(usage.searchLabel).toBe(t("modifiers.search_products"));
   expect(usage.noMatchesMessage).toBe(t("modifiers.products_no_matches"));
   expect(usage.emptyMessage).toBe(t("modifiers.no_product_usage"));
@@ -1033,7 +969,7 @@ it("shows a spinner then Close in the detail modal, and closes it", async () => 
   await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const modal = detailModal(el);
   expect(modal.querySelector("wt-spinner")).not.toBeNull();
-  resolve({ products: [], menus: [] });
+  resolve({ products: [] });
   await vi.waitFor(() => expect(modal.querySelector("wt-spinner")).toBeNull());
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="close-detail"]')!.click();
   await el.updateComplete;
@@ -1067,11 +1003,10 @@ it("dismisses the detail modal when it closes itself", async () => {
 // ---------------------------------------------------------------------------
 // Deleting
 
-it("previews the products and menus a deleted extras list would touch, and NO order count", async () => {
+it("previews the products a deleted extras list would touch, and NO order count", async () => {
   const client = api({
     getExtraListDependants: vi.fn().mockResolvedValue({
       products: [{ id: "p1", name: "Café" }],
-      menus: [{ id: "mn1", name: "Desayuno" }],
     }),
   });
   const el = await mount(client);
@@ -1086,17 +1021,10 @@ it("previews the products and menus a deleted extras list would touch, and NO or
   expect(warning.textContent).toContain(
     t("modifiers.delete_warning_products").replace("{count}", "1"),
   );
-  expect(warning.textContent).toContain(
-    t("modifiers.delete_warning_menus").replace("{count}", "1"),
-  );
   const deleteProducts = table(el, "list-delete-products");
-  const deleteMenus = table(el, "list-delete-menus");
   await vi.waitFor(() => expect(deleteProducts.shadowRoot.textContent).toContain("Café"));
-  await vi.waitFor(() => expect(deleteMenus.shadowRoot.textContent).toContain("Desayuno"));
   expect(deleteProducts.searchLabel).toBe(t("modifiers.search_products"));
   expect(deleteProducts.noMatchesMessage).toBe(t("modifiers.products_no_matches"));
-  expect(deleteMenus.searchLabel).toBe(t("modifiers.search_menus"));
-  expect(deleteMenus.noMatchesMessage).toBe(t("modifiers.menus_no_matches"));
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
 });
@@ -1124,33 +1052,6 @@ it("previews only the products a deleted options list would touch, and NO order 
   expect(dialog.querySelector('[data-test="list-delete-menus"]')).toBeNull();
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
-});
-
-it("names the menu beside the dish on each menu row of an extras list's delete preview", async () => {
-  const client = api({
-    getExtraListDependants: vi.fn().mockResolvedValue({
-      products: [],
-      menus: [
-        { id: "mn1", name: "Tostada", menuName: "Desayuno" },
-        { id: "mn2", name: "Tostada", menuName: "Merienda" },
-      ],
-    }),
-  });
-  const el = await mount(client);
-  await clickInTable(el, "extra-lists", "delete-extra-e1");
-  await vi.waitFor(() =>
-    expect(deleteDialog(el).querySelector('[data-test="list-delete-menus"]')).not.toBeNull(),
-  );
-  const menus = table(el, "list-delete-menus");
-  expect(menus.rows).toEqual([
-    { id: "mn1", name: "Tostada", menuName: "Desayuno" },
-    { id: "mn2", name: "Tostada", menuName: "Merienda" },
-  ]);
-  await vi.waitFor(() => expect(menus.shadowRoot.textContent).toContain("Tostada — Desayuno"));
-  expect(menus.shadowRoot.textContent).toContain("Tostada — Merienda");
-  const name = menus.columns.find((column) => column.key === "name")!;
-  expect(name.searchValue!(menus.rows[0] as never)).toBe("Tostada — Desayuno");
-  expect(name.sortValue!(menus.rows[1] as never)).toBe("Tostada — Merienda");
 });
 
 it("keeps Delete disabled behind a spinner until the preview resolves", async () => {
@@ -1243,7 +1144,7 @@ it("clears a failed delete preview when the dialog is reopened", async () => {
     getExtraListDependants: vi
       .fn()
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue({ products: [], menus: [] }),
+      .mockResolvedValue({ products: [] }),
   });
   const el = await mount(client);
   await clickInTable(el, "extra-lists", "delete-extra-e1");
@@ -1284,7 +1185,7 @@ it("ignores a stale preview success from an earlier open of the same list", asyn
   await vi.waitFor(() =>
     expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
   );
-  resolveFirst({ products: [], menus: [] });
+  resolveFirst({ products: [] });
   await el.updateComplete;
   await el.updateComplete;
   expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull();
@@ -1308,7 +1209,7 @@ it("ignores a stale preview failure from an earlier open of the same list", asyn
   await clickInTable(el, "extra-lists", "delete-extra-e1");
   await clickInTable(el, "extra-lists", "delete-extra-e1");
   const dialog = deleteDialog(el);
-  resolveSecond({ products: [], menus: [] });
+  resolveSecond({ products: [] });
   await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
   rejectFirst(new Error("offline"));
   await el.updateComplete;
@@ -1337,7 +1238,7 @@ it("ignores a stale detail read from an earlier open of the same list", async ()
   const modal = detailModal(el);
   rejectSecond(new Error("offline"));
   await vi.waitFor(() => expect(modal.querySelector('[data-test="usage-error"]')).not.toBeNull());
-  resolveFirst({ products: [], menus: [] });
+  resolveFirst({ products: [] });
   await el.updateComplete;
   await el.updateComplete;
   expect(modal.querySelector('[data-test="usage-error"]')).not.toBeNull();
@@ -1374,11 +1275,10 @@ it("finds a list by its name and by the status it shows", async () => {
   expect(byStatus).not.toContain("Breads");
 });
 
-it("finds a detail-modal row by its name and by the type it shows", async () => {
+it("finds a detail-modal product row by its name", async () => {
   const client = api({
     getExtraListDependants: vi.fn().mockResolvedValue({
       products: [{ id: "p1", name: "Hamburguesa" }],
-      menus: [{ id: "mn1", name: "Tostada", menuName: "Menú del día" }],
     }),
   });
   const el = await mount(client);
@@ -1389,10 +1289,6 @@ it("finds a detail-modal row by its name and by the type it shows", async () => 
   const byName = await search(usage, "Hamburguesa");
   expect(byName).toContain("Hamburguesa");
   expect(byName).not.toContain("Menú del día");
-
-  const byType = await search(usage, t("modifiers.usage_type.menu"));
-  expect(byType).toContain("Menú del día");
-  expect(byType).not.toContain("Hamburguesa");
 });
 
 it("switches back to the Extras tab from Options", async () => {
@@ -1503,29 +1399,6 @@ it.each([
   },
 );
 
-// ---------------------------------------------------------------------------
-// Deleting
-
-it("names only the menus in the delete warning when no product carries the list", async () => {
-  const client = api({
-    getExtraListDependants: vi
-      .fn()
-      .mockResolvedValue({ products: [], menus: [{ id: "mn1", name: "Desayuno" }] }),
-  });
-  const el = await mount(client);
-  await clickInTable(el, "extra-lists", "delete-extra-e1");
-  const dialog = deleteDialog(el);
-  await vi.waitFor(() =>
-    expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
-  );
-  expect(dialog.querySelector('[data-test="delete-warning"]')!.textContent!.trim()).toBe(
-    [
-      t("modifiers.delete_warning_intro"),
-      t("modifiers.delete_warning_menus").replace("{count}", "1"),
-    ].join(" "),
-  );
-});
-
 it("names only the products in the delete warning when no menu carries the list", async () => {
   const client = api({
     getExtraListDependants: vi.fn().mockResolvedValue({
@@ -1533,7 +1406,6 @@ it("names only the products in the delete warning when no menu carries the list"
         { id: "p1", name: "Café" },
         { id: "p2", name: "Tostada" },
       ],
-      menus: [],
     }),
   });
   const el = await mount(client);

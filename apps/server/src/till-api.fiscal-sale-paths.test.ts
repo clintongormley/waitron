@@ -22,7 +22,6 @@ import {
   createOptionList,
   listAvailableProducts,
   readContentLanguages,
-  setMenuItemExtraLists,
   updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -2167,8 +2166,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
         unitPrice: "9.00",
         vatClass: "reduced",
       });
-      // Three prices, one right answer: the product's own 9.00, the list's 5.00 override, and the
-      // MENU offer's 0.35 — and this sale goes through the offer, so only 0.35 can be charged.
       const extras = await createExtraList(
         tx,
         {
@@ -2179,7 +2176,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
           // Two of one product, which is what this sale picks: `maxPicks` counts the quantities.
           maxPicks: 2,
           active: true,
-          items: [{ productId: queso.id, maxQuantity: 2, preselected: false, price: "5.00" }],
+          items: [{ productId: queso.id, maxQuantity: 2, preselected: false, price: "0.35" }],
         },
         LOCALE,
       );
@@ -2199,9 +2196,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
         { kind: "extras", id: extras.id },
         { kind: "options", id: options.id },
       ]);
-      await setMenuItemExtraLists(tx, product.menuItemId, [
-        { listId: extras.id, items: [{ productId: queso.id, price: "0.35" }] },
-      ]);
+
       await publishWorkingMenu(tx, catalogueId);
       return {
         extraListId: extras.id,

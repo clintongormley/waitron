@@ -440,11 +440,8 @@ describe("TillApi", () => {
     const payload = {
       menus: [{ menuId: "lunch", versionId: "version-2" }],
       unavailable: {
-        products: ["burger"],
+        products: ["burger", "bacon"],
         optionLabels: ["label-rare"],
-        extraItems: [
-          { menuItemId: "offer-burger", extraListId: "list-extras", productId: "bacon" },
-        ],
       },
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));

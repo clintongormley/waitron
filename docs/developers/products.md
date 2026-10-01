@@ -271,9 +271,8 @@ Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operat
 that is Unavailable, or has become Inactive since, is served in its place marked unavailable
 (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). As served, whether a menu has
 switched a variant off is read from the published version, so a switch-off made since reaches the
-tills only when the menu is published again; whether an offer has switched an extras item off is
-read from the current rows, as is whether each product and variant is Active and Available
-(`applyLiveFields`).
+tills only when the menu is published again. Whether each product and variant is Active and
+Available, including products picked as extras, is read from the current rows (`applyLiveFields`).
 
 ### On the till
 

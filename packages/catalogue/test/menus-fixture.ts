@@ -3,7 +3,7 @@ import { kitchenCourses, withTransaction, type Database, type Transaction } from
 import { seedLegacySellingUnits, seedVenue } from "./fixtures.js";
 import { createCatalogue, createProduct, updateMenuItem } from "../src/operations.js";
 import { createCategory } from "../src/categories.js";
-import { createExtraList, setMenuItemExtraLists } from "../src/extras.js";
+import { createExtraList } from "../src/extras.js";
 import { createOptionList } from "../src/options.js";
 import { writeProductModifiers } from "../src/product-modifiers.js";
 import { readMenuStructure } from "../src/menu-structure.js";
@@ -159,10 +159,6 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
       { kind: "extras", id: extrasList },
       { kind: "options", id: iceList },
     ]);
-    for (const menuId of [lunch.id, dinner.id])
-      await setMenuItemExtraLists(tx, await offerOf(tx, menuId, lemonade), [
-        { listId: extrasList, items: [] },
-      ]);
     await updateMenuItem(tx, lunch.id, await offerOf(tx, lunch.id, lemonade), {
       grossPrice: "2.80",
     });
