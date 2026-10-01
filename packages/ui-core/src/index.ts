@@ -1,6 +1,7 @@
 export * from "./tokens/index.js";
 export * from "./components/wt-button.js";
 export * from "./components/wt-input.js";
+export * from "./components/wt-textarea.js";
 export * from "./components/wt-card.js";
 export * from "./components/wt-icon.js";
 export * from "./components/wt-spinner.js";

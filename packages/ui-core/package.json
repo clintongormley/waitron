@@ -32,6 +32,7 @@
     "./tokens": "./src/tokens/index.ts",
     "./components/wt-button": "./src/components/wt-button.ts",
     "./components/wt-input": "./src/components/wt-input.ts",
+    "./components/wt-textarea": "./src/components/wt-textarea.ts",
     "./components/wt-card": "./src/components/wt-card.ts",
     "./components/wt-icon": "./src/components/wt-icon.ts",
     "./components/wt-spinner": "./src/components/wt-spinner.ts",
@@ -69,6 +70,10 @@
       "./components/wt-input": {
         "types": "./dist/types/components/wt-input.d.ts",
         "import": "./dist/components/wt-input.js"
+      },
+      "./components/wt-textarea": {
+        "types": "./dist/types/components/wt-textarea.d.ts",
+        "import": "./dist/components/wt-textarea.js"
       },
       "./components/wt-card": {
         "types": "./dist/types/components/wt-card.d.ts",

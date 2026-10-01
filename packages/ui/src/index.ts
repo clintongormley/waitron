@@ -23,6 +23,7 @@ export type { WtSpinnerSize } from "./components/wt-spinner.js";
 export { WtCard } from "./components/wt-card.js";
 export { WtDisclosure } from "./components/wt-disclosure.js";
 export { WtInput } from "./components/wt-input.js";
+export { WtTextarea } from "./components/wt-textarea.js";
 export { WtPriceInput } from "./components/wt-price-input.js";
 export { WtNumberStepper } from "./components/wt-number-stepper.js";
 export { WtFormActions, formMessage, formMessageStyles } from "./components/wt-form-actions.js";

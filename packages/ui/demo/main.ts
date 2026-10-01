@@ -10,6 +10,7 @@ import "../src/components/wt-form-error-summary.js";
 import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
+import "../src/components/wt-textarea.js";
 import "../src/components/wt-price-input.js";
 import "../src/components/wt-number-stepper.js";
 import "../src/components/wt-spinner.js";
@@ -93,6 +94,10 @@ const panel = (theme: "light" | "dark") => `
       <wt-disclosure heading="Cocina" summary="Sin opciones">
         <wt-input label="Nota para cocina"></wt-input>
       </wt-disclosure>
+      <wt-textarea label="Descripción" hint="La ve el cliente en la carta."></wt-textarea>
+      <wt-textarea label="Nota para cocina" value="Sin cebolla" maxlength="200" required></wt-textarea>
+      <wt-textarea label="Alérgenos" error="Escribe como mucho 200 caracteres."></wt-textarea>
+      <wt-textarea label="Nota anterior" value="Sin sal" disabled></wt-textarea>
       <wt-disclosure heading="Descriptores" summary="2 etiquetas" open>
         <wt-switch label="Vegetariano" checked></wt-switch>
       </wt-disclosure>
