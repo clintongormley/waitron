@@ -7,7 +7,7 @@ import { createExtraList } from "../src/extras.js";
 import { createOptionList } from "../src/options.js";
 import { writeProductModifiers } from "../src/product-modifiers.js";
 import { readMenuStructure } from "../src/menu-structure.js";
-import { addMember, createSection } from "../src/sections.js";
+import { addMember, createSectionIn } from "../src/sections.js";
 import { setProductVariants } from "../src/variants.js";
 import { menuItems } from "../src/schema/menu.js";
 import type { MemberRef } from "../src/section-types.js";
@@ -22,6 +22,7 @@ export interface MenusFixture {
   lunchRoot: string;
   dinnerRoot: string;
   drinks: string;
+  drinksMenu: string;
   beer: string;
   mains: string;
   lemonade: string;
@@ -95,23 +96,28 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
     const soup = await make("Soup", "5.00");
     const extraLemon = await make("Extra lemon", "0.50");
 
-    const drinks = (
-      await createSection(tx, { internalName: "Drinks", names: { en: "Something to drink" } })
-    ).id;
-    const beer = (await createSection(tx, { internalName: "Beer", names: { en: "On tap" } })).id;
-    const mains = (
-      await createSection(tx, { internalName: "Mains", names: { en: "Main courses" } })
-    ).id;
+    const drinksMenu = await createCatalogue(tx, {
+      name: "Drinks",
+      names: { en: "Something to drink" },
+    });
+    const drinks = (await readMenuStructure(tx, drinksMenu.id)).rootSectionId;
     const lunchRoot = (await readMenuStructure(tx, lunch.id)).rootSectionId;
     const dinnerRoot = (await readMenuStructure(tx, dinner.id)).rootSectionId;
-    await addMember(tx, drinks, product(lemonade));
-    await addMember(tx, drinks, section(beer));
+    const beer = (
+      await createSectionIn(tx, drinks, { internalName: "Beer", names: { en: "On tap" } })
+    ).id;
+    await addMember(tx, drinks, product(lemonade), 0);
     await addMember(tx, beer, product(lager));
-    await addMember(tx, mains, product(burger));
     await addMember(tx, lunchRoot, section(drinks));
     await addMember(tx, lunchRoot, product(soup));
     await addMember(tx, dinnerRoot, section(drinks));
-    await addMember(tx, dinnerRoot, section(mains));
+    const mains = (
+      await createSectionIn(tx, dinnerRoot, {
+        internalName: "Mains",
+        names: { en: "Main courses" },
+      })
+    ).id;
+    await addMember(tx, mains, product(burger));
 
     const extrasList = (
       await createExtraList(
@@ -173,6 +179,7 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
       lunchRoot,
       dinnerRoot,
       drinks,
+      drinksMenu: drinksMenu.id,
       beer,
       mains,
       lemonade,

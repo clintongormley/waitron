@@ -26,14 +26,13 @@ import { menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
 import {
   createMenuShell,
-  menuRoot,
   menuRoots,
   reachableMenuItem,
   requireMenuRoot,
 } from "./menu-structure.js";
 import { batches } from "./batches.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
-import { addMember } from "./sections.js";
+import { addMember, sectionPatchValues } from "./sections.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
@@ -273,13 +272,24 @@ function legacyPricingUnit(unit: SellableUnit): PricingUnit {
 /** A new menu, with the root and default home layout it owns (`createMenuShell`). */
 export async function createCatalogue(
   tx: Transaction,
-  input: { name: string },
+  input: {
+    name: string;
+    names?: Record<string, string>;
+    image?: string | null;
+    color?: string | null;
+  },
 ): Promise<Catalogue> {
+  const presentation = await sectionPatchValues(tx, {
+    internalName: input.name,
+    names: input.names,
+    image: input.image,
+    color: input.color,
+  });
   const [row] = await tx
     .insert(catalogues)
-    .values({ name: input.name })
+    .values({ name: presentation.internalName! })
     .returning(CATALOGUE_COLUMNS);
-  await createMenuShell(tx, row!.id, row!.name);
+  await createMenuShell(tx, row!.id, row!.name, presentation);
   return row!;
 }
 
@@ -705,21 +715,30 @@ export async function catalogueExists(tx: Transaction, catalogueId: string): Pro
   return row !== undefined;
 }
 
-export async function renameCatalogue(
+export async function updateMenuDetails(
   tx: Transaction,
   catalogueId: string,
-  name: string,
+  patch: {
+    name?: string;
+    names?: Record<string, string>;
+    image?: string | null;
+    color?: string | null;
+  },
 ): Promise<void> {
-  const [row] = await tx
-    .update(catalogues)
-    .set({ name, updatedAt: now() })
-    .where(eq(catalogues.id, catalogueId))
-    .returning({ id: catalogues.id });
-  if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId });
-  // The root's internal name is the menu's name.
-  const rootSectionId = await menuRoot(tx, catalogueId);
-  if (rootSectionId !== undefined)
-    await tx.update(sections).set({ internalName: name }).where(eq(sections.id, rootSectionId));
+  const rootSectionId = await requireMenuRoot(tx, catalogueId);
+  const presentation = await sectionPatchValues(tx, {
+    internalName: patch.name,
+    names: patch.names,
+    image: patch.image,
+    color: patch.color,
+  });
+  if (presentation.internalName !== undefined)
+    await tx
+      .update(catalogues)
+      .set({ name: presentation.internalName, updatedAt: now() })
+      .where(eq(catalogues.id, catalogueId));
+  if (Object.keys(presentation).length > 0)
+    await tx.update(sections).set(presentation).where(eq(sections.id, rootSectionId));
 }
 
 export async function deactivateCatalogue(tx: Transaction, id: string): Promise<void> {

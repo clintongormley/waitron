@@ -77,7 +77,7 @@ it.each([
   ["listSections", [], ["sections", "section_members"]],
   ["listSectionUsages", [], ["sections", "section_members", "catalogues"]],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members"]],
+  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members", "catalogues"]],
   [
     "getMenuPrices",
     ["menu-1"],

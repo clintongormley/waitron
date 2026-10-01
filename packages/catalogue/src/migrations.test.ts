@@ -220,9 +220,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
       product_modifiers_one_reference_ck: `("product_modifiers"."extra_list_id" is null) <> ("product_modifiers"."option_list_id" is null)`,
-      sections_role_ck: `"sections"."role" in ('library', 'menu_root', 'home_layout')`,
-      sections_owner_ck: `("sections"."role" = 'library') = ("sections"."owner_menu_id" is null)`,
-      section_members_one_ref_ck: `("section_members"."product_id" is null) <> ("section_members"."child_section_id" is null)`,
+      sections_role_ck: `"sections"."role" in ('section', 'menu_root', 'home_layout')`,
+      section_members_one_ref_ck: `("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))`,
       menu_versions_number_ck: `"menu_versions"."number" >= 1`,
     });
   });

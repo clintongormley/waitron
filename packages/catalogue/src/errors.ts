@@ -110,7 +110,7 @@ declare module "@waitron/shared" {
     /** The list already holds that product or that section. */
     "menu_section.member_duplicate": { sectionId: string };
     /** `sectionId` is a list a menu owns, which the write refused. */
-    "menu_section.not_library": { sectionId: string };
+    "menu_section.wrong_role": { sectionId: string; role: string };
     /** A member reference or selection names nothing the write can use. */
     "menu_section.membership_invalid": Record<string, never>;
     /**

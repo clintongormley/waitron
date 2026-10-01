@@ -1,11 +1,15 @@
-import type { Transaction } from "@waitron/db";
+import { catalogues, type Transaction } from "@waitron/db";
 import { sectionMembers, sections } from "./schema/sections.js";
 import type { SectionMember, SectionRole } from "./section-types.js";
 
 export interface SectionRow {
   id: string;
   role: SectionRole;
-  ownerMenuId: string | null;
+  internalName?: string;
+  names?: Record<string, string>;
+  image?: string | null;
+  color?: string | null;
+  ownerMenuId: string;
 }
 
 export interface MemberRow {
@@ -24,6 +28,9 @@ export interface SectionGraph {
   parents(sectionId: string): string[];
   role(sectionId: string): SectionRole | undefined;
   ownerMenu(sectionId: string): string | null;
+  section(sectionId: string): SectionRow | undefined;
+  menu(menuId: string): { name: string; active: boolean } | undefined;
+  roots(): { menuId: string; sectionId: string }[];
 }
 
 export function toSectionMember(row: MemberRow): SectionMember {
@@ -40,7 +47,9 @@ export function toSectionMember(row: MemberRow): SectionMember {
 export function buildSectionGraph(
   sections: readonly SectionRow[],
   members: readonly MemberRow[],
+  menus: readonly { id: string; name: string; active: boolean }[] = [],
 ): SectionGraph {
+  const byMenu = new Map(menus.map((row) => [row.id, row]));
   const byId = new Map(sections.map((row) => [row.id, row]));
   const children = new Map<string, SectionMember[]>();
   const parents = new Map<string, Set<string>>();
@@ -58,6 +67,12 @@ export function buildSectionGraph(
     }
   }
   return {
+    section: (sectionId) => byId.get(sectionId),
+    menu: (menuId) => byMenu.get(menuId),
+    roots: () =>
+      sections
+        .filter((row) => row.role === "menu_root")
+        .map((row) => ({ menuId: row.ownerMenuId!, sectionId: row.id })),
     children: (sectionId) => children.get(sectionId) ?? [],
     parents: (sectionId) => [...(parents.get(sectionId) ?? [])],
     role: (sectionId) => byId.get(sectionId)?.role,
@@ -65,11 +80,8 @@ export function buildSectionGraph(
   };
 }
 
-/** Two reads, taken once per operation; the graph is small and walked in JavaScript. */
 export async function loadSectionGraph(tx: Transaction): Promise<SectionGraph> {
-  const sectionRows = await tx
-    .select({ id: sections.id, role: sections.role, ownerMenuId: sections.ownerMenuId })
-    .from(sections);
+  const sectionRows = await tx.select().from(sections);
   const memberRows = await tx
     .select({
       id: sectionMembers.id,
@@ -79,7 +91,10 @@ export async function loadSectionGraph(tx: Transaction): Promise<SectionGraph> {
       childSectionId: sectionMembers.childSectionId,
     })
     .from(sectionMembers);
-  return buildSectionGraph(sectionRows, memberRows);
+  const menus = await tx
+    .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
+    .from(catalogues);
+  return buildSectionGraph(sectionRows, memberRows, menus);
 }
 
 function childSections(graph: SectionGraph, sectionId: string): string[] {

@@ -482,7 +482,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "scheduled_runs_period_ck",
   "scheduled_runs_state_ck",
   "section_members_one_ref_ck",
-  "sections_owner_ck",
   "sections_role_ck",
   "service_commands_scope_kind_ck",
   "service_settings_singleton_ck",

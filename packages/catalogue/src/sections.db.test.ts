@@ -1,3 +1,4 @@
+import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
@@ -5,7 +6,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { racePair, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { loadSectionGraph, wouldCreateCycle } from "./section-graph.js";
-import { addMember, createSection, readSection } from "./sections.js";
+import { addMember, readSection } from "./sections.js";
 
 /**
  * Sections against the database itself: two member writes started together, and the constraints
@@ -76,30 +77,25 @@ it("lets exactly one of two opposing containments land when both start together"
   ]);
 });
 
-describe("sections_owner_ck", () => {
-  it("ties a menu owner to the two menu-owned roles and to nothing else", async () => {
+describe("section ownership", () => {
+  it("requires an existing owner for every role", async () => {
     const { menu } = await fixture();
-    await insertSection("library", null);
-    await insertSection("menu_root", menu);
-    await insertSection("home_layout", menu);
-    for (const [role, owner] of [
-      ["library", menu],
-      ["menu_root", null],
-      ["home_layout", null],
-    ] as const)
-      await expect(insertSection(role, owner)).rejects.toMatchObject({
-        message: expect.stringContaining("sections_owner_ck"),
-        errcode: 275,
-      });
-    await expect(insertSection("tile", null)).rejects.toMatchObject({
+    for (const role of ["section", "menu_root", "home_layout"]) {
+      await insertSection(role, menu);
+      await expect(insertSection(role, null)).rejects.toMatchObject({ errcode: 1299 });
+      await expect(insertSection(role, "missing")).rejects.toMatchObject({ errcode: 787 });
+    }
+    await expect(insertSection("library", menu)).rejects.toMatchObject({
       message: expect.stringContaining("sections_role_ck"),
       errcode: 275,
     });
-    // The menu's own two lists are not among them: they were written by `createCatalogue`.
-    const count = await fx.db.execute<{ n: number }>(
-      sql`select count(*) as n from sections where internal_name = 'Row'`,
-    );
-    expect(count.rows[0]!.n).toBe(3);
+    expect(
+      (
+        await fx.db.execute<{ n: number }>(
+          sql`select count(*) as n from sections where internal_name='Row'`,
+        )
+      ).rows[0]!.n,
+    ).toBe(3);
   });
 });
 
@@ -157,9 +153,12 @@ describe("section_members", () => {
   });
 
   it("goes with its list, its child section or its product", async () => {
-    const { water } = await fixture();
+    const { water, menu } = await fixture();
     const list = await app((tx) => createSection(tx, { internalName: "List" }));
-    const child = await app((tx) => createSection(tx, { internalName: "Child" }));
+    const child = { id: crypto.randomUUID() };
+    await fx.db.execute(
+      sql`insert into sections(id,internal_name,owner_menu_id) values (${child.id},'Child',${menu})`,
+    );
     const other = await app((tx) => createSection(tx, { internalName: "Other" }));
     await insertMember(list.id, water, null);
     await insertMember(list.id, null, child.id);

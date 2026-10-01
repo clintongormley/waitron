@@ -302,8 +302,9 @@ describe("home tiles", () => {
     for (const owned of [f.lunchRoot, counter.id, f.dinnerRoot, dinnerHome]) {
       const refused = await captureError(() => app((tx) => addShortcut(tx, home, section(owned))));
       expect(refused).toMatchObject({
-        code: "menu_section.not_library",
-        params: { sectionId: owned },
+        code: [f.lunchRoot, f.dinnerRoot].includes(owned)
+          ? "menu.shortcut_unreachable"
+          : "menu_section.wrong_role",
       });
     }
   });
@@ -436,12 +437,20 @@ describe("device home layouts", () => {
     await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
     const lunchHome = await defaultLayout(f.lunch);
     const dinnerHome = await defaultLayout(f.dinner);
+    const drinksHome = await defaultLayout(f.drinksMenu);
     await app((tx) => setDeviceHomeLayout(tx, other, f.dinner, dinnerHome));
     expect(await app((tx) => deviceHomeLayouts(tx, profile))).toEqual([
       {
         menuId: f.dinner,
         menuName: "Dinner Menu",
         layouts: [{ id: dinnerHome, name: "Home", isDefault: true }],
+        selectedLayoutId: null,
+        selectedRemoved: false,
+      },
+      {
+        menuId: f.drinksMenu,
+        menuName: "Drinks",
+        layouts: [{ id: drinksHome, name: "Home", isDefault: true }],
         selectedLayoutId: null,
         selectedRemoved: false,
       },

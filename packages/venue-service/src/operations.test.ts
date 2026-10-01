@@ -14,7 +14,7 @@ import {
   addMember,
   addProductToMenu,
   createProduct,
-  createSection,
+  createSectionIn,
   deactivateCatalogue,
   menuDocumentHash,
   publishMenu,
@@ -193,10 +193,8 @@ describe("venue service routing", () => {
       const menu = await createCatalogue(tx, { name: "Terrace menu" });
       await allowMenuInZone(tx, { locationId }, zone, menu.id, { makeDefault: true });
       const { rootSectionId } = await readMenuStructure(tx, menu.id);
-      const drinks = await createSection(tx, { internalName: "Drinks" });
-      const soft = await createSection(tx, { internalName: "Soft drinks" });
-      await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
-      await addMember(tx, drinks.id, { kind: "section", sectionId: soft.id });
+      const drinks = await createSectionIn(tx, rootSectionId, { internalName: "Drinks" });
+      const soft = await createSectionIn(tx, drinks.id, { internalName: "Soft drinks" });
       const menuEmpty = {
         code: "zone.menu_empty",
         zoneId: zone,
@@ -2310,11 +2308,12 @@ describe("each served menu's structure and home layouts", () => {
         })
       ).id;
       const drinks = (
-        await createSection(tx, { internalName: "Drinks", names: { en: "Something to drink" } })
+        await createSectionIn(tx, (await readMenuStructure(tx, venue.dinner)).rootSectionId, {
+          internalName: "Drinks",
+          names: { en: "Something to drink" },
+        })
       ).id;
       await addMember(tx, drinks, { kind: "product", productId: cola });
-      const root = (await readMenuStructure(tx, venue.dinner)).rootSectionId;
-      await addMember(tx, root, { kind: "section", sectionId: drinks });
       const counter = (await createHomeLayout(tx, venue.dinner, "Counter")).id;
       await addShortcut(tx, counter, { kind: "section", sectionId: drinks });
       await addShortcut(tx, counter, { kind: "product", productId: venue.burger });

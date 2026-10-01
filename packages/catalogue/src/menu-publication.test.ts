@@ -1,3 +1,4 @@
+import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { asc, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -33,11 +34,12 @@ import {
   createCatalogue,
   createProduct,
   deactivateProduct,
+  updateMenuDetails,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
-import { addMember, createSection, moveMember, removeMember, updateSection } from "./sections.js";
+import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
 import { sectionMembers, sections } from "./schema/sections.js";
@@ -533,13 +535,13 @@ describe("menuStatus", () => {
     await publish(f.dinner);
     const brunch = await app((tx) => createCatalogue(tx, { name: "Brunch Menu" }));
     const status = await app((tx) => menuStatus(tx));
-    expect([...status.keys()].sort()).toEqual([f.lunch, f.dinner, brunch.id].sort());
+    expect([...status.keys()].sort()).toEqual([f.lunch, f.dinner, f.drinksMenu, brunch.id].sort());
     expect(status.get(f.dinner)).toMatchObject({ state: "current", version: 1 });
     expect(status.get(brunch.id)).toEqual({ state: "unpublished" });
   });
 
   // Review Focus 3: shared edits flag exactly the menus they change.
-  describe("flags exactly the menus a shared edit changes", () => {
+  describe("flags exactly the menus an included-menu edit changes", () => {
     async function published(): Promise<MenusFixture> {
       const f = await menusFixture(fx.db);
       await publish(f.lunch);
@@ -849,7 +851,7 @@ describe("previewMenu", () => {
     expect(preview.warnings).toEqual([]);
   });
 
-  it("names Lemonade added under Drinks as this menu's change when no other menu uses Drinks", async () => {
+  it("names Lemonade added under Drinks as an included menu change when no other published menu uses Drinks", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await removeMember(tx, f.dinnerRoot, await sectionMemberOf(f.dinnerRoot, f.drinks));
@@ -863,7 +865,7 @@ describe("previewMenu", () => {
         productId: f.lemonade,
         name: "Lemonade",
         under: ["Drinks"],
-        source: "this_menu",
+        source: "shared_section",
       },
     ]);
   });
@@ -926,7 +928,7 @@ describe("previewMenu", () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
-    await app((tx) => updateSection(tx, f.drinks, { internalName: "Refreshments" }));
+    await app((tx) => updateMenuDetails(tx, f.drinksMenu, { name: "Refreshments" }));
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
       {
         kind: "section_changed",
@@ -942,7 +944,7 @@ describe("previewMenu", () => {
   it("names a shared change on a menu no other published menu shares without an also-on list", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
-    await app((tx) => updateSection(tx, f.drinks, { internalName: "Refreshments" }));
+    await app((tx) => updateMenuDetails(tx, f.drinksMenu, { name: "Refreshments" }));
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
       {
         kind: "section_changed",
@@ -974,7 +976,7 @@ describe("previewMenu", () => {
     await publish(f.lunch);
     await publish(f.dinner);
     const wine = await app(async (tx) => {
-      await removeMember(tx, f.drinks, await sectionMemberOf(f.drinks, f.beer));
+      await deleteSection(tx, f.beer);
       const created = await createSection(tx, {
         internalName: "Wine",
         names: { en: "By the glass" },
@@ -1069,7 +1071,7 @@ describe("previewMenu", () => {
     await publish(f.lunch);
     await publish(f.dinner);
     await app(async (tx) => {
-      await updateSection(tx, f.drinks, { internalName: "Refreshments" });
+      await updateMenuDetails(tx, f.drinksMenu, { name: "Refreshments" });
       await moveMember(tx, f.drinks, await memberOf(f.drinks, f.lemonade), 5);
     });
     const containing = vi.spyOn(sectionGraph, "menusContaining");

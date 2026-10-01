@@ -11,7 +11,7 @@ export interface LibraryImage extends ImageMetadata {
   usageCount: number;
 }
 export type ImageUsage =
-  | { kind: "section"; id: string; internalName: string }
+  | { kind: "section"; id: string; internalName: string; ownerMenuId: string }
   | { kind: "product"; id: string; catalogueId: string; name: string; active: boolean }
   | {
       kind: "variant";

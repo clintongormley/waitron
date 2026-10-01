@@ -3,17 +3,16 @@ import { kitchenStations, type Transaction } from "@waitron/db";
 import { preparationRoutes } from "@waitron/venue-service";
 import {
   addCatalogueToLocation,
-  addMember,
   addProductToMenu,
   addProducts,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
   createProduct,
-  createSection,
+  createSectionIn,
   createUnit,
   menuItems,
-  renameCatalogue,
+  updateMenuDetails,
   requireMenuRoot,
   setProductVariants,
   writeContentLanguages,
@@ -104,7 +103,8 @@ export async function seedCatalogues(
       existingMenuId === undefined
         ? await createCatalogue(tx, { name: data.name[locale] })
         : { id: existingMenuId };
-    if (existingMenuId !== undefined) await renameCatalogue(tx, existingMenuId, data.name[locale]);
+    if (existingMenuId !== undefined)
+      await updateMenuDetails(tx, existingMenuId, { name: data.name[locale] });
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, { name: cat.name.en });
@@ -120,9 +120,11 @@ export async function seedCatalogues(
         stationId: cat.station === null ? null : stationIds[cat.station],
         noPreparation: cat.station === null,
       });
-      const section = await createSection(
+      const section = await createSectionIn(
         tx,
-        { internalName: (cat.sectionName ?? cat.name)[locale], names: cat.name },
+        rootSectionId,
+        { internalName: cat.name[locale], names: cat.name },
+        undefined,
         locale,
       );
       const productIds: string[] = [];
@@ -176,7 +178,6 @@ export async function seedCatalogues(
         productsByImage.set(product.image, created.id);
       }
       await addProducts(tx, section.id, productIds);
-      await addMember(tx, rootSectionId, { kind: "section", sectionId: section.id });
       // Each product's row sets no menu price, so the menu charges the product's own price and
       // follows it when it changes.
       const rows = await tx

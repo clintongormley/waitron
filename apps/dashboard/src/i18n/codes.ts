@@ -83,7 +83,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This list already contains that item.",
     es: "Esta lista ya contiene ese elemento.",
   },
-  "menu_section.not_library": {
+  "menu_section.wrong_role": {
     en: "A menu's own list cannot be used this way.",
     es: "La lista propia de una carta no se puede usar de esta forma.",
   },

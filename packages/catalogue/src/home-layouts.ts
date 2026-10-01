@@ -222,7 +222,7 @@ export async function setDefaultHomeLayout(
 
 /**
  * Appends a tile, or puts it at `position` and renumbers the layout. The target must be a product
- * or library section the menu's working structure reaches (D13); a tile for a product the menu
+ * or section the menu's working structure reaches (D13); a tile for a product the menu
  * does not offer when it is published is left out of that version.
  */
 export async function addShortcut(

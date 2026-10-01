@@ -250,10 +250,6 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
  * What publishing the menu would change, each change naming its source, the shortcuts the publish
  * would leave out (D13), and the menu's publication state. `hash` is what `publishMenu` must be
  * handed back.
- *
- * A change inside a library section is the shared section's only while another menu reaches that
- * section, in its working structure or its live version. A shared change's `alsoOn` names the
- * other published menus whose own preview holds the same change.
  */
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
   const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);

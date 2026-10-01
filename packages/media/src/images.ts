@@ -38,7 +38,7 @@ export interface ImageRecord extends ImageMetadataInput {
 }
 export type ImageUsage =
   /** Any section, a list a menu owns included; `internalName` is the staff-facing name. */
-  | { kind: "section"; id: string; internalName: string }
+  | { kind: "section"; id: string; internalName: string; ownerMenuId: string }
   | {
       kind: "product";
       id: string;
@@ -143,7 +143,11 @@ async function listImageUsagesForFilename(
     // Products before variants, each in id order.
     .orderBy(isNotNull(products.parentId), products.id);
   const sectionRows = await tx
-    .select({ id: sections.id, internalName: sections.internalName })
+    .select({
+      id: sections.id,
+      internalName: sections.internalName,
+      ownerMenuId: sections.ownerMenuId,
+    })
     .from(sections)
     .where(eq(sections.image, filename))
     .orderBy(sections.id);

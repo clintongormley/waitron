@@ -514,7 +514,6 @@ export async function applyLiveFields(
   return live;
 }
 
-/** A change, with the library section a `shared_section` change happened in. */
 export interface DiffEntry {
   change: MenuChange;
   section?: string;
@@ -581,7 +580,6 @@ function namesOf(shape: Shape, path: readonly string[]): string[] {
   return path.map((sectionId) => shape.sections.get(sectionId)!.node.internalName);
 }
 
-/** A change to the list at the end of `path`: the menu's own top level, or a library section. */
 function listSource(path: readonly string[]): { source: MenuChangeSource; section?: string } {
   const holder = path.at(-1);
   return holder === undefined
@@ -696,11 +694,6 @@ function productFields(
   return { shared: ordered(shared), menu: ordered(menu) };
 }
 
-/**
- * The changes from `live` to `proposed`, each with the library section it happened in when that
- * decides its source. A change in a library section is named `shared_section` here; only the
- * caller, which can see the other menus, can tell whether another menu uses that section.
- */
 export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): DiffEntry[] {
   const next = shapeOf(proposed);
   const prev = shapeOf(live ?? { ...proposed, root: { members: [] }, offers: {}, homeLayouts: [] });

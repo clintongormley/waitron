@@ -1,3 +1,5 @@
+import { createIncludedMenu as createSection } from "../test/included-menu.js";
+import type { SectionInput } from "./section-types.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
@@ -10,17 +12,13 @@ import * as sectionStructure from "./section-structure.js";
 import {
   addMember,
   addProducts,
-  createSection,
+  createSectionIn,
   deleteSection,
-  duplicateSection,
   listMembers,
-  librarySectionUsages,
-  listSections,
   moveMember,
   readSection,
   removeMember,
   replaceMember,
-  sectionUsages,
   updateSection,
 } from "./sections.js";
 import type { MemberRef, SectionMember } from "./section-types.js";
@@ -133,6 +131,13 @@ async function cloneProducts(templateId: string, count: number): Promise<string[
   return Array.from({ length: count }, (_, index) => `bulk-${String(index + 1).padStart(6, "0")}`);
 }
 
+async function createOwned(tx: Transaction, input: SectionInput) {
+  const { rows } = await tx.execute<{ id: string }>(
+    sql`select root_section_id as id from menu_details join catalogues on catalogues.id = menu_details.menu_id where catalogues.name = 'Lunch menu' limit 1`,
+  );
+  return createSectionIn(tx, rows[0]!.id, input);
+}
+const owned = (internalName: string) => app((tx) => createOwned(tx, { internalName }));
 const create = (internalName: string) => app((tx) => createSection(tx, { internalName }));
 
 let hook: MockInstance<typeof sectionStructure.onStructureChanged>;
@@ -144,10 +149,10 @@ afterEach(() => {
 });
 
 describe("section details", () => {
-  it("creates, reads, lists and updates a library section", async () => {
+  it("creates, reads and updates an owned section", async () => {
     await fixture();
     const drinks = await app((tx) =>
-      createSection(tx, {
+      createOwned(tx, {
         internalName: "  Drinks  ",
         names: { en: "Something to drink", es: "Bebidas" },
         color: "#aabbcc",
@@ -162,7 +167,7 @@ describe("section details", () => {
       members: [],
     });
     // Customer names are optional.
-    const specials = await create("Specials");
+    const specials = await owned("Specials");
     expect(specials.names).toEqual({});
     expect(await app((tx) => readSection(tx, drinks.id))).toEqual(drinks);
 
@@ -181,24 +186,11 @@ describe("section details", () => {
     });
   });
 
-  it("lists library sections only, by internal name", async () => {
-    const f = await fixture();
-    const specials = await create("Specials");
-    const beer = await create("Beer");
-    await menuOwned("menu_root", f.lunchMenu);
-    await menuOwned("home_layout", f.lunchMenu);
-    await app((tx) => addMember(tx, beer.id, product(f.lager)));
-    const listed = await app((tx) => listSections(tx));
-    expect(listed.map((row) => row.internalName)).toEqual(["Beer", "Specials"]);
-    expect(listed[0]!.members.map((member) => member.ref)).toEqual([product(f.lager)]);
-    expect(listed[1]).toEqual(specials);
-  });
-
   it("refuses an empty internal name", async () => {
     await fixture();
-    const drinks = await create("Drinks");
+    const drinks = await owned("Drinks");
     for (const internalName of ["", "   ", 7 as unknown as string]) {
-      await expect(app((tx) => createSection(tx, { internalName }))).rejects.toMatchObject({
+      await expect(app((tx) => createOwned(tx, { internalName }))).rejects.toMatchObject({
         code: "menu_section.invalid",
         params: { field: "internalName" },
       });
@@ -214,7 +206,7 @@ describe("section details", () => {
 
   it("refuses malformed customer names, colour and image", async () => {
     await fixture();
-    const drinks = await create("Drinks");
+    const drinks = await owned("Drinks");
     const refused: [Parameters<typeof updateSection>[2], object][] = [
       [{ names: "Bebidas" as unknown as Record<string, string> }, { field: "names" }],
       [{ names: ["Bebidas"] as unknown as Record<string, string> }, { field: "names" }],
@@ -231,7 +223,7 @@ describe("section details", () => {
         params,
       });
       await expect(
-        app((tx) => createSection(tx, { internalName: "New", ...patch })),
+        app((tx) => createOwned(tx, { internalName: "New", ...patch })),
       ).rejects.toMatchObject({ code: "menu_section.invalid", params });
     }
     await expect(
@@ -240,7 +232,7 @@ describe("section details", () => {
     await expect(
       app((tx) => updateSection(tx, drinks.id, { names: { "not a language": "x" } })),
     ).rejects.toMatchObject({ code: "content.language_invalid" });
-    expect(await app((tx) => listSections(tx))).toEqual([drinks]);
+    expect(await app((tx) => readSection(tx, drinks.id))).toEqual(drinks);
   });
 
   it("refuses customer names with no text in the default content language, but accepts none", async () => {
@@ -248,13 +240,13 @@ describe("section details", () => {
     await app((tx) =>
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
-    const drinks = await create("Drinks");
+    const drinks = await owned("Drinks");
     const refusal = {
       code: "menu_section.translation_required",
       params: { field: "names", language: "en" },
     };
     await expect(
-      app((tx) => createSection(tx, { internalName: "Bebidas", names: { es: "Bebidas" } })),
+      app((tx) => createOwned(tx, { internalName: "Bebidas", names: { es: "Bebidas" } })),
     ).rejects.toMatchObject(refusal);
     await expect(
       app((tx) => updateSection(tx, drinks.id, { names: { es: "Bebidas" } })),
@@ -274,8 +266,6 @@ describe("section details", () => {
       (tx) => listMembers(tx, missing),
       (tx) => updateSection(tx, missing, { internalName: "X" }),
       (tx) => deleteSection(tx, missing),
-      (tx) => sectionUsages(tx, missing),
-      (tx) => duplicateSection(tx, missing, { internalName: "Copy", memberIds: [] }),
     ];
     for (const write of writes)
       await expect(app(write)).rejects.toMatchObject({
@@ -291,11 +281,10 @@ describe("section details", () => {
       const writes: ((tx: Transaction) => Promise<unknown>)[] = [
         (tx) => updateSection(tx, owned, { internalName: "X" }),
         (tx) => deleteSection(tx, owned),
-        (tx) => duplicateSection(tx, owned, { internalName: "Copy", memberIds: [] }),
       ];
       for (const write of writes)
         await expect(app(write)).rejects.toMatchObject({
-          code: "menu_section.not_library",
+          code: "menu_section.wrong_role",
           params: { sectionId: owned },
         });
     }
@@ -537,16 +526,15 @@ describe("cycles", () => {
 });
 
 describe("roles", () => {
-  it("refuses a menu-owned list as a member of any list", async () => {
+  it("refuses an owned section or home layout as an inclusion", async () => {
     const f = await fixture();
-    const drinks = await create("Drinks");
-    for (const role of ["menu_root", "home_layout"] as const) {
-      const owned = await menuOwned(role, f.lunchMenu);
-      await expect(app((tx) => addMember(tx, drinks.id, section(owned)))).rejects.toMatchObject({
-        code: "menu_section.not_library",
-        params: { sectionId: owned },
+    const target = await create("Target");
+    const own = await owned("Own");
+    const layout = await menuOwned("home_layout", f.lunchMenu);
+    for (const id of [own.id, layout])
+      await expect(app((tx) => addMember(tx, target.id, section(id)))).rejects.toMatchObject({
+        code: "menu_section.wrong_role",
       });
-    }
   });
 
   it("accepts members into a menu's root list", async () => {
@@ -572,112 +560,14 @@ describe("roles", () => {
       (tx) => removeMember(tx, layout, tile),
       (tx) => moveMember(tx, layout, tile, 0),
       (tx) => replaceMember(tx, layout, tile, product(f.water)),
-      (tx) =>
-        duplicateSection(tx, drinks.id, {
-          internalName: "Copy",
-          memberIds: [],
-          replaceIn: { sectionId: layout, memberId: tile },
-        }),
     ];
     for (const write of writes)
       await expect(app(write)).rejects.toMatchObject({
-        code: "menu_section.not_library",
+        code: "menu_section.wrong_role",
         params: { sectionId: layout },
       });
     expect(refs((await app((tx) => readSection(tx, layout))).members)).toEqual([
       section(drinks.id),
-    ]);
-    expect((await app((tx) => listSections(tx))).map((row) => row.internalName)).toEqual([
-      "Drinks",
-    ]);
-  });
-});
-
-describe("duplicate", () => {
-  it("copies the details and the chosen members in order, sharing nested sections", async () => {
-    const f = await fixture();
-    const drinks = await app((tx) =>
-      createSection(tx, {
-        internalName: "Drinks",
-        names: { en: "Something to drink", es: "Bebidas" },
-        color: "#112233",
-      }),
-    );
-    const beer = await create("Beer");
-    await app((tx) => addMember(tx, beer.id, product(f.lager)));
-    await app((tx) => addProducts(tx, drinks.id, [f.lemonade, f.water]));
-    await app((tx) => addMember(tx, drinks.id, section(beer.id)));
-    const [lemonade, , nested] = (await app((tx) => readSection(tx, drinks.id))).members;
-    const countProducts = async () =>
-      (await fx.db.execute<{ n: number }>(sql`select count(*) as n from products`)).rows[0]!.n;
-    const before = await countProducts();
-
-    const copy = await app((tx) =>
-      duplicateSection(tx, drinks.id, {
-        internalName: " Summer drinks ",
-        // Chosen out of order: the copy keeps the source's order.
-        memberIds: [nested!.id, lemonade!.id],
-      }),
-    );
-    expect(copy).toMatchObject({
-      internalName: "Summer drinks",
-      names: { en: "Something to drink", es: "Bebidas" },
-      image: null,
-      color: "#112233",
-    });
-    expect(copy.id).not.toBe(drinks.id);
-    expect(refs(copy.members)).toEqual([product(f.lemonade), section(beer.id)]);
-    expect(positions(copy.members)).toEqual([0, 1]);
-    expect(await countProducts()).toBe(before);
-    // The source is untouched.
-    expect(refs((await app((tx) => readSection(tx, drinks.id))).members)).toEqual([
-      product(f.lemonade),
-      product(f.water),
-      section(beer.id),
-    ]);
-  });
-
-  it("copies more members than one statement can bind, in the source's order", async () => {
-    const f = await fixture();
-    const drinks = await create("Drinks");
-    const ids = await cloneProducts(f.lemonade, 20_000);
-    await fx.db.execute(sql`
-      insert into section_members (id, section_id, position, product_id)
-      select 'member-' || id, ${drinks.id}, row_number() over (order by id) - 1, id
-      from products where id like 'bulk-%'`);
-    const source = await app((tx) => readSection(tx, drinks.id));
-
-    const copy = await app((tx) =>
-      duplicateSection(tx, drinks.id, {
-        internalName: "Copy",
-        memberIds: source.members.map((member) => member.id),
-      }),
-    );
-    expect(refs(copy.members)).toEqual(ids.map(product));
-    expect(positions(copy.members)).toEqual(ids.map((_, index) => index));
-  });
-
-  it("refuses a member id the source does not hold, a repeated one, or a blank name", async () => {
-    const f = await fixture();
-    const drinks = await create("Drinks");
-    const other = await create("Other");
-    const own = await app((tx) => addMember(tx, drinks.id, product(f.water)));
-    const foreign = await app((tx) => addMember(tx, other.id, product(f.water)));
-    for (const memberIds of [
-      [foreign.id],
-      [own.id, own.id],
-      [crypto.randomUUID()],
-      "x" as unknown as string[],
-    ])
-      await expect(
-        app((tx) => duplicateSection(tx, drinks.id, { internalName: "Copy", memberIds })),
-      ).rejects.toMatchObject({ code: "menu_section.membership_invalid" });
-    await expect(
-      app((tx) => duplicateSection(tx, drinks.id, { internalName: " ", memberIds: [own.id] })),
-    ).rejects.toMatchObject({ code: "menu_section.invalid", params: { field: "internalName" } });
-    expect((await app((tx) => listSections(tx))).map((row) => row.internalName)).toEqual([
-      "Drinks",
-      "Other",
     ]);
   });
 });
@@ -719,13 +609,11 @@ describe("replace", () => {
     await app((tx) => addMember(tx, drinks.id, section(beer.id)));
     const lager = await app((tx) => addMember(tx, beer.id, product(f.lager)));
     await app((tx) => addMember(tx, beer.id, product(f.water)));
-    const root = await menuOwned("menu_root", f.lunchMenu);
     const cases: [MemberRef, object][] = [
       [section(drinks.id), { code: "menu_section.member_cycle" }],
       [section(beer.id), { code: "menu_section.member_cycle" }],
       [product(f.water), { code: "menu_section.member_duplicate" }],
       [product(f.pint), { code: "menu_section.membership_invalid" }],
-      [section(root), { code: "menu_section.not_library" }],
     ];
     for (const [ref, error] of cases)
       await expect(app((tx) => replaceMember(tx, beer.id, lager.id, ref))).rejects.toMatchObject(
@@ -752,255 +640,35 @@ describe("replace", () => {
     expect(hook).toHaveBeenCalledTimes(1);
     expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu]);
   });
-
-  it("duplicates and replaces in the caller's one transaction, with one call to the hook", async () => {
-    const f = await fixture();
-    const lunchRoot = await menuOwned("menu_root", f.lunchMenu);
-    const drinks = await create("Drinks");
-    const lemonade = await app((tx) => addMember(tx, drinks.id, product(f.lemonade)));
-    const inLunch = await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
-    hook.mockClear();
-    const copy = await app((tx) =>
-      duplicateSection(tx, drinks.id, {
-        internalName: "Lunch drinks",
-        memberIds: [lemonade.id],
-        replaceIn: { sectionId: lunchRoot, memberId: inLunch.id },
-      }),
-    );
-    expect(hook).toHaveBeenCalledTimes(1);
-    expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu]);
-    expect(refs((await app((tx) => readSection(tx, lunchRoot))).members)).toEqual([
-      section(copy.id),
-    ]);
-    expect(refs(copy.members)).toEqual([product(f.lemonade)]);
-  });
-
-  it("refuses an unusable replaceIn before it writes the copy", async () => {
-    const f = await fixture();
-    const layout = await menuOwned("home_layout", f.lunchMenu);
-    const drinks = await create("Drinks");
-    const tile = await rawMember(layout, section(drinks.id), 0);
-    const unknown = crypto.randomUUID();
-    await app(async (tx) => {
-      // Caught inside the one transaction, so a copy written before the refusal would still show.
-      for (const [replaceIn, error] of [
-        [{ sectionId: layout, memberId: tile }, { code: "menu_section.not_library" }],
-        [
-          { sectionId: drinks.id, memberId: unknown },
-          { code: "menu_section.not_found", params: { sectionId: drinks.id, memberId: unknown } },
-        ],
-      ] as const)
-        await expect(
-          duplicateSection(tx, drinks.id, { internalName: "Copy", memberIds: [], replaceIn }),
-        ).rejects.toMatchObject(error);
-      expect((await listSections(tx)).map((row) => row.internalName)).toEqual(["Drinks"]);
-    });
-    expect(hook).not.toHaveBeenCalled();
-  });
-
-  it("leaves neither the copy nor the replacement when the replace is refused", async () => {
-    const f = await fixture();
-    const drinks = await create("Drinks");
-    const beer = await create("Beer");
-    const nested = await app((tx) => addMember(tx, drinks.id, section(beer.id)));
-    const inBeer = await app((tx) => addMember(tx, beer.id, product(f.lager)));
-    // The copy holds Beer, so putting it inside Beer closes a loop.
-    await expect(
-      app((tx) =>
-        duplicateSection(tx, drinks.id, {
-          internalName: "Copy",
-          memberIds: [nested.id],
-          replaceIn: { sectionId: beer.id, memberId: inBeer.id },
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu_section.member_cycle",
-      params: { sectionId: beer.id, childSectionId: expect.any(String) },
-    });
-    expect((await app((tx) => listSections(tx))).map((row) => row.internalName)).toEqual([
-      "Beer",
-      "Drinks",
-    ]);
-    expect(refs((await app((tx) => readSection(tx, beer.id))).members)).toEqual([product(f.lager)]);
-  });
-
-  it("refuses a replaceIn list the copy's kept sections reach at any depth", async () => {
-    const f = await fixture();
-    const drinks = await create("Drinks");
-    const beer = await create("Beer");
-    const ales = await create("Ales");
-    await app((tx) => addMember(tx, drinks.id, product(f.water)));
-    const nested = await app((tx) => addMember(tx, drinks.id, section(beer.id)));
-    await app((tx) => addMember(tx, beer.id, section(ales.id)));
-    const inAles = await app((tx) => addMember(tx, ales.id, product(f.lager)));
-    // Copy -> Beer -> Ales, and the copy would take a place inside Ales.
-    await expect(
-      app((tx) =>
-        duplicateSection(tx, drinks.id, {
-          internalName: "Copy",
-          memberIds: [nested.id],
-          replaceIn: { sectionId: ales.id, memberId: inAles.id },
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu_section.member_cycle",
-      params: { sectionId: ales.id, childSectionId: expect.any(String) },
-    });
-    expect(refs((await app((tx) => readSection(tx, ales.id))).members)).toEqual([product(f.lager)]);
-    // Keeping only the product leaves nothing to lead back to Ales.
-    const plain = await app((tx) => readSection(tx, drinks.id));
-    const copy = await app((tx) =>
-      duplicateSection(tx, drinks.id, {
-        internalName: "Copy",
-        memberIds: [plain.members[0]!.id],
-        replaceIn: { sectionId: ales.id, memberId: inAles.id },
-      }),
-    );
-    expect(refs((await app((tx) => readSection(tx, ales.id))).members)).toEqual([section(copy.id)]);
-  });
-});
-
-describe("delete and usages", () => {
-  it("names every menu and list using a section, and deleting it removes it from all of them", async () => {
-    const f = await fixture();
-    const lunchRoot = await menuOwned("menu_root", f.lunchMenu);
-    const dinnerRoot = await menuOwned("menu_root", f.dinnerMenu);
-    const layout = await menuOwned("home_layout", f.dinnerMenu);
-    const drinks = await create("Drinks");
-    const favourites = await create("Favourites");
-    const beer = await create("Beer");
-    await app((tx) => addMember(tx, beer.id, product(f.lager)));
-    await app((tx) => addMember(tx, drinks.id, section(beer.id)));
-    await app((tx) => addMember(tx, drinks.id, product(f.water)));
-    await app((tx) => addMember(tx, favourites.id, product(f.lemonade)));
-    await app((tx) => addMember(tx, favourites.id, section(drinks.id)));
-    await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
-    await app((tx) => addMember(tx, dinnerRoot, section(favourites.id)));
-    await rawMember(layout, section(drinks.id), 0);
-    const category = async () =>
-      (
-        await fx.db.execute<{ category_id: string | null }>(
-          sql`select category_id from products where id = ${f.water}`,
-        )
-      ).rows[0]!.category_id;
-
-    expect(await app((tx) => sectionUsages(tx, drinks.id))).toEqual({
-      menus: [
-        { id: f.dinnerMenu, name: "Dinner menu" },
-        { id: f.lunchMenu, name: "Lunch menu" },
-      ],
-      sections: [{ id: favourites.id, internalName: "Favourites" }],
-    });
-    expect(await app((tx) => sectionUsages(tx, favourites.id))).toEqual({
-      menus: [{ id: f.dinnerMenu, name: "Dinner menu" }],
-      sections: [],
-    });
-
-    hook.mockClear();
-    await app((tx) => deleteSection(tx, drinks.id));
-    expect(hook).toHaveBeenCalledTimes(1);
-    // Sorted by id, as `menusContaining` answers them.
-    expect(hook.mock.calls[0]![1]).toEqual([f.dinnerMenu, f.lunchMenu].sort());
-    await expect(app((tx) => readSection(tx, drinks.id))).rejects.toMatchObject({
-      code: "menu_section.not_found",
-    });
-    for (const list of [lunchRoot, layout]) {
-      expect((await app((tx) => readSection(tx, list))).members).toEqual([]);
-    }
-    const left = (await app((tx) => readSection(tx, favourites.id))).members;
-    expect(refs(left)).toEqual([product(f.lemonade)]);
-    // The nested section and the products survive, and the product keeps its category.
-    expect(refs((await app((tx) => readSection(tx, beer.id))).members)).toEqual([product(f.lager)]);
-    expect(await category()).toBe(f.category);
-  });
-});
-
-describe("every library section's usages at once", () => {
-  it("answers each library section as sectionUsages does, a menu's own lists left out", async () => {
-    const f = await fixture();
-    const lunchRoot = await menuOwned("menu_root", f.lunchMenu);
-    const dinnerRoot = await menuOwned("menu_root", f.dinnerMenu);
-    const layout = await menuOwned("home_layout", f.dinnerMenu);
-    const drinks = await create("Drinks");
-    const favourites = await create("Favourites");
-    const beer = await create("Beer");
-    const unused = await create("Unused");
-    const alsoHolds = await create("Also holds beer");
-    await app((tx) => addMember(tx, drinks.id, section(beer.id)));
-    await app((tx) => addMember(tx, alsoHolds.id, section(beer.id)));
-    await app((tx) => addMember(tx, favourites.id, section(drinks.id)));
-    await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
-    await app((tx) => addMember(tx, dinnerRoot, section(favourites.id)));
-    await rawMember(layout, section(unused.id), 0);
-    await app((tx) => createSection(tx, { internalName: "Empty" }));
-
-    const all = await app((tx) => librarySectionUsages(tx));
-    const library = await app((tx) => listSections(tx));
-    expect(Object.keys(all).sort()).toEqual(library.map((row) => row.id).sort());
-    for (const row of library)
-      expect(all[row.id], row.internalName).toEqual(await app((tx) => sectionUsages(tx, row.id)));
-    // Beer is reached by both menus through nesting, and held by two library sections.
-    expect(all[beer.id]).toEqual({
-      menus: [
-        { id: f.dinnerMenu, name: "Dinner menu" },
-        { id: f.lunchMenu, name: "Lunch menu" },
-      ],
-      sections: [
-        { id: alsoHolds.id, internalName: "Also holds beer" },
-        { id: drinks.id, internalName: "Drinks" },
-      ],
-    });
-    // A home layout holding a section names its menu.
-    expect(all[unused.id]).toEqual({
-      menus: [{ id: f.dinnerMenu, name: "Dinner menu" }],
-      sections: [],
-    });
-    expect(all[lunchRoot]).toBeUndefined();
-  });
-
-  it("answers an empty map when the library is empty", async () => {
-    await fixture();
-    expect(await app((tx) => librarySectionUsages(tx))).toEqual({});
-  });
 });
 
 describe("the structure hook", () => {
-  it("is told once per member write, with the menus the written list reaches", async () => {
+  it("is told once per member write, including the owner and every including menu", async () => {
     const f = await fixture();
     const lunchRoot = await menuOwned("menu_root", f.lunchMenu);
     const drinks = await create("Drinks");
     await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
-    const expectOneCall = (menus: string[]) => {
+    const expectOneCall = () => {
       expect(hook).toHaveBeenCalledTimes(1);
-      expect(hook.mock.calls[0]![1]).toEqual(menus);
+      expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu, drinks.ownerMenuId].sort());
       hook.mockClear();
     };
     hook.mockClear();
     const water = await app((tx) => addMember(tx, drinks.id, product(f.water)));
-    expectOneCall([f.lunchMenu]);
+    expectOneCall();
     await app((tx) => addProducts(tx, drinks.id, [f.lemonade]));
-    expectOneCall([f.lunchMenu]);
+    expectOneCall();
     await app((tx) => moveMember(tx, drinks.id, water.id, 1));
-    expectOneCall([f.lunchMenu]);
+    expectOneCall();
     await app((tx) => removeMember(tx, drinks.id, water.id));
-    expectOneCall([f.lunchMenu]);
-    const specials = await create("Specials");
-    await app((tx) => addMember(tx, specials.id, product(f.water)));
-    expectOneCall([]);
-    await app((tx) => duplicateSection(tx, drinks.id, { internalName: "Copy", memberIds: [] }));
-    expectOneCall([]);
-    // Details are not structure.
-    await app((tx) => updateSection(tx, drinks.id, { internalName: "Cold drinks" }));
-    expect(hook).not.toHaveBeenCalled();
+    expectOneCall();
   });
-
-  it("works out a section delete's menus before the cascade removes the link", async () => {
+  it("works out an owned section delete's menus before the cascade removes the link", async () => {
     const f = await fixture();
-    const lunchRoot = await menuOwned("menu_root", f.lunchMenu);
-    const drinks = await create("Drinks");
-    await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
+    const drinks = await owned("Drinks");
     hook.mockClear();
     await app((tx) => deleteSection(tx, drinks.id));
+    expect(hook).toHaveBeenCalledTimes(1);
     expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu]);
   });
 });

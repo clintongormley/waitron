@@ -19,8 +19,13 @@ import {
   type MenuDocument,
 } from "./menu-document.js";
 import * as vatRates from "./vat-rates.js";
-import { deactivateProduct, renameCatalogue, updateMenuItem, updateProduct } from "./operations.js";
-import { addMember, moveMember, removeMember, updateSection } from "./sections.js";
+import {
+  deactivateProduct,
+  updateMenuDetails,
+  updateMenuItem,
+  updateProduct,
+} from "./operations.js";
+import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { extraListItems } from "./schema/extras.js";
@@ -719,9 +724,7 @@ describe("diffMenuDocuments", () => {
   it("names a section removed and its products", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
-    await app(async (tx) =>
-      removeMember(tx, f.drinks, await memberOf(f.drinks, { sectionId: f.beer })),
-    );
+    await app(async (tx) => deleteSection(tx, f.beer));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       {
         kind: "section_removed",
@@ -744,7 +747,7 @@ describe("diffMenuDocuments", () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
     await app(async (tx) => {
-      await updateSection(tx, f.drinks, { internalName: "Soft drinks", color: "#112233" });
+      await updateMenuDetails(tx, f.drinksMenu, { name: "Soft drinks", color: "#112233" });
       await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
       await updateSection(tx, f.beer, { names: { en: "Cold beers" } });
     });
@@ -826,6 +829,15 @@ describe("diffMenuDocuments", () => {
 
   it("names a product and a section placed a second time", async () => {
     const f = await menusFixture(fx.db);
+    f.beer = await app(async (tx) => {
+      await deleteSection(tx, f.beer);
+      const included = await (
+        await import("../test/included-menu.js")
+      ).createIncludedMenu(tx, { internalName: "Beer", names: { en: "On tap" } });
+      await addMember(tx, included.id, product(f.lager));
+      await addMember(tx, f.drinks, section(included.id));
+      return included.id;
+    });
     const live = await build(f.lunch);
     await app(async (tx) => {
       await addMember(tx, f.lunchRoot, section(f.beer));
@@ -1131,7 +1143,7 @@ describe("diffMenuDocuments", () => {
       .update(menuDetails)
       .set({ defaultHomeLayoutId: counter!.id })
       .where(eq(menuDetails.menuId, f.lunch));
-    await app((tx) => renameCatalogue(tx, f.lunch, "Midday Menu"));
+    await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Midday Menu" }));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       { kind: "menu_renamed", from: "Lunch Menu", to: "Midday Menu", source: "this_menu" },
       { kind: "layout_changed", layoutId: counter!.id, name: "Counter", source: "this_menu" },

@@ -49,7 +49,7 @@ import {
   readInvoiceLocales,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
-  renameCatalogue,
+  updateMenuDetails,
   updateCategory,
   updateMenuItem,
   updateProduct,
@@ -1205,7 +1205,7 @@ describe("catalogue operations", () => {
   it("renames a catalogue", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
-      await renameCatalogue(tx, cat.id, "Delicatessen");
+      await updateMenuDetails(tx, cat.id, { name: "Delicatessen" });
       const [seen] = await listCatalogues(tx);
       expect(seen!.name).toBe("Delicatessen");
     });

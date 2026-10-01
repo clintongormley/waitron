@@ -102,7 +102,7 @@ export const QUERY_DEPENDENCIES = {
   getCanvas: ["canvases"],
   listCatalogues: ["catalogues"],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  getMenuStructure: ["menu_details", "sections", "section_members"],
+  getMenuStructure: ["menu_details", "sections", "section_members", "catalogues"],
   // `menuPrices` (packages/catalogue/src/operations.ts): the structure's tables for the placements,
   // then each reached product's menu item, menu and price, and its variants' overrides.
   getMenuPrices: [

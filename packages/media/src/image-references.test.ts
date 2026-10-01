@@ -6,7 +6,7 @@ import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
   createProduct,
-  createSection,
+  createSectionIn,
   menuVersionImages,
   menuVersions,
   previewMenu,
@@ -67,7 +67,7 @@ async function fixture(db: Database): Promise<Fixture> {
     .returning({ id: products.id });
   const [section] = await db
     .insert(sections)
-    .values({ internalName: "Bakery" })
+    .values({ internalName: "Bakery", ownerMenuId: menu!.id })
     .returning({ id: sections.id });
   return {
     catalogueId: menu!.id,
@@ -170,7 +170,9 @@ describe("a written image filename", () => {
 
 describe("a section's image", () => {
   const insert = async (image: string | null): Promise<void> => {
-    await suite.db.insert(sections).values({ internalName: "Drinks", image });
+    await suite.db
+      .insert(sections)
+      .values({ internalName: "Drinks", image, ownerMenuId: ids.catalogueId });
   };
   const update = async (image: string): Promise<void> => {
     await suite.db.execute(sql`update sections set image = ${image} where id = ${ids.sectionId}`);
@@ -199,14 +201,16 @@ describe("a section's image", () => {
 
   it("is checked by the section writes before the database is asked", async () => {
     const created = await withTransaction(suite.db, (tx) =>
-      createSection(tx, { internalName: "Bread", image: PRESENT }),
+      createSectionIn(tx, ids.sectionId, { internalName: "Bread", image: PRESENT }),
     );
     expect(created.image).toBe(PRESENT);
     await expect(
       withTransaction(suite.db, (tx) => updateSection(tx, created.id, { image: ABSENT })),
     ).rejects.toMatchObject({ code: "menu_section.invalid", params: { field: "image" } });
     await expect(
-      withTransaction(suite.db, (tx) => createSection(tx, { internalName: "X", image: ABSENT })),
+      withTransaction(suite.db, (tx) =>
+        createSectionIn(tx, ids.sectionId, { internalName: "X", image: ABSENT }),
+      ),
     ).rejects.toMatchObject({ code: "menu_section.invalid", params: { field: "image" } });
   });
 });

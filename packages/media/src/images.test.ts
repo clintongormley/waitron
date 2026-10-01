@@ -580,15 +580,14 @@ it("sorts by the default when the requested language was disabled while retainin
 });
 
 it("protects an image used by sections, a menu's own list among them, and counts each use", async () => {
-  const { createSection, updateSection, sections } = await import("@waitron/catalogue");
+  const { createSectionIn, updateSection, sections } = await import("@waitron/catalogue");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
-    const drinks = await createSection(tx, {
-      internalName: "Drinks (internal)",
-      names: { en: "Drinks (customer)" },
-      image: image.filename,
-    });
+    const { image } = await uploadImage(
+      tx,
+      { image: photo, names: { en: "Drinks" } },
+      {},
+    );
     const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
       id: catalogues.id,
     });
@@ -601,9 +600,19 @@ it("protects an image used by sections, a menu's own list among them, and counts
         image: image.filename,
       })
       .returning({ id: sections.id });
+    const drinks = await createSectionIn(tx, root!.id, {
+      internalName: "Drinks (internal)",
+      names: { en: "Drinks (customer)" },
+      image: image.filename,
+    });
     const uses = [
-      { kind: "section" as const, id: drinks.id, internalName: "Drinks (internal)" },
-      { kind: "section" as const, id: root!.id, internalName: "Lunch root" },
+      {
+        kind: "section" as const,
+        id: drinks.id,
+        internalName: "Drinks (internal)",
+        ownerMenuId: menu!.id,
+      },
+      { kind: "section" as const, id: root!.id, internalName: "Lunch root", ownerMenuId: menu!.id },
     ].sort((a, b) => a.id.localeCompare(b.id));
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(2);

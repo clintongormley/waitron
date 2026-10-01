@@ -37,12 +37,6 @@ export function refColumns(ref: MemberRef) {
     : { productId: null, childSectionId: ref.sectionId };
 }
 
-export function requireLibrary(graph: SectionGraph, sectionId: string): void {
-  const role = graph.role(sectionId);
-  if (role === undefined) throw new AppError("menu_section.not_found", { sectionId });
-  if (role !== "library") throw new AppError("menu_section.not_library", { sectionId });
-}
-
 export function heldMember(
   members: readonly SectionMember[],
   sectionId: string,
@@ -61,11 +55,7 @@ export function requirePosition(position: number | undefined): void {
   if (position !== undefined) requireIndex(position, "position");
 }
 
-/**
- * Refuse a ref no list may hold, or one this list holds already. `replacing` is the member whose
- * place it takes, if any. The cycle check is `sections.ts`'s: a home layout needs none, because
- * `requireLibrary` refuses one as a ref, so nothing a layout holds can lead back to it.
- */
+/** Home tiles may target owned sections or menu roots; reach is checked by the layout writer. */
 export async function checkRef(
   tx: Transaction,
   graph: SectionGraph,
@@ -74,7 +64,11 @@ export async function checkRef(
   replacing?: SectionMember,
 ): Promise<void> {
   if (ref?.kind === "section" && typeof ref.sectionId === "string") {
-    requireLibrary(graph, ref.sectionId);
+    const role = graph.role(ref.sectionId);
+    if (role === undefined)
+      throw new AppError("menu_section.not_found", { sectionId: ref.sectionId });
+    if (role === "home_layout")
+      throw new AppError("menu_section.wrong_role", { sectionId: ref.sectionId, role });
   } else if (ref?.kind !== "product" || !(await allTopLevelProducts(tx, [ref.productId]))) {
     throw new AppError("menu_section.membership_invalid", {});
   }

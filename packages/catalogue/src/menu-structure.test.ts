@@ -1,3 +1,4 @@
+import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
@@ -11,11 +12,10 @@ import {
   deactivateProduct,
   listMenuOffers,
   menuPrices,
-  renameCatalogue,
+  updateMenuDetails,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
-import { listContentTranslationGaps } from "./content-languages.js";
 import { createExtraList } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
@@ -25,10 +25,9 @@ import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
 import { createCategory } from "./categories.js";
 import {
   addMember,
-  createSection,
   deleteSection,
-  duplicateSection,
-  listSections,
+  createSectionIn,
+  replaceMember,
   moveMember,
   removeMember,
 } from "./sections.js";
@@ -42,6 +41,13 @@ const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 const product = (productId: string): MemberRef => ({ kind: "product", productId });
 const section = (sectionId: string): MemberRef => ({ kind: "section", sectionId });
 
+function stripPresentation(node: import("./menu-structure.js").MenuStructureNode): object {
+  return {
+    memberId: node.memberId,
+    ref: node.ref,
+    ...(node.children === undefined ? {} : { children: node.children.map(stripPresentation) }),
+  };
+}
 interface Fixture {
   lunch: string;
   dinner: string;
@@ -172,13 +178,15 @@ describe("creating a menu", () => {
     expect(await app((tx) => readMenuStructure(tx, menu.id))).toEqual({
       rootSectionId: root.id,
       nodes: [],
+      includable: [],
+      includedBy: [],
     });
   });
 
   it("keeps the root's internal name the menu's name when the menu is renamed", async () => {
     await seedTenant(fx.db);
     const menu = await app((tx) => createCatalogue(tx, { name: "Lunch menu" }));
-    await app((tx) => renameCatalogue(tx, menu.id, "Weekday lunch"));
+    await app((tx) => updateMenuDetails(tx, menu.id, { name: "Weekday lunch" }));
     const { rootSectionId } = await app((tx) => readMenuStructure(tx, menu.id));
     const [root] = await app((tx) =>
       tx
@@ -194,31 +202,6 @@ describe("creating a menu", () => {
     await expect(app((tx) => readMenuStructure(tx, crypto.randomUUID()))).rejects.toMatchObject({
       code: "catalogue.not_found",
     });
-  });
-});
-
-describe("a menu's own lists stay out of the library", () => {
-  it("never lists the root or the layout, never takes either as a member, and never reports their names", async () => {
-    const f = await fixture();
-    const [details] = await app((tx) =>
-      tx.select().from(menuDetails).where(eq(menuDetails.menuId, f.lunch)),
-    );
-    const listed = await app((tx) => listSections(tx));
-    expect(listed.map((row) => row.internalName)).toEqual(["Drinks", "Favourites"]);
-    for (const owned of [details!.rootSectionId, details!.defaultHomeLayoutId])
-      await expect(app((tx) => addMember(tx, f.drinks, section(owned)))).rejects.toMatchObject({
-        code: "menu_section.not_library",
-      });
-    // A customer name missing Spanish, on the owned lists and on a library section alike: only the
-    // library section is a gap.
-    await fx.db.execute(sql`update sections set names = '{"en":"Named"}'`);
-    const gaps = await app((tx) => listContentTranslationGaps(tx, "es"));
-    expect(
-      gaps
-        .filter((gap) => gap.kind.includes("section"))
-        .map((gap) => gap.id)
-        .sort(),
-    ).toEqual([f.drinks, f.favourites].sort());
   });
 });
 
@@ -292,7 +275,10 @@ describe("a menu offers what its structure reaches", () => {
     const [offer] = await app((tx) => listMenuOffers(tx, [f.lunch]));
     expect(offer!.placements).toEqual([[f.favourites], [f.drinks, beer.id], []]);
     const structure = await app((tx) => readMenuStructure(tx, f.lunch));
-    expect(structure).toEqual({
+    expect({
+      rootSectionId: structure.rootSectionId,
+      nodes: structure.nodes.map(stripPresentation),
+    }).toEqual({
       rootSectionId: f.lunchRoot,
       nodes: [
         {
@@ -458,7 +444,12 @@ describe("a product that leaves a menu starts fresh there", () => {
   it("resets when the last section reaching it is deleted", async () => {
     const { f, settings } = await lemonadeOnLunch();
     await removeFromFavourites(f);
-    await app((tx) => deleteSection(tx, f.drinks));
+    await app(async (tx) => {
+      const child = await createSectionIn(tx, f.drinks, { internalName: "Owned drinks" });
+      await addMember(tx, child.id, product(f.lemonade));
+      await removeMember(tx, f.drinks, await memberHolding(f.drinks, product(f.lemonade)));
+      await deleteSection(tx, child.id);
+    });
     await expectFresh(f, settings);
   });
 
@@ -467,7 +458,12 @@ describe("a product that leaves a menu starts fresh there", () => {
     const held = await memberHolding(f.drinks, product(f.lemonade));
     await app((tx) => removeMember(tx, f.drinks, held));
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(settings.lunch);
-    await app((tx) => deleteSection(tx, f.favourites));
+    await app(async (tx) => {
+      const child = await createSectionIn(tx, f.favourites, { internalName: "Owned favourites" });
+      await addMember(tx, child.id, product(f.lemonade));
+      await removeMember(tx, f.favourites, await memberHolding(f.favourites, product(f.lemonade)));
+      await deleteSection(tx, child.id);
+    });
     await expectFresh(f, settings);
   });
 
@@ -495,7 +491,7 @@ describe("a product that leaves a menu starts fresh there", () => {
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(settings.lunch);
   });
 
-  it("keeps the overrides when a section is duplicated and the copy takes its place in one step", async () => {
+  it("keeps the overrides when another included menu takes its place in one step", async () => {
     const f = await fixture();
     const before = await app(async (tx) => {
       await addMember(tx, f.drinks, product(f.lemonade));
@@ -507,14 +503,12 @@ describe("a product that leaves a menu starts fresh there", () => {
       return settingsOf(tx, f.lunch, f.lemonade);
     });
     const drinksMember = await memberHolding(f.lunchRoot, section(f.drinks));
-    const lemonadeMember = await memberHolding(f.drinks, product(f.lemonade));
-    const copy = await app((tx) =>
-      duplicateSection(tx, f.drinks, {
-        internalName: "Lunch drinks",
-        memberIds: [lemonadeMember],
-        replaceIn: { sectionId: f.lunchRoot, memberId: drinksMember },
-      }),
-    );
+    const copy = await app(async (tx) => {
+      const copy = await createSection(tx, { internalName: "Lunch drinks" });
+      await addMember(tx, copy.id, product(f.lemonade));
+      await replaceMember(tx, f.lunchRoot, drinksMember, section(copy.id));
+      return copy;
+    });
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(before);
     const structure = await app((tx) => readMenuStructure(tx, f.lunch));
     expect(structure.nodes.map((node) => node.ref)).toEqual([product(f.burger), section(copy.id)]);
@@ -531,10 +525,11 @@ describe("a product that leaves a menu starts fresh there", () => {
       await updateMenuItem(tx, f.lunch, item.id, { grossPrice: "2.50" });
       await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00", offered: true }]);
     });
-    const lemonadeMember = await memberHolding(f.drinks, product(f.lemonade));
-    const copy = await app((tx) =>
-      duplicateSection(tx, f.drinks, { internalName: "Lunch drinks", memberIds: [lemonadeMember] }),
-    );
+    const copy = await app(async (tx) => {
+      const copy = await createSection(tx, { internalName: "Lunch drinks" });
+      await addMember(tx, copy.id, product(f.lemonade));
+      return copy;
+    });
     const drinksMember = await memberHolding(f.lunchRoot, section(f.drinks));
     await app((tx) => removeMember(tx, f.lunchRoot, drinksMember));
     await app((tx) => addMember(tx, f.lunchRoot, section(copy.id)));

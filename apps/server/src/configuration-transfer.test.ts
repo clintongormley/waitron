@@ -8,11 +8,10 @@ import {
   addProductToMenu,
   createOptionList,
   createProduct,
-  createSection,
+  createSectionIn,
   listExtraLists,
   listMenuOffers,
   listOptionLists,
-  listSections,
   menuStatus,
   menuVersions,
   previewMenu,
@@ -763,14 +762,18 @@ it("transfers sections and their members, remapping ids, with a section's image"
       unitPrice: "1.00",
       vatClass: "general",
     });
-    const drinks = await createSection(tx, {
-      internalName: "Bebidas (interno)",
+    const drinksMenu = await createCatalogue(tx, {
+      name: "Bebidas (interno)",
       names: { es: "Bebidas" },
       image: image.filename,
+      color: "#aabbcc",
     });
-    const beer = await createSection(tx, { internalName: "Cervezas" });
-    await addMember(tx, drinks.id, { kind: "product", productId: water.id });
-    await addMember(tx, drinks.id, { kind: "section", sectionId: beer.id });
+    const drinks = await readSection(
+      tx,
+      (await readMenuStructure(tx, drinksMenu.id)).rootSectionId,
+    );
+    await createSectionIn(tx, drinks.id, { internalName: "Cervezas" });
+    await addMember(tx, drinks.id, { kind: "product", productId: water.id }, 0);
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
     await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
     return { drinks: drinks.id, image: image.filename };
@@ -783,10 +786,9 @@ it("transfers sections and their members, remapping ids, with a section's image"
     new Date("2026-09-25T12:00:00Z"),
     versions,
   );
-  // The two library sections, and the top level and home layout of each of the source's two menus
-  // (the one provisioning made, and "Sections menu").
-  expect(transferred.tables.sections).toHaveLength(6);
-  expect(transferred.tables.menu_details).toHaveLength(2);
+  // Three menu shells and Drinks' own Beer section.
+  expect(transferred.tables.sections).toHaveLength(7);
+  expect(transferred.tables.menu_details).toHaveLength(3);
   expect(transferred.tables.section_members).toHaveLength(3);
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
@@ -795,11 +797,22 @@ it("transfers sections and their members, remapping ids, with a section's image"
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
-    const library = await listSections(tx);
-    expect(library.map((row) => row.internalName)).toEqual(["Bebidas (interno)", "Cervezas"]);
-    const [drinks, beer] = library;
-    expect(drinks!.id).not.toBe(original.drinks);
-    expect(drinks).toMatchObject({ names: { es: "Bebidas" }, image: original.image });
+    const [importedDrinks] = await tx
+      .select({ id: catalogues.id })
+      .from(catalogues)
+      .where(eq(catalogues.name, "Bebidas (interno)"));
+    const drinks = await readSection(
+      tx,
+      (await readMenuStructure(tx, importedDrinks!.id)).rootSectionId,
+    );
+    const [beer] = await tx.select().from(sections).where(eq(sections.internalName, "Cervezas"));
+    expect(drinks.id).not.toBe(original.drinks);
+    expect(drinks).toMatchObject({
+      names: { es: "Bebidas" },
+      image: original.image,
+      color: "#aabbcc",
+    });
+    expect(beer!.ownerMenuId).toBe(importedDrinks!.id);
     const [product] = await tx
       .select({ id: products.id })
       .from(products)

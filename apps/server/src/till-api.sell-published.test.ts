@@ -15,7 +15,6 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  addMember,
   addProductToMenu,
   addShortcut,
   addProducts,
@@ -26,7 +25,7 @@ import {
   createOptionList,
   createHomeLayout,
   createProduct,
-  createSection,
+  createSectionIn,
   deactivateCatalogue,
   deleteHomeLayout,
   listHomeLayouts,
@@ -228,9 +227,8 @@ async function setupLunch(): Promise<Lunch> {
     const lemonadeOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: lemonade.id });
     const burgerOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: burger.id });
 
-    const postres = await createSection(tx, { internalName: "Postres" });
     const rootId = await requireMenuRoot(tx, lunch.id);
-    await addMember(tx, rootId, { kind: "section", sectionId: postres.id });
+    const postres = await createSectionIn(tx, rootId, { internalName: "Postres" });
     await addProducts(tx, postres.id, [flan.id]);
     const zone = await tx.execute<{ id: string }>(sql`
       select zone_id as id from zone_service_policies

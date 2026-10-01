@@ -257,12 +257,12 @@ describe("site content languages", () => {
     });
   });
 
-  it("reports a library section's partly filled customer names as a gap, and an empty map as none", async () => {
+  it("reports a menu section's partly filled customer names as a gap, and an empty map as none", async () => {
     await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Lunch" });
       const section = async (
         names: Record<string, string>,
-        role: "library" | "menu_root" = "library",
+        role: "section" | "menu_root" = "section",
       ) =>
         (
           await tx
@@ -271,7 +271,7 @@ describe("site content languages", () => {
               internalName: "Drinks (internal)",
               names,
               role,
-              ownerMenuId: role === "library" ? null : menu.id,
+              ownerMenuId: menu.id,
             })
             .returning({ id: sections.id })
         )[0]!.id;
@@ -283,10 +283,10 @@ describe("site content languages", () => {
 
       const gaps = await listContentTranslationGaps(tx, "en");
 
-      expect(gaps).toContainEqual({ kind: "library_section", id: spanishOnly });
-      expect(gaps).not.toContainEqual({ kind: "library_section", id: none });
-      expect(gaps).not.toContainEqual({ kind: "library_section", id: both });
-      expect(gaps.map((gap) => gap.id)).not.toContain(root);
+      expect(gaps).toContainEqual({ kind: "menu_section", id: spanishOnly });
+      expect(gaps).not.toContainEqual({ kind: "menu_section", id: none });
+      expect(gaps).not.toContainEqual({ kind: "menu_section", id: both });
+      expect(gaps).toContainEqual({ kind: "menu_section", id: root });
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
