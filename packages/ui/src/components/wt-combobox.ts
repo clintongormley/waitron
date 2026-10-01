@@ -1,13 +1,23 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import { baseStyles, disabledStyles } from "../base-styles.js";
+import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
 export interface ComboboxOption {
   value: string;
   label: string;
+  /** A registered wt-icon name, drawn before the label. */
+  icon?: string;
+  /** Consecutive options with the same group render under one heading. */
+  group?: string;
+  /** A row that sends `wt-combobox-action` and never becomes the value. */
+  action?: true;
 }
+
+/** With `search="auto"`, the search box shows only when there are more options than this. */
+export const SEARCH_THRESHOLD = 7;
 
 @customElement("wt-combobox")
 export class WtCombobox extends LitElement {
@@ -15,49 +25,44 @@ export class WtCombobox extends LitElement {
 
   static override styles = [
     baseStyles,
+    fieldStyles,
     css`
       :host {
         display: block;
         max-width: var(--wt-field-max-width);
       }
 
-      .label-row {
+      .row {
         display: flex;
         align-items: center;
-        margin-bottom: var(--wt-space-1);
+        gap: var(--wt-space-2);
       }
 
-      label {
-        display: block;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
+      .row > .field {
+        flex: 1;
+        min-width: 0;
+      }
+
+      /* As wide as its text, not the box, so the trigger under the rest of the box takes the
+         pointer; and stopped short of the chevron. */
+      .field-label {
+        inset-inline-end: auto;
+        max-width: calc(100% - 2 * var(--wt-space-3) - var(--wt-font-size-md) - var(--wt-space-2));
       }
 
       .trigger {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--wt-space-2);
-        width: 100%;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
         text-align: start;
         cursor: pointer;
-      }
-
-      .trigger:disabled {
-        ${disabledStyles}
       }
 
       /* nowrap comes from text-wrap here because no-hardcoded-chrome.test.ts's keyword-colour scan
          rejects the older shorthand, whose property name begins with a colour keyword. */
       .value {
+        flex: 1;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         text-wrap: nowrap;
@@ -65,6 +70,7 @@ export class WtCombobox extends LitElement {
 
       .value.placeholder {
         color: var(--wt-color-text-muted);
+        font-style: italic;
       }
 
       .chevron {
@@ -74,7 +80,7 @@ export class WtCombobox extends LitElement {
       [popover] {
         position: fixed;
         margin: 0;
-        padding: var(--wt-space-2);
+        padding: 0;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
@@ -82,40 +88,74 @@ export class WtCombobox extends LitElement {
         box-shadow: var(--wt-shadow-2);
       }
 
+      .search-area {
+        padding: var(--wt-space-2);
+        box-shadow: var(--wt-shadow-1);
+      }
+
       .search {
         width: 100%;
         min-height: var(--wt-tap-min);
-        margin-bottom: var(--wt-space-2);
         padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-bg);
+        border: var(--wt-field-line-width) solid var(--wt-color-primary);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
         color: var(--wt-color-text);
         font: inherit;
       }
 
-      .list {
+      .list,
+      .group-rows {
         list-style: none;
         margin: 0;
         padding: 0;
-        max-height: min(60vh, calc(var(--wt-tap-min) * 6));
+      }
+
+      .list {
+        padding: var(--wt-space-1);
+        scroll-padding-block: var(--wt-space-1);
+        max-height: min(60vh, calc(var(--wt-dropdown-row-height) * 6));
         overflow-y: auto;
+      }
+
+      .list:focus-visible {
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
+      .group-heading {
+        padding: var(--wt-space-2) var(--wt-space-3) var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .option {
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
+        min-height: var(--wt-dropdown-row-height);
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
         cursor: pointer;
       }
 
+      .option-label {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .option[aria-selected="true"] .option-label {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .icon,
+      .tick {
+        flex: none;
+      }
+
       /* --wt-color-bg, not --wt-color-surface-raised: raised equals the panel's own surface in the
-         light theme, so it would be invisible. --wt-color-bg is the tone the search box already
-         sits on, distinct in both themes. Hover adds background; .active adds an outline — the two
-         compose. */
+         light theme, so it would be invisible. Hover adds background; .active adds an outline — the
+         two compose. */
       .option:hover {
         background: var(--wt-color-bg);
       }
@@ -158,12 +198,7 @@ export class WtCombobox extends LitElement {
       }
 
       .add {
-        padding: var(--wt-space-2) var(--wt-space-3);
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .trigger[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
       }
 
       .required,
@@ -178,6 +213,10 @@ export class WtCombobox extends LitElement {
       .error {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
+      }
+
+      .hint {
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -204,14 +243,22 @@ export class WtCombobox extends LitElement {
     `${count} selected`;
   @property({ type: Boolean, reflect: true, attribute: "allow-add" }) allowAdd = false;
   @property({ attribute: false }) addLabel: (text: string) => string = (text) => `Add '${text}'`;
+  /** Whether the open list has a search box: always, only above `SEARCH_THRESHOLD` options, or
+   * never. `allow-add` shows it whatever this says, because the new option is typed into it. */
+  @property() search: "always" | "auto" | "never" = "always";
+  /** Shown as the placeholder unless one is given, and kept as the trigger's description because a
+   * placeholder disappears once something is chosen. */
+  @property() hint = "";
+  /** Names the trigger by `label` without drawing it, and makes the field compact. */
+  @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
 
   @state() private expanded = false;
-  @state() private search = "";
+  @state() private searchText = "";
   @state() private activeIndex = -1;
 
   @query(".trigger") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
-  @query(".search") private searchInput!: HTMLInputElement;
+  @query(".search") private searchInput!: HTMLInputElement | null;
 
   // An unnamed combobox has no semantic id to give its trigger, so the label's `for` points at a
   // generated one instead.
@@ -219,15 +266,21 @@ export class WtCombobox extends LitElement {
   private readonly labelId = uniqueId("wt-combobox-label");
   private readonly listboxId = uniqueId("wt-combobox-listbox");
   private readonly errorId = uniqueId("wt-combobox-error");
+  private readonly hintId = uniqueId("wt-combobox-hint");
+
+  private get hasSearchBox(): boolean {
+    if (this.allowAdd || this.search === "always") return true;
+    return this.search === "auto" && this.options.length > SEARCH_THRESHOLD;
+  }
 
   private get filteredOptions(): ComboboxOption[] {
-    const query = this.search.trim().toLowerCase();
+    const query = this.searchText.trim().toLowerCase();
     if (!query) return this.options;
     return this.options.filter((option) => option.label.toLowerCase().includes(query));
   }
 
   private get trimmedSearch(): string {
-    return this.search.trim();
+    return this.searchText.trim();
   }
 
   /** The add row offers only what no existing option already is, matched on the whole label. */
@@ -242,8 +295,9 @@ export class WtCombobox extends LitElement {
     return this.filteredOptions.length + (this.showAddRow ? 1 : 0);
   }
 
-  private isSelected(optionValue: string): boolean {
-    return this.multiple ? this.values.includes(optionValue) : this.value === optionValue;
+  private isSelected(option: ComboboxOption): boolean {
+    if (option.action) return false;
+    return this.multiple ? this.values.includes(option.value) : this.value === option.value;
   }
 
   /** The closed-state trigger text: the chosen label, or a count once more than one is chosen. */
@@ -292,13 +346,33 @@ export class WtCombobox extends LitElement {
     if (!this.multiple) this.closeAndReturnFocus();
   }
 
+  /** An action row is a command, not a choice: it announces itself and leaves the value alone. */
+  // Guarded for the same reason as commitSelection.
+  private runAction(optionValue: string, sourceEvent: Event): void {
+    if (this.disabled) return;
+    sourceEvent.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("wt-combobox-action", {
+        detail: { value: optionValue },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.closeAndReturnFocus();
+  }
+
+  private activateOption(option: ComboboxOption, sourceEvent: Event): void {
+    if (option.action) this.runAction(option.value, sourceEvent);
+    else this.commitSelection(option.value, sourceEvent);
+  }
+
   private closeAndReturnFocus(): void {
     if (this.popup.matches(":popover-open")) this.popup.hidePopover();
     this.trigger.focus();
   }
 
   private onSearchInput(event: Event): void {
-    this.search = (event.target as HTMLInputElement).value;
+    this.searchText = (event.target as HTMLInputElement).value;
     this.activeIndex = this.rowCount > 0 ? 0 : -1;
   }
 
@@ -354,13 +428,13 @@ export class WtCombobox extends LitElement {
     if (this.popup.matches(":popover-open")) {
       this.popup.hidePopover();
     } else {
-      this.search = "";
+      this.searchText = "";
       // No row is active until the user navigates, so a reopened panel neither announces a stale
       // row through aria-activedescendant nor makes the first arrow press skip the first option.
       this.activeIndex = -1;
       // Opening synchronously makes its dimensions available before the first paint.
       this.popup.showPopover();
-      this.searchInput.focus();
+      this.searchInput?.focus();
       // Clearing the search changes the rows, so measure the re-rendered list. The await resolves on
       // a microtask, still ahead of the frame this click paints.
       await this.updateComplete;
@@ -390,6 +464,13 @@ export class WtCombobox extends LitElement {
     }
   }
 
+  /** Focus taken on mousedown floats a resting label out from under the pointer, so the mouseup
+   * lands on the trigger and the browser sends no click at all. The click on the label opens the
+   * list, and that moves focus. */
+  private onLabelMousedown(event: MouseEvent): void {
+    event.preventDefault();
+  }
+
   private onToggle(event: ToggleEvent): void {
     this.expanded = event.newState === "open";
   }
@@ -403,85 +484,162 @@ export class WtCombobox extends LitElement {
     this.trigger.focus();
   }
 
+  private renderOption(option: ComboboxOption, index: number) {
+    const selected = this.isSelected(option);
+    return html`
+      <li
+        id=${`${this.listboxId}-${index}`}
+        class=${index === this.activeIndex ? "option active" : "option"}
+        role="option"
+        aria-selected=${selected}
+        @click=${(event: MouseEvent) => {
+          this.activeIndex = index;
+          this.activateOption(option, event);
+        }}
+      >
+        ${
+          this.multiple && !option.action
+            ? html`<span class=${selected ? "check checked" : "check"} aria-hidden="true"></span>`
+            : nothing
+        }
+        ${
+          option.icon
+            ? html`<wt-icon class="icon" name=${option.icon} aria-hidden="true"></wt-icon>`
+            : nothing
+        }
+        <span class="option-label">${option.label}</span>
+        ${
+          selected && !this.multiple
+            ? html`<wt-icon class="tick" name="check" aria-hidden="true"></wt-icon>`
+            : nothing
+        }
+      </li>
+    `;
+  }
+
+  /** Consecutive options sharing a `group` go inside one `role="group"` named by its heading. Row
+   * ids and `activeIndex` count options only, so a heading is never a row. */
+  private renderRows() {
+    const options = this.filteredOptions;
+    const rows = [];
+    let index = 0;
+    while (index < options.length) {
+      const group = options[index]!.group;
+      if (!group) {
+        rows.push(this.renderOption(options[index]!, index));
+        index += 1;
+        continue;
+      }
+      const first = index;
+      while (index < options.length && options[index]!.group === group) index += 1;
+      const headingId = `${this.listboxId}-group-${first}`;
+      rows.push(html`
+        <li role="presentation">
+          <div role="group" aria-labelledby=${headingId}>
+            <div id=${headingId} class="group-heading">${group}</div>
+            <ul class="group-rows" role="none">
+              ${options.slice(first, index).map((option, offset) => this.renderOption(option, first + offset))}
+            </ul>
+          </div>
+        </li>
+      `);
+    }
+    return rows;
+  }
+
   override render() {
     const triggerId = this.name || this.generatedTriggerId;
+    const hasError = this.error !== "";
+    const hasHint = this.hint !== "";
+    const invalid = this.invalid || hasError;
+    const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
+    const showLabel = this.label !== "" && !this.hideLabel;
+    const selectedText = this.selectedText;
+    const shownText = selectedText || this.placeholder || this.hint;
+    const triggerName = this.hideLabel && this.label ? this.label : !this.label && this.ariaLabel;
     return html`
-      ${
-        this.label
-          ? html`<div class="label-row">
-              <label id=${this.labelId} for=${triggerId}
-                >${this.label}${
-                  this.required
-                    ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                    : nothing
-                }</label
-              >
-            </div>`
-          : nothing
-      }
-      <button
-        type="button"
-        id=${triggerId}
-        name=${this.name || nothing}
-        class="trigger"
-        aria-haspopup="listbox"
-        aria-expanded=${this.expanded}
-        aria-labelledby=${this.label ? this.labelId : nothing}
-        aria-label=${!this.label && this.ariaLabel ? this.ariaLabel : nothing}
-        aria-invalid=${this.invalid || this.error !== ""}
-        aria-describedby=${this.error !== "" ? this.errorId : nothing}
-        popovertarget="panel"
-        ?disabled=${this.disabled}
-        @click=${this.onTriggerClick}
-        @keydown=${this.onKeydown}
-      >
-        <span class=${this.selectedText ? "value" : "value placeholder"}>
-          ${this.selectedText || this.placeholder}
-        </span>
-        <wt-icon class="chevron" name="chevron-down"></wt-icon>
-      </button>
-      <div id="panel" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
-        <input
-          class="search"
-          type="text"
-          role="combobox"
-          aria-expanded="true"
-          aria-required=${this.required}
-          placeholder=${this.searchPlaceholder}
-          aria-label=${this.label || this.ariaLabel || this.searchPlaceholder}
-          aria-controls=${this.listboxId}
-          aria-activedescendant=${
-            this.activeIndex >= 0 ? `${this.listboxId}-${this.activeIndex}` : nothing
+      <div class="row">
+        <div
+          class="field"
+          part="field"
+          data-label=${fieldLabelState({
+            value: selectedText,
+            hint: this.hint,
+            placeholder: this.placeholder,
+          })}
+          ?data-invalid=${invalid}
+          ?data-disabled=${this.disabled}
+          ?data-compact=${!showLabel}
+          ?data-open=${this.expanded}
+        >
+          ${
+            showLabel
+              ? html`<label
+                  class="field-label"
+                  id=${this.labelId}
+                  for=${triggerId}
+                  @mousedown=${this.onLabelMousedown}
+                  ><span class="field-label-text">${this.label}</span>${
+                    this.required
+                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
+                      : nothing
+                  }</label
+                >`
+              : nothing
           }
-          .value=${this.search}
-          @input=${this.onSearchInput}
-          @keydown=${this.onSearchKeydown}
-        />
-        <ul id=${this.listboxId} class="list" role="listbox" aria-multiselectable=${this.multiple}>
-          ${this.filteredOptions.map(
-            (option, index) => html`
-              <li
-                id=${`${this.listboxId}-${index}`}
-                class=${index === this.activeIndex ? "option active" : "option"}
-                role="option"
-                aria-selected=${this.isSelected(option.value)}
-                @click=${(event: MouseEvent) => {
-                  this.activeIndex = index;
-                  this.commitSelection(option.value, event);
-                }}
-              >
-                ${
-                  this.multiple
-                    ? html`<span
-                        class=${this.isSelected(option.value) ? "check checked" : "check"}
-                        aria-hidden="true"
-                      ></span>`
-                    : nothing
-                }
-                <span>${option.label}</span>
-              </li>
-            `,
-          )}
+          <button
+            type="button"
+            id=${triggerId}
+            name=${this.name || nothing}
+            class="field-control trigger"
+            aria-haspopup="listbox"
+            aria-expanded=${this.expanded}
+            aria-labelledby=${showLabel ? this.labelId : nothing}
+            aria-label=${triggerName || nothing}
+            aria-invalid=${invalid}
+            aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+            popovertarget="panel"
+            ?disabled=${this.disabled}
+            @click=${this.onTriggerClick}
+            @keydown=${this.onKeydown}
+          >
+            <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
+            <wt-icon class="chevron" name="chevron-down"></wt-icon>
+          </button>
+        </div>
+        <slot name="help"></slot>
+      </div>
+      <div id="panel" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
+        ${
+          this.hasSearchBox
+            ? html`<div class="search-area">
+                <input
+                  class="search"
+                  type="text"
+                  role="combobox"
+                  aria-expanded="true"
+                  aria-required=${this.required}
+                  placeholder=${this.searchPlaceholder}
+                  aria-label=${this.label || this.ariaLabel || this.searchPlaceholder}
+                  aria-controls=${this.listboxId}
+                  aria-activedescendant=${
+                    this.activeIndex >= 0 ? `${this.listboxId}-${this.activeIndex}` : nothing
+                  }
+                  .value=${this.searchText}
+                  @input=${this.onSearchInput}
+                  @keydown=${this.onSearchKeydown}
+                />
+              </div>`
+            : nothing
+        }
+        <ul
+          id=${this.listboxId}
+          class="list"
+          role="listbox"
+          aria-label=${this.label || this.ariaLabel || nothing}
+          aria-multiselectable=${this.multiple}
+        >
+          ${this.renderRows()}
           ${
             this.showAddRow
               ? html`
@@ -513,11 +671,8 @@ export class WtCombobox extends LitElement {
             : nothing
         }
       </div>
-      ${
-        this.error !== ""
-          ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>`
-          : nothing
-      }
+      ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
+      ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;
   }
 }

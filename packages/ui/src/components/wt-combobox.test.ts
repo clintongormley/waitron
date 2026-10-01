@@ -2,7 +2,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-combobox.js";
-import type { WtCombobox } from "./wt-combobox.js";
+import { SEARCH_THRESHOLD, type ComboboxOption, type WtCombobox } from "./wt-combobox.js";
+import { registerIcons } from "./wt-icon.js";
 
 afterEach(cleanup);
 
@@ -95,11 +96,15 @@ test("does not open when disabled", async () => {
 });
 
 test("meets the tap target and paints from the theme tokens", async () => {
-  const { trigger } = await mountCombobox();
+  const { el, trigger } = await mountCombobox();
   host.style.setProperty("--wt-tap-min", "52px");
-  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-fill", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-line", "rgb(4, 5, 6)");
   expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
-  expect(getComputedStyle(trigger).borderColor).toBe("rgb(1, 2, 3)");
+  const field = el.shadowRoot!.querySelector(".field")!;
+  expect(getComputedStyle(field).backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(4, 5, 6) 0px -1px 0px 0px inset");
+  expect(getComputedStyle(trigger).borderStyle).toBe("none");
 });
 
 const TAGS = [
@@ -502,17 +507,28 @@ test("wires the invalid property to aria-invalid independently of error text", a
   expect(el.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid")).toBe("true");
 });
 
-test("invalid state paints the trigger border from the danger token", async () => {
-  const el = await mount("<wt-combobox invalid></wt-combobox>");
+test("invalid state paints the bottom line and the label from the danger token", async () => {
+  const el = await mount('<wt-combobox label="Dietary tags" invalid></wt-combobox>');
   host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
-  const trigger = el.shadowRoot!.querySelector(".trigger")!;
-  expect(getComputedStyle(trigger).borderColor).toBe("rgb(13, 14, 15)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const field = el.shadowRoot!.querySelector(".field")!;
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("label")!).color).toBe("rgb(13, 14, 15)");
 });
 
-test("disabled trigger dims via the disabled-opacity token", async () => {
-  const el = await mount("<wt-combobox disabled></wt-combobox>");
+test("a disabled trigger paints the paler fill, a dashed line and muted text, at full opacity", async () => {
+  const el = await mount('<wt-combobox label="Dietary tags" disabled></wt-combobox>');
   host.style.setProperty("--wt-opacity-disabled", "0.3");
-  expect(getComputedStyle(el.shadowRoot!.querySelector(".trigger")!).opacity).toBe("0.3");
+  host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  const field = el.shadowRoot!.querySelector(".field")!;
+  const trigger = el.shadowRoot!.querySelector(".trigger")!;
+  expect(field.hasAttribute("data-disabled")).toBe(true);
+  expect(getComputedStyle(field).backgroundColor).toBe("rgb(21, 22, 23)");
+  expect(getComputedStyle(field, "::after").borderBottomStyle).toBe("dashed");
+  expect(getComputedStyle(trigger).color).toBe("rgb(24, 25, 26)");
+  expect(getComputedStyle(trigger).opacity).toBe("1");
+  expect(getComputedStyle(trigger).cursor).toBe("not-allowed");
 });
 
 async function mountWithManyOptions(count = 20) {
@@ -616,7 +632,8 @@ test("the popup stays inside the bottom gutter once its width matches the trigge
   }));
   el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 100}px; width: 150px`;
   await el.updateComplete;
-  await userEvent.click(trigger);
+  // At this width the resting label covers the trigger's middle; see the narrow-label case below.
+  await userEvent.click(trigger, { force: true });
   await new Promise(requestAnimationFrame);
   expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
 });
@@ -1056,4 +1073,560 @@ test("a panel whose trigger overhangs the left edge starts at the viewport edge"
   const box = popup.getBoundingClientRect();
   expect(box.width).toBeCloseTo(240, 0);
   expect(box.left).toBeCloseTo(0, 0);
+});
+
+// The filled field box, the list panel, and what a native select needs (A178).
+
+registerIcons({
+  check: "M2 8 L6 12 L14 4",
+  "chevron-down": "M3 6 L8 11 L13 6",
+  leaf: "M2 14 L14 2",
+});
+
+function fieldParts(el: WtCombobox) {
+  const root = el.shadowRoot!;
+  return {
+    field: root.querySelector<HTMLElement>(".field")!,
+    label: root.querySelector<HTMLLabelElement>("label"),
+    trigger: root.querySelector<HTMLButtonElement>(".trigger")!,
+    value: root.querySelector<HTMLElement>(".value")!,
+    chevron: root.querySelector<HTMLElement>(".chevron")!,
+    popup: root.querySelector<HTMLElement>("[popover]")!,
+  };
+}
+
+async function mountWith(html: string, options: ComboboxOption[] = TAGS) {
+  const el = (await mount(html)) as WtCombobox;
+  el.options = options;
+  await el.updateComplete;
+  return el;
+}
+
+function optionRows(el: WtCombobox): HTMLElement[] {
+  return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+}
+
+test("the trigger is the control of a filled field box, with the label resting while nothing is chosen", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  host.style.setProperty("--wt-field-height", "70px");
+  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  const { field, label, trigger } = fieldParts(el);
+  expect(field.getAttribute("part")).toBe("field");
+  expect(field.contains(trigger)).toBe(true);
+  expect(field.contains(label)).toBe(true);
+  expect(trigger.classList.contains("field-control")).toBe(true);
+  expect(field.getAttribute("data-label")).toBe("rest");
+  expect(field.hasAttribute("data-compact")).toBe(false);
+  expect(field.getBoundingClientRect().height).toBe(70);
+  expect(getComputedStyle(label!).fontSize).toBe("17px");
+  const fieldBox = field.getBoundingClientRect();
+  const triggerBox = trigger.getBoundingClientRect();
+  expect(triggerBox.width).toBe(fieldBox.width);
+  expect(triggerBox.height).toBe(fieldBox.height);
+});
+
+for (const [what, attrs] of [
+  ["a chosen value", 'value="vegan"'],
+  ["a hint", 'hint="Pick the main one"'],
+  ["a placeholder", 'placeholder="Choose a tag"'],
+] as const) {
+  test(`with ${what}, the trigger's label floats small at the top`, async () => {
+    const el = await mountWith(`<wt-combobox label="Dietary tags" ${attrs}></wt-combobox>`);
+    host.style.setProperty("--wt-font-size-sm", "11px");
+    const { field, label } = fieldParts(el);
+    expect(field.getAttribute("data-label")).toBe("float");
+    expect(getComputedStyle(label!).fontSize).toBe("11px");
+    expect(label!.getBoundingClientRect().top).toBeLessThan(
+      field.getBoundingClientRect().top + field.getBoundingClientRect().height / 2,
+    );
+  });
+}
+
+test("a value chosen in the list, or set from code after the first render, floats the label", async () => {
+  const picked = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  await userEvent.click(fieldParts(picked).trigger);
+  await userEvent.click(optionRows(picked)[1]!);
+  expect(fieldParts(picked).field.getAttribute("data-label")).toBe("float");
+
+  const coded = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  expect(fieldParts(coded).field.getAttribute("data-label")).toBe("rest");
+  coded.value = "vegan";
+  await coded.updateComplete;
+  expect(fieldParts(coded).field.getAttribute("data-label")).toBe("float");
+});
+
+test("a value naming no option leaves the label resting", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" value="halal"></wt-combobox>');
+  expect(fieldParts(el).field.getAttribute("data-label")).toBe("rest");
+});
+
+test("the chevron sits inside the field box, at least --wt-space-3 from its trailing edge", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" value="vegan"></wt-combobox>');
+  host.style.setProperty("--wt-space-3", "13px");
+  const { field, chevron, trigger } = fieldParts(el);
+  expect(trigger.contains(chevron)).toBe(true);
+  const fieldBox = field.getBoundingClientRect();
+  const chevronBox = chevron.getBoundingClientRect();
+  expect(chevronBox.width).toBeGreaterThan(0);
+  expect(fieldBox.right - chevronBox.right).toBeGreaterThanOrEqual(13);
+  expect(chevronBox.left).toBeGreaterThan(fieldBox.left + fieldBox.width / 2);
+  expect(chevronBox.top).toBeGreaterThanOrEqual(fieldBox.top);
+  expect(chevronBox.bottom).toBeLessThanOrEqual(fieldBox.bottom);
+});
+
+test("focusing the closed trigger draws the focus line and label colour, and no focus ring of its own", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label, trigger } = fieldParts(el);
+  el.focus();
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label!).color).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(trigger).outlineStyle).toBe("none");
+});
+
+test("opening sets data-open, and the field box drops its focus marking while the list is open", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(8, 8, 8)");
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  const { field, label, trigger, popup } = fieldParts(el);
+  expect(field.hasAttribute("data-open")).toBe(false);
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(field.hasAttribute("data-open")).toBe(true));
+  // Focus back on the trigger with the list still open is the one state where the field box holds
+  // focus while open, so it is what tells data-open's override apart from plain focus-within.
+  trigger.focus();
+  expect(popup.matches(":popover-open")).toBe(true);
+  expect(field.matches(":focus-within")).toBe(true);
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(7, 7, 7) 0px -1px 0px 0px inset");
+  expect(getComputedStyle(label!).color).toBe("rgb(8, 8, 8)");
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(field.hasAttribute("data-open")).toBe(false));
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -2px 0px 0px inset");
+});
+
+test("an error marks the field box invalid as the invalid property does", async () => {
+  const withError = await mountWith(
+    '<wt-combobox label="Dietary tags" error="Choose one"></wt-combobox>',
+  );
+  const plain = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  expect(fieldParts(withError).field.hasAttribute("data-invalid")).toBe(true);
+  expect(fieldParts(plain).field.hasAttribute("data-invalid")).toBe(false);
+});
+
+test("a focused invalid trigger keeps the danger line and label", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" invalid></wt-combobox>');
+  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  el.focus();
+  const { field, label } = fieldParts(el);
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label!).color).toBe("rgb(13, 14, 15)");
+});
+
+test("the chosen label paints from the field-value token, and the placeholder muted and italic", async () => {
+  const chosen = await mountWith('<wt-combobox label="Dietary tags" value="vegan"></wt-combobox>');
+  host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
+  expect(getComputedStyle(fieldParts(chosen).value).color).toBe("rgb(31, 32, 33)");
+  expect(getComputedStyle(fieldParts(chosen).value).fontStyle).toBe("normal");
+
+  const empty = await mountWith(
+    '<wt-combobox label="Dietary tags" placeholder="Choose a tag"></wt-combobox>',
+  );
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(fieldParts(empty).value).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(fieldParts(empty).value).fontStyle).toBe("italic");
+});
+
+test("each row is the dropdown row height tall, and a hovered row paints the page background", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  host.style.setProperty("--wt-dropdown-row-height", "53px");
+  host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
+  await userEvent.click(fieldParts(el).trigger);
+  const rows = optionRows(el);
+  expect(rows.map((row) => row.getBoundingClientRect().height)).toEqual([53, 53, 53]);
+  await userEvent.hover(rows[2]!);
+  expect(getComputedStyle(rows[2]!).backgroundColor).toBe("rgb(4, 5, 6)");
+});
+
+test("the chosen row's label is bold with a tick at its trailing end, and no other row has either", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" value="vegan"></wt-combobox>');
+  host.style.setProperty("--wt-font-weight-bold", "800");
+  host.style.setProperty("--wt-space-3", "13px");
+  await userEvent.click(fieldParts(el).trigger);
+  const rows = optionRows(el);
+  const labelOf = (row: HTMLElement) => row.querySelector<HTMLElement>(".option-label")!;
+  expect(rows.map((row) => getComputedStyle(labelOf(row)).fontWeight)).toEqual([
+    "400",
+    "800",
+    "400",
+  ]);
+  expect(rows.map((row) => row.querySelectorAll('wt-icon[name="check"]').length)).toEqual([
+    0, 1, 0,
+  ]);
+  const tick = rows[1]!.querySelector<HTMLElement>('wt-icon[name="check"]')!;
+  expect(tick.getAttribute("aria-hidden")).toBe("true");
+  expect(rows[1]!.lastElementChild).toBe(tick);
+  expect(rows[1]!.getBoundingClientRect().right - tick.getBoundingClientRect().right).toBeCloseTo(
+    13,
+    0,
+  );
+});
+
+test("the search box is outlined in the primary colour on the surface, and its area carries the first shadow", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  host.style.setProperty("--wt-color-surface", "rgb(1, 1, 1)");
+  host.style.setProperty("--wt-color-primary", "rgb(2, 2, 2)");
+  host.style.setProperty("--wt-field-line-width", "3px");
+  host.style.setProperty("--wt-radius-md", "7px");
+  host.style.setProperty("--wt-shadow-1", "rgb(3, 3, 3) 0px 2px 0px 0px");
+  await userEvent.click(fieldParts(el).trigger);
+  const search = searchBox(el);
+  const style = getComputedStyle(search);
+  expect(style.backgroundColor).toBe("rgb(1, 1, 1)");
+  for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
+    expect(style[`border${side}Color`]).toBe("rgb(2, 2, 2)");
+    expect(style[`border${side}Style`]).toBe("solid");
+    expect(style[`border${side}Width`]).toBe("3px");
+  }
+  expect(style.borderTopLeftRadius).toBe("7px");
+  expect(style.borderBottomRightRadius).toBe("7px");
+  const area = el.shadowRoot!.querySelector<HTMLElement>(".search-area")!;
+  expect(area.contains(search)).toBe(true);
+  expect(getComputedStyle(area).boxShadow).toBe("rgb(3, 3, 3) 0px 2px 0px 0px");
+});
+
+function manyOptions(count: number): ComboboxOption[] {
+  return Array.from({ length: count }, (_, index) => ({
+    value: String(index),
+    label: `Option ${index}`,
+  }));
+}
+
+test("the search box shows by default whatever the number of options", async () => {
+  const el = await mountWith('<wt-combobox label="Paper"></wt-combobox>', manyOptions(2));
+  expect(el.search).toBe("always");
+  expect(el.shadowRoot!.querySelector(".search")).not.toBeNull();
+});
+
+test(`search="auto" shows the search box only above ${SEARCH_THRESHOLD} options`, async () => {
+  expect(SEARCH_THRESHOLD).toBe(7);
+  const seven = await mountWith(
+    '<wt-combobox label="Paper" search="auto"></wt-combobox>',
+    manyOptions(7),
+  );
+  expect(seven.shadowRoot!.querySelector(".search")).toBeNull();
+  const eight = await mountWith(
+    '<wt-combobox label="Paper" search="auto"></wt-combobox>',
+    manyOptions(8),
+  );
+  expect(eight.shadowRoot!.querySelector(".search")).not.toBeNull();
+});
+
+test('search="never" shows no search box, even with many options or for a multiple choice', async () => {
+  const many = await mountWith(
+    '<wt-combobox label="Paper" search="never"></wt-combobox>',
+    manyOptions(20),
+  );
+  expect(many.shadowRoot!.querySelector(".search")).toBeNull();
+  const multiple = await mountWith(
+    '<wt-combobox label="Paper" search="never" multiple></wt-combobox>',
+    manyOptions(20),
+  );
+  expect(multiple.shadowRoot!.querySelector(".search")).toBeNull();
+});
+
+test('allow-add shows the search box even with search="never"', async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Paper" search="never" allow-add></wt-combobox>',
+    manyOptions(2),
+  );
+  expect(el.shadowRoot!.querySelector(".search")).not.toBeNull();
+});
+
+test("a list without a search box still opens and picks a clicked row", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" search="never"></wt-combobox>');
+  const { trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+  await userEvent.click(optionRows(el)[2]!);
+  expect(el.value).toBe("vegetarian");
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("an option's icon is drawn before its label and hidden from screen readers", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>', [
+    { value: "vegan", label: "Vegan", icon: "leaf" },
+    { value: "halal", label: "Halal" },
+  ]);
+  await userEvent.click(fieldParts(el).trigger);
+  const [withIcon, without] = optionRows(el);
+  const icon = withIcon!.querySelector<HTMLElement>('wt-icon[name="leaf"]')!;
+  expect(icon.getAttribute("aria-hidden")).toBe("true");
+  const label = withIcon!.querySelector<HTMLElement>(".option-label")!;
+  expect(icon.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(icon.getBoundingClientRect().right).toBeLessThanOrEqual(
+    label.getBoundingClientRect().left,
+  );
+  expect(without!.querySelector("wt-icon")).toBeNull();
+  expect(withIcon!.textContent!.trim()).toBe("Vegan");
+});
+
+const GROUPED: ComboboxOption[] = [
+  { value: "ana", label: "Ana", group: "Staff" },
+  { value: "luis", label: "Luis", group: "Staff" },
+  { value: "bar", label: "Bar", group: "Stations" },
+  { value: "grill", label: "Grill", group: "Stations" },
+];
+
+test("options sharing a group render under one heading, inside a group the heading names", async () => {
+  const el = await mountWith('<wt-combobox label="Members"></wt-combobox>', GROUPED);
+  await userEvent.click(fieldParts(el).trigger);
+  const groups = [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="group"]')];
+  expect(groups).toHaveLength(2);
+  const listbox = el.shadowRoot!.querySelector('[role="listbox"]')!;
+  for (const [index, name] of ["Staff", "Stations"].entries()) {
+    const group = groups[index]!;
+    expect(listbox.contains(group)).toBe(true);
+    const heading = el.shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!;
+    expect(heading.textContent!.trim()).toBe(name);
+    expect(heading.getAttribute("role")).not.toBe("option");
+    expect(heading.closest('[role="option"]')).toBeNull();
+  }
+  expect(
+    groups.map((group) =>
+      [...group.querySelectorAll('[role="option"]')].map((row) => row.textContent!.trim()),
+    ),
+  ).toEqual([
+    ["Ana", "Luis"],
+    ["Bar", "Grill"],
+  ]);
+});
+
+test("ungrouped options render without a group", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  await userEvent.click(fieldParts(el).trigger);
+  expect(el.shadowRoot!.querySelector('[role="group"]')).toBeNull();
+});
+
+test("a group split by an ungrouped option starts a new heading when it resumes", async () => {
+  const el = await mountWith('<wt-combobox label="Members"></wt-combobox>', [
+    { value: "ana", label: "Ana", group: "Staff" },
+    { value: "none", label: "Nobody" },
+    { value: "luis", label: "Luis", group: "Staff" },
+  ]);
+  await userEvent.click(fieldParts(el).trigger);
+  const groups = [...el.shadowRoot!.querySelectorAll('[role="group"]')];
+  expect(groups.map((group) => group.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+    "Staff Ana",
+    "Staff Luis",
+  ]);
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Ana", "Nobody", "Luis"]);
+});
+
+const WITH_ACTION: ComboboxOption[] = [
+  { value: "kg", label: "Kilogram" },
+  { value: "add-unit", label: "Add unit…", action: true },
+];
+
+test("clicking an action row announces it, closes the list, and never changes the value", async () => {
+  const el = await mountWith('<wt-combobox label="Unit" value="kg"></wt-combobox>', WITH_ACTION);
+  const changed = vi.fn();
+  const actions: string[] = [];
+  el.addEventListener("wt-change", changed);
+  el.addEventListener("wt-combobox-action", (event) =>
+    actions.push((event as CustomEvent<{ value: string }>).detail.value),
+  );
+  const { trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  const row = optionRows(el)[1]!;
+  expect(row.getAttribute("aria-selected")).toBe("false");
+  await userEvent.click(row);
+  expect(actions).toEqual(["add-unit"]);
+  expect(el.value).toBe("kg");
+  expect(changed).not.toHaveBeenCalled();
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("an action row is never shown as chosen, even when the value matches it", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Unit" value="add-unit"></wt-combobox>',
+    WITH_ACTION,
+  );
+  await userEvent.click(fieldParts(el).trigger);
+  expect(optionRows(el).map((row) => row.getAttribute("aria-selected"))).toEqual([
+    "false",
+    "false",
+  ]);
+  expect(el.shadowRoot!.querySelector('wt-icon[name="check"]')).toBeNull();
+});
+
+test("wt-combobox-action bubbles out of shadow roots, and its click stops at the component", async () => {
+  const el = (await mountInShadowRoot('<wt-combobox label="Unit"></wt-combobox>')) as WtCombobox;
+  el.options = WITH_ACTION;
+  await el.updateComplete;
+  let received: CustomEvent<{ value: string }> | undefined;
+  const listener = (event: Event) => (received = event as CustomEvent<{ value: string }>);
+  document.addEventListener("wt-combobox-action", listener, { once: true });
+  const pageClicks = vi.fn();
+  document.addEventListener("click", pageClicks);
+  try {
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+    await el.updateComplete;
+    pageClicks.mockClear();
+    optionRows(el)[1]!.click();
+  } finally {
+    document.removeEventListener("click", pageClicks);
+  }
+  expect(received?.detail).toEqual({ value: "add-unit" });
+  expect(received?.bubbles).toBe(true);
+  expect(received?.composed).toBe(true);
+  expect(pageClicks).not.toHaveBeenCalled();
+});
+
+test("a disabled combobox refuses an action row", async () => {
+  const el = await mountWith('<wt-combobox label="Unit"></wt-combobox>', WITH_ACTION);
+  const actions = vi.fn();
+  el.addEventListener("wt-combobox-action", actions);
+  el.disabled = true;
+  await el.updateComplete;
+  optionRows(el)[1]!.click();
+  expect(actions).not.toHaveBeenCalled();
+});
+
+test("a hint describes the trigger through a hidden paragraph, before the error", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" hint="Pick the main one" error="Choose one"></wt-combobox>',
+  );
+  const { trigger } = fieldParts(el);
+  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(hint.textContent).toBe("Pick the main one");
+  expect(trigger.getAttribute("aria-describedby")).toBe(`${hint.id} ${error.id}`);
+  expect(hint.id).toMatch(/^wt-combobox-hint-\d+$/);
+  expect(hint.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+  expect(getComputedStyle(hint).position).toBe("absolute");
+});
+
+test("the hint shows as the trigger's placeholder while nothing is chosen, and a placeholder wins over it", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" hint="Pick the main one"></wt-combobox>',
+  );
+  const { value } = fieldParts(el);
+  expect(value.textContent!.trim()).toBe("Pick the main one");
+  expect(value.classList.contains("placeholder")).toBe(true);
+  el.value = "vegan";
+  await el.updateComplete;
+  expect(value.textContent!.trim()).toBe("Vegan");
+
+  const both = await mountWith(
+    '<wt-combobox label="Dietary tags" hint="Pick the main one" placeholder="Choose a tag"></wt-combobox>',
+  );
+  expect(fieldParts(both).value.textContent!.trim()).toBe("Choose a tag");
+});
+
+test("a combobox with no hint renders no hint paragraph", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
+});
+
+test("hide-label draws no label, names the trigger by its label, and makes the field compact", async () => {
+  const el = await mountWith('<wt-combobox label="Course" hide-label></wt-combobox>');
+  host.style.setProperty("--wt-tap-min", "47px");
+  const { field, trigger } = fieldParts(el);
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(trigger.getAttribute("aria-label")).toBe("Course");
+  expect(trigger.hasAttribute("aria-labelledby")).toBe(false);
+  expect(field.hasAttribute("data-compact")).toBe(true);
+  expect(field.getBoundingClientRect().height).toBe(47);
+  expect(trigger.getBoundingClientRect().height).toBe(47);
+});
+
+test("a combobox named only by aria-label is compact too", async () => {
+  const el = await mountWith('<wt-combobox aria-label="Course"></wt-combobox>');
+  host.style.setProperty("--wt-tap-min", "47px");
+  const { field } = fieldParts(el);
+  expect(field.hasAttribute("data-compact")).toBe(true);
+  expect(field.getBoundingClientRect().height).toBe(47);
+});
+
+test("places field help beside the field box, nesting it in neither the label nor the box", async () => {
+  const el = (await mount(
+    '<wt-combobox label="Dietary tags"><button slot="help">?</button></wt-combobox>',
+  )) as WtCombobox;
+  const { field, label } = fieldParts(el);
+  const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="help"]')!;
+  expect(label!.contains(slot)).toBe(false);
+  expect(field.contains(slot)).toBe(false);
+  expect(slot.assignedElements()[0]?.textContent).toBe("?");
+});
+
+test("field help sits outside the field box, at its trailing side and centred on it", async () => {
+  const el = (await mount(
+    '<wt-combobox label="Dietary tags"><button slot="help">?</button></wt-combobox>',
+  )) as WtCombobox;
+  const fieldBox = fieldParts(el).field.getBoundingClientRect();
+  const helpBox = el.querySelector("button")!.getBoundingClientRect();
+  expect(helpBox.left).toBeGreaterThanOrEqual(fieldBox.right);
+  expect(
+    Math.abs(helpBox.top + helpBox.height / 2 - (fieldBox.top + fieldBox.height / 2)),
+  ).toBeLessThanOrEqual(1);
+});
+
+test("a long chosen label at phone width is one line cut with an ellipsis, ending before the chevron", async () => {
+  const long =
+    "Menú del día con primer plato, segundo plato, postre, pan y bebida incluidos para la mesa "
+      .repeat(2)
+      .slice(0, 120);
+  expect(long).toHaveLength(120);
+  const el = await mountWith('<wt-combobox label="Menu" value="long"></wt-combobox>', [
+    { value: "long", label: long },
+  ]);
+  host.style.width = "390px";
+  const short = await mountWith('<wt-combobox label="Menu" value="short"></wt-combobox>', [
+    { value: "short", label: "Menú" },
+  ]);
+  host.style.width = "390px";
+  const { value, chevron, field } = fieldParts(el);
+  expect(value.textContent!.trim()).toBe(long);
+  expect(getComputedStyle(value).textOverflow).toBe("ellipsis");
+  expect(value.scrollWidth).toBeGreaterThan(value.clientWidth);
+  expect(value.getBoundingClientRect().height).toBe(
+    fieldParts(short).value.getBoundingClientRect().height,
+  );
+  expect(value.getBoundingClientRect().right).toBeLessThanOrEqual(
+    chevron.getBoundingClientRect().left,
+  );
+  expect(field.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+});
+
+test("a long label stops short of the chevron", async () => {
+  const el = await mountWith(
+    `<wt-combobox label="${"The kitchen station this product is sent to ".repeat(3)}" value="vegan"></wt-combobox>`,
+  );
+  host.style.width = "390px";
+  const { label, chevron } = fieldParts(el);
+  expect(label!.getBoundingClientRect().right).toBeLessThanOrEqual(
+    chevron.getBoundingClientRect().left,
+  );
+});
+
+test("a press on a narrow field's resting label, where it covers the trigger's middle, opens the list", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  el.style.cssText = "position: fixed; left: 20px; top: 40px; width: 150px";
+  await el.updateComplete;
+  const { trigger, label, popup, field } = fieldParts(el);
+  expect(field.getAttribute("data-label")).toBe("rest");
+  const box = trigger.getBoundingClientRect();
+  const atMiddle = el.shadowRoot!.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+  expect(label!.contains(atMiddle)).toBe(true);
+  // Forced only past Playwright's own check that nothing covers the trigger: the press still lands
+  // at the trigger's middle, on the label, which is the path under test.
+  await userEvent.click(trigger, { force: true });
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+  expect(popup.getBoundingClientRect().height).toBeGreaterThan(0);
 });
