@@ -329,6 +329,77 @@ it("falls back to Extras for an unknown tab without adding a history entry", asy
   expect(history.length).toBe(before);
 });
 
+describe("a path naming one list", () => {
+  it("opens the options list the path names in its editor, on the Options tab", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
+    const el = await mount();
+    await vi.waitFor(() => expect(optionForm(el).open).toBe(true));
+    expect(optionForm(el).value).toEqual(optionList);
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("options");
+    expect(extraForm(el).open).toBe(false);
+  });
+
+  it("opens the extras list the path names in its editor", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    const el = await mount();
+    await vi.waitFor(() => expect(extraForm(el).open).toBe(true));
+    expect(extraForm(el).value).toEqual(extraList);
+    expect(optionForm(el).open).toBe(false);
+  });
+
+  it("opens nothing for a list it does not hold, and drops it from the path without a history entry", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/options/list/gone");
+    const before = history.length;
+    const el = await mount();
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/modifiers/view/options"));
+    expect(optionForm(el).open).toBe(false);
+    expect(history.length).toBe(before);
+  });
+
+  it("drops the list from the path, without a history entry, when its editor closes", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
+    const before = history.length;
+    const el = await mount();
+    await vi.waitFor(() => expect(optionForm(el).open).toBe(true));
+    optionForm(el).dispatchEvent(new CustomEvent("wt-cancel", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(optionForm(el).open).toBe(false);
+    expect(location.pathname).toBe("/manage/modifiers/view/options");
+    expect(history.length).toBe(before);
+  });
+
+  it("drops the list from the path once its editor saves", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    const el = await mount();
+    await vi.waitFor(() => expect(extraForm(el).open).toBe(true));
+    extraForm(el).dispatchEvent(
+      new CustomEvent("wt-submit", {
+        detail: { value: { name: "Breads" } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(extraForm(el).open).toBe(false));
+    expect(location.pathname).toBe("/manage/modifiers/view/extras");
+  });
+
+  it("leaves the path alone when a row opens an editor", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/options");
+    const before = history.length;
+    const el = await mount();
+    const options = table(el, "option-lists");
+    await options.updateComplete;
+    const row = options.shadowRoot.querySelector<HTMLElement>('tbody tr[data-row-key="o1"]')!;
+    await userEvent.click(row.querySelector<HTMLElement>(".row-activate")!, {
+      position: { x: 2, y: 2 },
+    });
+    await el.updateComplete;
+    expect(optionForm(el).open).toBe(true);
+    expect(location.pathname).toBe("/manage/modifiers/view/options");
+    expect(history.length).toBe(before);
+  });
+});
+
 it("lists each kind in its own table", async () => {
   const el = await mount();
   expect(table(el, "extra-lists").rows).toEqual([extraList]);

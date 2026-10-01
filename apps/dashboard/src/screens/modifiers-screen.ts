@@ -94,7 +94,7 @@ export class ModifiersScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @state() private tab: Kind = "extras";
   /** An unknown tab falls back to Extras and replaces rather than pushes, so Back still leaves the
-   * screen. */
+   * screen. A `list` in the path opens that list's editor once the lists have loaded. */
   readonly #url = new UrlStateController(
     this,
     () => {
@@ -102,9 +102,12 @@ export class ModifiersScreen extends LitElement {
       const view = this.#url.read("view");
       this.tab = view === "options" ? "options" : "extras";
       if (view !== this.tab) this.#url.write({ view: this.tab }, true);
+      this.#linkedList = this.#url.read("list");
+      if (!this.loading) this.#openLinkedList();
     },
     dashboardPath,
   );
+  #linkedList: string | null = null;
   @state() private extraLists: ExtraListRow[] = [];
   @state() private optionLists: OptionListRow[] = [];
   @state() private products: Product[] = [];
@@ -164,6 +167,7 @@ export class ModifiersScreen extends LitElement {
         }),
       ]);
       await this.#loadProducts();
+      this.#openLinkedList();
     } catch {
       this.loadError = true;
     } finally {
@@ -184,6 +188,20 @@ export class ModifiersScreen extends LitElement {
         this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
       },
     );
+  }
+  /** An id the tab does not hold opens nothing, and leaves the path rather than sitting in it. */
+  #openLinkedList(): void {
+    const id = this.#linkedList;
+    if (id === null) return;
+    this.#linkedList = null;
+    const list = this.#lists(this.tab).find((each) => each.id === id);
+    if (list) this.#edit(this.tab, list);
+    else this.#url.write({ list: null }, true);
+  }
+  /** Replaces, so closing an editor a link opened adds no stop to Back. */
+  #closeEditor(): void {
+    this.editing = null;
+    if (this.#url.read("list") !== null) this.#url.write({ list: null }, true);
   }
   #lists(kind: Kind): ModifierList[] {
     return kind === "extras" ? this.extraLists : this.optionLists;
@@ -281,7 +299,7 @@ export class ModifiersScreen extends LitElement {
     }
     // The write succeeded, so the editor closes BEFORE the refresh: a failed refresh is a load
     // failure, not a failed save, and a retained create form invites a duplicate submission.
-    this.editing = null;
+    this.#closeEditor();
     this.busy = false;
     await this.#load();
   }
@@ -608,7 +626,7 @@ export class ModifiersScreen extends LitElement {
           void this.#save("extras", event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
-          if (!this.busy) this.editing = null;
+          if (!this.busy) this.#closeEditor();
         }}
       ></dashboard-extra-list-form>
       <dashboard-option-list-form
@@ -621,7 +639,7 @@ export class ModifiersScreen extends LitElement {
           void this.#save("options", event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
-          if (!this.busy) this.editing = null;
+          if (!this.busy) this.#closeEditor();
         }}
       ></dashboard-option-list-form>
       <wt-modal
