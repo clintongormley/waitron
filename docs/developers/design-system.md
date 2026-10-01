@@ -398,8 +398,8 @@ button, check it by hand — and `scripts/pinned-actions-column.test.ts`. In a t
 the cell does not (the pinned-click cases in `wt-data-table.test.ts`).
 
 Supply `rowParent` — a `(row) => string | null` returning the parent row's own key, or `null` for a
-top-level row — to switch the same table into tree mode, as the categories screen does for its
-hierarchy. A row whose declared parent key isn't present among the current rows floats to the top
+top-level row — to switch the same table into tree mode, as the Products screen does for its
+variants. A row whose declared parent key isn't present among the current rows floats to the top
 level rather than disappearing. Each row that has children gets its own expand/collapse toggle
 (`collapseLabel`/`expandLabel` give it a localized accessible name, or `rowToggleLabel` one naming its own row); collapsed state lives inside the
 component, not the caller. The table renders `role="treegrid"` with `aria-level`/`aria-expanded` on

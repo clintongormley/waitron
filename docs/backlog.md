@@ -194,7 +194,8 @@ Slice 3 needs slice 1. Slice 2 is independent of both. Several entries below are
 design, and each carries a dated note. **Slice 1 is in progress** on `feature/product-folders`,
 following the [approved plan](superpowers/plans/2026-09-30-product-folders-slice-1.md).
 The branch removes labels and category presentation fields and adds the bulk move/delete API;
-the folder-browser screen and final integration remain to be completed and reviewed.
+the folder browser, selection actions and native dragging are implemented and task-reviewed.
+Final Categories retirement, branch review and current-head CI remain before landing.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
@@ -5800,8 +5801,7 @@ ongoing overhaul listed at the top of Track A.
   no chooser: its one column beside the buttons holds the address, the machine id, the role and, on
   its own row, "this server" together, so there is nothing to offer unless that cell is split into
   separate columns — **DECIDED (owner, 2026-09-29): leave it**, unsplit and with no chooser; (3)
-  `apps/dashboard/src/widgets/category-manager.ts` renders a table that no screen mounts (only its
-  own tests do), and was left alone; (4) nothing checks that a NEW dashboard table offers the
+  the unused category-manager widget and its tests are removed by the product-folders slice; (4) nothing checks that a NEW dashboard table offers the
   chooser; (5) where a screen keeps its search and filters outside the table (staff, card readers)
   or the table has none (alerts, venue operations), the Columns button sits alone on a row above the
   table rather than beside those controls — seen in real Chromium at 1280 px; moving a screen's own
