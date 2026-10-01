@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
+import type { RoutingModel } from "@waitron/venue-service/routing";
 import { baseStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -98,6 +99,7 @@ export class CatalogueScreen extends LitElement {
   @state() private optionLists: OptionList[] = [];
   @state() private products: Product[] = [];
   @state() private madeAt: Record<string, MadeAt> = {};
+  @state() private routing: RoutingModel | null = null;
   @state() private courses: Course[] = [];
   @state() private selectedCatalogueId = "";
   @state() private editorOpen = false;
@@ -135,6 +137,13 @@ export class CatalogueScreen extends LitElement {
     () => this.api,
     (error) => {
       this.errorKey = codeOf(error);
+    },
+  );
+  readonly #routingQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.routing = null;
     },
   );
   // A re-read that fails after the step's first load keeps the menus it already shows.
@@ -188,6 +197,13 @@ export class CatalogueScreen extends LitElement {
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
+        this.#routingQueries
+          .watch("getFolderRouting", [], (value) => {
+            this.routing = value;
+          })
+          .catch(() => {
+            this.routing = null;
+          }),
         this.#queries.watch("listUnits", [], (value) => {
           this.units = value;
         }),
@@ -603,6 +619,7 @@ export class CatalogueScreen extends LitElement {
               }}
               .products=${this.products}
               .madeAt=${this.madeAt}
+              .routing=${this.routing}
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}

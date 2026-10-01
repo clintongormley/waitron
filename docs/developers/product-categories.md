@@ -16,6 +16,11 @@ it its own ancestor is refused with `category.parent_cycle`. A product's folder 
 `products.category_id`. When this is null, the product is Uncategorised, which is not a folder
 row you can rename or delete.
 
+A red asterisk beside a folder means no active kitchen routing rule covers the folder or its
+parent folders. Its tooltip explains the warning. Set a claim or an exception that covers the
+folder in every service zone on Prep Stations to route those dishes before they fall through to
+the default station.
+
 A variant reads its own reporting category when set, and its product's otherwise. You edit that
 choice in the product editor. In the browser, variants sit under their product and move with it;
 you cannot select or drag a variant on its own.

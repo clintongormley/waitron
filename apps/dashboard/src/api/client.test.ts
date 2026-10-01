@@ -58,6 +58,22 @@ describe("DashboardApi", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+  it("reads the current folder routing claims", async () => {
+    const routing = {
+      claims: [],
+      exceptions: [],
+      unassigned: { folders: [], products: [] },
+      defaultStationId: null,
+      stations: [],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(routing));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getFolderRouting()).toEqual(routing);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/routing", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
   it("uses the discovery, adoption and separate reader-management routes", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

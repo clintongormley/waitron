@@ -13,6 +13,7 @@ import type { ContentLanguageRules, ContentLanguages } from "@waitron/shared";
  * catalogue's type-only leaf files (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { TimingBand } from "@waitron/shared";
+import type { RoutingModel } from "@waitron/venue-service/routing";
 import {
   createRequest,
   LiveData,
@@ -1813,6 +1814,10 @@ export class DashboardApi {
 
   listMadeAt(): Promise<Record<string, MadeAt>> {
     return this.#request<Record<string, MadeAt>>("/management-api/products/made-at", "GET");
+  }
+
+  getFolderRouting(): Promise<RoutingModel> {
+    return this.#request<RoutingModel>("/management-api/venue-service/routing", "GET");
   }
 
   getProductEditor(id: string): Promise<ProductEditorValue> {

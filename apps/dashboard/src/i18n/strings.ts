@@ -24,6 +24,7 @@ export const en = {
   "folders.product_count_one": "1 product",
   "folders.routes_warning": "{count} kitchen routing rules name these folders and will be removed.",
   "folders.routes_warning_one": "1 kitchen routing rule names these folders and will be removed.",
+  "folders.no_routing_rule": "No kitchen routing rule covers this folder",
   "folders.summary_error":
     "What these folders hold could not be read, so they cannot be deleted yet.",
   "folders.all_products": "All products",
@@ -1965,6 +1966,7 @@ export const es: Record<StringKey, string> = {
   "folders.routes_warning":
     "{count} reglas de envío a cocina nombran estas carpetas y se eliminarán.",
   "folders.routes_warning_one": "1 regla de envío a cocina nombra estas carpetas y se eliminará.",
+  "folders.no_routing_rule": "Ninguna regla de envío a cocina cubre esta carpeta",
   "folders.summary_error":
     "No se pudo leer lo que contienen estas carpetas, así que aún no se pueden eliminar.",
   "folders.all_products": "Todos los productos",

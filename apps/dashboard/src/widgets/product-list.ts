@@ -130,6 +130,10 @@ export class ProductList extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
       }
+      wt-data-table::part(unrouted-folder) {
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
       wt-data-table::part(variant-muted),
       wt-data-table::part(context) {
         color: var(--wt-color-text-muted);
@@ -157,6 +161,7 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
   @property({ attribute: false }) categories: CategorySummary[] = [];
+  @property({ attribute: false }) unroutedFolderIds: string[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
@@ -628,7 +633,7 @@ export class ProductList extends LitElement {
                 data-test=${`open-${folder.id}`}
                 @click=${(event: Event) => this.#emitFolder(event, "open-folder", folder.id)}
                 >${folder.name}</wt-button
-              ></span
+              >${this.unroutedFolderIds.includes(folder.id) ? html`<span part="unrouted-folder" data-test="unrouted-folder" role="img" aria-label=${t("folders.no_routing_rule")} title=${t("folders.no_routing_rule")}>*</span>` : nothing}</span
             >`;
           if (column.key === "reporting-category") return this.#category(folder.parentId);
           if (column.key === "actions")

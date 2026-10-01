@@ -21,6 +21,7 @@
     "@waitron/printing": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
+    "@waitron/venue-service": "workspace:*",
     "lit": "^3.2.0",
     "qrcode": "^1.5.4"
   },

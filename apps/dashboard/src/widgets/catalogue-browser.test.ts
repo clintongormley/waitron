@@ -90,6 +90,95 @@ export async function rowKeys(el: CatalogueBrowser) {
     (row) => row.dataset.rowKey,
   );
 }
+
+it("marks only folders without an active own or inherited routing claim and clears the mark when claimed", async () => {
+  setLocale("en-GB");
+  const routing = {
+    claims: [
+      {
+        categoryId: "d",
+        target: { kind: "station" as const, stationId: "bar" },
+        stationOff: false,
+      },
+    ],
+    exceptions: [],
+    unassigned: { folders: [], products: [] },
+    defaultStationId: "default",
+    stations: [
+      { id: "bar", name: "Bar", active: true },
+      { id: "default", name: "Kitchen", active: true },
+    ],
+  };
+  const el = await mountBrowser({ routing });
+  const marker = async (id: string) =>
+    (await tableOf(el)).shadowRoot!.querySelector(
+      `tr[data-row-key="folder:${id}"] [data-test="unrouted-folder"]`,
+    );
+  expect(await marker("d")).toBeNull();
+  expect(await marker("f")).not.toBeNull();
+  expect((await marker("f"))?.getAttribute("title")).toBe(
+    "No kitchen routing rule covers this folder",
+  );
+  el.folderId = "d";
+  await el.updateComplete;
+  expect(await marker("b")).toBeNull();
+  el.folderId = null;
+  el.routing = {
+    ...routing,
+    claims: [
+      ...routing.claims,
+      { categoryId: "f", target: { kind: "station", stationId: "bar" }, stationOff: false },
+    ],
+  };
+  await el.updateComplete;
+  expect(await marker("f")).toBeNull();
+  el.routing = {
+    ...routing,
+    stations: routing.stations.map((station) =>
+      station.id === "bar" ? { ...station, active: false } : station,
+    ),
+  };
+  await el.updateComplete;
+  expect(await marker("d")).not.toBeNull();
+  el.folderId = "d";
+  await el.updateComplete;
+  expect(await marker("b")).not.toBeNull();
+  setLocale("es");
+  await el.updateComplete;
+  expect((await marker("b"))?.getAttribute("title")).toBe(
+    "Ninguna regla de envío a cocina cubre esta carpeta",
+  );
+});
+
+it("does not mark a folder covered by a global folder exception", async () => {
+  const el = await mountBrowser({
+    routing: {
+      claims: [],
+      exceptions: [
+        {
+          id: "route-food",
+          position: 0,
+          zoneId: null,
+          categoryId: "f",
+          productId: null,
+          target: { kind: "station", stationId: "kitchen" },
+          neverMatches: false,
+          stationOff: false,
+        },
+      ],
+      unassigned: { folders: [], products: [] },
+      defaultStationId: "kitchen",
+      stations: [{ id: "kitchen", name: "Kitchen", active: true }],
+    },
+  });
+  const root = (await tableOf(el)).shadowRoot!;
+  expect(
+    root.querySelector('tr[data-row-key="folder:f"] [data-test="unrouted-folder"]'),
+  ).toBeNull();
+  expect(
+    root.querySelector('tr[data-row-key="folder:d"] [data-test="unrouted-folder"]'),
+  ).not.toBeNull();
+});
 async function nameCell(el: CatalogueBrowser, key: string) {
   return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
     `tr[data-row-key="${key}"] [part~="${key.startsWith("folder:") ? "folder-cell" : "product-cell"}"]`,
