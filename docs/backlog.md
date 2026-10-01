@@ -2955,6 +2955,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     (read from the code, not run on a box). Pre-live, there is no data migration (CLAUDE.md §3); the
     owner's box has printers.
   - Open:
+    - Landed before the box test by the owner's decision (2026-10-01 ~12:25: "land now, test
+      after"); the owner's box needs its venue reset once this image is on it (above), and anything
+      the box timings or photographs show wrong becomes a new item.
     - The box's timings are owed, and so are the owner's photographs of a receipt, a kitchen ticket,
       the ruler page and a sample receipt on both printers (what to time:
       `docs/developers/testing-guide.md`, "How long a job of pictures takes to print on the box is
