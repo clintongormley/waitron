@@ -192,6 +192,7 @@ async function deviceSaleCfgOf(
     ...deps.cfg,
     tillId: await requireSaleTillId(deps, c, device),
     allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
+    sendingDeviceId: device?.deviceId,
   };
 }
 

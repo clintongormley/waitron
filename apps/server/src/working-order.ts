@@ -126,6 +126,7 @@ import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { readMadeHereStations } from "./made-here.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { readUnsentDrafts } from "./order-drafts.js";
 import { readBillSignals, readPartySignals, tableSignals } from "./table-signals.js";
@@ -1139,7 +1140,8 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
 
 /**
  * Every order routes by exceptions, folder claims and the active default station. Station and
- * course are snapshotted at fire time: later rule edits never move work already sent.
+ * course are snapshotted at fire time: later rule edits never move work already sent. A made-here
+ * item is recorded and never printed.
  * A null outcome refuses `station.no_default`, unless payment uses `unroutable: "skip"` to leave
  * the dish unfired and unstamped and return it for the paid-order alert.
  */
@@ -1149,10 +1151,13 @@ export async function fireLines(
   orderId: string,
   // A CHILD modifier line is part of its parent dish and gets no ticket item of its own.
   // `quantity` is the line's stored thousandths, which the kitchen is asked to make.
-  // `hold: true` inserts the line unfired whatever its course, and `release: true` fires it whatever
-  // its course; neither is stored.
+  // `hold: true` inserts the line unfired whatever its course unless it is made here, and
+  // `release: true` fires it whatever its course; neither is stored.
   lines: (FireableLine & { hold?: boolean; release?: boolean })[],
-  options: { unroutable?: "skip" } = {},
+  options: {
+    unroutable?: "skip";
+    keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
+  } = {},
 ): Promise<FireableLine[]> {
   const parentLines = lines.filter((line) => line.parentLineId === null);
   if (parentLines.length === 0) {
@@ -1198,6 +1203,8 @@ export async function fireLines(
   });
   if (lines.length === 0) return unrouted;
 
+  const madeHere = await readMadeHereStations(tx, cfg.sendingDeviceId);
+
   const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
   // `anyFired` lets a later round join a course already cooking; `itemCount` includes prior rounds
@@ -1207,7 +1214,7 @@ export async function fireLines(
       id: kitchenCourses.id,
       displayOrder: kitchenCourses.displayOrder,
       // Arrives as the number 1 or 0, never a boolean: test its truthiness, never with `===`.
-      anyFired: sql<boolean>`max(${ticketItems.firedAt} is not null)`,
+      anyFired: sql<boolean>`max(${ticketItems.firedAt} is not null and not ${ticketItems.madeHere})`,
       itemCount: sql<number>`cast(count(${ticketItems.id}) as int)`,
     })
     .from(kitchenCourses)
@@ -1242,17 +1249,26 @@ export async function fireLines(
     .map((line) => {
       const maker = line.productId === null ? null : makers.get(line.productId);
       const courseId = courseByLine.get(line.id) ?? null;
-      // A line not fired now is HELD (`fired_at` NULL) until a later release fires it.
-      const fired =
+      const courseFired =
         line.release === true ||
         (line.hold !== true &&
           (courseId === null ||
             firedCourseIds.has(courseId) ||
             displayOrderByCourse.get(courseId) === earliestDisplayOrder));
-      // A no-preparation line has no kitchen work, and is sent when it would have fired.
-      if (fired) sentLineIds.push(line.id);
-      if (maker?.kind === "no_preparation") return null;
+      // A no-preparation line has no kitchen station or ticket item.
+      if (maker?.kind === "no_preparation") {
+        if (courseFired) sentLineIds.push(line.id);
+        return null;
+      }
       const stationId = maker?.kind === "station" ? maker.stationId : fallbackStationId!;
+      const kept = options.keepMadeHere?.get(line.id);
+      const made =
+        kept === undefined
+          ? madeHere.has(stationId)
+          : kept.madeHere && kept.stationId === stationId;
+      // A line not fired now is HELD (`fired_at` NULL) until release, unless it is made here.
+      const fired = made || courseFired;
+      if (fired) sentLineIds.push(line.id);
       return {
         nodeId: cfg.nodeId,
         workingOrderId: orderId,
@@ -1261,14 +1277,21 @@ export async function fireLines(
         courseId,
         note: line.note,
         firedAt: fired ? firedAt : null,
-        state: "queued" as const,
+        madeHere: made,
+        state: made ? ("ready" as const) : ("queued" as const),
+        readyAt: made ? firedAt : null,
         quantity: line.quantity,
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
   await stampSent(tx, orderId, sentLineIds, firedAt);
   if (values.length === 0) return unrouted;
-  let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
+  let inserted: {
+    workingOrderLineId: string;
+    stationId: string;
+    firedAt: string | null;
+    madeHere: boolean;
+  }[];
   try {
     // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
     // already-fired items and reprint them.
@@ -1276,6 +1299,7 @@ export async function fireLines(
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       firedAt: ticketItems.firedAt,
+      madeHere: ticketItems.madeHere,
     });
   } catch (error) {
     // A re-fire collides on the per-line unique, e.g. a double `sendToPrep`.
@@ -1285,10 +1309,10 @@ export async function fireLines(
     throw error;
   }
 
-  // Only the items fired here print here. Outbox inserts on the same transaction: no hardware I/O
+  // Only newly fired items not made here print. Outbox inserts on this transaction: no hardware I/O
   // blocks the fire.
   const firedItems = inserted
-    .filter((row) => row.firedAt !== null)
+    .filter((row) => row.firedAt !== null && !row.madeHere)
     .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }));
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
   return unrouted;
@@ -3485,6 +3509,7 @@ interface EditableLine {
     state: TicketState;
     stationId: string;
     courseId: string | null;
+    madeHere: boolean;
     /** Thousandths. */
     firedQuantity: number;
   } | null;
@@ -3691,6 +3716,7 @@ async function readEditableOrder(
       state: ticketItems.state,
       stationId: ticketItems.stationId,
       ticketCourseId: ticketItems.courseId,
+      madeHere: ticketItems.madeHere,
       firedQuantity,
     })
     .from(workingOrderLines)
@@ -3724,6 +3750,7 @@ async function readEditableOrder(
             state: row.state!,
             stationId: row.stationId!,
             courseId: row.ticketCourseId,
+            madeHere: row.madeHere!,
             firedQuantity: row.firedQuantity,
           },
   }));
@@ -3903,6 +3930,8 @@ async function applyLineEdits(
         kitchen: EditableOrder["newWork"];
         /** The stored line whose group the new one joins, for units added apart from it. */
         joins?: EditableParent;
+        /** The sent dish whose kitchen decision the added units follow. */
+        follows?: EditableParent;
       }
     | { kind: "extras" }
     | { kind: "check" }
@@ -3983,7 +4012,7 @@ async function applyLineEdits(
       pricedAs.push(
         addedApart
           ? { kind: "line", kitchen: kitchenStateOf(parent), joins: parent }
-          : { kind: "line", kitchen: "fire" },
+          : { kind: "line", kitchen: "fire", follows: parent },
       );
     }
     if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
@@ -4131,6 +4160,7 @@ async function applyLineEdits(
   const inserted: WorkingOrderLineInsert[] = [];
   const insertedContexts: typeof priced.lineContexts = [];
   const fireNow: Parameters<typeof fireLines>[3] = [];
+  const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   for (const change of changes.filter(({ action }) => action === "free" || action === "change")) {
     const { parent, quantity, note, optionSnapshots, kept } = change;
     await tx
@@ -4174,6 +4204,10 @@ async function applyLineEdits(
       }
     }
     if (change.action === "change") {
+      keepMadeHere.set(parent.id, {
+        madeHere: parent.ticket!.madeHere,
+        stationId: parent.ticket!.stationId,
+      });
       await tx.delete(ticketItems).where(eq(ticketItems.id, parent.ticket!.id));
       fireNow.push({
         id: parent.id,
@@ -4206,6 +4240,13 @@ async function applyLineEdits(
       inserted.push({ ...row, lineNo: ++nextLineNo, groupId, creditedTo: operatorId ?? null });
       insertedContexts.push(group.contexts[rowIndex]!);
       if (row.parentLineId === null && as.kitchen !== "none") {
+        const followed = as.joins ?? as.follows;
+        if (followed?.ticket !== null && followed?.ticket !== undefined) {
+          keepMadeHere.set(row.id!, {
+            madeHere: followed.ticket.madeHere,
+            stationId: followed.ticket.stationId,
+          });
+        }
         const courseId = row.courseId ?? null;
         fireNow.push({
           id: row.id!,
@@ -4232,7 +4273,7 @@ async function applyLineEdits(
   // After the extras a line gains are written: a slip reads the line as it now stands.
   await correctHoldTickets(tx, cfg, held.given, { kind: "HOLD CHANGED", direction: "added" });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
-  await fireLines(tx, cfg, orderId, fireNow);
+  await fireLines(tx, cfg, orderId, fireNow, { keepMadeHere });
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
