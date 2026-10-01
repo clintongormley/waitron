@@ -68,6 +68,10 @@ export class ReorderController implements ReactiveController {
   #announcement = "";
   /** Relies on the host keying its rows (`repeat` by id), so this element moves with the row. */
   #draggedRow: HTMLTableRowElement | null = null;
+  /** Where each row was drawn and where it rested before a render during a drag; null when no slide
+   * is waiting for its frame. */
+  #before: Map<HTMLElement, { drawn: number; rest: number }> | null = null;
+  #frame = 0;
 
   static readonly styles: CSSResult = css`
     .handle {
@@ -90,6 +94,11 @@ export class ReorderController implements ReactiveController {
        the same row apply themselves. */
     .handle:disabled {
       ${disabledStyles}
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      tr[data-sliding] {
+        transition: transform var(--wt-duration-move) ease-out;
+      }
     }
     /* A lifted row, marked by the controller while a pointer drag is in progress. */
     tr[data-dragging] {
@@ -148,6 +157,18 @@ export class ReorderController implements ReactiveController {
     host.addController(this);
   }
 
+  hostUpdate(): void {
+    if (this.#drag === null || this.#before !== null) return;
+    this.#before = new Map();
+    for (const row of this.#rows()) {
+      const drawn = row.getBoundingClientRect().top;
+      this.#before.set(row, { drawn, rest: drawn - offsetY(row) });
+    }
+    // The slide starts in the frame after the render, so a box read straight after an update is
+    // where the row rests, which is the position the hit test uses.
+    this.#frame = requestAnimationFrame(() => this.#slidePassedRows());
+  }
+
   hostUpdated(): void {
     // A render can move rows, so the next move re-measures.
     this.#rowBounds = null;
@@ -160,6 +181,8 @@ export class ReorderController implements ReactiveController {
 
   hostDisconnected(): void {
     this.#endDrag();
+    cancelAnimationFrame(this.#frame);
+    this.#before = null;
   }
 
   /** Its `data-test` also anchors the post-move refocus. */
@@ -221,6 +244,7 @@ export class ReorderController implements ReactiveController {
     this.#draggedRow = row;
     const grab = event.clientY - row.getBoundingClientRect().top;
     this.#drag = { id, pointerId: event.pointerId, grab, y: event.clientY };
+    this.#stopSlide(row);
     row.setAttribute("data-dragging", "");
     holdPageCursor();
     document.addEventListener("pointermove", this.#onPointerMove);
@@ -250,8 +274,11 @@ export class ReorderController implements ReactiveController {
 
   #endDrag(): void {
     if (this.#drag !== null) releasePageCursor();
-    this.#draggedRow?.removeAttribute("data-dragging");
-    this.#draggedRow?.style.removeProperty("transform");
+    const row = this.#draggedRow;
+    if (row !== null) {
+      row.removeAttribute("data-dragging");
+      this.#slideHome(row);
+    }
     this.#draggedRow = null;
     this.#drag = null;
     this.#rowBounds = null;
@@ -259,6 +286,43 @@ export class ReorderController implements ReactiveController {
     document.removeEventListener("pointerup", this.#onPointerEnd);
     document.removeEventListener("pointercancel", this.#onPointerEnd);
   }
+
+  #rows(): NodeListOf<HTMLElement> {
+    return this.#host.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr");
+  }
+
+  #slidePassedRows(): void {
+    const before = this.#before!;
+    this.#before = null;
+    for (const row of this.#rows()) {
+      const was = before.get(row);
+      if (was === undefined || row === this.#draggedRow) continue;
+      if (Math.abs(row.getBoundingClientRect().top - offsetY(row) - was.rest) < 0.5) continue;
+      this.#stopSlide(row);
+      row.style.transform = `translateY(${was.drawn - row.getBoundingClientRect().top}px)`;
+      this.#slideHome(row);
+    }
+  }
+
+  /** Removing the attribute alone does not stop a transition already running. */
+  #stopSlide(row: HTMLElement): void {
+    row.removeAttribute("data-sliding");
+    for (const animation of row.getAnimations()) animation.cancel();
+    row.style.removeProperty("transform");
+  }
+
+  /** Slides the row from where its transform draws it to where it rests. The transform must have
+   * been through a style recalculation before it is cleared, or no transition starts. */
+  #slideHome(row: HTMLElement): void {
+    void row.offsetHeight;
+    row.setAttribute("data-sliding", "");
+    row.style.removeProperty("transform");
+    row.addEventListener("transitionend", this.#onSlideEnd);
+  }
+
+  readonly #onSlideEnd = (event: Event): void => {
+    (event.currentTarget as HTMLElement).removeAttribute("data-sliding");
+  };
 
   #follow(drag: { grab: number; y: number }): void {
     const row = this.#draggedRow!;

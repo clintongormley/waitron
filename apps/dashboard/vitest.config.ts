@@ -4,9 +4,13 @@ import type { BrowserCommand } from "vitest/node";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
+type ReducedMotion = "reduce" | "no-preference" | null;
 
 interface PlaywrightPage {
-  emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
+  emulateMedia(options: {
+    colorScheme?: ColorScheme;
+    reducedMotion?: ReducedMotion;
+  }): Promise<void>;
 }
 
 /**
@@ -19,6 +23,14 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
+};
+
+const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = async (
+  context,
+  reducedMotion,
+) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  await page.emulateMedia({ reducedMotion });
 };
 
 // The browser context is pinned to UTC so screen tests' wall-clock assertions read the same on every
@@ -38,6 +50,7 @@ const browserProject = {
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
+        emulateReducedMotion,
         ...parkPointerCommands,
       },
     },

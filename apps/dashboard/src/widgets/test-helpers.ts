@@ -9,6 +9,7 @@ declare module "vitest/browser" {
     // Moves the real cursor off every element, clearing CSS `:hover`. See `parkPointer` in
     // packages/ui/src/vitest-park-pointer.ts for why `userEvent.unhover()` cannot be used for this.
     parkPointer: () => Promise<void>;
+    emulateReducedMotion: (reducedMotion: "reduce" | "no-preference" | null) => Promise<void>;
   }
 }
 

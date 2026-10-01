@@ -121,7 +121,11 @@ while a pointer drags it (`apps/dashboard/src/widgets/reorder-table.ts`). A drag
 inside a `wt-modal`, which is painted `--wt-color-surface-raised`, so the lifted surface differs
 from `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both themes, and
 keeps `--wt-color-text` and `--wt-color-text-muted` at 4.5:1 or more; the "lifted surface" test
-in `packages/ui-core/src/tokens/colors.test.ts` holds both.
+in `packages/ui-core/src/tokens/colors.test.ts` holds both. The dragged row follows the pointer,
+held inside its list, and is drawn above the rows it covers. Each row it passes slides out of its
+way, and the row itself slides into its slot when released, both over `--wt-duration-move`. Under
+reduced motion (`prefers-reduced-motion: reduce`) passed and released rows land at once, while the
+dragged row still follows the pointer.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
@@ -146,7 +150,7 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
 `--wt-field-max-width`, `--wt-cell-name-max-width`,
 `--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
-`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`
+`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`, `--wt-duration-move`
 
 The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
 system font; the app ships no font files (A179, 2026-10-01 — before it the scale was 13, 15, 19
@@ -160,6 +164,8 @@ changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.
 and till app suites: one for the app's own text, one for text on the page outside it.
 
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
+`--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by
+dragging.
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour

@@ -1,7 +1,8 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { afterEach, expect, it } from "vitest";
+import { commands } from "vitest/browser";
+import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import { reorder } from "./reorder.js";
@@ -56,7 +57,7 @@ const three = () => [
 async function mount(items: TestReorderHost["items"] = three(), busy = false) {
   return (await mountWidget<TestReorderHost>("test-reorder-host", { items, busy })).el;
 }
-function order(el: TestReorderHost) {
+function order(el: LitElement) {
   return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
     row.getAttribute("data-choice"),
   );
@@ -282,6 +283,168 @@ it("leaves the dragged row where it is when another pointer moves", async () => 
   pointer(document, "pointerup", 1);
 });
 
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+/** The test host, with `--wt-duration-move` set to `duration`. */
+async function mountTimed(duration: string, items: TestReorderHost["items"] = three()) {
+  const { el, host } = await mountWidget<TestReorderHost>("test-reorder-host", { items });
+  host.style.setProperty("--wt-duration-move", duration);
+  return el;
+}
+function slides(el: LitElement, id: string): string[] {
+  return row(el, id)
+    .getAnimations()
+    .filter((animation) => animation.playState === "running")
+    .map((animation) => (animation as CSSTransition).transitionProperty);
+}
+
+it("slides a passed row from its old place to its new one", async () => {
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.top + b.height / 2);
+  await el.updateComplete;
+  // Before any frame the row is where it rests: the slide starts in the next frame.
+  near(box(el, "b").top, a.top);
+  await nextFrame();
+  expect(slides(el, "b")).toEqual(["transform"]);
+  expect(row(el, "b").getAnimations()[0]).toBeInstanceOf(CSSTransition);
+  expect(getComputedStyle(row(el, "b")).transitionDuration).toBe("7s");
+  near(box(el, "b").top, b.top);
+  pointer(document, "pointerup", 1);
+});
+
+it("does not swap back when the pointer sits where a sliding row is still drawn", async () => {
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.top + b.height / 2);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  await nextFrame();
+  pointer(document, "pointermove", 1, b.top + b.height / 2 + 1);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  pointer(document, "pointerup", 1);
+});
+
+it("carries on from where a sliding row is drawn when the dragged row crosses it again", async () => {
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.top + b.height / 2);
+  await el.updateComplete;
+  await nextFrame();
+  const drawn = box(el, "b").top;
+  pointer(document, "pointermove", 1, a.top + a.height / 2);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  await nextFrame();
+  near(box(el, "b").top, drawn, 2);
+  pointer(document, "pointerup", 1);
+});
+
+it("carries on from where a sliding row is drawn when it is crossed again without being moved in the page", async () => {
+  // Moving a row in the page ends its running slide by itself. Dragged up past b, the list moves b
+  // in the page; dragged back down, it moves c, so b's slide is still running when it is crossed.
+  const el = await mountTimed("7s");
+  const b = box(el, "b");
+  const c = box(el, "c");
+  pointer(handle(el, "c"), "pointerdown", 1, c.top + c.height / 2);
+  pointer(document, "pointermove", 1, b.top + b.height / 2);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "c", "b"]);
+  await nextFrame();
+  const drawn = box(el, "b").top;
+  pointer(document, "pointermove", 1, c.top + c.height / 2);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  await nextFrame();
+  near(box(el, "b").top, drawn, 2);
+  pointer(document, "pointerup", 1);
+});
+
+it("follows the pointer at once when a row is grabbed again while it is still sliding home", async () => {
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const centre = a.top + a.height / 2;
+  pointer(handle(el, "a"), "pointerdown", 1, centre);
+  pointer(document, "pointermove", 1, centre + 0.4 * a.height);
+  pointer(document, "pointerup", 1);
+  await nextFrame();
+  const drawn = box(el, "a").top;
+  pointer(handle(el, "a"), "pointerdown", 2, drawn + 25);
+  pointer(document, "pointermove", 2, drawn + 35);
+  await nextFrame();
+  near(box(el, "a").top, drawn + 10);
+  pointer(document, "pointerup", 2);
+});
+
+it("slides the released row into its slot", async () => {
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const centre = a.top + a.height / 2;
+  pointer(handle(el, "a"), "pointerdown", 1, centre);
+  pointer(document, "pointermove", 1, centre + 0.4 * a.height);
+  pointer(document, "pointerup", 1);
+  await nextFrame();
+  expect(slides(el, "a")).toEqual(["transform"]);
+  near(box(el, "a").top, a.top + 0.4 * a.height);
+});
+
+it("slides the released row from where it was drawn when it is released straight after changing place", async () => {
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.top + 0.3 * a.height);
+  await el.updateComplete;
+  pointer(document, "pointerup", 1);
+  await nextFrame();
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  near(box(el, "a").top, b.top - 0.2 * a.height);
+});
+
+it("lands the released row in its slot when the slide ends", async () => {
+  const el = await mountTimed("50ms");
+  const a = box(el, "a");
+  const centre = a.top + a.height / 2;
+  pointer(handle(el, "a"), "pointerdown", 1, centre);
+  pointer(document, "pointermove", 1, centre + 0.4 * a.height);
+  pointer(document, "pointerup", 1);
+  await vi.waitFor(() => {
+    expect(row(el, "a").hasAttribute("data-sliding")).toBe(false);
+    expect(box(el, "a").toJSON()).toEqual(a.toJSON());
+  });
+});
+
+it("under reduced motion the passed row lands at once, while the dragged row still follows the pointer", async () => {
+  await commands.emulateReducedMotion("reduce");
+  try {
+    const el = await mountTimed("7s");
+    const a = box(el, "a");
+    const b = box(el, "b");
+    pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+    pointer(document, "pointermove", 1, b.top + b.height / 2);
+    await el.updateComplete;
+    await nextFrame();
+    expect(slides(el, "b")).toEqual([]);
+    near(box(el, "b").top, a.top);
+    pointer(document, "pointermove", 1, b.top + b.height / 2 + 0.4 * a.height);
+    near(box(el, "a").top, b.top + 0.4 * a.height);
+    pointer(document, "pointerup", 1);
+    await nextFrame();
+    expect(slides(el, "a")).toEqual([]);
+    near(box(el, "a").top, b.top);
+  } finally {
+    await commands.emulateReducedMotion(null);
+  }
+});
+
 it("marks the row being dragged, and clears it on release", async () => {
   const el = await mount();
   pointer(handle(el, "a"), "pointerdown", 1);
@@ -502,6 +665,20 @@ it("moves nothing when the table body vanishes mid-drag", async () => {
   expect(el.shadowRoot!.querySelector("tbody")).toBeNull();
   pointer(document, "pointermove", 1, y);
   expect(el.moves).toEqual([]);
+  pointer(document, "pointerup", 1);
+});
+
+it("goes on reporting crossings, for the host to ignore, after the dragged row has left the list", async () => {
+  const el = await mountVolatile({ dropOnMove: true });
+  pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "c"]);
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  expect(el.moves).toEqual([
+    ["a", 1],
+    ["a", 1],
+  ]);
   pointer(document, "pointerup", 1);
 });
 
