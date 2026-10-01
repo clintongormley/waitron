@@ -739,6 +739,22 @@ describe("till-menu-browser", () => {
       expect(store.lines).toEqual([{ product: jamon, quantity: "0.5" }]);
     });
 
+    it("uses the full width for a weighed dish's action", async () => {
+      const { el } = await mount({
+        menu: lunch({ homeLayoutId: "lay-counter" }),
+        weighs: true,
+      });
+      await tap(el, entry(el, "shortcuts", "Jamón"));
+      const weigh = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "till-tender-pay",
+      )!;
+      await weigh.updateComplete;
+      const add = weigh.shadowRoot!.querySelector<HTMLElement>("wt-button.add")!;
+      expect(weigh.getBoundingClientRect().right - add.getBoundingClientRect().right).toBeLessThan(
+        2,
+      );
+    });
+
     it("a fractional custom unit asks for its quantity without touching the basket", async () => {
       const portion = product("portion", "Ración", {
         unit: {

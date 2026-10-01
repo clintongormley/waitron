@@ -3864,7 +3864,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     which ignores a second press while it is opening or open)_; whether the floating language button covers the new draft bar
     at 390 px has not been re-checked _(Task 8, 2026-09-28, looked at in screenshots at 390 px: it
     does not cover the new last-added bar; on the new Review view it covers the corner of Fire all
-    now until the page is scrolled, which the page's bottom padding allows)_.
+    now until the page is scrolled, which the page's bottom padding allows; B18 moved the chooser
+    into the footer on 2026-10-01, so this overlap no longer applies)_.
   - **Splitting a held line's quantity on the till takes one request per unit** (found on the
     Task 4 branch, 2026-09-27). Splitting a quantity of N sends N−1 move requests, each at the
     revision the one before it answered with (`#onSplitGroupLine`, `apps/till/src/till-app.ts`),
@@ -6557,7 +6558,7 @@ bill is refused.
   - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English;
   - on the till at 390 px wide, the floating language button covers "Send round" _(2026-09-27:
     Send round was replaced by the draft's action bar; whether the button covers the new bar has
-    not been checked)_;
+    not been checked. B18 moved the chooser into the footer on 2026-10-01)_;
   - on the dashboard, the dialog for a new home page layout is nearly full-screen for a single
     name field;
   - on the dashboard, the publish preview says "Home page layout X changed" both for a layout that
@@ -7319,8 +7320,10 @@ ongoing overhaul listed at the top of Track A.
   #933, 2026-09-30):** both now end the page with one shared
   footer, `wt-language-footer` (`packages/ui/src/components/wt-language-footer.ts`), which sits in
   the page's flow below the content, so the closed chooser no longer floats over the page (its open
-  menu still opens upwards over the content above it). The till still has its own
-  floating copy, which moves onto the footer in lane B's B18. Seen while looking at C93 and not
+  menu still opens upwards over the content above it). **DONE for the till too (B18, 2026-10-01):**
+  enrolment and sign-in place it below their content; the floor, table, counter and kitchen shell
+  place it after the main region, and the counter's standalone view does likewise. The old till
+  chooser is gone. Seen while looking at C93 and not
   fixed there: on the dashboard at 390 px a sliver of the closed side-menu drawer's search box
   shows at the left edge, in the page's 24 px margin; C93 does not change the drawer's rules, so I
   believe it predates it (not checked on `main`). Raised in C93's review and left as they are:

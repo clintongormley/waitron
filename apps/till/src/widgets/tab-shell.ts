@@ -2,9 +2,10 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, queryAssignedElements } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TabDef } from "../layout.js";
-import "./language-chooser.js";
+import "@waitron/ui/src/components/wt-language-footer.js";
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
@@ -18,6 +19,11 @@ export type ShellAffordance = "station" | "expo" | "schedule";
  */
 @customElement("till-tab-shell")
 export class TillTabShell extends LitElement {
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   static override styles = [
     baseStyles,
     css`
@@ -28,7 +34,7 @@ export class TillTabShell extends LitElement {
       .shell {
         display: flex;
         flex-direction: column;
-        min-height: 100%;
+        height: 100dvh;
       }
 
       .head {
@@ -84,7 +90,20 @@ export class TillTabShell extends LitElement {
 
       .region {
         position: relative;
+        display: flex;
+        flex-direction: column;
         flex: 1;
+        min-height: 0;
+      }
+
+      .body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+
+      wt-language-footer {
+        padding-inline: var(--wt-space-4);
       }
 
       .drill {
@@ -198,13 +217,10 @@ export class TillTabShell extends LitElement {
         </div>
         ${
           this.loadLocales !== undefined
-            ? html`<till-language-chooser
+            ? html`<wt-language-footer
+                active=${currentLocale()}
                 .loadLocales=${this.loadLocales}
-                @locale-selected=${(e: Event) => {
-                  e.stopPropagation();
-                  this.#emit("locale-selected", (e as CustomEvent).detail);
-                }}
-              ></till-language-chooser>`
+              ></wt-language-footer>`
             : nothing
         }
       </div>

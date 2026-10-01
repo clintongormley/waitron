@@ -3,6 +3,7 @@ import type { TabDef } from "../layout.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./tab-shell.js";
 import type { TillTabShell } from "./tab-shell.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -95,7 +96,37 @@ describe("till-tab-shell", () => {
     expect(el.shadowRoot!.querySelector<HTMLElement>(".operator")!.textContent).toContain("Ana");
   });
 
-  it("re-emits the chooser's locale-selected (stopping the inner event)", async () => {
+  it("places the shared language footer after the scrollable floor or table region", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs,
+      activeTabKey: "floor",
+      loadLocales: async () => [{ code: "es-ES", label: "Español" }],
+    });
+    const shell = el.shadowRoot!.querySelector(".shell")!;
+    const footer = shell.querySelector("wt-language-footer")!;
+    expect(footer).not.toBeNull();
+    expect(footer.previousElementSibling).toBe(shell.querySelector(".region"));
+    expect(footer.getAttribute("active")).toBe(currentLocale());
+  });
+
+  it("updates the footer's active language when the till locale changes", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+        tabs,
+        loadLocales: async () => [],
+      });
+      setLocale("en-GB");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("wt-language-footer")!.getAttribute("active")).toBe(
+        "en-GB",
+      );
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("lets one composed footer selection reach its parent", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,
       activeTabKey: "counter",
@@ -104,20 +135,19 @@ describe("till-tab-shell", () => {
         { code: "es-ES", label: "Español" },
       ],
     });
-    let detail: { code: string } | undefined;
-    el.addEventListener(
-      "locale-selected",
-      (e) => (detail = (e as CustomEvent<{ code: string }>).detail),
+    const details: { code: string }[] = [];
+    el.addEventListener("wt-locale-selected", (e) =>
+      details.push((e as CustomEvent<{ code: string }>).detail),
     );
-    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
     chooser.dispatchEvent(
-      new CustomEvent("locale-selected", {
+      new CustomEvent("wt-locale-selected", {
         detail: { code: "en-GB" },
         bubbles: true,
         composed: true,
       }),
     );
-    expect(detail).toEqual({ code: "en-GB" });
+    expect(details).toEqual([{ code: "en-GB" }]);
   });
 
   it("omits the language chooser when loadLocales is not supplied (no throw-on-open surface)", async () => {
@@ -125,7 +155,7 @@ describe("till-tab-shell", () => {
       tabs,
       activeTabKey: "counter",
     });
-    expect(el.shadowRoot!.querySelector("till-language-chooser")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
   });
 
   it("makes the body inert while a drill-in is slotted", async () => {
@@ -147,6 +177,34 @@ describe("till-tab-shell", () => {
       true,
     );
     expect(el.shadowRoot!.querySelector<HTMLElement>(".drill")!.hasAttribute("hidden")).toBe(false);
+  });
+
+  it("keeps a drill-in over a long tab after the tab is scrolled", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs,
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    const content = document.createElement("div");
+    content.style.height = "3000px";
+    el.appendChild(content);
+    await el.updateComplete;
+    const region = el.shadowRoot!.querySelector<HTMLElement>(".region")!;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    body.scrollTop = body.scrollHeight;
+    expect(body.scrollTop).toBeGreaterThan(0);
+    const drillContent = document.createElement("div");
+    drillContent.slot = "drill";
+    drillContent.textContent = "Order details";
+    el.appendChild(drillContent);
+    await el.updateComplete;
+    await el.updateComplete;
+    const drill = el.shadowRoot!.querySelector<HTMLElement>(".drill")!;
+    expect(drill.getBoundingClientRect().top).toBeCloseTo(region.getBoundingClientRect().top, 0);
+    expect(drill.getBoundingClientRect().bottom).toBeCloseTo(
+      region.getBoundingClientRect().bottom,
+      0,
+    );
+    expect(el.shadowRoot!.querySelector<HTMLElement>("main.body")!.inert).toBe(true);
   });
 
   it("suppresses the whole operator header in kiosk mode, rendering only the body", async () => {
@@ -178,5 +236,5 @@ it("keeps the language chooser available on a kitchen display without operator c
     loadLocales: async () => [{ code: "en-GB", label: "English" }],
   });
   expect(el.shadowRoot!.querySelector("header")).toBeNull();
-  expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
 });

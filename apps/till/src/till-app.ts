@@ -813,12 +813,6 @@ export class TillApp extends LitElement {
         display: block;
       }
 
-      .app {
-        padding-bottom: calc(
-          var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom)
-        );
-      }
-
       .error {
         margin: 0 0 var(--wt-space-3);
         padding: var(--wt-space-3);
@@ -6036,7 +6030,7 @@ export class TillApp extends LitElement {
         @open-allergens=${() => this.#onOpenAllergens()}
         @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
-        @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
           this.#selectDiet(e.detail.predicate)}
         @counter-zone-selected=${(event: Event) => void this.#onCounterZoneSelected(event)}
@@ -6124,9 +6118,8 @@ export class TillApp extends LitElement {
               ></till-device-chooser>`
             : this.frontDoor === "enrol"
               ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
-              : // Keyed on the locale, so a switch rebuilds the subtree in the new language; the
-                // screens hold no locale controller of their own. The lock screen also shows after a
-                // boot failure, rather than an empty shell.
+              : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
+                // screen also shows after a boot failure, rather than an empty shell.
                 this.#inShell()
                 ? keyed(
                     currentLocale(),

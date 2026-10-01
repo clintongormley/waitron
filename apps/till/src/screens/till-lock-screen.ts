@@ -1,10 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { t } from "../i18n/t.js";
+import "@waitron/ui/src/components/wt-language-footer.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
-import "../widgets/language-chooser.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
 
@@ -36,17 +37,29 @@ function loginErrorKey(code: string): StringKey {
  */
 @customElement("till-lock-screen")
 export class TillLockScreen extends LitElement {
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   static override styles = [
     baseStyles,
     css`
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
       }
 
       /* Cap the login form and centre it — a wide till never stretches the roster or pad edge to edge. */
       .screen {
+        flex: 1;
         max-width: 24rem;
         margin-inline: auto;
+      }
+
+      wt-language-footer {
+        padding-inline: var(--wt-space-3);
       }
 
       .heading {
@@ -290,9 +303,6 @@ export class TillLockScreen extends LitElement {
     return html`
       <div class="screen">
         ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
-        <till-language-chooser
-          .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-        ></till-language-chooser>
         ${
           this.devMode
             ? html`<wt-button
@@ -307,6 +317,10 @@ export class TillLockScreen extends LitElement {
         }
       </div>
       ${this.#renderServers()}
+      <wt-language-footer
+        active=${currentLocale()}
+        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+      ></wt-language-footer>
     `;
   }
 

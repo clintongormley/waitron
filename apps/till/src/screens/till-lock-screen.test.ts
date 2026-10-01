@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, TillApi } from "../api/client.js";
@@ -294,17 +294,53 @@ describe("till-lock-screen", () => {
   it("renders the language chooser in the roster view", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
   });
 
-  it("lets the chooser's locale-selected bubble out composed (it does NOT handle it itself)", async () => {
+  it("puts the shared language footer after sign-in content", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    const footer = el.shadowRoot!.querySelector("wt-language-footer")!;
+    expect(footer).not.toBeNull();
+    expect(footer.previousElementSibling).toBe(el.shadowRoot!.querySelector(".screen"));
+  });
+
+  it("puts server status above the language footer when the till cannot reach its primary", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: [
+        { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
+      ],
+    });
+    await flush(el);
+    const footer = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const status = el.shadowRoot!.querySelector("[data-server-status]")!;
+    expect(footer.previousElementSibling).toBe(status);
+    expect(status.previousElementSibling).toBe(el.shadowRoot!.querySelector(".screen"));
+  });
+
+  it("updates its footer when the till locale changes while sign-in stays open", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+      setLocale("en-GB");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("wt-language-footer")!.getAttribute("active")).toBe(
+        "en-GB",
+      );
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("lets the chooser's wt-locale-selected bubble out composed (it does NOT handle it itself)", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
     const spy = vi.fn();
-    el.addEventListener("locale-selected", (e) => spy((e as CustomEvent).detail));
-    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    el.addEventListener("wt-locale-selected", (e) => spy((e as CustomEvent).detail));
+    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
     chooser.dispatchEvent(
-      new CustomEvent("locale-selected", {
+      new CustomEvent("wt-locale-selected", {
         detail: { code: "en-GB" },
         bubbles: true,
         composed: true,
@@ -317,7 +353,7 @@ describe("till-lock-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
-    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
     chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
     await vi.waitFor(() => {
       const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
@@ -352,10 +388,10 @@ describe("till-lock-screen", () => {
   it("keeps the language chooser available in PIN mode", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
   });
 
   it("round-trips a leading-zero PIN (e.g. the default 0000) to login unmangled", async () => {

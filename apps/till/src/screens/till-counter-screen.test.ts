@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helper
 import { TillCounterScreen } from "./till-counter-screen.js";
 import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { ServiceZoneSummary, TillApi, TillProduct, TillZoneMenu } from "../api/client.js";
 import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
@@ -416,7 +416,7 @@ describe("till-counter-screen", () => {
       venueDefault: "es-ES",
     });
     const { el } = await mount({ api: { getLocales } as unknown as TillApi });
-    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
     chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
     await vi.waitFor(() => {
       const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
@@ -448,19 +448,43 @@ describe("till-counter-screen", () => {
     expect(screen!.invoiceLocale).toBe("en");
   });
 
-  it("renders the language chooser in the header session row", async () => {
+  it("keeps the language chooser outside the header session row", async () => {
     const { el } = await mount();
     const session = el.shadowRoot!.querySelector(".session")!;
-    expect(session.querySelector("till-language-chooser")).not.toBeNull();
+    expect(session.querySelector("wt-language-footer")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
   });
 
-  it("lets the chooser's locale-selected bubble out composed (the screen does NOT handle it)", async () => {
+  it("puts the shared language footer after the standalone counter body", async () => {
+    const { el } = await mount();
+    const screen = el.shadowRoot!.querySelector(".screen")!;
+    const footer = screen.querySelector("wt-language-footer")!;
+    expect(footer).not.toBeNull();
+    expect(footer.previousElementSibling?.classList.contains("grid-body")).toBe(true);
+    expect(el.shadowRoot!.querySelector(".session wt-language-footer")).toBeNull();
+  });
+
+  it("updates the standalone counter footer when the till locale changes", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mount();
+      setLocale("en-GB");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("wt-language-footer")!.getAttribute("active")).toBe(
+        "en-GB",
+      );
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("lets the chooser's wt-locale-selected bubble out composed (the screen does NOT handle it)", async () => {
     const { el } = await mount();
     const spy = vi.fn();
-    el.addEventListener("locale-selected", (e) => spy((e as CustomEvent).detail));
-    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    el.addEventListener("wt-locale-selected", (e) => spy((e as CustomEvent).detail));
+    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
     chooser.dispatchEvent(
-      new CustomEvent("locale-selected", {
+      new CustomEvent("wt-locale-selected", {
         detail: { code: "en-GB" },
         bubbles: true,
         composed: true,
