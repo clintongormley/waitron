@@ -111,7 +111,6 @@ export const en = {
   // Placing and prep
   "action.place": "Place order",
   "action.send_to_prep": "Send to prep",
-  "action.collect": "Collect",
   // Station display. The view toggles name the view they switch TO. `station.min` is a suffix word,
   // rendered as `${n} ${t(key)}`.
   "station.open": "Kitchen",
@@ -958,7 +957,6 @@ export const es: Record<StringKey, string> = {
   "departures.recorded_approved": "Registrado por {name}, autorizado por {approver}",
   "action.place": "Enviar pedido",
   "action.send_to_prep": "Enviar a cocina",
-  "action.collect": "Entregar",
   "station.open": "Cocina",
   "station.title": "Cocina",
   "station.back": "Volver al mostrador",

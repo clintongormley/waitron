@@ -507,7 +507,7 @@ export class TillTenderPay extends LitElement {
           ?disabled=${disabled}
           @click=${() => this.#startPaying()}
         >
-          ${t("action.collect")}
+          ${t("tender.cash")}
         </wt-button>
         ${this.#renderCardButton(disabled)}
       </div>
@@ -526,7 +526,7 @@ export class TillTenderPay extends LitElement {
           ?disabled=${disabled}
           @click=${() => this.#startPaying()}
         >
-          ${t("action.pay")}
+          ${t("tender.cash")}
         </wt-button>
         ${this.#renderCardButton(disabled)}
         ${
