@@ -55,6 +55,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "money given back from a bill payment before the invoice; only its outcome moves, under a trigger",
   ),
+  appendOnly(
+    "unpaid_departures",
+    "ledger",
+    "which bills a party left without paying, against which invoice, by whose authority; never corrected",
+  ),
 
   // state — manager configuration and live service; copied to a standby, never drained back.
   classify(
