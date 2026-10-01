@@ -164,6 +164,44 @@ describe("add content language dialog", () => {
     expect([...field(el).options].map((option) => option.value)).not.toContain("ca");
   });
 
+  it("drops the chosen language when a live refresh enables it: the placeholder shows, stays when the language is disabled again, and Add counts as nothing chosen", async () => {
+    const api = { updateContentLanguages: vi.fn().mockResolvedValue(undefined) };
+    const { el } = await mount(api);
+    await choose(el, "");
+    await choose(el, "fr");
+    el.config = { defaultLanguage: "es", languages: ["es", "en", "fr"] };
+    await el.updateComplete;
+    expect(field(el).value).toBe("");
+    expect(field(el).selectedOptions[0]!.textContent!.trim()).toBe(t("content_languages.choose"));
+    el.config = CONFIG;
+    await el.updateComplete;
+    expect(field(el).value).toBe("");
+
+    click(el, "save-language");
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(api.updateContentLanguages).not.toHaveBeenCalled();
+    expect(field(el).getAttribute("aria-invalid")).toBe("true");
+    expect(el.shadowRoot!.querySelector("#language-error")!.textContent).toBe(
+      t("content_languages.choose"),
+    );
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(el.open).toBe(true);
+  });
+
+  it("sends no duplicate when Add is pressed before a refresh enabling the chosen language has rendered", async () => {
+    const api = { updateContentLanguages: vi.fn().mockResolvedValue(undefined) };
+    const { el } = await mount(api);
+    await choose(el, "fr");
+    el.config = { defaultLanguage: "es", languages: ["es", "en", "fr"] };
+    click(el, "save-language");
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(api.updateContentLanguages).not.toHaveBeenCalled();
+    expect(field(el).value).toBe("");
+    expect(field(el).getAttribute("aria-invalid")).toBe("true");
+  });
+
   it("starts again when reopened: nothing chosen and no messages", async () => {
     const { el } = await mount();
     await choose(el, "fr");

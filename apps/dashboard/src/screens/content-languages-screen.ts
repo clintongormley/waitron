@@ -100,6 +100,12 @@ export class ContentLanguagesScreen extends LitElement {
       this.loadFailed = true;
     },
   );
+  /** How many configurations the server has delivered, so a save can tell whether one arrived while
+   * it was in flight. */
+  #reads = 0;
+  readonly #writer = {
+    updateContentLanguages: (config: ContentLanguages) => this.#write(config),
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -110,18 +116,27 @@ export class ContentLanguagesScreen extends LitElement {
     this.loadFailed = false;
     try {
       await this.#queries.watch("getContentLanguages", [], (value) => {
+        this.#reads += 1;
         this.config = value;
         this.loadFailed = false;
+        setContentLanguages(value);
       });
     } catch {
       this.loadFailed = true;
     }
   }
 
-  #saved(config: ContentLanguages): void {
-    this.config = config;
+  async #write(config: ContentLanguages): Promise<void> {
+    const reads = this.#reads;
+    await this.api.updateContentLanguages(config);
     this.saveError = "";
-    setContentLanguages(config);
+    if (this.#reads === reads) {
+      this.config = config;
+      setContentLanguages(config);
+    } else {
+      // A configuration read during the save may predate it or follow it; only a fresh read can say.
+      this.api.liveData.invalidate([{ type: "content_languages" }]);
+    }
   }
 
   async #save(defaultLanguage: string, languages: string[]): Promise<void> {
@@ -133,8 +148,7 @@ export class ContentLanguagesScreen extends LitElement {
       languages: [defaultLanguage, ...languages.filter((code) => code !== defaultLanguage)],
     };
     try {
-      await this.api.updateContentLanguages(config);
-      this.#saved(config);
+      await this.#write(config);
     } catch (error) {
       this.saveError = codeMessage(codeOf(error));
     } finally {
@@ -208,14 +222,13 @@ export class ContentLanguagesScreen extends LitElement {
       <dashboard-add-content-language
         .open=${this.adding}
         .config=${config}
-        .api=${this.api}
+        .api=${this.#writer}
         @languages-closed=${() => {
           this.adding = false;
         }}
-        @languages-saved=${(event: CustomEvent<ContentLanguages>) => {
+        @languages-saved=${(event: Event) => {
           event.stopPropagation();
           this.adding = false;
-          this.#saved(event.detail);
         }}
       ></dashboard-add-content-language>`;
   }

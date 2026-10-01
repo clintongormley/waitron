@@ -44,6 +44,9 @@ export class AddContentLanguageDialog extends LitElement {
       this.attempted = false;
       this.error = null;
     }
+    if (changed.has("config") && this.config.languages.includes(this.language)) {
+      this.language = "";
+    }
   }
 
   #close(): void {
@@ -56,6 +59,7 @@ export class AddContentLanguageDialog extends LitElement {
     if (this.busy) return;
     this.attempted = true;
     this.error = null;
+    if (this.config.languages.includes(this.language)) this.language = "";
     if (this.language === "") {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -106,10 +110,10 @@ export class AddContentLanguageDialog extends LitElement {
             this.language = (event.target as HTMLSelectElement).value;
           }}
         >
-          <option value="" ?selected=${this.language === ""}>
+          <option value="" .selected=${this.language === ""}>
             ${t("content_languages.choose")}
           </option>
-          ${choices.map(({ code, name }) => html`<option value=${code} ?selected=${code === this.language}>${name}</option>`)}
+          ${choices.map(({ code, name }) => html`<option value=${code} .selected=${code === this.language}>${name}</option>`)}
         </select>
       </label>
       ${missing ? html`<p class="error" id="language-error">${t("content_languages.choose")}</p>` : nothing}

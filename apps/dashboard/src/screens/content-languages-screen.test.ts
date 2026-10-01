@@ -269,6 +269,116 @@ describe("content languages screen", () => {
     );
   });
 
+  describe("a change made elsewhere while a save is in flight", () => {
+    const WITH_ITALIAN = { defaultLanguage: "ca", languages: ["ca", "en", "de", "it"] };
+
+    async function mountLive() {
+      const liveData = new LiveData();
+      let finish!: () => void;
+      const client = Object.assign(
+        api({
+          updateContentLanguages: vi.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                finish = resolve;
+              }),
+          ),
+        }),
+        { liveData },
+      );
+      const el = await mount(client);
+      return { el, client, liveData, finish: () => finish() };
+    }
+
+    async function serverNow(
+      { el, client, liveData }: Awaited<ReturnType<typeof mountLive>>,
+      config: ContentLanguages,
+    ): Promise<void> {
+      vi.mocked(client.getContentLanguages).mockResolvedValue(config);
+      liveData.invalidate([{ type: "content_languages" }]);
+      await vi.waitFor(() => expect(shown(el)).toContain("Italiano"));
+    }
+
+    it("keeps a language added elsewhere while a removal was being saved, and settles on what the server holds", async () => {
+      const live = await mountLive();
+      const { el, client } = live;
+      q(el, "[data-test=remove-en]")!.click();
+      await el.updateComplete;
+      await serverNow(live, WITH_ITALIAN);
+      const after = { defaultLanguage: "ca", languages: ["ca", "de", "it"] };
+      vi.mocked(client.getContentLanguages).mockResolvedValue(after);
+      live.finish();
+      await vi.waitFor(() => expect(shown(el)).toEqual(["Catalán", "Alemán", "Italiano"]));
+      expect(currentContentLanguages()).toEqual(after);
+      expect(saveMessage(el)).toBeNull();
+    });
+
+    it("keeps a language added elsewhere while a new default was being saved, and settles on what the server holds", async () => {
+      const live = await mountLive();
+      const { el, client } = live;
+      q(el, "[data-test=set-default-de]")!.click();
+      await el.updateComplete;
+      await serverNow(live, WITH_ITALIAN);
+      const after = { defaultLanguage: "de", languages: ["de", "ca", "en", "it"] };
+      vi.mocked(client.getContentLanguages).mockResolvedValue(after);
+      live.finish();
+      await vi.waitFor(() =>
+        expect(shown(el)).toEqual(["Alemán", "Catalán", "Inglés", "Italiano"]),
+      );
+      expect(currentContentLanguages()).toEqual(after);
+    });
+
+    it("keeps a language added elsewhere while an added language was being saved, and settles on what the server holds", async () => {
+      const live = await mountLive();
+      const { el, client } = live;
+      q(el, "[data-test=add-language]")!.click();
+      await flush(el);
+      const add = dialog(el);
+      const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
+      select.value = "fr";
+      select.dispatchEvent(new Event("change"));
+      await add.updateComplete;
+      add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
+      await add.updateComplete;
+      await serverNow(live, WITH_ITALIAN);
+      const after = { defaultLanguage: "ca", languages: ["ca", "en", "de", "it", "fr"] };
+      vi.mocked(client.getContentLanguages).mockResolvedValue(after);
+      live.finish();
+      await vi.waitFor(() =>
+        expect(shown(el)).toEqual(["Catalán", "Alemán", "Francés", "Inglés", "Italiano"]),
+      );
+      expect(currentContentLanguages()).toEqual(after);
+      expect(dialog(el).open).toBe(false);
+    });
+
+    it("reports a failed read after the save as a load failure, not a failed save, keeping the languages it last read", async () => {
+      const live = await mountLive();
+      const { el, client } = live;
+      q(el, "[data-test=remove-en]")!.click();
+      await el.updateComplete;
+      await serverNow(live, WITH_ITALIAN);
+      vi.mocked(client.getContentLanguages).mockRejectedValue(new Error("offline"));
+      live.finish();
+      await vi.waitFor(() =>
+        expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(t("content_languages.load_error")),
+      );
+      expect(saveMessage(el)).toBeNull();
+      expect(shown(el)).toContain("Italiano");
+    });
+
+    it("shows the saved languages when nothing arrived during the save", async () => {
+      const live = await mountLive();
+      const { el, client } = live;
+      q(el, "[data-test=remove-en]")!.click();
+      await el.updateComplete;
+      live.finish();
+      const saved = { defaultLanguage: "ca", languages: ["ca", "de"] };
+      await vi.waitFor(() => expect(shown(el)).toEqual(["Catalán", "Alemán"]));
+      expect(client.updateContentLanguages).toHaveBeenCalledWith(saved);
+      expect(currentContentLanguages()).toEqual(saved);
+    });
+  });
+
   it("reopens the Add language dialog after it was cancelled", async () => {
     const el = await mount(api());
     q(el, "[data-test=add-language]")!.click();
