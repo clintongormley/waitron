@@ -2,6 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -218,9 +219,7 @@ const q = (el: DevicesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLE
 const text = (el: DevicesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
 function pickSelect(el: DevicesScreen, testId: string, value: string): void {
-  const select = q(el, `[data-test=${testId}]`) as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  void chooseOption(q(el, `[data-test=${testId}]`)!, value);
 }
 
 describe("devices-screen", () => {
@@ -674,10 +673,10 @@ describe("devices-screen", () => {
 
     const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
     expect(select).toBeTruthy();
-    const options = Array.from(select.querySelectorAll("option"));
+    const options = (select as unknown as { options: { value: string; label: string }[] }).options;
     expect(options.map((o) => o.value)).toEqual(["", "dp1", "dp2", "dp3"]);
-    expect(options[0]!.textContent?.trim()).toBe(t("devices.device_profile_none", "es-ES"));
-    expect(options[1]!.textContent?.trim()).toBe("Counter till");
+    expect(options[0]!.label.trim()).toBe(t("devices.device_profile_none", "es-ES"));
+    expect(options[1]!.label.trim()).toBe("Counter till");
     expect(select.value).toBe("dp1");
   });
 
@@ -792,11 +791,11 @@ describe("devices-screen", () => {
 
     const select = q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement;
     expect(select).toBeTruthy();
-    const options = Array.from(select.querySelectorAll("option"));
+    const options = (select as unknown as { options: { value: string; label: string }[] }).options;
     expect(options.map((o) => o.value)).toEqual(["", "r1", "r2"]); // r3 is retired — excluded
-    expect(options[0]!.textContent?.trim()).toBe(t("devices.default_reader_none", "es-ES"));
-    expect(options[1]!.textContent?.trim()).toBe("Front counter (Acme Pay)");
-    expect(options[2]!.textContent?.trim()).toBe("Bar (Zeta Pay)");
+    expect(options[0]!.label.trim()).toBe(t("devices.default_reader_none", "es-ES"));
+    expect(options[1]!.label.trim()).toBe("Front counter (Acme Pay)");
+    expect(options[2]!.label.trim()).toBe("Bar (Zeta Pay)");
   });
 
   it("preselects the empty option when a device has no default reader", async () => {
@@ -882,6 +881,117 @@ describe("devices-screen", () => {
   });
 });
 
+describe("devices-screen fields", () => {
+  type Combobox = HTMLElement & {
+    options: { value: string; label: string }[];
+    value: string;
+    label: string;
+    placeholder: string;
+    name: string;
+    hideLabel: boolean;
+  };
+  const box = (el: DevicesScreen, testId: string) =>
+    q(el, `wt-combobox[data-test=${testId}]`) as Combobox;
+
+  it("picks a device's receipt printer and card reader from labelled dropdowns showing the stored ones", async () => {
+    const api = stubApi({ getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r2" }) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await flush(el);
+
+    const printer = box(el, "hw-printer-d1");
+    expect(printer.name).toBe("receiptPrinterId");
+    expect(printer.label).toBe(t("devices.receipt_printer"));
+    expect(printer.placeholder).toBe(t("devices.receipt_printer_none"));
+    expect(printer.options).toEqual([
+      { value: "", label: t("devices.receipt_printer_none") },
+      { value: "pr1", label: "Cocina" },
+    ]);
+    expect(printer.value).toBe("");
+    await chooseOption(printer, "pr1");
+    q(el, "[data-test=hw-save-d1]")!.click();
+    await flush(el);
+    expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", { receiptPrinterId: "pr1" });
+
+    const reader = box(el, "hw-reader-d1");
+    expect(reader.name).toBe("defaultReaderId");
+    expect(reader.label).toBe(t("devices.default_reader"));
+    expect(reader.placeholder).toBe(t("devices.default_reader_none"));
+    expect(reader.options.map((o) => o.value)).toEqual(["", "r1", "r2"]);
+    expect(reader.value).toBe("r2");
+    await chooseOption(reader, "r1");
+    await flush(el);
+    expect(api.setDeviceReader).toHaveBeenCalledWith("d1", "r1");
+  });
+
+  it("names the move-to-profile dropdown by a hidden label carrying the device's name", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    const reassign = box(el, "reassign-d1");
+    expect(reassign.name).toBe("deviceProfileId");
+    expect(reassign.label).toBe(`${t("devices.reassign")} Pantalla Cocina`);
+    expect(reassign.hideLabel).toBe(true);
+    expect(reassign.placeholder).toBe(t("devices.device_profile_none"));
+    expect(reassign.value).toBe("dp1");
+    await chooseOption(reassign, "dp2");
+    await flush(el);
+    expect(api.reassignDeviceProfile).toHaveBeenCalledWith("d1", "dp2");
+  });
+
+  it("picks the joining device's profile, station and register from labelled dropdowns", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    const profile = box(el, "join-profile");
+    expect(profile.name).toBe("profileId");
+    expect(profile.label).toBe(t("devices.device_profile"));
+    expect(profile.placeholder).toBe(t("devices.join_pick_profile"));
+    expect(profile.options).toEqual([
+      { value: "", label: t("devices.join_pick_profile") },
+      { value: "dp1", label: "Counter till" },
+      { value: "dp2", label: "Waiter handheld" },
+      { value: "dp3", label: "Pass screen" },
+    ]);
+    expect(profile.value).toBe("");
+
+    await chooseOption(profile, "dp3");
+    await el.updateComplete;
+    const station = box(el, "join-station");
+    expect(station.name).toBe("stationId");
+    expect(station.label).toBe(t("devices.station"));
+    expect(station.placeholder).toBe(t("devices.join_pick_station"));
+    expect(station.options.map((o) => o.value)).toEqual(["", "s1", "s2"]);
+    expect(station.value).toBe("");
+
+    await chooseOption(profile, "dp2");
+    await el.updateComplete;
+    const register = box(el, "join-register");
+    expect(register.name).toBe("registerId");
+    expect(register.label).toBe(t("devices.till"));
+    expect(register.placeholder).toBe(t("devices.join_pick_register"));
+    expect(register.options).toEqual([
+      { value: "", label: t("devices.join_pick_register") },
+      { value: "t1", label: "Caja 1" },
+    ]);
+    await chooseOption(register, "t1");
+    await el.updateComplete;
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
+      choice: REAL_NUMBER,
+      profileId: "dp2",
+      registerId: "t1",
+    });
+  });
+});
+
 it("refreshes displayed devices when their data changes elsewhere", async () => {
   const liveData = new LiveData();
   const api = Object.assign(stubApi(), { liveData });
@@ -952,7 +1062,11 @@ describe("devices-screen remaining edges", () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    const select = () => q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
+    const select = () =>
+      q(el, "[data-test=reassign-d1]") as unknown as {
+        options: { value: string }[];
+        value: string;
+      };
     await vi.waitFor(() => expect(select()?.value).toBe("dp1"));
 
     vi.mocked(api.listDevices).mockResolvedValue([{ ...devices[0]!, deviceProfileId: null }]);
@@ -961,7 +1075,7 @@ describe("devices-screen remaining edges", () => {
     await vi.waitFor(() =>
       expect(text(el, "[data-test=device-profile-d1]")).toBe(t("devices.device_profile_none")),
     );
-    expect(select().selectedIndex).toBe(0);
+    expect(select().options.findIndex((o) => o.value === select().value)).toBe(0);
     expect(select().value).toBe("");
   });
 

@@ -1,5 +1,6 @@
 import { expect, afterEach, describe, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import "./devices-screen.js";
@@ -200,9 +201,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     // buttons are both in the a11y tree (a modal <dialog> is only exposed once it is open).
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
     await flush(el);
-    const profile = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=join-profile]")!;
-    profile.value = "dp3";
-    profile.dispatchEvent(new Event("change"));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
@@ -217,13 +216,9 @@ describe("devices-screen a11y — the numeric match", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
     await flush(el);
-    const profile = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=join-profile]")!;
-    profile.value = "dp3";
-    profile.dispatchEvent(new Event("change"));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
     await el.updateComplete;
-    const station = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=join-station]")!;
-    station.value = "s1";
-    station.dispatchEvent(new Event("change"));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-station]")!, "s1");
     await el.updateComplete;
     return el;
   }
@@ -253,13 +248,9 @@ describe("devices-screen a11y — the numeric match", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=join-dialog]")).toBeTruthy();
 
-    const profile = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=join-profile]")!;
-    profile.value = "dp3";
-    profile.dispatchEvent(new Event("change"));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
     await el.updateComplete;
-    const station = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=join-station]")!;
-    station.value = "s1";
-    station.dispatchEvent(new Event("change"));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-station]")!, "s1");
     await el.updateComplete;
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.focus();

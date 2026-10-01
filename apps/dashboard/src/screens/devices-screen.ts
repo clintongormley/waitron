@@ -1,8 +1,10 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -53,7 +55,6 @@ const DEFAULT_HARDWARE: HardwareEdit = {
 export class DevicesScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -111,10 +112,13 @@ export class DevicesScreen extends LitElement {
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
       }
-      .field {
-        display: block;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
+      .hardware wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 7);
+        min-width: 0;
+      }
+      .pickers wt-combobox {
+        flex: 1 1 calc(var(--wt-space-6) * 6);
+        min-width: 0;
       }
       .hint {
         margin: 0 0 var(--wt-space-3);
@@ -184,38 +188,6 @@ export class DevicesScreen extends LitElement {
     // Merge each panel's strings so its `displayNameKey` resolves; this screen never mounts a panel.
     for (const panel of this.panels) registerCatalogue(panel.strings);
     void this.#load();
-  }
-
-  /** A native select's `.value` set in the template commits before its options exist, so every select
-   * is reconciled here after render. This also snaps a control back to the stored value after a failed
-   * reassign or reader change re-renders without a reload. */
-  override updated(): void {
-    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
-      '[data-test^="reassign-"]',
-    )) {
-      const device = this.devices.find((d) => `reassign-${d.id}` === select.dataset.test);
-      if (device !== undefined) select.value = device.deviceProfileId ?? "";
-    }
-    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
-      '[data-test^="hw-printer-"]',
-    )) {
-      const id = select.dataset.test!.slice("hw-printer-".length);
-      select.value = this.#hardwareFor(id).receiptPrinterId;
-    }
-    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
-      '[data-test^="hw-reader-"]',
-    )) {
-      const id = select.dataset.test!.slice("hw-reader-".length);
-      select.value = this.deviceReaders[id] ?? "";
-    }
-    for (const [testId, value] of [
-      ["join-profile", this.chosenProfileId],
-      ["join-station", this.chosenStationId],
-      ["join-register", this.chosenRegisterId],
-    ] as const) {
-      const select = this.renderRoot.querySelector<HTMLSelectElement>(`[data-test="${testId}"]`);
-      if (select !== null) select.value = value;
-    }
   }
 
   async #load(): Promise<void> {
@@ -457,8 +429,8 @@ export class DevicesScreen extends LitElement {
     return `${reader.name} (${this.#providerName(reader.provider)})`;
   }
 
-  /** Written immediately, not staged. A rejection leaves `deviceReaders` untouched, so `updated()`
-   * snaps the control back to the stored default. */
+  /** Written immediately, not staged. A rejection leaves `deviceReaders` untouched, so the control
+   * shows the stored default again. */
   async #onReaderChange(id: string, value: string): Promise<void> {
     this.errorKey = null;
     const readerId = value === "" ? null : value;
@@ -494,30 +466,38 @@ export class DevicesScreen extends LitElement {
     const activePrinters = this.printers.filter((p) => p.active);
     const activeReaders = this.readers.filter((r) => r.active);
     return html`<div class="hardware" data-test="hardware-${device.id}">
-      <label class="field"
-        >${t("devices.receipt_printer")}
-        <select
-          data-test="hw-printer-${device.id}"
-          @change=${(e: Event) =>
-            this.#setHardware(device.id, {
-              receiptPrinterId: (e.target as HTMLSelectElement).value,
-            })}
-        >
-          <option value="">${t("devices.receipt_printer_none")}</option>
-          ${activePrinters.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
-        </select>
-      </label>
-      <label class="field"
-        >${t("devices.default_reader")}
-        <select
-          data-test="hw-reader-${device.id}"
-          @change=${(e: Event) =>
-            void this.#onReaderChange(device.id, (e.target as HTMLSelectElement).value)}
-        >
-          <option value="">${t("devices.default_reader_none")}</option>
-          ${activeReaders.map((r) => html`<option value=${r.id}>${this.#readerLabel(r)}</option>`)}
-        </select>
-      </label>
+      <wt-combobox
+        data-test="hw-printer-${device.id}"
+        name="receiptPrinterId"
+        label=${t("devices.receipt_printer")}
+        search="auto"
+        placeholder=${t("devices.receipt_printer_none")}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${[
+          { value: "", label: t("devices.receipt_printer_none") },
+          ...activePrinters.map((p) => ({ value: p.id, label: p.name })),
+        ]}
+        .value=${this.#hardwareFor(device.id).receiptPrinterId}
+        @wt-change=${(e: CustomEvent<{ value: string }>) =>
+          this.#setHardware(device.id, { receiptPrinterId: e.detail.value })}
+      ></wt-combobox>
+      <wt-combobox
+        data-test="hw-reader-${device.id}"
+        name="defaultReaderId"
+        label=${t("devices.default_reader")}
+        search="auto"
+        placeholder=${t("devices.default_reader_none")}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${[
+          { value: "", label: t("devices.default_reader_none") },
+          ...activeReaders.map((r) => ({ value: r.id, label: this.#readerLabel(r) })),
+        ]}
+        .value=${live(this.deviceReaders[device.id] ?? "")}
+        @wt-change=${(e: CustomEvent<{ value: string }>) =>
+          void this.#onReaderChange(device.id, e.detail.value)}
+      ></wt-combobox>
       <wt-button
         variant="secondary"
         size="sm"
@@ -552,22 +532,26 @@ export class DevicesScreen extends LitElement {
           </div>
           ${
             device.active
-              ? html`<select
+              ? html`<wt-combobox
                   data-test="reassign-${device.id}"
-                  aria-label=${`${t("devices.reassign")} ${device.label}`}
-                  @change=${(e: Event) =>
-                    void this.#onReassign(
-                      device.id,
-                      (e.target as HTMLSelectElement).value === ""
-                        ? null
-                        : (e.target as HTMLSelectElement).value,
-                    )}
-                >
-                  <option value="">${t("devices.device_profile_none")}</option>
-                  ${this.deviceProfiles.map(
-                    (profile) => html`<option value=${profile.id}>${profile.name}</option>`,
-                  )}
-                </select>`
+                  name="deviceProfileId"
+                  label=${`${t("devices.reassign")} ${device.label}`}
+                  hide-label
+                  search="auto"
+                  placeholder=${t("devices.device_profile_none")}
+                  searchPlaceholder=${t("categories.combobox_search")}
+                  noResultsLabel=${t("categories.combobox_no_results")}
+                  .options=${[
+                    { value: "", label: t("devices.device_profile_none") },
+                    ...this.deviceProfiles.map((profile) => ({
+                      value: profile.id,
+                      label: profile.name,
+                    })),
+                  ]}
+                  .value=${live(device.deviceProfileId ?? "")}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                    void this.#onReassign(device.id, e.detail.value === "" ? null : e.detail.value)}
+                ></wt-combobox>`
               : nothing
           }
           ${
@@ -681,27 +665,37 @@ export class DevicesScreen extends LitElement {
     const binding = bindingOf(profile.formFactor);
     if (binding === "none") return nothing;
     if (binding === "station") {
-      return html`<label class="field"
-        >${t("devices.station")}
-        <select
-          data-test="join-station"
-          @change=${(e: Event) => (this.chosenStationId = (e.target as HTMLSelectElement).value)}
-        >
-          <option value="">${t("devices.join_pick_station")}</option>
-          ${this.stations.map((station) => html`<option value=${station.id}>${station.name}</option>`)}
-        </select>
-      </label>`;
+      return html`<wt-combobox
+        data-test="join-station"
+        name="stationId"
+        label=${t("devices.station")}
+        search="auto"
+        placeholder=${t("devices.join_pick_station")}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${[
+          { value: "", label: t("devices.join_pick_station") },
+          ...this.stations.map((station) => ({ value: station.id, label: station.name })),
+        ]}
+        .value=${this.chosenStationId}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenStationId = e.detail.value)}
+      ></wt-combobox>`;
     }
-    return html`<label class="field"
-      >${t("devices.till")}
-      <select
-        data-test="join-register"
-        @change=${(e: Event) => (this.chosenRegisterId = (e.target as HTMLSelectElement).value)}
-      >
-        <option value="">${t("devices.join_pick_register")}</option>
-        ${this.tills.map((till) => html`<option value=${till.id}>${till.label}</option>`)}
-      </select>
-    </label>`;
+    return html`<wt-combobox
+      data-test="join-register"
+      name="registerId"
+      label=${t("devices.till")}
+      search="auto"
+      placeholder=${t("devices.join_pick_register")}
+      searchPlaceholder=${t("categories.combobox_search")}
+      noResultsLabel=${t("categories.combobox_no_results")}
+      .options=${[
+        { value: "", label: t("devices.join_pick_register") },
+        ...this.tills.map((till) => ({ value: till.id, label: till.label })),
+      ]}
+      .value=${this.chosenRegisterId}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenRegisterId = e.detail.value)}
+    ></wt-combobox>`;
   }
 
   /** A wrong tap denies the request, so the numbers stay disabled until the binding is complete, and
@@ -720,20 +714,25 @@ export class DevicesScreen extends LitElement {
     >
       <p class="label" data-test="join-dialog-label">${request.label}</p>
       <div class="pickers">
-        <label class="field"
-          >${t("devices.device_profile")}
-          <select
-            data-test="join-profile"
-            @change=${(e: Event) => {
-              this.chosenProfileId = (e.target as HTMLSelectElement).value;
-              this.chosenStationId = "";
-              this.chosenRegisterId = "";
-            }}
-          >
-            <option value="">${t("devices.join_pick_profile")}</option>
-            ${this.deviceProfiles.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
-          </select>
-        </label>
+        <wt-combobox
+          data-test="join-profile"
+          name="profileId"
+          label=${t("devices.device_profile")}
+          search="auto"
+          placeholder=${t("devices.join_pick_profile")}
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${[
+            { value: "", label: t("devices.join_pick_profile") },
+            ...this.deviceProfiles.map((p) => ({ value: p.id, label: p.name })),
+          ]}
+          .value=${this.chosenProfileId}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => {
+            this.chosenProfileId = e.detail.value;
+            this.chosenStationId = "";
+            this.chosenRegisterId = "";
+          }}
+        ></wt-combobox>
         ${profile === undefined ? nothing : this.#renderBindingPicker(profile)}
       </div>
       ${
