@@ -5817,15 +5817,16 @@ ongoing overhaul listed at the top of Track A.
   the modal's form width is the owner's call.
 
 - **A field's hint shows inside the empty field as its placeholder, not as a line under it (C104,
-  owner 2026-09-30) — DONE (2026-10-01, #966).** The owner, on the Pair a Bluetooth device dialog's PIN
-  field: "put the hint line in the field, not under it", and "that should be a standard". The three
-  shared fields that take a `hint` (`wt-input`, `wt-price-input`, `wt-number-stepper`; no other
-  shared field has one) now use it as the placeholder when the screen sets none, so every hinted
-  field follows without its screen changing. A placeholder the screen sets wins, and the hint is
-  then the field's screen-reader description only. The hint stays in the field, hidden from sight,
-  as that description in every case. A hint too long for the field is cut with "…", but only while
-  the field is not focused: Chromium clips a focused field's placeholder at its edge with no "…"
-  (seen in Chromium screenshots of three 250px fields, one focused).
+  owner 2026-09-30) — DONE (2026-10-01, #966).** _(2026-10-01, C119: the bill discount limit's
+  explanation now sits in a paragraph above the field; see the entry below.)_ The owner, on the Pair
+  a Bluetooth device dialog's PIN field: "put the hint line in the field, not under it", and "that
+  should be a standard". The three shared fields that take a `hint` (`wt-input`, `wt-price-input`,
+  `wt-number-stepper`; no other shared field has one) now use it as the placeholder when the screen
+  sets none, so every hinted field follows without its screen changing. A placeholder the screen
+  sets wins, and the hint is then the field's screen-reader description only. The hint stays in the
+  field, hidden from sight, as that description in every case. A hint too long for the field is cut
+  with "…", but only while the field is not focused: Chromium clips a focused field's placeholder at
+  its edge with no "…" (seen in Chromium screenshots of three 250px fields, one focused).
   `docs/developers/design-system.md` → Forms records the standard. Looked at in light and dark,
   English and Spanish, 1280 and 390 px wide: the PIN field, the extras form's two steppers, a menu
   price, the adjustments limit and a reason's two limits, and the till's party name and seat
@@ -5837,6 +5838,18 @@ ongoing overhaul listed at the top of Track A.
   only once the box is cleared. Help written as a paragraph beside a field, not as its `hint` (the
   sections screen's internal name help, the product editor's help lines), still sits under its
   field.
+
+- **The bill discount limit's explanation sits in the text above the field, not cut off inside it
+  (C119, owner 2026-10-01) — DONE (2026-10-01).** The owner, on C104's note that only "Discoun…" /
+  "Los des…" of it showed: "Move discount text". On the adjustments reasons screen, the "Limit on a
+  bill's discounts" section now explains the limit in a paragraph under its heading, in the same
+  muted style as the page's own introduction, with the wording unchanged in English and Spanish; the
+  percentage field has no hint, so the empty box shows nothing. The field no longer carries the
+  explanation as its screen-reader description; the paragraph is the text after the section's
+  heading, inside the section that heading names. Looked at in light and dark, English and Spanish,
+  at 390 and 1280 px wide, with no limit set and with 15%. The owner chose to leave as they are the
+  other hints cut off in their fields, and the fields whose own placeholder shows instead of their
+  hint.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now

@@ -1138,15 +1138,17 @@ describe("the bill discount limit", () => {
     el.shadowRoot!.querySelector('[data-test="limit-alert"]')?.textContent?.trim() ?? "";
   const saved = (el: AdjustmentReasonsScreen) =>
     el.shadowRoot!.querySelector('[data-test="limit-saved"]')?.textContent?.trim() ?? "";
+  const explained = (el: AdjustmentReasonsScreen) =>
+    section(el).querySelector<HTMLElement>('[data-test="limit-explained"]')!;
   const withLimit = (maxBillDiscountBp: number | null, over: Record<string, unknown> = {}) =>
     fakeApi({ getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp }), ...over });
 
   it("shows the saved limit as a percentage, labelled and explained", async () => {
     const el = await mount(withLimit(1250));
-    const input = limit(el) as Named & { label: string; hint: string };
+    const input = limit(el) as Named & { label: string };
     expect(input.value).toBe("12.5");
     expect(input.label).toBe("Largest total discount on one bill");
-    expect(input.hint).toBe(
+    expect(explained(el).textContent!.trim()).toBe(
       "Discounts on a bill's items and on the whole bill, added together, as a share of the full price of what is still on the bill. When the person making the change is below a manager, a discount that goes past it, or a cancellation that leaves the bill past it with a larger share than before, needs the PIN of a manager or someone more senior. Give-aways made on this bill are not counted as discount. Leave it empty for no limit.",
     );
     expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
@@ -1154,7 +1156,21 @@ describe("the bill discount limit", () => {
     );
   });
 
-  it("shows the percentage in a narrow box marked %, the label and help at full width", async () => {
+  it("explains the limit in the text above the field, not inside it", async () => {
+    const el = await mount(withLimit(null));
+    const input = limit(el) as Named & { hint: string; updateComplete: Promise<unknown> };
+    await input.updateComplete;
+    expect(
+      explained(el).compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(explained(el).classList.contains("intro")).toBe(true);
+    expect(input.hint).toBe("");
+    expect(
+      input.shadowRoot!.querySelector("[part=amount]")!.getAttribute("placeholder"),
+    ).toBeNull();
+  });
+
+  it("shows the percentage in a narrow box marked %, the mark also read to screen readers", async () => {
     const el = await mount(withLimit(1250));
     const input = limit(el) as Named & { updateComplete: Promise<unknown> };
     await input.updateComplete;
@@ -1181,6 +1197,14 @@ describe("the bill discount limit", () => {
     expect(input.label).toBe("Descuento total máximo en una cuenta");
     expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
       "Límite de descuento por cuenta",
+    );
+    // Its start and end only: the middle names words the English-only guard refuses in this file.
+    const explanation = explained(el).textContent!.trim();
+    expect(explanation).toMatch(
+      /^Los descuentos en los artículos de una cuenta y en toda la cuenta,/,
+    );
+    expect(explanation).toMatch(
+      /Las invitaciones hechas en esta cuenta no cuentan como descuento\. Déjalo vacío para no poner límite\.$/,
     );
     expect(button(el, "save-limit").textContent!.trim()).toBe("Guardar límite");
   });
