@@ -580,28 +580,21 @@ export class WtCombobox extends LitElement {
     event.preventDefault();
   }
 
-  private labelPressedWhileOpen = false;
+  /** The pointer whose press on the label began while the list was open. One left by a press that
+   * never became a click matches nothing later: a real click on the label follows its own press,
+   * which replaces it, and a scripted click's pointerId is -1. */
+  private labelPressOnOpenList: number | null = null;
 
-  /** Forgotten a task after the press ends, by which time a click on the label has already run,
-   * so a press that ends anywhere else leaves no note behind for a later click. */
-  private onLabelPointerdown(): void {
-    this.labelPressedWhileOpen = this.popup.matches(":popover-open");
-    if (!this.labelPressedWhileOpen) return;
-    const ended = new AbortController();
-    const forget = () => {
-      ended.abort();
-      setTimeout(() => (this.labelPressedWhileOpen = false));
-    };
-    for (const type of ["pointerup", "pointercancel"])
-      window.addEventListener(type, forget, { capture: true, signal: ended.signal });
+  private onLabelPointerdown(event: PointerEvent): void {
+    this.labelPressOnOpenList = this.popup.matches(":popover-open") ? event.pointerId : null;
   }
 
   /** A press on the label while the list is open closes it (the popover's own light dismiss);
-   * forwarding the click to the trigger would open it again straight away. The dismissal leaves
-   * focus in the hidden search box, so it goes back to the trigger, as a select keeps it. */
-  private onLabelClick(event: MouseEvent): void {
-    if (!this.labelPressedWhileOpen) return;
-    this.labelPressedWhileOpen = false;
+   * forwarding the click to the trigger would open it again straight away. Matched by pointer, not
+   * by time: a touch tap's click can come a task after its release. The dismissal leaves focus in the hidden search box, so it goes back to the
+   * trigger, as a select keeps it. */
+  private onLabelClick(event: PointerEvent): void {
+    if (event.pointerId !== this.labelPressOnOpenList) return;
     event.preventDefault();
     this.trigger.focus();
   }

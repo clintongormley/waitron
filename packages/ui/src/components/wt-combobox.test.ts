@@ -2294,3 +2294,23 @@ test("a label press cancelled by the browser does not swallow a later scripted c
   label!.click();
   await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
 });
+
+test("a touch tap on the label whose click arrives a task after the release still closes an open list", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { trigger, label, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  const toggles: string[] = [];
+  popup.addEventListener("toggle", (event) => toggles.push((event as ToggleEvent).newState));
+  const touch = { bubbles: true, composed: true, cancelable: true, pointerId: 7 };
+  label!.dispatchEvent(new PointerEvent("pointerdown", { ...touch, pointerType: "touch" }));
+  label!.dispatchEvent(new PointerEvent("pointerup", { ...touch, pointerType: "touch" }));
+  // A dispatched release does not light-dismiss the popover, so this stands in for that.
+  popup.hidePopover();
+  // On touch, Chromium can deliver the tap's click a task after the release.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  label!.dispatchEvent(new PointerEvent("click", { ...touch, pointerType: "touch" }));
+  await new Promise(requestAnimationFrame);
+  expect(toggles).toEqual(["closed"]);
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
