@@ -290,9 +290,17 @@ export class WtCombobox extends LitElement {
     return this.filteredOptions.length + (this.showAddRow ? 1 : 0);
   }
 
+  private get firstRowIndex(): number {
+    return this.rowCount > 0 ? 0 : -1;
+  }
+
   private isSelected(option: ComboboxOption): boolean {
     if (option.action) return false;
     return this.multiple ? this.values.includes(option.value) : this.value === option.value;
+  }
+
+  private indexOfChosen(options: ComboboxOption[]): number {
+    return options.findIndex((option) => this.isSelected(option));
   }
 
   /** The closed-state trigger text: the chosen label, or a count once more than one is chosen. */
@@ -368,7 +376,7 @@ export class WtCombobox extends LitElement {
 
   private onSearchInput(event: Event): void {
     this.searchText = (event.target as HTMLInputElement).value;
-    this.activeIndex = this.rowCount > 0 ? 0 : -1;
+    this.activeIndex = this.firstRowIndex;
   }
 
   /** The list scrolls, so a moved active row has to be brought back into view once Lit has drawn it. */
@@ -471,9 +479,8 @@ export class WtCombobox extends LitElement {
 
   /** The row a keyboard opening starts on: the chosen one, else the first. */
   private get chosenIndex(): number {
-    const chosen = this.filteredOptions.findIndex((option) => this.isSelected(option));
-    if (chosen >= 0) return chosen;
-    return this.rowCount > 0 ? 0 : -1;
+    const chosen = this.indexOfChosen(this.filteredOptions);
+    return chosen >= 0 ? chosen : this.firstRowIndex;
   }
 
   /** The panel's control that takes the keys: the search box, or the list when there is none. */
@@ -512,7 +519,7 @@ export class WtCombobox extends LitElement {
     event.preventDefault();
     // All options, not the filtered ones: the search text left from the last opening is not shown.
     const options = this.options;
-    const current = options.findIndex((option) => this.isSelected(option));
+    const current = this.indexOfChosen(options);
     const index = this.typeAhead(event.key, options, current);
     if (index >= 0 && index !== current) this.commitSelection(options[index]!.value, event);
   }
@@ -524,7 +531,7 @@ export class WtCombobox extends LitElement {
     // aria-activedescendant nor makes the first arrow press skip the first option.
     if (active === "none") this.activeIndex = -1;
     else if (active === "chosen") this.activeIndex = this.chosenIndex;
-    else this.activeIndex = this.rowCount > 0 ? 0 : -1;
+    else this.activeIndex = this.firstRowIndex;
     // Opening synchronously makes its dimensions available before the first paint.
     this.popup.showPopover();
     this.focusPanelControl();
@@ -533,8 +540,7 @@ export class WtCombobox extends LitElement {
     await this.updateComplete;
     this.positionPopup();
     // A click shows the chosen row, as a select does, without making it active.
-    if (active === "none")
-      this.scrollRowIntoView(this.filteredOptions.findIndex((option) => this.isSelected(option)));
+    if (active === "none") this.scrollRowIntoView(this.indexOfChosen(this.filteredOptions));
     else await this.scrollActiveIntoView();
   }
 
@@ -630,15 +636,13 @@ export class WtCombobox extends LitElement {
     if (event.key === "Tab") {
       // Not prevented: with the list closed and focus back on the trigger, the browser's own Tab
       // moves on from there.
-      this.popup.hidePopover();
-      this.trigger.focus();
+      this.closeAndReturnFocus();
       return;
     }
     if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
-    this.popup.hidePopover();
-    this.trigger.focus();
+    this.closeAndReturnFocus();
   }
 
   /** Focus that leaves both the panel and the trigger closes the list, as it would a select. */
