@@ -1433,8 +1433,14 @@ they settle:
 - a hint is grey AND italic, so it cannot be taken for a filled-in value;
 - an error turns the line (2px) and the label red, with the message under the field;
 - disabled: a paler fill, a dashed bottom line, greyed text;
+- a filled-in value is pure black (`#000000`) in light and pure white (`#ffffff`) in dark, so it
+  stands apart from the grey italic hint (owner, 2026-10-01);
 - the open dropdown: a search box at the top, 48px rows, the hovered row tinted, the chosen row bold
-  with a tick, and the field's line and label blue while it is open.
+  with a tick. While the list is open the FIELD loses its focus marking — its line and label go back
+  to their resting colours — because the search box is where typing goes, and two blue marks
+  confused (owner, 2026-10-01). The search box is outlined, not filled: the list's own background
+  with a thin (1px) blue line all round and 8px corners. Between it and the results, a soft drop
+  shadow under the search area takes the place of a dividing line (owner, after Home Assistant's).
 
 Colours, each worked out with WCAG's contrast formula on 2026-10-01 — they become new `--wt-*`
 tokens in both themes:
@@ -1454,7 +1460,19 @@ the fill in both themes.
 
 **Next action:** spec → plan from the approved mockups. The open questions above (the custom
 dropdown's keyboard and screen-reader behaviour, and whether the till follows) are still the
-spec's to settle.
+spec's to settle. The mockups are drawn at 14px in the system font, which is A179.
+
+**Smaller text: the system font at 14px (A179, owner 2026-10-01) — OPEN.** The owner: _"i find our
+text to be too big"_. Today body text is `--wt-font-size-md`, 15px, with `--wt-font-size-sm` 13px
+and `--wt-font-size-lg` 19px (`packages/ui-core/src/tokens/structure.css`), in each device's own
+system font (`--wt-font-family`: `system-ui, -apple-system, "Segoe UI", sans-serif`); the app
+ships no font files. The owner first asked for Home Assistant's Roboto, then chose to try the
+system font at 14px first — no font to bundle, no licence notice to ship. **Wanted:** body text
+14px, with the other sizes reconsidered beside it; fields follow (A178's mockups are already at
+14px, labels 12px). Open: whether the till, a touch screen with its own select styles, follows.
+**Phone check, the owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is
+widely reported to zoom the page in when a field whose text is under 16px is focused — not yet
+tried here. If it does, the usual remedy is to keep field text at 16px on small screens only.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
