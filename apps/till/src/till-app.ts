@@ -234,8 +234,14 @@ interface RefreshRetry {
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
-// wt-toast draws a `close` icon its consuming app registers.
-registerIcons({ close: CROSS_ICON_PATH });
+// Icons shared primitives draw and their consuming app registers: wt-toast's `close`, and
+// wt-combobox's `chevron-down` and `check`. `check` is adapted from Google's Material Symbols
+// (Apache License 2.0, https://fonts.google.com/icons).
+registerIcons({
+  close: CROSS_ICON_PATH,
+  "chevron-down": "M4.9 5.7L8 8.8L11.1 5.7L12 6.7L8 10.7L4 6.7Z",
+  check: "M6.37 12L2.57 8.2L3.52 7.25L6.37 10.1L12.48 3.98L13.43 4.93Z",
+});
 
 /**
  * How long the till waits on a request it bounds, its automatic resends included, before cancelling

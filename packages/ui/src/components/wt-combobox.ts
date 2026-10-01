@@ -590,9 +590,10 @@ export class WtCombobox extends LitElement {
   }
 
   /** A press on the label while the list is open closes it (the popover's own light dismiss);
-   * forwarding the click to the trigger would open it again straight away. Matched by pointer, not
-   * by time: a touch tap's click can come a task after its release. The dismissal leaves focus in the hidden search box, so it goes back to the
-   * trigger, as a select keeps it. */
+   * forwarding the click to the trigger would open it again straight away. The click is matched to
+   * its press by pointerId because a touch tap's click can arrive a task after its release. The
+   * dismissal leaves focus in the hidden search box, so it goes back to the trigger, as a select
+   * keeps it. */
   private onLabelClick(event: PointerEvent): void {
     if (event.pointerId !== this.labelPressOnOpenList) return;
     event.preventDefault();

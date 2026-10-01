@@ -1474,7 +1474,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-OPEN, needs a spec.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) built; A178b–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1564,14 +1564,42 @@ out at 4.1:1 (light) and 4.49:1 (dark), under the 4.5:1 small text needs. Label,
 text reuse `--wt-color-text-muted`, `--wt-color-text` and `--wt-color-danger`, all above 4.5:1 on
 the fill in both themes.
 
-**Spec and plan written 2026-10-01 (A178s), waiting for the owner's approval:**
+**Spec and plan written 2026-10-01 (A178s), approved by the owner the same day:**
 `docs/superpowers/specs/2026-10-01-filled-form-fields-design.md` and
 `docs/superpowers/plans/2026-10-01-filled-form-fields.md`. They settle the open questions — one
 dropdown primitive (`wt-combobox`, extended, with the keyboard of a select), a new `wt-textarea`,
 the till following, every hand-drawn field listed file by file, the tokens, and a closing guard —
 and ask the owner nine points (spec §12), among them six pull requests rather than one and the
-three kinds of test edit the move needs. Nothing is built until the owner approves. The mockups
-are drawn at 14px in the system font, which is A179.
+three kinds of test edit the move needs. The mockups are drawn at 14px in the system font, which
+is A179. The work lands in six pull requests, A178a to A178f, in order.
+
+**A178a — DONE: A178a (this branch, feat/filled-fields-primitives).** The shared field primitives
+draw the filled field: five colour and five structure tokens with their contrast held by
+`packages/ui-core/src/tokens/colors.test.ts`; one shared stylesheet, `fieldStyles`
+(`packages/ui-core/src/field-styles.ts`); `wt-input`, `wt-price-input` (which gains `invalid`) and
+`wt-number-stepper` drawn in it; a new `wt-textarea`; and `wt-combobox` extended into the one
+dropdown — `search` modes, option icons, groups and action rows, `hint`, a `help` slot,
+`hide-label`, and the keyboard of a select (arrows that wrap, type-ahead, Tab closes).
+`docs/developers/design-system.md` describes all of it (Tokens, the primitives table, Forms → "The
+field box", the axe states verified). The till and setup now register the `chevron-down` and
+`check` icons the dropdown draws, and the dashboard `check`. Screens that draw their own fields,
+native selects included, still look as before until A178b–e move them. **Existing tests changed for
+the look** (the approved edit kind; every behavioural assertion kept): in
+`packages/ui-core/src/components/wt-input.test.ts`, the label-size case (now mounted with a value,
+since a resting label is 16px), the help-placement case (beside the field box, not the label), the
+end-action case (reads `.field`), the invalid case (bottom line and label, not the border) and the
+disabled case (paler fill and dashed line, not opacity); in `wt-input.a11y.test.ts`, the
+"placeholder" and "input with a hint" contrast checks read the fill from `.field`; in
+`packages/ui/src/components/wt-number-stepper.test.ts`, the disabled, token-painting, invalid and
+button-placement cases (the buttons now sit outside the box), and the "empty" contrast check in its
+a11y suite; in `wt-price-input.test.ts`, the disabled, fixed-unit border, empty-unit,
+wider-field, seam, disabled-sign and the three locale cases, and three contrast checks in its a11y
+suite; in `wt-combobox.test.ts`, the tap-target-and-tokens case, the invalid case and the disabled
+case. Also changed, outside the look kind and named for the owner: `wt-combobox.test.ts`'s arrow
+case now expects the arrows to wrap (spec §12 point 8), and its "popup stays inside the bottom
+gutter" case presses the trigger near its chevron, because a resting label now covers the
+trigger's middle, and checks the list opened before its unchanged assertion. Both tap-target suites'
+"the interactive set is exactly …" lists gained `wt-textarea`.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
