@@ -1,12 +1,23 @@
 import { DraftRows, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, visuallyHiddenStyles } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  selectStyles,
+  submitOnEnter,
+  visuallyHiddenStyles,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import type { DashboardApi, ReceiptConfig, ReceiptPreview } from "../api/client.js";
+import type {
+  DashboardApi,
+  PrintPaperWidth,
+  ReceiptConfig,
+  ReceiptPreview,
+} from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { t } from "../i18n/t.js";
@@ -28,6 +39,7 @@ const TRIM_FIELDS: readonly TrimField[] = ["headerSubtitle", "footerMessage"];
 export class ReceiptsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     paperStyles,
     css`
       :host {
@@ -110,6 +122,10 @@ export class ReceiptsScreen extends LitElement {
       .preview h2 {
         margin-bottom: var(--wt-space-3);
       }
+      .paper-width {
+        display: block;
+        margin-bottom: var(--wt-space-3);
+      }
       .paper-viewport {
         overflow-x: auto;
       }
@@ -182,6 +198,8 @@ export class ReceiptsScreen extends LitElement {
   @state() private preview: ReceiptPreview | null = null;
   @state() private previewFailed = false;
   @state() private focusedTrim: TrimField | null = null;
+  /** The paper width the person chose, kept for every later preview; never saved. */
+  @state() private chosenWidth: PrintPaperWidth | null = null;
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
   #previewInFlight = false;
   #previewAgain = false;
@@ -284,7 +302,7 @@ export class ReceiptsScreen extends LitElement {
 
   /**
    * One request at a time; text typed meanwhile is sent once, as it stands, when it returns. Text
-   * already asked for is not asked for again. A preview only another session's save asked for goes
+   * already asked for at the same width is not asked for again. A preview only another session's save asked for goes
    * through the passive client, so it does not count as this person's activity.
    */
   async #sendPreview(): Promise<void> {
@@ -295,12 +313,15 @@ export class ReceiptsScreen extends LitElement {
     const client = this.#previewActive ? this.api : (this.api.background ?? this.api);
     this.#previewActive = false;
     const config = this.#trim();
-    const requested = JSON.stringify(config);
+    const width = this.chosenWidth;
+    const requested = JSON.stringify([config, width]);
     if (requested === this.#previewRequested) return;
     this.#previewRequested = requested;
     this.#previewInFlight = true;
     try {
-      this.preview = await client.previewReceipt(config);
+      this.preview = await (width === null
+        ? client.previewReceipt(config)
+        : client.previewReceipt(config, width));
       this.previewFailed = false;
     } catch {
       this.previewFailed = true;
@@ -322,6 +343,12 @@ export class ReceiptsScreen extends LitElement {
     this.saved = false;
     this.#previewActive = true;
     this.#schedulePreview();
+  }
+
+  #chooseWidth(width: PrintPaperWidth): void {
+    this.chosenWidth = width;
+    this.#previewActive = true;
+    void this.#sendPreview();
   }
 
   #validate(): string {
@@ -508,6 +535,25 @@ export class ReceiptsScreen extends LitElement {
     </div>`;
   }
 
+  #renderWidth(preview: ReceiptPreview): TemplateResult {
+    const chosen = this.chosenWidth ?? preview.paperWidth;
+    return html`<label class="paper-width"
+      ><span class="field-label">${t("printers.paper_width")}</span>
+      <select
+        name="paperWidth"
+        @change=${(event: Event) =>
+          this.#chooseWidth((event.target as HTMLSelectElement).value as PrintPaperWidth)}
+      >
+        ${preview.paperWidths.map(
+          (width) =>
+            html`<option value=${width} .selected=${width === chosen}>
+              ${t(width === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80")}
+            </option>`,
+        )}
+      </select></label
+    >`;
+  }
+
   #renderPreview(): TemplateResult {
     const preview = this.preview;
     const marks: PaperMark[] = [];
@@ -517,6 +563,7 @@ export class ReceiptsScreen extends LitElement {
     }
     return html`<div class="preview">
       <h2>${t("receipts.preview")}</h2>
+      ${preview && preview.paperWidths.length > 1 ? this.#renderWidth(preview) : nothing}
       ${
         this.previewFailed
           ? html`<p class="preview-error" data-test="preview-error">

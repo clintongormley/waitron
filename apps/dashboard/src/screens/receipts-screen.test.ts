@@ -625,3 +625,134 @@ describe("the Receipts page's refreshes from elsewhere", () => {
     });
   });
 });
+
+describe("the Receipts page's paper width", () => {
+  type Width = ReceiptPreview["paperWidth"];
+
+  /** Two widths offered; 58 mm drawn 30 columns wide and 80 mm 42, as the server draws them. */
+  function twoWidths(config: ReceiptConfig, paperWidth: Width = "80mm"): ReceiptPreview {
+    const drawn = fakePreview(config);
+    const columns = paperWidth === "58mm" ? 30 : 42;
+    return {
+      ...drawn,
+      preview: { ...drawn.preview, columns, widthDots: columns * 12 },
+      paperWidth,
+      paperWidths: ["58mm", "80mm"],
+    };
+  }
+
+  async function mountTwoWidths() {
+    const { LiveData } = await import("@waitron/dashboard-kit");
+    const liveData = new LiveData();
+    const drawer = () =>
+      vi.fn(async (config: ReceiptConfig, width?: Width) => twoWidths(config, width));
+    const background = stubApi({ previewReceipt: drawer() });
+    const api = Object.assign(stubApi({ previewReceipt: drawer() }), { liveData, background });
+    const { el } = await mount(api);
+    const savedElsewhere = (receipt: ReceiptConfig) => {
+      vi.mocked(background.getReceipt).mockResolvedValue({ receipt });
+      liveData.invalidate([{ type: "tenant_receipts" }]);
+    };
+    return { el, api, background, savedElsewhere };
+  }
+
+  const widthSelect = (el: ReceiptsScreen) => q<HTMLSelectElement>(el, "select[name=paperWidth]");
+
+  function choose(el: ReceiptsScreen, width: Width): void {
+    const select = widthSelect(el)!;
+    select.value = width;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  it("offers the location's widths in a labelled dropdown between the Preview heading and the paper, with the drawn width chosen", async () => {
+    const { el } = await mountTwoWidths();
+    const select = widthSelect(el)!;
+    expect(select).not.toBeNull();
+    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
+      [
+        ["58mm", t("printers.paper_width_58")],
+        ["80mm", t("printers.paper_width_80")],
+      ],
+    );
+    expect(select.value).toBe("80mm");
+    expect([...select.selectedOptions].map((option) => option.value)).toEqual(["80mm"]);
+    expect(select.labels![0]!.textContent).toContain(t("printers.paper_width"));
+    const heading = q(el, ".preview h2")!;
+    expect(heading.textContent).toBe(t("receipts.preview"));
+    expect(heading.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      select.compareDocumentPosition(paper(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("redraws the preview at a chosen width at once, through the active client, saving nothing", async () => {
+    const { el, api, background } = await mountTwoWidths();
+    expect(paper(el)!.style.width).toBe("42ch");
+    choose(el, "58mm");
+    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, "58mm"]]);
+    await vi.waitFor(() => expect(paper(el)!.style.width).toBe("30ch"));
+    expect(widthSelect(el)!.value).toBe("58mm");
+    expect(background.previewReceipt).not.toHaveBeenCalled();
+    expect(api.putReceipt).not.toHaveBeenCalled();
+  });
+
+  it("keeps a chosen width when another session's save redraws the preview through the passive client", async () => {
+    const { el, background, savedElsewhere } = await mountTwoWidths();
+    choose(el, "58mm");
+    await vi.waitFor(() => expect(paper(el)!.style.width).toBe("30ch"));
+    savedElsewhere({ headerSubtitle: "Suyo" });
+    await vi.waitFor(() =>
+      expect(vi.mocked(background.previewReceipt).mock.calls).toEqual([
+        [{ headerSubtitle: "Suyo" }, "58mm"],
+      ]),
+    );
+    await vi.waitFor(() => expect(paperLines(el)).toContain("Suyo"));
+    expect(paper(el)!.style.width).toBe("30ch");
+  });
+
+  it("sends one preview when a width is chosen while typed text waits for its quiet moment", async () => {
+    const { el, api, background } = await mountTwoWidths();
+    edit(el, "headerSubtitle", "Mío");
+    choose(el, "58mm");
+    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([
+      [{}],
+      [{ headerSubtitle: "Mío" }, "58mm"],
+    ]);
+    await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+    expect(api.previewReceipt).toHaveBeenCalledTimes(2);
+    expect(background.previewReceipt).not.toHaveBeenCalled();
+  });
+
+  it("keeps the chosen width, and says the preview is out of date under it, when the redraw fails", async () => {
+    const { el, api } = await mountTwoWidths();
+    vi.mocked(api.previewReceipt).mockRejectedValue({ code: "server.internal" });
+    choose(el, "58mm");
+    await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).not.toBeNull());
+    const select = widthSelect(el)!;
+    expect(select.value).toBe("58mm");
+    expect([...select.selectedOptions].map((option) => option.value)).toEqual(["58mm"]);
+    expect(
+      select.compareDocumentPosition(q(el, "[data-test=preview-error]")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(paper(el)!.style.width).toBe("42ch");
+  });
+
+  it.each([
+    ["one width", ["80mm"]],
+    ["no width", []],
+  ] as [string, Width[]][])(
+    "shows no width dropdown when the printers offer %s",
+    async (_, widths) => {
+      const api = stubApi({
+        previewReceipt: vi.fn(async (config: ReceiptConfig) => ({
+          ...fakePreview(config),
+          paperWidths: widths,
+        })),
+      });
+      const { el } = await mount(api);
+      expect(paper(el)).not.toBeNull();
+      expect(widthSelect(el)).toBeNull();
+    },
+  );
+});
