@@ -16,6 +16,7 @@ import type {
 } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
+import { describeSetting } from "./price-source.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
@@ -320,7 +321,7 @@ export class MenuPreviewPanel extends LitElement {
 
   #publish(event: Event): void {
     event.stopPropagation();
-    if (this.publishing || this.preview === null) return;
+    if (this.publishing || this.preview === null || this.preview.clashes.length > 0) return;
     this.dispatchEvent(
       new CustomEvent("wt-menu-publish", {
         detail: { hash: this.preview.hash },
@@ -477,6 +478,7 @@ export class MenuPreviewPanel extends LitElement {
         variant="primary"
         data-test="publish"
         .loading=${this.publishing}
+        .disabled=${this.preview.clashes.length > 0}
         @click=${(event: Event) => this.#publish(event)}
         >${fill(
           this.publishing ? "menu_preview.publishing" : "menu_preview.publish",
@@ -487,9 +489,51 @@ export class MenuPreviewPanel extends LitElement {
     </div>`;
   }
 
+  #renderClashes() {
+    const clashes = this.preview?.clashes ?? [];
+    if (!clashes.length) return nothing;
+    return html`<section>
+      <h2 data-test="clash-count">
+        ${fill(clashes.length === 1 ? "menu_preview.clash_count" : "menu_preview.clashes_count", { count: String(clashes.length) })}
+      </h2>
+      <ul data-test="clashes">
+        ${clashes.map((clash) => {
+          const offer = Object.values(this.preview!.document.offers).find(
+            (offer) => offer.productId === clash.productId,
+          );
+          const name = offer?.name ?? clash.productId;
+          const variant = clash.variantId
+            ? (offer?.variants.find((variant) => variant.id === clash.variantId)?.name ??
+              clash.variantId)
+            : null;
+          const words =
+            clash.field === "price"
+              ? describeSetting(
+                  {
+                    state: "clash",
+                    candidates:
+                      clash.candidates as import("@waitron/catalogue/src/menu-combine-types.js").Candidate<
+                        import("@waitron/shared").Decimal
+                      >[],
+                  },
+                  { product: name },
+                  t,
+                )
+              : t("menu_prices.sources_disagree");
+          return html`<li>
+            ${name}${variant ? ` — ${variant}` : ""}:
+            ${t(clash.field === "price" ? "menu_prices.menu_price" : "menu_prices.active")} —
+            ${words}
+          </li>`;
+        })}
+      </ul>
+    </section>`;
+  }
+
   override render() {
     return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderChanges()}
-    ${this.#renderWarnings()} ${this.#renderPublish()} ${this.#renderDocument()}`;
+    ${this.#renderWarnings()} ${this.#renderClashes()} ${this.#renderPublish()}
+    ${this.#renderDocument()}`;
   }
 }
 

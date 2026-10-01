@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
+  combinedFixture,
   cleanupWidgets,
   documentProduct,
   documentSection,
@@ -200,6 +201,7 @@ function api(state: State): DashboardApi {
     getMenuPrices: vi.fn().mockResolvedValue([
       {
         menuItemId: "mi-lager",
+        combined: combinedFixture("p-lager", "1.80", true, [], "1.80", "2.00"),
         productId: "p-lager",
         name: "Lager",
         categoryId: null,
@@ -207,7 +209,7 @@ function api(state: State): DashboardApi {
         productPrice: "2.00",
         override: "1.80",
         effectivePrice: "1.80",
-        active: true,
+        offered: true,
         variants: [],
       },
     ]),

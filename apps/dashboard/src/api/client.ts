@@ -1,3 +1,10 @@
+import type {
+  Setting,
+  CombinedOffer,
+  ValueSource,
+  Place,
+} from "@waitron/catalogue/src/menu-combine-types.js";
+export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguages } from "@waitron/shared";
 
 /**

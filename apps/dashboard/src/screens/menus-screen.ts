@@ -1467,7 +1467,7 @@ export class MenusScreen extends LitElement {
       >`;
     const { label, live } = statusWords(menu.status);
     return html`<span data-test=${test}
-      >${label}${
+      >${label}${menu.status.clashes ? html` <span part="clash">${menu.status.clashes} ${t(menu.status.clashes === 1 ? "menus.clash" : "menus.clashes")}</span>` : nothing}${
         live === null
           ? nothing
           : html` <span part="note">${live.version} · <span part="time">${live.time}</span></span>`
@@ -1855,6 +1855,7 @@ export class MenusScreen extends LitElement {
 
   #renderPrices() {
     return html`<dashboard-menu-prices-table
+        .nodes=${this.structure?.nodes ?? []}
         .rows=${this.prices ?? []}
         .loading=${this.prices === null && !this.pricesError}
         .failed=${this.pricesError}

@@ -700,3 +700,31 @@ it("names a product the document offers nothing for as no longer available", asy
   await tree.updateComplete;
   expect(topNames(tree)).toEqual([t("members.missing")]);
 });
+
+it("lists unresolved clashes above Publish and disables publishing", async () => {
+  const value = preview([]);
+  value.clashes = [
+    {
+      productId: "p-burger",
+      variantId: null,
+      field: "price",
+      candidates: [
+        { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
+        {
+          place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+          value: "14.00" as never,
+          source: { kind: "own" },
+        },
+      ],
+    },
+  ];
+  const el = await mount({ preview: value });
+  const publish = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
+  expect(publish.disabled).toBe(true);
+  expect(text(q(el, '[data-test="clashes"]'))).toContain("Burger");
+  expect(text(q(el, '[data-test="clash-count"]'))).toBe("Resolve 1 clash before publishing.");
+  const heard = vi.fn();
+  el.addEventListener("wt-menu-publish", heard);
+  publish.dispatchEvent(new MouseEvent("click"));
+  expect(heard).not.toHaveBeenCalled();
+});

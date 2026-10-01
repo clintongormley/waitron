@@ -1561,9 +1561,8 @@ it("reads the menu again when a later move is out and a read lands in the order 
 it("reads the menu again when a move made after a refusal is out and a read lands in the order a move before the refusal answered", async () => {
   const live = new LiveData();
   const client = api({ liveData: live });
-  const move = client.moveSectionMember.getMockImplementation()! as (
-    id: string,
-  ) => Promise<MenuStructure>;
+  const move =
+    client.moveSectionMember.getMockImplementation()! as DashboardApi["moveSectionMember"];
   const [burger, drinks, fav] = lunchNodes();
   client.moveSectionMember
     .mockImplementationOnce(move)
@@ -1760,9 +1759,8 @@ it("reads the menu again when a move's answer names members the menu does not sh
 it("explains a refused move, reads the menu again, and drops the moves queued behind it", async () => {
   let refuse!: (error: unknown) => void;
   const client = api();
-  const move = client.moveSectionMember.getMockImplementation()! as (
-    id: string,
-  ) => Promise<MenuStructure>;
+  const move =
+    client.moveSectionMember.getMockImplementation()! as DashboardApi["moveSectionMember"];
   client.moveSectionMember.mockImplementationOnce(
     () => new Promise((_, reject) => (refuse = reject)),
   );
@@ -4899,3 +4897,54 @@ it.each(["light", "dark"] as const)(
     expect(getComputedStyle(link).outlineStyle).not.toBe("none");
   },
 );
+
+it("sends only an offered reset and leaves the replacement variant set untouched", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  const select = pricesModal(el).querySelector<HTMLSelectElement>('select[name="offered"]');
+  expect(select).not.toBeNull();
+  select!.value = "";
+  select!.dispatchEvent(new Event("change"));
+  await prices(el).updateComplete;
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() =>
+    expect(client.updateMenuItem).toHaveBeenCalledExactlyOnceWith("menu-lunch", "mi-lemonade", {
+      offered: null,
+    }),
+  );
+  expect(client.setMenuVariants).not.toHaveBeenCalled();
+});
+it("shows the current clash count from the menus status read", async () => {
+  const client = api({
+    getMenuStatuses: vi
+      .fn()
+      .mockResolvedValue({
+        ...statuses(),
+        "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
+      }),
+  });
+  const el = await mount(client);
+  await table(el).updateComplete;
+  await vi.waitFor(() =>
+    expect(text(table(el).shadowRoot.querySelector('[data-test="status-menu-lunch"]'))).toContain(
+      "2 clashes",
+    ),
+  );
+});
+it("passes a product-only resolve through without replacing variant settings", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  emit(prices(el), "wt-offer-save", {
+    menuItemId: "mi-lemonade",
+    name: "Lemonade",
+    item: { grossPrice: "3.50" },
+    variants: null,
+  });
+  await vi.waitFor(() =>
+    expect(client.updateMenuItem).toHaveBeenCalledExactlyOnceWith("menu-lunch", "mi-lemonade", {
+      grossPrice: "3.50",
+    }),
+  );
+  expect(client.setMenuVariants).not.toHaveBeenCalled();
+});
