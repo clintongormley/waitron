@@ -866,8 +866,8 @@ Three rules make the fold safe rather than merely tidy.
 
 **Every collapsed section carries a one-line summary of what is inside it**, passed as `summary`, so
 nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
-empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Bar · Drinks`. An empty
-summary means an empty section, which is a useful signal in itself. One exception: the extras list
+empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Drinks` (kitchen name
+and course). An empty summary means an empty section, which is a useful signal in itself. One exception: the extras list
 form's names section (`apps/dashboard/src/widgets/extra-list-form.ts`) summarises with a count of
 the names filled in ("2 of 3 filled in"), as the owner's review of the Extras and Options editors
 chose (2026-09-26).
@@ -1564,8 +1564,8 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
-`departments`, `zones` and `routing`. The dashboard preserves module-owned `view` segments
-while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
+`departments`, `zones` and `kitchen` (Changes after sending). The dashboard preserves module-owned
+`view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
 `apps/dashboard/src/navigation.ts`).

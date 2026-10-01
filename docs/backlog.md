@@ -1351,7 +1351,7 @@ owner 2026-10-01: "i think we should separate kitchen name from customer facing 
 names" section with the customer-facing name in each language: an options list
 (`apps/dashboard/src/widgets/option-list-form.ts`), one option (`option-label-form.ts`) and an
 extras list (`extra-list-form.ts`). The product editor already keeps them apart — the kitchen name
-is in its "Kitchen" section with course and a read-only Made at link (slice 3a), the customer-facing names under
+is in its "Kitchen" section with course, the customer-facing names under
 "Descriptors" (`product-editor.ts`) — and the variant form (`variant-form.ts`) has no section but
 shows the kitchen name as its own field directly above the customer-facing names. **Decided
 (owner, 2026-10-01, mockup B):** in the three editors the kitchen name is a plain field, always
