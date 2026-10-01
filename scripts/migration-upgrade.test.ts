@@ -23,9 +23,10 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * After each step every table is topped up to two rows, read from that step's own schema (its
  * columns, foreign keys, unique indexes and CHECK constraints) and written with the file's foreign
  * keys, CHECKs and triggers in force. The second row repeats the first wherever its constraints
- * allow and differs in the primary key and in every unique index's columns, so a later unique index
- * over a column the two rows share is refused. Each table's row count is recorded before the next
- * step; a table that still exists after it holding fewer rows fails the test, naming the step.
+ * allow and differs in the primary key and in every unique index over plain columns, so a later
+ * unique index over a column the two rows share is refused. Each table's row count is recorded
+ * before the next step; a table that still exists after it holding fewer rows fails the test,
+ * naming the step.
  *
  * Weaker than its name in these ways. Every set's first migration, and everything up to
  * {@link FLOOR}, is applied together, because the baselines were regenerated out of date order
@@ -40,9 +41,9 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * constraints allow, except that a second row points a self-reference at the first. So a migration
  * that fails only on values the product writes and these rows lack passes: a unique index two real
  * rows break where these two differ, or a CHECK real values break and these do not. The tables
- * {@link ONE_ROW} names, and a singleton (`CHECK (id = 1)`), hold one row; a table whose insert
- * names a table a later step creates is not filled at that step. The steps {@link RESETS} lists
- * cannot carry the rows, and the walk restarts from an empty database at each. Rows are counted,
+ * {@link ONE_ROW} names, and a singleton (`CHECK (id = 1)`), hold one row. The steps
+ * {@link RESETS} lists cannot carry the rows, and the walk restarts from an empty database at each;
+ * at one refused by a constraint, nothing else the step does to the rows is seen. Rows are counted,
  * not compared, so a migration that rewrites a value passes. And beyond the counts it asserts only
  * that each step does not throw, so a trigger a rebuild silently drops is not seen.
  */
@@ -83,6 +84,13 @@ describe("upgrading a venue one migration at a time", () => {
       );
       // The control: a fill that wrote nothing would pass every row-count comparison.
       expect([...held].filter(([, rows]) => rows === 0).map(([table]) => table)).toEqual([]);
+      const unreached = (list: object, seen: Set<string>) =>
+        Object.keys(list).filter((entry) => !seen.has(entry));
+      expect({
+        RESETS: unreached(RESETS, reached.resets),
+        CANDIDATES: unreached(CANDIDATES, reached.candidates),
+        ONE_ROW: unreached(ONE_ROW, reached.oneRow),
+      }).toEqual({ RESETS: [], CANDIDATES: [], ONE_ROW: [] });
       console.log(
         `${watch.summary(5)}\n${held.size} tables hold rows after the last step.\n` +
           `Scratch directory under ${SCRATCH_PARENT}.`,
@@ -176,15 +184,16 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
       await step();
       continue;
     }
-    const refusal = await step().then(
+    reached.resets.add(reset);
+    const failure = await step().then(
       () => undefined,
-      (error: unknown) => messagesOf(error),
+      (error: unknown) => error,
     );
-    const expected = RESETS[reset];
-    if (refusal === undefined || !expected.every((part) => refusal.includes(part))) {
+    const mismatch = resetMismatch(RESETS[reset], failure);
+    if (mismatch !== undefined) {
       throw new Error(
-        `Step ${label} is listed in RESETS as refusing the rows with ${JSON.stringify(expected)}, ` +
-          `but ${refusal === undefined ? "it carried them" : `it failed with: ${refusal}`}`,
+        `Step ${label} is listed in RESETS as ${JSON.stringify(RESETS[reset])}, but ${mismatch}`,
+        { cause: failure },
       );
     }
     rmSync(venueDir, { recursive: true, force: true });
@@ -195,35 +204,72 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
 }
 
 /**
- * Shipped steps that cannot carry these rows, each with the parts of the failure it must still
- * show. Before go-live a schema change may need a venue reset (CLAUDE.md §3), so at a listed step
- * the guard checks the failure, then migrates an empty database to the same point and fills it
- * again. A listed step that carries the rows fails the guard, so an entry cannot outlive its cause.
+ * Shipped steps that cannot carry these rows, each with the failure it must still show: the parts
+ * of a refusal's message, or exactly the tables whose rows the step loses, so a loss beside the
+ * listed ones fails the guard. Before go-live a schema change may need a venue reset (CLAUDE.md
+ * §3), so at a listed step the guard checks the failure, then migrates an empty database to the
+ * same point and fills it again. A listed step that carries the rows, or a key naming no step the
+ * walk takes, fails the guard.
  */
-const RESETS: Record<string, readonly string[]> = {
+const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
   // Rebuilds `menu_items`; dropping the old one is refused while a non-cascading child holds rows.
-  "catalogue/0003_menu_price_nullable": [
-    "DROP TABLE `menu_items`",
-    "FOREIGN KEY constraint failed",
-  ],
+  "catalogue/0003_menu_price_nullable": {
+    refused: ["DROP TABLE `menu_items`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `mirror_config` with `node_id` required; a copied row's `node_id` is null.
-  "core/0008_node_keyed_rows": ["NOT NULL constraint failed: __new_mirror_config.node_id"],
+  "core/0008_node_keyed_rows": {
+    refused: ["NOT NULL constraint failed: __new_mirror_config.node_id"],
+  },
   // Rebuilds `management_sessions` with `token_hash` required; a copied row's is null.
-  "identity/0003_session_token_hash_required": [
-    "NOT NULL constraint failed: __new_management_sessions.token_hash",
-  ],
+  "identity/0003_session_token_hash_required": {
+    refused: ["NOT NULL constraint failed: __new_management_sessions.token_hash"],
+  },
   // Rebuilds `menu_items` again, as `catalogue/0003` does.
-  "catalogue/0008_menu_details": ["DROP TABLE `menu_items`", "FOREIGN KEY constraint failed"],
+  "catalogue/0008_menu_details": {
+    refused: ["DROP TABLE `menu_items`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `drawer_opens` without copying its rows.
-  "core/0012_printer_calibration": ["drawer_opens: 2 rows before, 0 after"],
+  "core/0012_printer_calibration": { lost: ["drawer_opens"] },
   // Rebuilds `working_order_lines` with `vat_class` required; a copied row's is null.
-  "core/0026_line_vat_class": ["NOT NULL constraint failed: __new_working_order_lines.vat_class"],
+  "core/0026_line_vat_class": {
+    refused: ["NOT NULL constraint failed: __new_working_order_lines.vat_class"],
+  },
   // Rebuilds `dining_tables`, refused as `menu_items` is; #897 says every venue needs a reset.
-  "core/0044_drop_table_bill_pointer": [
-    "DROP TABLE `dining_tables`",
-    "FOREIGN KEY constraint failed",
-  ],
+  "core/0044_drop_table_bill_pointer": {
+    refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
+  },
 };
+
+/** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */
+function resetMismatch(expected: (typeof RESETS)[string], failure: unknown): string | undefined {
+  if (failure === undefined) return "it carried the rows";
+  if ("refused" in expected) {
+    const message = messagesOf(failure);
+    return expected.refused.every((part) => message.includes(part))
+      ? undefined
+      : `it failed with: ${message}`;
+  }
+  if (!(failure instanceof RowsLost)) return `it failed with: ${messagesOf(failure)}`;
+  const unlisted = Object.keys(failure.lost).filter((table) => !expected.lost.includes(table));
+  const kept = expected.lost.filter((table) => !Object.hasOwn(failure.lost, table));
+  if (unlisted.length === 0 && kept.length === 0) return undefined;
+  return [
+    unlisted.length > 0 &&
+      `it also lost rows RESETS does not list:\n${unlisted.map((t) => failure.lost[t]).join("\n")}`,
+    kept.length > 0 && `it kept the rows of ${kept.join(", ")}`,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+class RowsLost extends Error {
+  /** Each table that holds fewer rows, with its before-and-after line. */
+  readonly lost: Readonly<Record<string, string>>;
+  constructor(label: string, lost: Record<string, string>) {
+    super(`Step ${label} lost rows the step before wrote:\n${Object.values(lost).join("\n")}`);
+    this.lost = lost;
+  }
+}
 
 /** An error's message and its causes', outermost first. */
 function messagesOf(error: unknown): string {
@@ -236,8 +282,8 @@ type Value = bigint | number | string | Uint8Array | null;
 type Row = Record<string, Value>;
 
 /**
- * Tried in order, ahead of the generic values, for a column whose CHECK constraint or trigger
- * refuses every generic value. Keyed `table.column`.
+ * Values tried in order, instead of the generic ones, for a column whose CHECK constraint or
+ * trigger refuses every generic value. Keyed `table.column`.
  */
 const CANDIDATES: Record<string, readonly Value[]> = {
   // The CHECK wants 64 lowercase hex digits and an image extension.
@@ -260,6 +306,17 @@ const ONE_ROW: Record<string, string> = {
     "a tender naming a settled sale is refused, so one sale stays open for the tenders",
   menu_item_variant_overrides:
     "its key is a menu item and a variant of that item's product, and the rows hold one such pair",
+};
+
+/**
+ * The entries of {@link RESETS}, {@link CANDIDATES} and {@link ONE_ROW} the walk reached; one it
+ * never reached fails the guard. Reaching a CANDIDATES or ONE_ROW entry shows only that the walk
+ * met its column or table, not that the entry is still needed.
+ */
+const reached = {
+  resets: new Set<string>(),
+  candidates: new Set<string>(),
+  oneRow: new Set<string>(),
 };
 
 const SOLUTIONS_TRIED = 100;
@@ -323,9 +380,9 @@ const key = (value: Value): string =>
       : `${typeof value}:${String(value)}`;
 
 /**
- * Opened on the closed file rather than through the store, as `scripts/append-only-triggers.test.ts`
- * does, with the two pragmas the store sets on its writer that change what a write does
- * (`packages/store/src/index.ts`), so the file's foreign keys, CHECKs and triggers all apply.
+ * Opened on the closed file rather than through the store, with the two pragmas the store sets on
+ * its writer that change what a write does (`packages/store/src/index.ts`), so the file's foreign
+ * keys, CHECKs and triggers all apply.
  */
 function openRaw(venueDir: string): DatabaseSync {
   const connection = new DatabaseSync(join(venueDir, "venue.db"));
@@ -365,12 +422,15 @@ function carryRows(
   const connection = openRaw(venueDir);
   try {
     const now = tableCounts(connection, skip);
-    const lost = [...kept]
-      .filter(([table, before]) => now.has(table) && (now.get(table) ?? 0) < before)
-      .map(([table, before]) => `${table}: ${before} rows before, ${now.get(table)} after`);
-    if (lost.length > 0) {
-      throw new Error(`Step ${label} lost rows the step before wrote:\n${lost.join("\n")}`);
-    }
+    const lost = Object.fromEntries(
+      [...kept]
+        .filter(([table, before]) => now.has(table) && (now.get(table) ?? 0) < before)
+        .map(([table, before]) => [
+          table,
+          `${table}: ${before} rows before, ${now.get(table)} after`,
+        ]),
+    );
+    if (Object.keys(lost).length > 0) throw new RowsLost(label, lost);
     const shapes = parentsFirst([...now.keys()].map((table) => shapeOf(connection, table)));
     connection.exec("begin");
     try {
@@ -517,7 +577,7 @@ function columnsNamedIn(sql: string, columns: Column[]): string[] {
 function listedValues(expression: string, column: string): string[] {
   const name = column.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const compared = new RegExp(
-    `"?${name}"?\\s*(?:=\\s*('(?:[^']|'')*')|in\\s*\\(([^()]*)\\))`,
+    `"?${name}"?\\s*(?:=\\s*('(?:[^']|'')*')|in\\s*\\(((?:'(?:[^']|'')*'|[^()'])*)\\))`,
     "gi",
   );
   return [...expression.matchAll(compared)].flatMap((match) =>
@@ -580,8 +640,11 @@ function readRows(connection: DatabaseSync, query: string, ...params: Value[]): 
 
 /** Tops `shape` up to two rows (one for a singleton), or fails naming the table. */
 function fill(connection: DatabaseSync, shape: Shape, label: string) {
+  if (shape.name in ONE_ROW) reached.oneRow.add(shape.name);
   const want = shape.singleton || shape.name in ONE_ROW ? 1 : 2;
   const rows = readRows(connection, `select * from ${ident(shape.name)} limit 2`);
+  // Ahead of preparing the insert, which fails while a foreign key names a table this step lacks.
+  if (rows.length >= want) return;
   let insert: StatementSync;
   try {
     insert = connection.prepare(
@@ -589,8 +652,6 @@ function fill(connection: DatabaseSync, shape: Shape, label: string) {
         `values (${shape.columns.map(() => "?").join(", ")})`,
     );
   } catch (error) {
-    // A foreign key naming a table a later step creates: this step's schema takes no row here.
-    if (error instanceof Error && error.message.startsWith("no such table")) return;
     throw new Error(`Step ${label}: could not write ${shape.name}: ${messagesOf(error)}`, {
       cause: error,
     });
@@ -634,16 +695,10 @@ function* solutions(
   search: { spent: boolean },
   template?: Row,
 ): Generator<Row> {
-  // A foreign key may name a table this step does not have; only a null passes it then.
-  const exists = connection.prepare(
-    `select 1 from sqlite_master where type = 'table' and name = ?`,
-  );
   const parentRows = new Map(
     shape.foreignKeys.map((fk) => [
       fk,
-      exists.get(fk.parent) === undefined
-        ? []
-        : readRows(connection, `select ${fk.to.map(ident).join(", ")} from ${ident(fk.parent)}`),
+      readRows(connection, `select ${fk.to.map(ident).join(", ")} from ${ident(fk.parent)}`),
     ]),
   );
   const parentKeys = new Map(
@@ -657,7 +712,10 @@ function* solutions(
 
   const ownValues = (column: Column): Value[] => {
     const declared = CANDIDATES[`${shape.name}.${column.name}`];
-    if (declared !== undefined) return [...declared];
+    if (declared !== undefined) {
+      reached.candidates.add(`${shape.name}.${column.name}`);
+      return [...declared];
+    }
     const kind = affinity(column.type);
     const values: Value[] = [];
     if (column.dflt !== null) {
