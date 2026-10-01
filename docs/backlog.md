@@ -6386,18 +6386,18 @@ ongoing overhaul listed at the top of Track A.
 - **Clicking the side menu's current section header collapses it (A161, owner 2026-09-30) — done (2026-10-01, #PR).**
   - On click: the header of the section holding the page you are on now collapses that section like
     any other, and a second click opens it again. Until now that section always showed open, so the
-    click did nothing visible (C35's leftover (1) above). Receipt: "collapses the current page's
+    click did nothing visible (C35's leftover (1) above). Test: "collapses the current page's
     group when its header is clicked, and opens it on a second click" in
     `apps/dashboard/src/dashboard-app.test.ts`.
   - On arrival: the section opens whenever you arrive at a page in it — the first load or a reload,
     the Back button, a nav click, a pick from the search box, a module's page — so a page is not
     opened with its section shut. Picking the page you are already on from the search box opens its
-    section too. Receipts: "starts with only the group holding the opened page expanded" (an
+    section too. Tests: "starts with only the group holding the opened page expanded" (an
     existing case), "opens a collapsed group when the Back button arrives at a page in it", "starts
     with a module page's group expanded when that page is opened", and "opens the current page's
     collapsed group when a search picks that same page".
   - The next navigation inside a collapsed section: after you collapse the section you are on,
-    arriving at another page in it opens it again. Receipt: "opens the current page's group again
+    arriving at another page in it opens it again. Test: "opens the current page's group again
     when a search picks another page in it after it was collapsed".
   - A difference from before: a section opened on arrival stays open after you leave it, as one
     opened by hand does. Before, a section shown open only because it held the current page closed
@@ -6405,7 +6405,7 @@ ongoing overhaul listed at the top of Track A.
   - Two older tests were removed in their own commit, because they checked the old rule this
     reverses: "keeps a group expanded once collapsed if it holds the current screen, so you never
     lose your place" and "does not clear a group's collapse when its header is clicked while it
-    shows open only for holding the current page". The removal waits on the owner's approval.
+    shows open only for holding the current page".
   - `docs/developers/design-system.md` → "Dashboard sidebar navigation" states the new rule.
 
 - **A form's message about a failed submission sits at the bottom of the form, on its own line above

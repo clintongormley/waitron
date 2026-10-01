@@ -1509,8 +1509,7 @@ export class DashboardApp extends LitElement {
         ${sections.map(({ group, pages }) => {
           if (pages === undefined) return nothing;
           // A search shows its matches open without touching `collapsedGroups`, and its headers
-          // are plain labels rather than toggles, so clearing it brings back the nav exactly as it
-          // was.
+          // are plain labels rather than toggles.
           const collapsed = !searching && this.collapsedGroups.has(group.id);
           const panelId = `nav-group-panel-${group.id}`;
           return html`

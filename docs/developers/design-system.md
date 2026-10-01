@@ -950,10 +950,10 @@ narrows the rows the nav would already show, so a page this person may not open 
 however exactly its name is typed. A group with no match is hidden, header and all. A group with a
 match shows open whatever its collapsed state. While a term is typed each shown header stops being a
 collapse control: it is a plain `<div>` with no `aria-expanded`, no click handler and no chevron (an
-empty space of the chevron's width keeps the label where it was). Nothing clicked during a search
-can therefore change the recorded collapsed state, so clearing the term brings the nav back exactly
-as it was. When nothing matches, the nav says **No pages match.** in a `role="status"` message. Enter
-opens the first page shown, in nav order, and does nothing when nothing matches or the box is blank.
+empty space of the chevron's width keeps the label where it was), so clicking one changes nothing.
+Picking a page opens its group, as any arrival does. When nothing matches, the nav says **No pages
+match.** in a `role="status"` message. Enter opens the first page shown, in nav order, and does
+nothing when nothing matches or the box is blank.
 Opening a page from a search, by Enter or by click, clears the term and closes the phone-width
 drawer, as any nav click does. Escape clears a term and goes no further, so an open drawer stays
 open; Escape in an empty box closes the drawer as it does anywhere else in the shell. An Enter or
