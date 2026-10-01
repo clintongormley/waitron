@@ -4693,41 +4693,66 @@ export async function sendToPrep(
   });
 }
 
-/** Stamp a settled, fired order as collected so it leaves the kitchen queue. */
+/**
+ * Stamp a fired order as collected so it leaves the kitchen queue: a settled one, or a counter order
+ * sent without payment in a mode that takes payment after the kitchen has it.
+ */
 export async function markCollected(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
-  void cfg;
-  return withTransaction(deps.db, async (tx) => {
-    const [order] = await tx
-      .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-    if (order === undefined || order.status !== "settled") {
-      throw new AppError("working_order.not_settled", { workingOrderId: id });
-    }
-    // Refused here, before the trigger that allows `collected_at` only NULL → non-null refuses it
-    // as an opaque error.
-    if (order.collectedAt !== null) {
-      throw new AppError("working_order.already_collected", { workingOrderId: id });
-    }
-    // An order with no ticket items is on no station display to hand over.
-    const [fired] = await tx
-      .select({ id: ticketItems.id })
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id))
-      .limit(1);
-    if (fired === undefined) {
-      throw new AppError("ticket.not_fired", { workingOrderId: id });
-    }
+  return withTransaction(deps.db, (tx) => handOver(tx, cfg, id));
+}
 
-    await tx
-      .update(workingOrders)
-      .set({ collectedAt: nowIso() })
-      .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
-  });
+async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
+  const [order] = await tx
+    .select({
+      status: workingOrders.status,
+      collectedAt: workingOrders.collectedAt,
+      partyId: workingOrders.partyId,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, id));
+  if (
+    order === undefined ||
+    (order.status !== "settled" && !(await sentUnpaidCounterOrder(tx, cfg, id, order)))
+  ) {
+    throw new AppError("working_order.not_settled", { workingOrderId: id });
+  }
+  // Refused here, before the trigger that allows `collected_at` only NULL → non-null refuses it
+  // as an opaque error.
+  if (order.collectedAt !== null) {
+    throw new AppError("working_order.already_collected", { workingOrderId: id });
+  }
+  // An order with no ticket items is on no station display to hand over.
+  const [fired] = await tx
+    .select({ id: ticketItems.id })
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, id))
+    .limit(1);
+  if (fired === undefined) {
+    throw new AppError("ticket.not_fired", { workingOrderId: id });
+  }
+
+  await tx
+    .update(workingOrders)
+    .set({ collectedAt: nowIso() })
+    .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
+}
+
+/** The service modes in which a counter order is sent to the kitchen before it is paid. */
+const PAY_AFTER_SENDING: ReadonlySet<string> = new Set(["ticket_then_pay", "invoice_first"]);
+
+async function sentUnpaidCounterOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  order: { status: string; partyId: string | null },
+): Promise<boolean> {
+  if (order.status !== "placed" || order.partyId !== null) return false;
+  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+  return PAY_AFTER_SENDING.has(context?.serviceMode ?? cfg.orderFlow);
 }
 
 /** One unserved, fired line of an open tab, as `listTablesWithState`'s JSON aggregate emits it. */
