@@ -1021,6 +1021,25 @@ describe("product-list", () => {
   });
 });
 
+it("drags a product outside the selection alone and never offers a variant as a drag source", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [product({ id: "bun", variants: [bunVariant] })],
+    selecting: true,
+    selected: ["folder:other"],
+  });
+  const root = await tableRoot(el);
+  const cell = root.querySelector<HTMLElement>('[part~="product-cell"]')!;
+  const data = new DataTransfer();
+  cell.dispatchEvent(
+    new DragEvent("dragstart", { bubbles: true, composed: true, dataTransfer: data }),
+  );
+  expect(data.getData("application/x-waitron-items")).toBe('["bun"]');
+  root.querySelector<HTMLElement>(".tree-toggle")!.click();
+  const variant = (await tableRoot(el)).querySelector('tr[data-row-key="bun:small"]')!;
+  expect(variant).not.toBeNull();
+  expect(variant.querySelector('[draggable="true"]')).toBeNull();
+});
+
 describe("the product list at phone width", () => {
   // A long unbroken product name widens the name column past a phone's screen.
   const phoneProducts = () => [

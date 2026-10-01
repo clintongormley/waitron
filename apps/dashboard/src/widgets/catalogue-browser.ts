@@ -26,7 +26,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import "./product-list.js";
+import { acceptsCatalogueDrop } from "./product-list.js";
 import "./category-form.js";
 
 @customElement("dashboard-catalogue-browser")
@@ -54,6 +54,9 @@ export class CatalogueBrowser extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+      .drop-target {
+        background: var(--wt-color-surface-lifted);
       }
       fieldset {
         margin: var(--wt-space-4) 0;
@@ -134,6 +137,53 @@ export class CatalogueBrowser extends LitElement {
   @state() private summaryFailed = false;
   @state() private operationBusy = false;
   @state() private operationError = "";
+  @state() private dropError = "";
+  #dragged: string[] = [];
+  #dropTarget: HTMLElement | null = null;
+
+  #clearDropTarget(): void {
+    this.#dropTarget?.classList.remove("drop-target");
+    this.#dropTarget = null;
+  }
+  #overCrumb(event: DragEvent, folderId: string | null): void {
+    this.#clearDropTarget();
+    if (
+      this.operationBusy ||
+      this.summaryLoading ||
+      !acceptsCatalogueDrop(this.#dragged, folderId, this.categories)
+    )
+      return;
+    event.preventDefault();
+    this.#dropTarget = event.currentTarget as HTMLElement;
+    this.#dropTarget.classList.add("drop-target");
+  }
+  async #drop(keys: string[], folderId: string | null): Promise<void> {
+    this.#clearDropTarget();
+    if (
+      this.operationBusy ||
+      this.summaryLoading ||
+      !acceptsCatalogueDrop(keys, folderId, this.categories)
+    )
+      return;
+    this.operationBusy = true;
+    this.dropError = "";
+    try {
+      await this.api.moveCatalogueItems(this.#selection(keys), folderId);
+      this.selected = [];
+    } catch (error) {
+      this.dropError = codeMessage(codeOf(error));
+    } finally {
+      this.operationBusy = false;
+    }
+  }
+  #dropCrumb(event: DragEvent, folderId: string | null): void {
+    const keys = this.#dragged;
+    this.#clearDropTarget();
+    if (!acceptsCatalogueDrop(keys, folderId, this.categories)) return;
+    this.#dragged = [];
+    event.preventDefault();
+    void this.#drop(keys, folderId);
+  }
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("folderId") || changed.has("view") || changed.has("search")) this.selected = [];
@@ -404,7 +454,16 @@ export class CatalogueBrowser extends LitElement {
     ];
     return html`<nav class="breadcrumb" aria-label=${t("folders.breadcrumb")}>
       <ol>
-        ${crumbs.map((crumb, index) => (index === crumbs.length - 1 ? html`<li><span aria-current="location">${crumb.name}</span></li>` : html`<li><wt-button variant="ghost" data-test=${`crumb-${index}`} @click=${() => this.#navigate("open-folder", { folderId: crumb.id })}>${crumb.name}</wt-button><span class="sep" aria-hidden="true">›</span></li>`))}
+        ${crumbs.map(
+          (crumb, index) =>
+            html`<li
+              @dragover=${(event: DragEvent) => this.#overCrumb(event, crumb.id)}
+              @dragleave=${() => this.#clearDropTarget()}
+              @drop=${(event: DragEvent) => this.#dropCrumb(event, crumb.id)}
+            >
+              ${index === crumbs.length - 1 ? html`<span aria-current="location">${crumb.name}</span>` : html`<wt-button variant="ghost" data-test=${`crumb-${index}`} @click=${() => this.#navigate("open-folder", { folderId: crumb.id })}>${crumb.name}</wt-button><span class="sep" aria-hidden="true">›</span>`}
+            </li>`,
+        )}
       </ol>
     </nav>`;
   }
@@ -485,6 +544,15 @@ export class CatalogueBrowser extends LitElement {
         }
       </div>
       <dashboard-product-list
+        @drag-items=${(event: CustomEvent<{ keys: string[] }>) => {
+          event.stopPropagation();
+          this.#dragged = event.detail.keys;
+          this.#clearDropTarget();
+        }}
+        @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string }>) => {
+          event.stopPropagation();
+          void this.#drop(event.detail.keys, event.detail.folderId);
+        }}
         .selecting=${this.selecting}
         .selected=${this.selected}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
@@ -528,7 +596,7 @@ export class CatalogueBrowser extends LitElement {
           if (!this.formBusy) this.folderForm = null;
         }}
       ></dashboard-category-form
-      >${this.#operationDialog()}`;
+      >${this.#operationDialog()}${this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing}`;
   }
 }
 declare global {

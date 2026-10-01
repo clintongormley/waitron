@@ -8,7 +8,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
-import { categoryPath } from "./category-form.js";
+import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import {
   modifierListName,
@@ -41,6 +41,22 @@ function rowActive({ product, variant }: ProductRow): boolean {
   return product.active && (variant?.active ?? true);
 }
 
+export function acceptsCatalogueDrop(
+  keys: string[],
+  folderId: string | null,
+  categories: CategorySummary[],
+): boolean {
+  return (
+    keys.length > 0 &&
+    (folderId === null ||
+      !keys.some(
+        (key) =>
+          key.startsWith("folder:") &&
+          categoryWithDescendants(key.slice(7), categories).has(folderId),
+      ))
+  );
+}
+
 @customElement("dashboard-product-list")
 export class ProductList extends LitElement {
   static override styles = [
@@ -57,6 +73,9 @@ export class ProductList extends LitElement {
          would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
       wt-data-table::part(product-cell) {
         display: block;
+      }
+      wt-data-table::part(drop-target) {
+        background: var(--wt-color-surface-lifted);
       }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
@@ -105,6 +124,56 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
   #listNames: ReadonlyMap<string, string> = new Map();
+  #dragged: string[] = [];
+  #dropTarget: HTMLElement | null = null;
+
+  #clearDropTarget(): void {
+    this.#dropTarget?.part.remove("drop-target");
+    this.#dropTarget = null;
+  }
+  #startDrag(event: DragEvent, key: string): void {
+    event.stopPropagation();
+    this.#dragged = this.selected.includes(key) ? [...this.selected] : [key];
+    event.dataTransfer?.setData("application/x-waitron-items", JSON.stringify(this.#dragged));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    this.dispatchEvent(
+      new CustomEvent("drag-items", {
+        detail: { keys: this.#dragged },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  #endDrag(event: DragEvent): void {
+    event.stopPropagation();
+    this.#clearDropTarget();
+    this.#dragged = [];
+    this.dispatchEvent(
+      new CustomEvent("drag-items", { detail: { keys: [] }, bubbles: true, composed: true }),
+    );
+  }
+  #overFolder(event: DragEvent, folderId: string): void {
+    event.stopPropagation();
+    this.#clearDropTarget();
+    if (!acceptsCatalogueDrop(this.#dragged, folderId, this.categories)) return;
+    event.preventDefault();
+    this.#dropTarget = event.currentTarget as HTMLElement;
+    this.#dropTarget.part.add("drop-target");
+  }
+  #dropFolder(event: DragEvent, folderId: string): void {
+    event.stopPropagation();
+    this.#clearDropTarget();
+    if (!acceptsCatalogueDrop(this.#dragged, folderId, this.categories)) return;
+    event.preventDefault();
+    this.dispatchEvent(
+      new CustomEvent("drop-items", {
+        detail: { keys: [...this.#dragged], folderId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.#endDrag(event);
+  }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("extraLists") || changed.has("optionLists"))
@@ -199,7 +268,12 @@ export class ProductList extends LitElement {
         cell: ({ product, variant }, { ancestorOnly }) =>
           variant
             ? html`<strong>${variant.name}</strong>`
-            : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
+            : html`<span
+                part=${ancestorOnly ? "product-cell context" : "product-cell"}
+                draggable="true"
+                @dragstart=${(event: DragEvent) => this.#startDrag(event, product.id)}
+                @dragend=${(event: DragEvent) => this.#endDrag(event)}
+              >
                 ${
                   product.image === null
                     ? html`<span
@@ -380,7 +454,14 @@ export class ProductList extends LitElement {
           if (row.kind === "product") return column.cell(row, context);
           const { folder } = row;
           if (column.key === "name")
-            return html`<span part="folder-cell"
+            return html`<span
+              part="folder-cell"
+              draggable="true"
+              @dragstart=${(event: DragEvent) => this.#startDrag(event, row.key)}
+              @dragend=${(event: DragEvent) => this.#endDrag(event)}
+              @dragover=${(event: DragEvent) => this.#overFolder(event, folder.id)}
+              @dragleave=${() => this.#clearDropTarget()}
+              @drop=${(event: DragEvent) => this.#dropFolder(event, folder.id)}
               ><wt-icon name="folder"></wt-icon
               ><wt-button
                 variant="ghost"

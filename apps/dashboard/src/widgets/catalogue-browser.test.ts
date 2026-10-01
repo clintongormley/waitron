@@ -89,6 +89,125 @@ export async function rowKeys(el: CatalogueBrowser) {
     (row) => row.dataset.rowKey,
   );
 }
+async function nameCell(el: CatalogueBrowser, key: string) {
+  return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
+    `tr[data-row-key="${key}"] [part~="${key.startsWith("folder:") ? "folder-cell" : "product-cell"}"]`,
+  )!;
+}
+function dragEvent(target: Element, type: string, data: DataTransfer) {
+  const event = new DragEvent(type, {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    dataTransfer: data,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+function drag(from: Element, to: Element) {
+  const data = new DataTransfer();
+  dragEvent(from, "dragstart", data);
+  dragEvent(to, "dragover", data);
+  dragEvent(to, "drop", data);
+  dragEvent(from, "dragend", data);
+  return data;
+}
+
+it("moves a dragged product into a folder", async () => {
+  const el = await mountBrowser();
+  const cell = await nameCell(el, "bread");
+  expect(cell.draggable).toBe(true);
+  const data = drag(cell, await nameCell(el, "folder:f"));
+  expect(data.getData("application/x-waitron-items")).toBe('["bread"]');
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "f",
+    ),
+  );
+});
+it("drags the whole selected group and clears selection after moving", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread", "folder:d"]);
+  drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+  expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    { productIds: ["bread"], categoryIds: ["d"] },
+    "f",
+  );
+});
+it("refuses dragover and drop of a folder onto itself or its descendants but accepts a sibling", async () => {
+  const el = await mountBrowser({ categories: [...CATEGORIES, folder("s", "Soft drinks", null)] });
+  await typeSearch(el, "drinks");
+  const from = await nameCell(el, "folder:d");
+  const data = new DataTransfer();
+  dragEvent(from, "dragstart", data);
+  // Protected dragover cannot read transfer contents; acceptance uses the captured keys.
+  data.clearData();
+  for (const key of ["folder:d", "folder:b"]) {
+    const target = await nameCell(el, key);
+    expect(dragEvent(target, "dragover", data).defaultPrevented).toBe(false);
+    dragEvent(target, "drop", data);
+    expect(target.getAttribute("part")).not.toContain("drop-target");
+  }
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  const sibling = await nameCell(el, "folder:s");
+  expect(dragEvent(sibling, "dragover", data).defaultPrevented).toBe(true);
+  expect(sibling.getAttribute("part")).toContain("drop-target");
+  dragEvent(sibling, "dragleave", data);
+  expect(sibling.getAttribute("part")).not.toContain("drop-target");
+  dragEvent(from, "dragend", data);
+  expect(dragEvent(sibling, "dragover", data).defaultPrevented).toBe(false);
+});
+it("moves a product to the top level through the first breadcrumb", async () => {
+  const el = await mountBrowser({ folderId: "d" });
+  drag(await nameCell(el, "cola"), el.shadowRoot!.querySelector('[data-test="crumb-0"]')!);
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["cola"], categoryIds: [] },
+      null,
+    ),
+  );
+});
+it("refuses a dragged folder's ancestor or current breadcrumb when it is inside that folder", async () => {
+  const el = await mountBrowser({
+    folderId: "b",
+    products: [],
+    categories: [...CATEGORIES, folder("child", "Child", "b")],
+  });
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  list.dispatchEvent(
+    new CustomEvent("drag-items", {
+      detail: { keys: ["folder:d"] },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const data = new DataTransfer();
+  const crumbs = el.shadowRoot!.querySelectorAll("nav li");
+  for (const target of [crumbs[1]!, crumbs[2]!]) {
+    expect(dragEvent(target, "dragover", data).defaultPrevented).toBe(false);
+    dragEvent(target, "drop", data);
+  }
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(dragEvent(crumbs[0]!, "dragover", data).defaultPrevented).toBe(true);
+});
+it("shows a refused drop at the bottom and keeps the selection for correction", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.moveCatalogueItems).mockRejectedValue(
+    Object.assign(new Error(), { code: "category.parent_cycle" }),
+  );
+  await selectKeys(el, ["bread"]);
+  drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+      "Choose a parent outside",
+    ),
+  );
+  expect(count(el)).toBe("1 selected");
+  expect(el.shadowRoot!.lastElementChild!.getAttribute("role")).toBe("alert");
+});
 export async function typeSearch(el: CatalogueBrowser, value: string) {
   el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
