@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
@@ -28,6 +28,7 @@ import {
   deleteException,
   loadRoutingRules,
   removeClaim,
+  resolveMakers,
   reorderExceptions,
   routingModel,
   setClaim,
@@ -441,5 +442,75 @@ describe("stored preparation rules", () => {
           stationOff: false,
         },
       ]);
+    }));
+});
+
+describe("resolveMakers", () => {
+  it("keeps the database read count constant as a batch grows", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      try {
+        expect(await resolveMakers(tx, f.cfg, null, [f.mojito])).toEqual(
+          new Map([[f.mojito, { kind: "station", stationId: f.terraceBar }]]),
+        );
+        const reads = prepared.mock.calls.length;
+        expect(reads).toBeGreaterThan(0);
+        prepared.mockClear();
+        expect(await resolveMakers(tx, f.cfg, null, [f.mojito, f.bread, f.variant])).toEqual(
+          new Map([
+            [f.mojito, { kind: "station", stationId: f.terraceBar }],
+            [f.bread, { kind: "station", stationId: f.bar }],
+            [f.variant, { kind: "station", stationId: f.terraceBar }],
+          ]),
+        );
+        expect(prepared.mock.calls.length).toBe(reads);
+        prepared.mockClear();
+        expect(await resolveMakers(tx, f.cfg, randomUUID(), [])).toEqual(new Map());
+        expect(prepared).not.toHaveBeenCalled();
+      } finally {
+        prepared.mockRestore();
+      }
+    }));
+
+  it("routes an order with no service zone by claims and the default", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      const made = await resolveMakers(tx, f.cfg, null, [f.mojito, f.bread]);
+      expect(made.get(f.mojito)).toEqual({ kind: "station", stationId: f.terraceBar });
+      expect(made.get(f.bread)).toEqual({ kind: "station", stationId: f.bar });
+    }));
+  it("answers null for every product when the default is off and nothing matches", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
+      expect((await resolveMakers(tx, f.cfg, f.terrace, [f.bread])).get(f.bread)).toBeNull();
+    }));
+  it("refuses an unknown product and an unknown zone", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await expect(resolveMakers(tx, f.cfg, null, [randomUUID()])).rejects.toMatchObject({
+        code: "route.subject_not_found",
+      });
+      await expect(resolveMakers(tx, f.cfg, randomUUID(), [f.bread])).rejects.toMatchObject({
+        code: "service_zone.not_found",
+      });
+    }));
+  it("keeps the first caller spelling and the effective variant folder", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      const upper = f.variant.toUpperCase();
+      expect(await resolveMakers(tx, f.cfg, null, [upper, f.variant])).toEqual(
+        new Map([[upper, { kind: "station", stationId: f.terraceBar }]]),
+      );
+      expect(await resolveMakers(tx, f.cfg, null, [f.variant, upper])).toEqual(
+        new Map([[f.variant, { kind: "station", stationId: f.terraceBar }]]),
+      );
     }));
 });

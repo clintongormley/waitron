@@ -2839,11 +2839,10 @@ describe("/api/working-orders/:id/cancel", () => {
 // operational field: nothing here touches a fiscal path. Zone CRUD is the management API's, so a
 // zone is seeded directly.
 describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, Task 6)", () => {
-  /** A table_tab zone offering the agua, for a served-route case that needs a real open tab. No route
-   *  is written: the agua already has its venue-wide one from setup. */
+  /** A table_tab zone offering agua for a served-route case; the active default takes its kitchen work. */
   async function tabZone(): Promise<{ zoneId: string; aguaOffer: string }> {
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, { zone: "tables", productIds: [aguaProduct.id], routes: "none" }),
+      offerProducts(tx, cfg, { zone: "tables", productIds: [aguaProduct.id] }),
     );
     return { zoneId: offers.zoneId, aguaOffer: offers.offerFor(aguaProduct.id) };
   }
@@ -3397,11 +3396,6 @@ async function modifierOfferFixture() {
       unitPrice: "8.00",
       vatClass: "general",
     });
-    await tx.execute(
-      // `preparation_routes.id` is a `$defaultFn` generator a raw insert never runs, and an
-      // INSERT … SELECT cannot go through the table definition, so the id is bound into the select.
-      sql`insert into preparation_routes (id,location_id,product_id,station_id) select ${randomUUID()},location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
-    );
     const offer = await addProductToMenu(tx, {
       menuId: aguaProduct.catalogueId,
       productId: product.id,

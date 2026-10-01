@@ -40,7 +40,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createCourse, createStation, setProductCourse, setProductStation } from "./kitchen.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -52,7 +52,7 @@ import {
 } from "./kitchen-print.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
   billRow,
   inTx,
@@ -185,7 +185,7 @@ async function makeProduct(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  if (route.stationId !== undefined) await setProductStation(tx, cfg, id, route.stationId);
+  if (route.stationId !== undefined) await routeProductTo(tx, cfg, id, route.stationId);
   if (route.courseId !== undefined) await setProductCourse(tx, cfg, id, route.courseId);
   return id;
 }
@@ -906,7 +906,7 @@ describe("a dish sold by the piece prints no unit", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await setProductStation(tx, cfg, id, cocina.id);
+      await routeProductTo(tx, cfg, id, cocina.id);
       return id;
     };
     return {
@@ -1394,7 +1394,7 @@ async function ticketWithNames(frozen: {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await setProductStation(tx, cfg, productId, station.id);
+    await routeProductTo(tx, cfg, productId, station.id);
     const orderId = randomUUID();
     const { lineRows } = await createOfferedOrder(tx, cfg, orderId, [line(productId)]);
     const parent = lineRows[0]!;

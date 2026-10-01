@@ -1,3 +1,4 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -88,9 +89,14 @@ useVenueDb({
     terrazaZone = await inTx(v, (tx) => zoneNamed(tx, "Terraza", "table_tab"));
     counterCaña = await pricedInZone(v, v.counter.zoneId, "Caña", "3.50");
     // Agua is handed over at the bar, so it is never sent to the kitchen.
-    db.run(sql`
-      update preparation_routes set station_id = null, no_preparation = 1
-      where product_id = ${v.productId("Agua")}`);
+    await inTx(v, (tx) =>
+      createException(tx, v.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: v.productId("Agua"),
+        target: { kind: "no_preparation" },
+      }),
+    );
   },
 });
 

@@ -22,12 +22,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  listPreparationRoutes,
-  updatePreparationRoute,
-  writeClearingWorkflow,
-  writeReleaseReminderMinutes,
-} from "@waitron/venue-service";
+import { writeClearingWorkflow, writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { takeBillPayment } from "./bill-payments.js";
 import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
@@ -54,7 +49,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { serveLine } from "./testing/serve-line.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import {
   addTabRound,
   advanceTicketItem,
@@ -75,13 +70,7 @@ const suite = useVenueDb({
 async function withBar(v: PartyVenue, displayOrder = 1): Promise<string> {
   return inTx(v, async (tx) => {
     const { id } = await createStation(tx, v.cfg, { name: "Barra", displayOrder });
-    const route = (await listPreparationRoutes(tx, v.cfg)).find(
-      (candidate) => candidate.productId === v.productId("Caña") && candidate.zoneId === null,
-    )!;
-    await updatePreparationRoute(tx, v.cfg, route.id, {
-      productId: v.productId("Caña"),
-      target: { kind: "station", stationId: id },
-    });
+    await routeProductTo(tx, v.cfg, v.productId("Caña"), id);
     return id;
   });
 }

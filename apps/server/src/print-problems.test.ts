@@ -37,12 +37,12 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createStation, setProductStation } from "./kitchen.js";
+import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { createTable } from "./tables.js";
 import { listPrintProblems, ordersWithPrintProblem, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import { listStationQueue, recallLines } from "./working-order.js";
 import { readPartyBills, seatTable } from "./parties.js";
 import {
@@ -143,7 +143,7 @@ async function setupVenue(): Promise<Venue> {
       });
       productId[dish] = product.id;
     }
-    await setProductStation(tx, cfg, productId.beer, barra);
+    await routeProductTo(tx, cfg, productId.beer, barra);
     await assignCatalogueToLocation(tx, locationId, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const printer = async (name: string) =>
@@ -1286,7 +1286,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         .select({ id: products.id })
         .from(products)
         .where(eq(products.name, DISHES.fish.staff));
-      await setProductStation(tx, v.cfg, fish!.id, id);
+      await routeProductTo(tx, v.cfg, fish!.id, id);
       await offerProducts(tx, v.cfg, { zone: "tables" });
       return id;
     });

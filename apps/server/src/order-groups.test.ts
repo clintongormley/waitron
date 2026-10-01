@@ -1,3 +1,4 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it } from "vitest";
@@ -208,9 +209,12 @@ async function setupVenue(): Promise<Venue> {
     await assignCatalogueToLocation(tx, locationId, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
-    await tx.run(sql`
-      update preparation_routes set station_id = null, no_preparation = 1
-      where product_id = ${productId.water}`);
+    await createException(tx, cfg, {
+      zoneId: null,
+      categoryId: null,
+      productId: productId.water,
+      target: { kind: "no_preparation" },
+    });
     const { id: printerId } = await createPrinter(
       tx,
       { locationId: cfg.locationId },

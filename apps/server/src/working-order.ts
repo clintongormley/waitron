@@ -61,7 +61,6 @@ import {
   appendOrderAmendment,
   billPaymentRefunds,
   billPayments,
-  categories,
   diningTables,
   invoiceSeries,
   isUniqueViolation,
@@ -120,13 +119,7 @@ import type {
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type {
-  FloorAnnotator,
-  PreparationRoute,
-  ServiceMode,
-  ZoneMenuOffer,
-  ZoneOffers,
-} from "@waitron/module";
+import type { FloorAnnotator, ServiceMode, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -1144,15 +1137,10 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
 }
 
 /**
- * Fire lines to the kitchen: one `ticket_items` row per line, its station and course RESOLVED and
- * SNAPSHOTTED at fire time, so a later configuration change never moves an already-fired item. The
- * one fire point every path funnels through. A zoned order routes by the venue-service route
- * (`no_preparation` skips the line); a context-less order uses the product, category and
- * location-default station chain. Also enqueues kitchen print jobs on the same transaction.
- *
- * A zoned line no station can take (`route.missing`, `route.station_inactive`) refuses the whole
- * fire, unless `unroutable: "skip"`: then it is left unfired and unstamped and returned, and the
- * rest fire. Only a payment skips, because the money is taken whether or not the kitchen is told.
+ * Every order routes by exceptions, folder claims and the active default station. Station and
+ * course are snapshotted at fire time: later rule edits never move work already sent.
+ * A null outcome refuses `station.no_default`, unless payment uses `unroutable: "skip"` to leave
+ * the dish unfired and unstamped and return it for the paid-order alert.
  */
 export async function fireLines(
   tx: Transaction,
@@ -1175,50 +1163,14 @@ export async function fireLines(
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
 
-  const unrouted: FireableLine[] = [];
-  let serviceRouteByProduct: ReadonlyMap<string, PreparationRoute> = new Map();
-  if (serviceContext !== null && options.unroutable === "skip") {
-    const outcomes = await VENUE_SERVICE.resolvePreparationRouteOutcomes(
-      tx,
-      cfg,
-      serviceContext.zoneId,
-      productIds,
-    );
-    const routes = new Map<string, PreparationRoute>();
-    const stranded = new Set<string>();
-    for (const [productId, outcome] of outcomes) {
-      if (!(outcome instanceof AppError)) routes.set(productId, outcome);
-      else if (outcome.code === "route.missing" || outcome.code === "route.station_inactive") {
-        stranded.add(productId);
-      } else throw outcome;
-    }
-    serviceRouteByProduct = routes;
-    lines = lines.filter((line) => {
-      const skipped = line.productId !== null && stranded.has(line.productId);
-      if (skipped) unrouted.push(line);
-      return !skipped;
-    });
-    if (lines.length === 0) return unrouted;
-  } else if (serviceContext !== null) {
-    serviceRouteByProduct = await VENUE_SERVICE.resolvePreparationRoutes(
-      tx,
-      cfg,
-      serviceContext.zoneId,
-      productIds,
-    );
-  }
-
-  const legacyLines = lines.filter(
-    (line) => line.productId === null || !serviceRouteByProduct.has(line.productId),
+  const makers = await VENUE_SERVICE.resolveMakers(
+    tx,
+    cfg,
+    serviceContext?.zoneId ?? null,
+    productIds,
   );
-  let defaultStationId: string | null = null;
-  let routeByProduct = new Map<
-    string,
-    { productStationId: string | null; categoryStationId: string | null }
-  >();
-  if (legacyLines.length > 0) {
-    // `active` is required: `deactivateStation` leaves `is_default` set on a deactivated default,
-    // and a line routed there would reach a queue no display shows.
+  let fallbackStationId: string | null = null;
+  if (lines.some((line) => line.productId === null)) {
     const [fallback] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
@@ -1229,27 +1181,21 @@ export async function fireLines(
           eq(kitchenStations.active, true),
         ),
       );
-    defaultStationId = fallback?.id ?? null;
-
-    // A variant line routes by its EFFECTIVE station and category: where its parent would, unless it
-    // sets its own.
-    const legacyProductIds = [
-      ...new Set(
-        legacyLines.map((line) => line.productId).filter((id): id is string => id !== null),
-      ),
-    ];
-    const routes = await tx
-      .select({
-        productId: products.id,
-        productStationId: effectiveProductColumns.stationId,
-        categoryStationId: categories.stationId,
-      })
-      .from(products)
-      .leftJoin(parentProducts, parentJoin)
-      .leftJoin(categories, eq(categories.id, effectiveProductColumns.categoryId))
-      .where(inArray(products.id, legacyProductIds));
-    routeByProduct = new Map(routes.map((route) => [route.productId, route]));
+    fallbackStationId = fallback?.id ?? null;
+    if (fallbackStationId === null)
+      throw new AppError("station.no_default", { locationId: cfg.locationId });
   }
+  const unrouted: FireableLine[] = [];
+  lines = lines.filter((line) => {
+    const hasMaker =
+      line.productId === null ? fallbackStationId !== null : makers.get(line.productId) != null;
+    if (hasMaker) return true;
+    if (options.unroutable !== "skip")
+      throw new AppError("station.no_default", { locationId: cfg.locationId });
+    unrouted.push(line);
+    return false;
+  });
+  if (lines.length === 0) return unrouted;
 
   const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
@@ -1293,11 +1239,7 @@ export async function fireLines(
   // A line with nowhere to go refuses the whole fire.
   const values = lines
     .map((line) => {
-      const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
-      const serviceRoute =
-        serviceContext === null || line.productId === null
-          ? null
-          : (serviceRouteByProduct.get(line.productId) ?? null);
+      const maker = line.productId === null ? null : makers.get(line.productId);
       const courseId = courseByLine.get(line.id) ?? null;
       // A line not fired now is HELD (`fired_at` NULL) until a later release fires it.
       const fired =
@@ -1308,14 +1250,8 @@ export async function fireLines(
             displayOrderByCourse.get(courseId) === earliestDisplayOrder));
       // A no-preparation line has no kitchen work, and is sent when it would have fired.
       if (fired) sentLineIds.push(line.id);
-      if (serviceRoute?.kind === "no_preparation") return null;
-      const stationId =
-        serviceRoute?.kind === "station"
-          ? serviceRoute.stationId
-          : (route?.productStationId ?? route?.categoryStationId ?? defaultStationId);
-      if (stationId === null || stationId === undefined) {
-        throw new AppError("station.no_default", { locationId: cfg.locationId });
-      }
+      if (maker?.kind === "no_preparation") return null;
+      const stationId = maker?.kind === "station" ? maker.stationId : fallbackStationId!;
       return {
         nodeId: cfg.nodeId,
         workingOrderId: orderId,
@@ -1395,8 +1331,7 @@ async function stampSent(
 /**
  * The dish lines of an order that have no ticket item and are not yet stamped sent, whose route is
  * `no_preparation`, and that sit in one of `courseIds` (`null` standing for no course) or are named
- * in `lineIds` — or every such line, with `"all"`: the no-route lines a send releases. Only a zoned
- * order has no-preparation routes.
+ * in `lineIds` — or every such line, with `"all"`: the no-preparation lines a send releases.
  */
 async function heldNoRouteLines(
   tx: Transaction,
@@ -1416,7 +1351,6 @@ async function heldNoRouteLines(
     inScope = or(...any);
   }
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
-  if (serviceContext === null) return [];
   const candidates = await tx
     .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
     .from(workingOrderLines)
@@ -1431,7 +1365,7 @@ async function heldNoRouteLines(
         inScope,
       ),
     );
-  const routes = await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, [
+  const routes = await VENUE_SERVICE.resolveMakers(tx, cfg, serviceContext?.zoneId ?? null, [
     ...new Set(candidates.map((line) => line.productId!)),
   ]);
   return candidates

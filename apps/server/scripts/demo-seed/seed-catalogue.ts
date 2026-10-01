@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
-import { preparationRoutes } from "@waitron/venue-service";
+import { stationClaims } from "@waitron/venue-service";
 import {
   addCatalogueToLocation,
   addMember,
@@ -116,7 +116,7 @@ export async function seedCatalogues(
           sql`update categories set station_id = ${stationIds[cat.station]} where id = ${category.id}`,
         );
       }
-      await tx.insert(preparationRoutes).values({
+      await tx.insert(stationClaims).values({
         locationId,
         categoryId: category.id,
         stationId: cat.station === null ? null : stationIds[cat.station],

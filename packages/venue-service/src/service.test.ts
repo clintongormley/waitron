@@ -25,6 +25,7 @@ describe("VENUE_SERVICE", () => {
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",
+      "resolveMakers",
       "resolveNewOrderZone",
       "resolvePreparationRouteOutcomes",
       "resolvePreparationRoutes",

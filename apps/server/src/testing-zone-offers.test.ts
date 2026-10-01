@@ -29,11 +29,11 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { addTabRound, parkOrder } from "./working-order.js";
-import { createStation, setCategoryStation, setProductStation } from "./kitchen.js";
+import { createStation } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import type { TillConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { claimFolderFor, routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 
@@ -53,8 +53,7 @@ interface Venue {
   stations: { cocina: string; barra: string; pase: string };
 }
 
-// Three products, one per link of the legacy station chain: café names its own station, the
-// tostada's category names one, and the agua has neither, so only the default station can take it.
+// Three products: café has a product exception, tostada has a folder claim, and agua uses the default.
 async function seedVenue(db: Database): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
@@ -98,8 +97,8 @@ async function seedVenue(db: Database): Promise<Venue> {
     const azucar = await product("Azúcar", "0.10", null);
     const barra = await createStation(tx, cfg, { name: "Barra" });
     const pase = await createStation(tx, cfg, { name: "Pase" });
-    await setProductStation(tx, cfg, cafe.id, barra.id);
-    await setCategoryStation(tx, cfg, comida.id, pase.id);
+    await routeProductTo(tx, cfg, cafe.id, barra.id);
+    await claimFolderFor(tx, cfg, comida.id, pase.id);
     const list = await createExtraList(
       tx,
       {
@@ -148,7 +147,7 @@ async function counts(db: Database) {
       (select count(*) from zone_menus) as zone_menus,
       (select count(*) from menu_items) as items,
       (select count(*) from product_modifiers where extra_list_id is not null) as extras,
-      (select count(*) from preparation_routes) as routes`);
+      (select count(*) from route_exceptions) as routes`);
   return rows[0]!;
 }
 
@@ -251,11 +250,14 @@ describe("offerProducts", () => {
     ]);
   });
 
-  it("writes no route with routes: none, so a zoned fire has nowhere to go", async () => {
+  it("refuses a zoned dish when no rule matches and the default is switched off", async () => {
     const venue = await seedVenue(suite.db);
     await expect(
       withTransaction(suite.db, async (tx) => {
-        const offers = await offerProducts(tx, venue.cfg, { zone: "tables", routes: "none" });
+        await tx.execute(
+          sql`update kitchen_stations set active = 0 where id = ${venue.stations.cocina}`,
+        );
+        const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
         const table = await createTable(tx, venue.cfg, { label: "T1", zoneId: offers.zoneId });
         const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
         await addTabRound(
@@ -265,7 +267,7 @@ describe("offerProducts", () => {
           offers.toOfferLines([{ productId: venue.agua, quantity: "1" }]),
         );
       }),
-    ).rejects.toMatchObject({ code: "route.missing" });
+    ).rejects.toMatchObject({ code: "station.no_default" });
   });
 
   it("is harmless to call twice, and offers a product added between the calls", async () => {

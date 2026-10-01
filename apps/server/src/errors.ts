@@ -1158,8 +1158,6 @@ declare module "@waitron/shared" {
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
     /** Raised by `raiseDishesNotSent` (`./dish-not-sent-alert.ts`). */
     "route.dish_not_sent": {
-      zoneId: string;
-      zoneName: string;
       dishes: string;
       workingOrderId: string;
       orderNumber: number;

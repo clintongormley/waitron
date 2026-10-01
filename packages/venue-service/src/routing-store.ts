@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { categories, kitchenStations, products, type Transaction } from "@waitron/db";
 import {
   categoryDetails,
@@ -7,9 +7,10 @@ import {
   parentProducts,
   productWithId,
 } from "@waitron/catalogue";
-import { AppError } from "@waitron/shared";
+import { AppError, normaliseUuid } from "@waitron/shared";
 import { resolveZoneContext, type VenueScope } from "./operations.js";
 import {
+  chooseMaker,
   folderAncestors,
   unreachableExceptions,
   type RouteTarget,
@@ -220,6 +221,57 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
 
 export async function loadRoutingRules(tx: Transaction, cfg: VenueScope): Promise<RoutingRules> {
   return (await snapshot(tx, cfg)).rules;
+}
+
+/** Canonical database spelling, also used to group caller spellings of one product. */
+function storedUuid(id: string): string {
+  return normaliseUuid(id, "ProductId");
+}
+
+export async function resolveMakers(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string | null,
+  productIds: readonly string[],
+): Promise<ReadonlyMap<string, RouteTarget | null>> {
+  const spellingByUuid = new Map<string, string>();
+  for (const id of productIds) {
+    const uuid = storedUuid(id);
+    if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
+  }
+  const ids = [...spellingByUuid.keys()];
+  const outcomes = new Map<string, RouteTarget | null>();
+  if (ids.length === 0) return outcomes;
+  if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
+  const rules = await loadRoutingRules(tx, cfg);
+  const productRows = await tx
+    .select({
+      id: products.id,
+      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+      categoryId: effectiveProductColumns.categoryId,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .where(inArray(products.id, ids));
+  const byId = new Map(productRows.map((row) => [storedUuid(row.id), row]));
+  for (const [uuid, id] of spellingByUuid) {
+    const product = byId.get(uuid);
+    if (product === undefined)
+      throw new AppError("route.subject_not_found", { subject: "product", id });
+    outcomes.set(
+      id,
+      chooseMaker(
+        rules,
+        {
+          productId: uuid,
+          routedProductId: storedUuid(product.routedId),
+          categoryId: product.categoryId,
+        },
+        zoneId,
+      ).route,
+    );
+  }
+  return outcomes;
 }
 
 export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<RoutingModel> {

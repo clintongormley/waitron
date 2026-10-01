@@ -40,7 +40,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { MANUAL_PROVIDER, SimulatorPaymentProvider, cardReaders } from "@waitron/payments";
-import { preparationRoutes } from "@waitron/venue-service";
+import { stationClaims } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
@@ -210,11 +210,9 @@ async function setupVenue(): Promise<{
       where location_id = ${cfg.locationId}
         and is_counter_default`);
     await publishWorkingMenu(tx, cat.id);
-    // Through the table definition, not raw SQL: `preparation_routes.id` is a `$defaultFn`
-    // generator, which a raw insert never runs.
     const defaultStation = sql`(select id from kitchen_stations
            where location_id = ${cfg.locationId} and is_default)`;
-    await tx.insert(preparationRoutes).values([
+    await tx.insert(stationClaims).values([
       { locationId: cfg.locationId, categoryId: comida.id, stationId: defaultStation },
       { locationId: cfg.locationId, categoryId: bebidas.id, stationId: defaultStation },
     ]);

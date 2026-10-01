@@ -1,3 +1,4 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -96,9 +97,12 @@ useVenueDb({
         productIds: [hamburger.id, toastie.id],
       });
       // Made at the bar with nothing to prepare: it never reaches a kitchen station.
-      await tx.run(sql`
-        update preparation_routes set station_id = null, no_preparation = 1
-        where product_id = ${toastie.id}`);
+      await createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: toastie.id,
+        target: { kind: "no_preparation" },
+      });
       offer = { hamburger: offers.offerFor(hamburger.id), toastie: offers.offerFor(toastie.id) };
       extras = { listId: list.id, fries: fries.id, salad: salad!.id, gherkins: gherkins.id };
     });

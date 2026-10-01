@@ -1400,10 +1400,7 @@ export async function fireDishesAtPayment(
     await unsentDishLines(tx, workingOrderId),
     { unroutable: "skip" },
   );
-  // Only a zoned order has routes to miss, so a returned line means a service context.
-  return unrouted.length === 0
-    ? null
-    : { zoneId: serviceContext!.zoneId, productIds: unrouted.map((line) => line.productId!) };
+  return unrouted.length === 0 ? null : { productIds: unrouted.map((line) => line.productId!) };
 }
 
 /**

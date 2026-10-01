@@ -1,3 +1,4 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -519,9 +520,12 @@ describe("a sent line is payable whatever its availability; an unsent one is not
         vatClass: "general",
       });
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
-      await tx.execute(sql`
-        update preparation_routes set station_id = null, no_preparation = 1
-        where product_id = ${beer.id}`);
+      await createException(tx, cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: beer.id,
+        target: { kind: "no_preparation" },
+      });
       const mains = await createCourse(tx, cfg, { name: "Principales", displayOrder: 2 });
       return { burgerId: burger.id, beerId: beer.id, offers, courseId: mains.id };
     });

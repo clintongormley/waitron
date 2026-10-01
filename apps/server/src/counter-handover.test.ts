@@ -1,3 +1,4 @@
+import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -40,9 +41,19 @@ useVenueDb({
     }
     // Caña is poured at the bar: it goes to no station, so an order of it alone has no kitchen
     // ticket.
-    venue.db.run(sql`
-      update preparation_routes set station_id = null, no_preparation = 1
-      where product_id = (select product_id from menu_items where id = ${venue.offerFor("Caña")})`);
+    await inTx(venue, async (tx) => {
+      const [item] = (
+        await tx.execute<{ product_id: string }>(
+          sql`select product_id from menu_items where id = ${venue.offerFor("Caña")}`,
+        )
+      ).rows;
+      await createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: item!.product_id,
+        target: { kind: "no_preparation" },
+      });
+    });
   },
 });
 

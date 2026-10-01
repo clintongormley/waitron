@@ -1,5 +1,6 @@
+import { createException, deleteException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   orderGroupEvents,
@@ -1240,29 +1241,20 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
     const [pulpo] = await inTx(venue, (tx) =>
       tx.select({ id: products.id }).from(products).where(eq(products.name, "Pulpo")),
     );
-    const route = sql`from preparation_routes where product_id = ${pulpo!.id} and zone_id is null`;
-    const [before] = (
-      await inTx(venue, async (tx) =>
-        tx.execute<{ station_id: string | null; no_preparation: number }>(
-          sql`select station_id, no_preparation ${route}`,
-        ),
-      )
-    ).rows;
-    // The suite shares one venue, so the Pulpo's route is put back whatever happens.
+    const exceptionId = await inTx(venue, (tx) =>
+      createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: pulpo!.id,
+        target: { kind: "no_preparation" },
+      }),
+    );
     try {
-      await inTx(venue, async (tx) =>
-        tx.run(sql`update preparation_routes set station_id = null, no_preparation = 1
-                   where product_id = ${pulpo!.id} and zone_id is null`),
-      );
       await inTx(venue, (tx) =>
         addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Pulpo"), hold: true }]),
       );
     } finally {
-      await inTx(venue, async (tx) =>
-        tx.run(sql`update preparation_routes
-                   set station_id = ${before!.station_id}, no_preparation = ${before!.no_preparation}
-                   where product_id = ${pulpo!.id} and zone_id is null`),
-      );
+      await inTx(venue, (tx) => deleteException(tx, venue.cfg, exceptionId));
     }
     const [line] = await inTx(venue, (tx) =>
       tx

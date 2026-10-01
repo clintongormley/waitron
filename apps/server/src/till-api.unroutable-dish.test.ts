@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
-  floorZones,
   incidents,
   kitchenStations,
   sales,
@@ -19,7 +18,7 @@ import { createProduct } from "@waitron/catalogue";
 import { hashPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import { createPreparationRoute } from "@waitron/venue-service";
+import { createException } from "@waitron/venue-service";
 import { takeBillPayment } from "./bill-payments.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
@@ -47,7 +46,6 @@ const noopLog: Logger = () => {};
 let v: PartyVenue;
 let app: Hono;
 let session: string;
-let counterZoneName: string;
 let catalogueId: string;
 
 async function enrolTill(): Promise<string> {
@@ -64,6 +62,11 @@ async function enrolTill(): Promise<string> {
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
+  await inTx(v, async (tx) =>
+    tx.run(
+      sql`update kitchen_stations set active = 0 where location_id = ${v.cfg.locationId} and is_default`,
+    ),
+  );
   app = new Hono();
   mountTillApi(
     app,
@@ -91,13 +94,6 @@ beforeEach(async () => {
   });
   expect(login.status).toBe(200);
   session = login.headers.get("set-cookie")!;
-  const [zone] = await inTx(v, (tx) =>
-    tx
-      .select({ name: floorZones.name })
-      .from(floorZones)
-      .where(eq(floorZones.id, v.counter.zoneId)),
-  );
-  counterZoneName = zone!.name;
   const [burger] = await inTx(v, (tx) =>
     tx
       .select({ catalogueId: products.catalogueId })
@@ -147,12 +143,10 @@ async function dish(name: string): Promise<Dish> {
     });
     const counter = await offerProducts(tx, v.cfg, {
       zone: "counter",
-      routes: "none",
       productIds: [product.id],
     });
     const tables = await offerProducts(tx, v.cfg, {
       zone: "tables",
-      routes: "none",
       productIds: [product.id],
     });
     return {
@@ -166,9 +160,10 @@ async function dish(name: string): Promise<Dish> {
 
 async function routeTo(productId: string, stationId: string, zoneId?: string): Promise<void> {
   await inTx(v, (tx) =>
-    createPreparationRoute(tx, v.cfg, {
+    createException(tx, v.cfg, {
       productId,
-      ...(zoneId === undefined ? {} : { zoneId }),
+      zoneId: zoneId ?? null,
+      categoryId: null,
       target: { kind: "station", stationId },
     }),
   );
@@ -284,8 +279,6 @@ function dishNotSent(workingOrderId: string, dishes: string, orderNumber: number
     code: "route.dish_not_sent",
     severity: "error",
     params: {
-      zoneId: v.counter.zoneId,
-      zoneName: counterZoneName,
       dishes,
       workingOrderId,
       orderNumber,
@@ -353,6 +346,33 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(await alertsFor(await saleOf(id))).toEqual([
       expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3")),
     ]);
+  });
+
+  it("settles a paid order with no service zone and leaves its unroutable dish unstamped, with no zone in the alert", async () => {
+    const made = await dish("Unzoned soup");
+    const id = randomUUID();
+    await park(id, [made]);
+    await inTx(v, async (tx) =>
+      tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`),
+    );
+    const res = await payCash(await enrolTill(), id);
+    expect(res.status).toBe(200);
+    expect(await filedFor(id)).toBe(1);
+    expect(await statusOf(id)).toBe("settled");
+    expect(await kitchenItems(id)).toEqual([]);
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ sentAt: workingOrderLines.sentAt })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(line!.sentAt).toBeNull();
+    const alerts = await alertsFor(await saleOf(id));
+    expect(alerts).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3")),
+    ]);
+    expect(alerts[0]!.params).not.toHaveProperty("zoneId");
+    expect(alerts[0]!.params).not.toHaveProperty("zoneName");
   });
 
   it("does the same for a walk-up cash sale", async () => {
@@ -765,7 +785,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         }),
       );
 
-    await expect(round(stranded)).rejects.toMatchObject({ code: "route.station_inactive" });
-    await expect(round(missing)).rejects.toMatchObject({ code: "route.missing" });
+    await expect(round(stranded)).rejects.toMatchObject({ code: "station.no_default" });
+    await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
   });
 });
