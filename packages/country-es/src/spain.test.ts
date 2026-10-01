@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findAdministrativeAreaByPostalCode, resolveFiscalJurisdiction } from "@waitron/country";
+import {
+  findAdministrativeAreaByPostalCode,
+  receiptLanguageRules,
+  resolveFiscalJurisdiction,
+} from "@waitron/country";
 import {
   SPAIN,
   validateSpanishNif,
@@ -186,6 +190,37 @@ describe("regional content languages", () => {
       expect(other.foreignLanguageNotice, other.code).toBeUndefined();
     }
   });
+});
+
+describe("receipt language", () => {
+  const OFFICIAL = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+
+  it("offers exactly Spain's four official languages, Spanish first, and never English", () => {
+    expect(SPAIN.invoiceLocales).toEqual(OFFICIAL);
+    expect(SPAIN.invoiceLocales).not.toContain("en-GB");
+  });
+
+  it.each(["08", "17", "25", "43"])(
+    "fixes %s to Catalan and says why in English and Spanish",
+    (code) => {
+      const rules = receiptLanguageRules(SPAIN, code);
+      expect(rules.choices).toEqual(OFFICIAL);
+      expect(rules.defaultLocale).toBe("ca-ES");
+      expect(rules.fixed?.locale).toBe("ca-ES");
+      expect(Object.keys(rules.fixed!.reason).sort()).toEqual(["en", "es"]);
+      for (const text of Object.values(rules.fixed!.reason)) expect(text).toContain("128-1.2.a");
+    },
+  );
+
+  it.each(["03", "12", "46", "15", "27", "32", "36", "01", "20", "48", "07", "31", "28"])(
+    "leaves %s free to choose, with Spanish the default",
+    (code) => {
+      expect(receiptLanguageRules(SPAIN, code)).toStrictEqual({
+        choices: OFFICIAL,
+        defaultLocale: "es-ES",
+      });
+    },
+  );
 });
 
 describe("validateSpanishPhone", () => {

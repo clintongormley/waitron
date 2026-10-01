@@ -172,24 +172,37 @@ function localeFor(code: string): string | undefined {
   return undefined;
 }
 
-type ContentLanguageLaw = Pick<
+type LanguageLaw = Pick<
   AdministrativeArea,
-  "requiredContentLocales" | "defaultContentLocale" | "foreignLanguageNotice"
+  "requiredContentLocales" | "defaultContentLocale" | "foreignLanguageNotice" | "fixedReceiptLocale"
 >;
 
 // Catalonia: Llei 1/1998 art. 32.3 puts "documents offering services" at least in Catalan, which
 // the Agència Catalana del Consum reads as covering the menu. STC 88/2017 upheld the Consumer Code's
 // language rule (art. 128-1.2) only on the reading that customers can also get the documents in
 // Spanish; Waitron keeps Spanish enabled for that.
-const CATALONIA: ContentLanguageLaw = {
+// The receipt is fixed to Catalan by the Consumer Code (Llei 22/2010) art. 128-1.2.a, which gives
+// customers the right to receive "les factures i els altres documents que hi facin referència o
+// que en derivin" in Catalan, and by the agency's reading that invoices are at least in Catalan and
+// till receipts ("tiquets de caixa") are owed in Catalan. Art. 32.3 is not the receipt's source:
+// putting invoices under it is the agency's reading, not the statute's.
+// Sources: docs/compliance/regional-language-rules.md, Catalonia table, "Receipts / invoices" rows.
+const CATALONIA: LanguageLaw = {
   requiredContentLocales: ["ca-ES", "es-ES"],
   defaultContentLocale: "ca-ES",
+  fixedReceiptLocale: {
+    locale: "ca-ES",
+    reason: {
+      en: "In Catalonia, customers have the right to receive invoices in Catalan (Catalan Consumer Code, Llei 22/2010, art. 128-1.2.a). The Agència Catalana del Consum lists invoices among what must be at least in Catalan, and says customers are entitled to till receipts in Catalan. Receipts here are printed in Catalan.",
+      es: "En Cataluña, los consumidores tienen derecho a recibir las facturas en catalán (Código de consumo de Cataluña, Ley 22/2010, art. 128-1.2.a). La Agència Catalana del Consum incluye las facturas entre lo que debe estar como mínimo en catalán, e indica que los consumidores tienen derecho a recibir los tiques de caja en catalán. Aquí los tiques se imprimen en catalán.",
+    },
+  },
 };
 
 // Decree 36/2023 arts. 9.9 and 12.4: both official languages and at least one foreign language,
 // preferably English. Art. 1.2.g exempts takeaway-only and delivery-only places; Waitron does
 // not distinguish them and keeps both languages enabled everywhere in the region.
-const VALENCIAN_COMMUNITY: ContentLanguageLaw = {
+const VALENCIAN_COMMUNITY: LanguageLaw = {
   requiredContentLocales: ["ca-ES", "es-ES"],
   foreignLanguageNotice: {
     minimumForeign: 1,
@@ -203,7 +216,7 @@ const VALENCIAN_COMMUNITY: ContentLanguageLaw = {
 // Decree 108/2006 art. 27.2, and the menu rule as amended by Decree 8/2007. Arts. 1-2 limit the
 // decree to restaurants and cafeterias; Waitron does not distinguish venue types and keeps both
 // languages enabled everywhere in the region.
-const GALICIA: ContentLanguageLaw = {
+const GALICIA: LanguageLaw = {
   requiredContentLocales: ["gl-ES", "es-ES"],
   foreignLanguageNotice: {
     minimumForeign: 2,
@@ -214,7 +227,7 @@ const GALICIA: ContentLanguageLaw = {
   },
 };
 
-function contentLanguageLawFor(code: string): ContentLanguageLaw {
+function languageLawFor(code: string): LanguageLaw {
   if (CATALONIA_PROVINCES.has(code)) return CATALONIA;
   if (VALENCIAN_PROVINCES.has(code)) return VALENCIAN_COMMUNITY;
   if (GALICIAN.has(code)) return GALICIA;
@@ -229,7 +242,7 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
     postalPrefixes: [code],
     ...(localeFor(code) === undefined ? {} : { defaultLocale: localeFor(code) }),
     timeZone: code === "35" || code === "38" ? "Atlantic/Canary" : "Europe/Madrid",
-    ...contentLanguageLawFor(code),
+    ...languageLawFor(code),
   }),
 );
 
@@ -255,7 +268,7 @@ export const SPAIN: CountryPack = {
   countryCode: "ES",
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",
-  invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"],
+  invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   officialLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   moduleIds: ["workforce-es"],
   availableForVenueSetup: true,

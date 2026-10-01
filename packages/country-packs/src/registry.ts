@@ -1,5 +1,5 @@
-import type { CountryPack, FiscalModules } from "@waitron/country";
-import { contentLanguageRules, resolveCountryLocale } from "@waitron/country";
+import type { CountryPack, FiscalModules, ReceiptLanguageRules } from "@waitron/country";
+import { contentLanguageRules, receiptLanguageRules, resolveCountryLocale } from "@waitron/country";
 import { contentLanguageCode, type ContentLanguageRules } from "@waitron/shared";
 import { SPAIN } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
@@ -100,4 +100,15 @@ export function resolveInstalledDefaultContentLanguage(input: VenueGeography): s
   const locale =
     pack === undefined ? undefined : contentLanguageRules(pack, input.area).defaultContentLocale;
   return locale === undefined ? undefined : contentLanguageCode(locale);
+}
+
+/** What a receipt prints in when the venue's country has no installed pack: `loadTillConfig`'s
+ * default when `WAITRON_TILL_LOCALE` is unset. */
+const FALLBACK_RECEIPT_LOCALE = "es-ES";
+
+/** The receipt languages the venue's installed country pack offers, and the one it fixes, if any. */
+export function resolveInstalledReceiptLanguageRules(input: VenueGeography): ReceiptLanguageRules {
+  const pack = packFor(input);
+  if (pack === undefined) return { choices: [], defaultLocale: FALLBACK_RECEIPT_LOCALE };
+  return receiptLanguageRules(pack, input.area);
 }

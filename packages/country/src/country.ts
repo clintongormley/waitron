@@ -29,6 +29,14 @@ export interface AdministrativeArea {
   /** A new venue's default content language in this area. */
   readonly defaultContentLocale?: string;
   readonly foreignLanguageNotice?: ForeignLanguageNotice;
+  /** The one receipt language the law gives a venue here. `reason` is keyed by the dashboard's
+   * language code and says why. */
+  readonly fixedReceiptLocale?: FixedReceiptLocale;
+}
+
+export interface FixedReceiptLocale {
+  readonly locale: string;
+  readonly reason: Readonly<Record<string, string>>;
 }
 
 export interface FiscalModules {
@@ -185,5 +193,24 @@ export function contentLanguageRules(
     ...(area?.foreignLanguageNotice === undefined
       ? {}
       : { foreignLanguageNotice: area.foreignLanguageNotice }),
+  };
+}
+
+export interface ReceiptLanguageRules {
+  readonly choices: readonly string[];
+  readonly defaultLocale: string;
+  readonly fixed?: FixedReceiptLocale;
+}
+
+export function receiptLanguageRules(
+  pack: CountryPack,
+  areaValue: string | null | undefined,
+): ReceiptLanguageRules {
+  const area = areaValue == null ? undefined : findAdministrativeArea(pack, areaValue);
+  const fixed = area?.fixedReceiptLocale;
+  return {
+    choices: pack.invoiceLocales,
+    defaultLocale: fixed?.locale ?? pack.defaultLocale,
+    ...(fixed === undefined ? {} : { fixed }),
   };
 }

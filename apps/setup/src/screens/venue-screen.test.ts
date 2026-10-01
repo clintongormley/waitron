@@ -493,10 +493,10 @@ describe("setup-venue-screen", () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
     await fillValid(el);
-    await toggleLocale(el, "en-GB", true);
+    await toggleLocale(el, "gl-ES", true);
     q(el, "[data-test=next]")!.click();
     const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue?.location?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
+    expect(patch.venue?.location?.invoiceLocales).toEqual(["es-ES", "gl-ES"]);
     expect(patch.venue?.location?.timeZone).toBe("Europe/Madrid");
   });
 
@@ -1006,12 +1006,12 @@ it("keeps languages the draft customised when the province changes", async () =>
     draft: {
       venue: {
         country: "ES",
-        location: { province: "Barcelona", invoiceLocales: ["es-ES", "en-GB"] },
+        location: { province: "Barcelona", invoiceLocales: ["es-ES", "eu-ES"] },
       },
     },
   });
   await type(el, "province", "15");
-  expect(ticked(el)).toEqual(["es-ES", "en-GB"]);
+  expect(ticked(el)).toEqual(["es-ES", "eu-ES"]);
 });
 
 it("keeps the operator's own choice when the province changes", async () => {
@@ -1191,11 +1191,11 @@ describe("setup-venue-screen in Spanish", () => {
     expect(q(el, "[data-test=back]")!.textContent).toBe("Volver");
   });
 
-  it("names English in Spanish followed by its own name, as it does the other languages", async () => {
+  it("names Galician in Spanish followed by its own name, as it does the other languages", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
-    expect(q(el, "[data-test=locale-en-GB]")!.parentElement!.textContent!.trim()).toBe(
-      "Inglés (English)",
+    expect(q(el, "[data-test=locale-gl-ES]")!.parentElement!.textContent!.trim()).toBe(
+      "Gallego (Galego)",
     );
   });
 

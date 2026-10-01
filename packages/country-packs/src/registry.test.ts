@@ -9,6 +9,7 @@ import {
   resolveInstalledContentLanguageRules,
   resolveInstalledCountryLocale,
   resolveInstalledDefaultContentLanguage,
+  resolveInstalledReceiptLanguageRules,
 } from "./registry.js";
 
 describe("installed country packs", () => {
@@ -128,5 +129,32 @@ describe("content-language rules", () => {
       { country: null, area: null },
     ])
       expect(resolveInstalledDefaultContentLanguage(input)).toBeUndefined();
+  });
+});
+
+describe("receipt-language rules", () => {
+  const SPAIN_OFFICIAL = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+
+  it("fixes a Barcelona venue's receipts to Catalan and carries the reason", () => {
+    const rules = resolveInstalledReceiptLanguageRules({ country: "ES", area: "Barcelona" });
+    expect(rules.choices).toEqual(SPAIN_OFFICIAL);
+    expect(rules.defaultLocale).toBe("ca-ES");
+    expect(rules.fixed?.locale).toBe("ca-ES");
+    expect(Object.keys(rules.fixed!.reason).sort()).toEqual(["en", "es"]);
+  });
+
+  it("offers a Madrid venue the four official languages, Spanish by default, nothing fixed", () => {
+    expect(resolveInstalledReceiptLanguageRules({ country: "es", area: "Madrid" })).toStrictEqual({
+      choices: SPAIN_OFFICIAL,
+      defaultLocale: "es-ES",
+    });
+  });
+
+  it("offers nothing for a country with no installed pack, or no country, and defaults to Spanish", () => {
+    for (const country of ["XX", null])
+      expect(resolveInstalledReceiptLanguageRules({ country, area: "Barcelona" })).toStrictEqual({
+        choices: [],
+        defaultLocale: "es-ES",
+      });
   });
 });
