@@ -1312,6 +1312,18 @@ third changes all five.
 Each hint follows the field it copies as the owner types: change Name and the blank fields' hints
 change with it.
 
+**A dropdown's arrow touches its right-hand border (A173, owner 2026-10-01) — OPEN.** Seen on a
+table's filter dropdown (the "Active" status filter), whose arrow sits against the border with no
+gap. The filter is a native `<select class="table-filter">` drawn by `wt-data-table`
+(`packages/ui/src/components/wt-data-table.ts`), styled by the shared `selectStyles`
+(`packages/ui/src/base-styles.ts`), which gives it `padding: var(--wt-space-2)` (8px) on every side
+and leaves the arrow to the browser. Not yet checked whether every dashboard dropdown using
+`selectStyles` shows the same thing, or only the filter — the till's own select styles
+(`apps/till/src/select-styles.ts`) are separate and use 12px side padding. **Next action:**
+reproduce in the dashboard on Chromium and Safari, then give the shared select room at the
+right-hand end for its arrow (more end padding, or draw the arrow ourselves so its position is
+ours rather than the browser's), and look at a couple of other screens' dropdowns afterwards.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
