@@ -244,7 +244,8 @@ export class WtCombobox extends LitElement {
       stable semantic id instead of a generated one. It is NOT a native form association — no
       primitive in this design system has one (design-system.md → Forms). */
   @property() name = "";
-  // The host's aria-label is the accessible name whenever there is no visible `label`.
+  // The host's aria-label names the field only when `label` is empty; with `hide-label` and a
+  // `label`, the `label` names it.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
