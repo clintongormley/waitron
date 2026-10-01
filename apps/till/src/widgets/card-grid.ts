@@ -10,6 +10,7 @@ import "./basket.js";
 import "./total.js";
 import "./tender-pay.js";
 import "./held-orders.js";
+import "./counter-waiting.js";
 import "./station-queue.js";
 import "../screens/till-floor-screen.js";
 import "../screens/till-expo-screen.js";
@@ -19,6 +20,7 @@ import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
   BillBalance,
+  CounterWaitingOrder,
   CurrentOrders,
   DeviceStation,
   FloorZone,
@@ -89,6 +91,8 @@ export class TillCardGrid extends LitElement {
   @property({ type: Boolean }) orderInFlight = false;
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
+  /** Shown in the held-orders card, under the held orders. */
+  @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   @property({ attribute: false }) defaultStationId?: string;
   @property({ type: Boolean }) busy = false;
@@ -255,9 +259,10 @@ export class TillCardGrid extends LitElement {
           ></till-tender-pay>`;
       case "held-orders":
         return html`<till-held-orders
-          .orders=${this.heldOrders}
-          .tables=${this.tables}
-        ></till-held-orders>`;
+            .orders=${this.heldOrders}
+            .tables=${this.tables}
+          ></till-held-orders
+          ><till-counter-waiting .orders=${this.counterWaiting}></till-counter-waiting>`;
       case "prep-queue":
         return html`<till-station-queue
           .groups=${this.stationQueue}
@@ -347,7 +352,9 @@ export class TillCardGrid extends LitElement {
   #currentState(type: CardType): string | undefined {
     switch (type) {
       case "held-orders":
-        return this.heldOrders.length > 0 ? "has-parked" : "empty";
+        return this.heldOrders.length > 0 || this.counterWaiting.length > 0
+          ? "has-parked"
+          : "empty";
       case "prep-queue":
         return this.stationQueue.length > 0 ? "has-items" : "empty";
       default:

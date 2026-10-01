@@ -119,6 +119,11 @@ a venue and serves the real till.
 > dialog gives a payment back before the invoice: given back by someone who may give refunds, or
 > approved with a supervisor's or manager's PIN; a card keyed on a separate terminal always takes one
 > PIN. So "No refunds" below no longer covers a bill payment given back before its invoice.
+>
+> **2026-10-01 (lane B item B16):** the counter's held-orders card also lists the counter orders
+> still waiting — sent to the kitchen but not paid, handed over but not paid, or paid but not handed
+> over — with **Hand over** and **Pay**. An order sent without payment can be handed over before it
+> is paid; Pay loads it into the basket to take its payment.
 
 **In scope (slice 1 / 7a):** one walk-up **cash** sale — choose products, weigh or count them, take
 cash, print the filed ticket with its Veri\*Factu QR.

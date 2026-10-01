@@ -11,6 +11,7 @@ import "../widgets/diet-filter.js";
 import "./till-allergen-screen.js";
 import "../widgets/language-chooser.js";
 import type {
+  CounterWaitingOrder,
   HeldOrderSummary,
   OrderFlow,
   ServiceZoneSummary,
@@ -106,6 +107,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property() selectedServiceZoneId = "";
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
+  @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
   /** The floor, which a held order's Move to table lists. */
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
@@ -268,6 +270,7 @@ export class TillCounterScreen extends LitElement {
         .selectedDiet=${this.selectedDiet}
         .handheld=${this.handheld}
         .heldOrders=${this.heldOrders}
+        .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.defaultStationId}

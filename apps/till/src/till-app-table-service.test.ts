@@ -251,6 +251,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZoneOffers: vi.fn().mockResolvedValue(diningOffers),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
+    listCounterWaiting: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([openTable]),
     listZones: vi.fn().mockResolvedValue([floorZone]),
     listStatuses: vi.fn().mockResolvedValue([]),

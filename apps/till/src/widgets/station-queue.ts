@@ -885,8 +885,8 @@ export class TillStationQueue extends LitElement {
     </button>`;
   }
 
-  /** Every order on the queue is already non-abandoned and uncollected (the server filters both), so
-   * `settled` is the whole collectability test. */
+  /** Collect is offered on settled orders only; a sent, unpaid counter order is handed over from the
+   * counter's waiting list instead. */
   #collectAction(group: StationQueueGroup): TemplateResult | typeof nothing {
     if (this.advanceOnly) return nothing;
     if (group.status !== "settled") return nothing;

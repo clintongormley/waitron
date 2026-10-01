@@ -122,13 +122,14 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Sixteen of the service
+1. **Finish table service and paying a bill in parts** (A4, lane B). Seventeen of the service
    plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
    #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
    the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
-   taking a reason is done by lane B item B11a, and Task 15, several payments on the till, has
-   landed as lane B item B15 (#956; the server side landed as #721). Left:
-   counter handover (16) and a table that leaves without paying (17).
+   taking a reason is done by lane B item B11a, Task 15, several payments on the till, has
+   landed as lane B item B15 (#956; the server side landed as #721), and Task 16, counter
+   handover, is built by lane B item B16 (what it left open is in the B16 entry under A4). Left:
+   a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
@@ -4437,6 +4438,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
         already filed its invoice. B16, the counter handover task, was kept clear of. **Next
         action:** decide with B16 whether a placed order can be adjusted before it is collected.
+        _(2026-10-01, B16: not decided; B16 lets such an order be handed over before it is paid,
+        and it still cannot be adjusted. The question stays open.)_
       - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
         dropped quantity without a reason** when a client sends it that way, the venue allows
         changes to sent items and the kitchen has not started the dish (otherwise it refuses
@@ -4824,6 +4827,54 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       "Take the rest". Left as it is.
     - Giving money back after the invoice stays out of scope for `BillPaymentView` (bill payments
       design §6).
+  - **Task 16, counter handover, is built by lane B item B16** (2026-10-01). A counter order sent
+    to the kitchen without payment (`ticket_then_pay` or `invoice_first`) can be handed over before
+    it is paid, and paying it afterwards keeps the handover time. The counter's held-orders card
+    lists the orders still waiting (sent, not paid; handed over, not paid; paid, not handed over)
+    with Hand over and Pay. Server:
+    `GET /api/orders/counter-waiting` and `GET /api/working-orders/:id/placed`. Open:
+    - **OPEN — Pay is not the main action in a zone that sends without payment.** The till keeps
+      "Place order" there. Making Pay the main action needs an open order's dishes sent to the
+      kitchen when it is paid in those modes, which today happens only for a pay-first order; that
+      would change the setup of "refuses a settled order that was never fired (ticket.not_fired)"
+      in `apps/server/src/working-order.pay-and-dispatch.test.ts`, so B16 left it.
+    - **OPEN, owner question — paying a sent order still counts as its handover.** When no earlier
+      handover was recorded, paying a placed order stamps the payment time as its handover, so it
+      leaves the waiting list and the kitchen queue at payment. Tests pin that:
+      `apps/server/src/till-sale-integrated.db.test.ts`,
+      `apps/server/src/till-api.fiscal-sale-paths.test.ts` and
+      `apps/server/src/collect-by-invoice.test.ts`. **Owner decision:** should paying a sent order
+      leave it listed until it is handed over?
+    - **OPEN — the kitchen queue's Collect sends no submission id**, on the station screen and on
+      the counter's prep-queue card, so a Collect resent after a lost reply is refused
+      `working_order.already_collected`. The waiting list's Hand over sends one. Two assertions pin
+      the kitchen queue's Collect calling without one: on the counter's prep-queue card in
+      `apps/till/src/till-app.test.ts`, and on the station screen in
+      `apps/till/src/screens/till-station-screen.test.ts`. A third, in
+      `apps/till/src/api/client.test.ts`, pins the body the client sends when it is given none.
+    - **OPEN — a collect straight after Place order does not re-read the kitchen queue.** Collecting
+      sets the order's handover time when none was set, so the order leaves the kitchen queue, but
+      the till re-reads the queue after a collect only when the collect was opened from the waiting
+      list, so the counter's prep-queue card can keep showing the order until the queue is next
+      read. Re-reading it after every collect would also stop an existing case proving what its
+      title says: "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late
+      failure does not bring the notice back" (`apps/till/src/till-app.test.ts`). The collect's
+      re-read would supersede the retry's request, so the retry's late failure would be ignored
+      whether or not the zone switch's own re-read superseded it. Tried 2026-10-01: with the
+      zone switch changed to end the retry without re-reading the queue, the case fails on the
+      notice coming back; with a re-read after every collect as well, it fails only on its call
+      count (four reads where it asserts three). So B16 left it.
+    - **OPEN — completed orders cannot be looked up.** The plan's "completed orders stay reachable"
+      was not built: no till or dashboard screen lists completed orders (the dashboard's Sales
+      screen shows totals).
+    - **OPEN — the waiting list is drawn only inside the held-orders card**, so a canvas without
+      that card shows no waiting list.
+    - **OPEN, not measured — Pay on a sent `invoice_first` order whose invoice was credited may
+      show the wrong total in the basket.** The waiting row shows what collecting charges (the
+      invoice net of its credit notes, `readIssuedSales` in `apps/server/src/sale-due.ts`), but Pay
+      loads the basket from `GET /api/working-orders/:id/placed`, which carries the order's lines,
+      so the basket is believed to show their sum. Reported by B16's review fixer from reading; no
+      test shows it.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
@@ -4864,7 +4915,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
   - **Tasks left: 16 and 17** (2026-09-30; 10 to 14 have landed, and Task 15, the till side of
-    Task 14, is built by lane B item B15). The menus tasks that change the same order and till code
+    Task 14, is built by lane B item B15). _(2026-10-01: Task 16 is built by lane B item B16; see
+    the B16 entry above. Task 17 is left.)_ The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
     plan's order among them: 16 after 10.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
@@ -10080,17 +10132,21 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    location.** The TENANT half of this item is retired — there is no tenant column, so a by-id read
    has no tenant clause to be missing (`CLAUDE.md` §3) — but the location half is untouched and is
    NOT covered by item 3, which names a different set of verbs. All four are in
-   `apps/server/src/working-order.ts` and were read on 2026-09-16 rather than inferred:
-   `markCollected` takes a `TillConfig` and discards it (`void cfg;`), then selects and updates on
-   `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
+   `apps/server/src/working-order.ts` and were read rather than inferred, `handOver` on 2026-10-01
+   and the other three on 2026-09-16: `handOver`, which `POST /api/orders/:id/collect` reaches
+   through `handOverOrder` (`markCollected` is a wrapper only tests call; the fiscal
+   `POST /api/working-orders/:id/collect` does not reach it), selects and updates on
+   `eq(workingOrders.id, id)`. It uses its `TillConfig` (since B16, 2026-10-01) only to read a
+   placed order's service mode, through `findOrderServiceContext`, which filters by
+   `cfg.locationId`, falling back to `cfg.orderFlow` when that finds none; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
    only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, nor does
    `priceStoredOrder`, which calls it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`,
    which the filing sites in `till-sale.ts` and `working-order.ts` call. Named by function rather than by line, because the line numbers
    this item used to carry went stale when the file moved.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
-3. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
-   `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
+3. **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
+   `updateHeldOrder`/`abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
    together with the four paths in item 1, which are the same problem in the same file.
 4. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
    are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no

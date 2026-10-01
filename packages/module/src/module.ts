@@ -360,6 +360,12 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     workingOrderId: string,
   ): Promise<OrderServiceContext | null>;
+  /** Each named order's frozen service mode in one read; an order with no context is absent. */
+  findOrderModes(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    workingOrderIds: readonly string[],
+  ): Promise<ReadonlyMap<string, ServiceMode>>;
   listLineContexts(
     tx: Transaction,
     cfg: { locationId: LocationId },

@@ -111,6 +111,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill is no longer open: it has been presented, paid or discarded",
     es: "Esta cuenta ya no está abierta: se ha presentado, pagado o descartado",
   },
+  "working_order.already_collected": {
+    en: "This order has already been handed over",
+    es: "Este pedido ya se ha entregado",
+  },
+  "working_order.not_settled": {
+    en: "This order can no longer be handed over",
+    es: "Este pedido ya no se puede entregar",
+  },
+  "ticket.not_fired": {
+    en: "Nothing on this order has gone to the kitchen, so there is nothing to hand over",
+    es: "Nada de este pedido ha ido a cocina, así que no hay nada que entregar",
+  },
   "tab.not_open": {
     en: "That bill is no longer open. Choose another bill and send again",
     es: "Esa cuenta ya no está abierta. Elige otra cuenta y vuelve a enviar el pedido",

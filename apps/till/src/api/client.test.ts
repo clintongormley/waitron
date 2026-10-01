@@ -915,7 +915,7 @@ describe("TillApi", () => {
     );
   });
 
-  it("markCollected POSTs an empty object to the order's /collect route — the Mode-P handover (empty 200 body)", async () => {
+  it("markCollected POSTs an empty object to the order's /collect route — the counter handover (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(new TillApi("", fetchStub).markCollected("wo1")).resolves.toBeUndefined();
@@ -929,6 +929,61 @@ describe("TillApi", () => {
         body: JSON.stringify({}),
       }),
     );
+  });
+
+  it("markCollected with a submission id POSTs it, and hands a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const signal = new AbortController().signal;
+
+    await new TillApi("", fetchStub).markCollected("wo1", "sub-1", { signal });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/collect",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ submissionId: "sub-1" }),
+        signal,
+      }),
+    );
+  });
+
+  it("listCounterWaiting GETs the counter's waiting orders and returns them", async () => {
+    const rows = [
+      {
+        id: "wo1",
+        orderNumber: 3,
+        label: null,
+        status: "settled",
+        openedAt: "2026-10-01T10:00:00.000Z",
+        settledAt: "2026-10-01T10:01:00.000Z",
+        collectedAt: null,
+        total: "18.00",
+        canHandOver: true,
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(rows));
+
+    const r = await new TillApi("", fetchStub).listCounterWaiting();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/counter-waiting",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(rows);
+  });
+
+  it("retrievePlacedOrder GETs the addressed sent order with a caller's abort signal", async () => {
+    const order = { id: "wo1", orderNumber: 7, label: null, revision: 2, lines: [] };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(order));
+    const signal = new AbortController().signal;
+
+    const r = await new TillApi("", fetchStub).retrievePlacedOrder("wo1", { signal });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/placed",
+      expect.objectContaining({ method: "GET", signal }),
+    );
+    expect(r).toEqual(order);
   });
 
   it("markCollected surfaces { code } when the order is not collectable", async () => {

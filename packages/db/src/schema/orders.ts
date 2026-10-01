@@ -42,14 +42,14 @@ export const workingOrderStatus = enumType([
  * What replaces immutability here is a state machine the database enforces
  * (`working_orders_enforce_transition`): an `open` order may change freely or
  * advance to any next state; a `placed` order may be settled or abandoned, or
- * stay placed changing only its `party_id`, `delivery_table_id` and `revision`;
- * `settled` and `abandoned` are terminal, save the handover stamp on a settled
- * order.
+ * stay placed changing only its `party_id`, `delivery_table_id` and `revision`,
+ * or only taking its handover stamp; `settled` and `abandoned` are terminal,
+ * save the handover stamp on a settled order.
  *
- * Each of those two exceptions lists every column of this table it holds
- * unchanged, so a column added here goes into both lists too, by a migration
+ * Each of those three exceptions lists every column of this table it holds
+ * unchanged, so a column added here goes into every list too, by a migration
  * that re-creates the trigger from the latest text,
- * `drizzle/0042_placed_bill_moves.sql`.
+ * `drizzle/0056_placed_order_handover.sql`.
  */
 export const workingOrders = table(
   "working_orders",

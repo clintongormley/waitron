@@ -120,7 +120,13 @@ import type {
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type { FloorAnnotator, PreparationRoute, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
+import type {
+  FloorAnnotator,
+  PreparationRoute,
+  ServiceMode,
+  ZoneMenuOffer,
+  ZoneOffers,
+} from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -168,6 +174,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
 import type { TillSaleResult } from "./till-sale.js";
+import { readIssuedSales } from "./sale-due.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
@@ -3279,10 +3286,34 @@ export async function listHeldOrders(
 
 /** Read an open parked order anywhere in the venue, with the snapshots the till rebuilds its basket
  * from even when an offer has since been deactivated. */
-export async function getHeldOrder(
+export function getHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
+): Promise<HeldOrder> {
+  return readBasketOrder(deps, cfg, id, eq(workingOrders.status, "open"));
+}
+
+/** A counter order sent without payment, read as {@link getHeldOrder} reads an open one, so the till
+ * can take its payment. */
+export function getPlacedCounterOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+): Promise<HeldOrder> {
+  return readBasketOrder(
+    deps,
+    cfg,
+    id,
+    and(eq(workingOrders.status, "placed"), isNull(workingOrders.partyId))!,
+  );
+}
+
+async function readBasketOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  which: SQL,
 ): Promise<HeldOrder> {
   return withTransaction(deps.db, async (tx) => {
     const [order] = await tx
@@ -3293,7 +3324,7 @@ export async function getHeldOrder(
         revision: workingOrders.revision,
       })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
+      .where(and(eq(workingOrders.id, id), which));
 
     if (order === undefined) {
       throw new AppError("working_order.not_found", { workingOrderId: id });
@@ -4693,40 +4724,182 @@ export async function sendToPrep(
   });
 }
 
-/** Stamp a settled, fired order as collected so it leaves the kitchen queue. */
+/**
+ * Stamp a fired order as collected so it leaves the kitchen queue: a settled one, or a counter order
+ * sent without payment in a mode that takes payment after the kitchen has it.
+ */
 export async function markCollected(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
-  void cfg;
-  return withTransaction(deps.db, async (tx) => {
-    const [order] = await tx
-      .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-    if (order === undefined || order.status !== "settled") {
-      throw new AppError("working_order.not_settled", { workingOrderId: id });
-    }
-    // Refused here, before the trigger that allows `collected_at` only NULL → non-null refuses it
-    // as an opaque error.
-    if (order.collectedAt !== null) {
-      throw new AppError("working_order.already_collected", { workingOrderId: id });
-    }
-    // An order with no ticket items is on no station display to hand over.
-    const [fired] = await tx
-      .select({ id: ticketItems.id })
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id))
-      .limit(1);
-    if (fired === undefined) {
-      throw new AppError("ticket.not_fired", { workingOrderId: id });
-    }
+  return withTransaction(deps.db, (tx) => handOverOrder(tx, cfg, id));
+}
 
-    await tx
-      .update(workingOrders)
-      .set({ collectedAt: nowIso() })
-      .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
+/**
+ * {@link markCollected} in the caller's transaction. With a `submissionId` it runs at most once per
+ * id on this order: a resent request answers as the first did, and the same id sent for another
+ * command on this bill is `submission.id_reused`.
+ */
+export function handOverOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  submissionId?: string,
+): Promise<void> {
+  if (submissionId === undefined) return handOver(tx, cfg, id);
+  return runServiceCommand(
+    tx,
+    { kind: "bill", workingOrderId: id },
+    submissionId,
+    "order.collect",
+    { workingOrderId: id },
+    () => handOver(tx, cfg, id),
+  );
+}
+
+async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
+  const [order] = await tx
+    .select({
+      status: workingOrders.status,
+      collectedAt: workingOrders.collectedAt,
+      partyId: workingOrders.partyId,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, id));
+  if (
+    order === undefined ||
+    (order.status !== "settled" && !(await sentUnpaidCounterOrder(tx, cfg, id, order)))
+  ) {
+    throw new AppError("working_order.not_settled", { workingOrderId: id });
+  }
+  // Refused here, before the trigger that allows `collected_at` only NULL → non-null refuses it
+  // as an opaque error.
+  if (order.collectedAt !== null) {
+    throw new AppError("working_order.already_collected", { workingOrderId: id });
+  }
+  // An order with no ticket items is on no station display to hand over.
+  const [fired] = await tx
+    .select({ id: ticketItems.id })
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, id))
+    .limit(1);
+  if (fired === undefined) {
+    throw new AppError("ticket.not_fired", { workingOrderId: id });
+  }
+
+  await tx
+    .update(workingOrders)
+    .set({ collectedAt: nowIso() })
+    .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
+}
+
+/** The service modes in which a counter order is sent to the kitchen before it is paid. */
+const PAY_AFTER_SENDING: ReadonlySet<string> = new Set(["ticket_then_pay", "invoice_first"]);
+
+async function sentUnpaidCounterOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  order: { status: string; partyId: string | null },
+): Promise<boolean> {
+  if (order.status !== "placed" || order.partyId !== null) return false;
+  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+  return paysAfterSending(context?.serviceMode, cfg);
+}
+
+/** An order with no frozen mode takes the venue's order flow. */
+function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
+  return PAY_AFTER_SENDING.has(mode ?? cfg.orderFlow);
+}
+
+/** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
+export interface CounterWaitingOrder {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  status: "placed" | "settled";
+  openedAt: string;
+  settledAt: string | null;
+  /** When it was handed over; set on a placed order handed over before payment. */
+  collectedAt: string | null;
+  /** What collecting a placed order charges: the sale already issued for it, net of its credit
+   * notes (`readIssuedSales`), else the sum of its lines. A settled order's is the sum of its lines. */
+  total: string;
+  /** {@link handOverOrder} would accept it now. */
+  canHandOver: boolean;
+  /** A placed order's frozen service mode, or `cfg.orderFlow` when it has none frozen; null on a
+   * settled one. */
+  serviceMode: ServiceMode | null;
+}
+
+/**
+ * The venue's counter orders (no party) that are `placed`, or `settled` with a kitchen ticket and no
+ * handover, oldest first.
+ */
+export async function listCounterWaiting(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+): Promise<CounterWaitingOrder[]> {
+  return withTransaction(deps.db, async (tx) => {
+    const firedOrders = tx.selectDistinct({ id: ticketItems.workingOrderId }).from(ticketItems);
+    const rows = await tx
+      .select({
+        id: workingOrders.id,
+        orderNumber: workingOrders.orderNumber,
+        label: workingOrders.label,
+        status: workingOrders.status,
+        openedAt: workingOrders.openedAt,
+        settledAt: workingOrders.settledAt,
+        collectedAt: workingOrders.collectedAt,
+        partyId: workingOrders.partyId,
+        // Cast to text for `rawCentsToDecimal`; see its doc comment.
+        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+        // The number 1 or 0: test its truthiness, never with `===`. Qualified, not bare, because
+        // the query joins.
+        fired: sql<number>`${workingOrders.id} in ${firedOrders}`,
+      })
+      .from(workingOrders)
+      .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+      .where(
+        and(
+          isNull(workingOrders.partyId),
+          or(
+            eq(workingOrders.status, "placed"),
+            and(
+              eq(workingOrders.status, "settled"),
+              isNull(workingOrders.collectedAt),
+              inArray(workingOrders.id, firedOrders),
+            ),
+          ),
+        ),
+      )
+      .groupBy(workingOrders.id)
+      .orderBy(workingOrders.openedAt, workingOrders.orderNumber);
+    const placedIds = rows.filter((row) => row.status === "placed").map((row) => row.id);
+    const modes = await VENUE_SERVICE.findOrderModes(tx, cfg, placedIds);
+    const issued = await readIssuedSales(tx, placedIds);
+    const waiting: CounterWaitingOrder[] = [];
+    for (const row of rows) {
+      const placed = row.status === "placed";
+      const eligible =
+        Boolean(row.fired) &&
+        row.collectedAt === null &&
+        (!placed || paysAfterSending(modes.get(row.id), cfg));
+      waiting.push({
+        id: row.id,
+        orderNumber: row.orderNumber,
+        label: row.label,
+        status: row.status as CounterWaitingOrder["status"],
+        openedAt: row.openedAt,
+        settledAt: row.settledAt,
+        collectedAt: row.collectedAt,
+        total: issued.get(row.id)?.amountDue ?? rawCentsToDecimal(row.total),
+        canHandOver: eligible,
+        serviceMode: placed ? (modes.get(row.id) ?? cfg.orderFlow) : null,
+      });
+    }
+    return waiting;
   });
 }
 
@@ -4904,7 +5077,8 @@ export interface StationQueueGroup {
   orderNumber: number;
   label: string | null;
   queuedAt: string;
-  /** The till reads COLLECTABLE off this alone: only a `settled` order awaits the counter handover. */
+  /** The station queue offers Collect on a `settled` order alone; a placed counter order is handed
+   * over from the counter's waiting list. */
   status: WorkingOrderStatus;
   /** Absent for a bill of no party. */
   party?: QueueParty;

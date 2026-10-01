@@ -1399,8 +1399,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         orderNumber: expect.any(Number),
         label: "Mesa 9",
         queuedAt: expect.any(String),
-        // A fired-at-PLACING order (Modes I/T) is on the queue as `placed` — not collectable via the
-        // Mode-P handover route; its collect is the fiscal `POST /api/working-orders/:id/collect` below.
+        // A fired-at-PLACING order (Modes I/T) is on the queue as `placed`; the station queue offers
+        // Collect on a settled order alone. This one is paid by the fiscal
+        // `POST /api/working-orders/:id/collect` below.
         status: "placed",
         // KDS order-timing alerts (design §3/§6/§11): the venue's DEFAULT station carries the schema's
         // default thresholds — provisioning never overrides them.

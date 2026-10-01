@@ -67,11 +67,13 @@ import {
   cancelPlacedOrder,
   fireCourse,
   getHeldOrder,
+  getPlacedCounterOrder,
   listExpoQueue,
+  listCounterWaiting,
   listHeldOrders,
   listStationQueue,
   listTablesWithState,
-  markCollected,
+  handOverOrder,
   markCourseAway,
   markGroupServed,
   markServed,
@@ -1223,6 +1225,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.get("/api/working-orders/:id/placed", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      return c.json(await getPlacedCounterOrder({ db: deps.db }, deps.cfg, id));
+    }),
+  );
+
   app.put("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -1385,12 +1395,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   mountCourseVerb(app, deps, log, "away", markCourseAway);
 
+  app.get("/api/orders/counter-waiting", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      return c.json(await listCounterWaiting({ db: deps.db }, deps.cfg));
+    }),
+  );
+
   // The non-fiscal counter handover; the fiscal collect is `POST /api/working-orders/:id/collect`.
   app.post("/api/orders/:id/collect", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
-      await markCollected({ db: deps.db }, deps.cfg, id);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const submissionId = body.submissionId === undefined ? undefined : submissionIdOf(body);
+      await withTransaction(deps.db, (tx) => handOverOrder(tx, deps.cfg, id, submissionId));
       return c.body(null, 200);
     }),
   );
