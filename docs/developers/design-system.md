@@ -357,6 +357,10 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 | `wt-language-footer` | `active` (the code of the page's language; the parent sets it and the component never changes it), `loadLocales` (property; `() => Promise<{ code, label }[]>`, called on the first open and again after a failed load; defaults to `SUPPORTED_LOCALES`; one load at a time; while it is pending, a second press, Escape, or a press or focus outside cancels the opening, and a further press asks for it again). A page footer in the page's flow, never fixed, holding a `wt-button` named with the active language (from the loaded list, then `SUPPORTED_LOCALES`, then the bare code) whose menu of `menuitemradio` options opens upwards over what is above it. Opening focuses the checked option (or the first); ArrowDown and ArrowUp move between options and wrap, Home and End reach the ends; Escape closes it and returns focus to the trigger, and goes no further only when it closed the menu; a press or focus outside closes it without moving focus; `data-test` hooks `lang-trigger` and `lang-<code>` | `wt-locale-selected` — `detail: { code: string }`; a pick closes the menu and returns focus to the trigger |
 
+Set a `wt-data-table` column’s `activatesRow: false` when it has an action separate from `rowClick`.
+Clicking blank space in that column does not open the row; its controls keep their own actions. This
+also applies to pinned columns.
+
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
 one icon with its own `aria-label` rather than a text label — the round "Add" button beside a table
 heading, for one. It replaces the button's own padding and border radius; it does not change what

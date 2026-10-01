@@ -2670,6 +2670,31 @@ test("a real click on a pinned cell's empty space opens its clickable row once",
   expect(clicked).toEqual(["b"]);
 });
 
+test.each([
+  { position: "unpinned", pinned: undefined },
+  { position: "pinned", pinned: "end" as const },
+])("a $position column can keep its blank space outside row activation", async ({ pinned }) => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      {
+        key: "action",
+        label: "Action",
+        pinned,
+        activatesRow: false,
+        cell: (row) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  const cell = el.shadowRoot!.querySelector<HTMLElement>("tbody tr td:last-child")!;
+  const box = cell.getBoundingClientRect();
+  expect(el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2)).toBe(cell);
+  await userEvent.click(cell, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual([]);
+});
+
 test("a real click on a control inside a pinned cell does not open its clickable row", async () => {
   const clicked: string[] = [];
   const { el } = await narrowTable("end", { rowClick: (row: Row) => clicked.push(row.id) });

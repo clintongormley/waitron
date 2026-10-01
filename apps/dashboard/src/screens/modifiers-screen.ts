@@ -398,6 +398,7 @@ export class ModifiersScreen extends LitElement {
         key: "usedBy",
         label: t("modifiers.used_by"),
         choosable: "shown",
+        activatesRow: kind === "options" ? false : undefined,
         searchValue: (list) => this.#usageText(list),
         sortValue: (list) => list.usage.products,
         cell: (list) => this.#usageCell(kind, list),
@@ -432,7 +433,7 @@ export class ModifiersScreen extends LitElement {
               >${t("action.edit")}</wt-button
             ><wt-button
               align="start"
-              variant="ghost"
+              variant=${kind === "options" ? "danger" : "ghost"}
               data-test=${`delete-${row}-${list.id}`}
               @click=${() => this.#openModal("delete", kind, list)}
               >${t("action.delete")}</wt-button
@@ -563,6 +564,8 @@ export class ModifiersScreen extends LitElement {
         .rows=${this.#lists(kind)}
         .columns=${this.#columns(kind)}
         .rowKey=${(list: ModifierList) => list.id}
+        .rowClick=${kind === "options" ? (list: ModifierList) => this.#edit(kind, list) : undefined}
+        .rowClickLabel=${(list: ModifierList) => `${t("action.edit")}: ${list.name}`}
         .emptyMessage=${t(`${kind}.empty`)}
       ></wt-data-table>`;
   }

@@ -1295,18 +1295,10 @@ options list that always has a default.
   the name and the error together. Expected from the CSS in `option-list-form.ts`, not yet looked at
   on screen. **Next action:** screenshot a row carrying an error and decide whether to align by baseline.
 
-**Options tab of the Modifiers screen: two owner fixes (A168, owner 2026-10-01: "queue these
-fixes") — OPEN.** Both live in the table's columns in `apps/dashboard/src/screens/modifiers-screen.ts`,
-which the Extras tab shares, so a fix there changes both tabs unless it is limited to Options.
-
-- **Clicking a row should open the list's editor, except in the products column.** Today only the
-  row menu's Edit opens it; the table is given no `rowClick`. `wt-data-table` already supports one
-  (`rowClick` and `rowClickLabel`, used by `apps/dashboard/src/screens/units-screen.ts`). The
-  products column is the "Used by" column, whose cell (when the list is used) is a button opening
-  its own popup of the products using it; a click anywhere in that column must not open the editor,
-  and the popup must still open.
-- **Delete in the row menu is not red.** It is a `variant="ghost"` button beside Edit; the Products
-  screen's menu gives its Delete `variant="danger"` (`apps/dashboard/src/widgets/product-list.ts`).
+**Options tab of the Modifiers screen: two owner fixes (A168, owner 2026-10-01) — DONE.**
+Clicking an Options row opens its editor, while the Used by column keeps its own popup and does not
+open the editor. Delete in an Options row menu uses the danger style. The Extras tab keeps its
+existing actions.
 
 **The folding section jumps about when it opens (A169, owner 2026-10-01) — OPEN.** The shared
 `wt-disclosure` (`packages/ui/src/components/wt-disclosure.ts`), seen by the owner as the

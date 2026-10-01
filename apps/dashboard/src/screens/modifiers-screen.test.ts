@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -676,6 +676,63 @@ it("counts in Spanish, with the singular forms", async () => {
 
 // ---------------------------------------------------------------------------
 // Add and Edit
+
+it("opens an options editor from its row while Used by opens only the products popup", async () => {
+  const el = await mount();
+  await selectTab(el, "options");
+  const options = table(el, "option-lists");
+  await options.updateComplete;
+  const row = options.shadowRoot.querySelector<HTMLElement>('tbody tr[data-row-key="o1"]')!;
+  await userEvent.click(row.querySelector<HTMLElement>(".row-activate")!, {
+    position: { x: 2, y: 2 },
+  });
+  await el.updateComplete;
+  expect(optionForm(el).open).toBe(true);
+  expect(optionForm(el).value).toEqual(optionList);
+  optionForm(el).dispatchEvent(new CustomEvent("wt-cancel", { bubbles: true, composed: true }));
+  await el.updateComplete;
+
+  const usedBy = row.querySelector<HTMLElement>("td:nth-child(3)")!;
+  await userEvent.click(usedBy, { position: { x: 2, y: 2 } });
+  await el.updateComplete;
+  expect(optionForm(el).open).toBe(false);
+  expect(detailModal(el).open).toBe(false);
+  await userEvent.click(usedBy.querySelector<HTMLElement>('[data-test="used-by-option-o1"]')!);
+  await el.updateComplete;
+  expect(detailModal(el).open).toBe(true);
+  expect(optionForm(el).open).toBe(false);
+});
+
+it("keeps an unused options list's Used by cell outside row activation", async () => {
+  const el = await mount(
+    api({
+      listOptionLists: vi.fn().mockResolvedValue([{ ...optionList, usage: { products: 0 } }]),
+    }),
+  );
+  await selectTab(el, "options");
+  const options = table(el, "option-lists");
+  await options.updateComplete;
+  const usedBy = options.shadowRoot.querySelector<HTMLElement>(
+    'tbody tr[data-row-key="o1"] td:nth-child(3)',
+  )!;
+  expect(usedBy.textContent?.trim()).toBe(t("modifiers.not_used"));
+  const box = usedBy.getBoundingClientRect();
+  expect(options.shadowRoot.elementFromPoint(box.x + 2, box.y + 2)).toBe(usedBy);
+  await userEvent.click(usedBy, { position: { x: 2, y: 2 } });
+  expect(optionForm(el).open).toBe(false);
+});
+
+it("marks Delete as dangerous in an options row menu", async () => {
+  const el = await mount();
+  await selectTab(el, "options");
+  const options = table(el, "option-lists");
+  await options.updateComplete;
+  expect(
+    options.shadowRoot
+      .querySelector<HTMLElement>('[data-test="delete-option-o1"]')
+      ?.getAttribute("variant"),
+  ).toBe("danger");
+});
 
 it("opens the extras form from the Extras tab's Add button", async () => {
   const el = await mount();
