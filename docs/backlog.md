@@ -7770,7 +7770,7 @@ ongoing overhaul listed at the top of Track A.
     `/manage/location-settings`, open now; a reading of the router says the overview page, which
     nobody has run — #993 added that test for `/manage/sections`.
 - **An open Receipts page's preview refresh does not keep an unattended dashboard signed in (C121,
-  owner 2026-10-01) — done (2026-10-01).** When another session saved a different header or footer,
+  owner 2026-10-01) — done (2026-10-01, #996).** When another session saved a different header or footer,
   the page redrew its preview, and every preview counted as this person's activity, so a Receipts
   page left open stayed signed in for as long as someone else kept editing.
   - The preview is now a GET, `GET /management-api/receipt-preview?receipt=…`, whose one `receipt`
