@@ -231,6 +231,46 @@ describe("device made-here stations", () => {
     });
   });
 
+  it("prints an unkept Bar item sent by a different device whose list is empty", async () => {
+    const venue = await setupVenue(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const printer = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
+      const barDeviceId = await deviceAt(
+        tx,
+        venue.cfg.locationId,
+        venue.cfg.tillId,
+        venue.defaultStationId,
+      );
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: "Other till", formFactor: "till", capabilities: [] })
+        .returning();
+      const [other] = await tx
+        .insert(devices)
+        .values({
+          locationId: venue.cfg.locationId,
+          tillId: venue.cfg.tillId,
+          deviceProfileId: profile!.id,
+          label: "Other",
+          tokenHash: "test",
+        })
+        .returning();
+      expect(other!.id).not.toBe(barDeviceId);
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const line = await rawLine(tx, orderId, venue.cafeId, 1);
+      await fireLines(tx, { ...venue.cfg, sendingDeviceId: other!.id }, orderId, [line]);
+      const [item] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, line.id));
+      expect(item).toMatchObject({ madeHere: false, state: "queued" });
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, printer)),
+      ).toHaveLength(1);
+    });
+  });
+
   it("prints a station item when there is no sending device", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
@@ -304,6 +344,13 @@ describe("device made-here stations", () => {
       const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
       const drink = await rawLine(tx, orderId, venue.cafeId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [burger, drink]);
+      const [madeDrink] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, drink.id));
+      expect(madeDrink).toMatchObject({ madeHere: true, state: "ready" });
+      expect(madeDrink!.firedAt).toEqual(expect.any(String));
+      expect(madeDrink!.readyAt).toBe(madeDrink!.firedAt);
       const steak = await rawLine(tx, orderId, venue.aguaId, 3, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [steak]);
       const [item] = await tx
