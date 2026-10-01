@@ -280,7 +280,7 @@ beside it: the Printers screen's `.field-row` does, for the calibration wizard's
 button beside the ruler's answer, and the section member list's `.add` row does, for its Add button, along with that row's
 `.error` line (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
 the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
-cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-combobox`,
+cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
 `wt-price-input`, `wt-number-stepper` and `wt-switch`, a native select
 field's label, select, hint and error, and the message at 1280px; the select below its label text
 at 1280px; wide content and the footer row at full width; each field at the
@@ -290,9 +290,7 @@ body's width at 390px; each field at its container's width outside a modal); the
 `apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
-`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. `wt-textarea` is not among
-the modal suite's fields; its own suite (`packages/ui-core/src/components/wt-textarea.test.ts`) sets
-the token and checks the width follows it. A new field primitive that does not read
+`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that does not read
 `--wt-field-max-width` is seen by none of them, and neither is a screen-styled native control such
 as the product editor's description `<textarea>`.
 
