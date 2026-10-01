@@ -177,7 +177,7 @@ describe("handing over a counter order sent without payment", () => {
   });
 });
 
-/** Long enough that a payment stamped at its own time cannot carry the handover's millisecond. */
+/** Long enough that two writes a case compares land on different milliseconds. */
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 /** Pays a placed order in cash through the till's collect. */
@@ -387,7 +387,7 @@ describe("paying a counter order sent without payment, before it is handed over"
     },
   );
 
-  it("a pay-first order paid by card before it was sent stays waiting until it is handed over", async () => {
+  it("a pay-first order paid by card before it was sent records no handover, and stays waiting and on its station queue", async () => {
     const id = randomUUID();
     const out = await payWorkingOrderIntegrated(
       { ...deps(), provider: venue.card },

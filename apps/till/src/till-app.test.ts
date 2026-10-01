@@ -9002,7 +9002,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     },
   );
 
-  it("collecting a waiting order reads the kitchen queue again, so the counter's prep-queue card shows it paid", async () => {
+  it("collecting a waiting order reads the kitchen queue again", async () => {
     const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
     const { el } = await counterWaiting({
       ...invoiceFirst,

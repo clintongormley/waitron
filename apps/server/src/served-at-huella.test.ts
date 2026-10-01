@@ -428,8 +428,8 @@ describe("table placement is not part of the huella", () => {
  * stamp the order's `collected_at`, then pay it through the real pay path with the FROZEN clock,
  * returning the filed huella (registro #1 at secuencia 1).
  *
- * `collected_at` is stamped by a direct UPDATE rather than `collectOrder`, which would file through
- * a different settle path: the filing path stays `payWorkingOrder`, as in the sibling tests.
+ * `collected_at` is stamped by a direct UPDATE; the filing path stays `payWorkingOrder`, as in the
+ * sibling tests.
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
   const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;

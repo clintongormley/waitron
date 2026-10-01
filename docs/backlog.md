@@ -4869,8 +4869,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       B25, PR to follow). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
       kitchen queue's Collect) records the handover time. An order handed over before it was paid
-      keeps that time. Cases: "paying a counter order sent without payment, before it is handed
-      over" in `apps/server/src/counter-handover.test.ts`.
+      keeps that time. Three existing assertions outside the owner-approved list were changed and
+      await the owner's approval: "a placed order paid without a handover is not handed over by
+      the payment" in `apps/server/src/counter-handover.test.ts`, and "Mode T: collectOrder files
+      the sale once and records no handover, so the order stays on its station queue" and "Mode I:
+      collectOrder files nothing new and records no handover, so the order stays on its station
+      queue" in `apps/server/src/working-order.pay-and-dispatch.test.ts`. Guards: "paying a counter
+      order sent without payment, before it is handed over" in
+      `apps/server/src/counter-handover.test.ts`.
     - **OPEN — the kitchen queue's Collect sends no submission id**, on the station screen and on
       the counter's prep-queue card, so a Collect resent after a lost reply is refused
       `working_order.already_collected`. The waiting list's Hand over sends one. Two assertions pin
@@ -4879,11 +4885,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/till/src/screens/till-station-screen.test.ts`. A third, in
       `apps/till/src/api/client.test.ts`, pins the body the client sends when it is given none.
     - **OPEN — a collect straight after Place order does not re-read the kitchen queue.** Since B25
-      a collect leaves the order on the kitchen queue but turns it from sent to paid, and the
-      counter's prep-queue card offers Collect on a paid order only. The till re-reads the queue
-      after a collect only when the collect was opened from the waiting list, so after any other
-      collect the card can keep showing the order as sent, with no Collect, until the queue is next
-      read; the waiting list, re-read after every collect, offers Hand over meanwhile. (Read in
+      a collect leaves the order on the kitchen queue and settles it, and the counter's prep-queue
+      card offers Collect only on a settled order. The till re-reads the queue after a collect only
+      when the collect was opened from the waiting list, so after any other collect the card can
+      keep showing the order without Collect until the queue is next read; the waiting list,
+      re-read after every collect, offers Hand over meanwhile. (Read in
       `#onCollectOrder`, `apps/till/src/till-app.ts`, and `#collectAction`,
       `apps/till/src/widgets/station-queue.ts`; not run.) Re-reading it after every collect would
       also stop an existing case proving what its title says: "a switch to a prepay zone ends a

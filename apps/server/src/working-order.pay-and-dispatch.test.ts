@@ -1774,7 +1774,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // The counter COLLECT is a payment, not a handover: a paid counter order stays on its station queue
   // until it is handed over. Both modes are pinned: Mode T settles through `fileImmediateSale`, Mode I
   // through the direct settle UPDATE.
-  it("Mode T: collectOrder records no handover, so the order stays on its station queue, fiscal result unchanged", async () => {
+  it("Mode T: collectOrder files the sale once and records no handover, so the order stays on its station queue", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
@@ -1799,7 +1799,6 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       tender: { method: "cash", amount: "1.50" },
     });
 
-    // Fiscal result byte-unchanged: filed once at collect, A/1, one chained registro, one tender.
     expect(collected.invoiceNumber).toBe("A/1");
     expect(collected.total).toBe("1.50");
     expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
@@ -1812,11 +1811,11 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(
       (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
-    // The ticket item ITSELF is untouched — collected_at is an ORDER marker, not a ticket kitchen state.
+    // Collect does not move the ticket item's kitchen state.
     expect(await ticketStateOf(id)).toBe("queued");
   });
 
-  it("Mode I: collectOrder records no handover, so the order stays on its station queue, no second file", async () => {
+  it("Mode I: collectOrder files nothing new and records no handover, so the order stays on its station queue", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
@@ -2039,7 +2038,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
     // Order 1 paid and handed over, written directly. The default-station display drops a
     // handed-over order (§3e), so it leaves the queue.
-    // ONE clock reading bound to both columns, so they hold the same instant.
     const settledNow = nowIso();
     await suite.db.execute(sql`
       update working_orders set status = 'settled', settled_at = ${settledNow}, collected_at = ${settledNow}
