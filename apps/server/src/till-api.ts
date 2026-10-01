@@ -68,6 +68,7 @@ import {
   fireCourse,
   getHeldOrder,
   listExpoQueue,
+  listCounterWaiting,
   listHeldOrders,
   listStationQueue,
   listTablesWithState,
@@ -1385,6 +1386,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountCourseVerb(app, deps, log, "ready", bumpCourseReady);
 
   mountCourseVerb(app, deps, log, "away", markCourseAway);
+
+  app.get("/api/orders/counter-waiting", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      return c.json(await listCounterWaiting({ db: deps.db }, deps.cfg));
+    }),
+  );
 
   // The non-fiscal counter handover; the fiscal collect is `POST /api/working-orders/:id/collect`.
   app.post("/api/orders/:id/collect", (c) =>

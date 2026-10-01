@@ -4777,6 +4777,90 @@ async function sentUnpaidCounterOrder(
   return PAY_AFTER_SENDING.has(context?.serviceMode ?? cfg.orderFlow);
 }
 
+/** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
+export interface CounterWaitingOrder {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  status: "placed" | "settled";
+  openedAt: string;
+  settledAt: string | null;
+  /** When it was handed over; set on a placed order handed over before payment. */
+  collectedAt: string | null;
+  /** The sum of its lines, as the open-order list shows it. */
+  total: string;
+  /** {@link markCollected} would accept it now. */
+  canHandOver: boolean;
+}
+
+/**
+ * The venue's counter orders (no party) that are `placed`, or `settled` with a kitchen ticket and no
+ * handover, oldest first.
+ */
+export async function listCounterWaiting(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+): Promise<CounterWaitingOrder[]> {
+  return withTransaction(deps.db, async (tx) => {
+    const firedOrders = tx.selectDistinct({ id: ticketItems.workingOrderId }).from(ticketItems);
+    const rows = await tx
+      .select({
+        id: workingOrders.id,
+        orderNumber: workingOrders.orderNumber,
+        label: workingOrders.label,
+        status: workingOrders.status,
+        openedAt: workingOrders.openedAt,
+        settledAt: workingOrders.settledAt,
+        collectedAt: workingOrders.collectedAt,
+        partyId: workingOrders.partyId,
+        // Cast to text for `rawCentsToDecimal`; see its doc comment.
+        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+        // The number 1 or 0: test its truthiness, never with `===`. Qualified, not bare, because
+        // the query joins.
+        fired: sql<number>`${workingOrders.id} in ${firedOrders}`,
+      })
+      .from(workingOrders)
+      .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+      .where(
+        and(
+          isNull(workingOrders.partyId),
+          or(
+            eq(workingOrders.status, "placed"),
+            and(
+              eq(workingOrders.status, "settled"),
+              isNull(workingOrders.collectedAt),
+              inArray(workingOrders.id, firedOrders),
+            ),
+          ),
+        ),
+      )
+      .groupBy(workingOrders.id)
+      .orderBy(workingOrders.openedAt, workingOrders.orderNumber);
+    const waiting: CounterWaitingOrder[] = [];
+    // One service-context read per placed row: the venue-service seat has no batch read of order
+    // modes, and adding one changes the seat's pinned key list
+    // (`packages/venue-service/src/service.test.ts`).
+    for (const row of rows) {
+      const eligible =
+        Boolean(row.fired) &&
+        row.collectedAt === null &&
+        (row.status === "settled" || (await sentUnpaidCounterOrder(tx, cfg, row.id, row)));
+      waiting.push({
+        id: row.id,
+        orderNumber: row.orderNumber,
+        label: row.label,
+        status: row.status as CounterWaitingOrder["status"],
+        openedAt: row.openedAt,
+        settledAt: row.settledAt,
+        collectedAt: row.collectedAt,
+        total: rawCentsToDecimal(row.total),
+        canHandOver: eligible,
+      });
+    }
+    return waiting;
+  });
+}
+
 /** One unserved, fired line of an open tab, as `listTablesWithState`'s JSON aggregate emits it. */
 interface UnservedLine {
   queuedAt: string;

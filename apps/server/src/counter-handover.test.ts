@@ -451,3 +451,129 @@ describe("POST /api/orders/:id/collect with a submission id (retry-safe)", () =>
     expect((await handOverRoute(id)).status).toBe(409);
   });
 });
+
+describe("GET /api/orders/counter-waiting", () => {
+  interface WaitingRow {
+    id: string;
+    orderNumber: number;
+    label: string | null;
+    status: string;
+    openedAt: string;
+    settledAt: string | null;
+    collectedAt: string | null;
+    total: string;
+    canHandOver: boolean;
+  }
+
+  async function waiting(): Promise<WaitingRow[]> {
+    const answer = await send(venue.app, venue.cookie, "GET", "/api/orders/counter-waiting");
+    expect(answer.status).toBe(200);
+    return answer.json as unknown as WaitingRow[];
+  }
+
+  async function paidPrepay(): Promise<string> {
+    const id = randomUUID();
+    await payWorkingOrder(
+      deps(),
+      venue.cfg,
+      {
+        id,
+        zoneId: zones.prepay,
+        lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+        tender: { method: "cash", amount: "50.00" },
+      },
+      venue.operatorId,
+    );
+    return id;
+  }
+
+  it("lists sent-not-paid, handed-over-not-paid and paid-not-handed-over counter orders, with what can be handed over now", async () => {
+    const sent = await placed("ticket_then_pay", "Tarta");
+    const handedOver = await placed("invoice_first", "Tarta");
+    await markCollected({ db: venue.db }, venue.cfg, handedOver);
+    const sentPrepay = await placed("prepay", "Tarta");
+    const sentNothingToCook = await placed("ticket_then_pay", "Caña");
+    const paid = await paidPrepay();
+
+    const rows = await waiting();
+    const row = (id: string) => rows.find((r) => r.id === id);
+
+    expect(row(sent)).toEqual({
+      id: sent,
+      orderNumber: (await orderRow(sent)).orderNumber,
+      label: null,
+      status: "placed",
+      openedAt: (await orderRow(sent)).openedAt,
+      settledAt: null,
+      collectedAt: null,
+      total: "18.00",
+      canHandOver: true,
+    });
+    expect(row(handedOver)).toMatchObject({
+      status: "placed",
+      collectedAt: (await orderRow(handedOver)).collectedAt,
+      canHandOver: false,
+    });
+    expect(row(handedOver)!.collectedAt).not.toBeNull();
+    expect(row(sentPrepay)).toMatchObject({ status: "placed", canHandOver: false });
+    expect(row(sentNothingToCook)).toMatchObject({ status: "placed", canHandOver: false });
+    expect(row(paid)).toMatchObject({
+      status: "settled",
+      settledAt: (await orderRow(paid)).settledAt,
+      collectedAt: null,
+      canHandOver: true,
+    });
+  });
+
+  it("leaves out a handed-over paid order, an open order, a table bill, an abandoned order and a paid order with nothing fired", async () => {
+    const collected = await paidPrepay();
+    await markCollected({ db: venue.db }, venue.cfg, collected);
+    const open = await parked("ticket_then_pay", "Tarta");
+    const tableBill = await tabWith(venue, "Paella");
+    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId, venue.cfg.tillId);
+    const abandoned = await parked("ticket_then_pay", "Tarta");
+    venue.db.run(sql`update working_orders set status = 'abandoned' where id = ${abandoned}`);
+    const paidUnfired = randomUUID();
+    await payWorkingOrder(
+      deps(),
+      venue.cfg,
+      {
+        id: paidUnfired,
+        zoneId: zones.ticket_then_pay,
+        lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+        tender: { method: "cash", amount: "50.00" },
+      },
+      venue.operatorId,
+    );
+    expect(ticketItemCount(paidUnfired)).toBe(0);
+
+    const ids = (await waiting()).map((r) => r.id);
+    for (const id of [collected, open, tableBill, abandoned, paidUnfired]) {
+      expect(ids).not.toContain(id);
+    }
+  });
+
+  it("drops a placed order once it is handed over and paid", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    await markCollected({ db: venue.db }, venue.cfg, id);
+    expect((await waiting()).map((r) => r.id)).toContain(id);
+    await collectCash(id);
+    expect((await waiting()).map((r) => r.id)).not.toContain(id);
+  });
+
+  it("lists the oldest first", async () => {
+    const older = await placed("ticket_then_pay", "Tarta");
+    await tick();
+    const newer = await paidPrepay();
+    const ids = (await waiting()).map((r) => r.id);
+    expect(ids.indexOf(older)).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf(older)).toBeLessThan(ids.indexOf(newer));
+    const opened = (await waiting()).map((r) => r.openedAt);
+    expect(opened).toEqual([...opened].sort());
+  });
+
+  it("requires a signed-in session", async () => {
+    const answer = await send(venue.app, "", "GET", "/api/orders/counter-waiting");
+    expect(answer.status).toBe(401);
+  });
+});
