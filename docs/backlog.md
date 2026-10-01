@@ -5086,7 +5086,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       left it.
     - **OPEN — completed orders cannot be looked up.** The plan's "completed orders stay reachable"
       was not built: no till or dashboard screen lists completed orders (the dashboard's Sales
-      screen shows totals).
+      screen shows totals). The Orders screen's spec (B27s, waiting for the owner) covers it:
+      `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`.
     - **OPEN — the waiting list is drawn only inside the held-orders card**, so a canvas without
       that card shows no waiting list.
     - **OPEN, not measured — Pay on a sent `invoice_first` order whose invoice was credited may
@@ -5125,7 +5126,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **OPEN — handhelds never see the list.** It sits in the counter's held-orders card, which the
       default phone and tablet layouts lack. The owner kept the counter list as a stopgap
       (2026-10-01) and wants a dashboard Orders screen listing every order, with an "unpaid"
-      filter, queued as lane B item B27s (spec and plan first).
+      filter, queued as lane B item B27s (spec and plan first). The spec and plan are written and
+      wait for the owner's choices (2026-10-02):
+      `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`,
+      `docs/superpowers/plans/2026-10-01-dashboard-orders.md`. Nothing is built.
     - A bill that owes nothing once invoiced — one already invoiced whose credit notes bring it to
       zero, or an open bill whose every line was given away — gets no departure row. The departure
       invoices it (at 0.00, for the open bill) and settles it with no payment, as collecting a bill
