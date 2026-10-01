@@ -329,7 +329,11 @@ async function finishClaimedAction(
   };
 }
 
-/** Returns null for an unknown or unavailable account, so the caller's response stays silent. */
+/**
+ * Returns null for an unknown or unavailable account, so the caller's response stays silent. When
+ * a well-formed address finds no active or pending account, it leaves foreign keys deferred for the
+ * rest of the caller's transaction.
+ */
 export async function requestAccountRecoveryAction(
   tx: Transaction,
   input: { email: string; now?: Date },
@@ -358,15 +362,18 @@ export async function requestAccountRecoveryAction(
 }
 
 /**
- * The statements `issueAccountAction` runs for a known address, against a person id nobody has,
- * with the row removed before commit, so an unknown address's commit writes too and a request
- * queued behind it waits about as long (measured: A159 in `docs/backlog.md`). The foreign key is
- * checked at commit, when the row is already gone.
+ * The statements `issueAccountAction` runs for an active account's password reset (read, delete
+ * dead links, retire, insert with the password_reset lifetime), against a person id nobody has,
+ * plus a final delete, so an unknown address's commit writes too (measured: A159 in
+ * `docs/backlog.md`). A pending account's invitation lifetime is not copied. The foreign key is
+ * checked at commit, when the row is already gone. The deferral lasts until the ENCLOSING
+ * transaction ends (rolling back a savepoint does not end it), so the caller must end the
+ * transaction straight after; `issueRecovery` (`apps/server/src/management-api.ts`) does.
  */
 async function writeAndRemoveDecoyAction(tx: Transaction, now: Date): Promise<void> {
   const personId = randomUUID();
   const nowIso = now.toISOString();
-  await tx.run(sql`pragma defer_foreign_keys = on`);
+  await tx.execute(sql`pragma defer_foreign_keys = on`);
   await tx
     .select({
       email: persons.email,

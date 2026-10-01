@@ -328,24 +328,24 @@ describe("management account actions", () => {
     ).resolves.toMatchObject({ personId, session: { personId } });
   });
 
-  it("writes and removes a reset row for an address with no account, so its commit costs what a known address's does", async () => {
-    await suite.db.execute(
-      sql`create table recovery_writes (op text not null, person_id text not null, token_hash text not null)`,
-    );
-    await suite.db
-      .execute(sql`create trigger recovery_writes_insert after insert on management_account_actions
-      begin insert into recovery_writes values ('insert', new.person_id, new.token_hash); end`);
-    await suite.db
-      .execute(sql`create trigger recovery_writes_delete after delete on management_account_actions
-      begin insert into recovery_writes values ('delete', old.person_id, old.token_hash); end`);
+  it("writes and then removes one reset row, for a person nobody has, when the address has no account", async () => {
     try {
+      await suite.db.execute(
+        sql`create table tmp_recovery_writes (op text not null, person_id text not null, token_hash text not null)`,
+      );
+      await suite.db
+        .execute(sql`create trigger tmp_recovery_writes_insert after insert on management_account_actions
+        begin insert into tmp_recovery_writes values ('insert', new.person_id, new.token_hash); end`);
+      await suite.db
+        .execute(sql`create trigger tmp_recovery_writes_delete after delete on management_account_actions
+        begin insert into tmp_recovery_writes values ('delete', old.person_id, old.token_hash); end`);
       const known = await seedManager(suite.db, { email: "decoy-known@x.com" });
       await expect(
         run((tx) => requestAccountRecoveryAction(tx, { email: "decoy-unknown@x.com" })),
       ).resolves.toBeNull();
       const writes = (
         await suite.db.execute<{ op: string; person_id: string; token_hash: string }>(
-          sql`select op, person_id, token_hash from recovery_writes order by rowid`,
+          sql`select op, person_id, token_hash from tmp_recovery_writes order by rowid`,
         )
       ).rows;
       expect(writes.map((w) => w.op)).toEqual(["insert", "delete"]);
@@ -359,18 +359,18 @@ describe("management account actions", () => {
       expect(owner.rows).toEqual([]);
 
       // A known address writes its link and removes nothing.
-      await suite.db.execute(sql`delete from recovery_writes`);
+      await suite.db.execute(sql`delete from tmp_recovery_writes`);
       await run((tx) => requestAccountRecoveryAction(tx, { email: "decoy-known@x.com" }));
       const knownWrites = (
         await suite.db.execute<{ op: string; person_id: string }>(
-          sql`select op, person_id from recovery_writes order by rowid`,
+          sql`select op, person_id from tmp_recovery_writes order by rowid`,
         )
       ).rows;
       expect(knownWrites).toEqual([{ op: "insert", person_id: known }]);
     } finally {
-      await suite.db.execute(sql`drop trigger recovery_writes_insert`);
-      await suite.db.execute(sql`drop trigger recovery_writes_delete`);
-      await suite.db.execute(sql`drop table recovery_writes`);
+      await suite.db.execute(sql`drop trigger if exists tmp_recovery_writes_insert`);
+      await suite.db.execute(sql`drop trigger if exists tmp_recovery_writes_delete`);
+      await suite.db.execute(sql`drop table if exists tmp_recovery_writes`);
     }
   });
 
@@ -389,19 +389,16 @@ describe("management account actions", () => {
     // Refused at the statement, not deferred to commit: the deferral ended with the decoy's
     // transaction. The delete lets a deferred check pass at commit, so only the statement can fail.
     const ghostId = randomUUID();
-    const outcome = await run(async (tx) => {
-      try {
+    const error = await captureError(() =>
+      run(async (tx) => {
         await tx.execute(sql`insert into management_account_actions
           (id, person_id, purpose, token_hash, created_at, expires_at)
           values (${ghostId}, ${randomUUID()}, 'password_reset', ${"0".repeat(64)},
                   '2026-10-01T00:00:00.000Z', '2026-10-02T00:00:00.000Z')`);
-      } catch (error) {
-        return engineErrorMessage(error);
-      }
-      await tx.execute(sql`delete from management_account_actions where id = ${ghostId}`);
-      return "accepted";
-    });
-    expect(outcome).toMatch(/FOREIGN KEY constraint failed/);
+        await tx.execute(sql`delete from management_account_actions where id = ${ghostId}`);
+      }),
+    );
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
     expect(await count()).toBe(before);
   });
 
