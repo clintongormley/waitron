@@ -4,6 +4,11 @@ import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-combobox.js";
 import { SEARCH_THRESHOLD, type ComboboxOption, type WtCombobox } from "./wt-combobox.js";
 import { registerIcons } from "./wt-icon.js";
+import "./wt-dialog.js";
+import type { WtDialog } from "./wt-dialog.js";
+import "./wt-input.js";
+import { focusFirstInvalid } from "../interactive.js";
+import { submitOnEnter } from "../submit-on-enter.js";
 
 afterEach(cleanup);
 
@@ -208,22 +213,23 @@ test("arrow keys move the active option, reflected in aria-activedescendant", as
   expect(search.getAttribute("aria-activedescendant")).toBe(rows[0].id);
 });
 
-test("ArrowUp at the first row and ArrowDown at the last row do not wrap or go out of range", async () => {
+test("ArrowUp with no row active goes to the last row, and the arrows wrap at both ends", async () => {
   const { el, trigger } = await mountWithOptions();
   await userEvent.click(trigger);
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
   search.focus();
+  const active = () =>
+    [...el.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+      row.classList.contains("active"),
+    );
   await userEvent.keyboard("{ArrowUp}");
-  expect(el.shadowRoot!.querySelectorAll('[role="option"]')[0].classList.contains("active")).toBe(
-    true,
-  );
+  expect(active()).toEqual([false, false, true]);
   await userEvent.keyboard("{End}");
-  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
-  expect(rows[rows.length - 1].classList.contains("active")).toBe(true);
+  expect(active()).toEqual([false, false, true]);
   await userEvent.keyboard("{ArrowDown}");
-  expect(el.shadowRoot!.querySelectorAll('[role="option"]')[rows.length - 1].classList).toContain(
-    "active",
-  );
+  expect(active()).toEqual([true, false, false]);
+  await userEvent.keyboard("{ArrowUp}");
+  expect(active()).toEqual([false, false, true]);
 });
 
 test("Home and End jump to the first and last option", async () => {
@@ -1629,4 +1635,526 @@ test("a press on a narrow field's resting label, where it covers the trigger's m
   await userEvent.click(trigger, { force: true });
   await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
   expect(popup.getBoundingClientRect().height).toBeGreaterThan(0);
+});
+
+// The keyboard and screen-reader behaviour of a select (A178, spec section 7.2).
+
+function listbox(el: WtCombobox): HTMLElement {
+  return el.shadowRoot!.querySelector<HTMLElement>('[role="listbox"]')!;
+}
+
+function activeRowText(el: WtCombobox, owner: HTMLElement): string | undefined {
+  const id = owner.getAttribute("aria-activedescendant");
+  if (id === null) return undefined;
+  const row = el.shadowRoot!.getElementById(id);
+  expect(row?.getAttribute("role")).toBe("option");
+  return row!.textContent!.trim();
+}
+
+/** Lets a key's release, and any click it would cause, run before the list is looked at. */
+const afterRelease = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+for (const [name, keys] of [
+  ["ArrowDown", "{ArrowDown}"],
+  ["ArrowUp", "{ArrowUp}"],
+  ["Alt+ArrowDown", "{Alt>}{ArrowDown}{/Alt}"],
+  ["Enter", "{Enter}"],
+  ["Space", " "],
+] as const) {
+  test(`${name} on the closed trigger opens the list with the chosen row active, and it stays open once released`, async () => {
+    const el = await mountWith('<wt-combobox label="Dietary tags" value="vegan"></wt-combobox>');
+    const { trigger, popup } = fieldParts(el);
+    trigger.focus();
+    await userEvent.keyboard(keys);
+    await afterRelease();
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+    expect(activeRowText(el, searchBox(el))).toBe("Vegan");
+    expect(el.value).toBe("vegan");
+  });
+}
+
+test("opening from the keyboard with nothing chosen makes the first row active", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, searchBox(el))).toBe("Gluten-free");
+});
+
+test("opening a multiple choice from the keyboard makes its first chosen row active", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" multiple></wt-combobox>');
+  el.values = ["vegetarian", "vegan"];
+  await el.updateComplete;
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, searchBox(el))).toBe("Vegan");
+});
+
+test("opening an empty list from the keyboard makes no row active", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>', []);
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(true);
+  expect(searchBox(el).hasAttribute("aria-activedescendant")).toBe(false);
+});
+
+test("opening from the keyboard places the list under the trigger", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  el.style.cssText = "position: fixed; left: 120px; top: 40px; width: 240px";
+  await el.updateComplete;
+  const { trigger, popup } = fieldParts(el);
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  await new Promise(requestAnimationFrame);
+  const box = popup.getBoundingClientRect();
+  expect(box.width).toBeCloseTo(240, 0);
+  expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+});
+
+test("a printable key on a closed searchable trigger opens the list with that character searched for", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { trigger, popup } = fieldParts(el);
+  trigger.focus();
+  await userEvent.keyboard("v");
+  await afterRelease();
+  expect(popup.matches(":popover-open")).toBe(true);
+  expect(searchBox(el).value).toBe("v");
+  expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Vegan", "Vegetarian"]);
+  expect(activeRowText(el, searchBox(el))).toBe("Vegan");
+});
+
+const PANTRY: ComboboxOption[] = [
+  { value: "new", label: "Pack a new one…", action: true },
+  { value: "olive", label: "Olive" },
+  { value: "pepper", label: "Pepper" },
+  { value: "paper", label: "Paper" },
+  { value: "pasta", label: "Pasta" },
+];
+
+test("typing on a closed list without a search box chooses the first option starting with the typed text, without opening", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const changes: string[] = [];
+  el.addEventListener("wt-change", (event) =>
+    changes.push((event as CustomEvent<{ value: string }>).detail.value),
+  );
+  const { trigger, popup, value } = fieldParts(el);
+  trigger.focus();
+  await userEvent.keyboard("pa");
+  expect(el.value).toBe("paper");
+  expect(changes).toEqual(["pepper", "paper"]);
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(value.textContent!.trim()).toBe("Paper");
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("type-ahead that matches the option already chosen sends no change", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" value="olive"></wt-combobox>',
+    PANTRY,
+  );
+  const changed = vi.fn();
+  el.addEventListener("wt-change", changed);
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("ol");
+  expect(el.value).toBe("olive");
+  expect(changed).not.toHaveBeenCalled();
+});
+
+test("type-ahead that matches nothing leaves the value alone", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" value="olive"></wt-combobox>',
+    PANTRY,
+  );
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("z");
+  expect(el.value).toBe("olive");
+});
+
+test("the typed text starts again 500 ms after the last key", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const { trigger } = fieldParts(el);
+  // Dispatched rather than typed: the page's timers are faked here, and a real keystroke travels
+  // through the test runner, which needs them.
+  const press = (key: string) =>
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    press("p");
+    press("a");
+    expect(el.value).toBe("paper");
+    vi.advanceTimersByTime(499);
+    press("s");
+    expect(el.value).toBe("pasta");
+    vi.advanceTimersByTime(500);
+    press("o");
+    expect(el.value).toBe("olive");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a repeated first letter steps through the options starting with it", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const { trigger } = fieldParts(el);
+  const press = (key: string) =>
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const seen: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      press("p");
+      seen.push(el.value);
+      vi.advanceTimersByTime(500);
+    }
+    expect(seen).toEqual(["pepper", "paper", "pasta", "pepper"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("keys with a modifier, and type-ahead on a closed multiple choice, change nothing", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const { trigger, popup } = fieldParts(el);
+  const press = (init: KeyboardEventInit) =>
+    !trigger.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+    );
+  expect(press({ key: "p", ctrlKey: true })).toBe(false);
+  expect(press({ key: "p", metaKey: true })).toBe(false);
+  expect(press({ key: "Tab" })).toBe(false);
+  expect(el.value).toBe("");
+  expect(popup.matches(":popover-open")).toBe(false);
+
+  const multi = await mountWith(
+    '<wt-combobox label="Pantry" search="never" multiple></wt-combobox>',
+    PANTRY,
+  );
+  fieldParts(multi).trigger.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "p", bubbles: true, cancelable: true }),
+  );
+  expect(multi.values).toEqual([]);
+  expect(fieldParts(multi).popup.matches(":popover-open")).toBe(false);
+});
+
+test("a disabled trigger ignores the keys that open the list", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" disabled></wt-combobox>');
+  const { trigger, popup } = fieldParts(el);
+  trigger.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+  );
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("in an open list, ArrowDown on the last row wraps to the first and ArrowUp on the first wraps to the last", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" value="vegetarian"></wt-combobox>');
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, searchBox(el))).toBe("Vegetarian");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, searchBox(el))).toBe("Gluten-free");
+  await userEvent.keyboard("{ArrowUp}");
+  expect(activeRowText(el, searchBox(el))).toBe("Vegetarian");
+});
+
+test("without a search box the list itself takes focus and names the active row", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" search="never"></wt-combobox>');
+  const { trigger } = fieldParts(el);
+  const list = listbox(el);
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(list.tagName).toBe("UL");
+  expect(list.getAttribute("tabindex")).toBe("-1");
+  expect(el.shadowRoot!.activeElement).toBe(list);
+  expect(activeRowText(el, list)).toBe("Gluten-free");
+  await userEvent.keyboard("{ArrowUp}");
+  expect(activeRowText(el, list)).toBe("Vegetarian");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, list)).toBe("Gluten-free");
+  await userEvent.keyboard("{End}");
+  expect(activeRowText(el, list)).toBe("Vegetarian");
+  await userEvent.keyboard("{Home}");
+  expect(activeRowText(el, list)).toBe("Gluten-free");
+});
+
+test("a list with a search box leaves focus and the active row to the search box", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(listbox(el).hasAttribute("tabindex")).toBe(false);
+  expect(listbox(el).hasAttribute("aria-activedescendant")).toBe(false);
+});
+
+test("a click opens a list without a search box with focus on the list", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" search="never"></wt-combobox>');
+  await userEvent.click(fieldParts(el).trigger);
+  expect(el.shadowRoot!.activeElement).toBe(listbox(el));
+  expect(listbox(el).hasAttribute("aria-activedescendant")).toBe(false);
+});
+
+test("Enter on the active row of a list without a search box picks it and closes the list", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" search="never"></wt-combobox>');
+  const { trigger, popup } = fieldParts(el);
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+  expect(el.value).toBe("vegan");
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("Space on the active row of a multiple list without a search box toggles it and keeps the list open", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" search="never" multiple></wt-combobox>',
+  );
+  const { trigger, popup } = fieldParts(el);
+  expect(el.shadowRoot!.querySelector(".search")).toBeNull();
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+  await userEvent.keyboard(" ");
+  expect(el.values).toEqual(["vegan"]);
+  await userEvent.keyboard(" ");
+  expect(el.values).toEqual([]);
+  await afterRelease();
+  expect(popup.matches(":popover-open")).toBe(true);
+});
+
+test("Enter with no active row in a list without a search box picks nothing", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" search="never"></wt-combobox>');
+  const changed = vi.fn();
+  el.addEventListener("wt-change", changed);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.keyboard("{Enter}");
+  expect(changed).not.toHaveBeenCalled();
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(true);
+});
+
+test("a printable key in an open list without a search box moves to the next row starting with it", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, listbox(el))).toBe("Pack a new one…");
+  await userEvent.keyboard("pa");
+  expect(activeRowText(el, listbox(el))).toBe("Paper");
+  expect(el.value).toBe("");
+});
+
+test("other keys in a list without a search box are left alone", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags" search="never"></wt-combobox>');
+  await userEvent.click(fieldParts(el).trigger);
+  const cancelled = !listbox(el).dispatchEvent(
+    new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }),
+  );
+  expect(cancelled).toBe(false);
+});
+
+async function mountBetween(combobox: string, options: ComboboxOption[] = TAGS) {
+  const wrapper = await mount(
+    `<div><button data-before>Before</button>${combobox}<button data-after>After</button></div>`,
+  );
+  const el = wrapper.querySelector("wt-combobox") as WtCombobox;
+  el.options = options;
+  await el.updateComplete;
+  return {
+    el,
+    before: wrapper.querySelector("[data-before]")!,
+    after: wrapper.querySelector("[data-after]")!,
+  };
+}
+
+for (const search of ["always", "never"] as const) {
+  test(`Tab in an open list (search="${search}") picks nothing, closes, and moves focus on`, async () => {
+    const { el, after } = await mountBetween(
+      `<wt-combobox label="Dietary tags" value="vegan" search="${search}"></wt-combobox>`,
+    );
+    const changed = vi.fn();
+    el.addEventListener("wt-change", changed);
+    fieldParts(el).trigger.focus();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+    await userEvent.keyboard("{Tab}");
+    expect(fieldParts(el).popup.matches(":popover-open")).toBe(false);
+    expect(document.activeElement).toBe(after);
+    expect(el.value).toBe("vegan");
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  test(`Shift+Tab in an open list (search="${search}") closes it and moves focus back`, async () => {
+    const { el, before } = await mountBetween(
+      `<wt-combobox label="Dietary tags" value="vegan" search="${search}"></wt-combobox>`,
+    );
+    fieldParts(el).trigger.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(fieldParts(el).popup.matches(":popover-open")).toBe(false);
+    expect(document.activeElement).toBe(before);
+    expect(el.value).toBe("vegan");
+  });
+}
+
+test("focus moving out of both the list and the trigger closes the list", async () => {
+  const { el, after } = await mountBetween('<wt-combobox label="Dietary tags"></wt-combobox>');
+  await userEvent.click(fieldParts(el).trigger);
+  (after as HTMLElement).focus();
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(false);
+  expect(el.value).toBe("");
+});
+
+test("arrows step over group headings", async () => {
+  const el = await mountWith('<wt-combobox label="Members" search="never"></wt-combobox>', GROUPED);
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  const seen = [activeRowText(el, listbox(el))];
+  for (let i = 0; i < 3; i += 1) {
+    await userEvent.keyboard("{ArrowDown}");
+    seen.push(activeRowText(el, listbox(el)));
+  }
+  expect(seen).toEqual(["Ana", "Luis", "Bar", "Grill"]);
+});
+
+for (const search of ["always", "never"] as const) {
+  test(`Enter on an action row (search="${search}") sends wt-combobox-action and keeps the value`, async () => {
+    const el = await mountWith(
+      `<wt-combobox label="Unit" value="kg" search="${search}"></wt-combobox>`,
+      WITH_ACTION,
+    );
+    const actions: string[] = [];
+    const changed = vi.fn();
+    el.addEventListener("wt-combobox-action", (event) =>
+      actions.push((event as CustomEvent<{ value: string }>).detail.value),
+    );
+    el.addEventListener("wt-change", changed);
+    fieldParts(el).trigger.focus();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(actions).toEqual(["add-unit"]);
+    expect(el.value).toBe("kg");
+    expect(changed).not.toHaveBeenCalled();
+  });
+}
+
+test("inside an open wt-dialog, Escape closes the list and not the dialog; a second Escape closes the dialog", async () => {
+  const dialog = (await mount(`<wt-dialog heading="Edit product">
+      <wt-combobox label="Dietary tags"></wt-combobox>
+    </wt-dialog>`)) as WtDialog;
+  dialog.open = true;
+  await dialog.updateComplete;
+  const el = dialog.querySelector("wt-combobox") as WtCombobox;
+  el.options = TAGS;
+  await el.updateComplete;
+  const closes = vi.fn();
+  dialog.addEventListener("wt-close", closes);
+  const { trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  expect(popup.matches(":popover-open")).toBe(true);
+  const box = popup.getBoundingClientRect();
+  expect(box.height).toBeGreaterThan(0);
+  expect(box.top).toBeGreaterThanOrEqual(0);
+  expect(box.left).toBeGreaterThanOrEqual(0);
+  expect(box.bottom).toBeLessThanOrEqual(innerHeight);
+  expect(box.right).toBeLessThanOrEqual(innerWidth);
+  const onTop = el.shadowRoot!.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+  expect(popup.contains(onTop)).toBe(true);
+
+  await userEvent.keyboard("{Escape}");
+  await afterRelease();
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(dialog.open).toBe(true);
+  expect(closes).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(dialog.open).toBe(false));
+  expect(closes).toHaveBeenCalledTimes(1);
+});
+
+async function mountInSubmitForm(combobox: string) {
+  const form = (await mount(`<form>
+      ${combobox}
+      <button type="button" data-submit>Save</button>
+    </form>`)) as HTMLFormElement;
+  const button = form.querySelector<HTMLButtonElement>("[data-submit]")!;
+  const submitted = vi.fn();
+  button.addEventListener("click", submitted);
+  form.addEventListener("keydown", (event) => submitOnEnter(event, button));
+  const el = form.querySelector("wt-combobox") as WtCombobox;
+  el.options = TAGS;
+  await el.updateComplete;
+  return { el, submitted };
+}
+
+test("Enter on a closed trigger in a form wired with submitOnEnter opens the list and submits nothing", async () => {
+  const { el, submitted } = await mountInSubmitForm(
+    '<wt-combobox label="Dietary tags"></wt-combobox>',
+  );
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{Enter}");
+  await afterRelease();
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(true);
+  expect(submitted).not.toHaveBeenCalled();
+});
+
+test("Enter in the search box with no row active, in a form wired with submitOnEnter, submits nothing", async () => {
+  const { el, submitted } = await mountInSubmitForm(
+    '<wt-combobox label="Dietary tags"></wt-combobox>',
+  );
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.type(searchBox(el), "zzz");
+  expect(searchBox(el).hasAttribute("aria-activedescendant")).toBe(false);
+  await userEvent.keyboard("{Enter}");
+  await afterRelease();
+  expect(submitted).not.toHaveBeenCalled();
+  expect(el.value).toBe("");
+});
+
+test("Enter on a row in the search box, in a form wired with submitOnEnter, picks it and submits nothing", async () => {
+  const { el, submitted } = await mountInSubmitForm(
+    '<wt-combobox label="Dietary tags"></wt-combobox>',
+  );
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  await afterRelease();
+  expect(el.value).toBe("gluten-free");
+  expect(submitted).not.toHaveBeenCalled();
+});
+
+test("a failed submission's focusFirstInvalid focuses an invalid combobox's trigger", async () => {
+  await mount(`<form>
+      <wt-input label="Name" name="name" value="Ana"></wt-input>
+      <wt-combobox label="Unit" name="unit" error="Choose a unit"></wt-combobox>
+    </form>`);
+  const form = host.querySelector("form")!;
+  const el = host.querySelector("wt-combobox") as WtCombobox;
+  const focused = await focusFirstInvalid(form);
+  expect(focused).toBe(fieldParts(el).trigger);
+  expect(el.shadowRoot!.activeElement).toBe(fieldParts(el).trigger);
+});
+
+test("ArrowDown in an empty list leaves no row active, and reaches the first row once options arrive", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>', []);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.keyboard("{ArrowDown}");
+  expect(searchBox(el).hasAttribute("aria-activedescendant")).toBe(false);
+  el.options = TAGS;
+  await el.updateComplete;
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, searchBox(el))).toBe("Gluten-free");
+});
+
+test("a printable key that matches nothing opens the list with no row active", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("z");
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(true);
+  expect(searchBox(el).value).toBe("z");
+  expect(searchBox(el).hasAttribute("aria-activedescendant")).toBe(false);
+});
+
+test("a printable key matching no row in an open list without a search box keeps the active row", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  fieldParts(el).trigger.focus();
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+  expect(activeRowText(el, listbox(el))).toBe("Olive");
+  await userEvent.keyboard("z");
+  expect(activeRowText(el, listbox(el))).toBe("Olive");
 });

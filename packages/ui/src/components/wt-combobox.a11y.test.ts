@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
@@ -187,6 +187,35 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     )) as WtCombobox;
     el.options = TAGS;
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+  test("opened from the keyboard without a search box, focus on the list and a row active", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Papel" search="never" value="vegan"></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = TAGS;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    const list = el.shadowRoot!.querySelector('[role="listbox"]')!;
+    expect(el.shadowRoot!.activeElement).toBe(list);
+    expect(list.getAttribute("aria-activedescendant")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("opened from the keyboard with a search box and a row active", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Etiquetas" value="vegan"></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = TAGS;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(
+      el.shadowRoot!.querySelector(".search")!.getAttribute("aria-activedescendant"),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

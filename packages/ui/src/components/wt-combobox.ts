@@ -19,6 +19,19 @@ export interface ComboboxOption {
 /** With `search="auto"`, the search box shows only when there are more options than this. */
 export const SEARCH_THRESHOLD = 7;
 
+const TYPE_AHEAD_RESET_MS = 500;
+
+const NAVIGATION_KEYS = ["ArrowDown", "ArrowUp", "Home", "End"] as const;
+type NavigationKey = (typeof NAVIGATION_KEYS)[number];
+
+function isNavigationKey(key: string): key is NavigationKey {
+  return (NAVIGATION_KEYS as readonly string[]).includes(key);
+}
+
+function isPrintable(event: KeyboardEvent): boolean {
+  return event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
 @customElement("wt-combobox")
 export class WtCombobox extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -259,6 +272,7 @@ export class WtCombobox extends LitElement {
   @query(".trigger") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
   @query(".search") private searchInput!: HTMLInputElement | null;
+  @query(".list") private listbox!: HTMLElement;
 
   // An unnamed combobox has no semantic id to give its trigger, so the label's `for` points at a
   // generated one instead.
@@ -385,41 +399,140 @@ export class WtCombobox extends LitElement {
       ?.scrollIntoView({ block: "nearest" });
   }
 
-  private async onSearchKeydown(event: KeyboardEvent): Promise<void> {
-    switch (event.key) {
+  /** The arrows wrap at both ends; ArrowUp with no row active goes to the last row. An index left
+   * past the end by a shorter list counts as the last row. */
+  private async moveActive(key: NavigationKey): Promise<void> {
+    const count = this.rowCount;
+    const current = Math.min(this.activeIndex, count - 1);
+    switch (key) {
       case "ArrowDown":
-        event.preventDefault();
-        this.activeIndex = Math.min(this.activeIndex + 1, this.rowCount - 1);
-        await this.scrollActiveIntoView();
-        return;
+        this.activeIndex = count === 0 ? -1 : (current + 1) % count;
+        break;
       case "ArrowUp":
-        event.preventDefault();
-        this.activeIndex = this.rowCount > 0 ? Math.max(this.activeIndex - 1, 0) : -1;
-        await this.scrollActiveIntoView();
-        return;
+        this.activeIndex = current <= 0 ? count - 1 : current - 1;
+        break;
       case "Home":
-        event.preventDefault();
-        this.activeIndex = this.rowCount > 0 ? 0 : -1;
-        await this.scrollActiveIntoView();
-        return;
+        this.activeIndex = count > 0 ? 0 : -1;
+        break;
       case "End":
-        event.preventDefault();
-        this.activeIndex = this.rowCount - 1;
-        await this.scrollActiveIntoView();
-        return;
-      case "Enter": {
-        event.preventDefault();
-        const options = this.filteredOptions;
-        if (this.activeIndex >= 0 && this.activeIndex < options.length) {
-          this.commitSelection(options[this.activeIndex].value, event);
-        } else if (this.activeIndex === options.length && this.showAddRow) {
-          this.addNew(event);
-        }
-        return;
-      }
-      default:
-        return;
+        this.activeIndex = count - 1;
+        break;
     }
+    await this.scrollActiveIntoView();
+  }
+
+  private activateActive(sourceEvent: Event): void {
+    const options = this.filteredOptions;
+    const option = options[this.activeIndex];
+    if (option) this.activateOption(option, sourceEvent);
+    else if (this.activeIndex === options.length && this.showAddRow) this.addNew(sourceEvent);
+  }
+
+  private async onSearchKeydown(event: KeyboardEvent): Promise<void> {
+    if (event.key === "Enter") {
+      // Whether or not a row is active, so a form's submit-on-Enter never sees it.
+      event.preventDefault();
+      this.activateActive(event);
+      return;
+    }
+    if (isNavigationKey(event.key)) {
+      event.preventDefault();
+      await this.moveActive(event.key);
+    }
+  }
+
+  /** The list's own keys, used when the panel has no search box and the list holds focus. */
+  private async onListKeydown(event: KeyboardEvent): Promise<void> {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      this.activateActive(event);
+      return;
+    }
+    if (isNavigationKey(event.key)) {
+      event.preventDefault();
+      await this.moveActive(event.key);
+      return;
+    }
+    if (isPrintable(event)) {
+      event.preventDefault();
+      const index = this.typeAhead(event.key, this.filteredOptions, this.activeIndex);
+      if (index >= 0) {
+        this.activeIndex = index;
+        await this.scrollActiveIntoView();
+      }
+    }
+  }
+
+  private typed = "";
+  private typedReset: ReturnType<typeof setTimeout> | undefined;
+
+  /** The index of the option the typed text picks: the next one after `from` when the text is one
+   * repeated letter, so pressing it again steps on, otherwise the first from `from` on. Action rows
+   * are never picked. -1 when nothing matches. */
+  private typeAhead(key: string, options: ComboboxOption[], from: number): number {
+    clearTimeout(this.typedReset);
+    this.typedReset = setTimeout(() => (this.typed = ""), TYPE_AHEAD_RESET_MS);
+    this.typed += key.toLowerCase();
+    const repeated = [...this.typed].every((letter) => letter === this.typed[0]);
+    const text = repeated ? this.typed[0]! : this.typed;
+    const start = repeated ? from + 1 : Math.max(from, 0);
+    for (let step = 0; step < options.length; step += 1) {
+      const index = (start + step) % options.length;
+      const option = options[index]!;
+      if (!option.action && option.label.toLowerCase().startsWith(text)) return index;
+    }
+    return -1;
+  }
+
+  /** The row a keyboard opening starts on: the chosen one, else the first. */
+  private get chosenIndex(): number {
+    const chosen = this.filteredOptions.findIndex((option) => this.isSelected(option));
+    if (chosen >= 0) return chosen;
+    return this.rowCount > 0 ? 0 : -1;
+  }
+
+  private onTriggerKeydown(event: KeyboardEvent): void {
+    if (this.disabled || this.popup.matches(":popover-open")) {
+      this.onKeydown(event);
+      return;
+    }
+    if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+      // Prevented, or the button's own click on the same key closes the list again.
+      event.preventDefault();
+      void this.openList("chosen", "");
+      return;
+    }
+    if (!isPrintable(event)) return;
+    if (this.hasSearchBox) {
+      // Prevented, or the character would also be typed into the search box once it has focus.
+      event.preventDefault();
+      void this.openList("first", event.key);
+      return;
+    }
+    if (this.multiple) return;
+    event.preventDefault();
+    const options = this.filteredOptions;
+    const current = options.findIndex((option) => this.isSelected(option));
+    const index = this.typeAhead(event.key, options, current);
+    if (index >= 0 && index !== current) this.commitSelection(options[index]!.value, event);
+  }
+
+  /** `active` is which row starts active: none (a click), the chosen one, or the first. */
+  private async openList(active: "none" | "chosen" | "first", text: string): Promise<void> {
+    this.searchText = text;
+    // A click makes no row active, so a reopened panel neither announces a stale row through
+    // aria-activedescendant nor makes the first arrow press skip the first option.
+    if (active === "none") this.activeIndex = -1;
+    else if (active === "chosen") this.activeIndex = this.chosenIndex;
+    else this.activeIndex = this.rowCount > 0 ? 0 : -1;
+    // Opening synchronously makes its dimensions available before the first paint.
+    this.popup.showPopover();
+    (this.searchInput ?? this.listbox).focus();
+    // The search text changes the rows, so measure the re-rendered list. The await resolves on a
+    // microtask, still ahead of the frame this paints.
+    await this.updateComplete;
+    this.positionPopup();
+    await this.scrollActiveIntoView();
   }
 
   private async onTriggerClick(event: MouseEvent): Promise<void> {
@@ -428,17 +541,7 @@ export class WtCombobox extends LitElement {
     if (this.popup.matches(":popover-open")) {
       this.popup.hidePopover();
     } else {
-      this.searchText = "";
-      // No row is active until the user navigates, so a reopened panel neither announces a stale
-      // row through aria-activedescendant nor makes the first arrow press skip the first option.
-      this.activeIndex = -1;
-      // Opening synchronously makes its dimensions available before the first paint.
-      this.popup.showPopover();
-      this.searchInput?.focus();
-      // Clearing the search changes the rows, so measure the re-rendered list. The await resolves on
-      // a microtask, still ahead of the frame this click paints.
-      await this.updateComplete;
-      this.positionPopup();
+      await this.openList("none", "");
     }
   }
 
@@ -476,12 +579,26 @@ export class WtCombobox extends LitElement {
   }
 
   private onKeydown(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || event.defaultPrevented || !this.popup.matches(":popover-open"))
+    if (event.defaultPrevented || !this.popup.matches(":popover-open")) return;
+    if (event.key === "Tab") {
+      // Not prevented: with the list closed and focus back on the trigger, the browser's own Tab
+      // moves on from there.
+      this.popup.hidePopover();
+      this.trigger.focus();
       return;
+    }
+    if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
     this.popup.hidePopover();
     this.trigger.focus();
+  }
+
+  /** Focus that leaves both the panel and the trigger closes the list, as it would a select. */
+  private onPanelFocusout(event: FocusEvent): void {
+    const next = event.relatedTarget as Node | null;
+    if (next !== null && (this.popup.contains(next) || next === this.trigger)) return;
+    if (this.popup.matches(":popover-open")) this.popup.hidePopover();
   }
 
   private renderOption(option: ComboboxOption, index: number) {
@@ -601,7 +718,7 @@ export class WtCombobox extends LitElement {
             popovertarget="panel"
             ?disabled=${this.disabled}
             @click=${this.onTriggerClick}
-            @keydown=${this.onKeydown}
+            @keydown=${this.onTriggerKeydown}
           >
             <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
             <wt-icon class="chevron" name="chevron-down"></wt-icon>
@@ -609,7 +726,13 @@ export class WtCombobox extends LitElement {
         </div>
         <slot name="help"></slot>
       </div>
-      <div id="panel" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
+      <div
+        id="panel"
+        popover
+        @toggle=${this.onToggle}
+        @keydown=${this.onKeydown}
+        @focusout=${this.onPanelFocusout}
+      >
         ${
           this.hasSearchBox
             ? html`<div class="search-area">
@@ -638,6 +761,13 @@ export class WtCombobox extends LitElement {
           role="listbox"
           aria-label=${this.label || this.ariaLabel || nothing}
           aria-multiselectable=${this.multiple}
+          tabindex=${this.hasSearchBox ? nothing : "-1"}
+          aria-activedescendant=${
+            !this.hasSearchBox && this.activeIndex >= 0
+              ? `${this.listboxId}-${this.activeIndex}`
+              : nothing
+          }
+          @keydown=${this.hasSearchBox ? nothing : this.onListKeydown}
         >
           ${this.renderRows()}
           ${
