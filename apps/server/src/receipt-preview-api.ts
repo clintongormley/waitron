@@ -12,7 +12,7 @@ import {
 import { authorizeManager } from "@waitron/identity";
 import { validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
 import { textGrid, type EscSetting, type PaperWidth } from "@waitron/printing";
-import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
+import { createErrorBoundary, requireEnum, requireManagementSession } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
@@ -82,10 +82,8 @@ function requireReceiptParameter(given: string[] | undefined): unknown {
 
 function optionalPaperWidth(given: string[] | undefined): PaperWidth | undefined {
   if (given === undefined) return undefined;
-  const [width] = given;
-  if (given.length !== 1 || !printPaperWidth.enumValues.some((known) => known === width))
-    throw new AppError("management.request_invalid", { field: "paperWidth" });
-  return width as PaperWidth;
+  if (given.length !== 1) throw new AppError("management.request_invalid", { field: "paperWidth" });
+  return requireEnum(given[0], "paperWidth", printPaperWidth.enumValues);
 }
 
 /**

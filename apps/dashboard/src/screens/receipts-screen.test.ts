@@ -738,6 +738,23 @@ describe("the Receipts page's paper width", () => {
     expect(paper(el)!.style.width).toBe("42ch");
   });
 
+  it("keeps the latest chosen width when an earlier choice's drawing arrives and the latest one's redraw fails", async () => {
+    const { el, api } = await mountTwoWidths();
+    const held = heldRead<ReceiptPreview>();
+    vi.mocked(api.previewReceipt)
+      .mockImplementationOnce(held.read)
+      .mockRejectedValueOnce({ code: "server.internal" });
+    choose(el, "58mm");
+    choose(el, "80mm");
+    held.release(twoWidths({}, "58mm"));
+    await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).not.toBeNull());
+    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, "58mm"], [{}, "80mm"]]);
+    expect(paper(el)!.style.width).toBe("30ch");
+    const select = widthSelect(el)!;
+    expect(select.value).toBe("80mm");
+    expect([...select.selectedOptions].map((option) => option.value)).toEqual(["80mm"]);
+  });
+
   it.each([
     ["one width", ["80mm"]],
     ["no width", []],

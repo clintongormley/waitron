@@ -228,7 +228,7 @@ describe("GET /management-api/receipt-preview", () => {
     });
   });
 
-  it("takes the receipt printer of the till first by name when several tills have one", async () => {
+  it("takes the receipt printer of the till first by name when two tills' paper widths tie", async () => {
     await withPrinters(
       [
         { till: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
@@ -357,7 +357,7 @@ describe("GET /management-api/receipt-preview", () => {
       );
     });
 
-    it("draws at the default, and says so, when asked for a width no receipt printer has any more", async () => {
+    it("draws as if no width were asked for, and says which width it drew, when asked for a width no receipt printer has any more", async () => {
       await withPrinters(
         [{ till: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
         async () => {

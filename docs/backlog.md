@@ -7835,8 +7835,8 @@ ongoing overhaul listed at the top of Track A.
     draws at 80 mm and 180 dpi, as before.
   - An optional `paperWidth` parameter (`58mm` or `80mm`) asks for a width. A known width that no
     receipt printer at the location has any more (one removed between loading the page and
-    choosing) is drawn at the default, and the answer's `paperWidth` says which width it drew. An
-    unknown or empty value, or the parameter given twice, is refused with
+    choosing) is drawn as if no width had been asked for, and the answer's `paperWidth` says which
+    width it drew. An unknown or empty value, or the parameter given twice, is refused with
     `management.request_invalid` (`field: "paperWidth"`).
   - The Receipts page shows a "Paper width" dropdown ("Ancho del papel"; the labels are the Printers
     screen's) under the Preview heading, above the paper, only when the last preview offered more
