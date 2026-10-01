@@ -1238,7 +1238,10 @@ The owner's suggestion, not yet decided: closed, show the section's current valu
 form. **This changes a written rule:** `docs/developers/design-system.md` → "A collapsed disclosure
 is a borderless heading with a chevron … When it opens, one rounded border encloses the body and the
 heading sits across that border like a legend" describes exactly the look being reported, so the fix
-rewrites that paragraph too. **Next action:** settle with the owner what open and closed should look
+rewrites that paragraph too. The owner's direction (2026-10-01): _"perhaps the names box doesn't
+actually need a border, maybe just a top and bottom line, or margin to delineate the area, or
+something"_ — so drop the enclosing box, and mark the section off with a line above and below, or
+with spacing alone. **Next action:** settle with the owner what open and closed should look
 like (heading and chevron fixed in place either way), and what "current values" means for each user
 — three names for the names sections; the product editor's sections already show a one-line
 `summary` today.
