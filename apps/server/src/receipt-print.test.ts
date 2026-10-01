@@ -53,7 +53,7 @@ import { collectOrder, printSaleReceipt, recordTillSale, reprintSale } from "./t
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
-import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
+import { commandNames, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
@@ -444,7 +444,7 @@ describe("cash payment drawer separation", () => {
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
     expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("TOTAL");
-    expect(bytesInclude(new Uint8Array(jobs[0]!.payload), DRAWER_KICK)).toBe(false);
+    expect(commandNames(new Uint8Array(jobs[0]!.payload)).includes("ESC p")).toBe(false);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
@@ -466,7 +466,7 @@ describe("cash payment drawer separation", () => {
       );
       const jobs = await printJobsFor(cfg);
       const drawerJobs = jobs.filter((job) =>
-        bytesInclude(new Uint8Array(job.payload), DRAWER_KICK),
+        commandNames(new Uint8Array(job.payload)).includes("ESC p"),
       );
       expect(drawerJobs).toHaveLength(1);
       expect([...drawerJobs[0]!.payload]).toEqual([...DRAWER_KICK]);
@@ -475,21 +475,20 @@ describe("cash payment drawer separation", () => {
       );
       expect(documents).toHaveLength(mode === "auto" ? 1 : 0);
       for (const job of documents)
-        expect(bytesInclude(new Uint8Array(job.payload), DRAWER_KICK)).toBe(false);
+        expect(commandNames(new Uint8Array(job.payload)).includes("ESC p")).toBe(false);
       expect(await drawerOpensFor(cfg)).toHaveLength(1);
     },
   );
 });
 
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
-  it("lays the automatic receipt out for the till printer's paper width and character set", async () => {
+  it("lays the automatic receipt out for the till printer's paper width and resolution", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await withTransaction(suite.db, async (tx) => {
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
-        characterSet: "pc858",
-        characterTable: 19,
+        resolution: "203dpi",
       });
     });
     await configureReceipt(cfg, { mode: "auto", printerId });
@@ -506,7 +505,18 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const receipt = (await printJobsFor(cfg))
       .map((job) => new Uint8Array(job.payload))
       .find((payload) => decodeTicket(payload).includes("VERI*FACTU"))!;
-    expect([...receipt.subarray(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
+    expect([...receipt.subarray(0, 10)]).toEqual([
+      0x1b,
+      0x40,
+      0x1d,
+      0x4c,
+      0x00,
+      0x00,
+      0x1d,
+      0x57,
+      384 & 0xff,
+      384 >> 8,
+    ]);
     for (const line of printedLines(receipt)) expect(line.length, line).toBeLessThanOrEqual(30);
   });
 
@@ -545,7 +555,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     )!;
     const payload = new Uint8Array(receipt.payload);
     expect(decodeTicket(payload)).toContain("Deli Recibos SL");
-    expect(bytesInclude(payload, DRAWER_KICK)).toBe(false);
+    expect(commandNames(payload).includes("ESC p")).toBe(false);
     const drawer = jobs.find((job) => job !== receipt)!;
     expect([...drawer.payload]).toEqual([...DRAWER_KICK]);
 
@@ -635,7 +645,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(jobs[0]!.printerId).toBe(printerId);
     const payload = new Uint8Array(jobs[0]!.payload);
     expect(decodeTicket(payload)).toContain("VERI*FACTU"); // a real receipt, still printed
-    expect(bytesInclude(payload, DRAWER_KICK)).toBe(false); // card → NO drawer kick
+    expect(commandNames(payload).includes("ESC p")).toBe(false); // card → NO drawer kick
     expect(await drawerOpensFor(cfg)).toEqual([]); // card → NO cash_sale audit row
   });
 
@@ -739,7 +749,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(await registroCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1); // the receipt is still enqueued
-    expect(bytesInclude(new Uint8Array(jobs[0]!.payload), DRAWER_KICK)).toBe(false); // no kick
+    expect(commandNames(new Uint8Array(jobs[0]!.payload)).includes("ESC p")).toBe(false); // no kick
     expect(await drawerOpensFor(cfg)).toEqual([]); // no audit row
   });
 
@@ -805,7 +815,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       expect(text).not.toContain("Cambio");
       expect(text).not.toContain("Tarjeta");
       expect(text).not.toContain("DUPLICADO");
-      expect(bytesInclude(original, DRAWER_KICK)).toBe(false);
+      expect(commandNames(original).includes("ESC p")).toBe(false);
       expect(await drawerOpensFor(cfg)).toEqual([]);
 
       await collectOrder(

@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { esc } from "@waitron/printing";
+import { TEXT_BAND_HEIGHT, esc, type EscSetting } from "@waitron/printing";
 import { previewPrintJob } from "./print-job-preview.js";
+
+const WIDE: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
+const band = (text: string, width = 512) => ({
+  kind: "image",
+  width,
+  height: TEXT_BAND_HEIGHT,
+  data: expect.any(String),
+  text,
+});
 
 describe("print job preview", () => {
   it("preserves justification on text and images and resets it at initialization", () => {
@@ -24,14 +33,15 @@ describe("print job preview", () => {
   it("shows receipt text without the printer commands or drawer pulse", () => {
     expect(
       previewPrintJob(
-        esc().init().line("Café <table>").line("Total 12.50").kick().feedAndCut().bytes(),
+        esc(WIDE).init().line("Café <table>").line("Total 12.50").kick().feedAndCut().bytes(),
       ),
     ).toEqual({
       columns: 42,
       dpi: 180,
       text: "Café <table>\nTotal 12.50\n",
       blocks: [
-        { kind: "text", text: "Café <table>\nTotal 12.50\n" },
+        band("Café <table>"),
+        band("Total 12.50"),
         { kind: "feed", lines: 5 },
         { kind: "cut" },
       ],
@@ -43,7 +53,7 @@ describe("print job preview", () => {
   });
 
   it("skips print-area commands without stopping the receipt preview", () => {
-    expect(previewPrintJob(esc().printArea(360).line("Receipt").bytes())).toMatchObject({
+    expect(previewPrintJob(esc(WIDE).printArea(512).line("Receipt").bytes())).toMatchObject({
       text: "Receipt\n",
       unsupported: false,
       truncated: false,
@@ -53,15 +63,15 @@ describe("print job preview", () => {
   it("extracts QR content when the stored symbol is printed", () => {
     const data = "https://example.test/receipt?id=1&total=12.50";
     expect(
-      previewPrintJob(esc().init().line("Receipt").qr(data).line("Thank you").bytes()),
+      previewPrintJob(esc(WIDE).init().line("Receipt").qr(data).line("Thank you").bytes()),
     ).toEqual({
       columns: 42,
       dpi: 180,
       text: "Receipt\nThank you\n",
       blocks: [
-        { kind: "text", text: "Receipt\n" },
+        band("Receipt"),
         expect.objectContaining({ kind: "image", qrData: data }),
-        { kind: "text", text: "Thank you\n" },
+        band("Thank you"),
       ],
       qrData: [data],
       omittedGraphics: false,
@@ -72,7 +82,7 @@ describe("print job preview", () => {
 
   it("skips complete raster data rather than treating its bytes as text", () => {
     const result = previewPrintJob(
-      esc()
+      esc(WIDE)
         .line("Before")
         .qrRaster([[true]], { moduleSize: 8 })
         .line("After")
@@ -81,9 +91,9 @@ describe("print job preview", () => {
     expect(result.text).toBe("Before\nAfter\n");
     expect(result.omittedGraphics).toBe(false);
     expect(result.blocks).toEqual([
-      { kind: "text", text: "Before\n" },
+      band("Before"),
       { kind: "image", width: 8, height: 8, data: Buffer.alloc(8, 255).toString("base64") },
-      { kind: "text", text: "After\n" },
+      band("After"),
     ]);
     expect(result.unsupported).toBe(false);
   });
@@ -167,12 +177,12 @@ describe("print job preview", () => {
 });
 
 it("keeps feed and cut positions between text and graphic blocks", () => {
-  const result = previewPrintJob(esc().text("Left  Right").feed(2).cut().line("Next").bytes());
+  const result = previewPrintJob(esc(WIDE).text("Left  Right").feed(2).cut().line("Next").bytes());
   expect(result.blocks).toEqual([
-    { kind: "text", text: "Left  Right" },
+    band("Left  Right"),
     { kind: "feed", lines: 2 },
     { kind: "cut" },
-    { kind: "text", text: "Next\n" },
+    band("Next"),
   ]);
 });
 
@@ -196,19 +206,20 @@ it("bounds bitmap dimensions and block count", () => {
   const raster = previewPrintJob(wide);
   expect(raster.omittedGraphics).toBe(true);
   expect(raster.blocks).toEqual([]);
-  const builder = esc();
-  for (let i = 0; i < 2050; i++) builder.line("x").cut();
-  const result = previewPrintJob(builder.bytes());
+  const textThenCut = [0x78, 0x0a, 0x1d, 0x56, 0x00];
+  const result = previewPrintJob(
+    Uint8Array.from(Array.from({ length: 2050 }, () => textThenCut).flat()),
+  );
   expect(result.blocks.length).toBeLessThanOrEqual(2048);
   expect(result.truncated).toBe(true);
 });
 
 it("omits oversized QR graphics while retaining their content and following text", () => {
   const data = "A".repeat(2000);
-  const result = previewPrintJob(esc().qr(data, { moduleSize: 16 }).line("After").bytes());
+  const result = previewPrintJob(esc(WIDE).qr(data, { moduleSize: 16 }).line("After").bytes());
   expect(result.omittedGraphics).toBe(true);
   expect(result.qrData).toEqual([data]);
-  expect(result.blocks).toEqual([{ kind: "text", text: "After\n" }]);
+  expect(result.blocks).toEqual([band("After")]);
 });
 
 it("bounds cumulative decoded QR bitmap memory", () => {
@@ -220,7 +231,7 @@ it("bounds cumulative decoded QR bitmap memory", () => {
     (total, block) => total + Buffer.from(block.data, "base64").length,
     0,
   );
-  expect(bytes).toBeLessThanOrEqual(262_144);
+  expect(bytes).toBeLessThanOrEqual(1_048_576);
   expect(images.length).toBeGreaterThan(0);
   expect(result.omittedGraphics).toBe(true);
 });
@@ -249,68 +260,71 @@ it("omits zero-sized and excessively tall raster images", () => {
   }
 });
 
-describe("character sets", () => {
-  it("decodes text through the table the payload selects, including bytes 0x80-0x9F", () => {
-    const wpc = previewPrintJob(esc("wpc1252").init().line("12,50 €").bytes());
-    expect(wpc).toMatchObject({ text: "12,50 €\n", unsupported: false, truncated: false });
-    const pc = previewPrintJob(esc("pc858").init().line("Café ü ç Ç €").bytes());
-    expect(pc).toMatchObject({ text: "Café ü ç Ç €\n", unsupported: false, truncated: false });
+describe("text", () => {
+  it("gives each drawn line's image the text read back from it, and the job its lines", () => {
+    const result = previewPrintJob(esc(WIDE).line("Café 5 €").line().line("Fin").bytes());
+    expect(result.blocks).toEqual([band("Café 5 €"), band(""), band("Fin")]);
+    expect(result.text).toBe("Café 5 €\n\nFin\n");
   });
 
-  it("returns to the starting table on ESC @", () => {
+  it("keeps the spaces a centred line starts with, on the grid of the image's width", () => {
     const result = previewPrintJob(
-      Uint8Array.of(0x1b, 0x74, 19, 0x82, 0x0a, 0x1b, 0x40, 0xe9, 0x0a),
+      esc({ paperWidth: "58mm", resolution: "203dpi" }).align("center").line("Hola").bytes(),
     );
-    expect(result).toMatchObject({ text: "é\né\n", unsupported: false, truncated: false });
+    expect(result.blocks).toEqual([{ ...band(`${" ".repeat(13)}Hola`, 384), align: "center" }]);
   });
 
-  it("uses the printer charset only as the starting table, then follows payload table changes", () => {
-    const payload = esc("wpc1252", 6)
-      .init()
-      .line("Café 5 €")
-      .charset("pc858", 19)
-      .line("Café 5 €")
-      .bytes();
-    const result = previewPrintJob(payload, {
-      columns: 42,
-      dpi: 203,
-      characterSet: "wpc1252",
-      characterTable: 6,
-    });
-    expect(result).toMatchObject({
-      text: "Café 5 €\nCafé 5 €\n",
-      unsupported: false,
-      truncated: false,
-    });
-
-    expect(
-      previewPrintJob(Uint8Array.of(0x1b, 0x40, 0x1b, 0x74, 99, 0x41), {
-        columns: 42,
-        dpi: 203,
-        characterSet: "wpc1252",
-        characterTable: 6,
-      }).unsupported,
-    ).toBe(true);
-  });
-
-  it("uses the printer profile to decode its model-specific table number", () => {
-    const result = previewPrintJob(esc("wpc1252", 7).init().line("Café 5 €").bytes(), {
-      columns: 42,
-      dpi: 203,
-      characterSet: "wpc1252",
-      characterTable: 7,
-    });
-    expect(result).toMatchObject({ text: "Café 5 €\n", unsupported: false, truncated: false });
-  });
-
-  it("stops at a byte 0x80-0x9F when no table was selected", () => {
-    expect(previewPrintJob(Uint8Array.of(0x41, 0x80, 0x0a)).unsupported).toBe(true);
-  });
-
-  it.each([0, 1, 17, 99])("stops the preview on character table %i", (table) => {
-    const result = previewPrintJob(Uint8Array.of(0x1b, 0x40, 0x1b, 0x74, table, 0x41));
-    expect(result.unsupported).toBe(true);
+  it("gives an image that is not drawn text no text: a QR code, a ruler", () => {
+    const result = previewPrintJob(
+      esc(WIDE)
+        .raster(576, TEXT_BAND_HEIGHT, (x) => x % 8 === 0)
+        .qrRaster([[true]])
+        .bytes(),
+    );
     expect(result.text).toBe("");
+    expect(result.blocks).toHaveLength(2);
+    for (const block of result.blocks) expect(block).not.toHaveProperty("text");
+  });
+
+  it("previews every line of a long job: about 500 lines at 576 dots fit the 1 MiB caps", () => {
+    const builder = esc({ paperWidth: "80mm", resolution: "203dpi" });
+    for (let i = 0; i < 500; i++) builder.line(`Line ${i}`);
+    const payload = builder.bytes();
+    expect(payload.length).toBeGreaterThan(262_144);
+    const result = previewPrintJob(payload);
+    expect(result).toMatchObject({ omittedGraphics: false, truncated: false, unsupported: false });
+    expect(result.text.split("\n").slice(-3)).toEqual(["Line 498", "Line 499", ""]);
+  });
+
+  it("stops at a drawn line whose text would pass the output cap", () => {
+    const filler = new Uint8Array(65_530).fill(0x41);
+    const line = esc(WIDE).line("Hello world").bytes();
+    const result = previewPrintJob(Uint8Array.from([...filler, ...line]));
+    expect(result.truncated).toBe(true);
+    expect(result.text).toBe("A".repeat(65_530));
+    expect(result.blocks.filter((block) => block.kind === "image")).toEqual([]);
+  });
+
+  it("reads past 1 MiB of payload no further", () => {
+    const builder = esc({ paperWidth: "80mm", resolution: "203dpi" });
+    for (let i = 0; i < 600; i++) builder.line(`Line ${i}`);
+    const payload = builder.bytes();
+    expect(payload.length).toBeGreaterThan(1_048_576);
+    expect(previewPrintJob(payload).truncated).toBe(true);
+  });
+
+  it("stops at a byte outside printable ASCII sent as text", () => {
+    expect(previewPrintJob(Uint8Array.of(0x41, 0x80, 0x0a)).unsupported).toBe(true);
+    expect(previewPrintJob(Uint8Array.of(0x41, 0xe9, 0x0a)).unsupported).toBe(true);
+  });
+
+  it.each([
+    ["ESC t", [0x1b, 0x74, 16]],
+    ["FS .", [0x1c, 0x2e]],
+  ])("stops at %s, which selected a character table and which no job sends", (_name, bytes) => {
+    const result = previewPrintJob(Uint8Array.from([0x41, ...bytes, 0x42]));
+    expect(result.unsupported).toBe(true);
+    expect(result.text).toBe("A");
   });
 
   it("reports the printer's column count and resolution", () => {
@@ -321,14 +335,7 @@ describe("character sets", () => {
   });
 });
 
-it("consumes single-byte mode selection without hiding the following accented text", () => {
-  const result = previewPrintJob(Uint8Array.of(0x1b, 0x74, 16, 0x1c, 0x2e, 0xe9));
-  expect(result.text).toBe("é");
-  expect(result.unsupported).toBe(false);
-});
-
 it.each([
-  ["a character-table selection", [0x1b, 0x74]],
   ["a cut", [0x1d, 0x56]],
   ["a QR command header", [0x1d, 0x28, 0x6b]],
   ["a raster image header", [0x1d, 0x76, 0x30]],

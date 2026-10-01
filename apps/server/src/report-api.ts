@@ -400,8 +400,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         const [printer] = await tx
           .select({
             paperWidth: printers.paperWidth,
-            characterSet: printers.characterSet,
-            characterTable: printers.characterTable,
+            resolution: printers.resolution,
           })
           .from(printers)
           .where(and(eq(printers.id, printerId), activePrinters()));

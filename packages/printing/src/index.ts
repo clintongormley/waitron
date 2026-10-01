@@ -20,6 +20,7 @@ export { prepareText } from "./text.js";
 export { TEXT_BAND_HEIGHT, drawTextBand, readRasterText } from "./raster-text.js";
 export type { Alignment } from "./raster-text.js";
 export {
+  DOTS_PER_COLUMN,
   QR_QUIET_ZONE,
   chooseQrDots,
   columnsFor,

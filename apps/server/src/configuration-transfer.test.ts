@@ -375,7 +375,6 @@ describe("configuration transfer database path", () => {
         active: true,
         paperWidth: "58mm",
         resolution: "203dpi",
-        characterSet: "pc858",
       });
       await tx.insert(sales).values({
         tillId: source.tillId,
@@ -521,13 +520,10 @@ describe("configuration transfer database path", () => {
     const printerSettings = await targetSuite.db.execute<{
       paper_width: string;
       resolution: string;
-      character_set: string;
     }>(sql`
-      select paper_width, resolution, character_set from printers
+      select paper_width, resolution from printers
       where local_key = 'B120300001'`);
-    expect(printerSettings.rows).toEqual([
-      { paper_width: "58mm", resolution: "203dpi", character_set: "pc858" },
-    ]);
+    expect(printerSettings.rows).toEqual([{ paper_width: "58mm", resolution: "203dpi" }]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
     await withTransaction(targetSuite.db, (tx) =>

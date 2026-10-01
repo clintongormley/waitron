@@ -19,17 +19,15 @@
 import {
   QR_QUIET_ZONE,
   chooseQrDots,
-  columnsFor,
   dpiValue,
   esc,
   labelAmountLines,
   prepareText,
   safeWidthDots,
+  textGrid,
   withQuietZone,
   wrapText,
-  type CharacterSet,
-  type PaperWidth,
-  type Resolution,
+  type EscSetting,
 } from "@waitron/printing";
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
 import {
@@ -60,12 +58,7 @@ export interface ReceiptTrim {
   footerMessage?: string;
 }
 
-export interface ReceiptPrinterSettings {
-  paperWidth: PaperWidth;
-  resolution: Resolution;
-  characterSet: CharacterSet;
-  characterTable: number;
-}
+export type ReceiptPrinterSettings = EscSetting;
 
 /** Everything {@link formatReceipt} needs to render one filed sale onto paper. */
 export interface FormatReceiptInput {
@@ -77,7 +70,7 @@ export interface FormatReceiptInput {
   receipt: ReceiptTrim;
   /** The locale the money, discount percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
-  /** The receipt printer's settings: they set the column count, the QR dot size and the text encoding. */
+  /** The receipt printer's settings: they set the image width, the column count and the QR dot size. */
   printer: ReceiptPrinterSettings;
   /** Marks a Demo/Prepare transaction without changing any filed fiscal value. */
   simulated?: boolean;
@@ -142,8 +135,7 @@ function issueDate(iso: string, locale: string): string {
 /**
  * Render one filed sale — the customer's factura simplificada. Total: empty `lines`/`vatBreakdown`
  * yield a header-and-total ticket, and an empty `result.qr` prints no QR but still the legend.
- * Every string is prepared for the character set before it is measured, so no line exceeds the
- * column count.
+ * Every string goes through `prepareText` before it is measured, so no line exceeds the column count.
  */
 export function formatReceipt({
   result,
@@ -155,21 +147,15 @@ export function formatReceipt({
   duplicate = false,
 }: FormatReceiptInput): Uint8Array {
   const locale = invoiceLocale;
-  const columns = columnsFor(printer.paperWidth);
-  const p = (s: string): string => prepareText(s, printer.characterSet);
-  const b = esc(printer.characterSet, printer.characterTable)
-    .init()
-    .printArea(safeWidthDots(printer.paperWidth))
-    .align("center");
-  // Equal-width lines centre the body as a block without centring each description within it.
-  const bodyLine = (line: string): void => {
-    b.line(line.padEnd(columns));
-  };
+  const { columns, widthDots } = textGrid(printer.paperWidth, printer.resolution);
+  const b = esc(printer).init().printArea(widthDots);
   const text = (s: string, indent = 0): void => {
-    for (const line of wrapText(p(s), columns, indent)) bodyLine(line);
+    for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };
   const row = (label: string, amount: string, indent = 0): void => {
-    for (const line of labelAmountLines(p(label), p(amount), columns, indent)) bodyLine(line);
+    for (const line of labelAmountLines(prepareText(label), prepareText(amount), columns, indent)) {
+      b.line(line);
+    }
   };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
     const label = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale)}`;
@@ -205,7 +191,7 @@ export function formatReceipt({
     // under ("es", not "es-ES") and an exact-key lookup would miss every one of them.
     const unit =
       dish.unitName == null ? "" : ` ${resolveSnapshotText(dish.unitName, locale, locale)}`;
-    const quantity = p(`${dish.quantity}${unit}  `);
+    const quantity = prepareText(`${dish.quantity}${unit}  `);
     // The name's continuation lines normally start under the name (indent = the quantity prefix width).
     // Cap that at 2 when the prefix is wider than half the paper: past there `wrapText`'s remaining room
     // shrinks to a few columns and the name wraps one glyph per line.
@@ -284,6 +270,7 @@ export function formatReceipt({
 
   // The QR (arts. 20-21), printed as an image Waitron builds, sized for this printer (30-40 mm). A sale's
   // cotejo URL can legitimately be "" (the fiscal backend minted none): then no QR, but still the legend.
+  b.align("center");
   if (result.qr !== "") {
     const matrix = qrModules(result.qr);
     const dots = chooseQrDots(
@@ -295,7 +282,7 @@ export function formatReceipt({
   }
 
   // The VERI*FACTU legend — printed UNCONDITIONALLY in Veri*Factu mode (art. 20.1.b).
-  b.line(LEGEND).line();
+  b.line(LEGEND).line().align("left");
 
   // Non-fiscal footer trim, under the legend.
   if (receipt.footerMessage) text(receipt.footerMessage);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CategoryReport, CategoryTotal } from "@waitron/reporting";
 import { decimal } from "@waitron/shared";
 import { formatCategorySalesPage, type CategorySalesPageInput } from "./category-sales-page.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 
 function node(
   over: Partial<Omit<CategoryTotal, "gross" | "net" | "direct">> & {
@@ -105,7 +105,7 @@ function page(over: Partial<CategorySalesPageInput> = {}): string[] {
       to: "2026-06-11",
       extrasIntoDish: false,
       locale: "en-GB",
-      printer: { paperWidth: "80mm", characterSet: "wpc1252", characterTable: 16 },
+      printer: { paperWidth: "80mm", resolution: "180dpi" },
       ...over,
     }),
   );
@@ -252,19 +252,28 @@ describe("formatCategorySalesPage", () => {
       ["80mm", 42],
     ] as const) {
       for (const locale of ["en-GB", "es-ES"] as const) {
-        const lines = page({
-          report,
-          locale,
-          extrasIntoDish: true,
-          printer: { paperWidth, characterSet: "pc858", characterTable: 19 },
-        });
+        // About a thousand lines of images, past the print preview's 1 MiB, so they are read
+        // command by command rather than through the preview.
+        const lines = printedCommands(
+          formatCategorySalesPage({
+            report,
+            from: "2026-06-10",
+            to: "2026-06-11",
+            locale,
+            extrasIntoDish: true,
+            printer: { paperWidth, resolution: "203dpi" },
+          }),
+        )
+          .filter((command) => command.name === "GS v 0")
+          .map((command) => command.text!);
         expect(lines.length).toBeGreaterThan(40);
+        expect(lines).not.toContain(undefined);
         for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
       }
     }
   });
 
-  it("prints through the printer's character set, replacing what it cannot encode", () => {
+  it("replaces what the glyph table cannot draw, and measures what it draws", () => {
     const bytes = formatCategorySalesPage({
       report: sampleReport({
         tree: [node({ id: "x", name: "Čaj ☕", gross: "1.00", net: "1.00" })],
@@ -273,11 +282,11 @@ describe("formatCategorySalesPage", () => {
       to: "2026-06-10",
       extrasIntoDish: false,
       locale: "en-GB",
-      printer: { paperWidth: "58mm", characterSet: "plain", characterTable: 0 },
+      printer: { paperWidth: "58mm", resolution: "180dpi" },
     });
     const lines = printedLines(bytes);
-    // The euro sign's fallback is measured too, so the columns still end at the paper's edge.
-    expect(lineFor(lines, "Caj")).toMatch(/^Caj \? +EUR1\.00 +EUR1\.00$/);
-    expect(lineFor(lines, "Caj")).toHaveLength(30);
+    // The replacement is measured, so the columns still end at the paper's edge.
+    expect(lineFor(lines, "Čaj")).toMatch(/^Čaj \? +€1\.00 +€1\.00$/);
+    expect(lineFor(lines, "Čaj")).toHaveLength(30);
   });
 });

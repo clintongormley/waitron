@@ -41,8 +41,6 @@ export async function resolveReceiptPrinter(
       hasCashDrawer: printers.hasCashDrawer,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
-      characterSet: printers.characterSet,
-      characterTable: printers.characterTable,
     })
     .from(tills)
     .innerJoin(printers, and(eq(printers.id, tills.receiptPrinterId), eq(printers.active, true)))

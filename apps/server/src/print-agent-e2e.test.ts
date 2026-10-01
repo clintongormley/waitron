@@ -34,6 +34,8 @@ import "./errors.js";
 // agent loop, whose fetch is routed into `app.request`. It lives in apps/server because packages never
 // import apps, so the agent package cannot reach the routes it must be proven against.
 const noopLog: Logger = () => {};
+/** A setting to draw opaque job payloads at; the agent never reads them. */
+const WIDE = { paperWidth: "80mm", resolution: "180dpi" } as const;
 
 const BASE = "http://waitron.e2e";
 
@@ -332,8 +334,8 @@ describe("print-agent end to end", () => {
     await agent.runOnce();
     expect(agent.status.phase).toBe("running");
 
-    const networkPayload = esc().text("Mesa 4").cut().bytes();
-    const usbPayload = esc().text("Barra 2").cut().bytes();
+    const networkPayload = esc(WIDE).text("Mesa 4").cut().bytes();
+    const usbPayload = esc(WIDE).text("Barra 2").cut().bytes();
     const { jobId } = await withTransaction(suite.db, async (tx) => {
       return enqueuePrintJob(tx, { locationId }, printerId, networkPayload);
     });
@@ -361,7 +363,7 @@ describe("print-agent end to end", () => {
     expect(await host.token()).toBeNull();
 
     const enqueuedAfterRevoke = await withTransaction(suite.db, async (tx) => {
-      return enqueuePrintJob(tx, { locationId }, printerId, esc().text("Ignored").bytes());
+      return enqueuePrintJob(tx, { locationId }, printerId, esc(WIDE).text("Ignored").bytes());
     });
     await agent.runOnce();
     expect(agent.status.phase).toBe("unauthorized");
@@ -436,12 +438,9 @@ describe("print-agent end to end", () => {
       });
       expect(created.status).toBe(201);
       const printerId = ((await created.json()) as { id: string }).id;
-      const test = await send(
-        app,
-        "POST",
-        `/management-api/printers/${printerId}/character-table-test`,
-        { cookie: managerCookie, body: { startTable: 0 } },
-      );
+      const test = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
+        cookie: managerCookie,
+      });
       expect(test.status).toBe(202);
       const { jobId } = (await test.json()) as { jobId: string };
 
@@ -529,12 +528,9 @@ describe("print-agent end to end", () => {
       });
       expect(created.status).toBe(201);
       const printerId = ((await created.json()) as { id: string }).id;
-      const test = await send(
-        app,
-        "POST",
-        `/management-api/printers/${printerId}/character-table-test`,
-        { cookie: managerCookie, body: { startTable: 0 } },
-      );
+      const test = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
+        cookie: managerCookie,
+      });
       expect(test.status).toBe(202);
       const { jobId } = (await test.json()) as { jobId: string };
 

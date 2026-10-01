@@ -240,8 +240,6 @@ describe("receiptLines", () => {
         printer: {
           paperWidth: "80mm",
           resolution: "180dpi",
-          characterSet: "wpc1252",
-          characterTable: 16,
         },
       }),
     );
@@ -284,8 +282,6 @@ describe("receiptLines", () => {
         printer: {
           paperWidth: "80mm",
           resolution: "180dpi",
-          characterSet: "wpc1252",
-          characterTable: 16,
         },
       }),
     );

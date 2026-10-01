@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DOTS_PER_COLUMN,
   TEXT_BAND_HEIGHT,
   chooseQrDots,
   columnsFor,
@@ -21,6 +22,7 @@ import {
 describe("package barrel", () => {
   it("re-exports the layout, text-drawing and command helpers", () => {
     expect(columnsFor("80mm")).toBe(42);
+    expect(DOTS_PER_COLUMN).toBe(12);
     expect(safeWidthDots("58mm")).toBe(360);
     expect(dpiValue("203dpi")).toBe(203);
     expect(QR_QUIET_ZONE).toBe(4);

@@ -30,13 +30,13 @@ import type { Transaction } from "@waitron/db";
 import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
-import { columnsFor, enqueuePrintJob } from "@waitron/printing";
-import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
+import { enqueuePrintJob } from "@waitron/printing";
+import type { PaperWidth, PrintConfig, Resolution } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
 import { partyFamilies, partyFamily } from "./parties.js";
-import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
+import type { KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -87,8 +87,7 @@ interface PrinterMapping {
   printerId: string;
   ticketScope: "station" | "order";
   paperWidth: PaperWidth;
-  characterSet: CharacterSet;
-  characterTable: number;
+  resolution: Resolution;
 }
 
 /**
@@ -107,8 +106,7 @@ async function printerMappings(
       printerId: stationPrinters.printerId,
       ticketScope: printers.ticketScope,
       paperWidth: printers.paperWidth,
-      characterSet: printers.characterSet,
-      characterTable: printers.characterTable,
+      resolution: printers.resolution,
     })
     .from(stationPrinters)
     .innerJoin(printers, eq(stationPrinters.printerId, printers.id))
@@ -120,26 +118,17 @@ async function printerMappings(
     );
 }
 
-/** The settings that change a kitchen ticket's bytes. Resolution does not: kitchen paper has no QR. */
+/** The settings that change a kitchen ticket's bytes: together they set the image's dot width. */
 interface KitchenPrinterLayout {
   paperWidth: PaperWidth;
-  characterSet: CharacterSet;
-  characterTable: number;
+  resolution: Resolution;
 }
 
-function layoutOf(printer: KitchenPrinterLayout): KitchenLayout {
-  return {
-    columns: columnsFor(printer.paperWidth),
-    charset: printer.characterSet,
-    characterTable: printer.characterTable,
-  };
-}
-
-/** `printers` grouped by paper width and character set, in first-seen order: one ticket per group. */
+/** `printers` grouped by paper width and resolution, in first-seen order: one ticket per group. */
 function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): T[][] {
   const groups = new Map<string, T[]>();
   for (const printer of printers) {
-    const key = `${printer.paperWidth}|${printer.characterSet}|${printer.characterTable}`;
+    const key = `${printer.paperWidth}|${printer.resolution}`;
     const group = groups.get(key);
     if (group === undefined) groups.set(key, [printer]);
     else group.push(printer);
@@ -450,7 +439,7 @@ async function planKitchenTickets(
             })),
           }
         : { ...head, scope: "station", stationName: station.name, items: station.items },
-      layoutOf(route.printers[0]!),
+      route.printers[0]!,
     );
     const lineIds = [
       ...new Set(
@@ -738,8 +727,7 @@ async function printCorrectionSlips(
     bucket.push({
       printerId: mapping.printerId,
       paperWidth: mapping.paperWidth,
-      characterSet: mapping.characterSet,
-      characterTable: mapping.characterTable,
+      resolution: mapping.resolution,
     });
     printersByStation.set(mapping.stationId, bucket);
   }
@@ -763,7 +751,7 @@ async function printCorrectionSlips(
           at,
           item: target.group === undefined ? item : { ...item, group: target.group },
         },
-        layoutOf(group[0]!),
+        group[0]!,
       );
       for (const printer of group) {
         await enqueuePrintJob(tx, printCfg, printer.printerId, bytes);

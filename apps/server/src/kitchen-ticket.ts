@@ -6,7 +6,7 @@
  *
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
-import { esc, prepareText, wrapText, type CharacterSet } from "@waitron/printing";
+import { esc, prepareText, textGrid, wrapText, type EscSetting } from "@waitron/printing";
 import { stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
 
 /** The printed header of an `order`-scope ticket. */
@@ -111,7 +111,7 @@ export function arrangeTicketItems(
   }));
 }
 
-/** `qty x name`, e.g. `2 x Steak`. An ASCII "x" so any single-byte printer code page renders it. */
+/** `qty x name`, e.g. `2 x Steak`. */
 function itemLine(item: KitchenTicketItem): string {
   return `${item.qty}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
 }
@@ -133,16 +133,15 @@ function sanitizeNote(note: string): string {
 function emitItem(
   b: ReturnType<typeof esc>,
   item: KitchenTicketItem,
-  layout: KitchenLayout,
+  columns: number,
   sign: "+" | "-" | "" = "",
 ): void {
   // Each line wraps to the paper; a continuation starts under the text after its marker.
   const text = (s: string, indent: number): void => {
-    for (const line of wrapText(prepareText(s, layout.charset), layout.columns, indent))
-      b.line(line);
+    for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };
   const prefix = `${sign}${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
-  text(`${sign}${itemLine(item)}`, prepareText(prefix, layout.charset).length);
+  text(`${sign}${itemLine(item)}`, prepareText(prefix).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   if (item.note !== undefined && item.note !== "") {
     // A note of nothing but control bytes sanitises to "" and is skipped.
@@ -151,12 +150,8 @@ function emitItem(
   }
 }
 
-/** The printer settings a kitchen ticket is laid out for. Kitchen paper carries no QR, so no resolution. */
-export interface KitchenLayout {
-  columns: number;
-  charset: CharacterSet;
-  characterTable: number;
-}
+/** The printer settings a kitchen ticket is drawn for: the image width and the column count. */
+export type KitchenLayout = EscSetting;
 
 function hhmm(at: Date): string {
   const h = String(at.getHours()).padStart(2, "0");
@@ -170,9 +165,10 @@ function hhmm(at: Date): string {
  * run of items instead, so callers put group-less items first and the rest in group order.
  */
 export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout): Uint8Array {
-  const b = esc(layout.charset, layout.characterTable).init();
+  const { columns } = textGrid(layout.paperWidth, layout.resolution);
+  const b = esc(layout).init();
   const text = (s: string): void => {
-    for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
+    for (const line of wrapText(prepareText(s), columns)) b.line(line);
   };
   const lists =
     ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
@@ -183,7 +179,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout
     for (const item of items) {
       if (item.group !== undefined && item.group !== current) b.line(`GROUP ${item.group}`);
       current = item.group;
-      emitItem(b, item, layout);
+      emitItem(b, item, columns);
     }
   };
 
@@ -254,9 +250,10 @@ function slipHeader(slip: CorrectionSlip): string {
  * + or -.
  */
 export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout): Uint8Array {
-  const b = esc(layout.charset, layout.characterTable).init();
+  const { columns } = textGrid(layout.paperWidth, layout.resolution);
+  const b = esc(layout).init();
   const text = (s: string): void => {
-    for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
+    for (const line of wrapText(prepareText(s), columns)) b.line(line);
   };
 
   text(`*** ${slipHeader(slip)} ***`);
@@ -276,12 +273,12 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout
   b.line(hhmm(new Date(slip.at)));
   if (slip.item.group !== undefined) b.line(`GROUP ${slip.item.group}`);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
-  emitItem(b, slip.item, layout, sign);
+  emitItem(b, slip.item, columns, sign);
   if (slip.kind === "EXTRA CANCELLED") {
     const prefix = `  ${extraCancelledWords(slip.locale).cancel} `;
     for (const line of wrapText(
-      prepareText(`${prefix}${slip.cancelledExtra}`, layout.charset),
-      layout.columns,
+      prepareText(`${prefix}${slip.cancelledExtra}`),
+      columns,
       prefix.length,
     )) {
       b.line(line);

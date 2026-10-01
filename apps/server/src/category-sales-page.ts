@@ -1,12 +1,10 @@
 import {
-  columnsFor,
   esc,
   labelAmountLines,
   prepareText,
-  safeWidthDots,
+  textGrid,
   wrapText,
-  type CharacterSet,
-  type PaperWidth,
+  type EscSetting,
 } from "@waitron/printing";
 import type { CategoryReport, CategoryReportMode, CategoryTotal } from "@waitron/reporting";
 import type { SupportedLocale } from "@waitron/shared";
@@ -19,7 +17,7 @@ export interface CategorySalesPageInput {
   to: string;
   extrasIntoDish: boolean;
   locale: SupportedLocale;
-  printer: { paperWidth: PaperWidth; characterSet: CharacterSet; characterTable: number };
+  printer: EscSetting;
 }
 
 interface Strings {
@@ -77,9 +75,9 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
 const INDENT = 2;
 
 /**
- * The category sales report as one ESC/POS document for a printer's paper width and character set.
- * Every string is prepared for the character set before it is measured, so no line is wider than
- * the paper, and the gross and net columns share one width so they line up down the page.
+ * The category sales report as one ESC/POS document for a printer's paper width and resolution.
+ * Every string goes through `prepareText` before it is measured, so no line is wider than the
+ * paper, and the gross and net columns share one width so they line up down the page.
  */
 export function formatCategorySalesPage({
   report,
@@ -90,12 +88,10 @@ export function formatCategorySalesPage({
   printer,
 }: CategorySalesPageInput): Uint8Array {
   const s = STRINGS[locale];
-  const columns = columnsFor(printer.paperWidth);
-  const p = (text: string): string => prepareText(text, printer.characterSet);
+  const { columns, widthDots } = textGrid(printer.paperWidth, printer.resolution);
+  const p = prepareText;
   const money = (value: string): string => p(formatMoney(value, locale));
-  const b = esc(printer.characterSet, printer.characterTable)
-    .init()
-    .printArea(safeWidthDots(printer.paperWidth));
+  const b = esc(printer).init().printArea(widthDots);
 
   const nameOf = (node: CategoryTotal): string =>
     node.kind === "uncategorised"

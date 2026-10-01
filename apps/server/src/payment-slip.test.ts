@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { formatPaymentSlip } from "./payment-slip.js";
-import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
+import {
+  commandNames,
+  decodeTicket,
+  printedCommands,
+  printedLines,
+} from "./testing/decode-ticket.js";
 
 const input = {
   issuer: { venueName: "Casa Gormley", nif: "B12345678" },
@@ -12,7 +17,7 @@ const input = {
   charged: "1.50",
   invoiceLocale: "es-ES",
   card: { scheme: "VISA", last4: "5838", entryMode: "contactless" as const, authCode: "328600" },
-  printer: { paperWidth: "80mm", characterSet: "wpc1252", characterTable: 16 } as const,
+  printer: { paperWidth: "80mm", resolution: "180dpi" } as const,
 };
 describe("payment slip (pure renderer, no database)", () => {
   it("prints payment identity, grouping and amounts without fiscal identifiers or QR", () => {
@@ -43,7 +48,7 @@ describe("payment slip (pure renderer, no database)", () => {
     expect(text).not.toContain("https://fiscal.invalid");
     expect(text).not.toContain("VERI*FACTU");
     expect(text).not.toMatch(/^\s*(?:Factura|Serie|Número de factura)\s*[:#]?\s*\S+/im);
-    expect(bytesInclude(bytes, Uint8Array.from([0x1d, 0x28, 0x6b]))).toBe(false);
+    expect(commandNames(bytes)).not.toContain("GS ( k");
   });
   it("omits missing card facts, tip and label while keeping the amount", () => {
     const text = decodeTicket(
@@ -69,44 +74,49 @@ describe("payment slip (pure renderer, no database)", () => {
 });
 
 describe("payment slip printer layout", () => {
-  it("selects the printer's configured table instead of the encoding default", () => {
-    const bytes = formatPaymentSlip({
-      ...input,
-      printer: { ...input.printer, characterTable: 6 },
-    });
-    expect([...bytes.slice(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 6]);
-  });
+  it.each([
+    [{ paperWidth: "58mm", resolution: "180dpi" } as const, 360],
+    [{ paperWidth: "58mm", resolution: "203dpi" } as const, 384],
+    [{ paperWidth: "80mm", resolution: "180dpi" } as const, 512],
+    [{ paperWidth: "80mm", resolution: "203dpi" } as const, 576],
+  ])(
+    "draws every line as an image as wide as %j's setting, selecting no character table",
+    (printer, widthDots) => {
+      const commands = printedCommands(formatPaymentSlip({ ...input, printer }));
+      const names = commands.map((command) => command.name);
+      expect(names).not.toContain("ESC t");
+      expect(names).not.toContain("FS .");
+      expect(names).not.toContain("text");
+      const lines = commands.filter((command) => command.name === "GS v 0");
+      expect(lines.length).toBeGreaterThan(0);
+      for (const line of lines) {
+        expect(line.text).toBeDefined();
+        expect((line.bytes[4]! + 256 * line.bytes[5]!) * 8).toBe(widthDots);
+      }
+    },
+  );
 
-  it("separates each amount from the euro sign with an ASCII space", () => {
-    const bytes = formatPaymentSlip(input);
-    const euro = 0x80; // € in Windows-1252
-    const positions = [...bytes].flatMap((byte, i) => (byte === euro ? [i] : []));
-    expect(positions).toHaveLength(3); // Importe, Propina, Cobrado
-    for (const i of positions) expect(bytes[i - 1]).toBe(0x20);
+  it("separates each amount from the euro sign with a space", () => {
+    const amounts = printedLines(formatPaymentSlip(input)).filter((line) => line.includes("€"));
+    expect(amounts).toHaveLength(3); // Importe, Propina, Cobrado
+    for (const line of amounts) expect(line).toMatch(/\d €$/u);
   });
 
   it.each([
-    { paperWidth: "80mm", characterSet: "wpc1252", characterTable: 16 },
-    { paperWidth: "58mm", characterSet: "pc858", characterTable: 19 },
-    { paperWidth: "58mm", characterSet: "plain", characterTable: 0 },
-  ] as const)(
-    "keeps every line within the column count ($paperWidth, $characterSet)",
-    (printer) => {
-      const lines = printedLines(
-        formatPaymentSlip({
-          ...input,
-          issuer: { venueName: "Charcutería y Bodega La Buena Mesa", nif: "B12345678" },
-          orderLabel: "Terraza mesa del fondo",
-          printer,
-        }),
-      );
-      const columns = printer.paperWidth === "58mm" ? 30 : 42;
-      for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
-      expect(lines).toContain(
-        printer.characterSet === "plain"
-          ? `Cobrado${" ".repeat(columns - 15)}1,50 EUR`
-          : `Cobrado${" ".repeat(columns - 13)}1,50 €`,
-      );
-    },
-  );
+    { paperWidth: "80mm", resolution: "180dpi" },
+    { paperWidth: "58mm", resolution: "180dpi" },
+    { paperWidth: "58mm", resolution: "203dpi" },
+  ] as const)("keeps every line within the column count ($paperWidth, $resolution)", (printer) => {
+    const lines = printedLines(
+      formatPaymentSlip({
+        ...input,
+        issuer: { venueName: "Charcutería y Bodega La Buena Mesa", nif: "B12345678" },
+        orderLabel: "Terraza mesa del fondo",
+        printer,
+      }),
+    );
+    const columns = printer.paperWidth === "58mm" ? 30 : 42;
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    expect(lines).toContain(`Cobrado${" ".repeat(columns - 13)}1,50 €`);
+  });
 });

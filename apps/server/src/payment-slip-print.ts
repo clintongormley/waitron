@@ -90,11 +90,7 @@ export async function printSalePaymentSlip(
         tip,
         card,
         invoiceLocale: cfg.locale,
-        printer: {
-          paperWidth: printer.paperWidth,
-          characterSet: printer.characterSet,
-          characterTable: printer.characterTable,
-        },
+        printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
       });
       await enqueuePrintJob(tx, { locationId: cfg.locationId }, printer.id, payload);
     }
