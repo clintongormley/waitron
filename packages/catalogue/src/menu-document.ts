@@ -3,6 +3,9 @@ import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
+import { includedMenus } from "./menu-inclusion.js";
+import { clashesOf } from "./menu-combine.js";
+import type { CombinedOffer, MenuClash } from "./menu-combine-types.js";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { menuDetails } from "./schema/menu.js";
@@ -39,6 +42,9 @@ export interface OmittedShortcut {
 }
 
 interface BuiltMenu {
+  workingHash: string;
+  clashes: MenuClash[];
+  combined: Map<string, CombinedOffer>;
   document: MenuDocument;
   omittedShortcuts: OmittedShortcut[];
   rootSectionId: string;
@@ -96,19 +102,28 @@ export async function buildMenuDocuments(
       .innerJoin(catalogues, eq(catalogues.id, menuDetails.menuId))
       .where(where)
       .orderBy(catalogues.createdAt, catalogues.id);
-  const details = [];
+  const loaded = graph ?? (await loadSectionGraph(tx));
+  const requested = menuIds === undefined ? undefined : new Set(menuIds);
+  const visit = (id: string): void => {
+    for (const included of includedMenus(loaded, id))
+      if (!requested!.has(included)) {
+        requested!.add(included);
+        visit(included);
+      }
+  };
+  if (requested !== undefined) for (const id of menuIds!) visit(id);
+  const details: Awaited<ReturnType<typeof readDetails>> = [];
   if (menuIds === undefined) details.push(...(await readDetails()));
   else
-    for (const batch of batches(menuIds))
+    for (const batch of batches([...requested!]))
       details.push(...(await readDetails(inArray(menuDetails.menuId, batch))));
-  const loaded = graph ?? (await loadSectionGraph(tx));
   const menus = new Map<string, BuiltMenu>();
   const sectionNames = new Map<string, string>();
   if (details.length === 0) return { graph: loaded, menus, sectionNames };
   const offers = await listMenuOffers(
     tx,
     details.map((row) => row.menuId),
-    { includeEveryModifierItem: true, graph: loaded },
+    { includeEveryModifierItem: true, includeSwitchedOff: true, graph: loaded },
   );
   const dishFacts = await readDishFacts(tx, [...new Set(offers.map((offer) => offer.productId))]);
   const extraImages = await readEffectiveImages(tx, [
@@ -138,12 +153,24 @@ export async function buildMenuDocuments(
   const layoutsByMenu = groupBy(sectionRows, (section) =>
     section.role === "home_layout" ? section.ownerMenuId : null,
   );
-  for (const row of details) {
+  const ordered: typeof details = [];
+  const seen = new Set<string>();
+  const order = (id: string): void => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    for (const child of includedMenus(loaded, id)) order(child);
+    const row = details.find((row) => row.menuId === id);
+    if (row !== undefined) ordered.push(row);
+  };
+  for (const row of details) order(row.menuId);
+  for (const row of ordered) {
     const onMenu = new Map(
-      (offersByMenu.get(row.menuId) ?? []).map((offer) => [
-        offer.productId,
-        freezeOffer(offer, dishFacts.get(offer.productId)!, extraImages),
-      ]),
+      (offersByMenu.get(row.menuId) ?? [])
+        .filter((offer) => offer.combined.offered.state === "clash" || offer.combined.offered.value)
+        .map((offer) => [
+          offer.productId,
+          freezeOffer(offer, dishFacts.get(offer.productId)!, extraImages),
+        ]),
     );
     const reachedSections = new Set<string>();
     const listOf = (sectionId: string, path: readonly string[]): DocumentMember[] =>
@@ -155,12 +182,18 @@ export async function buildMenuDocuments(
             : [{ kind: "product", menuItemId: offer.id, productId: ref.productId }];
         }
         if (path.includes(ref.sectionId)) return [];
+        const includedMenuId =
+          loaded.role(ref.sectionId) === "menu_root" ? loaded.ownerMenu(ref.sectionId) : null;
+        if (includedMenuId !== null && !loaded.menu(includedMenuId)?.active) return [];
         reachedSections.add(ref.sectionId);
         const section = sectionById.get(ref.sectionId)!;
         return [
           {
             kind: "section",
             sectionId: section.id,
+            ...(includedMenuId === null
+              ? {}
+              : { includedMenu: { id: includedMenuId, name: loaded.menu(includedMenuId)!.name } }),
             internalName: section.internalName,
             names: section.names,
             image: section.image,
@@ -185,11 +218,20 @@ export async function buildMenuDocuments(
       }
       return { id: layout.id, name: layout.internalName, tiles };
     });
-    menus.set(row.menuId, {
+    const built = {
       rootSectionId: row.rootSectionId,
+      clashes: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => clashesOf(offer.combined)),
+      combined: new Map(
+        (offersByMenu.get(row.menuId) ?? []).map((offer) => [offer.productId, offer.combined]),
+      ),
       omittedShortcuts,
       document: {
         format: MENU_DOCUMENT_FORMAT,
+        includedMenuHashes: Object.fromEntries(
+          includedMenus(loaded, row.menuId)
+            .filter((id) => menus.has(id))
+            .map((id) => [id, menus.get(id)!.workingHash]),
+        ),
         menuId: row.menuId,
         menuName: row.menuName,
         root,
@@ -197,19 +239,35 @@ export async function buildMenuDocuments(
         homeLayouts,
         defaultHomeLayoutId: row.defaultHomeLayoutId,
       },
+    } satisfies Omit<BuiltMenu, "workingHash">;
+    // Ancestors track an included menu's settings even when its switched-off offers are omitted.
+    const ownDecisions = (offersByMenu.get(row.menuId) ?? []).map((offer) => ({
+      productId: offer.productId,
+      price: offer.grossPrice,
+      offered: offer.offered,
+      variants: offer.variants.map((variant) => ({
+        variantId: variant.id,
+        price: variant.menuPrice,
+        offered: variant.ownOffered,
+      })),
+    }));
+    menus.set(row.menuId, {
+      ...built,
+      workingHash: createHash("sha256")
+        .update(canonicalJson({ document: built.document, ownDecisions }))
+        .digest("hex"),
     });
   }
+  if (menuIds !== undefined)
+    for (const id of menus.keys()) if (!menuIds.includes(id)) menus.delete(id);
   return { graph: loaded, menus, sectionNames };
 }
 
 /** The document the menu's working state would publish, and the shortcuts it leaves out (D13). */
-export async function buildMenuDocument(
-  tx: Transaction,
-  menuId: string,
-): Promise<{ document: MenuDocument; omittedShortcuts: OmittedShortcut[] }> {
+export async function buildMenuDocument(tx: Transaction, menuId: string): Promise<BuiltMenu> {
   const built = (await buildMenuDocuments(tx, [menuId])).menus.get(menuId);
   if (built === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
-  return { document: built.document, omittedShortcuts: built.omittedShortcuts };
+  return built;
 }
 
 /** The dish's own photo and description, which `MenuOffer` does not carry. */
@@ -261,7 +319,7 @@ function freezeOffer(
   extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
-    ...without(offer, ["courseId", "category", "offeredModifiers", "variants"]),
+    ...without(offer, ["courseId", "category", "offeredModifiers", "variants", "combined"]),
     image: facts.image,
     description: facts.description,
     variants: offer.variants.map((variant) =>
@@ -580,11 +638,16 @@ function namesOf(shape: Shape, path: readonly string[]): string[] {
   return path.map((sectionId) => shape.sections.get(sectionId)!.node.internalName);
 }
 
-function listSource(path: readonly string[]): { source: MenuChangeSource; section?: string } {
-  const holder = path.at(-1);
-  return holder === undefined
-    ? { source: "this_menu" }
-    : { source: "shared_section", section: holder };
+function listSource(
+  path: readonly string[],
+  ...shapes: Shape[]
+): { source: MenuChangeSource; section?: string; includedMenu?: { id: string; name: string } } {
+  for (const section of path)
+    for (const shape of shapes) {
+      const includedMenu = shape.sections.get(section)?.node.includedMenu;
+      if (includedMenu !== undefined) return { source: "included_menu", section, includedMenu };
+    }
+  return { source: "this_menu" };
 }
 
 const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
@@ -694,12 +757,34 @@ function productFields(
   return { shared: ordered(shared), menu: ordered(menu) };
 }
 
-export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): DiffEntry[] {
+export function diffEntries(
+  live: MenuDocument | null,
+  proposed: MenuDocument,
+  combined: ReadonlyMap<string, CombinedOffer> = new Map(),
+): DiffEntry[] {
   const next = shapeOf(proposed);
   const prev = shapeOf(live ?? { ...proposed, root: { members: [] }, offers: {}, homeLayouts: [] });
   const entries: DiffEntry[] = [];
   const push = (change: MenuChange, section?: string): void => {
-    entries.push(section === undefined ? { change } : { change, section });
+    if (
+      change.source === "included_menu" &&
+      change.includedMenu === undefined &&
+      section !== undefined
+    )
+      change.includedMenu = listSource(
+        [
+          ...(next.sections.get(section)?.parents[0] ??
+            prev.sections.get(section)?.parents[0] ??
+            []),
+          section,
+        ],
+        next,
+        prev,
+      ).includedMenu;
+    const { section: _section, ...publicChange } = change as MenuChange & { section?: string };
+    entries.push(
+      section === undefined ? { change: publicChange } : { change: publicChange, section },
+    );
   };
 
   if (live !== null && live.menuName !== proposed.menuName)
@@ -709,7 +794,7 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
     const held = new Set(next.sections.get(sectionId)?.parents.map(pathKey));
     for (const parent of parents)
       if (!held.has(pathKey(parent))) {
-        const { source, section } = listSource(parent);
+        const { source, section } = listSource(parent, next, prev);
         push(
           {
             kind: "section_removed",
@@ -726,7 +811,7 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
     const held = new Set(prev.sections.get(sectionId)?.parents.map(pathKey));
     for (const parent of parents)
       if (!held.has(pathKey(parent))) {
-        const { source, section } = listSource(parent);
+        const { source, section } = listSource(parent, next, prev);
         push(
           {
             kind: "section_added",
@@ -754,7 +839,11 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
           sectionId,
           name: node.internalName,
           fields,
-          source: "shared_section",
+          source: listSource(
+            [...(next.sections.get(sectionId)?.parents[0] ?? []), sectionId],
+            next,
+            prev,
+          ).source,
         },
         sectionId,
       );
@@ -763,7 +852,7 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
   for (const [productId, was] of prev.offers) {
     const offer = next.offers.get(productId);
     if (offer === undefined) {
-      const { source, section } = listSource(was.placements[0]!);
+      const { source, section } = listSource(was.placements[0]!, prev, next);
       push(
         {
           kind: "product_removed",
@@ -783,7 +872,9 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
       ...offer.placements.filter((path) => !from.has(pathKey(path))),
     ];
     if (moved.length > 0) {
-      const library = moved.map((path) => path.at(-1)).find((holder) => holder !== undefined);
+      const attribution = moved
+        .map((path) => listSource(path, next, prev))
+        .find((source) => source.source === "included_menu") ?? { source: "this_menu" as const };
       push(
         {
           kind: "product_moved",
@@ -791,9 +882,9 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
           name: offer.name,
           from: was.placements.map((path) => namesOf(prev, path)),
           to: offer.placements.map((path) => namesOf(next, path)),
-          source: library === undefined ? "this_menu" : "shared_section",
+          ...attribution,
         },
-        library,
+        "section" in attribution ? attribution.section : undefined,
       );
     }
     if (was.unitPrice !== offer.unitPrice || was.grossPrice !== offer.grossPrice)
@@ -803,9 +894,63 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
         name: offer.name,
         from: was.unitPrice,
         to: offer.unitPrice,
-        source: was.grossPrice === offer.grossPrice ? "shared_product" : "this_menu",
+        ...(() => {
+          const price = combined.get(productId)?.price;
+          return price?.state === "decided" && price.source.kind === "menu"
+            ? {
+                source: "included_menu" as const,
+                includedMenu: { id: price.source.menuId, name: price.source.menuName },
+              }
+            : {
+                source:
+                  was.grossPrice === offer.grossPrice
+                    ? ("shared_product" as const)
+                    : ("this_menu" as const),
+              };
+        })(),
       });
     const { shared, menu } = productFields(was, offer);
+    const decision = combined.get(productId);
+    const includedVariantSource = offer.variants.flatMap((variant) => {
+      const before = was.variants.find((v) => v.id === variant.id);
+      const setting = decision?.variants.find((v) => v.variantId === variant.id);
+      if (before === undefined || setting === undefined) return [];
+      const sources = [];
+      if (
+        before.offered !== variant.offered &&
+        before.ownOffered === variant.ownOffered &&
+        setting.offered.state === "decided"
+      )
+        sources.push(setting.offered.source);
+      if (
+        before.unitPrice !== variant.unitPrice &&
+        before.menuPrice === variant.menuPrice &&
+        setting.price.state === "decided"
+      ) {
+        sources.push(setting.price.source);
+        if (setting.price.source.kind === "parent" && decision?.price.state === "decided")
+          sources.push(decision.price.source);
+      }
+      return sources.filter((source) => source.kind === "menu");
+    })[0];
+    if (
+      includedVariantSource !== undefined &&
+      (shared.includes("variants") || menu.includes("variants"))
+    ) {
+      push({
+        kind: "product_changed",
+        productId,
+        name: offer.name,
+        fields: ["variants"],
+        source: "included_menu",
+        includedMenu: { id: includedVariantSource.menuId, name: includedVariantSource.menuName },
+      });
+      for (const fields of [shared, menu]) {
+        const index = fields.indexOf("variants");
+        if (index >= 0) fields.splice(index, 1);
+      }
+    }
+
     if (shared.length > 0)
       push({
         kind: "product_changed",
@@ -825,7 +970,7 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
   }
   for (const [productId, offer] of next.offers) {
     if (prev.offers.has(productId)) continue;
-    const { source, section } = listSource(offer.placements[0]!);
+    const { source, section } = listSource(offer.placements[0]!, next, prev);
     push(
       {
         kind: "product_added",
@@ -866,7 +1011,10 @@ export function diffEntries(live: MenuDocument | null, proposed: MenuDocument): 
     if (list === null) push({ kind: "order_changed", list: [], source: "this_menu" });
     else {
       const path = [...next.sections.get(list)!.parents[0]!, list];
-      push({ kind: "order_changed", list: namesOf(next, path), source: "shared_section" }, list);
+      push(
+        { kind: "order_changed", list: namesOf(next, path), ...listSource(path, next, prev) },
+        list,
+      );
     }
   }
 

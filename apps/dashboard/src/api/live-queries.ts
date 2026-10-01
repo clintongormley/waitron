@@ -113,6 +113,14 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "products",
     "menu_item_variant_overrides",
+    "content_languages",
+    "product_modifiers",
+    "extra_lists",
+    "extra_list_items",
+    "option_lists",
+    "option_labels",
+    "product_units",
+    "units",
   ],
   // The tables `menuStatus` and `previewMenu` (packages/catalogue/src/menu-publication.ts) read
   // over `menusFixture`, recorded from the statements they prepared. `categories` is read too, but

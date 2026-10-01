@@ -1,3 +1,4 @@
+import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
@@ -205,6 +206,7 @@ function lunchPrices(): MenuPriceRow[] {
   return [
     {
       menuItemId: "mi-burger",
+      combined: combinedFixture("p-burger", "12.00", true, [], null, "12.00", {}),
       productId: "p-burger",
       name: "Burger",
       categoryId: "c-mains",
@@ -217,6 +219,18 @@ function lunchPrices(): MenuPriceRow[] {
     },
     {
       menuItemId: "mi-lemonade",
+      combined: combinedFixture(
+        "p-lemonade",
+        "2.50",
+        true,
+        [
+          { variantId: "v-small", price: null, offered: true },
+          { variantId: "v-large", price: "3.75", offered: false },
+        ],
+        "2.50",
+        "3.00",
+        { "v-large": "3.40" },
+      ),
       productId: "p-lemonade",
       name: "Lemonade",
       categoryId: "c-drinks",
@@ -232,6 +246,7 @@ function lunchPrices(): MenuPriceRow[] {
     },
     {
       menuItemId: "mi-lager",
+      combined: combinedFixture("p-lager", "2.00", true, [], null, "2.00", {}),
       productId: "p-lager",
       name: "Lager",
       categoryId: "c-beer",
@@ -305,12 +320,14 @@ function statuses(): Record<string, MenuStatus> {
   return {
     "menu-lunch": {
       state: "changed",
+      clashes: 0,
       version: 2,
       publishedAt: PUBLISHED_AT,
       hash: LUNCH_LIVE_HASH,
     },
     "menu-dinner": {
       state: "current",
+      clashes: 0,
       version: 5,
       publishedAt: "2026-09-20T18:00:00.000Z",
       hash: "d".repeat(64),
@@ -321,6 +338,7 @@ function statuses(): Record<string, MenuStatus> {
 /** Lunch's pending changes: one of its own and one a shared product brings. */
 function lunchPreview(): MenuPreview {
   return {
+    clashes: [],
     hash: LUNCH_HASH,
     changes: [
       {
@@ -366,11 +384,13 @@ function lunchDocument() {
 /** Dinner's working state differs from its live version 5 by nothing a change can list. */
 function dinnerPreview(): MenuPreview {
   return {
+    clashes: [],
     hash: "c".repeat(64),
     changes: [],
     warnings: [],
     status: {
       state: "changed",
+      clashes: 0,
       version: 5,
       publishedAt: "2026-09-20T18:00:00.000Z",
       hash: "d".repeat(64),
@@ -460,7 +480,9 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     updateMenuItem: vi.fn().mockResolvedValue(undefined),
     setMenuVariants: vi.fn(async (_menu: string, _item: string, variants: unknown) => variants),
     getMenuStatuses: vi.fn(async () => statuses()),
-    getMenuStatus: vi.fn(async (id: string) => statuses()[id] ?? { state: "unpublished" }),
+    getMenuStatus: vi.fn(
+      async (id: string) => statuses()[id] ?? { state: "unpublished", clashes: 0 },
+    ),
     getMenuPreview: vi.fn(async (id: string) =>
       id === "menu-lunch" ? lunchPreview() : dinnerPreview(),
     ),
@@ -2908,7 +2930,7 @@ describe("publishing", () => {
         ]),
       getMenuStatuses: vi
         .fn()
-        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished" } }),
+        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
     });
     const el = await mount(client);
     await table(el).updateComplete;
@@ -2933,7 +2955,7 @@ describe("publishing", () => {
         ]),
       getMenuStatuses: vi
         .fn()
-        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished" } }),
+        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
     });
     const el = await mount(client);
     await vi.waitFor(() => expect(statusCell(el, "menu-brunch")).toBe("Unpublished"));
@@ -3092,7 +3114,7 @@ describe("publishing", () => {
         ]),
       getMenuStatuses: vi
         .fn()
-        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished" } }),
+        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
     });
     const el = await mount(client);
     await vi.waitFor(() => expect(statusCell(el, "menu-brunch")).toBe("Unpublished"));
@@ -3184,7 +3206,13 @@ describe("publishing", () => {
     const previews = client.getMenuPreview.mock.calls.length;
     client.getMenuPreview.mockResolvedValue({
       ...lunchPreview(),
-      status: { state: "changed", version: 3, publishedAt: PUBLISHED_AT, hash: LUNCH_LIVE_HASH },
+      status: {
+        state: "changed",
+        clashes: 0,
+        version: 3,
+        publishedAt: PUBLISHED_AT,
+        hash: LUNCH_LIVE_HASH,
+      },
     });
     live.invalidate([{ type: "menu_publications" }]);
     await vi.waitFor(() => expect(client.getMenuPreview.mock.calls.length).toBe(previews + 1));
@@ -3236,6 +3264,7 @@ describe("publishing", () => {
       warnings: [],
       status: {
         state: "current",
+        clashes: 0,
         version: 3,
         publishedAt: "2026-09-26T11:00:00.000Z",
         hash: LUNCH_HASH,
@@ -3445,7 +3474,13 @@ describe("publishing", () => {
         hash: LUNCH_HASH,
         changes: [],
         warnings: [],
-        status: { state: "current", version: 2, publishedAt: PUBLISHED_AT, hash: LUNCH_HASH },
+        status: {
+          state: "current",
+          clashes: 0,
+          version: 2,
+          publishedAt: PUBLISHED_AT,
+          hash: LUNCH_HASH,
+        },
         document: lunchDocument(),
       }),
     });

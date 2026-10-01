@@ -55,6 +55,7 @@ declare module "@waitron/shared" {
     "media.unsupported_type": { detected?: string };
     /** A location-menu write, or a read or write of a menu's structure, names no menu. */
     "catalogue.not_found": { catalogueId: string };
+    "menu.clashes_unresolved": { menuId: string; count: number };
     /** The menu's working state no longer hashes to what its preview showed, so nothing was
      * published. */
     "menu.changed_since_preview": { menuId: string };

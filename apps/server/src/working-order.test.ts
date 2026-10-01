@@ -1479,7 +1479,7 @@ describe("getHeldOrder", () => {
           allergens = ${JSON.stringify({ milk: { presence: "contains" } })}
       where id = ${cafeId}`);
     await db.execute(sql`
-      update menu_items set active = false where id = ${premiumCafeOfferId}`);
+      update menu_items set offered = false where id = ${premiumCafeOfferId}`);
 
     const order = await getHeldOrder({ db }, cfg, id);
     expect(order.lines).toEqual([

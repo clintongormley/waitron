@@ -103,6 +103,7 @@ describe("buildMenuDocument", () => {
           kind: "section",
           sectionId: f.drinks,
           internalName: "Drinks",
+          includedMenu: { id: f.drinksMenu, name: "Drinks" },
           names: { en: "Something to drink" },
           image: null,
           color: null,
@@ -646,21 +647,24 @@ describe("diffMenuDocuments", () => {
         sectionId: f.beer,
         name: "Beer",
         under: ["Drinks"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_added",
         productId: f.lemonade,
         name: "Lemonade",
         under: ["Drinks"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_added",
         productId: f.lager,
         name: "Lager",
         under: ["Drinks", "Beer"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       { kind: "product_added", productId: f.soup, name: "Soup", under: [], source: "this_menu" },
     ]);
@@ -690,7 +694,12 @@ describe("diffMenuDocuments", () => {
       moveMember(tx, f.drinks, await memberOf(f.drinks, { sectionId: f.beer }), 0),
     );
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
-      { kind: "order_changed", list: ["Drinks"], source: "shared_section" },
+      {
+        kind: "order_changed",
+        list: ["Drinks"],
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
+      },
     ]);
   });
 
@@ -708,7 +717,8 @@ describe("diffMenuDocuments", () => {
         productId: f.lager,
         name: "Lager",
         under: ["Drinks", "Beer"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_moved",
@@ -716,7 +726,8 @@ describe("diffMenuDocuments", () => {
         name: "Soup",
         from: [[]],
         to: [["Drinks"]],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
     ]);
   });
@@ -731,14 +742,16 @@ describe("diffMenuDocuments", () => {
         sectionId: f.beer,
         name: "Beer",
         under: ["Drinks"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_removed",
         productId: f.lager,
         name: "Lager",
         under: ["Drinks", "Beer"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
     ]);
   });
@@ -757,14 +770,16 @@ describe("diffMenuDocuments", () => {
         sectionId: f.drinks,
         name: "Soft drinks",
         fields: ["names", "image", "color"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Soft drinks" },
       },
       {
         kind: "section_changed",
         sectionId: f.beer,
         name: "Beer",
         fields: ["names"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Soft drinks" },
       },
     ]);
   });
@@ -843,6 +858,10 @@ describe("diffMenuDocuments", () => {
       await addMember(tx, f.lunchRoot, section(f.beer));
       await addMember(tx, f.lunchRoot, product(f.lemonade));
     });
+    const [beerRow] = await fx.db
+      .select({ menuId: sections.ownerMenuId })
+      .from(sections)
+      .where(eq(sections.id, f.beer));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       { kind: "section_added", sectionId: f.beer, name: "Beer", under: [], source: "this_menu" },
       {
@@ -859,7 +878,8 @@ describe("diffMenuDocuments", () => {
         name: "Lager",
         from: [["Drinks", "Beer"]],
         to: [["Drinks", "Beer"], ["Beer"]],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: beerRow!.menuId!, name: "Beer" },
       },
     ]);
   });

@@ -103,6 +103,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Only products and sections that are on this menu can be shortcuts on its home page.",
     es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio.",
   },
+  "menu.clashes_unresolved": {
+    en: "Resolve the price and on/off clashes before publishing this menu.",
+    es: "Resuelve los conflictos de precio y disponibilidad antes de publicar esta carta.",
+  },
   "menu.changed_since_preview": {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
     es: "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",

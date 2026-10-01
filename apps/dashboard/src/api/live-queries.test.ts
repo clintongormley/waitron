@@ -89,6 +89,14 @@ it.each([
       "catalogues",
       "products",
       "menu_item_variant_overrides",
+      "content_languages",
+      "product_modifiers",
+      "extra_lists",
+      "extra_list_items",
+      "option_lists",
+      "option_labels",
+      "product_units",
+      "units",
     ],
   ],
   // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default from
@@ -139,3 +147,29 @@ it("subscribes no read to the product label tables, which products no longer car
   expect(named).not.toContain("labels");
   expect(named).not.toContain("product_labels");
 });
+
+it.each(["getMenuPrices", "getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
+  "refreshes %s after an included menu's decision changes",
+  async (name) => {
+    const fetchImpl = vi.fn(async () => new Response("[]"));
+    const api = new DashboardApi("", fetchImpl);
+    const args: [] | [string] = name === "getMenuStatuses" ? [] : ["parent"];
+    const observed = api.liveData.observe(dashboardQuery(api, name, args), () => {});
+    try {
+      await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+      for (const type of [
+        "menu_items",
+        "menu_item_variant_overrides",
+        "catalogues",
+        "sections",
+        "section_members",
+      ]) {
+        const before = fetchImpl.mock.calls.length;
+        api.liveData.invalidate([{ type, id: "included-menu-record" }]);
+        await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));
+      }
+    } finally {
+      observed.unsubscribe();
+    }
+  },
+);

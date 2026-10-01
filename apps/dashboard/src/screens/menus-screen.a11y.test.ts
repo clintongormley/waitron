@@ -102,19 +102,22 @@ function api(state: State): DashboardApi {
     getMenuStatuses: vi.fn().mockResolvedValue({
       "menu-lunch": {
         state: "changed",
+        clashes: 0,
         version: 2,
         publishedAt: "2026-09-26T10:15:00.000Z",
         hash: "a".repeat(64),
       },
-      "menu-dinner": { state: "unpublished" },
+      "menu-dinner": { state: "unpublished", clashes: 0 },
     }),
     getMenuStatus: vi.fn().mockResolvedValue({
       state: "changed",
+      clashes: 0,
       version: 2,
       publishedAt: "2026-09-26T10:15:00.000Z",
       hash: "a".repeat(64),
     }),
     getMenuPreview: vi.fn().mockResolvedValue({
+      clashes: [],
       hash: "b".repeat(64),
       changes: [
         {
@@ -129,6 +132,7 @@ function api(state: State): DashboardApi {
       warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
       status: {
         state: "changed",
+        clashes: 0,
         version: 2,
         publishedAt: "2026-09-26T10:15:00.000Z",
         hash: "a".repeat(64),

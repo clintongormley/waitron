@@ -3443,6 +3443,22 @@ describe("a menu's prices", () => {
     expect(await res.json()).toEqual([
       {
         menuItemId: itemId,
+        combined: {
+          productId,
+          offered: { state: "decided", value: true, source: { kind: "product" }, otherwise: null },
+          price: {
+            state: "decided",
+            value: "1.40",
+            source: { kind: "own" },
+            otherwise: {
+              state: "decided",
+              value: "1.00",
+              source: { kind: "product" },
+              otherwise: null,
+            },
+          },
+          variants: [],
+        },
         productId,
         name,
         categoryId: null,
@@ -3510,10 +3526,59 @@ describe("publishing a menu", () => {
       .orderBy(menuVersions.number);
   }
 
+  it("shows included on/off clashes in prices and refuses publication without a version", async () => {
+    const app = mountApp();
+    const child = await createCatalogueVia(app, `Drinks ${crypto.randomUUID()}`);
+    const parent = await createCatalogueVia(app, `Evening ${crypto.randomUUID()}`);
+    const productId = await createNamedProductVia(app, `Lager ${crypto.randomUUID()}`);
+    const childItem = await offerVia(app, child, productId, "2.00");
+    await offerVia(app, parent, productId);
+    const childRoot = await menuRootVia(app, child);
+    const parentRoot = await menuRootVia(app, parent);
+    const included = await send(app, "POST", `/management-api/sections/${parentRoot}/members`, {
+      body: { ref: { kind: "section", sectionId: childRoot } },
+    });
+    expect(included.status).toBe(201);
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/catalogues/${child}/items/${childItem}`, {
+          body: { offered: false },
+        })
+      ).status,
+    ).toBe(204);
+    const rows = await (
+      await send(app, "GET", `/management-api/catalogues/${parent}/prices`)
+    ).json();
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          productId,
+          combined: expect.objectContaining({
+            offered: { state: "clash", candidates: expect.any(Array) },
+          }),
+        }),
+      ]),
+    );
+    const proposed = await preview(app, parent);
+    expect(proposed.clashes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ productId, field: "offered", variantId: null }),
+      ]),
+    );
+    const refused = await send(app, "POST", `/management-api/catalogues/${parent}/publish`, {
+      body: { expectedHash: proposed.hash },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "menu.clashes_unresolved", params: { menuId: parent, count: 1 } },
+    });
+    expect(await versionsOf(parent)).toEqual([]);
+  });
+
   it("previews, publishes and reports a menu as unpublished, current, then changed", async () => {
     const app = mountApp();
     const { menuId, itemId, name } = await menuWithProduct(app);
-    expect(await status(app, menuId)).toEqual({ state: "unpublished" });
+    expect(await status(app, menuId)).toEqual({ state: "unpublished", clashes: 0 });
 
     const first = await preview(app, menuId);
     expect(first.hash).toMatch(HASH);
@@ -3521,7 +3586,7 @@ describe("publishing a menu", () => {
       expect.objectContaining({ kind: "product_added", name, under: [], source: "this_menu" }),
     ]);
     expect(first.warnings).toEqual([]);
-    expect(first.status).toEqual({ state: "unpublished" });
+    expect(first.status).toEqual({ state: "unpublished", clashes: 0 });
     expect(first.document).toMatchObject({ menuId, menuName: expect.any(String) });
     expect(first.document.root.members).toEqual([
       { kind: "product", menuItemId: itemId, productId: expect.any(String) },
@@ -3536,12 +3601,14 @@ describe("publishing a menu", () => {
     expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
     expect(await status(app, menuId)).toEqual({
       state: "current",
+      clashes: 0,
       version: 1,
       publishedAt: expect.any(String),
       hash: first.hash,
     });
     const current = await status(app, menuId);
     expect(await preview(app, menuId)).toEqual({
+      clashes: [],
       hash: first.hash,
       changes: [],
       warnings: [],
@@ -3556,13 +3623,13 @@ describe("publishing a menu", () => {
         })
       ).status,
     ).toBe(204);
-    expect(await status(app, menuId)).toMatchObject({ state: "changed", version: 1 });
+    expect(await status(app, menuId)).toMatchObject({ state: "changed", clashes: 0, version: 1 });
     const second = await preview(app, menuId);
     expect(second.hash).not.toBe(first.hash);
     expect(second.changes).toEqual([
       expect.objectContaining({ kind: "price_changed", name, from: "2.00", to: "2.50" }),
     ]);
-    expect(second.status).toEqual({ ...current, state: "changed" });
+    expect(second.status).toEqual({ ...current, state: "changed", clashes: 0 });
     const again = await send(app, "POST", publish, { body: { expectedHash: second.hash } });
     expect(again.status).toBe(200);
     const two = (await again.json()) as { versionId: string; number: number };
@@ -3573,7 +3640,7 @@ describe("publishing a menu", () => {
       .from(menuPublications)
       .where(eq(menuPublications.menuId, menuId));
     expect(live).toEqual({ versionId: two.versionId });
-    expect(await status(app, menuId)).toMatchObject({ state: "current", version: 2 });
+    expect(await status(app, menuId)).toMatchObject({ state: "current", clashes: 0, version: 2 });
   });
 
   it("refuses a hash from before the latest edit and writes nothing", async () => {
@@ -3591,7 +3658,7 @@ describe("publishing a menu", () => {
       error: { code: "menu.changed_since_preview", params: { menuId } },
     });
     expect(await versionsOf(menuId)).toEqual([]);
-    expect(await status(app, menuId)).toEqual({ state: "unpublished" });
+    expect(await status(app, menuId)).toEqual({ state: "unpublished", clashes: 0 });
   });
 
   it("answers a publish of an unchanged menu with its live version, writing nothing", async () => {
@@ -3647,11 +3714,12 @@ describe("publishing a menu", () => {
     const all = (await res.json()) as Record<string, MenuStatus>;
     expect(all[published.menuId]).toEqual({
       state: "current",
+      clashes: 0,
       version: 1,
       publishedAt: expect.any(String),
       hash,
     });
-    expect(all[unpublished.menuId]).toEqual({ state: "unpublished" });
+    expect(all[unpublished.menuId]).toEqual({ state: "unpublished", clashes: 0 });
     const menus = (await (await send(app, "GET", "/management-api/catalogues")).json()) as {
       id: string;
     }[];

@@ -14,12 +14,14 @@ afterEach(cleanupWidgets);
 
 const live: MenuStatus = {
   state: "changed",
+  clashes: 0,
   version: 2,
   publishedAt: "2026-09-26T10:15:00.000Z",
   hash: "a".repeat(64),
 };
 
 const changes: MenuPreview = {
+  clashes: [],
   hash: "b".repeat(64),
   changes: [
     {
@@ -36,7 +38,7 @@ const changes: MenuPreview = {
       sectionId: "s-drinks",
       name: "Drinks",
       fields: ["names"],
-      source: "shared_section",
+      source: "included_menu",
     },
   ],
   warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lemonade" }],
@@ -55,14 +57,14 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
   "live version unread": { status: null, statusFailed: true, preview: changes },
   failed: { preview: null, failed: true },
   "changes and a warning": { preview: changes },
-  unpublished: { status: { state: "unpublished" }, preview: changes },
+  unpublished: { status: { state: "unpublished", clashes: 0 }, preview: changes },
   "nothing to publish": {
-    status: { ...live, state: "current", hash: changes.hash },
+    status: { ...live, state: "current", clashes: 0, hash: changes.hash },
     preview: {
       ...changes,
       changes: [],
       warnings: [],
-      status: { ...live, state: "current", hash: changes.hash },
+      status: { ...live, state: "current", clashes: 0, hash: changes.hash },
     },
   },
   "no changes to list": { preview: { ...changes, changes: [], warnings: [] } },

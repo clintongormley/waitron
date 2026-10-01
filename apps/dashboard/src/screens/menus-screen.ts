@@ -91,7 +91,7 @@ function publishedStatus(number: number, hash: string, before: MenuStatus | null
     before !== null && before.state !== "unpublished" && before.version === number
       ? before.publishedAt
       : new Date().toISOString();
-  return { state: "current", version: number, publishedAt, hash };
+  return { state: "current", clashes: 0, version: number, publishedAt, hash };
 }
 
 function refusal(error: unknown): Record<string, string> {

@@ -16,6 +16,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProductToMenu,
+  addMember,
+  removeMember,
   addShortcut,
   addProducts,
   assignCatalogueToLocation,
@@ -1051,4 +1053,38 @@ describe("the home layout each menu shows the device (D14)", () => {
       { ...lunch, homeLayoutId: home },
     ]);
   });
+});
+
+it("sells a product reached only through an included menu at that menu's price", async () => {
+  const v = await setupLunch();
+  await withTransaction(suite.db, async (tx) => {
+    const child = await createCatalogue(tx, { name: "Drinks" });
+    const childRoot = await requireMenuRoot(tx, child.id);
+    const parentRoot = await requireMenuRoot(tx, v.menuId);
+    const members = await tx.execute<{ id: string }>(
+      sql`select id from section_members where section_id=${parentRoot} and product_id=${v.lemonade.productId}`,
+    );
+    await removeMember(tx, parentRoot, members.rows[0]!.id);
+    await addMember(tx, childRoot, { kind: "product", productId: v.lemonade.productId });
+    const offers = await tx.execute<{ id: string }>(
+      sql`select id from menu_items where menu_id=${child.id} and product_id=${v.lemonade.productId}`,
+    );
+    await updateMenuItem(tx, child.id, offers.rows[0]!.id, { grossPrice: "3.50" });
+    await addMember(tx, parentRoot, { kind: "section", sectionId: childRoot });
+  });
+  const version = await publish(v.menuId);
+  const offers = await suite.db.execute<{ id: string }>(
+    sql`select id from menu_items where menu_id=${v.menuId} and product_id=${v.lemonade.productId}`,
+  );
+  const response = await pay(v, [
+    { menuItemId: offers.rows[0]!.id, menuVersionId: version, quantity: "1" },
+  ]);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ total: "3.50" });
+  const lines = await suite.db.select({ price: saleLines.unitPrice }).from(saleLines);
+  expect(lines.map((l) => l.price)).toContain(318);
+  const held = await suite.db
+    .select({ gross: workingOrderLines.unitPriceGross })
+    .from(workingOrderLines);
+  expect(held.map((l) => l.gross)).toContain(350);
 });

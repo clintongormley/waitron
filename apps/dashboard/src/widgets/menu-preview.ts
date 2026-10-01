@@ -46,7 +46,7 @@ const SECTION_FIELDS: Record<SectionChangeField, StringKey> = {
 const SOURCES: Record<MenuChange["source"], StringKey> = {
   this_menu: "menu_preview.source_this_menu",
   shared_product: "menu_preview.source_shared_product",
-  shared_section: "menu_preview.source_shared_section",
+  included_menu: "menu_preview.source_included_menu",
 };
 
 /** Fills `{key}` placeholders; each value is inserted once, never re-read as a placeholder. */

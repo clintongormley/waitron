@@ -703,7 +703,9 @@ describe("a menu's prices", () => {
       await addMember(tx, f.lunchRoot, product(f.water));
       await addMember(tx, f.dinnerRoot, section(unrelated.id));
     });
-    expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([
+    expect(
+      (await app((tx) => menuPrices(tx, f.lunch))).map(({ combined: _combined, ...row }) => row),
+    ).toEqual([
       {
         menuItemId: await itemOf(f.lunch, f.lemonade),
         productId: f.lemonade,

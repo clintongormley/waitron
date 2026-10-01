@@ -228,6 +228,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
+  "menu.clashes_unresolved": 409,
   "menu.layout_not_found": 404,
   "menu.default_layout_required": 409,
   "menu.shortcut_unreachable": 409,

@@ -1,3 +1,4 @@
+import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CategorySummary,
@@ -68,6 +69,7 @@ const lemonadeProduct = {
 
 const burger: MenuPriceRow = {
   menuItemId: "mi-burger",
+  combined: combinedFixture("p-burger", "12.00", true, [], null, "12.00", {}),
   productId: "p-burger",
   name: "Burger",
   categoryId: "c-mains",
@@ -80,6 +82,18 @@ const burger: MenuPriceRow = {
 };
 const lemonade: MenuPriceRow = {
   menuItemId: "mi-lemonade",
+  combined: combinedFixture(
+    "p-lemonade",
+    "2.50",
+    true,
+    [
+      { variantId: "v-small", price: null, offered: true },
+      { variantId: "v-large", price: "3.75", offered: false },
+    ],
+    "2.50",
+    "3.00",
+    { "v-large": "3.40" },
+  ),
   productId: "p-lemonade",
   name: "Lemonade",
   categoryId: "c-drinks",
@@ -95,6 +109,7 @@ const lemonade: MenuPriceRow = {
 };
 const lager: MenuPriceRow = {
   menuItemId: "mi-lager",
+  combined: combinedFixture("p-lager", "2.00", false, [], null, "2.00", {}),
   productId: "p-lager",
   name: "Lager",
   categoryId: "c-beer",
@@ -970,6 +985,19 @@ describe("variants", () => {
   /** Sets its own menu price and a menu price on two of its variants; the carafe is not offered. */
   const wine: MenuPriceRow = {
     menuItemId: "mi-wine",
+    combined: combinedFixture(
+      "p-wine",
+      "13.00",
+      true,
+      [
+        { variantId: "v-glass", price: "7.00", offered: true },
+        { variantId: "v-bottle", price: null, offered: true },
+        { variantId: "v-carafe", price: "15.00", offered: false },
+      ],
+      "13.00",
+      "10.00",
+      { "v-glass": "6.00", "v-bottle": null, "v-carafe": "14.00" },
+    ),
     productId: "p-wine",
     name: "Wine",
     categoryId: "c-drinks",
@@ -987,6 +1015,18 @@ describe("variants", () => {
   /** Its only menu price is a variant's. */
   const juice: MenuPriceRow = {
     menuItemId: "mi-juice",
+    combined: combinedFixture(
+      "p-juice",
+      "4.00",
+      true,
+      [
+        { variantId: "v-juice-small", price: "3.50", offered: true },
+        { variantId: "v-juice-large", price: null, offered: true },
+      ],
+      null,
+      "4.00",
+      { "v-juice-small": "3.00", "v-juice-large": "5.00" },
+    ),
     productId: "p-juice",
     name: "Juice",
     categoryId: "c-drinks",
@@ -1003,6 +1043,15 @@ describe("variants", () => {
   /** No variant is offered. */
   const tea: MenuPriceRow = {
     menuItemId: "mi-tea",
+    combined: combinedFixture(
+      "p-tea",
+      "2.00",
+      true,
+      [{ variantId: "v-pot", price: "2.40", offered: false }],
+      null,
+      "2.00",
+      { "v-pot": "2.20" },
+    ),
     productId: "p-tea",
     name: "Tea",
     categoryId: "c-mains",
@@ -1016,6 +1065,18 @@ describe("variants", () => {
   /** No menu price anywhere. */
   const cider: MenuPriceRow = {
     menuItemId: "mi-cider",
+    combined: combinedFixture(
+      "p-cider",
+      "4.00",
+      true,
+      [
+        { variantId: "v-pint", price: null, offered: true },
+        { variantId: "v-half", price: null, offered: true },
+      ],
+      null,
+      "4.00",
+      { "v-pint": "4.50", "v-half": null },
+    ),
     productId: "p-cider",
     name: "Cider",
     categoryId: "c-beer",
@@ -1032,6 +1093,7 @@ describe("variants", () => {
   const steak: MenuPriceRow = {
     ...burger,
     menuItemId: "mi-steak",
+    combined: combinedFixture("p-steak", "18.00", true, [], "18.00", "20.00", {}),
     productId: "p-steak",
     name: "Steak",
     productPrice: "20.00",
@@ -1041,6 +1103,7 @@ describe("variants", () => {
   const soup: MenuPriceRow = {
     ...burger,
     menuItemId: "mi-soup",
+    combined: combinedFixture("p-soup", "5.00", true, [], "5.00", "5.00", {}),
     productId: "p-soup",
     name: "Soup",
     productPrice: "5.00",

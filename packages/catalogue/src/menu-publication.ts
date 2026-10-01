@@ -1,3 +1,4 @@
+import type { CombinedOffer } from "./menu-combine-types.js";
 import { and, eq, inArray, max, sql, type SQL } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -16,7 +17,6 @@ import {
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
 import { menusContaining, reachableProducts } from "./section-graph.js";
 import type {
-  DocumentMember,
   MenuChange,
   MenuDocument,
   MenuPreview,
@@ -64,11 +64,12 @@ async function liveVersions(
 }
 
 /** `hash` is the working document's. */
-function statusOf(hash: string, version: LiveVersion | undefined): MenuStatus {
+function statusOf(hash: string, version: LiveVersion | undefined, clashes = 0): MenuStatus {
   return version === undefined
-    ? { state: "unpublished" }
+    ? { state: "unpublished", clashes }
     : {
         state: hash === version.contentHash ? "current" : "changed",
+        clashes,
         version: version.number,
         publishedAt: version.publishedAt.toISOString(),
         hash: version.contentHash,
@@ -88,8 +89,8 @@ export async function menuStatus(
   if (menuIds?.length === 0) return status;
   const { menus } = await buildMenuDocuments(tx, menuIds);
   const live = await liveVersions(tx, menuIds, false);
-  for (const [menuId, { document }] of menus)
-    status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId)));
+  for (const [menuId, { document, clashes }] of menus)
+    status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId), clashes.length));
   return status;
 }
 
@@ -199,20 +200,6 @@ export async function menusOfVersions(
   return menus;
 }
 
-/** Every section id the document's structure holds. */
-function sectionsOf(document: MenuDocument): Set<string> {
-  const held = new Set<string>();
-  const walk = (members: readonly DocumentMember[]): void => {
-    for (const member of members)
-      if (member.kind === "section") {
-        held.add(member.sectionId);
-        walk(member.members);
-      }
-  };
-  walk(document.root.members);
-  return held;
-}
-
 /** The key two menus' changes share when one shared edit made both. */
 function changeSubject({ change, section }: DiffEntry): string {
   switch (change.kind) {
@@ -256,29 +243,12 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const own = (await liveVersions(tx, [menuId], true)).get(menuId);
-  const entries = diffEntries(own?.document ?? null, mine.document);
+  const entries = diffEntries(own?.document ?? null, mine.document, mine.combined);
   const removedExtras = removedExtraOnlyProducts(own?.document ?? null, mine.document);
 
   // Every published menu's live version, read only once a change needs another menu.
   let everyLive: Map<string, LiveVersion> | undefined;
   const allLive = async () => (everyLive ??= await liveVersions(tx, undefined, true));
-  let liveSections: [string, Set<string>][] | undefined;
-  const heldLive = async (sectionId: string, owner: string): Promise<boolean> => {
-    liveSections ??= [...(await allLive())].map(([id, { document }]) => [
-      id,
-      sectionsOf(document!),
-    ]);
-    return liveSections.some(([other, held]) => other !== owner && held.has(sectionId));
-  };
-  const containing = new Map<string, string[]>();
-  const menusReaching = (sectionId: string): string[] => {
-    let found = containing.get(sectionId);
-    if (found === undefined) {
-      found = menusContaining(graph, sectionId);
-      containing.set(sectionId, found);
-    }
-    return found;
-  };
 
   const inactiveOf = async (
     lists: readonly DiffEntry[][],
@@ -309,25 +279,27 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   };
   const refine = async (
     list: DiffEntry[],
-    owner: string,
     rootSectionId: string,
     deleted: ReadonlySet<string>,
+    combined: ReadonlyMap<string, CombinedOffer>,
   ): Promise<void> => {
     const reached = new Set(reachableProducts(graph, rootSectionId));
     for (const entry of list) {
       const { change } = entry;
       if (change.kind === "product_removed" && reached.has(change.productId)) {
-        change.source = deleted.has(change.productId) ? "shared_product" : "this_menu";
-        delete entry.section;
-      } else if (entry.section !== undefined) {
-        const section = entry.section;
-        const shared =
-          menusReaching(section).some((other) => other !== owner) ||
-          (await heldLive(section, owner));
-        if (!shared) {
-          change.source = "this_menu";
-          delete entry.section;
+        const decision = combined.get(change.productId)?.offered;
+        if (
+          !deleted.has(change.productId) &&
+          decision?.state === "decided" &&
+          decision.source.kind === "menu"
+        ) {
+          change.source = "included_menu";
+          change.includedMenu = { id: decision.source.menuId, name: decision.source.menuName };
+        } else {
+          change.source = deleted.has(change.productId) ? "shared_product" : "this_menu";
+          delete change.includedMenu;
         }
+        delete entry.section;
       }
     }
   };
@@ -336,10 +308,14 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     removedExtras.map(({ productId }) => productId),
   );
   appendDeletedExtras(entries, removedExtras, deleted);
-  await refine(entries, menuId, mine.rootSectionId, deleted);
+  await refine(entries, mine.rootSectionId, deleted, mine.combined);
 
   // The other menus are built and compared only to fill in a shared change's `alsoOn`.
-  if (entries.some(({ change }) => change.source !== "this_menu")) {
+  if (
+    entries.length > 0 &&
+    (entries.some(({ change }) => change.source !== "this_menu") ||
+      menusContaining(graph, mine.rootSectionId).some((id) => id !== menuId))
+  ) {
     const live = await allLive();
     const { menus: built } = await buildMenuDocuments(
       tx,
@@ -347,11 +323,12 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
       graph,
     );
     const others = [...built]
-      .map(([other, { document, rootSectionId }]) => ({
+      .map(([other, { document, rootSectionId, combined }]) => ({
         menuId: other,
         name: document.menuName,
         rootSectionId,
-        entries: diffEntries(live.get(other)!.document, document),
+        combined,
+        entries: diffEntries(live.get(other)!.document, document, combined),
         removedExtras: removedExtraOnlyProducts(live.get(other)!.document, document),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -361,12 +338,24 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     );
     for (const other of others) {
       appendDeletedExtras(other.entries, other.removedExtras, deleted);
-      await refine(other.entries, other.menuId, other.rootSectionId, deleted);
+      await refine(other.entries, other.rootSectionId, deleted, other.combined);
     }
     for (const entry of entries) {
-      if (entry.change.source === "this_menu") continue;
       const alsoOn = others
-        .filter((other) => other.entries.some((candidate) => sameEdit(entry, candidate)))
+        .filter(
+          (other) =>
+            (entry.change.source === "this_menu" &&
+              menusContaining(graph, mine.rootSectionId).includes(other.menuId) &&
+              menuDocumentHash(built.get(other.menuId)!.document) !==
+                live.get(other.menuId)!.contentHash) ||
+            other.entries.some(
+              (candidate) =>
+                sameEdit(entry, candidate) ||
+                (entry.change.source === "this_menu" &&
+                  candidate.change.includedMenu?.id === menuId &&
+                  changeSubject(entry) === changeSubject(candidate)),
+            ),
+        )
         .map((other) => other.name);
       if (alsoOn.length > 0) entry.change.alsoOn = alsoOn;
     }
@@ -375,9 +364,10 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const hash = menuDocumentHash(mine.document);
   return {
     hash,
+    clashes: mine.clashes,
     changes: entries.map(({ change }) => change),
     warnings: await shortcutWarnings(tx, mine.document, mine.omittedShortcuts, sectionNames),
-    status: statusOf(hash, own),
+    status: statusOf(hash, own, mine.clashes.length),
     document: mine.document,
   };
 }
@@ -417,7 +407,9 @@ export async function publishMenu(
   expectedHash: string,
   personId: string,
 ): Promise<PublishedMenuVersion> {
-  const { document } = await buildMenuDocument(tx, menuId);
+  const { document, clashes } = await buildMenuDocument(tx, menuId);
+  if (clashes.length > 0)
+    throw new AppError("menu.clashes_unresolved", { menuId, count: clashes.length });
   const contentHash = menuDocumentHash(document);
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });
   const current = (await liveVersions(tx, [menuId], false)).get(menuId);

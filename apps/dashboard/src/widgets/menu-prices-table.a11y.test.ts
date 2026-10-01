@@ -1,3 +1,4 @@
+import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { CategorySummary, LibrarySection, MenuPriceRow, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -28,6 +29,7 @@ const lemonade = {
 const rows: MenuPriceRow[] = [
   {
     menuItemId: "mi-burger",
+    combined: combinedFixture("p-burger", "12.00", false, [], null, "12.00", {}),
     productId: "p-burger",
     name: "Burger",
     categoryId: null,
@@ -40,6 +42,18 @@ const rows: MenuPriceRow[] = [
   },
   {
     menuItemId: "mi-lemonade",
+    combined: combinedFixture(
+      "p-lemonade",
+      "2.50",
+      true,
+      [
+        { variantId: "v-small", price: null, offered: true },
+        { variantId: "v-large", price: "3.75", offered: false },
+      ],
+      "2.50",
+      "3.00",
+      { "v-large": "3.40" },
+    ),
     productId: "p-lemonade",
     name: "Lemonade",
     categoryId: "c-drinks",
