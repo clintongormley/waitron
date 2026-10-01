@@ -7692,7 +7692,7 @@ ongoing overhaul listed at the top of Track A.
   chose, which probably means setup asking; do it when there is a second region or country to be wrong
   about. The hard-code is in `packages/catalogue/src/provisioning.ts` and names this entry. Receipt
   languages are a separate setting and already follow the province.
-  _(2026-10-01, C112: Spain's country pack now names, per region, the content languages Waitron
+  _(2026-10-01, C112, #992: Spain's country pack now names, per region, the content languages Waitron
   keeps enabled for the region — Catalan and Spanish in Catalonia and the Valencian Community,
   Galician and Spanish in Galicia ([regional-language-rules.md](compliance/regional-language-rules.md)).
   Setup adds any required language the starting list lacks, a new venue in Catalonia starts with
