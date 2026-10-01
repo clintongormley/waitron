@@ -1145,7 +1145,7 @@ describe("the bill discount limit", () => {
 
   it("shows the saved limit as a percentage, labelled and explained", async () => {
     const el = await mount(withLimit(1250));
-    const input = limit(el) as Named & { label: string; hint: string };
+    const input = limit(el) as Named & { label: string };
     expect(input.value).toBe("12.5");
     expect(input.label).toBe("Largest total discount on one bill");
     expect(explained(el).textContent!.trim()).toBe(
@@ -1165,10 +1165,12 @@ describe("the bill discount limit", () => {
     ).toBeTruthy();
     expect(explained(el).classList.contains("intro")).toBe(true);
     expect(input.hint).toBe("");
-    expect(input.shadowRoot!.querySelector("[part=amount]")!.getAttribute("placeholder")).toBeNull();
+    expect(
+      input.shadowRoot!.querySelector("[part=amount]")!.getAttribute("placeholder"),
+    ).toBeNull();
   });
 
-  it("shows the percentage in a narrow box marked %, the label and help at full width", async () => {
+  it("shows the percentage in a narrow box marked %, the mark also read to screen readers", async () => {
     const el = await mount(withLimit(1250));
     const input = limit(el) as Named & { updateComplete: Promise<unknown> };
     await input.updateComplete;
