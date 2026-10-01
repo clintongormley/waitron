@@ -66,14 +66,14 @@ async function storedUnits() {
 
 describe("catalogue provisioning", () => {
   it.each([
-    // Spain is hard-coded to the same three languages whatever the province. The four Spanish rows
-    // vary both inputs the seed could plausibly read — province AND receipt locale — and all four
-    // expect one identical set: that sameness is the hard-code, written where it can be read. The
-    // varied receipt column is what keeps it checkable, so do not level it. See the comment in
+    // Spain starts from the same three languages whatever the province; the province adds only
+    // what its law requires, and a Catalan venue starts with Catalan as its default. The four
+    // Spanish rows vary both inputs the seed could plausibly read — province AND receipt locale —
+    // and the receipt column must never change the result, so do not level it. See the comment in
     // provisioning.ts.
     ["ES", "Madrid", "en-GB", "es", ["es", "ca", "en"]],
-    ["ES", "Barcelona", "es-ES", "es", ["es", "ca", "en"]],
-    ["ES", "A Coruña", "en-GB", "es", ["es", "ca", "en"]],
+    ["ES", "Barcelona", "es-ES", "ca", ["ca", "es", "en"]],
+    ["ES", "A Coruña", "en-GB", "es", ["es", "ca", "en", "gl"]],
     ["ES", "Bizkaia", "en-GB", "es", ["es", "ca", "en"]],
     // Everywhere else still takes its one language from geography.
     ["GB", "London", "es-ES", "en", ["en"]],

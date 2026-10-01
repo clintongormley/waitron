@@ -206,7 +206,7 @@ import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./member
 import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule, readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
-import { readVenueLocale } from "./venue-locale.js";
+import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
@@ -1343,6 +1343,9 @@ async function bootServer(
     locationId: till.locationId,
     override: till.localeOverride,
   });
+  const contentLanguageRules = await readVenueContentLanguageRules(db, {
+    locationId: till.locationId,
+  });
   const venueTimeZone = await readVenueTimeZone(db, {
     locationId: till.locationId,
   });
@@ -1523,6 +1526,7 @@ async function bootServer(
         }
         return gaps;
       },
+      contentLanguageRules,
       venueLocale,
     },
     log,

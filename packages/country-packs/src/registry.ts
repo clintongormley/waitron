@@ -1,5 +1,6 @@
 import type { CountryPack, FiscalModules } from "@waitron/country";
-import { resolveCountryLocale } from "@waitron/country";
+import { contentLanguageRules, resolveCountryLocale } from "@waitron/country";
+import { contentLanguageCode, type ContentLanguageRules } from "@waitron/shared";
 import { SPAIN } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
 
@@ -64,4 +65,39 @@ export function resolveInstalledCountryLocale<Locale extends string>(
     area: input.area,
     fallback: input.fallback,
   });
+}
+
+interface VenueGeography {
+  readonly country?: string | null;
+  readonly area?: string | null;
+}
+
+function packFor(input: VenueGeography): CountryPack | undefined {
+  return input.country == null ? undefined : getCountryPack(input.country);
+}
+
+function codes(locales: readonly string[]): string[] {
+  return [...new Set(locales.map(contentLanguageCode))];
+}
+
+/** The venue's content-language rules from its installed country pack, as language codes. */
+export function resolveInstalledContentLanguageRules(input: VenueGeography): ContentLanguageRules {
+  const pack = packFor(input);
+  if (pack === undefined) return { required: [], official: [] };
+  const rules = contentLanguageRules(pack, input.area);
+  return {
+    required: codes(rules.required),
+    official: codes(rules.official),
+    ...(rules.foreignLanguageNotice === undefined
+      ? {}
+      : { foreignLanguageNotice: rules.foreignLanguageNotice }),
+  };
+}
+
+/** A NEW venue's default content language where its area names one, as a language code. */
+export function resolveInstalledDefaultContentLanguage(input: VenueGeography): string | undefined {
+  const pack = packFor(input);
+  const locale =
+    pack === undefined ? undefined : contentLanguageRules(pack, input.area).defaultContentLocale;
+  return locale === undefined ? undefined : contentLanguageCode(locale);
 }

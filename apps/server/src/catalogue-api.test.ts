@@ -19,6 +19,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  type ContentLanguageRules,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -279,7 +280,7 @@ function venueCfg(): TillConfig {
   };
 }
 
-function mountApp(venueLocale = "es-ES"): Hono {
+function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageRules): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
@@ -287,6 +288,7 @@ function mountApp(venueLocale = "es-ES"): Hono {
       db: suite.db,
       venueCfg: venueCfg(),
       venueLocale,
+      ...(contentLanguageRules === undefined ? {} : { contentLanguageRules }),
     },
     noopLog,
   );
@@ -368,6 +370,65 @@ describe("content-language configuration", () => {
         })
       ).status,
     ).toBe(201);
+  });
+
+  const BARCELONA: ContentLanguageRules = {
+    required: ["ca", "es"],
+    official: ["es", "ca", "gl", "eu"],
+  };
+
+  it("refuses removing a language the venue's region requires", async () => {
+    const app = mountApp("es-ES", BARCELONA);
+    const all = { defaultLanguage: "es", languages: ["es", "ca", "en"] };
+    expect(
+      (await send(app, "PUT", "/management-api/content-languages", { body: all })).status,
+    ).toBe(204);
+    const withoutCatalan = await send(app, "PUT", "/management-api/content-languages", {
+      body: { defaultLanguage: "es", languages: ["es", "en"] },
+    });
+    expect(withoutCatalan.status).toBe(400);
+    expect(await withoutCatalan.json()).toEqual({
+      error: { code: "content.language_required", params: { language: "ca" } },
+    });
+    expect(await (await send(app, "GET", "/management-api/content-languages")).json()).toEqual(all);
+  });
+
+  it("lets a venue whose region requires nothing remove any language but its default", async () => {
+    const app = mountApp("es-ES", { required: [], official: BARCELONA.official });
+    for (const settings of [
+      { defaultLanguage: "es", languages: ["es", "ca", "en"] },
+      { defaultLanguage: "es", languages: ["es"] },
+    ])
+      expect(
+        (await send(app, "PUT", "/management-api/content-languages", { body: settings })).status,
+      ).toBe(204);
+  });
+
+  it("answers the venue's content-language rules to a manager", async () => {
+    const response = await send(
+      mountApp("es-ES", BARCELONA),
+      "GET",
+      "/management-api/content-language-rules",
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(BARCELONA);
+  });
+
+  it("answers no rules when none were worked out for the venue", async () => {
+    const response = await send(mountApp(), "GET", "/management-api/content-language-rules");
+    expect(await response.json()).toEqual({ required: [], official: [] });
+  });
+
+  it("answers the rules only under the content-languages read's authorisation", async () => {
+    const app = mountApp("es-ES", BARCELONA);
+    expect(
+      (await send(app, "GET", "/management-api/content-language-rules", { cookie: null })).status,
+    ).toBe(401);
+    for (const path of ["content-languages", "content-language-rules"])
+      expect(
+        (await send(app, "GET", `/management-api/${path}`, { cookie: staffCookie })).status,
+        path,
+      ).toBe(403);
   });
 
   it.each([

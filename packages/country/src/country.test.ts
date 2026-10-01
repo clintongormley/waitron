@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CountryPack } from "./country.js";
 import {
+  contentLanguageRules,
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
   resolveCountryLocale,
@@ -110,5 +111,53 @@ describe("resolveCountryLocale", () => {
       "xy-XY",
     );
     expect(resolveCountryLocale(pack, [], { fallback: "en-GB" })).toBe("en-GB");
+  });
+});
+
+describe("contentLanguageRules", () => {
+  const notice = { minimumForeign: 2, text: { en: "Two foreign languages." } };
+  const ruled: CountryPack = {
+    ...pack,
+    officialLocales: ["xy-XY", "north-XY"],
+    administrativeAreas: [
+      {
+        code: "01",
+        name: "North",
+        postalPrefixes: ["10"],
+        requiredContentLocales: ["north-XY", "xy-XY"],
+        defaultContentLocale: "north-XY",
+        foreignLanguageNotice: notice,
+      },
+      { code: "02", name: "South", postalPrefixes: ["20"], requiredContentLocales: ["xy-XY"] },
+      { code: "03", name: "East", postalPrefixes: ["30"] },
+    ],
+  };
+
+  it("returns the area's required locales, its default content locale and its notice", () => {
+    expect(contentLanguageRules(ruled, "north")).toStrictEqual({
+      required: ["north-XY", "xy-XY"],
+      official: ["xy-XY", "north-XY"],
+      defaultContentLocale: "north-XY",
+      foreignLanguageNotice: notice,
+    });
+  });
+
+  it("leaves out a default content locale and a notice the area does not declare", () => {
+    expect(contentLanguageRules(ruled, "02")).toStrictEqual({
+      required: ["xy-XY"],
+      official: ["xy-XY", "north-XY"],
+    });
+  });
+
+  it("requires nothing in an area without rules, an unknown area or no area", () => {
+    for (const area of ["East", "missing", null, undefined])
+      expect(contentLanguageRules(ruled, area)).toStrictEqual({
+        required: [],
+        official: ["xy-XY", "north-XY"],
+      });
+  });
+
+  it("names no official locale for a pack that declares none", () => {
+    expect(contentLanguageRules(pack, "01")).toStrictEqual({ required: [], official: [] });
   });
 });

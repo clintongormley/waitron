@@ -6,7 +6,9 @@ import {
   findFiscalModules,
   getCountryPack,
   getVenueSetupCountryPack,
+  resolveInstalledContentLanguageRules,
   resolveInstalledCountryLocale,
+  resolveInstalledDefaultContentLanguage,
 } from "./registry.js";
 
 describe("installed country packs", () => {
@@ -75,5 +77,56 @@ describe("installed country packs", () => {
         fallback: "en-GB",
       }),
     ).toBe("es-ES");
+  });
+});
+
+describe("content-language rules", () => {
+  const SPAIN_OFFICIAL = ["es", "ca", "gl", "eu"];
+
+  it("requires Catalan and Spanish for a Barcelona venue, as language codes", () => {
+    expect(
+      resolveInstalledContentLanguageRules({ country: "ES", area: "Barcelona" }),
+    ).toStrictEqual({ required: ["ca", "es"], official: SPAIN_OFFICIAL });
+  });
+
+  it("carries the area's foreign-language notice for a Valencia venue", () => {
+    const rules = resolveInstalledContentLanguageRules({ country: "ES", area: "46" });
+    expect(rules.required).toEqual(["ca", "es"]);
+    expect(rules.official).toEqual(SPAIN_OFFICIAL);
+    expect(rules.foreignLanguageNotice?.minimumForeign).toBe(1);
+    expect(Object.keys(rules.foreignLanguageNotice!.text).sort()).toEqual(["en", "es"]);
+  });
+
+  it("requires Galician and Spanish for an A Coruña venue", () => {
+    const rules = resolveInstalledContentLanguageRules({ country: "ES", area: "A Coruña" });
+    expect(rules.required).toEqual(["gl", "es"]);
+    expect(rules.foreignLanguageNotice?.minimumForeign).toBe(2);
+  });
+
+  it("requires nothing for a Madrid venue or a Spanish venue with no province", () => {
+    for (const area of ["Madrid", null])
+      expect(resolveInstalledContentLanguageRules({ country: "ES", area })).toStrictEqual({
+        required: [],
+        official: SPAIN_OFFICIAL,
+      });
+  });
+
+  it("requires nothing and names no official language for a country with none, or no country", () => {
+    for (const country of ["GB", "XX", null])
+      expect(resolveInstalledContentLanguageRules({ country, area: "London" })).toStrictEqual({
+        required: [],
+        official: [],
+      });
+  });
+
+  it("gives Catalan as a new Barcelona venue's default content language and nothing elsewhere", () => {
+    expect(resolveInstalledDefaultContentLanguage({ country: "es", area: "Barcelona" })).toBe("ca");
+    for (const input of [
+      { country: "ES", area: "Valencia" },
+      { country: "ES", area: "Madrid" },
+      { country: "XX", area: "Barcelona" },
+      { country: null, area: null },
+    ])
+      expect(resolveInstalledDefaultContentLanguage(input)).toBeUndefined();
   });
 });

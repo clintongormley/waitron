@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import { catalogues, locationCatalogues } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
-import { COUNTRY_PACKS, resolveInstalledCountryLocale } from "@waitron/country-packs";
+import {
+  COUNTRY_PACKS,
+  resolveInstalledContentLanguageRules,
+  resolveInstalledCountryLocale,
+  resolveInstalledDefaultContentLanguage,
+} from "@waitron/country-packs";
 import { contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
 import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
@@ -48,22 +53,33 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         cross join tenants t
         where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
+      const area = location.rows[0]?.province;
       // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: nothing in setup asks
       // which languages a venue wants. docs/backlog.md → "Product languages are hard-coded at setup".
-      const languages =
+      const starting =
         country === "ES"
           ? ["es", "ca", "en"]
           : [
               contentLanguageCode(
                 resolveInstalledCountryLocale(geographicLocales, {
                   country,
-                  area: location.rows[0]?.province,
+                  area,
                   fallback: FALLBACK_LOCALE,
                 }),
               ),
             ];
+      const { required } = resolveInstalledContentLanguageRules({ country, area });
+      const withRequired = [
+        ...starting,
+        ...required.filter((language) => !starting.includes(language)),
+      ];
       // The default has to be one of the languages: `content_languages_default_ck`.
-      const defaultLanguage = languages[0]!;
+      const defaultLanguage =
+        resolveInstalledDefaultContentLanguage({ country, area }) ?? withRequired[0]!;
+      const languages = [
+        defaultLanguage,
+        ...withRequired.filter((language) => language !== defaultLanguage),
+      ];
       // Every write below goes through its drizzle table rather than through raw SQL, because
       // `id`, `created_at` and `updated_at` are supplied by `$defaultFn` in JavaScript
       // (`packages/db/src/schema/columns.ts`), so a raw `insert into catalogues (name)` writes a

@@ -783,6 +783,9 @@ importers:
       '@waitron/country-gb':
         specifier: workspace:*
         version: link:../country-gb
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.11
