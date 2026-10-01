@@ -1504,19 +1504,30 @@ OPEN.** Two kinds of drag exist in the dashboard:
   It uses pointer events, not the browser's own drag: the row stays in the table and jumps slot to
   slot as the pointer crosses rows, and while it moves the controller marks it `data-dragging`, for
   which its styles (included by all five) paint `--wt-color-surface-lifted` and `--wt-shadow-2` on
-  the `tr` (A64 added that look). Read from the code, not yet reproduced; candidate causes to check
-  on screen: a cell's own background covering the row's, a `box-shadow` on a table row that the
-  browser does not draw, or the look working but being too faint to read as "the row in my hand"
-  — nothing follows the pointer between slots.
+  the `tr` (A64 added that look). **The owner, 2026-10-01:** _"you see the background colour, but
+  the row itself doesn't move smoothly as you drag it, it jumps"_ — the lifted colour works; what is
+  missing is a row that travels with the pointer.
 - **Dragging a product onto a folder** on the Products screen (`apps/dashboard/src/widgets/product-list.ts`,
   #968) — the browser's own drag (`draggable="true"` and `dragstart`); the folder under the pointer
   is lit (`::part(drop-target)`), and the browser draws its own picture of what is dragged.
 
-**Wanted:** while dragging, the dragged row is plainly visible — lifted, and following the pointer
-— in every list that reorders and on every drag onto a target. **Next action:** reproduce on each
-of the six places in Chromium and Safari, find the cause, and fix it in the shared controller (and
-the products drag) rather than per screen; a browser test that reads the dragged row's computed
-background and shadow mid-drag, in both themes, so a look that silently stops painting fails.
+**Wanted (owner, 2026-10-01):**
+
+- **The dragged row follows the pointer smoothly**, lifted, while the rows it passes slide out of
+  its way to open the gap where it will land — not a jump from slot to slot.
+- **One drag mechanism everywhere** (_"we should use the same drag mechanism everywhere"_): the
+  handle reorder and the drag onto a folder become one shared piece, so they look and behave the
+  same. The pointer-event approach `ReorderController` already uses is the natural base: it serves
+  mouse, touch and pen alike and already carries keyboard reordering and a screen-reader
+  announcement (`action.reordered`), which the browser's own drag gives none of. Dropping onto a
+  target (a folder) then becomes a second thing the shared piece can do, beside reordering.
+  Whether the products drag has a keyboard way to move a product into a folder today is not
+  checked; the shared piece must offer one.
+
+**Next action:** design the shared drag piece (where it lives — `apps/dashboard/src/widgets/` or
+`packages/ui` — and how a host declares "reorder" and "drop onto"), move the six places onto it,
+and add a browser test that moves the pointer part way between two rows and checks the dragged row
+has moved by that much — the case a slot-to-slot jump fails.
 
 **The extras list editor's "Add product" dropdown offers products already in the list (A181, owner
 2026-10-01: "when create extras lists, the products dropdown should remove already chosen
