@@ -819,7 +819,7 @@ tree; the same reference inside the shadow root did describe it).
 #### A field that falls back to another value
 
 Some fields store a value only to override one they would otherwise take from somewhere else — a
-variant's VAT, unit, station or photo from its parent product, an extra's price from its product's. Such a field is
+variant's VAT, unit or photo from its parent product, an extra's price from its product's. Such a field is
 **empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
@@ -837,9 +837,8 @@ record's own value applies and its blank languages show no placeholder hint.
   (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
   product" (`editor.same_as_parent`). Mark it chosen with `.selected` while the stored value is null,
   like every option built from an expression. A choice that means "none" on a record of its own
-  (in the product editor: `editor.unit_each` for the unit, `product.no_station` for the kitchen
-  station, `product.no_course` for the course) is left out where the empty value already means
-  "fall back": offering both would read as one thing and save as another.
+  (in the product editor: `editor.unit_each` for the unit and `product.no_course` for the course)
+  is left out where the empty value already means "fall back": offering both would read as one thing and save as another.
 - **A single-choice `wt-combobox`** (the product editor's main category): its first option has an
   empty value and reads "Same as &lt;fallback value&gt;", and so does its placeholder, which is what
   it shows while the stored value is null; like a `<select>`, it has no separate hint line.

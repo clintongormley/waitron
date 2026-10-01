@@ -42,6 +42,11 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     db = suite.db;
   });
 
+  it("products and categories carry no station of their own", async () => {
+    expect((await columnsOf(db, "products")).map((c) => c.name)).not.toContain("station_id");
+    expect((await columnsOf(db, "categories")).map((c) => c.name)).not.toContain("station_id");
+  });
+
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
     // A real parent row, so the INSERTs below reach the CHECKs rather than the foreign key.
     const [catalogue] = await db

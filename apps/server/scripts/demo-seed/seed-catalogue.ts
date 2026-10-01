@@ -110,12 +110,6 @@ export async function seedCatalogues(
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, { name: cat.name.en });
-      if (cat.station !== null) {
-        // The create op takes no station.
-        await tx.execute(
-          sql`update categories set station_id = ${stationIds[cat.station]} where id = ${category.id}`,
-        );
-      }
       await tx.insert(stationClaims).values({
         locationId,
         categoryId: category.id,

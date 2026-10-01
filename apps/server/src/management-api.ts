@@ -91,11 +91,9 @@ import {
   listCourses,
   listStations,
   setBumpMode,
-  setCategoryStation,
   setDefaultStation,
   setFireControl,
   setProductCourse,
-  setProductStation,
   updateCourse,
   updateStation,
   type BumpMode,
@@ -1753,41 +1751,6 @@ export function mountManagementApi(
       return c.body(null, 204);
     }),
   );
-
-  // Routes a category, or a product (which overrides its category), to a station; `null` clears it.
-  // A malformed `:id` gets the verb's unknown-id no-op, inside `withVenueAuth` so the gate still runs.
-  const registerStationRoute = (
-    segment: string,
-    setStation: (
-      tx: Transaction,
-      cfg: TillConfig,
-      id: string,
-      stationId: string | null,
-    ) => Promise<void>,
-  ): void => {
-    app.put(`/management-api/${segment}/:id/station`, (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const cfg = requireVenueCfg(deps);
-        const id = c.req.param("id");
-        const body = await readJsonBody<{ stationId?: unknown }>(c);
-        if (typeof body.stationId !== "string" && body.stationId !== null) {
-          throw new AppError("management.request_invalid", { field: "stationId" });
-        }
-        const stationId = body.stationId;
-        if (stationId !== null && !isUuid(stationId)) {
-          throw new AppError("station.not_found", { stationId });
-        }
-        await withVenueAuth(deps, sessionId, async (tx) => {
-          if (!isUuid(id)) return;
-          await setStation(tx, cfg, id, stationId);
-        });
-        return c.body(null, 204);
-      }),
-    );
-  };
-  registerStationRoute("categories", setCategoryStation);
-  registerStationRoute("products", setProductStation);
 
   app.put("/management-api/bump-mode", (c) =>
     run(c, log, async () => {

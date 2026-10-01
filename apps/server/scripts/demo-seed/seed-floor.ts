@@ -25,7 +25,7 @@ import {
 import { createTable, createZone, setTablePlacement } from "../../src/tables.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "./floor.js";
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { CASA_DELGADO, SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 export interface SeedFloorInput {
   locationId: string;
@@ -175,7 +175,14 @@ export async function seedFloor(
     const barCategories = await tx
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.stationId, downstairsStationId));
+      .where(
+        inArray(
+          categories.name,
+          CASA_DELGADO.categories
+            .filter((category) => category.station === "bar")
+            .map((category) => category.name.en),
+        ),
+      );
     for (const category of barCategories) {
       await createException(
         tx,

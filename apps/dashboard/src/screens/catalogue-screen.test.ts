@@ -125,7 +125,6 @@ const value: ProductEditorValue = {
   modifiers: [{ kind: "options", id: "opt-list-1" }],
   allergens: {},
   dietaryDeclarations: ["vegetarian"],
-  stationId: null,
   courseId: null,
 };
 
@@ -359,20 +358,8 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBeTruthy();
   });
 
-  it("offers the venue's stations and courses and saves the routing inside the product write", async () => {
+  it("offers the venue's courses and saves the course inside the product write", async () => {
     const api = stubApi({
-      listStations: vi.fn().mockResolvedValue([
-        {
-          id: "s1",
-          name: "Bar",
-          displayOrder: 0,
-          isDefault: true,
-          active: true,
-          warmAfterMinutes: 5,
-          overdueAfterMinutes: 10,
-          forgottenAfterMinutes: 20,
-        },
-      ]),
       listCourses: vi
         .fn()
         .mockResolvedValue([{ id: "k1", name: "Starters", displayOrder: 0, active: true }]),
@@ -381,17 +368,13 @@ describe("catalogue-screen", () => {
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
-    expect(editor(el).stations.map(({ id, name }) => ({ id, name }))).toEqual([
-      { id: "s1", name: "Bar" },
-    ]);
     expect(editor(el).courses.map(({ id, name }) => ({ id, name }))).toEqual([
       { id: "k1", name: "Starters" },
     ]);
-    const routed: ProductEditorInput = { ...value, stationId: "s1", courseId: "k1" };
+    const routed: ProductEditorInput = { ...value, courseId: "k1" };
     emit(editor(el), "wt-submit", { value: routed });
     await flush(el);
-    // ONE write carries the product and its routing: a station this venue does not have has to roll
-    // the product back rather than leave it saved without its routing.
+    // The course travels in the same product write.
     expect(api.updateProductEditor).toHaveBeenCalledExactlyOnceWith("p1", routed);
     expect(api.createProductEditor).not.toHaveBeenCalled();
   });
@@ -875,7 +858,6 @@ describe("catalogue-screen", () => {
   it.each([
     ["category.not_found", { categoryId: "c1" }, "primary"],
     ["unit.not_found", { unitId: "u1" }, "unit"],
-    ["station.not_found", { stationId: "s1" }, "product-station"],
     ["course.not_found", { courseId: "k1" }, "product-course"],
     ["product.variant_not_found", { variantId: "v2" }, "variant-1-name"],
   ])(
@@ -891,7 +873,6 @@ describe("catalogue-screen", () => {
       };
       const sent = {
         ...value,
-        stationId: "s1",
         courseId: "k1",
         variants: [
           { ...variant, id: "v1", name: "Media" },
@@ -933,24 +914,6 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect(editor(el).fieldErrors).toEqual({});
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBeTruthy();
-  });
-
-  it("puts a malformed station the request check names beside the station select", async () => {
-    const api = stubApi({
-      updateProductEditor: vi.fn().mockRejectedValue({
-        code: "management.request_invalid",
-        params: { field: "stationId" },
-        status: 400,
-      }),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(list(el), "edit-product", { productId: "p1" });
-    await flush(el);
-    emit(editor(el), "wt-submit", { value });
-    await flush(el);
-    expect(editor(el).fieldErrors).toEqual({ "product-station": t("editor.field_rejected") });
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
   it("falls back to the screen's banner when a refusal names a field with no error display", async () => {
@@ -1251,7 +1214,6 @@ describe("catalogue-screen", () => {
         vatClass: "reduced",
         unitId: "u1",
         primaryCategoryId: "c1",
-        stationId: null,
         courseId: null,
         allergens: {},
         dietaryDeclarations: ["vegetarian"],

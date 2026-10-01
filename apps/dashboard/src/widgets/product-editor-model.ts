@@ -13,14 +13,13 @@ import type {
 export type EditorVariant = ProductVariantInput;
 
 /** The product editor's DRAFT: the wire body the editor sends (`ProductEditorBody`), plus an optional
- * `id` for an existing product. `stationId`/`courseId` are re-required here even though the wire body's
- * `ProductRouting` allows omission — both travel in the product's own save, and the form always carries
+ * `id` for an existing product. `courseId` is re-required here even though the wire body's
+ * `ProductRouting` allows omission — it travels in the product's own save, and the form always carries
  * an explicit value, so an absent key and a cleared one must not collapse to the same submitted body.
  * `inherited` is what the editor READ carries for a variant — its parent's values, shown as hints —
  * and is never sent back. */
 export type ProductEditorDraft = ProductEditorBody & {
   id?: string;
-  stationId: string | null;
   courseId: string | null;
   inherited?: InheritedValues | null;
 };

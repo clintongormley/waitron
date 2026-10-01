@@ -76,7 +76,7 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
 /** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
 const SECTION_FIELDS = {
-  kitchen: ["kitchen-name", "product-station", "product-course"],
+  kitchen: ["kitchen-name", "product-course"],
   descriptors: ["customer-name-", "description-", "image"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
@@ -100,7 +100,6 @@ const SERVER_FIELDS: Record<string, string> = {
   primaryCategoryId: "primary",
   active: "active",
   ordering: "ordering",
-  stationId: "product-station",
   courseId: "product-course",
 };
 
@@ -162,7 +161,6 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   primaryCategoryId: "primary",
   modifiers: "modifier",
   ordering: "ordering",
-  stationId: "product-station",
   courseId: "product-course",
 };
 
@@ -184,7 +182,6 @@ function emptyDraft(): ProductEditorDraft {
     modifiers: [],
     allergens: null,
     dietaryDeclarations: [],
-    stationId: null,
     courseId: null,
   };
 }
@@ -192,9 +189,8 @@ function emptyDraft(): ProductEditorDraft {
 /**
  * The product's own name is the plain STAFF name. The translated customer-facing name and the
  * kitchen name are separate optional fields that fall back to it, and the fallback belongs to
- * `packages/catalogue/src/product-presentation.ts`, never to a screen. The kitchen routing (station
- * and course) travels in this form's own submitted value, so a station this venue does not have
- * rolls the product back instead of leaving it half saved.
+ * `packages/catalogue/src/product-presentation.ts`, never to a screen. The kitchen course travels
+ * in this form's own submitted value.
  *
  * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
  * field the variant may leave blank shows blank, with the parent's value as its hint, and there is
@@ -370,7 +366,6 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
-  @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
   @property({ attribute: false }) taxChoices?: {
     id: ProductEditorDraft["vatClass"];
@@ -523,7 +518,6 @@ export class ProductEditor extends LitElement {
       "tax",
       "unit",
       "unit-price",
-      "product-station",
       "product-course",
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
@@ -811,9 +805,8 @@ export class ProductEditor extends LitElement {
   }
 
   private renderKitchen() {
-    const station = this.stations.find(({ id }) => id === this.draft.stationId)?.name;
     const course = this.courses.find(({ id }) => id === this.draft.courseId)?.name;
-    const summary = [this.draft.kitchenName?.trim(), station, course]
+    const summary = [this.draft.kitchenName?.trim(), course]
       .filter((part): part is string => !!part)
       .join(SUMMARY_SEPARATOR);
     return html`<wt-disclosure
@@ -829,14 +822,6 @@ export class ProductEditor extends LitElement {
           t("editor.kitchen_name"),
           this.draft.kitchenName ?? "",
           (value) => this.change("kitchenName", value),
-        )}
-        ${this.renderRouting(
-          "product-station",
-          t("product.station"),
-          this.blankChoice(t("product.no_station"), this.stations, this.inherited?.stationId),
-          this.stations,
-          this.draft.stationId,
-          (id) => this.change("stationId", id),
         )}
         ${this.renderRouting(
           "product-course",

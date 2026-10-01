@@ -56,7 +56,7 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     const locationId = brandLocationId(loc!.id);
-    // The default station a fire routes the (courseless, stationless) product to (fireLines fallback).
+    // The default station serves an item with no matching exception or claim.
     stationId = await seedKitchenStation(db, { locationId });
     const [till] = await db
       .insert(tills)
@@ -70,7 +70,7 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, loc!.id, nodeId);
 
-    // One sellable product, routed to the default station by the fire fallback (no explicit station/course).
+    // One sellable product with no claimed folder, routed to the default station.
     await withTransaction(db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Carta" });
       const cafe = await createProduct(tx, {

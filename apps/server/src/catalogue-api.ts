@@ -98,7 +98,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
-import { setProductCourse, setProductStation } from "./kitchen.js";
+import { setProductCourse } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
@@ -112,9 +112,8 @@ export interface CatalogueApiDeps {
   ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
   /**
-   * The venue whose kitchen stations and courses the product editor may route a product to. Optional
-   * so a suite that never routes a product can mount without it; `requireVenueCfg` throws on a
-   * routing request that arrives without one.
+   * The venue whose kitchen courses the product editor may set. Optional for suites that never
+   * set a course; `requireVenueCfg` throws on a course request without one.
    */
   venueCfg?: TillConfig;
   venueLocale?: string;
@@ -244,8 +243,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu.layout_not_found": 404,
   "menu.default_layout_required": 409,
   "menu.shortcut_unreachable": 409,
-  // The product editor's kitchen routing: an id that names no LIVE station or course of this venue.
-  "station.not_found": 404,
+  // The product editor refuses a course this venue does not have.
   "course.not_found": 404,
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
@@ -689,50 +687,27 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return fn(tx, authorizedBy);
     });
 
-  /**
-   * Screen the editor body's OPTIONAL kitchen routing. `undefined` means "leave it alone"; `null`
-   * clears it. Only the SHAPE is checked here — `setProductStation`/`setProductCourse` are the
-   * authority on whether the id names a live station or course of this venue, and raise
-   * `station.not_found` / `course.not_found`.
-   */
+  /** Screen the editor body's optional course; null clears it. */
   const screenRouting = (body: Record<string, unknown>): ProductRouting => {
-    for (const field of ["stationId", "courseId"] as const) {
-      const value = body[field];
-      if (value !== undefined && value !== null && typeof value !== "string") {
-        throw new AppError("management.request_invalid", { field });
-      }
-      // A malformed id gets the same not-found code an absent one does, as in `management-api.ts`.
-      if (typeof value === "string" && !isUuid(value)) {
-        throw field === "stationId"
-          ? new AppError("station.not_found", { stationId: value })
-          : new AppError("course.not_found", { courseId: value });
-      }
+    const value = body.courseId;
+    if (value !== undefined && value !== null && typeof value !== "string") {
+      throw new AppError("management.request_invalid", { field: "courseId" });
     }
-    return {
-      stationId: body.stationId as string | null | undefined,
-      courseId: body.courseId as string | null | undefined,
-    };
+    if (typeof value === "string" && !isUuid(value)) {
+      throw new AppError("course.not_found", { courseId: value });
+    }
+    return { courseId: value as string | null | undefined };
   };
 
-  /**
-   * Write the product's kitchen routing on the SAME transaction the product was saved on, so a
-   * station or course id the venue does not have rolls the whole product back. Only a body that
-   * writes routing needs the re-read.
-   */
+  /** Save the course on the same transaction as the product. */
   const applyRouting = async (
     tx: Transaction,
     saved: ProductEditorValue,
     routing: ProductRouting,
   ): Promise<ProductEditorValue> => {
-    if (routing.stationId === undefined && routing.courseId === undefined) return saved;
+    if (routing.courseId === undefined) return saved;
     const cfg = requireVenueCfg(deps);
-    // `saveProductEditor` has already found the product, a variant included.
-    if (routing.stationId !== undefined) {
-      await setProductStation(tx, cfg, saved.id, routing.stationId, "any");
-    }
-    if (routing.courseId !== undefined) {
-      await setProductCourse(tx, cfg, saved.id, routing.courseId, "any");
-    }
+    await setProductCourse(tx, cfg, saved.id, routing.courseId, "any");
     return readProductEditor(tx, saved.id);
   };
 

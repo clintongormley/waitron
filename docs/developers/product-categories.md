@@ -24,8 +24,8 @@ Reports can use the classification recorded with each sale, or today's catalogue
 Moving a product or renaming a folder does not rewrite recorded sale lines. See
 [the two report modes](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md#5-the-two-report-modes).
 
-Folders still use the existing kitchen routing in this slice: a route names a product's effective
-category directly, not its ancestors. The separate prep-station slice changes that contract; see
+The prep-station rules walk a product's folder ancestors, using the nearest claimed folder after
+ordered exceptions. See
 [the approved design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
 
 ## Categories are not sections

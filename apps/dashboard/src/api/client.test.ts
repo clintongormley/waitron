@@ -1666,30 +1666,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("setCategoryStation PUTs { stationId } to the category's station route (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setCategoryStation("c1", "s1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/c1/station", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stationId: "s1" }),
-    });
-  });
-
-  it("setCategoryStation carries a null stationId to CLEAR the category route", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await api.setCategoryStation("c1", null);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/c1/station", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stationId: null }),
-    });
-  });
-
   it("setBumpMode PUTs { mode } to /management-api/bump-mode (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

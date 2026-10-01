@@ -3,12 +3,11 @@ import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
-  categories,
   fireControlMode,
   isUniqueViolation,
   kitchenCourses,
-  kitchenStations,
   products,
+  kitchenStations,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { productWithId, type ProductScope } from "@waitron/catalogue";
@@ -195,40 +194,6 @@ export async function setDefaultStation(
   await requireLiveStation(tx, cfg, id);
   await clearDefault(tx, cfg);
   await tx.update(kitchenStations).set({ isDefault: true }).where(eq(kitchenStations.id, id));
-}
-
-/**
- * Set (or clear, with `null`) a category's default routing station. A non-null `stationId` must be
- * a LIVE station of this venue. An absent `categoryId` matches no row and is a no-op.
- */
-export async function setCategoryStation(
-  tx: Transaction,
-  cfg: TillConfig,
-  categoryId: string,
-  stationId: string | null,
-): Promise<void> {
-  if (stationId !== null) {
-    await requireLiveStation(tx, cfg, stationId);
-  }
-  await tx.update(categories).set({ stationId }).where(eq(categories.id, categoryId));
-}
-
-/**
- * Set (or clear, with `null`) a product's override routing station, which wins over its category's.
- * A non-null `stationId` must be a LIVE station of this venue. An absent `productId`, or a variant's
- * unless `scope` is `"any"`, is a no-op.
- */
-export async function setProductStation(
-  tx: Transaction,
-  cfg: TillConfig,
-  productId: string,
-  stationId: string | null,
-  scope: ProductScope = "top-level",
-): Promise<void> {
-  if (stationId !== null) {
-    await requireLiveStation(tx, cfg, stationId);
-  }
-  await tx.update(products).set({ stationId }).where(productWithId(productId, scope));
 }
 
 /** `line` = per-line bump only; `ticket` = the station display also offers a whole-ticket bump.

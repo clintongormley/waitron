@@ -45,11 +45,9 @@ Categories form a tree, so the field shows each category's full path. Leave it e
 is Uncategorised. The main category also plays a part in choosing the kitchen station a dish goes to,
 as described below.
 
-Use the product's **Kitchen station** and **Default course** fields, under **Kitchen**, for its
-preparation routing. They save with the product, so you can set them while creating it, and
-cancelling the editor leaves them as they were. When a dish is sent to the kitchen, a service route
-set for the product or for its main category comes first. After that comes the product's own
-**Kitchen station**, then its main category's station, then the venue's default station.
+Use the **Default course** field under **Kitchen** to decide when the product fires. It saves with
+the product. Prep stations choose where the dish is made: an ordered exception applies first, then
+the nearest claimed folder, then the venue's default station.
 
 You can create a unit, a category, an extras list or an options list without abandoning a product
 you are editing. Open the nested form, save the new item and select it when you return. The unsaved

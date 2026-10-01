@@ -2119,12 +2119,6 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/stations/${id}/default`, "POST");
   }
 
-  setCategoryStation(categoryId: string, stationId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/categories/${categoryId}/station`, "PUT", {
-      stationId,
-    });
-  }
-
   setBumpMode(mode: BumpMode): Promise<void> {
     return this.#request<void>("/management-api/bump-mode", "PUT", { mode });
   }

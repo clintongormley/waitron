@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenCourses, kitchenStations, locations, products, withTransaction } from "@waitron/db";
+import { kitchenCourses, locations, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -159,7 +159,6 @@ it("saves and reads the canonical editor shape with independent content and vari
     parentId: null,
     inherited: null,
     variants: input.variants.map((v, i) => ({ ...v, id: saved.variants[i]!.id, active: true })),
-    stationId: null,
     courseId: null,
   });
   expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id))).toEqual(saved);
@@ -534,17 +533,13 @@ describe("a variant's own page", () => {
   let variantId: string;
   let categories: { parent: string; own: string };
   let kgUnitId: string;
-  let routing: { stationId: string; courseId: string };
+  let routing: { courseId: string };
   beforeEach(async () => {
     const setup = await withTransaction(fx.db, async (tx) => {
       const [location] = await tx
         .insert(locations)
         .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" })
         .returning({ id: locations.id });
-      const [station] = await tx
-        .insert(kitchenStations)
-        .values({ locationId: location!.id, name: "Bar" })
-        .returning({ id: kitchenStations.id });
       const [course] = await tx
         .insert(kitchenCourses)
         .values({ locationId: location!.id, name: "Drinks" })
@@ -583,16 +578,13 @@ describe("a variant's own page", () => {
         },
         "en",
       );
-      await tx
-        .update(products)
-        .set({ stationId: station!.id, courseId: course!.id })
-        .where(eq(products.id, parent.id));
+      await tx.update(products).set({ courseId: course!.id }).where(eq(products.id, parent.id));
       return {
         parent,
         parentCategory: parentCategory.id,
         ownCategory: ownCategory.id,
         kg: kg.id,
-        routing: { stationId: station!.id, courseId: course!.id },
+        routing: { courseId: course!.id },
       };
     });
     routing = setup.routing;
@@ -638,7 +630,6 @@ describe("a variant's own page", () => {
       primaryCategoryId: null,
       allergens: null,
       dietaryDeclarations: null,
-      stationId: null,
       courseId: null,
       modifiers: [],
       variants: [],
@@ -649,7 +640,6 @@ describe("a variant's own page", () => {
         vatClass: "reduced",
         unitId: kgUnitId,
         primaryCategoryId: categories.parent,
-        stationId: routing.stationId,
         courseId: routing.courseId,
         allergens: { milk: { presence: "contains" } },
         dietaryDeclarations: ["vegan"],

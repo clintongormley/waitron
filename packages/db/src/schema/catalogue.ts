@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { bigCount, count, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
-import { kitchenStations } from "./kitchen-stations.js";
 
 /**
  * The db-layer copy of `@waitron/catalogue`'s `ProductAllergens`, local because `@waitron/catalogue`
@@ -25,10 +24,6 @@ export const catalogues = table("catalogues", {
 export const categories = table("categories", {
   id: id("id").primaryKey().$defaultFn(newId),
   name: label("name").notNull(),
-  // A fired line with no product-level station falls back to this one.
-  /* v8 ignore start */
-  stationId: id("station_id").references(() => kitchenStations.id),
-  /* v8 ignore stop */
   createdAt: ts("created_at").notNull().$defaultFn(now),
   updatedAt: ts("updated_at").notNull().$defaultFn(now),
 });
@@ -55,11 +50,7 @@ export const products = table(
     /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),
     /* v8 ignore stop */
-    // A line with no station falls back to its category's and then to the venue's default station,
-    // and a line with no course fires earliest.
-    /* v8 ignore start */
-    stationId: id("station_id").references(() => kitchenStations.id),
-    /* v8 ignore stop */
+    // A line with no course fires earliest.
     /* v8 ignore start */
     courseId: id("course_id").references(() => kitchenCourses.id),
     /* v8 ignore stop */

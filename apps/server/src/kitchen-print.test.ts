@@ -216,7 +216,7 @@ type ProductLine = {
 
 /** Open a working order in the counter zone, selling each line through the zone's offer for its
  *  product. Call once the suite's products, stations and extras are final: the offers' routes mirror
- *  the product/category/default station each product would have taken. */
+ *  the active claim or default station each product would have taken. */
 async function createOfferedOrder(
   tx: Transaction,
   cfg: TillConfig,

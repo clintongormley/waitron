@@ -87,7 +87,6 @@ export const effectiveProductColumns = {
   pricingUnit: owned(products.pricingUnit, parentProducts.pricingUnit),
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: inherited(products.categoryId, parentProducts.categoryId),
-  stationId: inherited(products.stationId, parentProducts.stationId),
   courseId: inherited(products.courseId, parentProducts.courseId),
   image: inherited(products.image, parentProducts.image),
   allergens: inherited(products.allergens, parentProducts.allergens),

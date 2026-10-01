@@ -42,7 +42,6 @@ const product: ProductEditorDraft = {
   modifiers: [],
   allergens: null,
   dietaryDeclarations: [],
-  stationId: null,
   courseId: null,
 };
 const small: EditorVariant = {
@@ -607,10 +606,7 @@ it("submits past a refusal beside a field or on a variant's row, which then go",
   expect(await bottomOf(el)).toBe("");
 });
 
-it.each([
-  ["product-station", "stationId"],
-  ["product-course", "courseId"],
-])(
+it.each([["product-course", "courseId"]])(
   "puts a refused %s under its select, opening the kitchen section, until it changes",
   async (name) => {
     const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -619,7 +615,6 @@ it.each([
       locales: ["en"],
       units: [unit],
       taxChoices: reduced,
-      stations: [{ id: "station-1", name: "Bar" }],
       courses: [{ id: "course-1", name: "Starters" }],
     });
     el.fieldErrors = { [name]: "That one is gone" };
@@ -1263,32 +1258,24 @@ it("names the product's unit in the variants table's price column", async () => 
   });
 });
 
-it("saves station and course with a new product, without a separate routing event", async () => {
+it("saves course with a new product, without a separate routing event", async () => {
   const routed = vi.fn();
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
     units: [unit],
     taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
-    stations: [
-      { id: "station-1", name: "Bar" },
-      { id: "station-2", name: "Kitchen" },
-    ],
     courses: [
       { id: "course-1", name: "Starters" },
       { id: "course-2", name: "Mains" },
     ],
   });
-  el.addEventListener("wt-set-product-station", routed);
   el.addEventListener("wt-set-product-course", routed);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await openSection(el, "kitchen");
   await input(el, "name", "Tortilla");
-  const station = el.shadowRoot!.querySelector<HTMLSelectElement>("[name=product-station]")!;
   const course = el.shadowRoot!.querySelector<HTMLSelectElement>("[name=product-course]")!;
-  station.value = "station-2";
-  station.dispatchEvent(new Event("change"));
   course.value = "course-1";
   course.dispatchEvent(new Event("change"));
   await el.updateComplete;
@@ -1312,31 +1299,23 @@ it("saves station and course with a new product, without a separate routing even
     modifiers: [],
     allergens: null,
     dietaryDeclarations: [],
-    stationId: "station-2",
     courseId: "course-1",
   });
 });
 
-it("preselects the saved station and course", async () => {
+it("preselects the saved course", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
-    value: { ...product, id: "product-1", stationId: "station-1", courseId: "course-1" },
+    value: { ...product, id: "product-1", courseId: "course-1" },
     locales: ["en"],
     units: [unit],
     taxChoices: reduced,
-    stations: [
-      { id: "station-1", name: "Bar" },
-      { id: "station-2", name: "Kitchen" },
-    ],
     courses: [
       { id: "course-1", name: "Starters" },
       { id: "course-2", name: "Mains" },
     ],
   });
   await openSection(el, "kitchen");
-  expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[name=product-station]")!.value).toBe(
-    "station-1",
-  );
   expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[name=product-course]")!.value).toBe(
     "course-1",
   );
@@ -1608,17 +1587,15 @@ it("summarises each collapsed section so nothing filled in is invisible", async 
     value: {
       ...product,
       image: "abc.png",
-      stationId: "station-1",
       courseId: "course-1",
       dietaryDeclarations: ["vegan"],
     },
     locales: ["en", "es"],
     units: [unit],
     taxChoices: reduced,
-    stations: [{ id: "station-1", name: "Bar" }],
     courses: [{ id: "course-1", name: "Starters" }],
   });
-  expect(section(el, "kitchen").getAttribute("summary")).toBe("BAR · Bar · Starters");
+  expect(section(el, "kitchen").getAttribute("summary")).toBe("BAR · Starters");
   // The dashboard's shipped locale is Spanish, so these summaries are the Spanish strings.
   expect(section(el, "descriptors").getAttribute("summary")).toBe(
     "nombre para el cliente (en, es) · descripción (en) · imagen",
@@ -1797,7 +1774,6 @@ it("maps a rejected product body's field onto the editor field that holds it", (
   // control, so every position reports there.
   expect(productEditorField("modifiers.0.id", "es")).toBe("modifier");
   expect(productEditorField("modifiers.11.id", "es")).toBe("modifier");
-  expect(productEditorField("stationId", "es")).toBe("product-station");
   expect(productEditorField("courseId", "es")).toBe("product-course");
   // A field with no error display on this form maps to nothing rather than to a guess, and the
   // refusal falls back to the screen's own banner. The product's availability IS on the form (a
@@ -2162,7 +2138,6 @@ const parentValues: InheritedValues = {
   vatClass: "reduced",
   unitId: litre.id,
   primaryCategoryId: "drinks",
-  stationId: "bar",
   courseId: "mains",
   allergens: { milk: { presence: "contains" } },
   dietaryDeclarations: ["vegetarian"],
@@ -2183,13 +2158,8 @@ const glass: ProductEditorDraft = {
   primaryCategoryId: null,
   allergens: null,
   dietaryDeclarations: null,
-  stationId: null,
   courseId: null,
 };
-const stations = [
-  { id: "bar", name: "Bar" },
-  { id: "grill", name: "Grill" },
-];
 const courses = [
   { id: "mains", name: "Mains" },
   { id: "desserts", name: "Desserts" },
@@ -2208,7 +2178,6 @@ async function mountVariant(value: ProductEditorDraft = glass) {
       units: [unit, litre],
       taxChoices: taxes,
       categories,
-      stations,
       courses,
       api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
     })
@@ -2323,7 +2292,6 @@ it("offers each inherited choice first as 'Same as' the parent's value, with an 
   const expected = {
     tax: sameAs("Reduced (10%)"),
     unit: sameAs("Litre (l)"),
-    "product-station": sameAs("Bar"),
     "product-course": sameAs("Mains"),
   };
   for (const [name, text] of Object.entries(expected)) {
@@ -2347,11 +2315,9 @@ it("marks a variant's own choice selected over the 'Same as' option", async () =
   const el = await mountVariant({
     ...glass,
     vatClass: "general",
-    stationId: "grill",
     courseId: "desserts",
   });
   expect(control<HTMLSelectElement>(el, "tax").value).toBe("general");
-  expect(control<HTMLSelectElement>(el, "product-station").value).toBe("grill");
   expect(control<HTMLSelectElement>(el, "product-course").value).toBe("desserts");
 });
 
@@ -2392,7 +2358,6 @@ it("saves every field a variant left blank as null, so it keeps reading the pare
     unitPrice: null,
     vatClass: null,
     unitId: null,
-    stationId: null,
     courseId: null,
     description: null,
     image: null,
