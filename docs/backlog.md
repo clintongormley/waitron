@@ -6286,7 +6286,8 @@ ongoing overhaul listed at the top of Track A.
   current page; the click only records a collapse for later). The old code had the same no-op.
   `wt-disclosure` and `wt-data-table` instead hide or disable a collapse control that would do
   nothing. **DECIDED (owner, 2026-09-29): the header is not changed.** Instead each section gets an
-  info page, which its header would open — the next entry.
+  info page, which its header would open — the next entry. (2026-10-01: superseded by A161, below —
+  the owner asked on 2026-09-30 for that click to collapse the section, and it now does.)
   (2) **A test that guards nothing:** "keeps the clicked group header at the same on-screen position…"
   in `apps/dashboard/src/dashboard-app.test.ts` still passes with the scroll correction in
   `#toggleGroup` deleted — on `main` at 55504ee1b too, before C35. Making it catch a missing correction
@@ -6296,7 +6297,9 @@ ongoing overhaul listed at the top of Track A.
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It replaces the
   question C35 left about the header of the section you are on. **Next action:** brainstorm what
-  each section's page says; it needs a spec.
+  each section's page says; it needs a spec. (2026-10-01: A161, below, answered C35's question
+  another way — the header of the section you are on now collapses it, as every other header does —
+  so whether this page is still wanted, and what would open it, is the owner's call.)
 
 - **A generated display name is the first given name and first surname (C38, #827, owner decision
   2026-09-28).** `deriveDisplayName` (`packages/shared/src/derive-display-name.ts`) takes the first
@@ -6379,6 +6382,31 @@ ongoing overhaul listed at the top of Track A.
   pass. Two choices the branch made are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched
   as "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
   sidebar.
+
+- **Clicking the side menu's current section header collapses it (A161, owner 2026-09-30) — done (2026-10-01, #PR).**
+  - On click: the header of the section holding the page you are on now collapses that section like
+    any other, and a second click opens it again. Until now that section always showed open, so the
+    click did nothing visible (C35's leftover (1) above). Receipt: "collapses the current page's
+    group when its header is clicked, and opens it on a second click" in
+    `apps/dashboard/src/dashboard-app.test.ts`.
+  - On arrival: the section opens whenever you arrive at a page in it — the first load or a reload,
+    the Back button, a nav click, a pick from the search box, a module's page — so a page is not
+    opened with its section shut. Picking the page you are already on from the search box opens its
+    section too. Receipts: "starts with only the group holding the opened page expanded" (an
+    existing case), "opens a collapsed group when the Back button arrives at a page in it", "starts
+    with a module page's group expanded when that page is opened", and "opens the current page's
+    collapsed group when a search picks that same page".
+  - The next navigation inside a collapsed section: after you collapse the section you are on,
+    arriving at another page in it opens it again. Receipt: "opens the current page's group again
+    when a search picks another page in it after it was collapsed".
+  - A difference from before: a section opened on arrival stays open after you leave it, as one
+    opened by hand does. Before, a section shown open only because it held the current page closed
+    again when you left.
+  - Two older tests were removed in their own commit, because they checked the old rule this
+    reverses: "keeps a group expanded once collapsed if it holds the current screen, so you never
+    lose your place" and "does not clear a group's collapse when its header is clicked while it
+    shows open only for holding the current page". The removal waits on the owner's approval.
+  - `docs/developers/design-system.md` → "Dashboard sidebar navigation" states the new rule.
 
 - **A form's message about a failed submission sits at the bottom of the form, on its own line above
   the buttons (C97, owner 2026-09-30) — DONE (2026-10-01, #961).** The one message a form shows about a

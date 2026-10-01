@@ -931,12 +931,15 @@ is also its own disclosure toggle, except while a search term is typed (below): 
 `wt-icon` that rotates 180° when expanded (pointing down at rest — "expand this way" — up when open
 — "collapse"). Every headed group starts collapsed (owner decision 2026-09-28, replacing
 expanded-by-default). Collapsed state is a plain `Set<NavGroupId>` in component state, not
-persisted, so each load starts collapsed again. A group that contains the CURRENT screen always
-renders expanded regardless of that set, so opening the dashboard on a page shows that page's group
-open and the rest closed. A header click records the opposite of what the header shows. The group
-holding the current screen always shows open, so clicking its header leaves a collapse recorded that
-a further click cannot clear; the collapse shows once you open a screen outside that group, and
-never hides the page you are on.
+persisted, so each load starts collapsed again — except the group holding the page it opens.
+Whenever the current screen changes (the first load, a reload, the Back button, a nav click, a
+search pick), and whenever a nav row or a search pick opens a page even if it is the page already
+shown, that page's group is taken out of the set, so it shows open. After that its header collapses
+and reopens it like any other group's (A161, owner 2026-09-30): a header click records the opposite
+of what the header shows, and outside a search the header's `aria-expanded` and the item list's
+`hidden` follow the set alone. A collapsed group holding the current page hides that page's row;
+arriving at another page in it opens it again. A group opened on arrival stays open after you leave
+it, as one opened by hand does.
 
 A search box sits at the top of the sidebar, above the groups: a native `<input type="search">`
 named `nav-search`, whose accessible name and placeholder are both **Search pages**. A staff session
