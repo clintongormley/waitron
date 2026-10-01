@@ -4550,7 +4550,6 @@ export async function placeOrder(
       lines.map((line) => line.id),
     );
     // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
-    // Stamped while the order is still open, which is the only time a line may be written.
     await tx
       .update(workingOrderLines)
       .set({ sentAt: nowIso() })

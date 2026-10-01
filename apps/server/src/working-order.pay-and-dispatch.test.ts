@@ -1231,7 +1231,8 @@ describe("cross-till end-to-end", () => {
 });
 
 // Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
-// freezes composition (for free — a placed order's lines are already frozen by require_open_parent, their served count aside);
+// freezes composition (for free — a placed order's lines are already frozen by require_open_parent;
+// `OPEN_PARENT_REFUSAL`'s comment, packages/db/src/trigger-refusals.ts, lists what still changes);
 // cancelling a placed order (placed → abandoned) appends an `order_cancelled` amendment.
 // The append-only guarantee on `order_amendments` is a trigger this suite's database carries
 // (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`), so a rewrite is refused

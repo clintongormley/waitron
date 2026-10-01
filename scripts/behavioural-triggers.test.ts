@@ -51,6 +51,10 @@ import {
  * with its served exception and a refusal to move a line off an order that is not open, by
  * `packages/db/drizzle/0033_line_served_exception.sql`. Both are re-created by
  * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
+ * `working_order_lines_require_open_parent_update` is re-created again by
+ * `packages/db/drizzle/0050_line_list_price_frozen.sql`, with `list_unit_price_gross` in its
+ * unchanged-column lists, and by `packages/db/drizzle/0052_line_sent_after_close.sql`, which lets a
+ * presented or paid bill's line take a first `sent_at`.
  * Some triggers ACT rather than refuse.
  * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
  * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`, and again after the
@@ -460,12 +464,14 @@ function seed(connection) {
     `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
       `where id in ('wo-served-settled', 'wo-served-orphan', 'wo-served-relocale')`,
 
-    // Lines for the sent-stamp exception: a held dish fired after its bill was presented or paid.
+    // Lines for the sent-stamp exception: a line sent to the kitchen after its bill was presented or
+    // paid.
     // `line-sent-stamped` was sent while its order was open.
     workingOrder("wo-sent-placed", "open"),
     workingOrder("wo-sent-settled", "open"),
     workingOrder("wo-sent-abandoned", "open"),
     line("line-sent-placed", "wo-sent-placed", '{"es":"Plato","ca":"Plat"}'),
+    line("line-sent-placed-frozen", "wo-sent-placed", '{"es":"Plato","ca":"Plat"}'),
     line("line-sent-settled", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-sent-frozen", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-sent-stamped", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
@@ -1060,19 +1066,22 @@ describe("working_order_lines_require_open_parent_update's sent-stamp exception"
     }
   });
 
-  it.each(FROZEN_SENT_LINE_COLUMNS)(
-    "refuses a paid bill's line taking its sent stamp and also changing %s",
-    (column) => {
-      const value = CHANGED_VALUE[column] ?? `'changed'`;
-      expect(
-        refusalFor(
-          connection,
-          `update working_order_lines set sent_at = '${LATER}', ${column} = ${value} ` +
-            `where id = 'line-sent-frozen'`,
-        ),
-      ).toBe(OPEN_PARENT_REFUSAL);
-    },
-  );
+  // On a presented bill a line may change its group alone, so `group_id` matters most there.
+  it.each(
+    FROZEN_SENT_LINE_COLUMNS.flatMap((column) => [
+      ["presented", column, "line-sent-placed-frozen"],
+      ["paid", column, "line-sent-frozen"],
+    ]),
+  )("refuses a %s bill's line taking its sent stamp and also changing %s", (_bill, column, id) => {
+    const value = CHANGED_VALUE[column] ?? `'changed'`;
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set sent_at = '${LATER}', ${column} = ${value} ` +
+          `where id = '${id}'`,
+      ),
+    ).toBe(OPEN_PARENT_REFUSAL);
+  });
 
   it("still refuses a paid bill's line changing its quantity or its price alone", () => {
     for (const change of ["quantity = 2000", "unit_price_gross = 1"]) {

@@ -601,7 +601,7 @@ describe("a held dish split onto a check", () => {
   });
 });
 
-describe("a held dish on a whole table bill paid before its group fires", () => {
+describe("a held dish on a whole table bill presented or paid before its group fires", () => {
   it("is stamped sent when its group fires, and a dish in a group that never fires stays unsent", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Mesa paid whole then sent"));
     await inTx(v, (tx) =>
@@ -638,6 +638,7 @@ describe("a held dish on a whole table bill paid before its group fires", () => 
       where working_order_line_id = ${flan.id}`),
     ).toEqual([{ fired: 1 }]);
   });
+
   it("is stamped sent when its group fires after the bill is presented, before it is paid", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Mesa presented then sent"));
     await inTx(v, (tx) =>

@@ -23,8 +23,9 @@ export const TRANSITION_REFUSAL = "working order cannot make that transition";
 /**
  * `working_order_lines_require_open_parent_*`: the order is not open, or does not exist; an update
  * also refuses a line moved off an order that is not open. On an order that exists but is not open,
- * an update changing what was served and nothing else is let through, and, on a placed order, an
- * update changing its `group_id` and nothing else.
+ * an update changing what was served and nothing else is let through; on a placed order, an
+ * update changing its `group_id` and nothing else; and, on a placed or settled order, an update
+ * giving a line that had no `sent_at` its first one and changing nothing else.
  */
 export const OPEN_PARENT_REFUSAL = "lines may only be written while the order is open";
 
