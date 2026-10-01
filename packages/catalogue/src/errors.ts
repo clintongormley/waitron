@@ -134,7 +134,7 @@ declare module "@waitron/shared" {
      */
     "options.label_required": { optionListId: string };
     /**
-     * An extras list's authoring body, an ORDER-time selection body, or a PER-MENU publication body
+     * An extras list's authoring body or an ORDER-time selection body
      * is refused. `field` is the dotted path of the offending value in that body (`"maxPicks"`,
      * `"items.1.maxQuantity"`, `"lists.0.listId"`), so the editor can put the refusal beside the
      * input that caused it.

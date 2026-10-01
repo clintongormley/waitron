@@ -119,7 +119,9 @@ async function seed(database: Database): Promise<void> {
     vatClass: "general",
     image: PRODUCT_PHOTO,
   });
-  await database.insert(sections).values({ internalName: "Bakery", image: SECTION_PHOTO });
+  await database
+    .insert(sections)
+    .values({ internalName: "Bakery", ownerMenuId: catalogueId, image: SECTION_PHOTO });
   const publishedAt = new Date("2026-09-20T10:00:00.000Z");
   const [version] = await database
     .insert(menuVersions)
@@ -292,7 +294,9 @@ describe("after the upgrade, a section's photo", () => {
 
   it("is checked on a section insert and update", async () => {
     const insert = async (image: string): Promise<void> => {
-      await db().insert(sections).values({ internalName: "Drinks", image });
+      await db()
+        .insert(sections)
+        .values({ internalName: "Drinks", ownerMenuId: catalogueId, image });
     };
     await expect(insert(ABSENT)).rejects.toMatchObject({ message: "sections_media_image_fk" });
     await insert(SECTION_PHOTO);

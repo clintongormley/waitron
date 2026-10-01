@@ -206,7 +206,8 @@ any routing rules attached to them. Confirmation is shown when selected folders 
 or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
 per-menu extras, is approved (owner, 2026-10-01). PF2b Tasks 1–10 are implemented and independently
-reviewed. Rebase, branch finishing and landing are pending. After landing, reset each dev venue
+reviewed. The branch is rebased over slice 1 and name-only photos; migration upgrade failures,
+branch finishing and landing remain pending. After landing, reset each dev venue
 with `wa-wt reset demo <name>`: library sections and their placements disappear, menu switched-off
 settings clear, and stored variant switches become explicit on decisions. Per-menu extras are
 retired; menu extras follow product-level attachments and settings. Reload tills running the older

@@ -289,7 +289,6 @@ function refuseNegativePrice(value: string, field: string): void {
   if (parsed.startsWith("-")) throw new AppError("management.request_invalid", { field });
 }
 
-/** A menu's settings for the offer's variants: a `price` of null follows the variant's own. */
 function parseMenuVariants(value: unknown): MenuVariantWrite[] {
   if (!Array.isArray(value)) {
     throw new AppError("management.request_invalid", { field: "variants" });
