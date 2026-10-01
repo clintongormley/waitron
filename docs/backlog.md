@@ -5171,17 +5171,26 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (owner, 2026-10-01: _"A handheld should be able to do pretty much anything a till can do, it
       just depends on the permissions of the person using the handheld. But a cash register should
       only be opened by the device it is assigned to"_; lane B item B29). The server no longer
-      refuses a handheld for being one when it places, collects or cancels an order; it files under
-      the register it joined with, as its cash and hand-keyed card sales already did. None of the
-      three routes checks a permission beyond a signed-in operator, on a till or a handheld. A
-      drawer belongs to one register: the one its printer names under "Drawer opens at" (new
-      column `printers.drawer_till_id`, core `0062_printer_drawer_till`, set on the dashboard's
-      Printers screen), else the only register whose receipt printer it is, else none. Every
-      automatic opening and the Open drawer button check it; the button now reads the pressing
-      device's register, where it read the box's configured till, and a till that does not own the
-      drawer is refused `drawer.not_owner`. Found on the way: once collect accepted a handheld, a
-      handheld collecting in cash would have opened its register's drawer; collect now sets the
-      same flag the sale and bill routes set. **Open:** the till app still keeps a handheld off the
+      refuses a handheld for being one when it places, collects or cancels an order. A collect, and
+      the invoice a place may file, go on record under the register the device joined with, as its
+      cash and hand-keyed card sales already did; the `order_placed` record and a cancel's amendment
+      record still name the box's configured till, and a cancel files nothing with the tax agency.
+      None of the three routes checks a permission beyond a signed-in operator, on a till or a
+      handheld. A drawer belongs to at most one register: the one its printer names under "Drawer
+      opens at" (new column `printers.drawer_till_id`, core `0062_printer_drawer_till`, set when
+      editing a printer on the dashboard's Printers screen) while that register's receipts print on
+      this printer, and none once they do not; with none named, the only register at the printer's
+      location whose receipt printer it is, else none. Setup copy leaves the named register behind.
+      Every automatic opening and the Open drawer button check it; the button now needs an enrolled
+      device and reads its register, where it read the box's configured till, and a till that does
+      not own the drawer is refused `drawer.not_owner`. Found on the way: once collect accepted a
+      handheld, a handheld collecting in cash would have opened its register's drawer; collect now
+      builds its configuration through the same `deviceSaleCfg` as the sale and bill routes, which
+      allows a drawer only on a till. **Open for the owner:** the dashboard's "Test open drawer"
+      calibration (`POST /management-api/printers/:id/test-drawer`) still opens any active
+      printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no till
+      and no ownership check — should it
+      be limited too? **Open:** the till app still keeps a handheld off the
       counter screen (where Place lives) and gives its bill-pay dialog no card reader whatever its
       profile allows (`apps/till/src/till-app.ts`, `HANDHELD_FACES` and the `cardReader` binding);
       both are screen choices by form factor, left for a decision. The Devices screen's per-device
@@ -6747,7 +6756,9 @@ bill is refused.
   `assertDeviceCapability` and `assertNotHandheld` (`apps/server/src/device-session.ts`), and the
   handheld block is still a blocklist. Left: refuse a request with no device, one table of which
   device kinds may do what with a guard that walks the routes, and printer identity (the design's
-  sub-project C). It sits on the sale and cash path, so it takes the full review.
+  sub-project C). It sits on the sale and cash path, so it takes the full review. 2026-10-02 (B29,
+  feat/service-handheld-permissions): a handheld now places, collects and cancels like a till; only
+  the drawer is refused it, so the design's table is out of date on those rows.
 - Register/device follow-ups: `WAITRON_TILL_TILL_ID` still seeds a "Caja 1" register while a till
   enrol auto-creates its own; the device-management routes build their `devices ⨝ device_profiles`
   read inline where a `listDevices` store verb belongs.

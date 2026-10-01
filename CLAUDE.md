@@ -975,16 +975,20 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
 
 ## 5. Fiscal invariants — the unrecoverable ones
 
-- **Printing never opens the cash drawer, and only the drawer's own till opens it.** A cash
-  payment, or a card hand-keyed on a machine Waitron does not talk to (its slip is kept in the
-  drawer, owner 2026-10-01), enqueues a separate audited `drawer` job; receipt jobs are `document`
-  jobs and contain no drawer command. A card on a connected machine opens nothing. The drawer opens
-  only at the till that owns it (owner 2026-10-01: _"a cash register should only be opened by the
-  device it is assigned to"_): the register the printer names under "Drawer opens at", else the one
-  register whose receipts print there, and none when several do (`drawerOwnerOf`,
-  `apps/server/src/receipt-print.ts`). Every other till and every handheld may print there and opens
-  nothing, even with `cash.drawer` and a profile capability. Drawer jobs cannot be manually resent.
-  The receipt review reproduced a resent cash receipt opening the drawer without a new audit row.
+- **Printing never opens the cash drawer, and from a till or handheld only the drawer's own till
+  opens it.** A cash payment, or a card hand-keyed on a machine Waitron does not talk to (its slip
+  is kept in the drawer, owner 2026-10-01), enqueues a separate audited `drawer` job; receipt jobs
+  are `document` jobs and contain no drawer command. A card on a connected machine opens nothing.
+  The drawer's till (owner 2026-10-01: _"a cash register should only be opened by the device it is
+  assigned to"_) is the register the printer names under "Drawer opens at" while that register's
+  receipts print there and nobody once they move; with none named, the one register at its location
+  whose receipts print there, and nobody when several do (`drawerOwnerOf`, `apps/server/src/receipt-print.ts`).
+  The manual open also needs an enrolled device. Every other till and every handheld may print
+  there and opens nothing, even with `cash.drawer` and a profile capability. The one exception is
+  the dashboard's "Test open drawer" calibration (`POST /management-api/printers/:id/test-drawer`),
+  which opens any active printer's drawer for a manager holding `printer.manage` and `cash.drawer`.
+  Drawer jobs cannot be manually resent. The receipt review reproduced a resent cash receipt
+  opening the drawer without a new audit row.
   Pointer: #324; the card slip, B30; the drawer's own till, B29.
 
 - **One database per environment.** A pre-production database is never promoted:

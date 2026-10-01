@@ -228,7 +228,8 @@ and approving the plan approves them.
     "dish not sent" alert is raised, as 3a does.
   - **Who may answer:** any waiter (owner). The routes involved check only that someone is signed
     in (Place also refuses a handheld, and the integrated card route needs a card-capable device,
-    as today); this adds no permission.
+    as today); this adds no permission. 2026-10-02 (B29, feat/service-handheld-permissions): Place
+    no longer refuses a handheld.
   - **Slice 3c** adds "Make at…" on any dish before it is sent (the same stored field, without the
     question), moving a dish after it is sent, and re-routing a held dish at release (owner).
 - **S18. A dish already with the kitchen that is changed and re-sent keeps its station** when the

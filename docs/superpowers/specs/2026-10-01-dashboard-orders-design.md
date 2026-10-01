@@ -253,6 +253,9 @@ replacement, so `main` never has a period with no way to see a debt at the till.
 refuses a handheld (`assertNotHandheld` on the collect route); lane B's B29 is queued to let a
 handheld do what a till can by permission, and this design follows whatever B29 lands.
 
+> **Update (2026-10-02, B29, branch `feat/service-handheld-permissions`):** a handheld now places,
+> collects and cancels like a till; only the drawer is refused it.
+
 Collecting part of a debt stays out of scope, as B17 left it (`docs/backlog.md`, B17's entry).
 
 ## 6. Permissions

@@ -116,18 +116,33 @@ cases, the “a replay opens nothing more” sale and collect cases in
 The owner, 2026-10-01: _"A handheld should be able to do pretty much anything a till can do, it just
 depends on the permissions of the person using the handheld. But a cash register should only be
 opened by the device it is assigned to."_ (B29). A handheld places, collects and cancels like a till;
-the operator's permissions decide. A drawer belongs to one register: the one its printer names under
-"Drawer opens at" (`printers.drawer_till_id`), else the only register whose receipt printer it is,
-else none (`drawerOwnerOf`, `apps/server/src/receipt-print.ts`). Every automatic opening (cash, a
-hand-keyed card's slip, a bill payment or refund) and the Open drawer button check it; the button
-reads the pressing device's register, and a till that does not own the drawer is refused
-`drawer.not_owner`. A handheld opens no drawer on any of those paths, because each route that reaches
-one sets `allowCashDrawer` from the device's form factor (`till-api.ts`'s sale and collect routes,
-`deviceSaleCfg` in `bill-payments-api.ts`); a new route that reaches a drawer and forgets it lets a
+the operator's permissions decide; none of the three checks a permission, only a signed-in
+operator. A drawer belongs to at most one register: the one its printer names under "Drawer opens
+at" (`printers.drawer_till_id`) while that register's receipts print on this printer, and none once
+they do not; with none named, the only register at the printer's location whose receipt printer it
+is, else none (`drawerOwnerOf`, `apps/server/src/receipt-print.ts`). The printers management API
+accepts a named register only when editing a printer, and only a register at the printer's location
+whose receipts print there; creating a printer accepts none. Setup copy (configuration transfer)
+leaves the named register behind (`packages/db/src/configuration-transfer.ts`). Every automatic
+opening (cash, a hand-keyed card's slip, a collect, a bill payment or refund) and the Open drawer
+button check ownership; a till that does not own the drawer is refused `drawer.not_owner`. The Open
+drawer route (`POST /api/drawer/open`) needs an enrolled device — with none it answers
+`device.unauthorized` — and reads that device's register; it refuses a handheld through
+`assertNotHandheld` and the device-capability check. The automatic paths open nothing on a handheld
+because each of their routes builds its configuration through the shared `deviceSaleCfg`
+(`apps/server/src/device-session.ts`), which allows a drawer only for a till form factor; a
+configuration that leaves `allowCashDrawer` unset allows one, so a new route that reaches a drawer
+and builds its configuration another way lets a
 handheld open its register's drawer, and nothing guards that. Regressions: the two-tills cases in
 `apps/server/src/receipt-print.test.ts` and `till-api.receipt.test.ts`, and the handheld-collect
 cases in `till-api.fiscal-sale-paths.test.ts`, which failed with a drawer opened before collect set
 the flag (2026-10-02).
+
+One path is outside the rule: the dashboard's "Test open drawer" calibration,
+`POST /management-api/printers/:id/test-drawer` (`apps/server/src/print-api.ts`), opens any
+active printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no till
+and no ownership check. Whether
+it should be gated too is an open question for the owner (B29).
 
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 

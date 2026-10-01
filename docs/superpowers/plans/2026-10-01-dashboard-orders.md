@@ -2000,7 +2000,8 @@ export interface FindBillPayDetail {
     `apps/till/src/till-app.ts:1623-1626`; `"departures"` is a `RefreshList` (`:222`);
   - `POST /api/working-orders/:id/collect` refuses a handheld (`assertNotHandheld`,
     `apps/server/src/till-api.ts:1553`) and replays a settled bill (`collectOrder`,
-    `apps/server/src/till-sale.ts:1602-1604`);
+    `apps/server/src/till-sale.ts:1602-1604`); 2026-10-02 (B29, feat/service-handheld-permissions):
+    the collect route no longer refuses a handheld, so expect a handheld to collect;
   - `#affordances()` gives a handheld none (`apps/till/src/till-app.ts:5752-5756`);
   - the tab shell's header is the only header in use (`till-counter-screen.ts`'s own header is
     test-only: its `embedded` comment, `:154-158`);
@@ -2182,6 +2183,8 @@ export function mountBillLookupApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     `<wt-button class="find-bill" variant="secondary" @click=${() => this.#emit("find-bill")}>${t("find_bill.open")}</wt-button>`.
   - `apps/till/src/till-app.ts` `#affordances()` (`:5752-5756`): append `"find-bill"` to the list
     (a handheld still gets none, because collecting refuses it today — `till-api.ts:1553`).
+    2026-10-02 (B29, feat/service-handheld-permissions): collecting no longer refuses a handheld;
+    see Step 0.
 
 - [ ] **Step 5: Wire it in `till-app.ts` and remove the list.**
   - State: `@state() private findingBill = false; @state() private findBillBusy = false; @state() private findBillError?: StringKey;`

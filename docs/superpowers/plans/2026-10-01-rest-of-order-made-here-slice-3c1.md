@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Update (2026-10-02, B29, branch `feat/service-handheld-permissions`):** `deviceSaleCfgOf` in
+> `apps/server/src/bill-payments-api.ts`, which this plan cites, moved to
+> `apps/server/src/device-session.ts` as the exported `deviceSaleCfg`, and `POST /api/sales` and the
+> collect route now build their configuration through it too — anything this plan adds to it reaches
+> them as well.
+
 **Goal:** Two kitchen-ticket settings from the routing design. First, a station can be set to "Show
 the rest of the order": its printed tickets and its kitchen screen then also list the order's other
 dishes, each with the station making it. Second, a till or handheld can be told "items for these
