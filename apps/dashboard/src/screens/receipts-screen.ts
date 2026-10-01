@@ -366,8 +366,8 @@ export class ReceiptsScreen extends LitElement {
     this.focusedTrim = field;
   }
 
-  #blurTrim(field: TrimField): void {
-    if (this.focusedTrim === field) this.focusedTrim = null;
+  #blurTrim(): void {
+    this.focusedTrim = null;
   }
 
   #renderFooter(): TemplateResult {
@@ -389,7 +389,7 @@ export class ReceiptsScreen extends LitElement {
             this.#changeTrim("footerMessage", (event.target as HTMLTextAreaElement).value);
           }}
           @focus=${() => this.#focusTrim("footerMessage")}
-          @blur=${() => this.#blurTrim("footerMessage")}
+          @blur=${() => this.#blurTrim()}
         ></textarea>
       </label>
       <span id="footer-message-hint" class="hint">${t("receipts.footer_message_hint")}</span>
@@ -429,7 +429,7 @@ export class ReceiptsScreen extends LitElement {
             this.#changeTrim("headerSubtitle", event.detail.value);
           }}
           @focusin=${() => this.#focusTrim("headerSubtitle")}
-          @focusout=${() => this.#blurTrim("headerSubtitle")}
+          @focusout=${() => this.#blurTrim()}
           @keydown=${(event: KeyboardEvent) => this.#enter(event)}
         ></wt-input>
         ${this.#renderFooter()}

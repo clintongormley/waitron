@@ -76,3 +76,19 @@ it("outlines only the active mark, and an empty range marks nothing", async () =
   expect(getComputedStyle(mark("headerSubtitle")!).outlineColor).toBe("rgb(1, 2, 3)");
   await expectNoA11yViolations(host);
 });
+
+it("wraps every piece of a marked range in one element, text and pictures alike", async () => {
+  const { el } = await mountWidget<TestPrintPaperHost>("test-print-paper-host", {
+    preview: { ...preview, blocks: [{ kind: "text", text: "X\n" }, line("A"), line("B")] },
+    marks: [{ name: "footerMessage", range: { start: 0, end: 2 }, active: false }],
+  });
+  const paper = el.shadowRoot!.querySelector(".paper")!;
+  const mark = paper.querySelector("[data-mark=footerMessage]")!;
+  expect([...mark.children].map((node) => node.getAttribute("data-kind"))).toEqual([
+    "text",
+    "image",
+  ]);
+  expect([...paper.children].map((node) => node.getAttribute("data-kind") ?? node.tagName)).toEqual(
+    ["DIV", "image"],
+  );
+});
