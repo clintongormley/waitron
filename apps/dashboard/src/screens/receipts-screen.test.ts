@@ -49,6 +49,17 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
   } as unknown as DashboardApi;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A read that stays open until `release` is called with what it answers. */
+function heldRead<T>(): { read: () => Promise<T>; release: (value: T) => void } {
+  let release!: (value: T) => void;
+  const pending = new Promise<T>((resolve) => {
+    release = resolve;
+  });
+  return { read: () => pending, release };
+}
+
 async function flush(el: ReceiptsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -242,6 +253,29 @@ describe("the Receipts page's live preview", () => {
     expect(previewReceipt).toHaveBeenCalledTimes(3);
   });
 
+  it("sends the latest text once when a queued follow-up and a newer quiet timer both want it", async () => {
+    let answer!: () => void;
+    const previewReceipt = vi.fn(async (config: ReceiptConfig) => {
+      if (previewReceipt.mock.calls.length === 2) {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+      }
+      return fakePreview(config);
+    });
+    const api = stubApi({ previewReceipt });
+    const { el } = await mount(api);
+    edit(el, "headerSubtitle", "uno");
+    await vi.waitFor(() => expect(previewReceipt).toHaveBeenCalledTimes(2));
+    edit(el, "headerSubtitle", "dos");
+    await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+    edit(el, "headerSubtitle", "tres");
+    answer();
+    await vi.waitFor(() => expect(previewReceipt).toHaveBeenCalledTimes(3));
+    await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+    expect(previewCalls(api)).toEqual([{}, { headerSubtitle: "uno" }, { headerSubtitle: "tres" }]);
+  });
+
   it("keeps the last preview and says it is out of date when a preview request fails", async () => {
     const previewReceipt = vi
       .fn()
@@ -375,5 +409,149 @@ describe("the Receipts page's one Save", () => {
     });
     liveData.invalidate([{ type: "tenant_receipts" }]);
     await vi.waitFor(() => expect(paperLines(el)).toContain("Desde otro sitio"));
+  });
+
+  it("keeps the saved description when a read that started before the Save answers after it", async () => {
+    const { LiveData } = await import("@waitron/dashboard-kit");
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getLocationSettings: vi
+          .fn()
+          .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Before" }),
+      }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    const held = heldRead<{ name: string; operationDescription: string }>();
+    vi.mocked(api.getLocationSettings).mockImplementation(held.read);
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() => expect(api.getLocationSettings).toHaveBeenCalledTimes(2));
+    edit(el, "operationDescription", "Saved new");
+    q(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(q(el, "[role=status]")).not.toBeNull();
+    held.release({ name: "Calle Mayor", operationDescription: "Before" });
+    await flush(el);
+    expect(q<WtInput>(el, "wt-input[name=operationDescription]")!.value).toBe("Saved new");
+    edit(el, "headerSubtitle", "Solo la cabecera");
+    q(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(vi.mocked(api.putLocationSettings).mock.calls).toEqual([["Saved new"], ["Saved new"]]);
+  });
+
+  it("still takes a description read that started after the Save", async () => {
+    const { LiveData } = await import("@waitron/dashboard-kit");
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mount(api);
+    edit(el, "operationDescription", "Saved new");
+    q(el, "[data-test=save]")!.click();
+    await flush(el);
+    vi.mocked(api.getLocationSettings).mockResolvedValue({
+      name: "Calle Mayor",
+      operationDescription: "Changed elsewhere",
+    });
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() =>
+      expect(q<WtInput>(el, "wt-input[name=operationDescription]")!.value).toBe(
+        "Changed elsewhere",
+      ),
+    );
+  });
+
+  it("keeps the saved receipt texts when a read that started before the Save answers after it", async () => {
+    const { LiveData } = await import("@waitron/dashboard-kit");
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getReceipt: vi.fn().mockResolvedValue({ receipt: { headerSubtitle: "Before" } }),
+      }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    const held = heldRead<{ receipt: ReceiptConfig }>();
+    vi.mocked(api.getReceipt).mockImplementation(held.read);
+    liveData.invalidate([{ type: "tenant_receipts" }]);
+    await vi.waitFor(() => expect(api.getReceipt).toHaveBeenCalledTimes(2));
+    edit(el, "headerSubtitle", "Saved new");
+    q(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(q(el, "[role=status]")).not.toBeNull();
+    held.release({ receipt: { headerSubtitle: "Before" } });
+    await flush(el);
+    expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Saved new");
+    edit(el, "operationDescription", "Solo la descripción");
+    q(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(vi.mocked(api.putReceipt).mock.calls).toEqual([
+      [{ headerSubtitle: "Saved new" }],
+      [{ headerSubtitle: "Saved new" }],
+    ]);
+  });
+});
+
+describe("the Receipts page's refreshes from elsewhere", () => {
+  async function mountLive(receipt: ReceiptConfig = {}) {
+    const { LiveData } = await import("@waitron/dashboard-kit");
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({ getReceipt: vi.fn().mockResolvedValue({ receipt }) }), {
+      liveData,
+    });
+    const { el } = await mount(api);
+    return { el, api, liveData };
+  }
+
+  it("sends no preview when a refresh leaves the shown receipt texts as they were", async () => {
+    const { el, api, liveData } = await mountLive();
+    edit(el, "headerSubtitle", "Mío");
+    await vi.waitFor(() => expect(previewCalls(api)).toHaveLength(2));
+    vi.mocked(api.getReceipt).mockResolvedValue({ receipt: { headerSubtitle: "Suyo" } });
+    vi.mocked(api.getLocationSettings).mockResolvedValue({
+      name: "Calle Mayor",
+      operationDescription: "Otra descripción",
+    });
+    liveData.invalidate([{ type: "tenant_receipts" }, { type: "locations" }]);
+    await vi.waitFor(() =>
+      expect(q<WtInput>(el, "wt-input[name=operationDescription]")!.value).toBe("Otra descripción"),
+    );
+    await vi.waitFor(() => expect(api.getReceipt).toHaveBeenCalledTimes(2));
+    await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+    expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Mío");
+    expect(previewCalls(api)).toHaveLength(2);
+  });
+
+  it("sends no preview when a refresh changes the shown text only in what a save would trim off", async () => {
+    const { el, api, liveData } = await mountLive({ headerSubtitle: "Hola" });
+    expect(previewCalls(api)).toEqual([{ headerSubtitle: "Hola" }]);
+    vi.mocked(api.getReceipt).mockResolvedValue({ receipt: { headerSubtitle: "Hola " } });
+    liveData.invalidate([{ type: "tenant_receipts" }]);
+    await vi.waitFor(() =>
+      expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Hola "),
+    );
+    await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+    expect(previewCalls(api)).toHaveLength(1);
+  });
+
+  it("reads the location's description through the active client on opening, and through the passive background client on a refresh", async () => {
+    const { LiveData } = await import("@waitron/dashboard-kit");
+    const liveData = new LiveData();
+    const background = stubApi({
+      getLocationSettings: vi
+        .fn()
+        .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Changed elsewhere" }),
+    });
+    const api = Object.assign(stubApi(), { liveData, background });
+    const { el } = await mount(api);
+    expect(api.getLocationSettings).toHaveBeenCalledTimes(1);
+    expect(background.getLocationSettings).not.toHaveBeenCalled();
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() =>
+      expect(q<WtInput>(el, "wt-input[name=operationDescription]")!.value).toBe(
+        "Changed elsewhere",
+      ),
+    );
+    expect(background.getLocationSettings).toHaveBeenCalledTimes(1);
+    expect(api.getLocationSettings).toHaveBeenCalledTimes(1);
   });
 });

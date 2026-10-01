@@ -1,4 +1,4 @@
-import { DraftRows } from "@waitron/dashboard-kit";
+import { DraftRows, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter, visuallyHiddenStyles } from "@waitron/ui";
@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import type { DashboardApi, ReceiptConfig, ReceiptPreview } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { dashboardQuery } from "../api/live-queries.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { PrintPaper, paperStyles, type PaperMark } from "../widgets/print-paper.js";
@@ -52,7 +53,7 @@ export class ReceiptsScreen extends LitElement {
         gap: var(--wt-space-4);
       }
       .settings + .settings {
-        margin-top: var(--wt-space-6);
+        margin-top: var(--wt-space-5);
       }
       h2 {
         margin: 0;
@@ -145,9 +146,9 @@ export class ReceiptsScreen extends LitElement {
       this.receiptLoadError = codeOf(error);
     },
   );
-  readonly #locationQueries = new DashboardQueries(
+  readonly #locationQueries = new QueryController(
     this,
-    () => this.api,
+    () => this.api.liveData,
     () => {
       this.locationLoadFailed = true;
     },
@@ -171,6 +172,8 @@ export class ReceiptsScreen extends LitElement {
   @state() private refusal = "";
   @state() private saveFailed = false;
   #dirty = false;
+  /** Successful description writes so far; a read stamped with an older count may predate the latest one. */
+  #saves = 0;
 
   @state() private attempted = false;
   @state() private saving = false;
@@ -182,6 +185,7 @@ export class ReceiptsScreen extends LitElement {
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
   #previewInFlight = false;
   #previewAgain = false;
+  #previewRequested: string | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -236,13 +240,26 @@ export class ReceiptsScreen extends LitElement {
   }
 
   async #loadLocation(): Promise<void> {
+    const query = dashboardQuery(this.api, "getLocationSettings", []);
     try {
-      await this.#locationQueries.watch("getLocationSettings", [], (value) => {
-        this.name = value.name;
-        if (!this.#dirty && !this.saving) this.description = value.operationDescription;
-        this.locationLoaded = true;
-        this.locationLoadFailed = false;
-      });
+      await this.#locationQueries.watch(
+        "getLocationSettings",
+        {
+          ...query,
+          key: `${query.key}:save-stamped`,
+          read: async () => {
+            const saves = this.#saves;
+            return { saves, value: await query.read() };
+          },
+        },
+        ({ saves, value }) => {
+          this.name = value.name;
+          if (!this.#dirty && !this.saving && saves === this.#saves)
+            this.description = value.operationDescription;
+          this.locationLoaded = true;
+          this.locationLoadFailed = false;
+        },
+      );
     } catch {
       this.locationLoadFailed = true;
     }
@@ -263,18 +280,27 @@ export class ReceiptsScreen extends LitElement {
     this.#previewTimer = setTimeout(() => void this.#sendPreview(), RECEIPT_PREVIEW_QUIET_MS);
   }
 
-  /** One request at a time; text typed meanwhile is sent once, as it stands, when it returns. */
+  /**
+   * One request at a time; text typed meanwhile is sent once, as it stands, when it returns. Text
+   * already asked for is not asked for again, because a preview is a POST and so keeps the session
+   * signed in: a refresh from another session's save must not do that unless the paper would change.
+   */
   async #sendPreview(): Promise<void> {
     if (this.#previewInFlight) {
       this.#previewAgain = true;
       return;
     }
+    const config = this.#trim();
+    const requested = JSON.stringify(config);
+    if (requested === this.#previewRequested) return;
+    this.#previewRequested = requested;
     this.#previewInFlight = true;
     try {
-      this.preview = await this.api.previewReceipt(this.#trim());
+      this.preview = await this.api.previewReceipt(config);
       this.previewFailed = false;
     } catch {
       this.previewFailed = true;
+      this.#previewRequested = null;
     } finally {
       this.#previewInFlight = false;
     }
@@ -347,7 +373,10 @@ export class ReceiptsScreen extends LitElement {
     this.saving = false;
     if (trim.status === "rejected") this.#receiptRefused(trim.reason);
     if (location.status === "rejected") this.#locationRefused(location.reason);
-    else this.#dirty = false;
+    else {
+      this.#dirty = false;
+      this.#saves += 1;
+    }
     if (trim.status === "fulfilled" && location.status === "fulfilled") {
       this.saved = true;
       this.attempted = false;
