@@ -66,8 +66,8 @@ const CUTOVER = "05:00";
 const YEAR = 2026;
 const MONTH = 8;
 
-// `node` indexes `venue.nodes`. `base`/`tax` are filed verbatim as the sale's `vatBreakdown`, so
-// what is filed equals what the expectation sums.
+// `node` indexes `venue.nodes`. `base`/`tax` are filed as given (all at the cent) as the sale's
+// `vatBreakdown`, so what is filed equals what the expectation sums.
 interface SeedSale {
   node: 0 | 1;
   /** Civil calendar date "YYYY-MM-DD" in August 2026. */

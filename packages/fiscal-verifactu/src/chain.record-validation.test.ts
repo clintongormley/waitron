@@ -118,7 +118,10 @@ describe("a record whose totals disagree with themselves is written, filed and f
    * SUPPLIED breakdown against the stated total and throws `sale.total_mismatch`
    * (`packages/core/src/record-sale.ts`) before the fiscal record is built, so a fixture that
    * passed one would abort there and this suite would again be testing nothing. The breakdown this
-   * case needs is the DERIVED one, which cannot disagree with itself. */
+   * case needs is the DERIVED one, which cannot disagree with itself. It also depends on
+   * `saleInput`'s lines being at the cent (10.00 and 2.10, `test/write-path-fixtures.ts`): with a
+   * line total past the cent the derived breakdown is checked against the total too, and refused
+   * the same way (`deriveVatBreakdown`). */
   function mismatchedSale() {
     return {
       ...saleInput({ tillId, nodeId, seriesId }),

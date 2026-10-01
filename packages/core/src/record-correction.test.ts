@@ -229,6 +229,14 @@ async function countCorrectives(originalId: SaleId): Promise<number> {
   return result.rows[0]!.n;
 }
 
+async function rectSeriesNext(): Promise<number | undefined> {
+  const [series] = await suite.db
+    .select({ n: invoiceSeries.nextNumber })
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.id, rectSeriesId));
+  return series?.n;
+}
+
 describe("recordCorrection — series purpose guard (§5)", () => {
   it("rejects an ordinary (standard) series: a correction must draw a corrective number", async () => {
     const backend = new FakeFiscalBackend(suite.db);
@@ -400,19 +408,57 @@ describe("recordCorrection — the corrective sale", () => {
     const backend = new FilesBreakdownsBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 
-    // -1.005 is stored as -1.01 and the -0.045 line as -0.05, whose 10% is -0.005, rounded -0.01.
+    // -0.055 is stored as -0.06 and the -0.045 line as -0.05, whose 10% is -0.005, rounded -0.01.
     const { saleId: correctiveId } = await correct(
       backend,
       originalId,
-      credit("0.045", "-1.005", "10.00"),
+      credit("0.045", "-0.055", "10.00"),
     );
 
-    expect((await backend.recordsFor(nodeId))[1]?.total).toBe("-1.01");
+    expect((await backend.recordsFor(nodeId))[1]?.total).toBe("-0.06");
     const breakdown = [{ rate: "10.00", base: "-0.05", tax: "-0.01" }];
     expect(backend.filed[0]).toEqual(breakdown);
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
-    expect(row?.total).toBe(-101);
+    expect(row?.total).toBe(-6);
     expect(row?.vatBreakdown).toEqual(breakdown);
+  });
+
+  it("refuses a breakdown that no longer sums to the total once each line is rounded to the cent, writing nothing", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const discount = credit("0.005", "-0.01", "0.00").lines![0]!;
+
+    // Each -0.005 is stored as -0.01: the lines hold -0.02 against a total of -0.01. Caught inside
+    // the transaction, so the transaction commits whatever was written before the refusal.
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordCorrection(
+          tx,
+          backend,
+          correctionInput(originalId, {
+            total: "-0.01",
+            lines: [discount, { ...discount, lineNo: 2 }],
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "sale.total_mismatch",
+        params: { declaredTotal: "-0.01", breakdownTotal: "-0.02" },
+      });
+    });
+
+    expect(await countRows("sales")).toBe(1); // the original alone
+    expect((await backend.recordsFor(nodeId)).map((r) => r.kind)).toEqual(["sale"]);
+    expect(await rectSeriesNext()).toBe(1);
+  });
+
+  it("still files a two-decimal correction whose breakdown does not sum to its total", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    // -1.00 at 21% derives -1.00 - 0.21, against a total of -1.00. No amount is past the cent.
+    await correct(backend, originalId, credit("1.00", "-1.00"));
+
+    expect((await backend.recordsFor(nodeId))[1]?.total).toBe("-1.00");
   });
 });
 
@@ -472,14 +518,6 @@ describe("recordCorrection — never below zero", () => {
     ) {
       return this.recordSale(tx, sale);
     }
-  }
-
-  async function rectSeriesNext(): Promise<number | undefined> {
-    const [series] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
-      .from(invoiceSeries)
-      .where(eq(invoiceSeries.id, rectSeriesId));
-    return series?.n;
   }
 
   it("refuses a correction one cent larger than the invoice, and writes nothing", async () => {

@@ -619,6 +619,13 @@ caught a conversion placed ABOVE the row; it cannot see one placed below it.
 _2026-09-30 (A144):_ `recordCorrection` now passes `buildVatBreakdown` the lines with each
 `lineTotal` rounded to the cent; the rate is still the input's.
 
+_2026-10-01 (A158):_ that rounding moved into `buildVatBreakdown` itself, so a sale and a
+substitution take each `lineTotal` at the cent too. The three files now reach it through
+`deriveVatBreakdown`, which refuses with `sale.total_mismatch` when a line total is past the cent
+and the breakdown, built from the lines at the cent, does not sum to the total at the cent. A breakdown a caller supplies to `recordSale` does not go
+through `buildVatBreakdown`: it has its base and tax each rounded to the cent, and is refused with
+`sale.total_mismatch` if the rounded amounts no longer add up to the total.
+
 **A guard got quietly weaker and had to be shored up.** With `quantity` and `rate` converted, the
 vocabulary stopped importing `numeric` at all — and `scripts/column-vocabulary.test.ts` DERIVES its
 forbidden set from the vocabulary's own import block, so `numeric` would have become legal in every

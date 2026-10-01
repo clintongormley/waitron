@@ -857,7 +857,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
     return { backend, captured: () => seen };
   }
 
-  it("passes a supplied vatBreakdown to the backend verbatim", async () => {
+  it("passes a supplied two-decimal vatBreakdown to the backend unchanged", async () => {
     // The supplied tax (0.72) is not what `buildVatBreakdown` derives from the line (0.73), so a
     // path that ignored the supplied value cannot pass.
     const breakdown: VatBreakdownLine[] = [
@@ -981,6 +981,157 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
       sql`select category from sale_lines where sale_id = ${saleId}`,
     );
     expect(row!.category).toBeNull();
+  });
+});
+
+describe("recordSale — the amounts filed are the cent amounts the rows store", () => {
+  /** One line per entry of `lineTotals`, sold on a deferred bill so no tender has to cover it. */
+  function linesOf(lineTotals: string[], vatRate: string): Partial<RecordSaleInput> {
+    return {
+      lines: lineTotals.map((lineTotal, index) => ({
+        lineNo: index + 1,
+        name: "x",
+        descriptions: { en: "x" },
+        quantity: "1",
+        unitPrice: lineTotal,
+        vatRate,
+        lineTotal,
+      })),
+      settlement: { kind: "deferred" },
+    };
+  }
+
+  function oneLine(lineTotal: string, vatRate: string): Partial<RecordSaleInput> {
+    return linesOf([lineTotal], vatRate);
+  }
+
+  async function seriesNext(): Promise<number | undefined> {
+    const [series] = await suite.db
+      .select({ n: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, seriesId));
+    return series?.n;
+  }
+
+  it("files the total and a derived breakdown at the cent amounts the rows store, not as typed", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+
+    // 0.055 is stored as 0.06 and the 0.045 line as 0.05, whose 10% is 0.005, rounded 0.01.
+    const { saleId } = await run(backend, { total: "0.055", ...oneLine("0.045", "10.00") });
+
+    const breakdown = [{ rate: "10.00", base: "0.05", tax: "0.01" }];
+    const [record] = await backend.recordsFor(nodeId);
+    expect(record?.total).toBe("0.06");
+    const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, saleId));
+    expect(filed?.vatBreakdown).toEqual(breakdown);
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row?.total).toBe(6);
+    expect(row?.vatBreakdown).toEqual(breakdown);
+    const [line] = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
+    expect(line?.lineTotal).toBe(5);
+  });
+
+  it("files a supplied breakdown at the cent amounts the row stores, not as typed", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+
+    // 1.004 + 0.1004 = 1.1044; at the cent, 1.00 + 0.10 = 1.10.
+    const { saleId } = await run(backend, {
+      total: "1.1044",
+      vatBreakdown: [{ rate: decimal("10.00"), base: decimal("1.004"), tax: decimal("0.1004") }],
+      ...oneLine("1.004", "10.00"),
+    });
+
+    const breakdown = [{ rate: "10.00", base: "1.00", tax: "0.10" }];
+    const [record] = await backend.recordsFor(nodeId);
+    expect(record?.total).toBe("1.10");
+    const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, saleId));
+    expect(filed?.vatBreakdown).toEqual(breakdown);
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row?.total).toBe(110);
+    expect(row?.vatBreakdown).toEqual(breakdown);
+  });
+
+  it("refuses a supplied breakdown that no longer sums to the total once each amount is rounded to the cent", async () => {
+    // 1.005 + 0.105 = 1.110 as typed; at the cent, 1.01 + 0.11 = 1.12, against a total of 1.11.
+    await expect(
+      run(new FakeFiscalBackend(suite.db), {
+        total: "1.110",
+        vatBreakdown: [{ rate: decimal("10.00"), base: decimal("1.005"), tax: decimal("0.105") }],
+        ...oneLine("1.005", "10.00"),
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.total_mismatch",
+      params: { declaredTotal: "1.11", breakdownTotal: "1.12" },
+    });
+    expect(await countRows("sales")).toBe(0);
+  });
+
+  it.each([
+    // Each 0.045 is stored as 0.05: the lines hold 5.00, whose 10% is 0.50, against 4.95.
+    {
+      total: "4.95",
+      lineTotals: Array<string>(100).fill("0.045"),
+      vatRate: "10.00",
+      declared: "4.95",
+      sum: "5.50",
+    },
+    // Each 0.005 is stored as 0.01: the lines hold 0.02 against 0.01.
+    {
+      total: "0.01",
+      lineTotals: ["0.005", "0.005"],
+      vatRate: "0.00",
+      declared: "0.01",
+      sum: "0.02",
+    },
+  ])(
+    "refuses a derived breakdown that does not sum to $total at the cent, writing nothing",
+    async ({ total, lineTotals, vatRate, declared, sum }) => {
+      const backend = new FakeFiscalBackend(suite.db);
+      // Caught inside the transaction, so the transaction commits whatever was written before the
+      // refusal.
+      await withTransaction(suite.db, async (tx) => {
+        await backend.registerNode(tx, nodeId);
+        await expect(
+          recordSale(tx, backend, input({ total, ...linesOf(lineTotals, vatRate) })),
+        ).rejects.toMatchObject({
+          code: "sale.total_mismatch",
+          params: { declaredTotal: declared, breakdownTotal: sum },
+        });
+      });
+
+      expect(await countRows("sales")).toBe(0);
+      expect(await countRows("sale_lines")).toBe(0);
+      expect(await backend.recordsFor(nodeId)).toEqual([]);
+      expect(await seriesNext()).toBe(1);
+    },
+  );
+
+  it("still files a two-decimal sale whose derived breakdown does not sum to its total", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+
+    // 1.00 at 21% derives 1.00 + 0.21, against a total of 1.00. No amount is past the cent.
+    await run(backend, { total: "1.00", ...oneLine("1.00", "21.00") });
+
+    const [record] = await backend.recordsFor(nodeId);
+    expect(record?.total).toBe("1.00");
+    expect(await countRows("sales")).toBe(1);
+  });
+
+  it("files a total past the cent, with every line at the cent, as the cent total the row stores", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+
+    // 1.005 is stored as 1.01; the 0.83 line at 21% derives 0.83 + 0.17 = 1.00. No line is past
+    // the cent, so the breakdown is not checked against the total.
+    const { saleId } = await run(backend, { total: "1.005", ...oneLine("0.83", "21.00") });
+
+    const breakdown = [{ rate: "21.00", base: "0.83", tax: "0.17" }];
+    const [record] = await backend.recordsFor(nodeId);
+    expect(record?.total).toBe("1.01");
+    const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, saleId));
+    expect(filed?.vatBreakdown).toEqual(breakdown);
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row?.total).toBe(101);
+    expect(row?.vatBreakdown).toEqual(breakdown);
   });
 });
 

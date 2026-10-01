@@ -26,7 +26,7 @@ import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fisc
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
-import { buildVatBreakdown } from "./record-sale.js";
+import { deriveVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 const ZERO = decimal("0");
@@ -68,14 +68,20 @@ export interface RecordCorrectionInput {
  * action.
  *
  * The authorization gate runs after the sale and series checks, so those still report their own
- * codes, and before the number is allocated, so a refused correction burns no number. A failed
- * integrity check records an incident and the correction proceeds anyway.
+ * codes, and before the number is allocated, so a refused correction burns no number. A
+ * `sale.total_mismatch` refusal comes before all three. A failed integrity check records an
+ * incident and the correction proceeds anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
+  // Derived before anything is written; refused when a line total is past the cent and the
+  // breakdown no longer sums to the total (`deriveVatBreakdown`). The stored
+  // `sales.vat_breakdown` and the filed breakdown are this one value.
+  const vatBreakdown = deriveVatBreakdown(input.total, input.lines);
+
   // The corrective inherits the original's `locale` and `invoiceLocales`.
   // `${sales}.id`, not `${sales.id}`: see the same subquery in `settleSale`.
   const [original] = await tx
@@ -189,15 +195,6 @@ export async function recordCorrection(
   }
 
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
-
-  // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value,
-  // built from each `lineTotal` rounded to the cent as `saleLineRows` stores it.
-  const vatBreakdown = buildVatBreakdown(
-    input.lines.map((line) => ({
-      ...line,
-      lineTotal: centsToDecimal(stringToCents(line.lineTotal)),
-    })),
-  );
 
   // No settlement and no tenders: the refund is a separate action.
   const [inserted] = await tx

@@ -5279,6 +5279,58 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         and the record filed `importe_total` 9.79 and `cuota_total` 1.01. The shape would matter
         only for a new caller that builds its amounts some other way, and nothing guards against
         one. The demo scripts under `apps/server/scripts` were not checked.
+        **DONE (A158, 2026-10-01): a sale and a substitution are filed at the cent amounts their
+        rows store.** Amounts a caller hands them are rounded to the cent, as A144 chose for
+        corrections, and a breakdown that rounding stops adding up to the total is refused, for
+        corrections now as well. `buildVatBreakdown` (`packages/core/src/record-sale.ts`) now takes each
+        `lineTotal` at the cent, as `saleLineRows` stores it, so a correction, a substitution and a
+        sale with no supplied breakdown derive theirs from the stored line amounts
+        (`recordCorrection`'s own copy of that rounding was removed); a supplied breakdown is
+        rounded instead, as below. `recordSale` and `recordSubstitution` work out the total's cents once and hand
+        the backend that amount, the one the row stores. A breakdown supplied to `recordSale` is
+        rounded to the cent, base and tax each, before it is stored and filed. Rounding each amount
+        on its own can move the sum, and filing a breakdown that does not add up to the filed
+        total would chain a record nobody can repair, so this change adds two refusals, each
+        `sale.total_mismatch` and each before anything is written. A breakdown supplied to
+        `recordSale` is checked as given (the old check, unchanged) and again at the cent. A
+        breakdown derived from the lines, in `recordSale` when none is supplied, `recordSubstitution`
+        and `recordCorrection` (`deriveVatBreakdown`), is checked at the cent, but only when a line
+        total is past the cent; with every line total at the cent, the breakdown is not checked,
+        whether or not it sums to the total, and a total past the cent does not by itself trigger the
+        check — such a breakdown is built from cent amounts, so rounding moves none of it, and its
+        sum never equalled a total past the cent as typed either. `recordCorrection` had filed a derived breakdown from
+        lines rounded to the cent, unchecked, since A144 (#929). A148's probes found no product
+        path producing an amount past the cent. A supplied base or tax wider than the money scale
+        admits (twelve integer digits, `decimalToCents`) is also now refused, with `shared.decimal_overflow`, before either check: a base of
+        1000000000000.00 with a tax of -999999999998.90 against a total of 1.10 was refused by
+        `recordSale` with this change and accepted by the code before it (core's fake backend),
+        measured by a probe that was not committed.
+        Measured through the
+        real Veri\*Factu backend in the new `packages/fiscal-verifactu/src/sale-amount.huella.test.ts`,
+        on the code before the change: a 0.045 line at 10% was stored as 5 cents but filed with a
+        tax and `cuota_total` of 0.00 (10% of 0.05 is 0.005, which rounds to 0.01), for a sale and
+        for a substitution; two 0.005 lines were stored as 1 cent each but filed with a base of
+        0.01, not 0.02; and a supplied breakdown of 1.004 + 0.1004 was stored in
+        `sales.vat_breakdown` as typed, beside a stored total of 110 cents. A substitution's total
+        typed as 1.005 was already filed as 1.01, because the Veri\*Factu library rounds every
+        filed amount to two places itself; core's fake backend was handed the typed text. A
+        two-decimal sale and a two-decimal substitution file the same huella as before (literals
+        captured on the old code). A whole-cent amount typed with other than two places ("10")
+        keeps its value but now reaches `sales.vat_breakdown` and the backend written as "10.00";
+        the filed record is unchanged, because the library formats every amount it files with exactly
+        two decimal places.
+        Tests: that suite, the cases under "the amounts filed are the cent amounts the rows
+        store" in `packages/core/src/record-sale.test.ts` and `record-substitution.test.ts`, and
+        the refusal and two-decimal cases beside the cent-amount case in
+        `record-correction.test.ts`. Deletion probes: handing the backend the typed sale total,
+        building the breakdown from the typed lines, passing a supplied breakdown as given,
+        dropping the check at the cent, and handing the backend the typed substitution total each
+        failed at least one named core case. Removing the derived breakdown's check failed its
+        refusal case in all three suites; checking every derived breakdown, past the cent or not,
+        failed the three two-decimal cases, the `recordSale` case with a total past the cent and
+        its line at the cent, and four older `recordSale` cases; and gating on the total as well
+        as the lines failed that `recordSale` case and the third-decimal total cases in
+        `sale-amount.huella.test.ts` (substitution) and `correction-amount.huella.test.ts`.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.

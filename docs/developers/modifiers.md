@@ -394,11 +394,11 @@ description, its `total`, its VAT breakdown (a list of one entry per VAT rate) a
 — and never the lines themselves, so the words a diner chose have no channel at all into
 `computeHuella`'s input. The money is a different story, and the
 channel is that breakdown, whichever of the two ways it was built. When the caller supplies none,
-`recordSale` derives it from the lines (`input.vatBreakdown ?? buildVatBreakdown(input.lines)`,
-`packages/core/src/record-sale.ts`), and `buildVatBreakdown` groups each line's `lineTotal` by its
-`vatRate`; a correction and a substitution always take that path, calling `buildVatBreakdown`
-unconditionally. When the caller supplies its own — which the till's filing routes do — it is filed
-verbatim, but it too was grouped per rate over the priced lines a moment earlier
+`recordSale` derives it from the lines with `deriveVatBreakdown` (`packages/core/src/record-sale.ts`),
+which groups each line's `lineTotal`, rounded to the cent, by its `vatRate`; a correction and a
+substitution always take that path, calling `deriveVatBreakdown` unconditionally. When the caller
+supplies its own — which the till's filing routes do — it is filed with each base and tax rounded to
+the cent, but it too was grouped per rate over the priced lines a moment earlier
 (`packages/catalogue/src/pricing.ts`). Either way an extras child line's base and its own VAT rate
 reach the record's `CuotaTotal`, and `CuotaTotal` is one of the fields `computeHuella` hashes
 (`@waitron/verifactu`'s `computeHuella`).
