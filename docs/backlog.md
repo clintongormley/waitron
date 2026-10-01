@@ -5033,8 +5033,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Task 17, a table that leaves without paying, is built as lane B item B17** (2026-10-01,
     waiting for the owner's review; asesor Q28 decided by the owner without the asesor: the full
     simplified invoice is issued when the table leaves). When Finish table is refused because a bill still owes, the till offers **Record unpaid
-    departure** beside Take payment. It needs the new core permission `sale.unpaid_departure`
-    (supervisor and up, or a supervisor's PIN) and a reason. Each owing bill with no invoice yet is
+    departure** beside Take payment. It needs the existing permission `sale.void`
+    (supervisor and up, or a supervisor's PIN; owner, 2026-10-01: no new permission) and a reason. Each owing bill with no invoice yet is
     invoiced now for its full amount and filed; a bill already invoiced keeps its invoice. One row
     per bill owing more than zero goes into the new append-only core table `unpaid_departures`
     (amount still due, reason, who recorded it, who authorised it), and the party closes exactly

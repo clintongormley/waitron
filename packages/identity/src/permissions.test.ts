@@ -108,13 +108,6 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "payments.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "payments.manage")).toBe(false);
   });
-  it("grants sale.unpaid_departure to supervisor, manager and admin, not staff", () => {
-    expect(PERMISSIONS).toContain("sale.unpaid_departure");
-    expect(roleHasPermission("supervisor", "sale.unpaid_departure")).toBe(true);
-    expect(roleHasPermission("manager", "sale.unpaid_departure")).toBe(true);
-    expect(roleHasPermission("admin", "sale.unpaid_departure")).toBe(true);
-    expect(roleHasPermission("staff", "sale.unpaid_departure")).toBe(false);
-  });
   it("grants report.view to supervisor, manager and admin, not staff", () => {
     expect(roleHasPermission("supervisor", "report.view")).toBe(true);
     expect(roleHasPermission("manager", "report.view")).toBe(true);

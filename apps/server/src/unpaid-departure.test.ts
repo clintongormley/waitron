@@ -448,7 +448,7 @@ describe("who may record it", () => {
       status: 403,
       json: {
         code: "authorization.not_permitted",
-        params: { permission: "sale.unpaid_departure" },
+        params: { permission: "sale.void" },
       },
     });
     await expectNothingWritten(party.partyId, party.tabId);
