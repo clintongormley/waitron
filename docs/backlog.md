@@ -4989,7 +4989,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       whose dish no kitchen station can take" in `apps/server/src/till-api.unroutable-dish.test.ts`,
       now "paying a pay-first order, or an open counter order in a zone that sends before payment,
       whose dish no kitchen station can take" (its existing cases unchanged; one case added).
-      DONE in lane B item B30 (owner, 2026-10-01): the button that opens the cash screen reads
+      DONE in lane B item B30 (owner, 2026-10-01; landed as #1002): the button that opens the cash screen reads
       Cash/Efectivo at both stages instead of Pay or Collect, a main action beside Card/Tarjeta, in
       every zone mode and on handhelds; `action.collect` is gone. Cash and Card sit in one row of
       two equal halves, Cash on the left, falling to one column where the widget is narrower than
@@ -5015,7 +5015,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **DONE — a card hand-keyed on a machine Waitron does not talk to opens the drawer for its
       slip** (owner, 2026-10-01: _"Only if the device taking payment is the till with the cash
       drawer, we shouldn't open it remotely. But the drawer is the typical place to store credit
-      card slips, so it should be easy to do."_; lane B item B30, the drawer half). A hand-keyed
+      card slips, so it should be easy to do."_; lane B item B30, the drawer half; landed as #1002). A hand-keyed
       card sale, a collect of a placed order by hand-keyed card, and a hand-keyed card bill payment
       each enqueue a separate `drawer` job and a `drawer_opens` row of the new reason `card_slip`
       when something is owed (a sale or collect that owes nothing opens no drawer, by card or cash,
