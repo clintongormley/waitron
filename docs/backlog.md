@@ -5284,7 +5284,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         and the record filed `importe_total` 9.79 and `cuota_total` 1.01. The shape would matter
         only for a new caller that builds its amounts some other way, and nothing guards against
         one. The demo scripts under `apps/server/scripts` were not checked.
-        **DONE (A158, 2026-10-01): a sale and a substitution are filed at the cent amounts their
+        **DONE (A158, 2026-10-01, #982): a sale and a substitution are filed at the cent amounts their
         rows store.** Amounts a caller hands them are rounded to the cent, as A144 chose for
         corrections, and a breakdown that rounding stops adding up to the total is refused, for
         corrections now as well. `buildVatBreakdown` (`packages/core/src/record-sale.ts`) now takes each
