@@ -16,10 +16,10 @@
 
   --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   --wt-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --wt-font-size-sm: 13px;
-  --wt-font-size-md: 15px;
-  --wt-font-size-lg: 19px;
-  --wt-font-size-xl: 24px;
+  --wt-font-size-sm: 12px;
+  --wt-font-size-md: 14px;
+  --wt-font-size-lg: 18px;
+  --wt-font-size-xl: 22px;
   --wt-font-weight-normal: 400;
   --wt-font-weight-bold: 600;
 

@@ -1675,6 +1675,32 @@ describe("dashboard-app", () => {
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
   });
 
+  it("draws text on the page itself, outside the app, at the 14px body size", () => {
+    // In the app, tokens sit on <html> and index.html styles <body>; anything rendered straight into
+    // the page rather than inside the app's own element inherits the body's size.
+    const style = document.createElement("style");
+    style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+    document.head.append(style);
+    applyTokens(document.documentElement);
+    try {
+      expect(getComputedStyle(document.body).fontSize).toBe("14px");
+    } finally {
+      style.remove();
+      document.documentElement.removeAttribute("data-wt-theme-root");
+    }
+  });
+
+  it("draws a nav item at the 14px body size and a group header at the 12px small size", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    expect(getComputedStyle(navItem(el, "catalogue")!).fontSize).toBe("14px");
+    expect(getComputedStyle(el.shadowRoot!.querySelector("button.nav-group")!).fontSize).toBe(
+      "12px",
+    );
+  });
+
   it("expands and collapses a nav group's items from its header toggle", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

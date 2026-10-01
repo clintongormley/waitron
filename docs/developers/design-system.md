@@ -148,6 +148,14 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`
 
+The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
+system font; the app ships no font files (A179, 2026-10-01 — before it the scale was 13, 15, 19
+and 24px). Body text is `--wt-font-size-md`: `baseStyles` sets it on the host of each component that
+includes it, the dashboard, setup and till shells among them, and each of those apps' `index.html`
+sets it on `<body>` for anything drawn outside the app's own element. A size in `rem` does not
+follow the scale — it is relative to the browser's 16px root, which none of the three changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts` and by a
+case each in the dashboard, setup and till app suites.
+
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
@@ -193,7 +201,7 @@ What the cap covers of a field's label, hint and error depends on how the field 
   them stop at the form width. The select is still `width: 100%` of that label, so it stays on its
   own line below the text.
 - Not covered by `selectStyles`, measured 2026-10-01 with a temporary test in a `wt-modal` at
-  1280px (form width 576px, body 974px): a select labelled by a separate `<label for>` keeps that
+  1280px (form width 576px, body 974px), at the 15px body size before A179: a select labelled by a separate `<label for>` keeps that
   label, and an error written outside it, at the body's width (label 974px, select 576px, error
   974px) unless its screen caps the element wrapping them, as the adjustments reasons screen does
   (below); and an inline `<label>` ignores `max-width`, so the 576px select fits on its text's line
@@ -252,7 +260,9 @@ columns leave. The unit select in the price heading goes with its column; the pr
 above the table keeps a unit button that changes the same unit. The name is the one column that
 may break inside a word; an amount never breaks, so the name column is never narrower than the
 widest price. The Available heading is capped by `--wt-tap-min` plus a spacing token, and a longer
-heading runs on into the row menu's empty heading. Measured 2026-09-24 in the product editor at
+heading runs on into the row menu's empty heading. The measurements in this paragraph were taken
+at the type scale before A179 (13, 15, 19 and 24px), and none has been repeated at the 12, 14, 18
+and 22px one. Measured 2026-09-24 in the product editor at
 390px, with `wt-modal`'s old 24px side margin and padding, a four-digit price, the text sizes raised
 a step and Verdana standing in for CI's Linux fonts: with the price column the table needed 304px of
 a 292px box. The price under the name carries its euro sign (`€1,250.00`, `1250,00 €`) and is drawn
@@ -269,7 +279,9 @@ there (see the `wt-modal` entry below): measured 2026-09-24 with the modal's ful
 padding, the table at the larger text size needed 268px (280px in Verdana) of a 262px box at 360px,
 and at 320px every case but English at the normal size in the default fonts overflowed a 222px box.
 Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390, 360 and
-320px, in English and Spanish, with the text sizes raised, and each again in Verdana. They check
+320px, in English and Spanish, with the text sizes raised, and each again in Verdana. "Raised"
+means the small size set to `--wt-font-size-lg` and the body size to `--wt-font-size-xl`, so since
+A179 those cases draw 18px and 22px text where they drew 19px and 24px. They check
 that the table does not scroll, that each row menu ends inside both the table's box and the frame,
 that the price column is hidden and each price sits on one line inside the name's cell, that the
 Available heading sits on one line, that the heading's unit select is hidden, and that the price
@@ -885,9 +897,11 @@ Two notes on the primitives this pattern uses, both in the table above:
   `extra-list-form.test.ts` checks that with "kilogramos", "Unidadesdeembalaje" and a multi-word
   unit name against the one-letter "g". Its price cells pass `locale`, and the field's own growth
   keeps "9999.99" whole beside the sign. Measured 2026-09-29 in headless Chromium with the default
-  font at `--wt-font-size-md`: "9999.99" is 58.9px wide; with the sign inside a 96px box it had
+  font at `--wt-font-size-md`, then 15px: "9999.99" is 58.9px wide; with the sign inside a 96px box it had
   56.8px to 57.8px, and with the box grown by the sign it has the 70px to 71px it had without one
-  (English and Spanish, with a unit button and a fixed unit).
+  (English and Spanish, with a unit button and a fixed unit). Re-measured 2026-10-01 for A179 in
+  headless Chromium (Vitest browser mode, Playwright 1.63.0, macOS) in `--wt-font-family`: "9999.99"
+  is 55.5px at 14px, against 59.0px at 15px in the same run; the box figures were not re-measured.
 
 ### Dashboard banner
 
@@ -1362,7 +1376,7 @@ note — measured 2026-09-13 by running axe over `<wt-combobox aria-label="Dieta
 control, over the same component with a visible `label` instead, which drew none. Both are engine
 limitations, not defects —
 verified by hand: `--wt-color-text` on `--wt-color-surface-raised` computes to ~13:1 in dark and >15:1
-in light, both far past the 4.5:1 AA floor for the 15px body text involved.)
+in light, both far past the 4.5:1 AA floor for the 14px body text involved.)
 
 New primitives require an axe test covering every meaningfully distinct accessibility-relevant state
 (not just the default render) — see the checklist below.

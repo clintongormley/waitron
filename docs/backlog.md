@@ -1538,14 +1538,37 @@ the fill in both themes.
 dropdown's keyboard and screen-reader behaviour, and whether the till follows) are still the
 spec's to settle. The mockups are drawn at 14px in the system font, which is A179.
 
-**Smaller text: the system font at 14px (A179, owner 2026-10-01) — OPEN.** The owner: _"i find our
-text to be too big"_. Today body text is `--wt-font-size-md`, 15px, with `--wt-font-size-sm` 13px
-and `--wt-font-size-lg` 19px (`packages/ui-core/src/tokens/structure.css`), in each device's own
-system font (`--wt-font-family`: `system-ui, -apple-system, "Segoe UI", sans-serif`); the app
-ships no font files. The owner first asked for Home Assistant's Roboto, then chose to try the
-system font at 14px first — no font to bundle, no licence notice to ship. **Wanted:** body text
-14px, with the other sizes reconsidered beside it; fields follow (A178's mockups are already at
-14px, labels 12px). Open: whether the till, a touch screen with its own select styles, follows.
+**Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01.** The owner:
+_"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
+`--wt-font-size-sm` 13px, `--wt-font-size-lg` 19px and `--wt-font-size-xl` 24px
+(`packages/ui-core/src/tokens/structure.css`), in each device's own system font
+(`--wt-font-family`: `system-ui, -apple-system, "Segoe UI", sans-serif`); the app ships no font
+files. The owner first asked for Home Assistant's Roboto, then chose to try the system font at
+14px first — no font to bundle, no licence notice to ship.
+
+**What was built.** The scale is now 12 / 14 / 18 / 22px (sm / md / lg / xl): each old step
+scaled by 14/15 and rounded (12.1, 14, 17.7, 22.4), and 12px small text also matches the 12px
+labels in A178's approved mockups. The font is still the system font. It applies to the dashboard,
+setup and the till alike (owner: _"yes for now, then we can revisit later"_), since all three read
+the same tokens. Each app's `index.html` now also sets `<body>` to the body size, so text drawn
+outside the app's own element (the till's "this device hasn't trusted the till yet" page) is 14px
+rather than the browser's 16px. Checked in the till and setup: the till's touch select styles
+(`apps/till/src/select-styles.ts`) inherit the text size and keep their `--wt-tap-min` minimum
+height, and the ui-core tap-target suite (`packages/ui-core/src/tap-target-and-focus.test.ts`)
+passes. Left alone on purpose, because they are sized in `rem` (relative to the browser's 16px
+root, which this does not change) and are not body text: the till's enrolment number (`4rem`),
+setup's cloud-recovery code (`1.8rem`), and the done screen's break-glass heading (`1rem`) and
+code (`1.1rem`), which stay 16px and 17.6px. Setup's and some dashboard screens' page headings
+(the content languages screen's, for one) take the browser's own `<h1>` size, twice the text
+around them: 28px, measured 2026-10-01, where it was 30px. Whether those headings should read
+`--wt-font-size-xl` instead is open. The phone-width cases that raise the text sizes (in the
+product editor, printers and servers suites) raise them to `--wt-font-size-lg` and
+`--wt-font-size-xl`, so they now draw 18px and 22px where they drew 19px and 24px. The dashboard
+(users list and its add form, content languages), setup (first screen, done screen) and till (lock,
+counter with two lines, enrolment) were looked at in headless Chromium, light and dark, English and
+Spanish, at 1280 and 390px wide (the till also at 1024x768), beside the same screens at the old scale in light
+English; nothing was clipped or misaligned by the change.
+
 **Phone check, the owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is
 widely reported to zoom the page in when a field whose text is under 16px is focused — not yet
 tried here. If it does, the usual remedy is to keep field text at 16px on small screens only.

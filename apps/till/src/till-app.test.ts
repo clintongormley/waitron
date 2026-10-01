@@ -1,5 +1,6 @@
 import { page } from "vitest/browser";
-import { currentContentLanguages } from "@waitron/ui";
+import { applyTokens, currentContentLanguages } from "@waitron/ui";
+import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import {
@@ -672,6 +673,29 @@ describe("till-app", () => {
     const { el } = await mountWidget<TillApp>("till-app", { api });
     await flush(el);
     expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
+  });
+
+  it("draws text on the page itself, outside the app, at the 14px body size", () => {
+    // In the app, tokens sit on <html> and index.html styles <body>; anything rendered straight into
+    // the page rather than inside the app's own element inherits the body's size.
+    const style = document.createElement("style");
+    style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+    document.head.append(style);
+    applyTokens(document.documentElement);
+    try {
+      expect(getComputedStyle(document.body).fontSize).toBe("14px");
+    } finally {
+      style.remove();
+      document.documentElement.removeAttribute("data-wt-theme-root");
+    }
+  });
+
+  it("draws the lock screen's text at the 14px body size and its heading at the 18px large size", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    const screen = lock(el)!.shadowRoot!;
+    expect(getComputedStyle(screen.querySelector(".screen")!).fontSize).toBe("14px");
+    expect(getComputedStyle(screen.querySelector(".heading")!).fontSize).toBe("18px");
   });
 
   it("starts on the lock screen", async () => {

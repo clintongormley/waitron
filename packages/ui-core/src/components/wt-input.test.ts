@@ -10,6 +10,12 @@ test("renders its label", async () => {
   expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Weight");
 });
 
+test("its value is body text and its label small text", async () => {
+  const el = await mount('<wt-input label="Weight"></wt-input>');
+  expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).fontSize).toBe("14px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("label")!).fontSize).toBe("12px");
+});
+
 test("associates the label with the input so it has an accessible name", async () => {
   const el = await mount('<wt-input label="Weight"></wt-input>');
   const label = el.shadowRoot!.querySelector("label")!;
