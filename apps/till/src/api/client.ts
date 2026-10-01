@@ -1077,7 +1077,7 @@ export interface HeldOrder {
 
 /**
  * The per-location pay-timing mode. `prepay` pays at order; `invoice_first` and `ticket_then_pay`
- * place the order first and collect payment later.
+ * either pay at order or place the order first and collect payment later.
  */
 export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
 

@@ -5745,12 +5745,15 @@ describe("till-app", () => {
     ] as const)(
       "Pay by %s at the order stage of a ticket_then_pay zone pays the open order and re-reads the kitchen queue",
       async (_method, event, detail, route) => {
+        const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
         const { el } = await mountApp({
           getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+          getStationQueue,
         });
         const c = await toCounter(el);
         c.store.addProduct(cafe, "2");
         await el.updateComplete;
+        const reads = getStationQueue.mock.calls.length;
 
         emit(c, event, detail);
         await flush(el);
@@ -5759,34 +5762,27 @@ describe("till-app", () => {
         expect(currentApi.placeOrder).not.toHaveBeenCalled();
         expect(currentApi.collectOrder).not.toHaveBeenCalled();
         expect(ticket(el)).not.toBeNull();
-        // once on entering the counter, once after the payment sent the dishes to the kitchen.
-        expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
+        expect(getStationQueue).toHaveBeenCalledTimes(reads + 1);
       },
     );
 
-    it.each([
-      ["cash", "confirm-payment", { method: "cash", amount: "5" }],
-      ["an integrated card", "collect-card", {}],
-    ] as const)(
-      "Pay by %s at the order stage of an invoice_first zone issues the invoice now, so the original receipt is offered",
-      async (_method, event, detail) => {
-        const { el } = await mountApp({
-          getTill: vi.fn().mockResolvedValue({
-            ...till,
-            orderFlow: "invoice_first",
-            receiptPrintMode: "on_request",
-          }),
-        });
-        const c = await toCounter(el);
-        c.store.addProduct(cafe, "2");
-        await el.updateComplete;
+    it("Pay by an integrated card at the order stage of an invoice_first zone issues the invoice now, so the original receipt is offered", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          orderFlow: "invoice_first",
+          receiptPrintMode: "on_request",
+        }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
 
-        emit(c, event, detail);
-        await flush(el);
+      emit(c, "collect-card", {});
+      await flush(el);
 
-        expect(ticket(el)!.originalReceiptAvailable).toBe(true);
-      },
-    );
+      expect(ticket(el)!.originalReceiptAvailable).toBe(true);
+    });
 
     it("collect-order: settles the placed order and shows the ticket", async () => {
       const { el } = await mountApp({
@@ -8305,6 +8301,32 @@ describe("a failed list refresh after a successful write", () => {
     expect(el.shadowRoot!.querySelector("[data-refresh-retry]")).toBeNull();
     expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
   });
+
+  it.each([
+    ["ticket_then_pay", "cash", "confirm-payment", { method: "cash", amount: "5" }],
+    ["ticket_then_pay", "an integrated card", "collect-card", {}],
+    ["invoice_first", "cash", "confirm-payment", { method: "cash", amount: "5" }],
+    ["invoice_first", "an integrated card", "collect-card", {}],
+  ] as const)(
+    "a kitchen queue that cannot be read after an order in a %s zone is paid by %s at the order stage says the sale was recorded",
+    async (orderFlow, _method, event, detail) => {
+      const getStationQueue = failingAfterLogin<StationQueue>({ items: [], notices: [] });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
+        getStationQueue,
+      });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, event, detail);
+      await settle(el);
+
+      expect(ticket(el)).not.toBeNull();
+      expect(alertText(el)).not.toContain(t("sale.unconfirmed"));
+      expect(message(el, "station")).toBe(t("refresh.station_after_sale"));
+    },
+  );
 
   /** An invoice-first counter whose zone list offers a prepay zone, `zone-deli`, to switch to. */
   function mountWithPrepayZone(getStationQueue: ReturnType<typeof vi.fn>) {

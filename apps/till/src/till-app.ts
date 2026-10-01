@@ -2138,7 +2138,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Settles the basket (prepay). The ticket's lines come from the server result, so a rejection leaves
+   * Pays the basket: a prepay basket, or an open order at the order stage of a zone that sends to the
+   * kitchen without payment. The ticket's lines come from the server result, so a rejection leaves
    * the basket untouched on the counter.
    */
   async #onConfirmPayment(event: Event, retried = false): Promise<void> {
@@ -2166,8 +2167,8 @@ export class TillApp extends LitElement {
       this.#showTicket(id);
       // A just-paid retrieved order must drop off the held list.
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
-      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
       if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
@@ -2235,8 +2236,8 @@ export class TillApp extends LitElement {
         this.result = out.ticket;
         this.#showTicket(id, invoiceIssuedNow);
         await this.#refreshAfterWrite("held", "refresh.held_after_sale");
-        await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
         if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
+        await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
       } else {
         this.cardOutcome = out.outcome;
       }
