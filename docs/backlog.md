@@ -4825,7 +4825,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       holds in `apps/till/src/till-app.test.ts`, and the wording pinned in
       `apps/till/src/i18n/strings.test.ts`.
     - **DONE — a discard refused for a pending card refund says so, and the server checks a
-      discarded order is still open before it checks for money** (lane B item B24, 2026-10-01; the
+      discarded order is still open before it checks for money** (lane B item B24, #984, 2026-10-01; the
       owner's "queue it" to both of B23's FYI points). On the till, a discard refused
       `bill.refund_in_progress` shows that code's own till text instead of `held.stale`. On the
       server, `abandonHeldOrder` (`apps/server/src/working-order.ts`) now reads the order's status
