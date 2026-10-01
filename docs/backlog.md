@@ -1612,7 +1612,7 @@ A173 (the dropdown's arrow) disappears if A178 replaces the native dropdown.
 
 **Dragging a row: the row being dragged cannot be seen, everywhere (A180, owner 2026-10-01: "drag
 and drop works, but you don't see the row being dragged. this should be fixed everywhere") —
-OPEN: reorder lists DONE 2026-10-01 (branch `fix/drag-row-follows-pointer`); the Products drag
+OPEN: reorder lists DONE 2026-10-01, #994; the Products drag
 and the canvas tiles WAIT on the owner.** The owner's words about the reorder lists, 2026-10-01:
 _"you see the background colour, but the row itself doesn't move smoothly as you drag it, it
 jumps"_. Wanted (owner, 2026-10-01): the dragged row follows the pointer smoothly, lifted, while
