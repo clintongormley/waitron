@@ -28,6 +28,8 @@ export interface DataTableColumn<Row> {
   /** On the table's last column, keeps it at the box's trailing edge while the other columns scroll
    * sideways under it. */
   pinned?: "end";
+  /** Keep the whole cell above a row's stretched activator, including blank space beside its action. */
+  activatesRow?: false;
 }
 
 type SortDirection = "ascending" | "descending";
@@ -149,6 +151,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       tr.clickable td :is(button, a, input, select, label, wt-row-actions):not(.row-activate) {
         position: relative;
         z-index: 1;
+      }
+
+      tr.clickable td[data-row-activate="false"] {
+        position: relative;
+        z-index: 1;
+        cursor: default;
       }
 
       .sort {
@@ -1023,6 +1031,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         <td
                           data-align=${column.align ?? "start"}
                           data-pinned=${column.pinned ?? nothing}
+                          data-row-activate=${column.activatesRow === false ? "false" : nothing}
                           @click=${
                             column.pinned && this.rowClick !== undefined
                               ? (event: Event) => this.#openFromPinnedCell(event, row)
