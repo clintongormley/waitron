@@ -245,13 +245,15 @@ hook, or how tests are scheduled:
   fresh database migrated in one go never has — so most suites cannot see it. `applyMigrations`
   removes the change feed first for that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild of a table
   another set's trigger BODY reads still fails (measured on core `0003`). Guard:
-  `scripts/migration-upgrade.test.ts`, which also carries two rows per table through every step
-  and fails a step that refuses them or loses any. Weaker than its name — the rows are synthetic,
+  `scripts/migration-upgrade.test.ts`, which also carries two rows per table (one where `ONE_ROW` or a
+  singleton CHECK says so) through every step and fails a step that refuses them or leaves a table
+  that still exists holding fewer. Weaker than its name — the rows are synthetic,
   read from each step's schema rather than written by the product, so a migration that fails only
   on values the product writes and they lack passes; a step that cannot carry them goes in its
   `RESETS`, where the walk restarts empty; it installs
   today's change-feed list, and today's append-only list less the tables the previous step lacked, at every step; it applies everything up to core's
-  `0003` in one go; and it asserts only that each step does not throw, so a rebuild that silently
+  `0003` in one go; rows are counted, not compared, so a step that rewrites a value passes; and
+  beyond the counts it asserts only that each step does not throw, so a rebuild that silently
   drops a trigger ON the rebuilt table passes it (SQLite drops one silently:
   [conventions-data.md](docs/developers/conventions-data.md)). Cost: an earlier bricked box that
   was wiped, and a box that failed three starts on 2026-09-26. See

@@ -141,7 +141,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
      archives can only be saved on the box itself (`LocalFsBackend`);
    - installing or renewing the AEAT certificate after setup (A9) — today only the setup wizard can
      set it, and nothing watches when it expires;
-   - upgrade testing with rows in the tables and a real older database (B4) — owner-marked blocking
+   - upgrade testing with rows the product itself writes and a real older database (B4) — owner-marked blocking
      before go-live;
    - the bootable USB installer (B3), the last piece of "install without a terminal";
    - the degraded-but-trading recovery spec (B5).
@@ -6778,19 +6778,10 @@ approved.
   could see because every suite migrated a fresh database. #692 removes the change feed before
   migrating, and its `scripts/migration-upgrade.test.ts`
   walks one database through every shipped migration in date order, with the change feed installed
-  between steps. What it still does not cover, each needed before a real venue is live:
-  - **Rows.** _(2026-10-01: synthetic rows DONE by A164, below.)_ The guard now carries two
-    rows per table, read from each step's own schema, so a new `not null` column with no default,
-    a rebuild whose `DROP TABLE` cascades and a unique index over a column the two rows share
-    each fail it.
-    Still open: rows the product itself writes. The synthetic rows hold a few generic values, so a
-    migration that fails only on values the product writes and they lack passes — a unique index
-    two real rows break where these two differ, a required column real rows leave empty while
-    these hold a value. Seed a realistic venue (the demo seed at least) at each step for that;
-    the product's writers name today's columns, so they cannot write an older step's schema.
+  between steps.
   - **A164: the upgrade guard carries rows — DONE (2026-10-01, owner: "queue it").** After each
-    step `scripts/migration-upgrade.test.ts` tops every table up to two rows, the second repeating
-    the first, where its constraints allow, except in its key and unique-index columns, and fails a step that refuses them or
+    step `scripts/migration-upgrade.test.ts` tops every table up to two rows (one where `ONE_ROW`
+    or a singleton CHECK says so), the second repeating the first, where its constraints allow, except in its key and unique-index columns, and fails a step that refuses them or
     leaves a table holding fewer. Shown by three planted migrations (a `not null` column with no
     default, a cascading rebuild, a unique index), each passing the guard before and failing it after; the
     receipt is in [ci-and-gates.md](developers/ci-and-gates.md) → *The upgrade test carries rows
@@ -6801,6 +6792,19 @@ approved.
     drawer-open records when it took that migration would have lost them — inferred, not run on a
     box. Whether the owner's box held any then was not checked. Runtime: about 8.1 seconds
     before, 9.9 after (three runs each, locally).
+
+  What it still does not cover, each needed before a real venue is live:
+  - **Rows.** _(2026-10-01: synthetic rows DONE by A164, above.)_ The guard now carries two
+    rows per table (one where `ONE_ROW` or a singleton CHECK says so), read from each step's own
+    schema, so a new `not null` column with no default,
+    a rebuild whose `DROP TABLE` cascades and a unique index over a column the two rows share
+    each fail it.
+    Still open: rows the product itself writes. The synthetic rows hold a few generic values, so a
+    migration that fails only on values the product writes and they lack passes — a unique index
+    two real rows break where these two differ, a required column real rows leave empty while
+    these hold a value. Seed a realistic venue (the demo seed at least) at each step for that;
+    the product's writers name today's columns; whether they can write an older step's schema was
+    not tried.
   - **A rebuild of a table another set's trigger BODY reads is still refused** on a box that has
     the trigger — core `0003` on `products`, recorded in
     [conventions-data.md](developers/conventions-data.md) → *A migration set depends on another
