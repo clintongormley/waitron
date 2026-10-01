@@ -111,6 +111,24 @@ cases, the “a replay opens nothing more” sale and collect cases in
 `apps/server/src/bill-payments-api.test.ts`, each failed when the drawer was also opened on a replay
 (2026-10-01).
 
+## Only the drawer's own till opens it; a handheld does what a till does
+
+The owner, 2026-10-01: _"A handheld should be able to do pretty much anything a till can do, it just
+depends on the permissions of the person using the handheld. But a cash register should only be
+opened by the device it is assigned to."_ (B29). A handheld places, collects and cancels like a till;
+the operator's permissions decide. A drawer belongs to one register: the one its printer names under
+"Drawer opens at" (`printers.drawer_till_id`), else the only register whose receipt printer it is,
+else none (`drawerOwnerOf`, `apps/server/src/receipt-print.ts`). Every automatic opening (cash, a
+hand-keyed card's slip, a bill payment or refund) and the Open drawer button check it; the button
+reads the pressing device's register, and a till that does not own the drawer is refused
+`drawer.not_owner`. A handheld opens no drawer on any of those paths, because each route that reaches
+one sets `allowCashDrawer` from the device's form factor (`till-api.ts`'s sale and collect routes,
+`deviceSaleCfg` in `bill-payments-api.ts`); a new route that reaches a drawer and forgets it lets a
+handheld open its register's drawer, and nothing guards that. Regressions: the two-tills cases in
+`apps/server/src/receipt-print.test.ts` and `till-api.receipt.test.ts`, and the handheld-collect
+cases in `till-api.fiscal-sale-paths.test.ts`, which failed with a drawer opened before collect set
+the flag (2026-10-02).
+
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 
 Close the editor after the write succeeds, then refresh the list separately; retaining a create form

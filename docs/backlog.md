@@ -5141,7 +5141,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       the one cash uses: the device is not a handheld, and the calling till's active receipt
       printer has a drawer attached. A card on a connected machine (Stripe,
       SumUp, the practice simulator) opens nothing, and a replay opens nothing more. Lane B's B29
-      (queued, owner 2026-10-01) narrows "the till" to the drawer printer's primary owner. Both
+      (next entry) narrows "the till" to the drawer's own till. Both
       review seats reproduced the case B29 must close: two tills that share one drawer-equipped
       receipt printer both open its drawer (cash already did; a hand-keyed card now does too). The new reason needed a migration: the
       reason and target CHECKs changed, and changing a CHECK rebuilds the table on this engine
@@ -5167,6 +5167,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       reads. **For the owner:** a card taken on a connected machine that also prints a paper
       merchant slip still opens nothing; this change covers only the machine Waitron does not talk
       to.
+    - **DONE — a handheld does what a till does, and only the drawer's own till opens it**
+      (owner, 2026-10-01: _"A handheld should be able to do pretty much anything a till can do, it
+      just depends on the permissions of the person using the handheld. But a cash register should
+      only be opened by the device it is assigned to"_; lane B item B29). The server no longer
+      refuses a handheld for being one when it places, collects or cancels an order; it files under
+      the register it joined with, as its cash and hand-keyed card sales already did. None of the
+      three routes checks a permission beyond a signed-in operator, on a till or a handheld. A
+      drawer belongs to one register: the one its printer names under "Drawer opens at" (new
+      column `printers.drawer_till_id`, core `0062_printer_drawer_till`, set on the dashboard's
+      Printers screen), else the only register whose receipt printer it is, else none. Every
+      automatic opening and the Open drawer button check it; the button now reads the pressing
+      device's register, where it read the box's configured till, and a till that does not own the
+      drawer is refused `drawer.not_owner`. Found on the way: once collect accepted a handheld, a
+      handheld collecting in cash would have opened its register's drawer; collect now sets the
+      same flag the sale and bill routes set. **Open:** the till app still keeps a handheld off the
+      counter screen (where Place lives) and gives its bill-pay dialog no card reader whatever its
+      profile allows (`apps/till/src/till-app.ts`, `HANDHELD_FACES` and the `cardReader` binding);
+      both are screen choices by form factor, left for a decision. The Devices screen's per-device
+      "Receipt printer" is read by nothing that prints.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the

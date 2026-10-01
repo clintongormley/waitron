@@ -975,13 +975,17 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
 
 ## 5. Fiscal invariants — the unrecoverable ones
 
-- **Printing never opens the cash drawer.** A cash payment, or a card hand-keyed on a machine
-  Waitron does not talk to (its slip is kept in the drawer, owner 2026-10-01), at a till whose
-  receipt printer has an attached drawer enqueues a separate audited `drawer` job; receipt jobs are
-  `document` jobs and contain no drawer command. A card on a connected machine opens nothing.
-  Handhelds cannot open the drawer, even with a profile capability, and drawer jobs cannot be
-  manually resent. The receipt review reproduced a resent cash receipt opening the drawer without a
-  new audit row. Pointer: #324; the card slip, B30.
+- **Printing never opens the cash drawer, and only the drawer's own till opens it.** A cash
+  payment, or a card hand-keyed on a machine Waitron does not talk to (its slip is kept in the
+  drawer, owner 2026-10-01), enqueues a separate audited `drawer` job; receipt jobs are `document`
+  jobs and contain no drawer command. A card on a connected machine opens nothing. The drawer opens
+  only at the till that owns it (owner 2026-10-01: _"a cash register should only be opened by the
+  device it is assigned to"_): the register the printer names under "Drawer opens at", else the one
+  register whose receipts print there, and none when several do (`drawerOwnerOf`,
+  `apps/server/src/receipt-print.ts`). Every other till and every handheld may print there and opens
+  nothing, even with `cash.drawer` and a profile capability. Drawer jobs cannot be manually resent.
+  The receipt review reproduced a resent cash receipt opening the drawer without a new audit row.
+  Pointer: #324; the card slip, B30; the drawer's own till, B29.
 
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across and pre-production sales would leave a permanent hole
