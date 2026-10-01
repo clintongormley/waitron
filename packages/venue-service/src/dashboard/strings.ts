@@ -39,6 +39,7 @@ const en = {
   "prep.cancel": "Cancel",
   "prep.load_error": "Prep stations could not be loaded.",
   "prep.save_error": "The change could not be saved.",
+  "prep.created_needs_thresholds": "Station created. Save again to finish its timing settings.",
   "prep.fix_fields": "Correct the highlighted fields to continue.",
   "prep.station_inactive": "This station is switched off. Choose an active station.",
   "venue.department_has_zones":
@@ -172,6 +173,8 @@ const es: Record<keyof typeof en, string> = {
   "prep.cancel": "Cancelar",
   "prep.load_error": "No se pudieron cargar las estaciones de preparación.",
   "prep.save_error": "No se pudo guardar el cambio.",
+  "prep.created_needs_thresholds":
+    "La estación se creó. Guarda de nuevo para terminar sus tiempos.",
   "prep.fix_fields": "Corrige los campos marcados para continuar.",
   "prep.station_inactive": "Esta estación está desactivada. Elige una estación activa.",
   "venue.department_has_zones":

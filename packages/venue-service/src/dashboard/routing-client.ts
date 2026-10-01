@@ -21,6 +21,14 @@ export interface PrepStationsView {
   stationPrinters: { stationId: string; printerId: string }[];
   devices: { id: string; label: string; stationId: string | null; kind: string; active: boolean }[];
 }
+export class StationThresholdPatchError extends Error {
+  constructor(
+    readonly createdStationId: string,
+    cause: unknown,
+  ) {
+    super("Station created but thresholds could not be saved", { cause });
+  }
+}
 export type StationInput = {
   name: string;
   displayOrder: number;
@@ -66,11 +74,15 @@ export class PrepStationsApi {
       name: input.name,
       displayOrder: input.displayOrder,
     });
-    await this.request(`/management-api/stations/${created.id}`, "PATCH", {
-      warmAfterMinutes: input.warmAfterMinutes,
-      overdueAfterMinutes: input.overdueAfterMinutes,
-      forgottenAfterMinutes: input.forgottenAfterMinutes,
-    });
+    try {
+      await this.request(`/management-api/stations/${created.id}`, "PATCH", {
+        warmAfterMinutes: input.warmAfterMinutes,
+        overdueAfterMinutes: input.overdueAfterMinutes,
+        forgottenAfterMinutes: input.forgottenAfterMinutes,
+      });
+    } catch (cause) {
+      throw new StationThresholdPatchError(created.id, cause);
+    }
     return created;
   }
   updateStation(id: string, input: StationInput): Promise<void> {
@@ -95,6 +107,13 @@ export class PrepStationsApi {
       ...condition,
       ...(target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true }),
     });
+  }
+  assignProduct(productId: string, target: RouteTarget): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/routing/products/${productId}/assignment`,
+      "PUT",
+      target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true },
+    );
   }
   removeClaim(categoryId: string): Promise<void> {
     return this.request(`/management-api/venue-service/routing/claims/${categoryId}`, "DELETE");

@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS, createCatalogue, createCategory } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  createCatalogue,
+  createCategory,
+  createProduct,
+} from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   deviceProfiles,
@@ -370,6 +375,7 @@ describe("venue service management routes", () => {
       ["GET", base, undefined],
       ["PUT", `${base}/claims/${fx.categoryId}`, { noPreparation: true }],
       ["DELETE", `${base}/claims/${fx.categoryId}`, undefined],
+      ["PUT", `${base}/products/${crypto.randomUUID()}/assignment`, { noPreparation: true }],
       ["POST", `${base}/exceptions`, { categoryId: fx.categoryId, noPreparation: true }],
       [
         "PUT",
@@ -1130,5 +1136,42 @@ describe("the release-reminder setting", () => {
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
     expect(body.printHeldWork).toBe(false);
+  });
+});
+
+describe("Prep stations product assignment route", () => {
+  it("requires a manager and writes one prioritized product-wide exception", async () => {
+    const fx = await fixture();
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Bread",
+        categoryId: null,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = `/management-api/venue-service/routing/products/${product.id}/assignment`;
+    expect((await send(fx.app, "PUT", path, undefined, { stationId: fx.stationId })).status).toBe(
+      401,
+    );
+    expect(
+      (await send(fx.app, "PUT", path, fx.staffCookie, { stationId: fx.stationId })).status,
+    ).toBe(403);
+    expect(
+      (await send(fx.app, "PUT", path, fx.managerCookie, { stationId: fx.stationId })).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "PUT", path, fx.managerCookie, { noPreparation: true })).status,
+    ).toBe(204);
+    const model = (await (
+      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+    ).json()) as { exceptions: { productId: string; target: unknown }[] };
+    expect(
+      model.exceptions
+        .filter((e) => e.productId === product.id)
+        .map(({ productId, target }) => ({ productId, target })),
+    ).toEqual([{ productId: product.id, target: { kind: "no_preparation" } }]);
   });
 });

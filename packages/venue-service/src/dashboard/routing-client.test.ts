@@ -83,3 +83,32 @@ it("writes station changes to core and claims to venue-service", async () => {
     ],
   ]);
 });
+it("assigns an unfiled product through the prioritized assignment route", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.assignProduct("bread", { kind: "station", stationId: "bar" });
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/venue-service/routing/products/bread/assignment",
+    "PUT",
+    { stationId: "bar" },
+  );
+});
+
+it("carries the created station id when its threshold patch fails", async () => {
+  const request = vi.fn(async (path: string, method: string) => {
+    if (path === "/management-api/stations" && method === "POST") return { id: "new-bar" };
+    if (path === "/management-api/stations/new-bar" && method === "PATCH")
+      throw { code: "management.request_invalid" };
+  });
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await expect(
+    api.createStation({
+      name: "Bar",
+      displayOrder: 0,
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    }),
+  ).rejects.toMatchObject({ createdStationId: "new-bar" });
+  expect(request).toHaveBeenCalledTimes(2);
+});

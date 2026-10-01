@@ -514,3 +514,43 @@ describe("resolveMakers", () => {
       );
     }));
 });
+describe("assigning an unfiled product from Prep stations", () => {
+  it("makes repeated assignments effective before an earlier broad exception without duplicating the product rule", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const broad = await createException(tx, f.cfg, {
+        zoneId: f.terrace,
+        categoryId: null,
+        productId: null,
+        target: noPrep,
+      });
+      const unrelated = await createException(tx, f.cfg, {
+        zoneId: null,
+        categoryId: f.drinks,
+        productId: null,
+        target: { kind: "station", stationId: f.bar },
+      });
+      const product = { productId: f.bread, routedProductId: f.bread, categoryId: null };
+      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual(
+        noPrep,
+      );
+      const { assignUnfiledProduct } = await import("./routing-store.js");
+      await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
+      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual({
+        kind: "station",
+        stationId: f.terraceBar,
+      });
+      await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.bar });
+      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual({
+        kind: "station",
+        stationId: f.bar,
+      });
+      const model = await routingModel(tx, f.cfg);
+      expect(
+        model.exceptions.filter((e) => e.productId === f.bread && e.zoneId === null),
+      ).toHaveLength(1);
+      expect(
+        model.exceptions.filter((e) => e.id === broad || e.id === unrelated).map((e) => e.id),
+      ).toEqual([broad, unrelated]);
+    }));
+});

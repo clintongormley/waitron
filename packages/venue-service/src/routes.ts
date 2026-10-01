@@ -39,6 +39,7 @@ import {
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import {
+  assignUnfiledProduct,
   createException,
   deleteException,
   removeClaim,
@@ -168,6 +169,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const categoryId = requireUuidParam(c.req.param("categoryId"), "CategoryId");
         await gated(sessionId, (tx) => removeClaim(tx, ctx.cfg, categoryId));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/routing/products/:productId/assignment", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const productId = requireUuidParam(c.req.param("productId"), "ProductId");
+        const target = requireRoutingTarget(await readJsonBody<Record<string, unknown>>(c));
+        await gated(sessionId, (tx) => assignUnfiledProduct(tx, ctx.cfg, productId, target));
         return c.body(null, 204);
       }),
     );

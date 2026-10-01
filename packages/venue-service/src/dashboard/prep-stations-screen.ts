@@ -10,11 +10,12 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { RouteTarget } from "../routing.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
-import type {
-  PrepStation,
-  PrepStationsApi,
-  PrepStationsView,
-  StationInput,
+import {
+  StationThresholdPatchError,
+  type PrepStation,
+  type PrepStationsApi,
+  type PrepStationsView,
+  type StationInput,
 } from "./routing-client.js";
 import { t } from "./strings.js";
 
@@ -256,8 +257,12 @@ export class PrepStationsScreen extends LitElement {
       this.editor = undefined;
       await this.#load();
     } catch (e) {
-      const code = codeOf(e);
-      if (code === "station.name_taken") this.fieldError = { name: t("prep.name_taken") };
+      if (e instanceof StationThresholdPatchError) {
+        this.editor = { kind: "station", id: e.createdStationId };
+        await this.#load();
+        this.error = t("prep.created_needs_thresholds");
+      } else if (codeOf(e) === "station.name_taken")
+        this.fieldError = { name: t("prep.name_taken") };
       else this.error = t("prep.save_error");
     } finally {
       this.busy = false;
@@ -335,7 +340,7 @@ export class PrepStationsScreen extends LitElement {
     return html`<wt-card data-test="unassigned"
       ><h2>${t("prep.unassigned")}</h2>
       <p>${destination}</p>
-      ${r.unassigned.folders.map((f) => html`<div class="item"><span>${this.#path(f.id)}</span><wt-combobox data-test=${`assign-${f.id}`} label=${t("prep.assign_to")} .options=${this.#targetOptions()} @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#setClaim(f.id, targetFor(e.detail.value))}></wt-combobox>${this.claimError && this.claimField === f.id ? html`<p class="error" data-field-error=${f.id} role="alert">${this.claimError}</p>` : nothing}</div>`)}${r.unassigned.products.map((p) => html`<div class="item"><span>${p.name}</span><wt-combobox data-test=${`assign-${p.id}`} label=${t("prep.assign_to")} .options=${this.#targetOptions()} @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#assign(p.id, () => this.api.createException({ zoneId: null, categoryId: null, productId: p.id, target: targetFor(e.detail.value) }))}></wt-combobox>${this.claimError && this.claimField === p.id ? html`<p class="error" data-field-error=${p.id} role="alert">${this.claimError}</p>` : nothing}</div>`)}</wt-card
+      ${r.unassigned.folders.map((f) => html`<div class="item"><span>${this.#path(f.id)}</span><wt-combobox data-test=${`assign-${f.id}`} label=${t("prep.assign_to")} .options=${this.#targetOptions()} @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#setClaim(f.id, targetFor(e.detail.value))}></wt-combobox>${this.claimError && this.claimField === f.id ? html`<p class="error" data-field-error=${f.id} role="alert">${this.claimError}</p>` : nothing}</div>`)}${r.unassigned.products.map((p) => html`<div class="item"><span>${p.name}</span><wt-combobox data-test=${`assign-${p.id}`} label=${t("prep.assign_to")} .options=${this.#targetOptions()} @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#assign(p.id, () => this.api.assignProduct(p.id, targetFor(e.detail.value)))}></wt-combobox>${this.claimError && this.claimField === p.id ? html`<p class="error" data-field-error=${p.id} role="alert">${this.claimError}</p>` : nothing}</div>`)}</wt-card
     >`;
   }
   #field(field: keyof StationInput, label: string, type = "number") {

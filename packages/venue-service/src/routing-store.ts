@@ -125,6 +125,72 @@ export async function createException(
   return row!.id;
 }
 
+/** A product-wide assignment must precede broader exceptions to become the effective route. */
+export async function assignUnfiledProduct(
+  tx: Transaction,
+  cfg: VenueScope,
+  productId: string,
+  target: RouteTarget,
+): Promise<void> {
+  const [product] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(
+      and(
+        productWithId(productId, "top-level"),
+        eq(products.active, true),
+        isNull(products.categoryId),
+      ),
+    );
+  if (product === undefined)
+    throw new AppError("route.subject_not_found", { subject: "product", id: productId });
+  await validateRoutingInput(tx, cfg, {
+    zoneId: null,
+    categoryId: null,
+    productId,
+    target,
+  });
+  const existing = await tx
+    .select({ id: routeExceptions.id })
+    .from(routeExceptions)
+    .where(
+      and(
+        eq(routeExceptions.locationId, cfg.locationId),
+        isNull(routeExceptions.zoneId),
+        isNull(routeExceptions.categoryId),
+        eq(routeExceptions.productId, productId),
+      ),
+    )
+    .orderBy(asc(routeExceptions.position), asc(routeExceptions.id));
+  const [first] = await tx
+    .select({ position: sql<number>`coalesce(min(${routeExceptions.position}), 0)` })
+    .from(routeExceptions)
+    .where(eq(routeExceptions.locationId, cfg.locationId));
+  const position = first!.position - 1;
+  if (existing[0] === undefined) {
+    await tx.insert(routeExceptions).values({
+      locationId: cfg.locationId,
+      position,
+      zoneId: null,
+      categoryId: null,
+      productId,
+      ...storedTarget(target),
+    });
+    return;
+  }
+  await tx
+    .update(routeExceptions)
+    .set({ position, ...storedTarget(target) })
+    .where(eq(routeExceptions.id, existing[0].id));
+  if (existing.length > 1)
+    await tx.delete(routeExceptions).where(
+      inArray(
+        routeExceptions.id,
+        existing.slice(1).map((row) => row.id),
+      ),
+    );
+}
+
 export async function updateException(
   tx: Transaction,
   cfg: VenueScope,
