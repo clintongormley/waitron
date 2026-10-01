@@ -1560,10 +1560,13 @@ root, which this does not change) and are not body text: the till's enrolment nu
 setup's cloud-recovery code (`1.8rem`), and the done screen's break-glass heading (`1rem`) and
 code (`1.1rem`), which stay 16px and 17.6px. Setup's and some dashboard screens' page headings
 (the content languages screen's, for one) take the browser's own `<h1>` size, twice the text
-around them: 28px, measured 2026-10-01, where it was 30px. Whether those headings should read
-`--wt-font-size-xl` instead is open. The phone-width cases that raise the text sizes (in the
-product editor, printers and servers suites) raise them to `--wt-font-size-lg` and
-`--wt-font-size-xl`, so they now draw 18px and 22px where they drew 19px and 24px. The dashboard
+around them: 28px, measured 2026-10-01, where it was 30px. The Typography roles table in
+`docs/developers/design-system.md` sets a page title to `--wt-font-size-xl`, but page headings
+follow it only in part: some take the browser's own size, as above; dashboard screens such as
+approvals and email set theirs to `--wt-font-size-lg`; and screens such as menus and modifiers
+set theirs to `--wt-font-size-xl`. Bringing them into line is open, and not part of A179. The
+phone-width cases that raise the text sizes (in the product editor, printers and servers suites)
+raise them to `--wt-font-size-lg` and `--wt-font-size-xl`, so they now draw 18px and 22px where they drew 19px and 24px. The dashboard
 (users list and its add form, content languages), setup (first screen, done screen) and till (lock,
 counter with two lines, enrolment) were looked at in headless Chromium, light and dark, English and
 Spanish, at 1280 and 390px wide (the till also at 1024x768), beside the same screens at the old scale in light

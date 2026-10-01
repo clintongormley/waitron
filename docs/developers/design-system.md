@@ -150,11 +150,14 @@ the filled-background idiom only for a colour that is itself the data, never as 
 
 The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
 system font; the app ships no font files (A179, 2026-10-01 — before it the scale was 13, 15, 19
-and 24px). Body text is `--wt-font-size-md`: `baseStyles` sets it on the host of each component that
-includes it, the dashboard, setup and till shells among them, and each of those apps' `index.html`
-sets it on `<body>` for anything drawn outside the app's own element. A size in `rem` does not
-follow the scale — it is relative to the browser's 16px root, which none of the three changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts` and by a
-case each in the dashboard, setup and till app suites.
+and 24px). Body text is `--wt-font-size-md`: `baseStyles` sets it on the host of each component
+that includes it, the dashboard, setup and till shells among them, and each of those apps'
+`index.html` sets it on `<body>` for anything drawn outside the app's own element. A size in `rem`
+does not follow the scale — it is relative to the browser's 16px root, which none of the three
+changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts`,
+`packages/ui-core/src/components/wt-card.test.ts` and
+`packages/ui-core/src/components/wt-input.test.ts`, and by two cases each in the dashboard, setup
+and till app suites: one for the app's own text, one for text on the page outside it.
 
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
 
