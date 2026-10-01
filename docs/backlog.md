@@ -6383,7 +6383,7 @@ ongoing overhaul listed at the top of Track A.
   as "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
   sidebar.
 
-- **Clicking the side menu's current section header collapses it (A161, owner 2026-09-30) — done (2026-10-01, #PR).**
+- **Clicking the side menu's current section header collapses it (A161, owner 2026-09-30) — done (2026-10-01, #979).**
   - On click: the header of the section holding the page you are on now collapses that section like
     any other, and a second click opens it again. Until now that section always showed open, so the
     click did nothing visible (C35's leftover (1) above). Test: "collapses the current page's
