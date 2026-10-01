@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -5,6 +6,7 @@ import { printers, readTenant, tills, withTransaction } from "@waitron/db";
 import { validateReceiptConfig } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
@@ -39,8 +41,8 @@ async function preview(
   });
 }
 
-async function rendered(body: unknown, cfg: Partial<TillConfig> = {}) {
-  const response = await preview(body, { cfg });
+async function rendered(receipt: unknown, cfg: Partial<TillConfig> = {}) {
+  const response = await preview({ receipt }, { cfg });
   expect(response.status).toBe(200);
   return (await response.json()) as ReceiptPreviewResponse;
 }
@@ -116,8 +118,27 @@ async function withPrinters(
 
 describe("POST /management-api/receipt-preview", () => {
   it("requires a management session, and a manager's configuration permission", async () => {
-    expect((await preview({}, { cookie: "" })).status).toBe(401);
-    expect((await preview({}, { cookie: venue.staffCookie })).status).toBe(403);
+    expect((await preview({ receipt: {} }, { cookie: "" })).status).toBe(401);
+    expect((await preview({ receipt: {} }, { cookie: venue.staffCookie })).status).toBe(403);
+  });
+
+  it("refuses an unknown session before it checks the receipt's text, as the save does", async () => {
+    const response = await preview(
+      { receipt: { footerMessage: 5 } },
+      { cookie: `${MANAGEMENT_COOKIE}=${randomUUID()}` },
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it.each([
+    ["a body without a receipt", {}],
+    ["a body that is not an object", ["Venta"]],
+  ])("refuses %s as the save does", async (_, body) => {
+    const response = await preview(body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "receipt" } },
+    });
   });
 
   it("draws the sample sale with the venue's legal name and tax ID, and the unsaved trim where a receipt prints it", async () => {
@@ -181,7 +202,7 @@ describe("POST /management-api/receipt-preview", () => {
     );
   });
 
-  it("is drawn at the width of the location's receipt printer", async () => {
+  it("is drawn at the width of the receipt printer of the location's one till that has one", async () => {
     await withPrinters([{ till: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }], async () => {
       const result = await rendered({ headerSubtitle: "Calle Mayor 1" });
       expect([result.preview.widthDots, result.preview.columns]).toEqual([384, 30]);
@@ -219,7 +240,7 @@ describe("POST /management-api/receipt-preview", () => {
     ["too long a footer", { footerMessage: "x".repeat(201) }],
     ["a field that is not text", { footerMessage: 5 }],
     ["a field the receipt does not have", { operationDescription: "Venta" }],
-    ["a body that is not an object", ["Venta"]],
+    ["a receipt that is not an object", ["Venta"]],
   ])("refuses %s with the code and params a save would refuse it with", async (_, body) => {
     let saveRefusal: unknown;
     try {
@@ -228,7 +249,7 @@ describe("POST /management-api/receipt-preview", () => {
       saveRefusal = error;
     }
     expect(isAppError(saveRefusal)).toBe(true);
-    const response = await preview(body);
+    const response = await preview({ receipt: body });
     expect(response.status).toBe(400);
     const { error } = (await response.json()) as { error: { code: string; params: unknown } };
     const expected = saveRefusal as { code: string; params: unknown };

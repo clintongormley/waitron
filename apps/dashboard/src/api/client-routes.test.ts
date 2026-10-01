@@ -200,7 +200,7 @@ describe("DashboardApi routes", () => {
     await expect(api.previewReceipt({ headerSubtitle: "Calle Mayor 1" })).resolves.toEqual(answer);
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/receipt-preview", "POST", { headerSubtitle: "Calle Mayor 1" }],
+      ["/management-api/receipt-preview", "POST", { receipt: { headerSubtitle: "Calle Mayor 1" } }],
     ]);
   });
 
