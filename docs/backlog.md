@@ -4278,7 +4278,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     against Escape while a save is in flight" (`apps/dashboard/src/screens/labels-panel.test.ts`,
     deleted with product labels on 2026-09-30),
     the three "keeps the … open against Escape" cases in
-    `apps/dashboard/src/screens/categories-screen.test.ts`, "holds the draft open and unchanged
+    `apps/dashboard/src/screens/categories-screen.test.ts` (retired by product-folders slice 1
+    on 2026-10-01), "holds the draft open and unchanged
     while a save is in flight" (`apps/dashboard/src/widgets/content-languages.test.ts`), "ignores
     Escape while a save is in flight and honours it once the save has settled"
     (`packages/media/src/dashboard/image-library.test.ts`) and "stays open on Escape while a save is
@@ -6287,6 +6288,9 @@ ongoing overhaul listed at the top of Track A.
   rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`)
   _(2026-10-01, C97: done — `#dialogMessage` is gone and the delete dialog passes its message to its
   footer `wt-form-actions`)_;
+  _(2026-10-01, product-folders slice 1: the Categories screen and these tests are retired.
+  Bulk folder deletion's warning and refusal checks live in
+  `apps/dashboard/src/widgets/catalogue-browser.test.ts`.)_
   (14) on the Cloud restore screen a `setup.request_invalid` naming `oldBoxGone` or `pointId` (the
   server raises both, through the Cloud restore route's `invalidRequest` calls in
   `apps/server/src/setup-api.ts`) shows "Cloud recovery is unavailable. Check the connection or
@@ -8746,6 +8750,8 @@ reading unless marked run:
   variant form stays OPEN, for lane B's B13 reason above. _(2026-09-30: B13 is done on
   `feat/service-standalone-ordering` and did not touch the variant form, so its fix no longer waits
   on B13.)_
+  _2026-10-01: product-folders slice 1 retires the Categories-screen caller. The folder form is
+  now mounted by `apps/dashboard/src/widgets/catalogue-browser.ts`; C74's close guard remains._
 - Pressing Escape in the Unit form opened from the product editor on the Catalogue screen
   (`apps/dashboard/src/screens/catalogue-screen.ts` mounts it at about line 711) also closes the
   product editor behind it; in the same test the Unit form sent exactly one cancel. Measured

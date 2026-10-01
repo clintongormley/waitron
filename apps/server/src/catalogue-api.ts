@@ -216,6 +216,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "catalogue.not_found": 404,
   "category.not_found": 404,
   "category.invalid": 400,
+  "category.parent_cycle": 409,
   "menu_item.not_found": 404,
   // A menu offer asked for a variant, which follows its parent onto the menu instead.
   "menu_item.variant_not_allowed": 400,

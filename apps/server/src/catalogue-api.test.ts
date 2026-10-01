@@ -99,6 +99,32 @@ describe("folder selection routes", () => {
     );
   });
 
+  it.each(["self", "descendant"])(
+    "answers a folder parent edit to its %s with 409 and preserves the tree",
+    async (target) => {
+      const app = mountApp();
+      const parent = await folder(app, "Drinks");
+      const child = await folder(app, "Beer", parent);
+      const response = await send(app, "PATCH", `/management-api/categories/${parent}`, {
+        body: { parentId: target === "self" ? parent : child },
+      });
+      expect(await response.json()).toMatchObject({ error: { code: "category.parent_cycle" } });
+      expect(response.status).toBe(409);
+      expect(
+        await (await send(app, "GET", `/management-api/categories/${parent}`)).json(),
+      ).toMatchObject({
+        id: parent,
+        parentId: null,
+      });
+      expect(
+        await (await send(app, "GET", `/management-api/categories/${child}`)).json(),
+      ).toMatchObject({
+        id: child,
+        parentId: parent,
+      });
+    },
+  );
+
   it.each([
     ["move", { productIds: [], categoryIds: [] }, "management.request_invalid", "to"],
     [
@@ -3728,7 +3754,9 @@ it("authors a hierarchy and requires a session to read it", async () => {
     name: "Food",
     parentId: null,
   });
-  expect((await send(app, "PATCH", path, { body: { parentId: category.id } })).status).toBe(400);
+  const cycle = await send(app, "PATCH", path, { body: { parentId: category.id } });
+  expect(cycle.status).toBe(409);
+  expect(await cycle.json()).toMatchObject({ error: { code: "category.parent_cycle" } });
   const catalogueId = await createCatalogueVia(app, "Main category menu");
   const response = await send(app, "POST", "/management-api/products", {
     body: {
