@@ -15,7 +15,8 @@ through a new seat method that loads the rules once and answers both dishes and 
 (`routingAt`; 3a's `resolveMakers` and a new `resolveExtraMakers` wrap it), whether each extra
 follows its dish or is made somewhere else (X2–X6). `fireLines` stays the one place a station is
 chosen and recorded: after it has decided each dish, it reads that dish's extras itself and inserts
-a record for each that splits off, copying the dish's course and hold. One small helper
+a record for each that splits off, copying the dish's course and hold — except one whose station
+the sending device makes here (3c-1's T12), which is made at the send, never held. One small helper
 (`apps/server/src/dish-kitchen.ts`) answers "this dish's kitchen work: its own record plus its
 split-off extras' records", and every release, recall, cancel, edit, split and group path uses it.
 Printing (`buildTicketItems`) and the kitchen screens (`readQueueSubItems`) leave a split-off extra
@@ -89,7 +90,12 @@ them.
 - **X6. A dish the waiter sent somewhere by hand (3b's Make at):** extras that split off still split
   by their own rule; extras that follow the dish go wherever the dish goes.
 - **X7. Held and fired together:** a split-off extra copies its dish's course, group and hold. Firing
-  the course or the group fires it; Ready and Away on the course or the group cover it.
+  the course or the group fires it; Ready and Away on the course or the group cover it. **One
+  exception (owner, 2026-10-01, after approval; 3c-1's T12):** a split-off extra whose final station
+  the sending device makes here is never held — it is recorded made here, fired and ready at the
+  send, even when its dish is held, and it joins 3c-1's "Make now" list (T13) like any made-here
+  item. It still copies its dish's course and group, so the bill and the screens keep it with its
+  dish.
 - **X8. Whatever happens to the dish happens to the extra's record, with a slip at the extra's own
   station:** cancelling the dish voids the extra there; recalling the dish recalls it; splitting the
   dish splits it; an edit that re-sends the dish re-sends it. **Cancelling only the extra** prints a
@@ -110,11 +116,23 @@ them.
   the extra's allergen and diet marks, as its "+" line has them today, and the extra's own record
   shows its own.
 - **X13. With 3c-1's "made here":** an extra whose final station is made here gets no ticket (3c-1's
-  born-ready record); the dish's ticket still says "with Chips from Bar".
+  born-ready record); the dish's ticket still says "with Chips from Bar". Like any made-here item it
+  is never held (3c-1's T12, owner 2026-10-01, after approval): it is made at the send even when its
+  dish is held, and it appears in 3c-1's "Make now" list (T13). **Release routes carry no device**
+  (the course verbs, `apps/server/src/till-api.ts:783`, `/groups/:gid/fire`, `:1826`, and send-lines,
+  `:2063`, all pass `deps.cfg`), so an extra first decided at a release — one an edit added to a held
+  no-preparation dish (Task 4's `finishRelease` call) — is never made here: it gets its station's
+  ticket, in line with 3c-1's T8 (no device, no "here"). It is the one case where an extra the
+  sending device makes waits for its dish and then prints.
 - **X14. Readers that must show the extra once:** the station queue, the pass (expo) screen, printing
   and every slip leave a split-off extra out of its dish's "+" lines and show the cross-reference
-  instead. The bill's line read (`readTabLines`) stops being able to promise that an extra line never
-  carries a kitchen state; the till and that promise are fixed together (Task 11).
+  instead. So does 3c-1's "Make now" list (`readMadeHereItems`, `apps/server/src/made-here.ts`, whose
+  `extras` are built with `extraLabel` over the dish's children): it leaves out a split-off extra of
+  a made-here dish, so it never lists "+ Chips" the Fryer makes (amended 2026-10-01; a split-off extra
+  that is itself made here is listed as its own item). Whichever of 3c-1 and this plan lands second
+  applies it, with a test: a made-here dish with chips split off to Fryer lists no chips. The bill's
+  line read (`readTabLines`) stops being able to promise that an extra line never carries a kitchen
+  state; the till and that promise are fixed together (Task 11).
 
 **Further defaults this plan takes (P1–P7).** Not discussed with the owner; approving the plan
 approves them.
@@ -767,11 +785,22 @@ async function insertSplitExtras(
   station, or the rules' answer — so an extra that follows it follows it there, and one that splits
   off splits by its own rule.
 - **X13, only if 3c-1 is on `main`:** after an extra's station is decided, apply 3c-1's made-here
-  check exactly as `fireLines` applies it to a dish (its record is born ready with 3c-1's made-here
-  mark and nothing prints for it).
+  check exactly as `fireLines` applies it to a dish: its record is born `ready` with 3c-1's made-here
+  mark, nothing prints for it, and its line id goes to `cfg.madeHereSink` (3c-1's Task 9b) so the
+  till's "Make now" list shows it. **It is never held (3c-1's T12, owner 2026-10-01, after
+  approval):** its `fired_at` is the send's one clock reading (`routing.at`) whatever its dish's
+  `DishKitchenPlace.firedAt` says — the one place an extra does not copy its dish's hold. The check
+  lives in `insertSplitExtras`, not only in `fireLines`, so every path that decides an extra applies
+  it: a send (`fireLines`), a release (`finishRelease`, Task 4) and an edit (Task 6); the device
+  is the one sending the request (3c-1's T8, read from the same `cfg.sendingDeviceId` 3c-1's
+  `fireLines` reads). A release route carries no device (`till-api.ts:783`, `:1826`, `:2063` pass
+  `deps.cfg`), so at a release the check finds no "here" and the extra gets its station's ticket
+  (X13). Step 3's "release with the dish" never meets a made-here extra: it has no
+  held record.
 - Rewrite `fireLines`' doc comment so it states the rule (a dish's extras are decided after it,
   against the same routing snapshot, and one made elsewhere gets its own record copying the dish's
-  course and hold), and replace the `:1146` comment.
+  course and hold — or, when the sending device makes its station here, fired and ready at the send,
+  never held), and replace the `:1146` comment.
 
 **The fixture** (`testing/split-extras-venue.ts`, used by Tasks 3–10). `setupVenue` (`:96`),
 `fireNewOrder` (`:234`) and `addExtras` (`:311`) are local functions of `apps/server/src/kitchen-print.test.ts`,
@@ -845,6 +874,15 @@ branch starts (slice 2, above). It provides:
     wrapper.)
   - **X13** (only if 3c-1 is on `main`): with Bar made here at the sending device and Bar claiming
     Extras › Sides, the chips' record is born ready with the made-here mark and no print job names it.
+  - **Made here, never held (only if 3c-1 is on `main`; owner, 2026-10-01, after approval).** The bar
+    till makes Bar here and Bar claims Extras › Sides. A burger in a later course (so held), with
+    chips, sent from the bar till: the burger's record at Grill is held (`fired_at` null); the chips'
+    record is at Bar, made here, `ready`, with `fired_at` equal to the send's instant, and its line id
+    is in the request's made-here sink (the response's "Make now" items, 3c-1's Task 9b). The same in
+    a held group placed through `placeGroups` with `release: "hold"`. Then `fireCourse` (or
+    `fireGroup`) releases the burger and prints at Grill, and touches the chips' record not at all.
+    (Without the exception: the chips' `fired_at` is null — the assertion that fails.) The same send
+    from a device that makes nothing here: the chips' record at Bar is held with the burger.
   - Keep, re-named, the existing cases that pin an UNCLAIMED extra: `kitchen-print.test.ts:1040`
     ("fires a dish with two extras as ONE ticket_item") and `:1182` ("never station-resolves a child
     line…") — they now pin "an extra no rule covers follows its dish, and never falls to the
@@ -1794,3 +1832,32 @@ Every finding of `plan-3c2-recheck2.md` was applied; none was rejected.
   other plans cite"), for 3c-3 to cite: `VENUE_SERVICE.routingAt(tx, cfg, at): Promise<MakerResolver>`,
   core's `routingOnce(tx, cfg, at): RoutingOnce`, `fireLines`' `routing` option, and the release
   functions' optional `routing` parameter.
+
+
+## Amended 2026-10-01 (owner, after approval)
+
+The owner corrected 3c-1 after approval: a made-here item is never held — it is made at the moment
+it is sent, and the till lists it in "Make now" (3c-1's T12 and T13, and its own "Amended
+2026-10-01" note, in `docs/superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md`).
+This plan copies a dish's hold to its split-off extras (X7), so it gains the same exception: a
+split-off extra whose final station the sending device makes here is recorded made here, fired and
+`ready` at the send's one clock reading, even when its dish is held, and it joins "Make now" like
+any made-here item. Changed: the Architecture paragraph, X7, X13, Task 3's X13 bullet (the check
+lives in `insertSplitExtras`, so a send, a release and an edit all apply it, and it fills 3c-1's
+`cfg.madeHereSink`), Task 3's doc-comment bullet, and a new Task 3 test (a held burger with chips
+the bar till makes here: chips made at the send, burger held, the later release touching only the
+burger). The other places that copy or act on an extra's hold need no change, because they act
+only on held records and a made-here extra never has one: Task 3's step 3 (release with the dish),
+Task 4's releases (they stamp records with no fire time), Task 6's per-record held corrections
+(they correct unfired records only), and Task 8's group Ready and Away (Ready bumps only fired
+records not yet `ready`, `order-groups.ts:287-288`, so a made-here record, born `ready`, is untouched; Away stamps it like any
+ready record). 3c-1 does NOT change `readGroups` after all (its latest amendment), so a made-here
+record counts there as a ready dish; Task 8 relies only on that unchanged count
+(`order-groups.ts:832-848`). Added after
+the cross-plan check (`made-here-amend-check.md`, M5): X14 names 3c-1's "Make now" read,
+`readMadeHereItems`, among the readers that leave a split-off extra out of its dish's extras
+(whichever plan lands second applies it, with a test); and X13 and Task 3 say release routes carry
+no device (`apps/server/src/till-api.ts:783`, `:1826`, `:2063`, read at `dcc6a3adc`), so an extra
+first decided at a release is never made here and gets its station's ticket, as 3c-1's T8 rules.
+3c-1's T12 and T13 were read in the amended 3c-1 plan in the
+main checkout on 2026-10-01 (at `e5ba24d55` with that file modified, not yet committed).

@@ -6,7 +6,9 @@
 the rest of the order": its printed tickets and its kitchen screen then also list the order's other
 dishes, each with the station making it. Second, a till or handheld can be told "items for these
 stations are made here": when that device sends such an item, the item gets no ticket and appears on
-no kitchen screen, while its station is still recorded as the place it is made.
+no kitchen screen, while its station is still recorded as the place it is made. Such an item is
+never held: it is made the moment it is sent, and the till that sent it shows a "Make now" list of
+what to make until the waiter dismisses it (owner, 2026-10-01, after approval).
 
 **Architecture:** Both settings are core data. "Show the rest" is a yes/no column on
 `kitchen_stations`, written through core's existing station route and switched on Prep Stations
@@ -18,7 +20,9 @@ to the kitchen screen inside each order's card, refreshed by the screen's existi
 "Made here" is a new core table, `device_made_here_stations`, edited on the Devices screen. A till
 route that knows its device puts the device's id on the request's `TillConfig`; `fireLines` reads
 that device's made-here stations once and, for each item whose FINAL station is one of them, writes
-the kitchen record with a new `made_here` mark (ready at once if it fires now). A dish an edit
+the kitchen record with a new `made_here` mark, fired and ready at once — never held (T12). The
+request's answer carries the made-here items it recorded, and the till shows them as "Make now"
+until dismissed (T13). A dish an edit
 sends again keeps the mark its first send gave it, whichever device edits it. A made-here record is
 never printed, gets no correction slip or kitchen notice, and is left out of the kitchen and expo
 screens, the floor's kitchen counts, the overdue report and "Show the rest"; the till's own order
@@ -45,7 +49,10 @@ whoever lands second rebases. Where this plan says "3a's X" or "3b's X", read X 
 the 3a or 3b plan: the code is what landed. Line numbers below were read on `main` at `8aa9a4bfe`
 (2026-10-01), BEFORE 3a, and rechecked at `f8850049f` for the files that moved since
 (`apps/dashboard/src/api/client.ts`, `apps/dashboard/src/i18n/strings.ts`; the rest of the gap is
-printing and backlog files this plan does not cite). 3a and 3b move most of them in
+printing and backlog files this plan does not cite). The owner's amendment of 2026-10-01 (T12, T13,
+Tasks 9b and 10) was read at `e6c46531f`, where `apps/server/src/working-order.ts` sits a few lines
+lower than at `8aa9a4bfe` from about `fireLines` on (B24 landed between); its new citations are to
+`e6c46531f`. 3a and 3b move most of them in
 `working-order.ts`, so find each place by the function named beside the number. PR #974 (ticket text drawn as pictures) is merged, and every
 citation of `kitchen-ticket.ts` and `kitchen-print.ts` below is to the code after it
 (`formatKitchenTicket(ticket, layout: EscSetting)`, `emitItem(b, item, columns, sign)`).
@@ -84,13 +91,13 @@ apply them while rebasing 3b: at finish time Task 12 Step 5 writes them, as a da
 - 3b's Task 6 adds a status line, hours and a fallback to each Prep Stations card; this plan adds one
   switch to the same card.
 - 3b's waiting-dish query (`stationsWithWaitingDishes`) counts `queued` and `preparing` items fired
-  in the last hour. A made-here item is never both fired and queued (T10 below), so it never counts.
+  in the last hour. A made-here item is always fired and `ready` (T12 below), so it never counts.
 
 **3c-2** (`feat/split-off-extras`, after 3b) rewrites `fireLines` again and adds cross-references to
 the ticket item shape; its X13 says an extra whose final station is made here gets no ticket and the
 dish's ticket still names it. 3c-1 may land before or after 3c-2.
 
-## Decisions for the owner (T1–T11)
+## Decisions for the owner (T1–T13)
 
 None of T1–T11 was answered by the owner directly: each is a default from the slice 3c decisions
 sheet (2026-10-01), and approving this plan approves them. The split of 3c into three plans is the
@@ -183,16 +190,16 @@ differently from what the sheet assumed; each says what was found.
   from the device in `deviceSaleCfgOf`, `apps/server/src/bill-payments-api.ts:198-208`). `fireLines`
   reads it from `cfg`. The behaviour is the sheet's; only the carrier differs. Which routes carry it
   is derived from the call graph up from `fireLines` (Task 9 Step 3), not from this list. Also
-  found: the integrated-card recovery at `apps/server/src/till-sale.ts:1283` runs inside the
-  `/api/pay` request (`payIntegrated` calls `finalizeRecovery`, `apps/server/src/till-sale.ts:916`),
+  found: the integrated-card recovery (`apps/server/src/till-sale.ts:1256` at `efb0ebf9d`) runs inside the
+  `/api/pay` request (`payIntegrated` calls `finalizeRecovery`, `apps/server/src/till-sale.ts:891`),
   so it DOES know its device and is treated as a device path.
 - **T9. Made here is checked against the station the item finally goes to:** after the rules (3a)
   and, once 3b is in, after fallbacks, a station kept on an edit and the waiter's Make at. If the bar
   is closed and its work goes to the downstairs bar, the bar till is not making it, so the downstairs
   bar gets a ticket.
 - **T10. A made-here item is kept as a kitchen record with a made-here mark** (a new not-null
-  `ticket_items.made_here`, default false), so its station stays its maker and holds keep working
-  through the existing paths. Every kitchen-facing reader leaves it out: printing (first send, release, HOLD
+  `ticket_items.made_here`, default false), so its station stays its maker and cancels, splits and
+  moves keep working through the existing paths (it is never held, T12). Every kitchen-facing reader leaves it out: printing (first send, release, HOLD
   tickets, reprint, correction slips), kitchen notices, the station and expo screens, the table
   signals, the tables-with-state read, the overdue-orders report and "Show the rest". The till's own
   order views keep it, as Ready (Task 11's "Not changed, on purpose"). Nothing fiscal reads kitchen
@@ -206,14 +213,86 @@ differently from what the sheet assumed; each says what was found.
   - **fired now:** the record is born `ready` (`ready_at` = the fire time). By default, like any
     dish the kitchen has started, it can be cancelled but not changed or recalled: it was made on the
     spot. The owner chooses between this and an alternative at approval (D1).
-  - **sent on hold:** the record waits as `queued` with no fire time, like any held dish, so it can
-    still be changed or cancelled while held. When it is released (a course, a group, or Send), it
-    turns `ready` in the same statement that stamps its fire time, and prints nothing.
-- **T11. A made-here item gets no slip and no notice:** cancelling it (in whole or in part), changing
-  it while held, cancelling one of its extras, or moving its bill to another table prints nothing at
-  its station and records no kitchen notice.
+  - **never held:** see T12 (owner, 2026-10-01, after approval). _The approved plan had a held
+    made-here record wait as `queued` and turn `ready` at release; the owner replaced that: such an
+    item printed nowhere when released, so nothing told the waiter to make it._
+- **T11. A made-here item gets no slip and no notice:** cancelling it (in whole or in part),
+  cancelling one of its extras, or moving its bill to another table prints nothing at its station and
+  records no kitchen notice.
+- **T12. A made-here item is never held (owner, 2026-10-01, after approval: "a made-here item should
+  never be held, it must be made in the moment otherwise the waiter will forget").** Whenever a send
+  would put an item on hold — a course not yet started, a held group, a round sent on hold, units
+  added beside a held dish — and the item's final station is one its sending device makes here, the
+  item is not held: `fireLines` records it fired at the send's one clock reading, `ready`, made here.
+  **The owner accepts that a made-here drink ordered for a later course, or in a held group, is made
+  at once.** So a made-here record ALWAYS has a fire time and is `ready` (Task 10 pins it after every
+  path below). What each hold path does with it (read on `main` at `e6c46531f`, not run; Task 10's
+  tests pin each):
+  - **The course hold in `fireLines`** (`fired`, `apps/server/src/working-order.ts:1295-1300`): a
+    made-here line fires whatever its course. It still COUNTS for its course when the order's first
+    course is worked out (`courseRows`' `itemCount` and the round's `orderCourseIds`,
+    `:1250-1279`), so a course holding only a made-here aperitif is still the first course and a
+    burger in course 2 waits for course 2 (D10, owner). It does NOT count as the course having
+    started (`anyFired`), so a later dish of its course is not fired at once because of it.
+  - **`hold: true` lines** — a held group's lines from `placeGroups` (`apps/server/src/order-groups.ts:194`),
+    a held round from `addTabRound` (`working-order.ts:1849`; only tests and `testing/party-venue.ts`
+    call it), an edit's new work held beside a held dish (`hold: as.kitchen === "hold"`,
+    `working-order.ts:4240`): fired now, the same way. `insertTabRound` (`:1903`) writes order lines
+    only; its caller's `fireLines` decides.
+  - **Its group.** The line keeps its `group_id`, so a held group can hold a made-here line.
+    `isReleased` (`working-order.ts:2264-2272`) counts a line whose record is made here as released,
+    so it can be served at once (`servableLines`, `:2220`), the till's current orders show it released
+    (`readCurrentOrders`, `order-groups.ts:1149`), an adjustment reads it as fired (`stageOf`,
+    `apps/server/src/adjustments-apply.ts:260-264`), and a bill moved into a party puts it in the
+    fired group (`groupArrivingDishes`, `order-groups.ts:1434`). A held group whose only line is a
+    made-here drink stays "held", and the till's release reminder will still ask the waiter to fire
+    it; firing it changes nothing in the kitchen. Accepted. `refuseHeldLeavingParty` (`working-order.ts:3060`)
+    still keys on the group's state, so the line's bill stays in the party until the group fires, like
+    every line of that group (unchanged).
+  - **HOLD tickets and HOLD corrections.** `printHoldTickets` (`order-groups.ts:1175-1209`) prints
+    records with no fire time, so a made-here record is never on one. `correctJoin`
+    (`order-groups.ts:1283-1308`) reads joining lines' records with no fire-time filter; the made-here
+    filter in `enqueueHoldCorrections` (Task 10) drops it. `planHeldCorrections` concerns held records
+    only.
+  - **`readGroups`' counts** (`order-groups.ts:802-877`) are NOT changed (coordinator ruling,
+    2026-10-01): a made-here record is fired and `ready`, so it counts as a ready dish. A fired group
+    of made-here drinks alone reads Ready, as its rows do. A held group holding one could read
+    "ready" in the API, but the till never shows it: `#groupProgress` answers "held" for a held group
+    before it looks at `ready` (`apps/till/src/screens/till-table-order-screen.ts:3188`). _(The
+    amendment's first draft left made-here records out of these counts; that left a fired group of
+    drinks never reading Ready, and was dropped.)_
+  - **Releases** — `releaseGroup` (`order-groups.ts:420-452`) → `fireOrderLines` → `releaseHeld`,
+    `fireCourse`, and `sendLines`: each stamps records with no fire time (`working-order.ts:1532`,
+    `:1624`), so it finds nothing of a made-here item and prints nothing of it.
+  - **B21's sent stamp on a presented or paid bill** (`stampSent`, `working-order.ts:1359-1385`, run
+    again when a group or course fires): a made-here line was stamped sent at its own send, and
+    `stampSent` stamps only lines with no `sent_at` (`:1376`), so a later fire leaves it alone.
+  - **Recall** un-fires only `queued` records (`working-order.ts:1744`), so it never un-fires a
+    made-here one; the started check refuses it first anyway (D1).
+  - **An edit's view of the bill** (`readEditableOrder`, `working-order.ts:3771-3780`; coordinator
+    ruling, 2026-10-01): for `newWork`, a made-here line counts as SENT work (its `sent_at` is set),
+    unless its group is held, where it counts as held work — so a burger added by an edit to a bill
+    whose only sent work is a made-here drink is fired, or held by its course, as before; leaving the
+    drink out would have answered `"none"` (`:3530-3534`), and the burger would have got no kitchen
+    record at all (`:4085`, `:4231`). `firedCourseIds` leaves made-here records out, as `anyFired`
+    does (D10).
+  - **3b's `keepStations` and this plan's `keepMadeHere` on held lines:** no made-here record is
+    held, and a change or raise of a fired made-here dish is refused (D1), so neither map meets one;
+    `keepMadeHere`'s `madeHere: true` entries arise only under D1's alternative.
+- **T13. The waiter is told what to make (owner, 2026-10-01, after approval: "what happens when a
+  held made-here item gets sent? it doesn't get printed anywhere. how does the waiter know to make
+  it?").** Every till request whose work records a made-here item answers with those items, and the
+  till shows them in a "Make now" / "Preparar ahora" list — "2 × Lager, 1 × Mojito", each with its
+  options, extras and note — that stays until the waiter dismisses it, and grows if another send
+  adds more. It names each item by its **staff name** (`staffPresentationName`,
+  `packages/catalogue/src/product-presentation.ts:16`), as the till's basket and the tab's line list
+  do (`docs/developers/products.md:158-159`; options read the staff wording there too, `:162`): the
+  list is a till surface, read by the person who just rang the item up under that name, not a kitchen
+  ticket read by a cook; and CLAUDE.md §3 gives each surface one name. Extras print as their frozen
+  staff names with " x<n>", as the kitchen paper labels them (`extraLabel`,
+  `apps/server/src/kitchen-print.ts:80-83`). Task 9b builds it.
 
-**Further defaults this plan takes (D1–D9)** — approved with the plan:
+**Further defaults this plan takes (D1–D11)** — approved with the plan:
 
 - **D1. A made-here dish that has fired can be cancelled, not changed — or the owner may choose the
   alternative.** Default: it counts as started, so the edit route refuses a change to it
@@ -253,6 +332,22 @@ differently from what the sheet assumed; each says what was found.
   the code, not measured. The read must run BEFORE the route opens its transaction: a sighting opens
   a transaction of its own, which the write queue refuses inside another (the same file's comment,
   `bill-payments-api.ts:213-215`).
+- **D10. A made-here item counts for its course when the first course is worked out (owner,
+  2026-10-01: "Burger waits for course 2, otherwise the waiter should have sent them together").** A
+  round of a made-here aperitif in course 1 and a burger in course 2: the aperitif is made now (T12),
+  course 1 is the order's first course, and the burger is held until course 2 is fired — as it would
+  be with a Bar ticket for the aperitif. A made-here record does not, however, mark its course as
+  started (`anyFired`): a dish of that course sent in a later round is held or fired by the course's
+  other dishes, never because a drink was made at the till. _(The amendment's first draft left
+  made-here items out of the first-course choice too; the owner reversed that.)_
+- **D11. The "Make now" list survives a reload (owner, 2026-10-01).** The till keeps it in the
+  device's own storage (`localStorage`), under a key naming the device —
+  `waitron.makeNow.<deviceId>`, the shape of the lock screen's `waitron.lastOperator.<deviceId>`
+  (`apps/till/src/screens/till-lock-screen.ts:12`) — so another device in the same browser (the dev
+  stack's device switcher) never shows it; with no device known it lives in memory only. Every read
+  and write is wrapped in `try`/`catch`, as the lock screen's are (`:184-192`), and when storage
+  throws the list still works in memory. "Done" empties it and removes the key. _(The amendment's
+  first draft kept it in memory only; the owner reversed that.)_
 
 ## Global Constraints
 
@@ -296,8 +391,9 @@ These are the inputs likeliest to hurt a venue. Each is pinned by a test in the 
 1. **A made-here drink still reaches paper or a screen.** The bar till lists Bar as made here, and Bar
    has a printer and a kitchen screen. A lager sent from the bar till: no print job at Bar, nothing
    on Bar's queue, on the expo board, in the table's "ready" count or in the overdue report; the line
-   is still stamped sent and still servable. The same lager HELD in a group and then released by the
-   group, by its course, and by Send: no HOLD ticket, no FIRE ticket, and the record turns `ready`.
+   is still stamped sent and still servable. The same lager sent in a held group, in a course not yet
+   started, and in a round sent on hold: made at once (fired, `ready`), no HOLD ticket, and releasing
+   the group, the course or the round later prints nothing at Bar.
    A reprint of the order: no lager. Cancelling it, cancelling its extra, and moving its bill to
    another table: no slip, no notice. (Tasks 9, 10, 11)
 2. **The station the item finally goes to decides, not the device.** The bar till lists Bar; a rule
@@ -312,7 +408,7 @@ These are the inputs likeliest to hurt a venue. Each is pinned by a test in the 
    place, group submit, draft submit, the three party table moves, bill move, and `deviceSaleCfgOf`
    (bill payments, splits, adjustments) — has a case that fails when its device id is removed. A lager
    first sent from a handheld and then changed or raised on the bar till gets a ticket at Bar (after a
-   RECALLED slip, for the change); units added to a held made-here dish stay made here.
+   RECALLED slip, for the change).
    (Task 9)
 5. **Show the rest says only what is known, and only where it is asked for.** Grill shows the rest,
    Fryer does not, and a PASE printer hangs off Grill. First send of a burger (Grill) and chips
@@ -321,15 +417,22 @@ These are the inputs likeliest to hurt a venue. Each is pinned by a test in the 
    a made-here line, a line sent away from the pass and a no-preparation line are never listed; a
    held dessert is "(on hold)". A reprint of a station with fired and held-in-advance work prints the
    block once. A Spanish till prints the Spanish heading. (Tasks 4, 5)
-6. **A held made-here dish stays editable until it is released.** Held, its quantity is changed and
-   its note edited through the order edit route (no refusal, no HOLD slip); released, it turns
-   `ready`; fired, a change is refused `ticket.already_started` and Cancel still works silently.
-   (Task 10)
+6. **A made-here item is never held, and never disturbs what is held** (owner, 2026-10-01). A
+   made-here aperitif in a held group with a burger: the aperitif is made now and can be served now;
+   the till still shows the group as held (the API answers `ready: true` for it, which the till
+   ignores for a held group, T12), and its HOLD ticket names only the burger. A made-here
+   drink in course 2 does not make a later course-2 dish fire at once, and a made-here aperitif in
+   course 1 still keeps a course-2 burger waiting (D10, owner). The "Make now" list survives a reload
+   on the same device and is gone after Done (D11, owner). A change is refused
+   `ticket.already_started`; Cancel still works silently. (Task 10)
 7. **The kitchen screen's list never confuses the cook.** The card lists other stations' items with
    their progress and "On hold", by kitchen name; a station with the setting off shows nothing; the
    column view shows nothing. (Tasks 6, 7)
 8. **The read does not scan.** `explain query plan` on the rest-of-order read names
    `ticket_items_order_idx` and no `SCAN` of `ticket_items`. (Task 5)
+9. **The waiter is told what to make** (owner, 2026-10-01). After a table Send and after a counter Pay
+   from the bar till, the till shows "Make now" with each made-here item by its staff name, until the
+   waiter dismisses it; a send with no made-here item shows nothing. (Task 9b)
 
 ---
 
@@ -343,7 +446,10 @@ These are the inputs likeliest to hurt a venue. Each is pinned by a test in the 
 - `packages/db/drizzle/00NN_rest_of_order_made_here.sql` (generated).
 - `apps/server/src/rest-of-order.ts` + `rest-of-order.test.ts` — `readRestOfOrder`.
 - `apps/server/src/made-here.ts` + `made-here.test.ts` — `readMadeHereStations`,
-  `listMadeHereStations`, `setMadeHereStations`, and the send-path tests.
+  `listMadeHereStations`, `setMadeHereStations`, `readMadeHereItems`, the `madeHereAnswer`
+  middleware, and the send-path tests.
+- `apps/till/src/widgets/make-now.ts` + `make-now.test.ts` + `make-now.a11y.test.ts` — the "Make now"
+  list (T13).
 
 **Modified (main ones)** — each task lists its own exactly.
 
@@ -355,7 +461,7 @@ These are the inputs likeliest to hurt a venue. Each is pinned by a test in the 
 - `packages/reporting/src/overdue-orders.ts`
 - `apps/dashboard/src/{api/client,api/live-queries,screens/devices-screen,i18n/strings}.ts`
 - `packages/venue-service/src/dashboard/{prep-stations-screen,routing-client,strings}.ts` (3a's)
-- `apps/till/src/{api/client,widgets/station-queue,i18n/strings}.ts`
+- `apps/till/src/{api/client,widgets/station-queue,i18n/strings,till-app}.ts`
 - `docs/backlog.md`, the design, `docs/developers/products.md`
 
 ---
@@ -1024,15 +1130,26 @@ sendingDeviceId?: string;
     `keepStations` and fallback outcome — T9), compute
     `const kept = options.keepMadeHere?.get(line.id);`
     `const made = kept === undefined ? madeHere.has(stationId) : kept.madeHere && kept.stationId === stationId;`
-    and write `madeHere: made`, `state: made && fired ? "ready" : "queued"`,
-    `readyAt: made && fired ? firedAt : null` (T10: a held one waits as `queued`). A kept decision
-    whose station has changed is not applied: the item gets a ticket at its new station, whatever the
-    sending device lists (T9);
+    A kept decision whose station has changed is not applied: the item gets a ticket at its new
+    station, whatever the sending device lists (T9). **A made-here line is never held (T12):** its
+    fire decision becomes `const fired = made || <today's rule>` (`working-order.ts:1295-1300`), so the
+    builder must decide the station and `made` BEFORE it decides `fired` and pushes the line to
+    `sentLineIds` (`:1302`) — today the station is decided after (`:1304-1307`); a no-preparation line
+    still returns before any station. Write `madeHere: made`, `firedAt: fired ? firedAt : null`,
+    `state: made ? "ready" : "queued"`, `readyAt: made ? firedAt : null`;
+  - the course test (`courseRows`, `:1250-1264`): `anyFired` leaves made-here records out —
+    `max(${ticketItems.firedAt} is not null and not ${ticketItems.madeHere})` — while `itemCount`
+    keeps counting them, and the round's earliest course (`orderCourseIds`, `:1268-1279`) keeps this
+    round's made-here lines, so a made-here item still makes its course the first one (D10, owner);
+    a made-here line's own `fired` is `true` whatever that test says (T12);
+  - each made-here record's line id is added to `cfg.madeHereSink` when present (Task 9b);
   - the insert's `.returning(...)` (`:1323-1327`) gains `madeHere: ticketItems.madeHere`, and the
     items handed to `enqueueKitchenTickets` (`:1338-1341`) leave out `row.madeHere`. The line is still
     stamped sent (`stampSent`, unchanged);
   - rewrite `fireLines`' doc comment's sentence about printing to say a made-here item is recorded
-    and never printed.
+    and never printed, and the two comments T12 makes false: "`hold: true` inserts the line unfired
+    whatever its course" (`working-order.ts:1155`) and "A line not fired now is HELD" (`:1294`) — each
+    gains "unless it is made here" (keep it to that).
 - Modify: `apps/server/src/working-order.ts` — `readEditableOrder` (`:3658-3751`) selects
   `madeHere: ticketItems.madeHere` beside `ticketCourseId` (`:3685`) and puts it on
   `EditableLine.ticket`; `applyLineEdits` (`:3802`) fills `keepMadeHere`:
@@ -1051,11 +1168,10 @@ sendingDeviceId?: string;
     — the zone-less setup below, where `addedApart` writes the added units a first, held record
     (review 3 measured it on `main`, probe F);
   and passes `{ keepMadeHere }` to its `fireLines` call (`:4227`), beside 3b's `keepStations` when 3b
-  is in. Under D1's default a FIRED made-here record never reaches either case (`kitchenHas` refuses
-  a `ready` one, `:3823-3825`), so a changed or raised fired dish keeps its ticket. A HELD made-here
-  record that a comp or discount repriced does reach `addedApart` (`:3949`), so its added units stay
-  made here — the one product path where a kept `madeHere: true` applies today. Under D1's
-  alternative a changed fired one would keep its mark too.
+  is in. Under D1's default a made-here record never reaches either case (`kitchenHas` refuses a
+  `ready` one, `:3823-3825`, and no made-here record is held, T12), so every entry today carries
+  `madeHere: false` and the re-sent or added units get a ticket. Under D1's alternative a changed or
+  raised made-here dish would keep its mark.
 - Modify: `apps/server/src/till-api.ts` — every route the call-graph walk (Step 3) finds passes a cfg
   carrying its device. Add one helper beside the routes:
 
@@ -1111,7 +1227,15 @@ async function sendingCfg(deps: TillApiDeps, c: Context, device?: DeviceBinding 
     `firedAt`, the line has `sent_at` set, and NO print job exists for Bar's printer (count
     `print_jobs` by printer before and after);
   - a burger in the same send, routed to Grill: an ordinary record and a Grill print job;
-  - the lager with `hold: true`: `madeHere: true`, `state: "queued"`, `firedAt: null`, no print job;
+  - the lager with `hold: true`, and the lager in a course not yet started (course 2, with a course-1
+    burger in the round): `madeHere: true`, `state: "ready"`, `firedAt` the send's time, the line
+    stamped sent, no print job (T12); the course-1 burger fires;
+  - **D10 (owner):** a round of a made-here aperitif in course 1 and a burger in course 2 → the
+    aperitif made now, the burger HELD (course 1 is the first course); `fireCourse` for course 2 then
+    fires the burger. Control: drop the made-here lines from `orderCourseIds` and see the burger fire
+    at once. And: a first round of a burger in course 1 and a made-here drink in course 2, then a
+    later round with a course-2 steak → the steak is held, because the drink did not mark course 2
+    started (`anyFired`); control: count the drink in `anyFired` and see the steak fire at once;
   - **T9 (Review Focus 2):** with an exception or claim sending the lager to Downstairs bar instead,
     the record is at Downstairs bar, `madeHere: false`, with a ticket;
   - **Review Focus 3:** the same lager with `cfg` carrying another device's id (empty list), and
@@ -1141,7 +1265,7 @@ async function sendingCfg(deps: TillApiDeps, c: Context, device?: DeviceBinding 
   | `/api/parties/:id/move` (shared registration, `till-api.ts:1697-1714`) | the zone-less setup below; that party moves to a free table-service table (`moveGuests` → `retargetOpenBills` → `takeIntoParty` → `adoptZone`) | the same |
   | `/api/parties/:id/join` (the same registration) | the zone-less setup below; a table-service party, seated at a table-service table, asks to join the zone-less party's table — the request is made on the TABLE-SERVICE party's id, so the zone-less party's bills are taken into it with its zone (`joinTables` → `combineAt` → `combineParties` → `takeIntoParty`, `table-actions.ts:121`, `:189-192`). With the default `bills: "merge"` the lager's bill merges into the table-service party's main bill (`table-actions.ts:197-208`; review 3, probe E2), so find the record BY THE LAGER'S LINE ID, never by its first bill | the same |
   | `/api/parties/:id/split-table` (`:1716-1741`) | the split setup below; split onto the joined table-service table with the lager's bill (`splitTable` → `takeIntoParty`, `:277`) | the same |
-  | `PUT /api/working-orders/:id/lines/:lineNo` | the zone-less setup (the lager, unsent, in a held group with no record), the lager given a discount through the adjustments route, then raised by 1 through this route with the bar till's cookie (`addedApart`) | the NEW line's record `madeHere: true`, `queued`, `firedAt: null`; the lager's own line still has no record. On `deps.cfg` it would be `madeHere: false` |
+  | `PUT /api/working-orders/:id/lines/:lineNo` | the zone-less setup (the lager, unsent, in a held group with no record), the lager given a discount through the adjustments route, then raised by 1 through this route with the bar till's cookie (`addedApart`) | the NEW line's record `madeHere: true`, `ready`, fired at the edit (it is not held, T12); the lager's own line still has no record. On `deps.cfg` it would be `madeHere: false`, held |
   | `deviceSaleCfgOf` | a pay-first bill holding a lager paid in full in cash through `POST /api/working-orders/:id/payments` (the busiest case: it runs `issueWhenFullyPaid` → `firePrepayOrder`, `apps/server/src/bill-payments.ts:717`) | the same |
 
   **The zone-less setup** (the only way a party holds a pay-first bill with unsent dishes; read, not
@@ -1181,11 +1305,11 @@ async function sendingCfg(deps: TillApiDeps, c: Context, device?: DeviceBinding 
   | --- | --- | --- |
   | ruling 1 | a lager first sent from a handheld whose list is empty (a Bar ticket printed), its note changed from the bar till | a RECALLED slip at Bar, then a new Bar ticket; the new record `madeHere: false` |
   | ruling 2, a raise | the same first send, its quantity raised by 1 from the bar till | the added units' new line has a record at Bar with `madeHere: false` and a Bar ticket for them |
-  | ruling 2, a held made-here dish (M1) | a lager sent on hold from the bar till (made here, `queued`), given a discount, then raised by 1 from a handheld whose list is empty (`addedApart`, `working-order.ts:3949`) | the new line's record `madeHere: true`, `queued`, no HOLD CHANGED and no ticket at Bar |
 
-  For the three edit cases, remove each `keepMadeHere` entry kind from `applyLineEdits` in turn
-  (the changed lines', then the new lines') and see its cases fail: the first two would be made here
-  with no new ticket, the third would get a ticket. And one no-device path through its
+  For the two edit cases, remove each `keepMadeHere` entry kind from `applyLineEdits` in turn
+  (the changed lines', then the new lines') and see its case fail: each would be made here with no
+  new ticket. (The approved plan's third case, a held made-here dish raised from a handheld, is gone:
+  no made-here dish is held, T12.) And one no-device path through its
   real route: a bill paid by the background loop (`bill-payments-loop.ts:129`) or resolved from the
   dashboard (`payments-api.ts:713-720`) — whichever existing suite already drives one
   (`grep -rln 'completeBillPayment\|payment.not_stuck' apps/server/src/*.test.ts`) — prints at Bar.
@@ -1231,25 +1355,225 @@ async function sendingCfg(deps: TillApiDeps, c: Context, device?: DeviceBinding 
 
 ---
 
-### Task 10: A made-here item never prints and records no notice — releases, HOLD tickets, reprints, slips
+### Task 9b: The till tells the waiter what to make (owner, 2026-10-01, after approval)
+
+T13. Every till request whose work records a made-here item answers with those items, and the till
+keeps them on screen as "Make now" until the waiter dismisses them.
+
+**Files:**
+- Modify: `apps/server/src/till-config.ts` — `TillConfig` gains, beside `sendingDeviceId`:
+
+```ts
+/** Where `fireLines` notes the line ids of the made-here records this request writes (T13);
+ *  absent where nothing is to be told. */
+madeHereSink?: Set<string>;
+```
+
+- Modify: `apps/server/src/working-order.ts` — `fireLines` adds each made-here record's
+  `working_order_line_id` to `cfg.madeHereSink` (Task 9's builder knows `made` per line).
+- Modify: `apps/server/src/made-here.ts`:
+
+```ts
+/** One made-here item as the till shows it (T13): the staff name, as the basket names it. */
+export interface MadeHereItem {
+  lineId: string;
+  /** `staffPresentationName` of the line (`packages/catalogue/src/product-presentation.ts:16`). */
+  name: string;
+  /** The record's quantity (`firedQuantity`), as a decimal string. */
+  quantity: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  optionSnapshots: OptionSnapshot[];
+  /** Each extra's frozen staff name, ` x<n>` when the dish has more than one each (`extraLabel`). */
+  extras: string[];
+  note: string | null;
+}
+
+/** The made-here records of these lines that EXIST, in line order. A line id from an attempt that
+ *  rolled back names nothing and is dropped. Read outside any transaction: committed rows only. */
+export async function readMadeHereItems(db: Database, lineIds: ReadonlySet<string>): Promise<MadeHereItem[]>;
+
+/** The sink for this request, made on first use and kept per request. */
+export function madeHereSinkFor(c: Context): Set<string>;
+
+/** Hono middleware: after the handler, when the request's sink holds line ids and the answer is a
+ *  2xx JSON object, answer the same object with `madeHere: readMadeHereItems(…)` added, keeping the
+ *  status and every header (the session cookie included). Any other answer is left as it is. */
+export function madeHereAnswer(db: Database): MiddlewareHandler;
+```
+
+  `extraLabel` (`apps/server/src/kitchen-print.ts:80-83`) is private: export it, or move it beside
+  `staffPresentationName`'s users, rather than copying it.
+- Modify: `apps/server/src/till-api.ts` — `sendingCfg` (Task 9) also sets
+  `madeHereSink: madeHereSinkFor(c)`; `/api/sales`' and `/api/pay`'s `saleCfg` do too; register
+  `app.use("/api/*", madeHereAnswer(deps.db))` as the FIRST statement of `mountTillApi` (`:796`),
+  before it mounts the bill-payment (`:801`) and adjustment (`:802`) routes and its own, because a
+  Hono middleware wraps only routes registered after it.
+- Modify: `apps/server/src/bill-payments-api.ts` — `deviceSaleCfgOf` (`:198-208`) also sets
+  `madeHereSink: madeHereSinkFor(c)`, so a bill payment, a split, an adjustment or a line edit that
+  completes a pay-first bill tells the waiter too.
+- **A replay reports the original facts (coordinator ruling, 2026-10-01; CLAUDE.md §3).** A repeated
+  request — the retry after a lost answer, exactly when the waiter never saw the list — runs no
+  `fireLines`, so the sink would stay empty. So the made-here line ids are stored with each sending
+  write's recorded result and put back into the sink on a repeat:
+  - `runServiceCommand` (`apps/server/src/parties.ts:590-631`) gains an optional last parameter
+    `sink?: Set<string>`. It notes the sink's contents before `run()`, and stores the ids `run()`
+    added beside the result — `result: { value, madeHere: [...] }`, written ONLY when ids were added,
+    so every other command's stored result stays `{ value }` exactly (`parties.test.ts:1261-1270`
+    asserts it by equality; keep that assertion as it is); the column is JSON
+    (`packages/db/src/schema/parties.ts:119`; widen its type), so no migration — and on a replay adds
+    the stored ids to the sink before returning the recorded value. Every caller with a `cfg` in
+    scope passes `cfg.madeHereSink` (`grep -n 'runServiceCommand(' apps/server/src` lists them; the
+    sending ones are the group submit, `order-groups.ts:107`, and the draft submit,
+    `order-drafts.ts:293`).
+  - `firePrepayOrder` (`apps/server/src/till-sale.ts:1306` at `efb0ebf9d`), through which the cash
+    sale, the integrated card's capture and recovery, and a bill payment that completes a pay-first
+    bill (`apps/server/src/bill-payments.ts:717`) all send, takes the ids its `fireLines` added from
+    the difference in `cfg.madeHereSink` before and after the call (the sink cannot already hold
+    them: a rolled-back first attempt under `withSaleTillWhenIssuing` is refused at
+    `bill-payments.ts:660`, before `firePrepayOrder` runs at `:717`), and, ONLY when there are some,
+    stores them as a `service_commands` row on the bill — `scope_kind` `bill`, `scope_id` the order,
+    `submission_id` `made-here:prepay`, `kind` `made_here`, `fingerprint` empty,
+    `result: { value: <line ids> }`. No row is written when nothing was made here, so the existing
+    counts of a bill's command rows (`adjustments-apply.test.ts:785`, `:3344`) are untouched. It
+    merges only into an existing row whose `kind` is `made_here`; any other row under that id is
+    refused (`submission.id_reused`). The till mints UUIDs for submission ids, which contain no `:`
+    (`apps/till/src/till-app.ts:2421`, `:3748`, `:3867`, `:4203`), but the server does not check
+    this — it accepts any string of 1 to 200 characters (`submissionIdOf`,
+    `apps/server/src/bill-payments-api.ts:95-104`) — so the kind check is what keeps a client's
+    command and this row apart. `readSettledTicket` (`till-sale.ts:534`), which every sale and pay
+    replay answers through, and a bill payment's replay, through `resultOf` → `readSettledTicket`
+    when the bill is settled (`bill-payments.ts:929-932`), add that row's ids to `cfg.madeHereSink`.
+    A first answer adding them again changes nothing: the sink is a set. **A replayed partial
+    payment** repeated after a later payment settled the bill answers through `readSettledTicket`
+    too, so it carries the completing payment's `madeHere`, which its own first answer never had —
+    as its `invoice` field already does. Accepted: it re-shows items still to make; it is not
+    strictly the original facts.
+  - **The adjustment route** (`POST /api/working-orders/:id/adjustments`,
+    `apps/server/src/adjustments-api.ts:120-127`) runs `applyAdjustment` with `deps.cfg` and its
+    `runServiceCommand`, then `issueIfFullyPaid` outside that command; on a repeat the command
+    replays, and `issueWhenFullyPaid` returns early because the bill is no longer open
+    (`bill-payments.ts:648`), so nothing reads the stored row. After `issueIfFullyPaid`, the route
+    calls `replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id)` — harmless on a first
+    answer. `POST /api/bills/:id/split` and `PUT …/lines/:lineNo` have no replay (a repeat is refused,
+    a stale revision), so they need nothing.
+  - Write the helpers once in `made-here.ts`: `storePrepayMadeHere(tx, orderId, lineIds)` (no row
+    for an empty list) and `replayPrepayMadeHere(tx, cfg, orderId)`.
+  - Update the two descriptions the `made-here:prepay` row makes false: `service_commands`' schema
+    comment, "One row per service command, keyed by the submission id its device made for it"
+    (`packages/db/src/schema/parties.ts:102-108`), and its classification text, "the recorded result
+    of each service command" (`packages/db/src/classification.ts:122-126`) — each gains that a bill
+    may also hold one `made_here` row the server writes, recording a pay-first send's made-here
+    items for a replay.
+- Modify: `apps/till/src/api/client.ts` — export `MadeHereItem` (the server's shape); `TillApi`
+  (`:1701`) gains `onMadeHere(listener: (items: MadeHereItem[]) => void): void`, and `#request`
+  (`:2799-2831`), after a successful answer is parsed, calls the listener when the answer is an
+  object whose `madeHere` is a non-empty array. One place covers every sending route, including any
+  added later.
+- Create: `apps/till/src/widgets/make-now.ts` (`till-make-now`, an app widget, not a shared `wt-*`
+  primitive), `make-now.test.ts`, `make-now.a11y.test.ts`.
+- Modify: `apps/till/src/till-app.ts` — subscribe to `api.onMadeHere` whenever `api` is set (in
+  `willUpdate` on a change of `api`: the property's default, `:895`, is replaced by `main.ts:31` and
+  by the tests), keep the items in a
+  `@state()` list (appending; the same `lineId` once), and render `<till-make-now>` in `render()`
+  (`:5700`) beside the other shell-level notices (the `wt-toast` at `:5793`), so it stays whatever
+  screen is shown; its `dismiss` event empties the list. It keeps the list in `localStorage` under
+  `waitron.makeNow.<deviceId>` (D11, owner): restored when the device's identity is known
+  (`this.deviceId`, set at `apps/till/src/till-app.ts:1464`), written on every change, removed on
+  Done; every access in `try`/`catch` — reaching the bare `localStorage` global included, which
+  itself throws when site data is blocked (`apps/till/src/api/server-router.ts:22-27`, the closer
+  precedent) — falling back to memory; no device → memory only.
+- Modify: `apps/till/src/i18n/strings.ts`, both languages: `"make_now.title": "Make now"` /
+  `"Preparar ahora"`; `"make_now.dismiss": "Done"` / `"Hecho"`.
+
+**The widget:** a region labelled by its heading "Make now", one line per item —
+`dishLine(item, item.name)` (`apps/till/src/widgets/dish-format.ts:16-29`), so "2× Lager" — then the
+options in the staff wording (`optionAnswers(item.optionSnapshots, { reads: "staff" })`,
+`apps/till/src/widgets/option-snapshot.ts:25`, as the basket reads them), each extra as "+ name", the
+note — and one "Done" button that dispatches `dismiss`. It is not a toast: it never closes by itself
+and is not `role="alert"` (it would re-announce on every render); its heading is announced when it
+first appears through a polite live region. It renders nothing when the list is empty. Every colour,
+spacing and font reads a `--wt-*` token; it fits a phone-width handheld without a sideways scroll.
+
+- [ ] **Step 1: Write the failing tests.**
+  - Server (`made-here.test.ts` or the route suite Task 9 made): `POST /api/sales` from the bar till
+    with a lager and a burger answers `madeHere` holding one item, the lager, named by its STAFF
+    name — give the lager different staff, customer and kitchen names, and assert the staff one
+    (CLAUDE.md §3) — with the quantity `thousandthsToDecimal` gives for it; a draft submit (table Send) with a made-here lager answers it; a send with no made-here item
+    answers no `madeHere` key; a route that answers a non-object is untouched; the session cookie set
+    by a route survives the middleware (assert the `Set-Cookie` header on a response that sets one).
+  - `readMadeHereItems` drops a line id with no made-here record.
+  - Till client (`apps/till/src/api/client.test.ts` or beside it): a stubbed answer carrying
+    `madeHere` calls the listener once with the items; one without it calls nothing.
+  - Till widget: renders "Make now", "2× Lager", the staff option answer and "+ Lime"; "Done"
+    dispatches `dismiss`; an empty list renders nothing. Its a11y test covers it in both themes.
+  - Till app (`ls apps/till/src/till-app*.test.ts` for the suites driving Send and counter Pay): after
+    a table Send whose answer carries a made-here item, and after a counter cash Pay whose answer
+    does, the list shows the item; after "Done" it is gone; it is still shown after the screen
+    changes; a send whose answer has none shows nothing.
+  - **D11 (owner), a reload:** with a device identity, a list shown, then a new `till-app` mounted
+    (the reload) with the same device → the list is restored from `waitron.makeNow.<deviceId>`; after
+    Done the key is gone from `localStorage`; a different device id restores nothing; with
+    `localStorage.getItem`/`setItem` stubbed to throw, and with the `localStorage` global itself
+    throwing (as `apps/till/src/api/server-router.test.ts:173` stubs it), the list still shows and
+    Done still clears it.
+  - **Replays (coordinator ruling):** `POST /api/parties/:id/groups` sent twice with one
+    `submissionId` from the bar till → both answers carry the lager in `madeHere`; `POST /api/sales`
+    sent twice for one order → both answers carry it; a bill payment that completes a pay-first bill,
+    repeated with its `submissionId` → both carry it; an adjustment that completes a pay-first bill,
+    repeated with its `submissionId` → both carry it; a pay-first send with nothing made here writes
+    no `made_here` row; a client command sent with the submission id `made-here:prepay` before the
+    payment → the payment's store is refused `submission.id_reused` rather than writing into it. Control for each: drop the replay's restore and
+    see the second answer lose `madeHere`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/made-here.test.ts` and — check
+  memory first — `pnpm --filter @waitron/till exec vitest run src/widgets/make-now.test.ts src/widgets/make-now.a11y.test.ts src/api/client.test.ts`
+  and the till-app suites. Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same. Expected: PASS. Then in the dev stack (`wa-wt demo <worktree-name>`):
+  tick Bar for the demo till on the Devices screen, sell a drink at the counter and send a drink
+  from a table, and look at the list in both themes and at phone width.
+- [ ] **Step 5: Commit** — "Till: after a send, the till lists the items it must make on the spot, by the names on its basket, until the waiter dismisses them".
+
+---
+
+### Task 10: A made-here item is never held, never prints and records no notice — holds, releases, reprints, slips
+
+_Amended 2026-10-01 (owner, after approval): the approved task turned a held made-here record `ready`
+at release; no made-here record is held any more (T12), so those changes are gone and the hold paths
+below are pinned instead._
 
 **Files:**
 - Modify: `apps/server/src/working-order.ts`:
-  - `releaseHeld` (`:1513-1544`): its update (`:1522-1530`) also sets
-    `state: sql\`case when ${ticketItems.madeHere} then 'ready' else ${ticketItems.state} end\`` and
-    `readyAt: sql\`case when ${ticketItems.madeHere} then ${firedNow} else ${ticketItems.readyAt} end\``,
-    and its `.returning` gains `madeHere`;
-  - `sendLines` (`:1573-1649`): the same in its update (`:1611-1628`);
-  - `finishRelease` (`:1552-1567`): its `fired` items carry `madeHere`; every one still counts as
-    released (sold-out check, `stampSent`, revision), but only those with `madeHere` false go to
-    `enqueueKitchenTickets` (`:1565`).
-- Modify: `apps/server/src/order-groups.ts` — `printHoldTickets` (`:1175-1209`): its query's where
-  (`:1192`) adds `eq(ticketItems.madeHere, false)`, so a group of made-here items alone queues no HOLD
-  ticket and keeps no `hold_printed_at`.
+  - `isReleased` (`:2264-2272`) gains `ticketMadeHere: boolean | null` in its `Pick` and answers
+    `true` first when it is true: a made-here line is released work, in a held group or not (T12).
+    Every caller (`grep -n isReleased apps/server/src`) selects `madeHere: ticketItems.madeHere`
+    beside `ticketFiredAt`: at `efb0ebf9d`, `servableLines` (`:2237`), `readCurrentOrders`
+    (`apps/server/src/order-groups.ts:1099`), `groupArrivingDishes` (`order-groups.ts:1406-1414`,
+    called at `:1434`) and the adjustments read (`apps/server/src/adjustments-apply.ts:209`, used by
+    `stageOf`, `:260-264`). Rewrite `isReleased`' doc (`:2260`: "a line in a held group … is not")
+    to name the made-here exception.
+  - `readEditableOrder` (`:3689`) also reads each line's group state (left join `order_groups` on
+    `group_id`); `newWork` (`:3771-3775`) counts a made-here line as sent work unless its group is
+    held, where it counts as held work (T12, coordinator ruling); `firedCourseIds` (`:3776-3780`)
+    leaves made-here records out (D10). Task 9 already put `madeHere` on `EditableLine.ticket`.
+    Update `newWork`'s doc comment (`:3528-3534`, "`fire` where some line of the order was sent"):
+    a sent made-here line in a held group counts as held work.
+  - The comments T12 makes false: `sendLines`' "A held group's lines are released only by firing the
+    group" (`:1587`) and `refuseHeldLeavingParty`'s "held work leaves only once fired" (`:3058`) —
+    each narrowed to say a made-here line in the group was made at its send; keep it to that.
+  - NOT changed: `releaseHeld` (`:1520`), `sendLines` (`:1580`), `finishRelease`, `fireCourse`,
+    `recallLines` — each touches only records with no fire time (`:1532`, `:1624`) or `queued` ones
+    (`:1744`), and a made-here record always has a fire time and is `ready` (T12). Write that
+    invariant in one sentence on `ticket_items.made_here`'s doc comment (Task 1's sentence already
+    says "it is `ready` from the moment it fires"; make it "it is fired and `ready` from the moment it
+    is recorded: it is never held").
+- NOT changed: `apps/server/src/order-groups.ts` — `readGroups` (T12: a made-here record counts as a
+  ready dish), and `printHoldTickets` (`:1175-1209`), which reads records with no fire time (`:1192`),
+  which a made-here record never is.
 - Modify: `apps/server/src/kitchen-print.ts`:
-  - `readReprintParts` (`:975-1028`): both queries (`:987`, `:999-1004`) add
-    `eq(ticketItems.madeHere, false)`, so a reprint never prints one, and `readReprintTargets`
-    (`:1034-1064`), which reads the same parts to match print problems, never names one;
+  - `readReprintParts` (`:975-1028`): its FIRED query (`:987`) adds `eq(ticketItems.madeHere, false)`,
+    so a reprint never prints one and `readReprintTargets` (`:1034-1064`) never names one. Its held
+    query (`:999-1004`) reads records with no fire time and needs nothing;
   - a helper used at the TOP of `enqueueCorrectionSlips` (`:557-574`), `enqueueHoldCorrections`
     (`:581-598`) and `enqueueExtraCancelled` (`:666-689`), BEFORE each records its notices, and in
     `notifyMoved` (`:844-882`) before its notices:
@@ -1266,51 +1590,65 @@ async function withoutMadeHere<T extends { workingOrderLineId: string }>(
   (Each of those helpers is called before the line or record it corrects is deleted —
   `enqueueCorrectionSlips`' own doc says a void calls it first, `:554-555` — so the record is still
   there to read. For `notifyMoved`, reading `madeHere` in `readTicketItemsOn`, `:814-841`, and
-  filtering there does the same with no extra read.)
+  filtering there does the same with no extra read. `enqueueHoldCorrections` needs it for
+  `correctJoin`, `order-groups.ts:1283-1308`, which reads a joining line's record whatever its fire
+  time.)
 
-**Behaviour:** the paths that reach these (no change to them): a course fired (`fireCourse`), a group
-fired (`releaseGroup` → `fireOrderLines`), Send and Send all (`sendLines`), a HOLD ticket
-(`printHoldTickets`, from group submission and edits), Reprint (`reprintOrderTickets`), a cancel
-(`removeFromLine`, from the adjustments route), a held line changed or removed through the order edit
-route (`planHeldCorrections` → `correctHoldTickets`), an extra cancelled off a made-here dish
+**Behaviour:** the paths T12 lists, plus a reprint (`reprintOrderTickets`), a cancel
+(`removeFromLine`, from the adjustments route), an extra cancelled off a made-here dish
 (`tellKitchenOfCancelledExtra`), and a bill moved to another table (`enqueueMovedSlips`,
-`enqueueMovedSlipsFor`). A fired made-here line can be cancelled but not changed or recalled:
-`kitchenHas` (`working-order.ts:3816-3826`) and `recallLines` (`:1718-1720`) already refuse a
-`ready` item `ticket.already_started`, and the till already hides Change and Recall for one (T10's
-correction) — this task changes neither; its tests pin it.
+`enqueueMovedSlipsFor`). A made-here line can be cancelled but not changed or recalled:
+`kitchenHas` (`working-order.ts:3848`) and `recallLines` already refuse a `ready` item
+`ticket.already_started`, and the till already hides Change and Recall for one (T10's correction) —
+this task changes neither; its tests pin it.
 
-- [ ] **Step 1: Write the failing tests** in `made-here.test.ts` (Bar has a printer; the bar till's
-  list is `[Bar]`; count Bar's print jobs and its kitchen notices — the notices through
-  `VENUE_SERVICE.listStationNotices` — before and after each step):
-  - a lager held on a course, then `fireCourse`: no Bar job, the record is `ready` with `readyAt`
-    set, and it is not in `listStationQueue(tx, bar)`;
-  - a lager held, then `sendLines` with no line numbers (Send all): the same;
-  - on a party (`apps/server/src/testing/party-venue.ts`): a held group holding a made-here lager and
-    a burger at Grill, with the venue printing held work in advance → a HOLD job at Grill, none at
-    Bar; a held group holding only the lager → no HOLD job and the group's `hold_printed_at` stays
-    null; firing that group → no FIRE job at Bar;
+- [ ] **Step 1: Write the failing tests** in `made-here.test.ts` (Bar has a printer; Grill has one;
+  the bar till's list is `[Bar]`; every send uses the bar till's cfg; count Bar's print jobs and its
+  kitchen notices — the notices through `VENUE_SERVICE.listStationNotices` — before and after each
+  step). After every step, also assert the invariant: every `made_here` record has `fired_at` set and
+  `state = 'ready'`.
+  - **course hold:** a round of a burger in course 1 and a lager in course 2 → the lager is made now
+    (`ready`, fired); then `fireCourse` for course 2 → no Bar job, the lager's record unchanged, and
+    it is not in `listStationQueue(tx, bar)`. A later round with a course-2 burger: that burger is
+    still held (the drink did not mark course 2 started, D10);
+  - **D10 (owner):** a made-here aperitif in course 1 and a burger in course 2 in one round: the
+    aperitif made now, the burger held until `fireCourse` for course 2;
+  - **a round on hold** (`hold: true`), then `sendLines` with no line numbers (Send all): the lager
+    was made at the send; Send all prints nothing at Bar;
+  - **a held group** on a party (`apps/server/src/testing/party-venue.ts`) holding a lager and a burger
+    (Grill), the venue printing held work in advance: the lager is made now; a HOLD job at Grill
+    naming only the burger, none at Bar; the
+    lager can be marked served at once (`markServed`), while the burger is refused `group.line_held`;
+    the till's current orders (`readCurrentOrders`) show the lager released; firing the group
+    (`fireGroup`) → a FIRE job at Grill for the burger, nothing at Bar, and the lager's `sent_at`
+    unchanged;
+  - **a held group of only the lager** → no HOLD job, `hold_printed_at` stays null; and a FIRED
+    group of only made-here drinks reads `ready` in `listOrderGroups` (`readGroups` unchanged);
+  - **an edit after a made-here send (coordinator ruling):** an open bill whose only line is a lager
+    made here (sent, `ready`), then a burger added through `PUT /api/working-orders/:id` → the burger
+    has a kitchen record at Grill, fired (no course) and printed; control: leave the made-here line out
+    of `newWork` and see the burger get no record;
+  - **a burger joining that held group by an edit** whose HOLD ticket was queued (`correctJoin`):
+    HOLD CHANGED at Grill only, no notice at Bar;
   - `reprintOrderTickets` on an order with a made-here lager and a burger: Grill's REPRINT, nothing at
     Bar;
-  - cancelling the fired lager through the adjustments route (as
+  - cancelling the lager through the adjustments route (as
     `apps/server/src/adjustments-extra-cancel.test.ts` cancels a line), whole and in part: no Bar
     job, no notice; cancelling an extra off a made-here dish: no Bar job, no notice;
-  - a held made-here lager whose quantity is changed through `PUT /api/working-orders/:id` (or its
-    function, `updateHeldOrder`) in a group whose HOLD ticket was queued (because a Grill dish is in
-    it): no HOLD CHANGED at Bar, the record's quantity follows the line (Review Focus 6);
-  - **the T10 correction, D1's default:** changing a FIRED made-here lager through the edit route is refused
-    `ticket.already_started`, and so is recalling it (`recallLines`); assert the codes;
-  - a party's bill holding a fired made-here lager and a fired burger moved to another table: a MOVED
+  - **D1's default:** changing the lager through the edit route is refused `ticket.already_started`,
+    and so is recalling it (`recallLines`); assert the codes;
+  - a party's bill holding the made-here lager and a fired burger moved to another table: a MOVED
     slip at Grill, nothing at Bar, no `moved` notice at Bar;
   - splitting a bill holding a made-here lager (`carveOffLines`): the split-off part's record is
     still `madeHere: true` (`splitTicketItem` copies the whole row, `working-order.ts:3115-3139`).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/made-here.test.ts`.
-  Expected: FAIL (each print, slip and notice above still happens; the released record stays
-  `queued`).
+  Expected: FAIL (the lager is refused serving in a held group; each slip and notice above still
+  happens).
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the same command, then
-  `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts src/order-groups.test.ts src/adjustments-extra-cancel.test.ts src/print-problems.test.ts src/till-api.reprint.test.ts src/kitchen-print.concurrency.test.ts src/party-move-bill.test.ts src/split-bill.test.ts src/working-order.test.ts`.
+  `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts src/order-groups.test.ts src/adjustments-extra-cancel.test.ts src/print-problems.test.ts src/till-api.reprint.test.ts src/kitchen-print.concurrency.test.ts src/party-move-bill.test.ts src/split-bill.test.ts src/working-order.test.ts src/served.test.ts src/current-orders.test.ts`.
   Expected: PASS.
-- [ ] **Step 5: Commit** — "Kitchen paper: a made-here item is never on a FIRE, HOLD or reprinted ticket, gets no correction slip and records no kitchen notice; released from hold, it turns ready".
+- [ ] **Step 5: Commit** — "Kitchen paper: a made-here item is never held, is served and read as released at once, and is never on a reprint, a correction slip or a kitchen notice".
 
 ---
 
@@ -1338,9 +1676,9 @@ correction) — this task changes neither; its tests pin it.
   `apps/server/src/table-signals.test.ts`, `packages/reporting/src/overdue-orders.test.ts`
 
 **Not changed, on purpose:** the till's own order views (`readTabLines`, `working-order.ts:2663`;
-`readCurrentOrders`, `order-groups.ts:1054`) show a made-here line as Ready — it was made on the spot —
-and a group's roll-up (`readGroups`, `order-groups.ts:802-877`) counts it ready. A made-here line is
-still servable (`isReleased`, `working-order.ts:2257-2265`).
+`readCurrentOrders`, `order-groups.ts:1054`) show a made-here line as Ready — it was made on the spot.
+A made-here line is servable at once, even in a held group (T12, Task 10), and a group's roll-up
+(`readGroups`) counts it as a ready dish (T12).
 
 - [ ] **Step 1: Write the failing tests:** with a fired made-here lager and a queued burger on one
   table's bill: Bar's `listStationQueue` is empty; `listExpoQueue` has the burger and no lager; an
@@ -1434,12 +1772,17 @@ still servable (`isReleased`, `working-order.ts:2257-2265`).
   are left out._"; and at §5.11: "_2026-10-01 (slice 3c-1): set per device on the Devices screen, not per
   profile, and not carried by configuration export. "Here" is the device that first sends the item;
   paths with no device give it a ticket. It is checked against the station the item finally goes to.
-  A held made-here item waits like any held dish and needs no ticket when released; once made it can
-  be cancelled, not changed (D1). A dish an edit sends again keeps its first send's decision._"
+  A made-here item is never held: it is made the moment it is sent, even for a later course or in a
+  held group, and the sending till shows a "Make now" list until the waiter dismisses it (owner,
+  2026-10-01). Once made it can be cancelled, not changed (D1). A dish an edit sends again keeps its
+  first send's decision._"
 - Modify: `docs/developers/products.md` — in the surfaces table (`:152-165`), a row: "Also on this
   order (not for this station), on a station's own ticket and in its kitchen screen's order card |
   the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`,
-  `apps/server/src/rest-of-order.ts`"; and in the paragraph after it ("A cook sees the same name
+  `apps/server/src/rest-of-order.ts`"; and a second row: "Make now, on the till that sent made-here
+  items | the staff names (`staffPresentationName`), each option answer's staff wording, and each
+  extra's frozen staff name with ` x<n>` | `readMadeHereItems`, `apps/server/src/made-here.ts`, shown
+  by `apps/till/src/widgets/make-now.ts`" (T13); and in the paragraph after it ("A cook sees the same name
   whether the order arrives on paper or on a screen", `:169`) nothing changes unless the sentence
   lists the surfaces, in which case add this one.
 - Claims this slice retires (CLAUDE.md §1: a behaviour change retires every receipt about the old
@@ -1471,12 +1814,14 @@ still servable (`isReleased`, `working-order.ts:2257-2265`).
   reports (Task 11). §5.12's station card line: Task 3. Watchers (§5.11's last sentence) are 3d's;
   made-here items are left out of every reader a watcher would build on.
 - T1 Tasks 1–3; T2 Tasks 5, 6; T3 Tasks 6, 7, 12; T4 Tasks 4, 5; T5 Task 5; T6 Tasks 1, 5; T7 Tasks 1,
-  8, 12; T8 Task 9; T9 Task 9; T10 Tasks 1, 9, 10, 11; T11 Task 10.
+  8, 12; T8 Task 9; T9 Task 9; T10 Tasks 1, 9, 10, 11; T11 Task 10; T12 Tasks 9, 10; T13 Task 9b.
 - Interfaces changed: `kitchen_stations.shows_rest_of_order`, `ticket_items.made_here`,
   `ticket_items_order_idx`, `device_made_here_stations`; `Station.showsRestOfOrder` (server, dashboard);
   `TillConfig.sendingDeviceId`; `fireLines`' option `keepMadeHere` (changed lines and added-units
   lines); a raise's `pricedAs` entry gains `follows`; `EditableLine.ticket.madeHere`;
-  `planKitchenTickets`' option `restOfOrderExcept`; `KitchenTicket`'s station variant `alsoOnOrder`;
+  `planKitchenTickets`' option `restOfOrderExcept`; `TillConfig.madeHereSink`, `MadeHereItem`,
+  `readMadeHereItems`, the `madeHereAnswer` middleware and every till answer's optional `madeHere`;
+  `TillApi.onMadeHere`; `isReleased`'s `ticketMadeHere`; `KitchenTicket`'s station variant `alsoOnOrder`;
   `StationQueueGroup.elsewhere` and `ElsewhereItem` (server, till); `DeviceRow.madeHereStationIds`;
   new routes `PUT /management-api/devices/:id/made-here`; `PATCH /management-api/stations/:id` takes
   `showsRestOfOrder`.
@@ -1548,3 +1893,45 @@ the PF4 copy; M4 the `follows` field is no longer said to be 3b's, and the point
 field; M5 a change with a raise is named beside a raise; M6 T6 and Task 1's commit describe the
 reads that scan as "among them", not a count; M7 the pointer's grep finds route cases by `madeHere`.
 The re-check's aside became a backlog entry in Task 12.
+
+## Amended 2026-10-01 (owner, after approval)
+
+The owner corrected the approved plan: "a made-here item should never be held, it must be made in
+the moment otherwise the waiter will forget. what happens when a held made-here item gets sent? it
+doesn't get printed anywhere. how does the waiter know to make it?" Two decisions were added, both
+the owner's: **T12**, a made-here item is never held — `fireLines` fires it at the send whatever
+would have held it, and the owner accepts that a made-here drink ordered for a later course, or in a
+held group, is made at once; T12 traces what every hold path then does with it — and **T13**, every
+till request that records made-here items answers with them, and the till keeps a "Make now" list,
+by staff name, until the waiter dismisses it (new Task 9b). Removed with the old rule: the approved
+T10's "sent on hold" bullet; Review Focus 6's "a held made-here dish stays editable until it is
+released"; Task 9's held-record test assertions and the held made-here `addedApart` row; Task 10's
+release-time state change in `releaseHeld` and `sendLines`, its `finishRelease` filter, its
+`printHoldTickets` filter and its held-dish edit case. Added: `isReleased` counts a made-here line
+as released, `readGroups` was to leave made-here records out (dropped, below), and the course test's "already started"
+check (`anyFired`) and an edit's view of the bill leave them out. The amendment's first draft took two defaults the owner then reversed
+(2026-10-01): **D10** — a made-here item still counts for its course when the order's first course is
+worked out ("Burger waits for course 2, otherwise the waiter should have sent them together"), though
+it never marks its course started; and **D11** — the "Make now" list survives a reload, kept in the
+device's own storage under a key naming the device, and cleared by Done. A cross-plan check the same
+day (`made-here-amend-check.md`) and the coordinator's rulings changed three more things: an edit
+counts a made-here line as sent work unless its group is held, so a dish added to a bill whose only
+sent work is a made-here drink is still sent (the first draft left it out and stranded the dish);
+`readGroups` is not changed after all (the first draft's filter left a fired group of drinks never
+reading Ready, and the till already shows a held group as held, `till-table-order-screen.ts:3188`);
+and a replayed send reports the made-here items the original recorded (`runServiceCommand` stores
+them with its result; `firePrepayOrder` stores them on the bill for the sale, pay and bill-payment
+replays). Also: every `isReleased` caller, `groupArrivingDishes` included; the five code comments T12
+makes false; a `products.md` row for "Make now"; the till subscribing when `api` is set; the bare
+`localStorage` global throwing. Those citations were read at `efb0ebf9d`. A second check
+(`made-here-amend-check2.md`) then fixed: Task 10's commit message and Review Focus 6, which still
+leaned on the dropped `readGroups` change (the API answers `ready: true` for a held group holding a
+made-here drink; the till shows "held" first); the adjustment route, which now restores the stored
+made-here ids on a repeat, with a replay test; the stored row, written only when there are ids,
+merged only into a `made_here` row, and described truthfully (the server does not check that
+submission ids are UUIDs); `firePrepayOrder` taking its ids from the sink's difference; the
+`newWork` doc comment and `service_commands`' schema comment and classification text added to the
+descriptions to update; and the accepted partial-payment replay behaviour. Under D1's default an edit cannot
+add units to a made-here dish (a fired, `ready` record refuses a change), so "an edit that adds
+units to a made-here dish" reaches "Make now" only under D1's alternative; ordering more as a new
+line does reach it. Citations added here were read at `e6c46531f`.

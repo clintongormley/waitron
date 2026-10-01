@@ -209,9 +209,12 @@ defaults; approving the plan approves them too.
   or is resent from the Printers screen; a Reprint does not clear it there
   (`printJobInTrouble`, `apps/server/src/print-job-trouble.ts:38-78`, clears a kitchen ticket by a
   later printed reprint only through its link rows). A backlog entry records it.
-- **P10. At a release, watcher copies are built once per release, from the same made-here-free list
-  `finishRelease` hands its station parts** (3c-1 leaves made-here records out of that list at the
-  caller, its Task 10; `planKitchenTickets` does not filter them itself). For each watcher printer,
+- **P10. At a release, watcher copies are built once per release, from the same list
+  `finishRelease` hands its station parts.** That list never holds a made-here record, because
+  nothing made here is ever held (3c-1's T12, amended by the owner on 2026-10-01: a made-here item is
+  fired and `ready` at the send that records it), and every release stamps and prints only records
+  with no fire time (`releaseHeld`, `apps/server/src/working-order.ts:1532`; `sendLines`, `:1624`).
+  3d's own made-here drop in the watcher paths (Task 9) is a defence, not what keeps them off. For each watcher printer,
   every released dish it sees at the dish's final station is on ONE copy marked FIRE when the release
   is — except a dish 3c-3 re-routed that the watcher did NOT follow at its old station: that dish goes
   on a copy of its own per old station, with the "From Upstairs bar" line and no FIRE header, as W25
@@ -359,11 +362,11 @@ The inputs likeliest to hurt a venue, each pinned by a test in the task named:
 13. **Away does not take a dish off a runner.** The pass presses Away on the Terrace party's course:
     "Terrace runner" still lists the burger, shown "Sent out", until the runner marks it done (or it is
     served, handed over or discarded, W11). The pass's own board clears it (P5). (Tasks 6, 10)
-14. **A made-here dish never reaches a watcher's paper at a release or a move.** A lager made here,
-    held in a group, is on no watcher copy or slip when the group is released — at an open station,
-    and at a station that has closed (3c-3's re-route path) — nor when a move is attempted; and 3d's
-    own watcher copy and slip code leaves a made-here record out even when a caller hands it one.
-    (Task 9)
+14. **A made-here dish never reaches a watcher's paper.** A lager made here, sent from the bar till in
+    a send that holds the rest of the order, is on no watcher copy — not at the send, and not when the
+    held dishes are released later, including at a station that has closed (3c-3's re-route path) —
+    and a move of it is refused (3c-3's P13); and 3d's own watcher copy and slip code leaves a
+    made-here record out even when a caller hands it one. (Task 9)
 
 ---
 
@@ -1554,18 +1557,19 @@ type WatcherSlipRule =
 - 3c-3's release re-route (`finishRelease` after 3c-3, P10): both of its `enqueueKitchenTickets` parts
   pass `watchers: "none"`; then ONE `enqueueWatcherCopies(tx, cfg, orderId, <printable>, { mark,
   rerouted })`, where `<printable>` is, in the landed code, the variable `finishRelease` passes to
-  `enqueueKitchenTickets` — the two station parts together, each item at its final station: the
-  released records with 3c-1's made-here filter applied (3c-1 Task 10), plus the split-off extras 3c-2
-  inserts for released no-preparation dishes (3c-2 Task 4). Never the unfiltered `fired`, which still
-  holds made-here records so they count as released.
+  `enqueueKitchenTickets` (today `fired`, `working-order.ts:1572`) — the two station parts together,
+  each item at its final station: the released records, plus the split-off extras 3c-2 inserts for
+  released no-preparation dishes (3c-2 Task 4). It holds no made-here record: none is ever held
+  (3c-1's T12), and a release reads only records with no fire time (P10).
   `rerouted` is 3c-3's map from `rerouteHeldAtRelease`. `rerouteHeldAtRelease` step 5's
   `enqueueStationMoved` passes the new station's id, so a watcher that followed a re-routed dish only
   at its old station gets HOLD CANCELLED there.
 - **A made-here record never reaches a watcher, whatever a caller hands in (defence in its own right;
-  Review Focus 14).** A held made-here record is `queued` (3c-1 Task 9: "a held one waits as
-  `queued`"), and 3c-3's re-route and move read held records by `state = 'queued'`. The 3c-3 plan was
-  amended on 2026-10-01 (its P13: a made-here dish is never moved and never re-routed; a move is
-  refused `ticket.made_here`, and a release leaves it where it is); 3d does not rely on that. In `printCorrectionSlips`' watcher branch and in
+  Review Focus 14).** No path that builds a watcher copy or slip is expected to hand one in: a
+  made-here record is always fired and `ready` (3c-1's T12), so releases and 3c-3's re-route (which
+  read records with no fire time) never meet one, a move of one is refused `ticket.made_here` (3c-3's
+  P13), and the correction slips' callers drop them first (3c-1's `withoutMadeHere`). 3d does not rely
+  on any of that. In `printCorrectionSlips`' watcher branch and in
   `planKitchenTickets`' watcher copies, drop every item whose kitchen record is made here before
   choosing watchers — one read of `ticket_items.made_here` by line id for the call's items, the shape
   of 3c-1's `withoutMadeHere`, and only when there are watcher printers. Station paper is left to the
@@ -1589,24 +1593,22 @@ type WatcherSlipRule =
     (`moveDishesToStation`): Terrace runner's printer (every station) gets nothing; a watcher following
     Grill and Downstairs grill gets nothing; a Grill-only watcher gets the "MOVED TO DOWNSTAIRS GRILL"
     slip; a Downstairs-grill-only watcher gets a copy with "From Grill".
-  - **P10, a release re-route (3c-3), and Review Focus 14:** a held mojito on a printed HOLD copy at
-    Upstairs bar, Upstairs bar closed with Downstairs bar as its fallback, and in the same held group
-    a lager made here (3c-1: routed to Downstairs bar explicitly with 3a's `routeProductTo` — in
-    3c-3's fixture Upstairs bar claims Drinks, so a lager left in Drinks would route to Upstairs bar,
-    not be made here, and print — and sent on hold from a till whose made-here list names Downstairs
-    bar) and a burger at Grill; the group fired: a watcher following every station (every zone) gets ONE copy with
-    `*** FIRE ***` listing the mojito under Downstairs bar and the burger under Grill, and no lager; an
-    Upstairs-bar-only watcher gets HOLD CANCELLED and no copy; a Downstairs-bar-only watcher gets one
-    copy with "From Upstairs bar", no FIRE header, the mojito and no lager. No watcher copy anywhere
-    contains the lager. Proof by deletion: pass the unfiltered `fired` to `enqueueWatcherCopies` and
-    confirm the "no lager" assertion fails.
-  - **Review Focus 14, the closed-station path:** a second lager, made here at Upstairs bar (routed
-    there, sent on hold from a till whose made-here list names Upstairs bar), in a group whose HOLD
-    copy printed, with Upstairs bar closed (Downstairs bar its fallback) when the group fires: no
-    watcher slip and no watcher copy names it, whatever the landed 3c-3 does with the record (amended:
-    it stays at Upstairs bar); and a move of it by hand (`moveDishesToStation`) prints nothing on any
-    watcher printer — it is refused `ticket.made_here` (3c-3's P13; assert the code) and no watcher
-    job was queued.
+  - **P10, a release re-route (3c-3):** a held mojito on a printed HOLD copy at Upstairs bar, Upstairs
+    bar closed with Downstairs bar as its fallback, and a burger at Grill in the same held group; the
+    group fired: a watcher following every station (every zone) gets ONE copy with `*** FIRE ***`
+    listing the mojito under Downstairs bar and the burger under Grill; an Upstairs-bar-only watcher
+    gets HOLD CANCELLED and no copy; a Downstairs-bar-only watcher gets one copy with "From Upstairs
+    bar", no FIRE header, and the mojito.
+  - **Review Focus 14, a made-here lager in a send that holds the rest:** the bar till (its made-here
+    list names Downstairs bar) sends, in one request, a lager routed to Downstairs bar explicitly
+    (3a's `routeProductTo` — in 3c-3's fixture Upstairs bar claims Drinks, so a lager left in Drinks
+    would go to Upstairs bar, not be made here, and print) together with the held mojito and burger
+    of the case above, in a held group. At the send: the lager's record is made here, fired and
+    `ready` (3c-1's T12), and no watcher printer — a watcher following every station included — gets
+    a copy naming it (the HOLD copies list the mojito and burger only). Then Upstairs bar closes and
+    the group fires as above: still no watcher copy or slip anywhere names the lager. A move of the
+    lager by hand (`moveDishesToStation`) is refused `ticket.made_here` (3c-3's P13; assert the code)
+    and queues no watcher job.
   - **3d's own filter, directly:** call `enqueueStationMoved` with a made-here item (as a
     `HOLD CANCELLED` item carrying a group) and `enqueueKitchenTickets(…, { watchers: { newSince } })`
     and `enqueueWatcherCopies(…, { rerouted })` each with a made-here item: no watcher printer gets a
@@ -2148,7 +2150,8 @@ away; Task 6 states there is no `away_at` condition and adds the Terrace-runner-
 proof by deletion; Task 10 keeps the pass's away filter on "All stations" only, shows "En route", and
 adds the screen case; new Review Focus 13. **I2 / ruling 2:** the release's watcher copies are built
 from the same made-here-free list `finishRelease` hands its station parts, named in Task 9, with a
-made-here lager in the release case and a proof by deletion; new Review Focus 14. **I3 / ruling 3:**
+made-here lager in the release case and a proof by deletion; new Review Focus 14 _(amended
+2026-10-01, owner: no made-here record is ever held; see the note at the end)_. **I3 / ruling 3:**
 P4 is now one switch, "Runs the pass" / "Lleva el pase" (column `runs_pass`, field `runsPass`),
 flagged for the owner as a widening of W6's switch with the reason; W6 points at it; Tasks 2, 10, 13
 and 14 follow it. **I4 / ruling 4:** only the shell's Expo drill (not `embedded`) shows the chooser;
@@ -2172,7 +2175,9 @@ and the coordinator's ruling were applied in place. **I-1:** a held made-here re
 held made-here record is never re-routed, a move refuses it), and 3d now also drops made-here
 records itself in `printCorrectionSlips`' watcher branch and in `planKitchenTickets`' watcher copies,
 with Review Focus 14 widened to a made-here lager held at a station that closes, a move attempt, and
-direct calls that hand the watcher code a made-here item. **Minors:** M-1 no lever on a section
+direct calls that hand the watcher code a made-here item. _(Amended 2026-10-01, owner, after
+approval: no made-here record is ever held — see the note at the end; Review Focus 14's held-lager
+cases are replaced by a made-here lager in a send that holds the rest.)_ **Minors:** M-1 no lever on a section
 already away, and the sent-out label is "Sent out" / "Enviado" (`expo.sent_out`), so the Spanish no
 longer reads "En camino" twice on one card; M-2 `#restoreDestination` (`till-app.ts:1347`) keeps
 `till-watcher` for an `expo` destination and clears it otherwise, with reload and tab-change cases in
@@ -2201,3 +2206,19 @@ B24's two moved files and A156; `listExpoQueue` `:5405`, `cancelPlacedOrder` `:4
 `:4730`; the 3c-3 amendment is cited as its P13 and the move case asserts `ticket.made_here`; the
 no-lever reason distinguishes the group verb (bumps the party's revision) from the course verb
 (changes nothing).
+
+## Amended 2026-10-01 (owner, after approval)
+
+The owner corrected slice 3c-1 after this plan was approved: a made-here item is never held — it is
+made at the moment it is sent, so `fireLines` records it fired and `ready` whatever would have held
+it (3c-1's T12, and its "Amended 2026-10-01" note; 3c-1's Task 10 release-time filter is gone). This
+plan's text that assumed a held made-here record is corrected: P10 now says the release list is
+free of made-here records because none is ever held or released (releases read only records with no
+fire time, `working-order.ts:1532`, `:1624`), not because of a 3c-1 filter; Task 9's `<printable>`
+and its made-here defence bullet say the same; Review Focus 14 and Task 9's tests use a case that can
+exist — a made-here lager sent from the bar till in a send that holds the rest of the order, on no
+watcher copy at the send or at the later release, and refused on a move (3c-3's P13). 3d's own
+made-here drops in `printCorrectionSlips`' watcher branch and `planKitchenTickets`' watcher copies
+stay, as a defence that no current path needs, with their direct tests and proofs by deletion. The
+earlier review notes are left as they were written, with a dated pointer here. Citations added here
+were read on `main` at `e5ba24d55`.

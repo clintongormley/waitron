@@ -272,14 +272,15 @@ default the plan takes; approving the plan approves them.
   - **It never clears by itself**: moving the dish, or reopening the station, leaves it up until
     someone marks it handled on the dashboard. Then the next dead end records a new one.
   - **The wording says there may be more**, in a sentence of its own (Task 5).
-- **P13. A "made here" dish (3c-1) is never moved and never re-routed** (amended 2026-10-01). 3c-1
-  keeps such a dish as a kitchen record with a `made_here` mark: born `ready` when it fires at once,
-  but, when sent ON HOLD, an ordinary held record (`state = 'queued'`, no fire time) that turns
-  `ready` in the statement that releases it, printing nothing (3c-1 plan, T10). The till that sent it
-  makes it on the spot, so it has no ticket at its station to move. A move of one is refused with a
-  new code, `ticket.made_here` (Task 3), and the till never offers Move to station… for one; a release
-  never re-routes it and never raises the alert for it, whatever its station's state (Task 4) — its
-  station stays its maker and nothing prints.
+- **P13. A "made here" dish (3c-1) is never moved and never re-routed** (amended 2026-10-01, twice).
+  3c-1 keeps such a dish as a kitchen record with a `made_here` mark, and a made-here item is NEVER
+  held: whatever would have held it (a later course, a held group, a round sent on hold, units added
+  beside a held dish), `fireLines` records it fired at the send's one clock reading and `ready`
+  (3c-1 plan, T12, owner). So a made-here record always has a fire time and is `ready`. The till that
+  sent it makes it on the spot, so it has no ticket at its station to move. A move of one is refused
+  with a new code, `ticket.made_here` (Task 3), and the till never offers Move to station… for one.
+  A release never meets one — it reads only held records — and its candidate read still says
+  `made_here = false`, as a defence only (Task 4).
 
 ## Global Constraints
 
@@ -675,7 +676,8 @@ fail in the commit message, and restore.
 
 ```ts
 /** Whether a kitchen record may still move to another station (M6): not made here (3c-1's
- *  `made_here`, P13), still queued — held or fired, not started — not sent out of the kitchen, and
+ *  `made_here`, P13 — always fired and ready), still queued — held or fired, not started — not sent
+ *  out of the kitchen, and
  *  nothing of its line served. The till offers the button exactly where this holds (P3). */
 export function stillMovable(
   item: { state: TicketState; awayAt: string | null; madeHere: boolean },
@@ -721,8 +723,9 @@ request.submissionId, "line.move_station", { orderId, lineIds: [...new Set(reque
    `away_at`, `made_here`, the fired quantity via `firedQuantity`, `kitchen-print.ts:519`), plus each
    line's `group_id`. A requested id not on this order → `tab.line_not_found { tabId: orderId,
    lineId }`; one with no kitchen record → `ticket.not_sent { workingOrderId: orderId, lineId }`; one
-   whose record is made here (held or fired) → `ticket.made_here { ticketItemId }` (P13), checked
-   before the next; one where `stillMovable` is otherwise false → `ticket.already_started
+   whose record is made here → `ticket.made_here { ticketItemId }` (P13; such a record is always
+   fired and `ready`, 3c-1 T12, so without this check it would be refused `ticket.already_started`,
+   wrongly blaming the kitchen), checked before the next; one where `stillMovable` is otherwise false → `ticket.already_started
    { ticketItemId }`. All refusals come before any
    write. **Only the named lines' OWN records are read** — never 3c-2's "a dish's kitchen work"
    helper, which would add its split-off extras (M23).
@@ -773,13 +776,14 @@ are still mapped after 3a and 3b (3a's plan deletes `route.station_inactive` fro
   made before it is sent is 'make at' (`make_at_station_id`)." `ticket.not_fired` (`:616`) means
   "the order was never fired" and is not stretched.
 - `"ticket.made_here": { ticketItemId: string }` (P13) — "A move to another station named a dish
-  that is made at the till that sent it (3c-1's `made_here`, held or fired): it has no ticket at its
-  station, and its station stays its maker." Why a new code rather than a sibling (grepped 2026-10-01,
-  `grep -n '"ticket\.' apps/server/src/errors.ts`: `invalid_transition`, `already_fired`,
-  `not_fired`, `item_held`, `already_started`, and this plan's `not_sent`): a HELD made-here dish is
-  neither started (`already_started` would tell the waiter the kitchen began it) nor without a
-  record (`not_sent` says it has no kitchen record, and it has one), and the till's words must say
-  why the move is pointless — it is made at the till.
+  that is made at the till that sent it (3c-1's `made_here`; always fired and ready): it has no ticket
+  at its station, and its station stays its maker." Why a new code rather than a sibling (grepped
+  2026-10-01, `grep -n '"ticket\.' apps/server/src/errors.ts`: `invalid_transition`,
+  `already_fired`, `not_fired`, `item_held`, `already_started`, and this plan's `not_sent`): the
+  record is `ready`, so `already_started` would fit its state but tell the waiter the KITCHEN made
+  it, and its till words end "You can cancel it", which is no answer to "move it"; `not_sent` says
+  the line has no kitchen record, and it has one. The till's words must say why the move is
+  pointless — it is made at the till.
 - `ticket.already_started`: "A recall, or a move to another station, was asked for a line the kitchen
   has already started (`preparing` or `ready`); a move also refuses a line sent out of the kitchen or
   with any part served. …" (keep the rest).
@@ -827,12 +831,13 @@ fields: find them with `grep -rln 'parentProductId\|awayAt' apps/server/src/*.te
     `submission.id_reused`.
   - **Review Focus 3:** `preparing` → `ticket.already_started`; `ready` → same; `away_at` set → same;
     `served_quantity` > 0 → same.
-  - **Made here (P13, amended 2026-10-01):** a lager sent ON HOLD from the bar till whose made-here
-    list names Bar (3c-1's setup: its record is at Bar, `made_here` true, `queued`, no fire time)
-    moved to Grill → refused `ticket.made_here`, nothing written (no print job, no notice, record
-    still at Bar, revision unchanged); the same lager sent fired (`ready`) → also `ticket.made_here`,
-    not `ticket.already_started`; `GET /api/working-orders/:id/lines` lists both with
-    `movable: false`, and the current-orders row's kitchen part likewise.
+  - **Made here (P13, amended 2026-10-01, twice):** a lager sent from the bar till whose made-here
+    list names Bar (3c-1's setup: its record is at Bar, `made_here` true, `ready`, fired at the send)
+    moved to Grill → refused `ticket.made_here`, not `ticket.already_started`, and nothing written
+    (no print job, no notice, record still at Bar, revision unchanged). The same lager sent from the
+    bar till inside a HELD group (3c-1 T12: made at once, so its record is fired and `ready` while the
+    group's other dishes wait) → also `ticket.made_here`. `GET /api/working-orders/:id/lines` lists
+    both with `movable: false`, and the current-orders row's kitchen part likewise.
   - `ticket.not_sent` for a line with no record; `tab.line_not_found` for another order's line;
     `station.not_found` for another venue's station; `route.station_inactive` for a switched-off
     station; a station closed by hand (3b's `setStationToday`) is accepted; `working_order.not_open`
@@ -954,10 +959,11 @@ export async function rerouteHeldAtRelease(
 **Behaviour:**
 1. Read the held records in scope: `ticket_items` joined to `working_order_lines` where
    `ticket_items.working_order_id = orderId`, `scope`, `fired_at is null`, `state = 'queued'` and
-   `made_here = false` (P13). A 3c-1 "made here" record is `ready` only when it fired at once; one sent
-   ON HOLD waits as `queued` and turns `ready` in the release's own statement (3c-1 plan, T10), so
-   without this condition it would be re-routed and printed. It is never a candidate here: not
-   re-routed, not told to any station, not alerted, whatever its station's state. Take the record id, its
+   `made_here = false` (P13). That condition is a defence, not a branch a correct venue reaches: a
+   3c-1 made-here record is never held (3c-1 plan, T12, owner: every hold path fires it at the send,
+   `ready`), so `fired_at is null` already leaves it out. It costs one predicate, and it keeps a held
+   made-here row — should a path T12 missed ever write one — from being re-routed and printed at a
+   station whose till makes the dish. Take the record id, its
    `station_chosen_at`, the line id, station, the line's `parent_line_id`, `product_id`,
    `make_at_station_id` and `group_id`, and the fired quantity. A record whose line has a
    `parent_line_id` is a split-off extra's (3c-2): it is an **alert-only** candidate, never re-routed
@@ -1091,13 +1097,19 @@ the opener is lazy, and a replay asks it nothing.
     refusal ("lines may only be written while the order is open"); remove it.
   - P9: a recalled mojito (`recallLines`) whose station has since closed, with Downstairs bar as its
     fallback, sent again with `sendLines` → at Downstairs bar, and Upstairs bar gets nothing new.
-  - **Made here at release (P13, amended 2026-10-01):** a lager sent ON HOLD in group 1 from the bar
-    till whose made-here list names Upstairs bar (3c-1: its record at Upstairs bar, `made_here` true,
-    `queued`), `print_held_work` on, Upstairs bar then closed by hand with Downstairs bar as its
-    fallback; `fireGroup` → the lager's record is still at Upstairs bar, `ready` (3c-1's release), no
-    print job at either bar for it, no `rerouted` notice, and no `route.released_at_closed_station`
-    incident. Proof by deletion: drop `made_here = false` from step 1 — the case must fail on "still at
-    Upstairs bar" (it would move to Downstairs bar with a HOLD CANCELLED slip and a "From" ticket).
+  - **Made here beside a held dish (P13, amended 2026-10-01, twice):** group 1 sent from the bar
+    till whose made-here list names Upstairs bar, holding a mojito (Upstairs bar) and a burger
+    (Grill), with Downstairs grill as Grill's fallback: per 3c-1 T12 the mojito's record is made at
+    once (fired, `ready`, `made_here` true) while the burger waits held at Grill. Grill then closed by
+    hand, and Upstairs bar too; `fireGroup` → the burger is re-routed to Downstairs grill (a ticket
+    with "From Grill"), and the mojito's record is untouched: still at Upstairs bar, same `fired_at`,
+    no print job naming it, no `rerouted` notice, no `route.released_at_closed_station` incident.
+  - **The defence (P13):** the one case that exercises step 1's `made_here = false`, since no product
+    path writes a held made-here record: insert one directly (a mojito at Upstairs bar, `made_here`
+    true, `queued`, `fired_at` null, in group 1 — the row T12 says cannot occur), close Upstairs bar
+    with Downstairs bar as its fallback, `fireGroup` → the record stays at Upstairs bar, with no
+    "From" ticket at Downstairs bar and no notice. Proof by deletion: drop `made_here = false` — the
+    case must fail on "stays at Upstairs bar".
   - **Review Focus 11:** a held burger at Grill (open) whose chips are a split-off extra at Fryer
     (built through 3c-2's send path); Fryer closed with no fallback; `fireGroup` → the chips' record
     is released at Fryer (never re-routed, P3), and one incident names Fryer and the chips. With
@@ -1690,22 +1702,41 @@ coordinator's ruling, all applied:
 
 Found by the 3d plan's re-check (`plan-3d-recheck.md`, I-1). This plan said a 3c-1 "made here"
 record is "born `ready`", so its release re-route (which reads `state = 'queued'`) would never meet
-one. That holds only for a made-here dish that fires at once. 3c-1 keeps one sent ON HOLD as an
-ordinary held record (`queued`, made-here mark set) that turns `ready` at release (3c-1 plan, T10),
-so both this plan's re-route and its move could pick one up and print it at a station that never
-makes it. Changed:
+one. As 3c-1's approved plan then stood, that held only for a made-here dish that fired at once: it
+kept one sent on hold as an ordinary held record that turned `ready` at release, so this plan's
+re-route and move could have picked one up and printed it at a station that never makes it.
+(Superseded by the second amendment below: the owner then ruled that a made-here item is never
+held.) Changed then:
 
 - **P13 (new):** a made-here dish is never moved and never re-routed; its station stays its maker and
   nothing prints.
-- **Task 4, step 1:** the release's candidates add `made_here = false`; a made-here record is not
-  re-routed, told to any station or alerted. The false "born `ready`" sentence is corrected. New case:
-  a held made-here lager at a station closed before release stays there and prints nothing, with a
-  proof by deletion.
-- **Task 3:** a move of a made-here record (held or fired) is refused with a new code,
-  `ticket.made_here` (409), checked before `ticket.already_started`; a new code because no sibling
-  says it truthfully (a held made-here dish is neither started nor without a record). `stillMovable`
-  takes the mark, so `movable` is false for one and the till never offers Move to station…. New
-  cases for both refusals and the `movable` flag.
+- **Task 4, step 1:** the release's candidates add `made_here = false`, with a test.
+- **Task 3:** a move of a made-here record is refused with a new code, `ticket.made_here` (409),
+  checked before `ticket.already_started`. `stillMovable` takes the mark, so `movable` is false for
+  one and the till never offers Move to station…. New cases for the refusal and the `movable` flag.
 - **Tasks 7 and 8:** English and Spanish wording for `ticket.made_here` in the Move dialog and the
   till's code table; it joins `LINE_REFUSALS` (and so, through Task 9, `ACTIONABLE_REFUSALS`).
 - **Builds after:** 3c-1 is now required, not "most likely" — the amendment reads its column.
+
+## Amended 2026-10-01 (owner, after approval) — second
+
+The owner corrected 3c-1 after approval: "a made-here item should never be held, it must be made in
+the moment otherwise the waiter will forget" (3c-1 plan, T12 and T13, and its "Amended 2026-10-01
+(owner, after approval)" note). Every hold path now fires a made-here item at the send, `ready`, so
+the HELD made-here record the first amendment guarded against can no longer exist. Changed here:
+
+- **P13:** restated — a made-here record is always fired and `ready`; a move of one is still refused
+  `ticket.made_here`, and the till never offers the move; the release never meets one.
+- **Task 3:** the refusal's reason no longer speaks of a held made-here dish: the record is `ready`,
+  so without the check it would be refused `ticket.already_started`, which blames the kitchen; the
+  code's description and its "why a new code" say so. The held-lager test is replaced by two that
+  can exist: a lager made here at a plain send, and one made at once inside a held group.
+- **`stillMovable`'s description** says a made-here record is always fired and ready.
+- **Task 4, step 1:** `made_here = false` stays, described truthfully as a defence (no correct venue
+  reaches it; `fired_at is null` already leaves made-here records out). The held-lager release test
+  is replaced by one that can exist — a held group sent from the bar till, where the made-here mojito
+  was made at once: the release re-routes the held burger and never touches the mojito — and by one
+  case that inserts a held made-here row directly, the only way to exercise the defence, with its
+  proof by deletion.
+- **The first amendment's note** is reworded to say what 3c-1's plan said then and that this note
+  supersedes it.
