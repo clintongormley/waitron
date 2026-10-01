@@ -554,4 +554,72 @@ describe("the Receipts page's refreshes from elsewhere", () => {
     expect(background.getLocationSettings).toHaveBeenCalledTimes(1);
     expect(api.getLocationSettings).toHaveBeenCalledTimes(1);
   });
+
+  describe("which client a preview goes through", () => {
+    async function mountWithBackground() {
+      const { LiveData } = await import("@waitron/dashboard-kit");
+      const liveData = new LiveData();
+      const background = stubApi();
+      const api = Object.assign(stubApi(), { liveData, background });
+      const { el } = await mount(api);
+      const savedElsewhere = (receipt: ReceiptConfig) => {
+        vi.mocked(background.getReceipt).mockResolvedValue({ receipt });
+        liveData.invalidate([{ type: "tenant_receipts" }]);
+      };
+      return { el, api, background, savedElsewhere };
+    }
+
+    it("sends a preview caused by another session's save through the passive background client", async () => {
+      const { el, api, background, savedElsewhere } = await mountWithBackground();
+      expect(previewCalls(api)).toEqual([{}]);
+      savedElsewhere({ headerSubtitle: "Desde otro sitio" });
+      await vi.waitFor(() =>
+        expect(previewCalls(background)).toEqual([{ headerSubtitle: "Desde otro sitio" }]),
+      );
+      await vi.waitFor(() => expect(paperLines(el)).toContain("Desde otro sitio"));
+      expect(previewCalls(api)).toEqual([{}]);
+    });
+
+    it("sends a preview caused by typing through the active client", async () => {
+      const { el, api, background } = await mountWithBackground();
+      edit(el, "headerSubtitle", "Mío");
+      await vi.waitFor(() => expect(previewCalls(api)).toEqual([{}, { headerSubtitle: "Mío" }]));
+      await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+      expect(background.previewReceipt).not.toHaveBeenCalled();
+    });
+
+    it("sends text typed while another session's preview is in flight through the active client", async () => {
+      const { el, api, background, savedElsewhere } = await mountWithBackground();
+      const held = heldRead<ReceiptPreview>();
+      vi.mocked(background.previewReceipt).mockImplementation(held.read);
+      savedElsewhere({ headerSubtitle: "Suyo" });
+      await vi.waitFor(() => expect(previewCalls(background)).toHaveLength(1));
+      typeFooter(el, "Gracias");
+      await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+      expect(previewCalls(api)).toEqual([{}]);
+      held.release(fakePreview({ headerSubtitle: "Suyo" }));
+      await vi.waitFor(() =>
+        expect(previewCalls(api)).toEqual([
+          {},
+          { headerSubtitle: "Suyo", footerMessage: "Gracias" },
+        ]),
+      );
+      expect(previewCalls(background)).toEqual([{ headerSubtitle: "Suyo" }]);
+    });
+
+    it("sends typed text through the active client when another session's save arrives during the quiet moment", async () => {
+      const { el, api, background, savedElsewhere } = await mountWithBackground();
+      edit(el, "headerSubtitle", "Mío");
+      savedElsewhere({ footerMessage: "Suyo" });
+      await vi.waitFor(() =>
+        expect(q<HTMLTextAreaElement>(el, "textarea[name=footerMessage]")!.value).toBe("Suyo"),
+      );
+      expect(previewCalls(api)).toEqual([{}]);
+      await vi.waitFor(() =>
+        expect(previewCalls(api)).toEqual([{}, { headerSubtitle: "Mío", footerMessage: "Suyo" }]),
+      );
+      await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
+      expect(background.previewReceipt).not.toHaveBeenCalled();
+    });
+  });
 });

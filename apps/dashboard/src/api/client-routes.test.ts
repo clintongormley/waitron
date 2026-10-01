@@ -196,7 +196,7 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("posts the receipt text to preview and returns the drawn receipt", async () => {
+  it("asks for a preview of the receipt text and returns the drawn receipt", async () => {
     const answer = {
       preview: {
         widthDots: 512,
@@ -216,8 +216,29 @@ describe("DashboardApi routes", () => {
     await expect(api.previewReceipt({ headerSubtitle: "Calle Mayor 1" })).resolves.toEqual(answer);
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/receipt-preview", "POST", { receipt: { headerSubtitle: "Calle Mayor 1" } }],
+      [
+        `/management-api/receipt-preview?receipt=${encodeURIComponent(
+          JSON.stringify({ headerSubtitle: "Calle Mayor 1" }),
+        )}`,
+        "GET",
+        undefined,
+      ],
     ]);
+  });
+
+  it("marks a preview passive only when it goes through the background client", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+
+    await api.previewReceipt({ footerMessage: "Gracias" });
+    await api.background.previewReceipt({ footerMessage: "Gracias" });
+
+    const headers = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).map(([, init]) =>
+      new Headers(init.headers).get("x-waitron-live"),
+    );
+    expect(headers).toEqual([null, "1"]);
   });
 
   it("unwraps the canvas and device-profile list envelopes, and addresses one profile by id", async () => {

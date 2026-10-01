@@ -5,7 +5,7 @@ import { printers, readTenant, tills, withTransaction, type Database } from "@wa
 import { authorizeManager } from "@waitron/identity";
 import { validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
 import { textGrid, type EscSetting } from "@waitron/printing";
-import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
+import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
@@ -60,27 +60,32 @@ function addedBlocks(without: PrintPreviewBlock[], withField: PrintPreviewBlock[
   return { start, end: withField.length - tail };
 }
 
+/** The one `receipt` parameter's JSON; missing, repeated or unparseable is refused. */
+function receiptParameter(given: string[] | undefined): unknown {
+  if (given?.length === 1) {
+    try {
+      return JSON.parse(given[0]!);
+    } catch {
+      // Refused below, as a missing one is.
+    }
+  }
+  throw new AppError("management.request_invalid", { field: "receipt" });
+}
+
 /**
  * A sample receipt drawn by the formatter a sale's receipt prints from, with unsaved trim. It
- * files, saves and enqueues nothing.
+ * files, saves and enqueues nothing. A GET, so a dashboard refresh can ask for it passively; the
+ * `receipt` parameter holds the JSON object a save sends as `receipt`.
  */
 export function mountReceiptPreviewApi(
   app: Hono,
   deps: { db: Database; cfg: TillConfig },
   log: Logger,
 ): void {
-  app.post("/management-api/receipt-preview", (c) =>
+  app.get("/management-api/receipt-preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<unknown>(c);
-      if (
-        typeof body !== "object" ||
-        body === null ||
-        Array.isArray(body) ||
-        !("receipt" in body)
-      ) {
-        throw new AppError("management.request_invalid", { field: "receipt" });
-      }
+      const requested = receiptParameter(c.req.queries("receipt"));
       const { issuer, printer } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -103,7 +108,7 @@ export function mountReceiptPreviewApi(
           printer: receiptPrinter ?? DEFAULT_PRINTER,
         };
       });
-      const receipt = validateReceiptConfig(body.receipt);
+      const receipt = validateReceiptConfig(requested);
       const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
       const draw = (trim: ReceiptConfig) =>
         previewPrintJob(

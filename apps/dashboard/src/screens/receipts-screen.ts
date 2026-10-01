@@ -186,6 +186,8 @@ export class ReceiptsScreen extends LitElement {
   #previewInFlight = false;
   #previewAgain = false;
   #previewRequested: string | null = null;
+  /** Whether this person opened the page or typed since the last preview was sent. */
+  #previewActive = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -231,6 +233,7 @@ export class ReceiptsScreen extends LitElement {
         this.receiptLoadError = null;
         if (!this.receiptLoaded) {
           this.receiptLoaded = true;
+          this.#previewActive = true;
           void this.#sendPreview();
         } else if (changed) this.#schedulePreview();
       });
@@ -282,21 +285,23 @@ export class ReceiptsScreen extends LitElement {
 
   /**
    * One request at a time; text typed meanwhile is sent once, as it stands, when it returns. Text
-   * already asked for is not asked for again, because a preview is a POST and so keeps the session
-   * signed in: a refresh from another session's save must not do that unless the paper would change.
+   * already asked for is not asked for again. A preview only another session's save asked for goes
+   * through the passive client, so it does not count as this person's activity.
    */
   async #sendPreview(): Promise<void> {
     if (this.#previewInFlight) {
       this.#previewAgain = true;
       return;
     }
+    const client = this.#previewActive ? this.api : (this.api.background ?? this.api);
+    this.#previewActive = false;
     const config = this.#trim();
     const requested = JSON.stringify(config);
     if (requested === this.#previewRequested) return;
     this.#previewRequested = requested;
     this.#previewInFlight = true;
     try {
-      this.preview = await this.api.previewReceipt(config);
+      this.preview = await client.previewReceipt(config);
       this.previewFailed = false;
     } catch {
       this.previewFailed = true;
@@ -316,6 +321,7 @@ export class ReceiptsScreen extends LitElement {
     delete refusals[field];
     this.trimRefusals = refusals;
     this.saved = false;
+    this.#previewActive = true;
     this.#schedulePreview();
   }
 

@@ -30,15 +30,23 @@ function app(cfg: Partial<TillConfig> = {}) {
   return app;
 }
 
-async function preview(
-  body: unknown,
+async function previewQuery(
+  query: string,
   { cookie = venue.managerCookie, cfg = {} }: { cookie?: string; cfg?: Partial<TillConfig> } = {},
 ): Promise<Response> {
-  return app(cfg).request("/management-api/receipt-preview", {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify(body),
+  return app(cfg).request(`/management-api/receipt-preview${query}`, {
+    method: "GET",
+    headers: { cookie },
   });
+}
+
+async function preview(
+  body: { receipt?: unknown },
+  options: { cookie?: string; cfg?: Partial<TillConfig> } = {},
+): Promise<Response> {
+  const query =
+    "receipt" in body ? `?receipt=${encodeURIComponent(JSON.stringify(body.receipt))}` : "";
+  return previewQuery(query, options);
 }
 
 async function rendered(receipt: unknown, cfg: Partial<TillConfig> = {}) {
@@ -116,7 +124,7 @@ async function withPrinters(
   }
 }
 
-describe("POST /management-api/receipt-preview", () => {
+describe("GET /management-api/receipt-preview", () => {
   it("requires a management session, and a manager's configuration permission", async () => {
     expect((await preview({ receipt: {} }, { cookie: "" })).status).toBe(401);
     expect((await preview({ receipt: {} }, { cookie: venue.staffCookie })).status).toBe(403);
@@ -131,10 +139,11 @@ describe("POST /management-api/receipt-preview", () => {
   });
 
   it.each([
-    ["a body without a receipt", {}],
-    ["a body that is not an object", ["Venta"]],
-  ])("refuses %s as the save does", async (_, body) => {
-    const response = await preview(body);
+    ["a request without a receipt", ""],
+    ["a receipt that is not JSON", `?receipt=${encodeURIComponent("{headerSubtitle:")}`],
+    ["a receipt given twice", "?receipt=%7B%7D&receipt=%7B%7D"],
+  ])("refuses %s as the save does", async (_, query) => {
+    const response = await previewQuery(query);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "management.request_invalid", params: { field: "receipt" } },
