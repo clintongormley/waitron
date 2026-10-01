@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { GLYPH_WIDTH } from "./glyphs.js";
 import {
+  DOTS_PER_COLUMN,
+  SETTING_WIDTHS,
   chooseQrDots,
   columnsFor,
   dpiValue,
@@ -232,6 +235,19 @@ describe("text grid per paper width and resolution", () => {
       expect(columns).toBe(columnsFor(paperWidth));
     },
   );
+
+  it("lists every setting once, each with the width its text grid draws", () => {
+    expect(SETTING_WIDTHS).toEqual([
+      { paperWidth: "58mm", resolution: "180dpi", widthDots: 360 },
+      { paperWidth: "58mm", resolution: "203dpi", widthDots: 384 },
+      { paperWidth: "80mm", resolution: "180dpi", widthDots: 512 },
+      { paperWidth: "80mm", resolution: "203dpi", widthDots: 576 },
+    ]);
+  });
+
+  it("counts a column as one glyph wide, so the layout and the glyph table agree", () => {
+    expect(GLYPH_WIDTH).toBe(DOTS_PER_COLUMN);
+  });
 
   it("reads any other width as as many whole cells as fit, centred", () => {
     expect(gridForWidth(400)).toEqual({ widthDots: 400, columns: 33, offsetDots: 2 });

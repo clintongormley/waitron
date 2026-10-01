@@ -44,7 +44,6 @@ export interface EscSetting {
  */
 export class EscBuilder {
   private readonly parts: number[] = [];
-  private pending = "";
   private alignment: Alignment = "left";
   /** Undefined for a builder made without a setting, which can send anything but text. */
   readonly grid: TextGrid | undefined;
@@ -54,47 +53,28 @@ export class EscBuilder {
       setting === undefined ? undefined : textGrid(setting.paperWidth, setting.resolution);
   }
 
-  /** Text left waiting by `text()` is drawn as its own line before any other command. */
   private push(...bytes: number[]): void {
-    if (this.pending !== "") this.line();
     for (const b of bytes) this.parts.push(b);
   }
 
-  /** `ESC @`. */
+  /** `ESC @`, which also returns the printer's alignment to left, so text lines follow suit. */
   init(): this {
     this.push(ESC, 0x40);
+    this.alignment = "left";
     return this;
   }
 
-  /** Adds to the line the next `line()` draws. */
-  text(s: string): this {
-    this.pending += s;
-    return this;
-  }
-
-  /** Draws the waiting text plus `s` as one band on the setting's grid; no text draws a blank band. */
+  /** Draws `s` as one band on the setting's grid; no text draws a blank band. */
   line(s = ""): this {
     if (this.grid === undefined) {
       throw new Error(
         "esc() was made without a paper width and resolution, so it cannot draw text",
       );
     }
-    const text = this.pending + s;
-    this.pending = "";
-    return this.band(this.grid, text);
-  }
-
-  /** Draws `s` as one band on `grid`, for a line narrower or wider than the job's. */
-  lineOn(grid: TextGrid, s = ""): this {
-    this.push();
-    return this.band(grid, s);
-  }
-
-  private band(grid: TextGrid, text: string): this {
     this.pushRaster(
-      Math.ceil(grid.widthDots / 8),
+      Math.ceil(this.grid.widthDots / 8),
       TEXT_BAND_HEIGHT,
-      drawTextBand(text, grid, this.alignment),
+      drawTextBand(s, this.grid, this.alignment),
     );
     return this;
   }
@@ -119,7 +99,6 @@ export class EscBuilder {
         throw new RangeError(`raster ${name} must be an integer >= 1, got ${value}`);
       }
     }
-    this.push();
     this.pushRaster(Math.ceil(widthDots / 8), heightDots, packRows(widthDots, heightDots, dot));
     return this;
   }
@@ -129,6 +108,11 @@ export class EscBuilder {
    * set bit printing, and a row's last byte is zero-padded.
    */
   private pushRaster(widthBytes: number, heightDots: number, data: Uint8Array): void {
+    if (widthBytes > 0xffff || heightDots > 0xffff) {
+      throw new RangeError(
+        `GS v 0's 16-bit size fields hold at most ${0xffff} bytes across and ${0xffff} dots down, got ${widthBytes} × ${heightDots}`,
+      );
+    }
     this.parts.push(
       GS,
       0x76,
@@ -193,7 +177,6 @@ export class EscBuilder {
         `qr store-data length (data bytes + 3 = ${storeLen}) exceeds the 16-bit pL/pH field maximum of ${0xffff}`,
       );
     }
-    this.push();
     // Fn 165 — select model: cn=0x31, fn=0x41, n1=0x32 (model 2), n2=0x00; length field pL=0x04.
     this.parts.push(GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
     // Fn 167 — set module size: cn=0x31, fn=0x43, n=moduleSize dots (1-16); length pL=0x03.
@@ -224,7 +207,6 @@ export class EscBuilder {
       );
     }
     const pixelSide = side * moduleSize;
-    this.push();
     this.pushRaster(
       Math.ceil(pixelSide / 8),
       pixelSide,
@@ -238,7 +220,6 @@ export class EscBuilder {
   }
 
   bytes(): Uint8Array {
-    this.push();
     return Uint8Array.from(this.parts);
   }
 }
@@ -260,6 +241,8 @@ function packRows(
 }
 
 /** Without a setting the builder sends everything but text: a drawer pulse needs no paper width. */
+export function esc(setting: EscSetting): EscBuilder & { readonly grid: TextGrid };
+export function esc(): EscBuilder;
 export function esc(setting?: EscSetting): EscBuilder {
   return new EscBuilder(setting);
 }

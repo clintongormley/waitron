@@ -6,8 +6,6 @@ import {
   columnsFor,
   dpiValue,
   drawTextBand,
-  esc,
-  escPosCommands,
   gridForWidth,
   labelAmountLines,
   prepareText,
@@ -20,7 +18,7 @@ import {
 } from "./index.js";
 
 describe("package barrel", () => {
-  it("re-exports the layout, text-drawing and command helpers", () => {
+  it("re-exports the layout and text-drawing helpers", () => {
     expect(columnsFor("80mm")).toBe(42);
     expect(DOTS_PER_COLUMN).toBe(12);
     expect(safeWidthDots("58mm")).toBe(360);
@@ -34,6 +32,5 @@ describe("package barrel", () => {
     expect(textGrid("80mm", "203dpi")).toEqual(gridForWidth(576));
     const band = drawTextBand("€", gridForWidth(360));
     expect(readRasterText(360, TEXT_BAND_HEIGHT, band)).toBe("€");
-    expect(escPosCommands(esc().init().bytes())).toEqual([{ name: "ESC @", offset: 0, length: 2 }]);
   });
 });

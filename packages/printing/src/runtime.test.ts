@@ -96,7 +96,7 @@ describe("runAgentOnce (pull → push → report)", () => {
         tx,
         cfg,
         printerId,
-        esc(SETTING).text("Table 4").cut().bytes(),
+        esc(SETTING).line("Table 4").cut().bytes(),
       );
 
       const sink = new FakeSink();
@@ -109,7 +109,7 @@ describe("runAgentOnce (pull → push → report)", () => {
       });
 
       expect(sink.written).toEqual([
-        { printerId, bytes: esc(SETTING).text("Table 4").cut().bytes() },
+        { printerId, bytes: esc(SETTING).line("Table 4").cut().bytes() },
       ]);
       expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
       const row = await jobRow(tx, jobId);

@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { cellsFrom, expectedBand } from "../test/expected-band.js";
-import { escPosCommands } from "./escpos-commands.js";
+import { escPosCommands } from "./testing/escpos-commands.js";
 import { FEED_BEFORE_CUT, esc } from "./escpos.js";
 import { GLYPHS } from "./glyphs.js";
-import { gridForWidth } from "./layout.js";
 
 // These pin the exact bytes, not that a physical printer accepts them.
 describe("esc() ESC/POS builder", () => {
@@ -371,12 +370,6 @@ describe("text drawn as images", () => {
     ]);
   });
 
-  it("collects text() into the line the next line() draws", () => {
-    expect([...esc(TM_T88_58).text("Ca").text("fé").line(" 5 €").bytes()]).toEqual([
-      ...esc(TM_T88_58).line("Café 5 €").bytes(),
-    ]);
-  });
-
   it("draws an empty line as a blank band of the same size", () => {
     expect([...esc(TM_T88_58).line().bytes()]).toEqual([
       ...header(45, 28),
@@ -401,30 +394,8 @@ describe("text drawn as images", () => {
     ]);
   });
 
-  it("draws text left waiting by text() before the next command, and at bytes()", () => {
-    expect([...esc(TM_T88_58).text("A").feed(1).bytes()]).toEqual([
-      ...esc(TM_T88_58).line("A").bytes(),
-      0x1b,
-      0x64,
-      1,
-    ]);
-    expect([...esc(TM_T88_58).text("A").bytes()]).toEqual([...esc(TM_T88_58).line("A").bytes()]);
-  });
-
-  it("draws a line on a grid other than the setting's", () => {
-    expect([...esc(TM_T88_80).lineOn(gridForWidth(360), "Hi").bytes()]).toEqual([
-      ...header(45, 28),
-      ...expectedBand(360, cellsFrom("Hi", 0)),
-    ]);
-    expect([...esc().lineOn(gridForWidth(576)).bytes()]).toEqual([
-      ...header(72, 28),
-      ...new Array(72 * 28).fill(0),
-    ]);
-  });
-
   it("refuses to draw text without a paper width and resolution to draw it to", () => {
     expect(() => esc().line("A")).toThrow(/paper width/);
-    expect(() => esc().text("A").bytes()).toThrow(/paper width/);
   });
 
   it("draws any picture as a GS v 0 image, rows packed most significant bit first", () => {
@@ -440,6 +411,32 @@ describe("text drawn as images", () => {
       0x40,
       0x40, // row 1: dots 1 and 9
     ]);
+  });
+
+  it("draws text left-aligned again after ESC @, which resets the printer's alignment too", () => {
+    expect([...esc(TM_T88_58).align("center").init().line("Hola").bytes()]).toEqual([
+      0x1b,
+      0x61,
+      1,
+      0x1b,
+      0x40,
+      ...header(45, 28),
+      ...expectedBand(360, cellsFrom("Hola", 0)),
+    ]);
+  });
+
+  it("refuses a picture too big for the 16-bit size fields, before sending any of it", () => {
+    const tall = esc().init();
+    expect(() => tall.raster(8, 0x10000, () => false)).toThrow(RangeError);
+    expect([...tall.bytes()]).toEqual([0x1b, 0x40]);
+    const wide = esc();
+    expect(() => wide.raster(8 * 0x10000, 1, () => false)).toThrow(RangeError);
+    expect([...wide.bytes()]).toEqual([]);
+    expect(
+      esc()
+        .raster(8, 0xffff, () => false)
+        .bytes().length,
+    ).toBe(8 + 0xffff);
   });
 
   it("refuses a picture with no dots or a fractional size", () => {

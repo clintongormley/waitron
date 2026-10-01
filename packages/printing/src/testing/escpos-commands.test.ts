@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { escPosCommands } from "./escpos-commands.js";
-import { esc } from "./escpos.js";
+import { esc } from "../escpos.js";
 
 const DRAWER_PULSE = [0x1b, 0x70, 0x00, 0x19, 0xfa];
+/** `DLE DC4 fn=1 m t`: the drawer pulse a printer runs as soon as it receives it. */
+const REAL_TIME_PULSE = [0x10, 0x14, 0x01, 0x00, 0x05];
 
 /** A 40-dot, one-row image whose five data bytes are exactly the drawer pulse. */
 const pulseShapedImage = () =>
@@ -27,7 +29,9 @@ describe("escPosCommands", () => {
   it("does not report a drawer pulse that is only bytes inside an image", () => {
     const image = pulseShapedImage().bytes();
     expect([...image.slice(8)]).toEqual(DRAWER_PULSE);
-    expect(escPosCommands(image)).toEqual([{ name: "GS v 0", offset: 0, length: 13 }]);
+    expect(escPosCommands(image)).toEqual([
+      { name: "GS v 0", offset: 0, length: 13, widthDots: 40, heightDots: 1 },
+    ]);
   });
 
   it("reports a drawer pulse sent after the image", () => {
@@ -69,6 +73,32 @@ describe("escPosCommands", () => {
     expect(() => escPosCommands(Uint8Array.from([0x1d, 0x28, 0x6b, 3, 0, 0x31]))).toThrow(
       RangeError,
     );
+  });
+
+  it("names the real-time drawer pulse DLE DC4", () => {
+    expect(escPosCommands(Uint8Array.from(REAL_TIME_PULSE))).toEqual([
+      { name: "DLE DC4", offset: 0, length: 5 },
+    ]);
+    expect(names(Uint8Array.from([0x41, ...REAL_TIME_PULSE, 0x0a]))).toEqual([
+      "text",
+      "DLE DC4",
+      "LF",
+    ]);
+  });
+
+  it("does not report a real-time drawer pulse that is only bytes inside an image", () => {
+    const image = esc()
+      .raster(40, 1, (x) => (REAL_TIME_PULSE[x >> 3]! & (0x80 >> (x & 7))) !== 0)
+      .bytes();
+    expect([...image.slice(8)]).toEqual(REAL_TIME_PULSE);
+    expect(names(image)).toEqual(["GS v 0"]);
+  });
+
+  it("refuses any other DLE sequence rather than guess its length", () => {
+    expect(() => escPosCommands(Uint8Array.from([0x10, 0x04, 1]))).toThrow(RangeError);
+    expect(() => escPosCommands(Uint8Array.from([0x10, 0x14, 0x02, 1, 1]))).toThrow(RangeError);
+    expect(() => escPosCommands(Uint8Array.from([0x10]))).toThrow(RangeError);
+    expect(() => escPosCommands(Uint8Array.from([0x10, 0x14, 0x01, 0]))).toThrow(RangeError);
   });
 
   it("lists nothing for an empty payload", () => {

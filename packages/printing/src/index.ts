@@ -14,14 +14,13 @@ export type {
 export { enqueuePrintJob, resendPrintJob, canResendPrintJob } from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";
 export type { EscSetting } from "./escpos.js";
-export { escPosCommands } from "./escpos-commands.js";
-export type { EscPosCommand } from "./escpos-commands.js";
 export { prepareText } from "./text.js";
 export { TEXT_BAND_HEIGHT, drawTextBand, readRasterText } from "./raster-text.js";
 export type { Alignment } from "./raster-text.js";
 export {
   DOTS_PER_COLUMN,
   QR_QUIET_ZONE,
+  SETTING_WIDTHS,
   chooseQrDots,
   columnsFor,
   dpiValue,

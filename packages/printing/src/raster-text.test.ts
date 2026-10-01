@@ -51,8 +51,12 @@ describe("drawTextBand", () => {
     expect([...drawTextBand("日\t", textGrid("58mm", "180dpi"))]).toEqual(band(360, at("?", 0)));
   });
 
-  it("draws on a grid of any width", () => {
-    expect([...drawTextBand("ab", gridForWidth(30))]).toEqual(band(30, at("ab", 3)));
+  it("draws on a grid of any whole number of bytes", () => {
+    expect([...drawTextBand("ab", gridForWidth(32))]).toEqual(band(32, at("ab", 4)));
+  });
+
+  it("refuses a grid whose width is not a whole number of bytes, which would not read back", () => {
+    expect(() => drawTextBand("ab", gridForWidth(30))).toThrow(RangeError);
   });
 });
 
