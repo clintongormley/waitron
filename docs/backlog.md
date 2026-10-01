@@ -128,10 +128,12 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
    taking a reason is done by lane B item B11a, Task 15, several payments on the till, has
    landed as lane B item B15 (#956; the server side landed as #721), and Task 16, counter
-   handover, has landed as lane B item B16 (#981; what it left open is in the B16 entry under A4). Left:
-   a table that leaves without paying (17).
-   **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
-   invoice on Q29, and printing the invoice before payment on Q27.
+   handover, has landed as lane B item B16 (#981; what it left open is in the B16 entry under A4).
+   Task 17, a table that leaves without paying, is built as lane B item B17 and waits for the
+   owner's review (the B17 entry under A4).
+   **Send asesor Q27–Q29 now:** the owner decided Q28 without the asesor on 2026-10-01 and Task 17
+   is built on it, so Q28 is asked to confirm; how Task 11's discount appears on the invoice is
+   Q29, and printing the invoice before payment is Q27.
 
 2. **Build good screens for each kind of device, and retire canvases** (A4's A182, owner
    2026-10-01). The till, handheld, kitchen screen and pass are still built from stored canvases of
@@ -5028,6 +5030,46 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       loads the basket from `GET /api/working-orders/:id/placed`, which carries the order's lines,
       so the basket is believed to show their sum. Reported by B16's review fixer from reading; no
       test shows it.
+  - **Task 17, a table that leaves without paying, is built as lane B item B17** (2026-10-01,
+    waiting for the owner's review; asesor Q28 decided by the owner without the asesor, option
+    (b)). When Finish table is refused because a bill still owes, the till offers **Record unpaid
+    departure** beside Take payment. It needs the new core permission `sale.unpaid_departure`
+    (supervisor and up, or a supervisor's PIN) and a reason. Each owing bill with no invoice yet is
+    invoiced now for its full amount and filed; a bill already invoiced keeps its invoice. One row
+    per bill goes into the new append-only core table `unpaid_departures` (amount still due, reason,
+    who recorded it, who authorised it), and the party closes exactly as Finish table closes it. No
+    receipt is printed and nothing is sent to the kitchen. The counter's held-orders card lists the
+    departures still unpaid under "Left without paying". Server:
+    `POST /api/parties/:id/unpaid-departure`, `GET /api/unpaid-departures`,
+    `GET /api/unpaid-departure-authorizers`. Open:
+    - **OPEN, owner question — a bill holding a payment cannot be left unpaid.** The departure
+      refuses a bill holding any bill payment, even one given back in full
+      (`unpaid_departure.bill_holds_payment`): its invoice would have to be settled in part, and
+      `settleSale` (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not
+      add up to the amount due. Such a table can only be finished by taking the rest as payment.
+    - **OPEN — collecting PART of the debt later is not built**, for the same reason. Collecting
+      it in full uses `POST /api/working-orders/:id/collect`, and the bill then leaves the list.
+    - **OPEN — a dish never sent, on hold or recalled blocks the departure**
+      (`unpaid_departure.unfired_dishes`); staff cancel it first. The guests were never served it.
+    - **OPEN — handhelds never see the list.** It sits in the counter's held-orders card, which the
+      default phone and tablet layouts lack. The dashboard may be the better home.
+    - A bill that owes nothing — one already invoiced whose credit notes bring it to zero, or an
+      open bill whose every line was given away — would be recorded as a 0.00 departure, and the
+      till's dialog leaves such bills out of what it shows. Found by reading; no test reaches it.
+  - **The service plan's acceptance checks (spec §12), swept against `main` plus B17 on
+    2026-10-01.** Each check has a test, is partly met with the rest already recorded in this
+    backlog, or is out of scope by the plan's D13. Two gaps were not recorded before:
+    - **The merged-party check of §12 item 9 uses a bill whose state is written by hand.** In
+      `apps/server/src/parties.test.ts` ("merged parties keep their bills") the unpaid €15.00 bill
+      is set to `placed` with no invoice filed and later set to `settled` directly
+      (`apps/server/src/testing/party-venue.ts`), so no test files that bill's invoice, merges its
+      party and collects it through `POST /api/working-orders/:id/collect`.
+      `apps/server/src/unpaid-departure.test.ts` builds a really invoiced bill on a party, which
+      such a test could reuse.
+    - **No permanent test lays the service screens out at phone and till widths in both themes
+      (§12 item 14).** The axe scans run in both themes, mostly at the browser's default size with
+      one block at 390 px (`apps/till/src/screens/till-table-order-screen.a11y.test.ts`); the
+      widths were checked by screenshots during each task, which nothing repeats.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
@@ -5070,10 +5112,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `dismissible`.
   - **Tasks left: 16 and 17** (2026-09-30; 10 to 14 have landed, and Task 15, the till side of
     Task 14, is built by lane B item B15). _(2026-10-01: Task 16 has landed as lane B item B16, #981; see
-    the B16 entry above. Task 17 is left.)_ The menus tasks that change the same order and till code
+    the B16 entry above. Task 17 is left.)_ _(Later on 2026-10-01: Task 17 is built as lane B item
+    B17 and waits for the owner's review; see the B17 entry above.)_ The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
     plan's order among them: 16 after 10.
-  - **Task 17** (unpaid departure) also waits for asesor Q28.
+  - **Task 17** (unpaid departure) ~~also waits for asesor Q28~~ — built on the owner's Q28
+    decision of 2026-10-01 (B17 entry above).
   - **Asesor questions to send:**
     [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
     (money before the invoice, then a split; printing the invoice first),
@@ -12100,7 +12144,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | **Q14 (precuenta → amendment log)** | a printed pre-bill may oblige an amendment log | **Open** — the interpretive hinge |
 | Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
-| Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying waits | **send now** — service plan Task 17 waits on Q28 |
+| Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17) | **send now** — Q28 to confirm the owner's 2026-10-01 decision |
 | Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it | needs advisor before the correction screen is designed |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in
