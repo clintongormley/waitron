@@ -2941,7 +2941,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     pictures.
   - **Upgrading a venue that has used its printers refuses to start.** The generated migration
     (`packages/db/drizzle/0054_drop_printer_character_set.sql`) rebuilds the `printers` table. Run
-    on 2026-10-01 against a database migrated to the step before it, with one printer: with nothing
+    on 2026-10-01 against a database migrated to core `0052`, when this file was numbered `0053`
+    (its SQL is byte-identical; main's `0053_line_sent_after_close` touches no printer table, and
+    `scripts/migration-upgrade.test.ts`, which walks through both, refuses `0054` the same way),
+    with one printer: with nothing
     else pointing at the printer it applied; with one row in any of `print_jobs`, `station_printers`,
     `tills` (its receipt printer), `devices` (its receipt printer) or `drawer_opens` pointing at it,
     `applyMigrations` threw `migrations.apply_failed` at ``DROP TABLE `printers` `` with "FOREIGN KEY
