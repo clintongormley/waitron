@@ -237,8 +237,8 @@ The local lane E receipt `~/waitron-campaign-e/receipts/finish-render-20261001/r
 click-path screenshot. Check restored selection visibility before changing the shared component.
 Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
-([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), **built 2026-10-01**, branch
-`feat/prep-station-rules`; [PR #1004](https://github.com/clintongormley/waitron/pull/1004)). Prep Stations now edits folder claims and ordered
+([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), **landed 2026-10-01** in
+[#1004](https://github.com/clintongormley/waitron/pull/1004)). Prep Stations now edits folder claims and ordered
 exceptions, previews routing changes and tests a product's maker. Products link to that tester;
 till default service zones are set on Venue operations. The old preparation-route table and
 product/category station fields are removed. 3b, opening hours, by-hand open and close, fallbacks
@@ -255,7 +255,7 @@ starts once 3b has landed); 3c-3, "Make at" on any dish before sending, moving a
 been started to another station (a slip at the old station whenever it was sent there), and
 re-routing a held dish whose station closed before it was released, which, with no replacement,
 goes to its old station with an alert ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md),
-starts once 3c-2 has landed); 3d, watchers. **Next action:** 3a is lane D's PF3 and 3b its PF4; the
+starts once 3c-2 has landed); 3d, watchers. **Next action:** 3b is lane D's PF4; the
 three 3c plans are approved (owner, 2026-10-01) and queued — 3c-1 as lane E's PF5, 3c-2 and 3c-3 as
 lane D's PF6 and PF7, each landing on its own when green (3c-3 was amended after approval so a
 dish made at the till is never moved or re-routed, and now also waits for 3c-1). 3d, watchers
