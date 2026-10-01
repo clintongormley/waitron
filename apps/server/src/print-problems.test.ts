@@ -27,6 +27,7 @@ import {
   deactivatePrinter,
   enqueuePrintJob,
   MAX_DELIVERY_ATTEMPTS,
+  resendPrintJob,
   updatePrinter,
 } from "@waitron/printing";
 import {
@@ -52,6 +53,7 @@ import {
   type GroupLine,
   type GroupRelease,
 } from "./order-groups.js";
+import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { writePrintHeldWork } from "@waitron/venue-service";
@@ -62,8 +64,9 @@ import { moveBill } from "./move-bill.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
-// and on its station's card, never refuses the next order, and clears once a reprint has printed, or
-// once a Reprint would print nothing on that printer for that station.
+// and on its station's card, never refuses the next order, and clears once a reprint has printed,
+// once a Reprint would print nothing on that printer for that station, or once a resend of it from
+// the Printers screen has printed.
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -502,6 +505,38 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     await setJob(reprint, { status: "done" });
     expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
+  });
+
+  it("clears once a resend of the failed ticket has printed, and not while the resend waits", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(job, exhausted);
+
+    const copy = await inTx(async (tx) => (await resendPrintJob(tx, job)).jobId);
+    expect(await problemsOf(mesa4.partyId)).toHaveLength(1);
+
+    await setJob(copy, { status: "done" });
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
+    expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
+  });
+
+  it("stays clear when a resend of the printed copy then runs out of attempts, while the printer's alert counts that copy", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(job, exhausted);
+    const printed = await inTx(async (tx) => (await resendPrintJob(tx, job)).jobId);
+    await setJob(printed, { status: "done" });
+
+    await setJob(await inTx(async (tx) => (await resendPrintJob(tx, printed)).jobId), exhausted);
+    // A resend is a byte-for-byte copy, so once one printed the kitchen has every dish the ticket carried.
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
+    expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
+    const alerts = await inTx((tx) => printingAlertSource().read({ tx, now: new Date() }));
+    expect(alerts.filter((a) => a.code === "printer.jobs_waiting")).toMatchObject([
+      { params: { count: 1 } },
+    ]);
   });
 
   it("is not cleared by a later round's ticket printing, which does not carry the lost dishes", async () => {

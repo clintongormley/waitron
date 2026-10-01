@@ -16,8 +16,9 @@ declare module "@waitron/shared" {
      * is echoed so the dashboard can point at the existing registration. */
     "printer.already_registered": { localKey: string };
     /** An ongoing dashboard alert: `{count}` print jobs are stuck at printer `{printer}` — waiting too
-     * long or out of delivery attempts, other than jobs a succeeded Unpair ended (`printer.unpaired`).
-     * Not thrown; raised by the printing alert source. */
+     * long or out of delivery attempts, other than jobs a succeeded Unpair ended (`printer.unpaired`)
+     * and jobs a later resend of the same job has printed. Not thrown; raised by the printing alert
+     * source. */
     "printer.jobs_waiting": { printer: string; count: number };
     /** A print job ended because the agent that has its Bluetooth printer paired cannot print over
      * Bluetooth. Not thrown; stored as the job's `last_error` by `failUnprintableBluetoothJobs`. */

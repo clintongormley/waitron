@@ -147,6 +147,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["print_jobs", ["claimed_by"], "print_agents"],
   ["print_jobs", ["location_id"], "locations"],
   ["print_jobs", ["printer_id"], "printers"],
+  ["print_jobs", ["resend_of"], "print_jobs"],
   ["printers", ["location_id"], "locations"],
   ["product_labels", ["label_id"], "labels"],
   ["product_labels", ["product_id"], "products"],

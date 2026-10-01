@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index } from "drizzle-orm/sqlite-core";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   binary,
   count,
@@ -60,9 +61,15 @@ export const printJobs = table(
     // delivery is at-least-once: a reclaim may reprint.
     claimedAt: tsString("claimed_at"),
     deliveredAt: tsString("delivered_at"),
+    // The job a resend copies, always the first of its chain: a resend of a resend names the same
+    // job (`resendPrintJob`, packages/printing/src/outbox.ts).
+    /* v8 ignore start */
+    resendOf: id("resend_of").references((): AnySQLiteColumn => printJobs.id),
+    /* v8 ignore stop */
   },
   (t) => [
     index("print_jobs_pull_idx").on(t.printerId, t.status),
+    index("print_jobs_resend_of_idx").on(t.resendOf),
     check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),
     check("print_jobs_status_ck", enumCheck(t.status)),
   ],

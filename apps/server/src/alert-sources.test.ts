@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -24,6 +24,7 @@ import {
   BLUETOOTH_PRINTING_UNAVAILABLE,
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_UNPAIRED,
+  resendPrintJob,
 } from "@waitron/printing";
 import {
   awaitingCertAlertSource,
@@ -457,18 +458,34 @@ async function seedJob(t: {
   status?: "queued" | "printing" | "done" | "failed";
   attempts?: number;
   lastError?: string;
-}): Promise<void> {
-  await suite.db.insert(printJobs).values({
-    locationId: t.locationId,
-    printerId: t.printerId,
-    payload: Uint8Array.from([0x01]),
-    kind: t.kind ?? "document",
-    status: t.status ?? "queued",
-    attempts: t.attempts ?? 0,
-    lastError: t.lastError ?? null,
-    createdAt: t.createdAt,
-  });
+}): Promise<string> {
+  const [row] = await suite.db
+    .insert(printJobs)
+    .values({
+      locationId: t.locationId,
+      printerId: t.printerId,
+      payload: Uint8Array.from([0x01]),
+      kind: t.kind ?? "document",
+      status: t.status ?? "queued",
+      attempts: t.attempts ?? 0,
+      lastError: t.lastError ?? null,
+      createdAt: t.createdAt,
+    })
+    .returning({ id: printJobs.id });
+  return row!.id;
 }
+
+const resend = (jobId: string) =>
+  withTransaction(suite.db, async (tx) => (await resendPrintJob(tx, jobId)).jobId);
+
+async function setStatus(
+  jobId: string,
+  values: { status: "done" | "failed"; attempts?: number },
+): Promise<void> {
+  await suite.db.update(printJobs).set(values).where(eq(printJobs.id, jobId));
+}
+
+const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;
 
 async function readAlerts(now = NOW) {
   return withTransaction(suite.db, async (tx) => {
@@ -629,6 +646,99 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
       attempts: MAX_DELIVERY_ATTEMPTS,
       lastError: BLUETOOTH_PRINTING_UNAVAILABLE,
     });
+    expect(await readAlerts()).toMatchObject([
+      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+    ]);
+  });
+
+  it("stops counting a job that ran out of attempts once a resend of it has printed, and not while the resend waits", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+
+    const copy = await resend(failed);
+    expect(await readAlerts()).toMatchObject([
+      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+    ]);
+
+    await setStatus(copy, { status: "done" });
+    expect(await readAlerts()).toEqual([]);
+  });
+
+  it("still counts a job whose resend also ran out of attempts, and the resend beside it", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await setStatus(await resend(failed), exhausted);
+
+    expect(await readAlerts()).toMatchObject([
+      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 2 }, since: minsAgo(10) },
+    ]);
+  });
+
+  it("stops counting a job and its failed resend once a resend of that resend has printed", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    const first = await resend(failed);
+    await setStatus(first, exhausted);
+
+    await setStatus(await resend(first), { status: "done" });
+    expect(await readAlerts()).toEqual([]);
+  });
+
+  it("stops counting a failed resend once a later resend of the same job has printed", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await setStatus(await resend(failed), exhausted);
+
+    await setStatus(await resend(failed), { status: "done" });
+    expect(await readAlerts()).toEqual([]);
+  });
+
+  it("still counts a resend that ran out of attempts though the job it copies printed before it", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printed = await seedJob({
+      locationId,
+      printerId,
+      createdAt: minsAgo(10),
+      status: "done",
+    });
+    await setStatus(await resend(printed), exhausted);
+
+    expect(await readAlerts()).toMatchObject([
+      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+    ]);
+  });
+
+  it("still counts a resend that ran out of attempts though an earlier resend of the same job printed", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    const printed = await resend(failed);
+    await setStatus(printed, { status: "done" });
+
+    await setStatus(await resend(printed), exhausted);
+    expect(await readAlerts()).toMatchObject([
+      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+    ]);
+  });
+
+  it("still counts a job that ran out of attempts beside a printed job with the same bytes that is not its resend", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(5), status: "done" });
+
     expect(await readAlerts()).toMatchObject([
       { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
     ]);

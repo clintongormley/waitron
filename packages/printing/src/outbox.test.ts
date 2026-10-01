@@ -189,6 +189,29 @@ describe("resendPrintJob", () => {
     },
   );
 
+  it("names the original job a resend copies, and a resend of that resend names the same original", async () => {
+    const cfg = await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(tx, cfg, {
+        name: "Resend",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+      const exhausted = { status: "failed", attempts: 5 } as const;
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, original.jobId));
+      const first = await resendPrintJob(tx, original.jobId);
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, first.jobId));
+      const second = await resendPrintJob(tx, first.jobId);
+
+      const resendOf = async (jobId: string) =>
+        (await tx.select().from(printJobs).where(eq(printJobs.id, jobId)))[0]!.resendOf;
+      expect(await resendOf(original.jobId)).toBeNull();
+      expect(await resendOf(first.jobId)).toBe(original.jobId);
+      expect(await resendOf(second.jobId)).toBe(original.jobId);
+    });
+  });
+
   it.each([
     ["queued", 0],
     ["printing", 0],
