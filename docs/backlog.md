@@ -5088,7 +5088,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       The dialog then says every listed bill is recorded as unpaid and its button reads "Record
       18.00 unpaid", while the server records no departure row for that bill and settles it. The
       fix is for the dialog to show each invoice's amount due, its total plus its credit notes.
-    - **DONE (B28, 2026-10-01): paying a bill that owes €0.00 closes it instead of answering 500.**
+    - **DONE (B28, #1005, 2026-10-01): paying a bill that owes €0.00 closes it instead of answering 500.**
       The owner's answer (2026-10-01): make it work. Measured 2026-10-01 through the routes before
       the change, these till paths answered 500 on a bill whose total was zero: Pay
       (`POST /api/sales`) in cash, with 0.00 or 5.00 handed over, or by manual card, on a table's
@@ -5127,6 +5127,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/till/src/widgets/tender-pay.test.ts` shows a 0.00 total can be confirmed in cash with
       nothing typed (sending `0`) and by card; it passed on the unchanged till, which needed no
       change, and fails when Confirm is disabled at zero.
+    - **OPEN — left by B28's review (#1005), neither acted on.** (1) The reader pay's `tipOf`
+      (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip, against CLAUDE.md §3's rule
+      that a default applies only when the field is absent; it predates B28 (`f29a328c0a`,
+      2026-09-30), and paying a non-zero bill on the reader is believed to accept it the same way
+      (read, not run). Next: a route case sending `tip: null` to `POST /api/pay`, then decide
+      refuse or accept. (2) After a free sale settles on the reader, a stale card-attempt mark on
+      the order is left in place; manual Pay is believed to leave it the same way (read, not run).
     - **OPEN — a bill presented without an invoice keeps the label it was placed with when the
       departure invoices it.** Every other path that invoices such a bill saves the receipt label
       (the party's name and tables) in the update that settles it; the departure leaves the bill
