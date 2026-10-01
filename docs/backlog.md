@@ -2743,7 +2743,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     print path for a switched-off printer, since `enqueuePrintJob` refuses one and `claimPrintJobs`
     claims only switched-on printers' jobs.
 - **A succeeded Unpair ends the printer's waiting print jobs (A163, owner 2026-10-01) — DONE
-  (2026-10-01).** The owner chose to drop, at unpair time, the jobs C109 left waiting, so that a
+  (#962, 2026-10-01).** The owner chose to drop, at unpair time, the jobs C109 left waiting, so that a
   later Add again, which switches the printer on for calibration, does not print them.
   - When the agent job pull switches a Bluetooth printer off after a succeeded Unpair, it ends, in
     the same transaction and for the same addresses, the waiting jobs of the Bluetooth printers at
@@ -2772,6 +2772,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     again does and sends a calibration test page, and the next pull hands out only that page;
     `apps/server/src/print-api.unpair-kitchen.test.ts`; and the worded reason in
     `apps/dashboard/src/screens/printers-screen.test.ts`.
+  - **Left open, not checked:** a document job that runs out of attempts for any OTHER reason
+    keeps the printer's `printer.jobs_waiting` alert up after it is reprinted, because the reprint
+    makes a new job and the given-up one keeps matching (`apps/server/src/alert-sources.ts`). Found
+    while reading A163's review, not run; believed to predate A163, history not checked. No item
+    queued: the owner was asked on 2026-10-01 whether to queue one and has not answered.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
