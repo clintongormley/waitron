@@ -39,6 +39,7 @@ async function stage(control = false) {
   scratch.push(root);
   const staged = join(root, "migrations");
   const journals = new Map<string, { entries: { tag: string }[] }>();
+  let soupId: string;
   for (const set of sets) {
     const source = resolveMigrationsFolder(set, null);
     cpSync(source, join(staged, set.name), { recursive: true });
@@ -88,6 +89,7 @@ async function stage(control = false) {
         vatClass: "general",
       }),
     );
+    soupId = soup.id;
     await store.venue
       .insert(oldMembers)
       .values({ id: "soup-placement", sectionId: "root", position: 1, productId: soup.id });
@@ -144,18 +146,38 @@ async function stage(control = false) {
       .join(";--> statement-breakpoint\n");
     writeFileSync(path, sql);
   }
-  return { venueDir, staged };
+  return { venueDir, staged, soupId: soupId! };
 }
 it("keeps menu details and a home tile across the rebuild, removes the library, and reinstalls media guards", async () => {
-  const { venueDir, staged } = await stage();
+  const { venueDir, staged, soupId } = await stage();
   await applyMigrations(venueDir, migrationOptionsFor(sets, staged));
   const store = await openVenueDatabase(venueDir);
   try {
-    expect(store.venue.all("select id from section_members order by id")).toEqual([
-      { id: "soup-placement" },
-      { id: "tile" },
+    expect(
+      store.venue.all(
+        "select id,section_id,position,product_id,child_section_id,missing_name from section_members order by id",
+      ),
+    ).toEqual([
+      {
+        id: "soup-placement",
+        section_id: "root",
+        position: 1,
+        product_id: soupId,
+        child_section_id: null,
+        missing_name: null,
+      },
+      {
+        id: "tile",
+        section_id: "home",
+        position: 0,
+        product_id: null,
+        child_section_id: "root",
+        missing_name: null,
+      },
     ]);
-    expect(store.venue.all("select menu_id from menu_details")).toEqual([{ menu_id: "menu" }]);
+    expect(
+      store.venue.all("select menu_id,root_section_id,default_home_layout_id from menu_details"),
+    ).toEqual([{ menu_id: "menu", root_section_id: "root", default_home_layout_id: "home" }]);
     expect(store.venue.all("select role from sections order by role")).toEqual([
       { role: "home_layout" },
       { role: "menu_root" },

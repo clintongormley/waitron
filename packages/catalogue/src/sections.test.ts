@@ -274,7 +274,7 @@ describe("section details", () => {
       });
   });
 
-  it("refuses to change, delete or duplicate a list a menu owns", async () => {
+  it("refuses to update or delete a menu root or home layout", async () => {
     const f = await fixture();
     for (const role of ["menu_root", "home_layout"] as const) {
       const owned = await menuOwned(role, f.lunchMenu);

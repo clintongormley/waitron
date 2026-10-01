@@ -217,7 +217,7 @@ describe("home layouts", () => {
 });
 
 describe("home tiles", () => {
-  it("accepts a product or library section the menu reaches, however deep", async () => {
+  it("accepts a product or included menu section the menu reaches, however deep", async () => {
     const f = await menusFixture(fx.db);
     const home = await defaultLayout(f.lunch);
     const lager = await app((tx) => addShortcut(tx, home, product(f.lager)));
@@ -233,7 +233,7 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("refuses a product or library section the menu does not reach", async () => {
+  it("refuses a product or included menu section the menu does not reach", async () => {
     const f = await menusFixture(fx.db);
     const home = await defaultLayout(f.lunch);
     for (const ref of [product(f.burger), section(f.mains)]) {
@@ -294,7 +294,7 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("refuses a menu-owned section as a tile", async () => {
+  it("refuses unreachable menu roots and home layouts as tiles", async () => {
     const f = await menusFixture(fx.db);
     const home = await defaultLayout(f.lunch);
     const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));

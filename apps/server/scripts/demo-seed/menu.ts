@@ -47,8 +47,6 @@ export interface SeedProduct {
 
 export interface SeedCategory {
   name: Record<SeedLocale, string>;
-  /** The internal name of the library section built from this category, where `name` would repeat
-   * another menu's; `name` stays its customer-facing name. */
   station: "kitchen" | "bar" | "deli" | null;
   products: SeedProduct[];
 }

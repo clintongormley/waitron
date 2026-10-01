@@ -278,7 +278,6 @@ describe("site content languages", () => {
       const spanishOnly = await section({ es: "Bebidas" });
       const none = await section({});
       const both = await section({ en: "Drinks", es: "Bebidas" });
-      // A menu's own list is not in the sections library, so the report does not name it.
       const root = await section({ es: "Carta" }, "menu_root");
 
       const gaps = await listContentTranslationGaps(tx, "en");
