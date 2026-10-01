@@ -856,7 +856,7 @@ test("the unit button sits inside the field box at its trailing end, centred on 
 
 test("a long label never runs under the unit button", async () => {
   const el = await mount(
-    `<wt-price-input label="${"Precio de venta al público con impuestos ".repeat(3)}" unit="ración" value="9,00" style="width: 300px"></wt-price-input>`,
+    `<wt-price-input label="${"Selling price to the public including taxes ".repeat(3)}" unit="ración" value="9,00" style="width: 300px"></wt-price-input>`,
   );
   const label = field(el).label!.getBoundingClientRect();
   const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();

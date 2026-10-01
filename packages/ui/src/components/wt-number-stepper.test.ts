@@ -566,7 +566,7 @@ test("hide-label makes the box compact, the same height as the buttons", async (
 });
 
 test("a stepper labelled with 40 characters keeps its box at --wt-stepper-field-width and its label on one line", async () => {
-  const long = "Cantidad máxima de raciones por pedido x";
+  const long = "Maximum number of portions in an order x";
   const el = await mount(`<wt-number-stepper label="${long}" value="3"></wt-number-stepper>`);
   host.style.setProperty("--wt-stepper-field-width", "77px");
   const short = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
@@ -584,7 +584,7 @@ test("a stepper labelled with 40 characters keeps its box at --wt-stepper-field-
 
 test("a required stepper keeps its star inside the box", async () => {
   const el = await mount(
-    '<wt-number-stepper label="Cantidad máxima de raciones" required value="3"></wt-number-stepper>',
+    '<wt-number-stepper label="Maximum number of portions allowed" required value="3"></wt-number-stepper>',
   );
   const star = el.shadowRoot!.querySelector("[data-required]")!.getBoundingClientRect();
   expect(star.width).toBeGreaterThan(0);

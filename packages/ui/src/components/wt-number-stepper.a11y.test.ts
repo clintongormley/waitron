@@ -116,7 +116,7 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
 
   test("a label longer than the box", async () => {
     await mountThemed(
-      '<wt-number-stepper label="Cantidad máxima de raciones por pedido" name="max" value="3"></wt-number-stepper>',
+      '<wt-number-stepper label="Maximum number of portions in an order" name="max" value="3"></wt-number-stepper>',
       theme,
     );
     await expectNoA11yViolations(host);

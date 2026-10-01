@@ -1635,7 +1635,7 @@ test("field help sits outside the field box, at its trailing side and centred on
 
 test("a long chosen label at phone width is one line cut with an ellipsis, ending before the chevron", async () => {
   const long =
-    "Menú del día con primer plato, segundo plato, postre, pan y bebida incluidos para la mesa "
+    "Set lunch with a starter, a main course, a dessert, bread and a drink included for the table "
       .repeat(2)
       .slice(0, 120);
   expect(long).toHaveLength(120);

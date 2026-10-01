@@ -124,7 +124,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("invalid, with no error message", async () => {
     await mountThemed(
-      '<wt-price-input label="Precio" name="price" unit="kg" value="-1" invalid></wt-price-input>',
+      '<wt-price-input label="Price" name="price" unit="kg" value="-1" invalid></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -132,7 +132,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("resting label in an empty field", async () => {
     await mountThemed(
-      '<wt-price-input label="Precio" name="price" unit="kg"></wt-price-input>',
+      '<wt-price-input label="Price" name="price" unit="kg"></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -140,7 +140,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("resting label over a hidden currency sign and fixed unit", async () => {
     await mountThemed(
-      '<wt-price-input label="Precio" name="price" unit="kg" fixed-unit locale="es-ES"></wt-price-input>',
+      '<wt-price-input label="Price" name="price" unit="kg" fixed-unit locale="es-ES"></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -148,7 +148,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("focused amount", async () => {
     const el = await mountThemed(
-      '<wt-price-input label="Precio" name="price" unit="kg" locale="es-ES"></wt-price-input>',
+      '<wt-price-input label="Price" name="price" unit="kg" locale="es-ES"></wt-price-input>',
       theme,
     );
     el.focus();
@@ -158,7 +158,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("disabled, with a fixed unit", async () => {
     await mountThemed(
-      '<wt-price-input label="Precio" name="price" unit="%" fixed-unit value="10" disabled></wt-price-input>',
+      '<wt-price-input label="Price" name="price" unit="%" fixed-unit value="10" disabled></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
