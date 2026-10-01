@@ -7,7 +7,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { indexViolated, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
@@ -54,7 +54,10 @@ export interface IssuedAccountAction {
   expiresAt: string;
 }
 
-/** Issue a fresh action and invalidate any still-live predecessor of the same purpose. */
+/**
+ * Issue a fresh action and invalidate any still-live predecessor of the same purpose. It also
+ * deletes the person's used or expired actions of that purpose.
+ */
 export async function issueAccountAction(
   tx: Transaction,
   input: {
@@ -91,6 +94,7 @@ export async function issueAccountAction(
     input.purpose === "email_change" ? normalizeEmail(input.targetEmail ?? "") : person.email;
   if (!isValidEmail(deliveryEmail)) throw new AppError("person.email_invalid", {});
 
+  await deleteDeadActions(tx, input.personId, input.purpose, nowIso);
   await tx
     .update(managementAccountActions)
     .set({ usedAt: nowIso })
@@ -137,6 +141,26 @@ export async function issueAccountAction(
     ...(code === undefined ? {} : { code, codeExpiresAt }),
     expiresAt,
   };
+}
+
+async function deleteDeadActions(
+  tx: Transaction,
+  personId: string,
+  purpose: AccountActionPurpose,
+  nowIso: string,
+): Promise<void> {
+  await tx
+    .delete(managementAccountActions)
+    .where(
+      and(
+        eq(managementAccountActions.personId, personId),
+        eq(managementAccountActions.purpose, purpose),
+        or(
+          isNotNull(managementAccountActions.usedAt),
+          lte(managementAccountActions.expiresAt, nowIso),
+        ),
+      ),
+    );
 }
 
 interface CompletionInput {
@@ -343,7 +367,16 @@ async function writeAndRemoveDecoyAction(tx: Transaction, now: Date): Promise<vo
   const personId = randomUUID();
   const nowIso = now.toISOString();
   await tx.run(sql`pragma defer_foreign_keys = on`);
-  await tx.select({ email: persons.email }).from(persons).where(eq(persons.id, personId));
+  await tx
+    .select({
+      email: persons.email,
+      displayName: persons.displayName,
+      locale: persons.locale,
+      status: persons.status,
+    })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  await deleteDeadActions(tx, personId, "password_reset", nowIso);
   await tx
     .update(managementAccountActions)
     .set({ usedAt: nowIso })

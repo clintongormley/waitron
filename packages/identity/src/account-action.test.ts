@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
   captureError,
@@ -553,6 +553,95 @@ describe("issuing an account action refuses an account that cannot receive one",
       sql`select id from management_account_actions where person_id = ${personId}`,
     );
     expect(rows.rows).toEqual([]);
+  });
+});
+
+describe("issuing an account action keeps a person's history of that purpose bounded", () => {
+  const NOW = new Date("2026-10-01T12:00:00.000Z");
+
+  async function seedAction(
+    personId: string,
+    purpose: "invitation" | "password_reset" | "email_change",
+    state: "used" | "expired",
+  ): Promise<string> {
+    const id = randomUUID();
+    const targetEmail = purpose === "email_change" ? "elsewhere@x.com" : null;
+    const expiresAt = state === "expired" ? "2026-10-01T11:00:00.000Z" : "2026-10-01T13:00:00.000Z";
+    const usedAt = state === "used" ? "2026-10-01T10:30:00.000Z" : null;
+    await suite.db.execute(sql`insert into management_account_actions
+      (id, person_id, purpose, target_email, token_hash, created_at, expires_at, used_at)
+      values (${id}, ${personId}, ${purpose}, ${targetEmail}, ${randomBytes(32).toString("hex")},
+              '2026-10-01T10:00:00.000Z', ${expiresAt}, ${usedAt})`);
+    return id;
+  }
+
+  async function actionsOf(
+    personId: string,
+    purpose: string,
+  ): Promise<{ id: string; used_at: string | null }[]> {
+    return (
+      await suite.db.execute<{ id: string; used_at: string | null }>(
+        sql`select id, used_at from management_account_actions
+            where person_id = ${personId} and purpose = ${purpose} order by created_at, id`,
+      )
+    ).rows;
+  }
+
+  it("deletes the person's used and expired links of that purpose, leaving only the new one", async () => {
+    const personId = await seedManager(suite.db, { email: "history-pruned@x.com" });
+    for (let i = 0; i < 25; i++) {
+      await seedAction(personId, "password_reset", "used");
+      await seedAction(personId, "password_reset", "expired");
+    }
+    expect(await actionsOf(personId, "password_reset")).toHaveLength(50);
+    const issued = await run((tx) =>
+      requestAccountRecoveryAction(tx, { email: "history-pruned@x.com", now: NOW }),
+    );
+    expect(await actionsOf(personId, "password_reset")).toEqual([
+      { id: issued!.id, used_at: null },
+    ]);
+  });
+
+  it("retires a still-live link rather than deleting it, and deletes it on the issue after", async () => {
+    const personId = await seedManager(suite.db, { email: "history-retired@x.com" });
+    const issue = (now: Date) =>
+      run((tx) => issueAccountAction(tx, { personId, purpose: "password_reset", now }));
+    const first = await issue(NOW);
+    const second = await issue(new Date(NOW.getTime() + 1_000));
+    expect(await actionsOf(personId, "password_reset")).toEqual([
+      { id: first.id, used_at: new Date(NOW.getTime() + 1_000).toISOString() },
+      { id: second.id, used_at: null },
+    ]);
+    const third = await issue(new Date(NOW.getTime() + 2_000));
+    expect(await actionsOf(personId, "password_reset")).toEqual([
+      { id: second.id, used_at: new Date(NOW.getTime() + 2_000).toISOString() },
+      { id: third.id, used_at: null },
+    ]);
+  });
+
+  it("leaves dead links of another purpose, and another person's dead links, in place", async () => {
+    const personId = await seedManager(suite.db, { email: "history-kept@x.com" });
+    const otherId = await seedManager(suite.db, { email: "history-other@x.com" });
+    const kept = {
+      invitation: [
+        await seedAction(personId, "invitation", "used"),
+        await seedAction(personId, "invitation", "expired"),
+      ],
+      email_change: [
+        await seedAction(personId, "email_change", "used"),
+        await seedAction(personId, "email_change", "expired"),
+      ],
+      other: [
+        await seedAction(otherId, "password_reset", "used"),
+        await seedAction(otherId, "password_reset", "expired"),
+      ],
+    };
+    await run((tx) => issueAccountAction(tx, { personId, purpose: "password_reset", now: NOW }));
+    const ids = async (person: string, purpose: string) =>
+      (await actionsOf(person, purpose)).map((row) => row.id).sort();
+    expect(await ids(personId, "invitation")).toEqual([...kept.invitation].sort());
+    expect(await ids(personId, "email_change")).toEqual([...kept.email_change].sort());
+    expect(await ids(otherId, "password_reset")).toEqual([...kept.other].sort());
   });
 });
 
