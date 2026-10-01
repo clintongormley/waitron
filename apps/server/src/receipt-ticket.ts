@@ -12,10 +12,11 @@
  * §14 and the C115 entry in `docs/backlog.md`. The owner's non-fiscal trim renders around that core
  * and is never read by it.
  *
- * The receipt is issued in the INVOICE locale, not the operator's UI language: the fiscal labels
- * are fixed Spanish constants, and only money, discount percentages, date and product names are
- * formatted with `invoiceLocale`. The helpers shared with the till screen are copied rather than
- * imported, because `apps/server` must not depend on `apps/till`; keep them in step.
+ * The receipt is issued in the INVOICE locale, not the operator's UI language: its fixed words come
+ * from the country pack's table for that locale (`receiptLabelsFor`), and money, discount
+ * percentages, date and product names are formatted in it. The helpers shared with the till screen
+ * are copied rather than imported, because `apps/server` must not depend on `apps/till`; keep them
+ * in step.
  */
 import {
   QR_QUIET_ZONE,
@@ -30,6 +31,8 @@ import {
   type EscSetting,
 } from "@waitron/printing";
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
+import type { ReceiptLabels } from "@waitron/country";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import {
   addDecimal,
   decimal,
@@ -66,7 +69,7 @@ export interface FormatReceiptInput {
   issuer: ReceiptIssuer;
   /** The owner-authored non-fiscal header/footer trim; `{}` (or missing fields) prints no trim. */
   receipt: ReceiptTrim;
-  /** The locale the money, discount percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
+  /** The locale the fixed words are printed in and the money, discount percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
   /** The receipt printer's settings: they set the image width, the column count and the QR dot size. */
   printer: EscSetting;
@@ -74,26 +77,6 @@ export interface FormatReceiptInput {
   simulated?: boolean;
   duplicate?: boolean;
 }
-
-/**
- * Fixed Spanish legal labels, whatever the operator's language; a non-Spanish invoice locale would
- * need its own set.
- */
-const LABEL = {
-  nif: "NIF",
-  invoice: "Factura",
-  date: "Fecha",
-  base: "Base",
-  vat: "IVA",
-  total: "TOTAL",
-  cash: "Efectivo",
-  change: "Cambio",
-  tip: "Propina",
-  charged: "Cobrado",
-  refund: "Devolución",
-  comp: "Invitación",
-  discount: "Descuento",
-} as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
@@ -115,15 +98,19 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
 const percentFormatters = new Map<string, Intl.NumberFormat>();
 
 /** The label of an amount taken off: `Descuento 12,5%` for 1250 basis points. */
-function adjustmentLabel(adjustment: ReceiptAdjustment, locale: string): string {
-  if (adjustment.kind === "comp") return LABEL.comp;
-  if (adjustment.percentBp === undefined) return LABEL.discount;
+function adjustmentLabel(
+  adjustment: ReceiptAdjustment,
+  locale: string,
+  label: ReceiptLabels,
+): string {
+  if (adjustment.kind === "comp") return label.comp;
+  if (adjustment.percentBp === undefined) return label.discount;
   let formatter = percentFormatters.get(locale);
   if (formatter === undefined) {
     formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
     percentFormatters.set(locale, formatter);
   }
-  return `${LABEL.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
+  return `${label.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
 }
 
 /** The issue timestamp formatted in the invoice locale — the fecha de expedición (art. 7.1.b). */
@@ -148,6 +135,7 @@ export function formatReceipt({
   duplicate = false,
 }: FormatReceiptInput): Uint8Array {
   const locale = invoiceLocale;
+  const label = receiptLabelsFor(locale);
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
   b.init().printArea(widthDots);
@@ -160,29 +148,29 @@ export function formatReceipt({
     }
   };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
-    const label = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale)}`;
-    row(label, `-${formatMoney(adjustment.amount, locale)}`, indent);
+    const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}`;
+    row(name, `-${formatMoney(adjustment.amount, locale)}`, indent);
   };
 
   // The practice warning surrounds the immutable receipt content. It never enters the filed record or
   // its hash, but it must survive when a paper ticket leaves a Demo/Prepare till.
   if (simulated) {
-    text("PRUEBA - SIN COBRO REAL");
+    text(label.practice);
     b.line();
   }
 
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
   text(issuer.venueName);
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
-  if (duplicate) text("DUPLICADO");
-  text(`${LABEL.nif}: ${issuer.nif}`);
+  if (duplicate) text(label.duplicate);
+  text(`${label.nif}: ${issuer.nif}`);
   b.line();
 
-  text([result.orderLabel, `Pedido ${result.orderNumber}`].filter(Boolean).join(" · "));
+  text([result.orderLabel, `${label.order} ${result.orderNumber}`].filter(Boolean).join(" · "));
 
   // Metadata — serie+número (7.1.a) and fecha de expedición (7.1.b).
-  row(LABEL.invoice, result.invoiceNumber);
-  row(LABEL.date, issueDate(result.issuedAt, locale));
+  row(label.invoice, result.invoiceNumber);
+  row(label.date, issueDate(result.issuedAt, locale));
   b.line();
 
   // Goods identification (7.1.e) — the FILED composition, grouped so each option prints indented beneath
@@ -224,13 +212,13 @@ export function formatReceipt({
 
   // VAT breakdown (7.1.f) — base imponible + cuota per tipo impositivo.
   for (const v of result.vatBreakdown) {
-    row(`${LABEL.base} ${v.rate}%`, formatMoney(v.base, locale));
-    row(`${LABEL.vat} ${v.rate}%`, formatMoney(v.tax, locale));
+    row(`${label.base} ${v.rate}%`, formatMoney(v.base, locale));
+    row(`${label.vat} ${v.rate}%`, formatMoney(v.tax, locale));
   }
   b.line();
 
   // Contraprestación total (7.1.g).
-  row(LABEL.total, formatMoney(result.total, locale));
+  row(label.total, formatMoney(result.total, locale));
   b.line();
 
   // Allowed operational extras — the tender block. Card identity belongs on the payment slip.
@@ -238,34 +226,34 @@ export function formatReceipt({
   if (result.payments !== undefined && result.payments.length > 0) {
     for (const payment of result.payments) {
       if (payment.method === "cash") {
-        row(LABEL.cash, formatMoney(payment.tendered, locale));
-        if (payment.change !== "0.00") row(LABEL.change, formatMoney(payment.change, locale));
+        row(label.cash, formatMoney(payment.tendered, locale));
+        if (payment.change !== "0.00") row(label.change, formatMoney(payment.change, locale));
       } else {
         // The tender amount is net of refunds, which print below it: show the original charge.
         const charged = payment.refunds.reduce(
           (sum, refund) => addDecimal(addDecimal(sum, decimal(refund.amount)), decimal(refund.tip)),
           decimal(payment.amount),
         );
-        row("Tarjeta", formatMoney(charged, locale));
-        if (payment.reference !== null) text(`Ref. ${payment.reference}`);
+        row(label.card, formatMoney(charged, locale));
+        if (payment.reference !== null) text(`${label.reference} ${payment.reference}`);
       }
-      if (payment.tip !== "0.00") row(LABEL.tip, formatMoney(payment.tip, locale));
+      if (payment.tip !== "0.00") row(label.tip, formatMoney(payment.tip, locale));
       for (const refund of payment.refunds) {
         const given = addDecimal(decimal(refund.amount), decimal(refund.tip));
-        row(LABEL.refund, formatMoney(subtractDecimal(decimal("0.00"), given), locale));
+        row(label.refund, formatMoney(subtractDecimal(decimal("0.00"), given), locale));
       }
     }
   } else if (t.method === "cash") {
-    row(LABEL.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
-    row(LABEL.change, formatMoney(t.change, locale));
+    row(label.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
+    row(label.change, formatMoney(t.change, locale));
   } else if (t.method === "card") {
-    text("Tarjeta");
-    if (t.reference !== null) text(`Ref. ${t.reference}`);
+    text(label.card);
+    if (t.reference !== null) text(`${label.reference} ${t.reference}`);
     // String compare is safe: `readTenderBlock` renders the tip with `centsToDecimal`, always two
     // places.
     if (t.tip !== "0.00") {
-      row(LABEL.tip, formatMoney(t.tip, locale));
-      row(LABEL.charged, formatMoney(t.charged, locale));
+      row(label.tip, formatMoney(t.tip, locale));
+      row(label.charged, formatMoney(t.charged, locale));
     }
   }
   b.line();
@@ -294,7 +282,7 @@ export function formatReceipt({
   // the document as simulated.
   if (simulated) {
     b.line();
-    text("PRUEBA - SIN COBRO REAL");
+    text(label.practice);
   }
 
   return b.feedAndCut().bytes();
