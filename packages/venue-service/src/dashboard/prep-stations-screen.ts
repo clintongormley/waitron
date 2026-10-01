@@ -1,14 +1,23 @@
 import { QueryController, codeOf } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  submitOnEnter,
+  ReorderController,
+  reorder,
+  type ReorderModel,
+} from "@waitron/ui";
+import { repeat } from "lit/directives/repeat.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { RouteTarget } from "../routing.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import type { RouteTarget, ExceptionInput, RouteException } from "../routing.js";
+import { exceptionSentence } from "./exception-sentence.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
   PrepStation,
@@ -18,7 +27,11 @@ import type {
 } from "./routing-client.js";
 import { t } from "./strings.js";
 
-type Editor = { kind: "station"; id?: string } | { kind: "claim"; stationId: string | null };
+type Editor =
+  | { kind: "station"; id?: string }
+  | { kind: "claim"; stationId: string | null }
+  | { kind: "exception"; id?: string }
+  | { kind: "exception_delete"; id: string };
 const NO_PREPARATION = "no_preparation";
 const targetFor = (id: string): RouteTarget =>
   id === NO_PREPARATION ? { kind: "no_preparation" } : { kind: "station", stationId: id };
@@ -27,6 +40,8 @@ const targetFor = (id: string): RouteTarget =>
 export class PrepStationsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    ReorderController.styles,
+    ReorderController.tableStyles,
     css`
       :host {
         display: block;
@@ -74,6 +89,45 @@ export class PrepStationsScreen extends LitElement {
       .form {
         padding-block: var(--wt-space-3);
       }
+      .exception-layout {
+        display: grid;
+        gap: var(--wt-space-4);
+        margin-bottom: var(--wt-space-4);
+      }
+      .exception-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+        flex-wrap: wrap;
+      }
+      .exception-table {
+        table-layout: fixed;
+      }
+      .exception-table th:first-child,
+      .exception-table td:first-child,
+      .exception-table th:last-child,
+      .exception-table td:last-child {
+        width: var(--wt-tap-min);
+      }
+      .exception-table td:nth-child(2) {
+        overflow-wrap: anywhere;
+      }
+      .exception-table th:last-child,
+      .exception-table td:last-child {
+        position: sticky;
+        inset-inline-end: 0;
+        background: var(--wt-color-surface);
+      }
+      .warnings .chip {
+        border-color: var(--wt-color-warning);
+      }
+      .warnings {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-1);
+        margin-top: var(--wt-space-1);
+      }
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
@@ -91,6 +145,35 @@ export class PrepStationsScreen extends LitElement {
   @state() private claimError = "";
   @state() private claimField = "";
   @state() private busy = false;
+  @state() private exceptionOrder: string[] = [];
+  @state() private exceptionDraft: ExceptionInput = {
+    zoneId: null,
+    categoryId: null,
+    productId: null,
+    target: { kind: "no_preparation" },
+  };
+  @state() private exceptionTarget = "";
+  @state() private exceptionFieldError = "";
+  #pointerChanged = false;
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.exceptionOrder,
+      move: (id, to, via) => this.#moveException(id, to, via),
+      drop: () => {
+        if (this.#pointerChanged) {
+          this.#pointerChanged = false;
+          void this.#saveExceptionOrder();
+        }
+      },
+      label: (id) => this.#exceptionText(this.view?.routing.exceptions.find((e) => e.id === id)),
+      busy: () => this.busy,
+      get reorderLabel() {
+        return t("prep.reorder_exception");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("prep.reordered") },
+  );
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -121,6 +204,9 @@ export class PrepStationsScreen extends LitElement {
         },
         (value) => {
           this.view = value;
+          this.exceptionOrder = [...value.routing.exceptions]
+            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+            .map((e) => e.id);
           this.error = "";
         },
       );
@@ -262,6 +348,161 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
+  #exceptionText(exception?: RouteException): string {
+    if (!exception || !this.view) return "";
+    return exceptionSentence(exception, {
+      categories: this.view.categories.map((c) => ({ id: c.id, name: this.#path(c.id) })),
+      products: this.view.products,
+      zones: this.view.zones,
+      stations: this.view.routing.stations,
+    });
+  }
+  #moveException(id: string, to: number, via: "key" | "pointer") {
+    const next = reorder(this.exceptionOrder, this.exceptionOrder.indexOf(id), to);
+    if (next.join() === this.exceptionOrder.join()) return;
+    this.exceptionOrder = next;
+    if (via === "key") void this.#saveExceptionOrder();
+    else this.#pointerChanged = true;
+  }
+  async #saveExceptionOrder() {
+    if (this.busy) return;
+    const order = [...this.exceptionOrder];
+    this.busy = true;
+    this.error = "";
+    try {
+      await this.api.reorderExceptions(order);
+      await this.#load();
+    } catch {
+      this.exceptionOrder = [...(this.view?.routing.exceptions ?? [])]
+        .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+        .map((e) => e.id);
+      this.error = t("prep.save_error");
+    } finally {
+      this.busy = false;
+    }
+  }
+  #openException(exception?: RouteException) {
+    this.exceptionDraft = exception
+      ? {
+          zoneId: exception.zoneId,
+          categoryId: exception.categoryId,
+          productId: exception.productId,
+          target: exception.target,
+        }
+      : { zoneId: null, categoryId: null, productId: null, target: { kind: "no_preparation" } };
+    this.exceptionTarget = exception
+      ? exception.target.kind === "station"
+        ? exception.target.stationId
+        : NO_PREPARATION
+      : "";
+    this.exceptionFieldError = "";
+    this.error = "";
+    this.editor = { kind: "exception", id: exception?.id };
+  }
+  async #saveException() {
+    if (this.busy || this.editor?.kind !== "exception") return;
+    const input = this.exceptionDraft;
+    if (!input.zoneId && !input.categoryId && !input.productId) {
+      this.exceptionFieldError = t("prep.exception_condition");
+      this.error = t("prep.fix_fields");
+      return;
+    }
+    if (!this.exceptionTarget) {
+      this.error = t("prep.exception_target_required");
+      return;
+    }
+    const id = this.editor.id;
+    this.busy = true;
+    this.error = "";
+    try {
+      if (id) await this.api.updateException(id, input);
+      else await this.api.createException(input);
+      this.editor = undefined;
+      await this.#load();
+    } catch (e) {
+      const field = (e as { params?: { field?: unknown } } | undefined)?.params?.field;
+      if (field === "condition") this.exceptionFieldError = t("prep.exception_condition");
+      else if (codeOf(e) === "route.station_inactive") this.error = t("prep.station_inactive");
+      else this.error = t("prep.save_error");
+    } finally {
+      this.busy = false;
+    }
+  }
+  #exceptionOptions() {
+    return [
+      { value: "", label: t("prep.everything") },
+      ...(this.view?.categories.map((c) => ({
+        value: `category:${c.id}`,
+        label: this.#path(c.id),
+      })) ?? []),
+      ...(this.view?.products.map((p) => ({ value: `product:${p.id}`, label: p.name })) ?? []),
+    ];
+  }
+  #exceptions() {
+    const byId = new Map(this.view!.routing.exceptions.map((e) => [e.id, e]));
+    return html`<wt-card data-test="exceptions" class="exception-layout">
+      <div class="exception-head">
+        <h2>${t("prep.exceptions")}</h2>
+        <wt-button data-test="add-exception" @click=${() => this.#openException()}
+          >${t("prep.add_exception")}</wt-button
+        >
+      </div>
+      <div class="table-wrap" tabindex="0">
+        <table class="exception-table">
+          <thead>
+            <tr>
+              <th scope="col">
+                <span class="visually-hidden">${t("prep.reorder_exception")}</span>
+              </th>
+              <th scope="col">${t("prep.exception_rule")}</th>
+              <th scope="col"><span class="visually-hidden">${t("prep.actions")}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${repeat(
+              this.exceptionOrder,
+              (id) => id,
+              (id) => {
+                const e = byId.get(id);
+                return e
+                  ? html`<tr data-id=${id}>
+                      <td class="handle-cell">${this.#reorder.handle(id)}</td>
+                      <td>
+                        ${this.#exceptionText(e)}
+                        <div class="warnings">
+                          ${e.neverMatches ? html`<span class="chip">${t("prep.never_used")}</span>` : nothing}${e.stationOff ? html`<span class="chip">${t("prep.exception_station_off")}</span>` : nothing}
+                        </div>
+                      </td>
+                      <td>
+                        <wt-row-actions
+                          align="end"
+                          label=${`${t("prep.actions")}: ${this.#exceptionText(e)}`}
+                          ><wt-button
+                            data-test=${`edit-exception-${id}`}
+                            variant="secondary"
+                            @click=${() => this.#openException(e)}
+                            >${t("prep.edit")}</wt-button
+                          ><wt-button
+                            data-test=${`delete-${id}`}
+                            variant="danger"
+                            @click=${() => {
+                              this.editor = { kind: "exception_delete", id };
+                              this.error = "";
+                            }}
+                            >${t("prep.delete")}</wt-button
+                          ></wt-row-actions
+                        >
+                      </td>
+                    </tr>`
+                  : nothing;
+              },
+            )}
+          </tbody>
+        </table>
+      </div>
+      ${this.#reorder.liveRegion()}
+    </wt-card>`;
+  }
   #claims(stationId: string | null) {
     return (
       this.view?.routing.claims.filter(
@@ -357,30 +598,88 @@ export class PrepStationsScreen extends LitElement {
     const editor = this.editor;
     return html`<wt-modal
       open
-      heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.id ? t("prep.edit_station") : t("prep.new_station")}
+      heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : editor.id ? t("prep.edit_station") : t("prep.new_station")}
       @wt-close=${() => {
         this.editor = undefined;
       }}
       ><div class="form">
         ${
-          editor.kind === "claim"
-            ? html`<wt-combobox
-                  data-test="claim-choice"
-                  label=${t("prep.folder")}
-                  .options=${this.#claimOptions()}
-                  @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                    const id = e.detail.value;
-                    void this.#setClaim(
-                      id,
-                      targetFor(editor.stationId ?? NO_PREPARATION),
-                      "claim",
-                    ).then(() => {
-                      if (!this.error && !this.claimError) this.editor = undefined;
-                    });
-                  }}
-                ></wt-combobox
-                >${this.claimError && this.claimField === "claim" ? html`<p class="error" data-field-error="claim" role="alert">${this.claimError}</p>` : nothing}`
-            : html`${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}`
+          editor.kind === "exception_delete"
+            ? html`<p>
+                ${this.#exceptionText(this.view?.routing.exceptions.find((e) => e.id === editor.id))}
+              </p>`
+            : editor.kind === "exception"
+              ? html`<div>
+                    <wt-combobox
+                      data-test="exception-what"
+                      name="what"
+                      label=${t("prep.what")}
+                      placeholder=${t("prep.everything")}
+                      .options=${this.#exceptionOptions()}
+                      .value=${this.exceptionDraft.categoryId ? `category:${this.exceptionDraft.categoryId}` : this.exceptionDraft.productId ? `product:${this.exceptionDraft.productId}` : ""}
+                      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                        const value = e.detail.value;
+                        this.exceptionDraft = {
+                          ...this.exceptionDraft,
+                          categoryId: value.startsWith("category:") ? value.slice(9) : null,
+                          productId: value.startsWith("product:") ? value.slice(8) : null,
+                        };
+                        this.exceptionFieldError = "";
+                        this.error = "";
+                      }}
+                    ></wt-combobox
+                    >${this.exceptionFieldError ? html`<p class="error" role="alert" data-field-error="condition">${this.exceptionFieldError}</p>` : nothing}
+                  </div>
+                  <wt-combobox
+                    data-test="exception-zone"
+                    name="zone"
+                    label=${t("prep.service_zone")}
+                    placeholder=${t("prep.any_zone")}
+                    .options=${[{ value: "", label: t("prep.any_zone") }, ...(this.view?.zones.filter((z) => z.active !== false).map((z) => ({ value: z.id, label: z.name })) ?? [])]}
+                    .value=${this.exceptionDraft.zoneId ?? ""}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                      this.exceptionDraft = {
+                        ...this.exceptionDraft,
+                        zoneId: e.detail.value || null,
+                      };
+                      this.exceptionFieldError = "";
+                      this.error = "";
+                    }}
+                  ></wt-combobox
+                  ><wt-combobox
+                    data-test="exception-target"
+                    name="target"
+                    label=${t("prep.made_at")}
+                    required
+                    .options=${this.#targetOptions()}
+                    .value=${this.exceptionTarget}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                      this.exceptionTarget = e.detail.value;
+                      this.exceptionDraft = {
+                        ...this.exceptionDraft,
+                        target: targetFor(e.detail.value),
+                      };
+                      this.error = "";
+                    }}
+                  ></wt-combobox>`
+              : editor.kind === "claim"
+                ? html`<wt-combobox
+                      data-test="claim-choice"
+                      label=${t("prep.folder")}
+                      .options=${this.#claimOptions()}
+                      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                        const id = e.detail.value;
+                        void this.#setClaim(
+                          id,
+                          targetFor(editor.stationId ?? NO_PREPARATION),
+                          "claim",
+                        ).then(() => {
+                          if (!this.error && !this.claimError) this.editor = undefined;
+                        });
+                      }}
+                    ></wt-combobox
+                    >${this.claimError && this.claimField === "claim" ? html`<p class="error" data-field-error="claim" role="alert">${this.claimError}</p>` : nothing}`
+                : html`${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}`
         }
         ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
       </div>
@@ -392,7 +691,34 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
           }}
           >${t("prep.cancel")}</wt-button
-        >${editor.kind === "station" ? html`<wt-button data-test="save-station" ?disabled=${this.busy} @click=${() => void this.#saveStation()}>${t("prep.save")}</wt-button>` : nothing}
+        >${
+          editor.kind === "station"
+            ? html`<wt-button
+                data-test="save-station"
+                ?disabled=${this.busy}
+                @click=${() => void this.#saveStation()}
+                >${t("prep.save")}</wt-button
+              >`
+            : editor.kind === "exception"
+              ? html`<wt-button
+                  data-test="save-exception"
+                  ?disabled=${this.busy || !this.exceptionTarget}
+                  @click=${() => void this.#saveException()}
+                  >${t("prep.save")}</wt-button
+                >`
+              : editor.kind === "exception_delete"
+                ? html`<wt-button
+                    data-test="confirm-delete-exception"
+                    variant="danger"
+                    ?disabled=${this.busy}
+                    @click=${() =>
+                      void this.#act(() => this.api.deleteException(editor.id)).then(() => {
+                        if (!this.error) this.editor = undefined;
+                      })}
+                    >${t("prep.delete")}</wt-button
+                  >`
+                : nothing
+        }
       </wt-form-actions></wt-modal
     >`;
   }
@@ -411,7 +737,8 @@ export class PrepStationsScreen extends LitElement {
       </div>
       ${
         view
-          ? html`<div class="cards">
+          ? html`${this.#exceptions()}
+              <div class="cards">
                 ${active.map((s) => this.#stationCard(s))}<wt-card data-test="no-preparation"
                   ><h2>${t("prep.no_preparation")}</h2>
                   ${this.#chips(null)}<wt-button

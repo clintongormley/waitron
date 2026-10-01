@@ -15,7 +15,7 @@ export interface PrepStationsView {
   routing: RoutingModel;
   stations: PrepStation[];
   categories: { id: string; name: string; parentId: string | null }[];
-  zones: { id: string; name: string }[];
+  zones: { id: string; name: string; active?: boolean }[];
   products: { id: string; name: string }[];
   printers: { id: string; name: string }[];
   stationPrinters: { stationId: string; printerId: string }[];
@@ -86,6 +86,19 @@ export class PrepStationsApi {
       ...condition,
       ...(target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true }),
     });
+  }
+  updateException(id: string, input: ExceptionInput): Promise<void> {
+    const { target, ...condition } = input;
+    return this.request(`/management-api/venue-service/routing/exceptions/${id}`, "PUT", {
+      ...condition,
+      ...(target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true }),
+    });
+  }
+  deleteException(id: string): Promise<void> {
+    return this.request(`/management-api/venue-service/routing/exceptions/${id}`, "DELETE");
+  }
+  reorderExceptions(ids: string[]): Promise<void> {
+    return this.request("/management-api/venue-service/routing/exception-order", "PUT", { ids });
   }
   assignProduct(productId: string, target: RouteTarget): Promise<void> {
     return this.request(

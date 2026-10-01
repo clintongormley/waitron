@@ -374,3 +374,204 @@ it("guards repeated Enter saves while a station write is pending and allows retr
   await settle(el);
   expect(updateStation).toHaveBeenCalledTimes(2);
 });
+
+const exceptionView: PrepStationsView = {
+  ...view,
+  zones: [{ id: "terrace", name: "Terrace" }],
+  routing: {
+    ...view.routing,
+    stations: [...view.routing.stations, { id: "old", name: "Old bar", active: false }],
+    exceptions: [
+      {
+        id: "b",
+        position: 20,
+        zoneId: "terrace",
+        categoryId: "cocktails",
+        productId: null,
+        target: { kind: "station", stationId: "old" },
+        neverMatches: true,
+        stationOff: true,
+      },
+      {
+        id: "a",
+        position: 10,
+        zoneId: null,
+        categoryId: null,
+        productId: "bread",
+        target: { kind: "no_preparation" },
+        neverMatches: false,
+        stationOff: false,
+      },
+    ],
+  },
+};
+it("lists exceptions by position as sentences and identifies both warnings", async () => {
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
+  const rows = [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')];
+  expect(rows.map((row) => row.getAttribute("data-id"))).toEqual(["a", "b"]);
+  expect(rows[0]!.textContent).toContain("Bread → No preparation");
+  expect(rows[1]!.textContent).toContain("Cocktails from Terrace → Old bar");
+  expect(rows[1]!.textContent).toContain("Never used: an exception above always catches it first");
+  expect(rows[1]!.textContent).toContain("Its station is switched off");
+});
+it("moves the second exception up by keyboard and sends the complete new order", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    reorderExceptions: vi.fn().mockResolvedValue(undefined),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="drag-b"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+  );
+  await settle(el);
+  expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
+});
+it("refuses an exception without a subject or zone beside What", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  q(el, '[data-test="exception-target"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
+    "Choose a folder or product, a service zone, or both",
+  );
+  expect(a.createException).not.toHaveBeenCalled();
+});
+it("confirms deletion before calling the exception endpoint", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    deleteException: vi.fn().mockResolvedValue(undefined),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="delete-a"]')!.click();
+  await settle(el);
+  expect(a.deleteException).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-delete-exception"]')!.click();
+  await settle(el);
+  expect(a.deleteException).toHaveBeenCalledWith("a");
+});
+it("drags the second exception above the first and saves the complete order on release", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    reorderExceptions: vi.fn().mockResolvedValue(undefined),
+  });
+  const el = await mount(a);
+  const handle = q(el, '[data-test="drag-b"]')!;
+  const first = q(el, '[data-id="a"]')!.getBoundingClientRect();
+  handle.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 9, bubbles: true }));
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 9, clientY: first.top + first.height / 2 }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9 }));
+  await settle(el);
+  expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
+});
+it("writes a chosen folder and zone to the selected station", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    createException: vi.fn().mockResolvedValue(undefined),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  q(el, '[data-test="exception-what"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "category:cocktails" } }),
+  );
+  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
+  );
+  q(el, '[data-test="exception-target"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(a.createException).toHaveBeenCalledWith({
+    zoneId: "terrace",
+    categoryId: "cocktails",
+    productId: null,
+    target: { kind: "station", stationId: "bar" },
+  });
+});
+it("puts the server's condition refusal beside What", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    createException: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "condition" } }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
+  );
+  q(el, '[data-test="exception-target"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
+    "Choose a folder or product",
+  );
+});
+it("shows Everything and Any service zone as the form defaults", async () => {
+  setLocale("en");
+  const el = await mount(api());
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  expect(
+    q(el, '[data-test="exception-what"]')!.shadowRoot!.querySelector(".trigger .value")!
+      .textContent,
+  ).toContain("Everything");
+  expect(
+    q(el, '[data-test="exception-zone"]')!.shadowRoot!.querySelector(".trigger .value")!
+      .textContent,
+  ).toContain("Any service zone");
+});
+it("restores the server order if reordering is refused", async () => {
+  setLocale("en");
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    reorderExceptions: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="drag-b"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+  );
+  await settle(el);
+  expect(
+    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
+      row.getAttribute("data-id"),
+    ),
+  ).toEqual(["a", "b"]);
+  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
+});
+it("edits an existing exception without changing its position", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    updateException: vi.fn().mockResolvedValue(undefined),
+    reorderExceptions: vi.fn(),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="edit-exception-a"]')!.click();
+  await settle(el);
+  q(el, '[data-test="exception-target"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(a.updateException).toHaveBeenCalledWith("a", {
+    zoneId: null,
+    categoryId: null,
+    productId: "bread",
+    target: { kind: "station", stationId: "bar" },
+  });
+  expect(a.reorderExceptions).not.toHaveBeenCalled();
+});

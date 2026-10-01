@@ -125,3 +125,24 @@ it("creates station and its timing thresholds with one POST", async () => {
     ],
   ]);
 });
+it("updates, deletes and reorders exceptions using the routing endpoints", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.updateException("e1", {
+    zoneId: "terrace",
+    categoryId: null,
+    productId: "lager",
+    target: { kind: "no_preparation" },
+  });
+  await api.deleteException("e1");
+  await api.reorderExceptions(["e2", "e1"]);
+  expect(request.mock.calls).toEqual([
+    [
+      "/management-api/venue-service/routing/exceptions/e1",
+      "PUT",
+      { zoneId: "terrace", categoryId: null, productId: "lager", noPreparation: true },
+    ],
+    ["/management-api/venue-service/routing/exceptions/e1", "DELETE"],
+    ["/management-api/venue-service/routing/exception-order", "PUT", { ids: ["e2", "e1"] }],
+  ]);
+});
