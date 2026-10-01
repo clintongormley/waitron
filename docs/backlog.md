@@ -1222,6 +1222,27 @@ which the Extras tab shares, so a fix there changes both tabs unless it is limit
 - **Delete in the row menu is not red.** It is a `variant="ghost"` button beside Edit; the Products
   screen's menu gives its Delete `variant="danger"` (`apps/dashboard/src/widgets/product-list.ts`).
 
+**The folding section jumps about when it opens (A169, owner 2026-10-01) — OPEN.** The shared
+`wt-disclosure` (`packages/ui/src/components/wt-disclosure.ts`), seen by the owner as the
+"Customer and kitchen names" section of the Options and Extras editors. It is also the product
+editor's Kitchen, Descriptors and Nutrition sections (`apps/dashboard/src/widgets/product-editor.ts`)
+and the option editor's names (`option-label-form.ts`). The owner's findings, each a result of the
+open style drawing the section as a bordered box with the header sitting on its top edge:
+
+- the chevron jumps from the far right (closed) to just after the summary (open) — open, the
+  header shrinks to its content (`width: auto`) instead of filling the row;
+- the title moves right when it opens, by the header's added side margin and padding;
+- a border appears only when it opens.
+
+The owner's suggestion, not yet decided: closed, show the section's current values; open, show the
+form. **This changes a written rule:** `docs/developers/design-system.md` → "A collapsed disclosure
+is a borderless heading with a chevron … When it opens, one rounded border encloses the body and the
+heading sits across that border like a legend" describes exactly the look being reported, so the fix
+rewrites that paragraph too. **Next action:** settle with the owner what open and closed should look
+like (heading and chevron fixed in place either way), and what "current values" means for each user
+— three names for the names sections; the product editor's sections already show a one-line
+`summary` today.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
