@@ -7783,7 +7783,8 @@ ongoing overhaul listed at the top of Track A.
   - Beside the fields (below them at phone width) the server draws the sample sale from
     `sample-receipt.ts` with the formatter a sale's receipt prints from, with the unsaved header and footer, the venue's
     legal name and tax ID, the location's receipt language, and the width of the receipt printer of
-    the location's till first by name (80 mm at 180 dpi, 512 dots, when there is none):
+    the location's till first by name (80 mm at 180 dpi, 512 dots, when there is none; the width
+    most of its tills print on, with a choice of widths, since C120, 2026-10-01, below):
     `POST /management-api/receipt-preview` (a GET since C121, 2026-10-01, below)
     (`apps/server/src/receipt-preview-api.ts`), which saves and enqueues nothing ("saves nothing
     and enqueues no print job, even with a receipt printer registered"). The page draws it with the
@@ -7795,16 +7796,17 @@ ongoing overhaul listed at the top of Track A.
   - One Save sends both settings. If one is refused, the other is still saved, the refusal is
     shown where it belongs (under its field, or at the bottom), and no "Saved" message appears.
   - Still open: C120 (a location whose tills print on different paper widths previews only one) is
-    queued in lane C. No test pins what the two removed addresses, `/manage/receipt` and
-    `/manage/location-settings`, open now; a reading of the router says the overview page, which
-    nobody has run — #993 added that test for `/manage/sections`.
+    queued in lane C (done: C120, 2026-10-01, below). No test pins what the two removed addresses,
+    `/manage/receipt` and `/manage/location-settings`, open now; a reading of the router says the
+    overview page, which nobody has run — #993 added that test for `/manage/sections`.
 - **An open Receipts page's preview refresh does not keep an unattended dashboard signed in (C121,
   owner 2026-10-01) — done (2026-10-01, #996).** When another session saved a different header or footer,
   the page redrew its preview, and every preview counted as this person's activity, so a Receipts
   page left open stayed signed in for as long as someone else kept editing.
   - The preview is now a GET, `GET /management-api/receipt-preview?receipt=…`, whose one `receipt`
-    parameter carries the same JSON object a save sends, so the server checks it with the save's own
-    `validateReceiptConfig` and refuses what a save refuses. A missing, repeated or unreadable
+    parameter (beside an optional `paperWidth` since C120, 2026-10-01, below) carries the same JSON
+    object a save sends, so the server checks it with the save's own `validateReceiptConfig` and
+    refuses what a save refuses. A missing, repeated or unreadable
     parameter is refused with `management.request_invalid` (`field: "receipt"`), as a body without a
     receipt was. Being a GET, it can be sent as a passive read.
   - A preview the page sends only because another session saved goes through the dashboard's
@@ -7819,6 +7821,40 @@ ongoing overhaul listed at the top of Track A.
     `assertPassiveManagementReads` in `apps/server/src/boot.test.ts`, which sends a preview through
     the booted server with and without the passive header and checks that only the second moves the
     session's last-seen time.
+- **The Receipts preview offers a choice of paper width (C120, owner 2026-10-01) — done
+  (2026-10-01).** A location whose tills print on 58 mm and 80 mm paper previewed only one width.
+  - The preview route, `GET /management-api/receipt-preview`
+    (`apps/server/src/receipt-preview-api.ts`), now reads the active receipt printer of every till
+    at the location, not only the first till's by name. Its answer gains `paperWidths`, the widths
+    those printers have, narrowest first (empty when there is none), and `paperWidth`, the width it
+    drew at.
+  - Without a choice it draws at the width most of the location's tills print on, counted one per
+    till, so two tills sharing a printer count twice. A tie goes to the width of the till first by
+    name, so a location whose tills all print on one width draws as before. A width is drawn at the
+    resolution of the first till by name whose printer has it. With no receipt printer at all it
+    draws at 80 mm and 180 dpi, as before.
+  - An optional `paperWidth` parameter (`58mm` or `80mm`) asks for a width. A known width that no
+    receipt printer at the location has any more (one removed between loading the page and
+    choosing) is drawn at the default, and the answer's `paperWidth` says which width it drew. An
+    unknown or empty value, or the parameter given twice, is refused with
+    `management.request_invalid` (`field: "paperWidth"`).
+  - The Receipts page shows a "Paper width" dropdown ("Ancho del papel"; the labels are the Printers
+    screen's) under the Preview heading, above the paper, only when the last preview offered more
+    than one width. Choosing a width redraws the preview at once, through the ordinary client, so it
+    counts as the person's activity; nothing is saved. A later preview caused by another session's
+    save keeps the chosen width and stays passive. If a redraw fails, the dropdown keeps the choice
+    and the "could not be updated" line shows under it.
+  - Open points for the owner: the dropdown names widths only, not printers, so two printers of
+    one width at different resolutions cannot be told apart. And the list of widths comes from the
+    last preview, which the page asks for again only when the receipt text changes or a width is
+    chosen: a printer or till changed elsewhere does not update it while the page is open. Probed
+    2026-10-01 with a temporary browser test: invalidating `printers` and `tills` sent no new
+    preview and no new read, while invalidating `tenant_receipts` (the control) sent one.
+  - Tests: the "paper widths" cases in `apps/server/src/receipt-preview-api.test.ts`; the "the
+    Receipts page's paper width" cases in `apps/dashboard/src/screens/receipts-screen.test.ts`; the
+    dropdown case in `apps/dashboard/src/screens/receipts-screen.a11y.test.ts`, in both themes; and
+    "asks for a preview at a chosen paper width" in
+    `apps/dashboard/src/api/client-routes.test.ts`.
 - **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** AEAT's «Detalle de
   las especificaciones técnicas del código «QR» de la factura y de la «URL» del servicio de cotejo o
   remisión de información por parte del receptor de la factura», version 0.5.0 of 10/12/2025, section
