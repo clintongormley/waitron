@@ -477,19 +477,39 @@ it("offers the publish when the menu differs from its live version but no change
   expect(q(el, '[data-test="publish"]')).not.toBeNull();
 });
 
-it("lists an omitted shortcut as a warning that does not block publishing", async () => {
-  const el = await mount({
-    preview: preview(
-      [{ kind: "layout_changed", layoutId: "l-home", name: "Home", source: "this_menu" }],
-      [{ kind: "shortcut_missing", layoutName: "Home", name: "Lemonade" }],
-    ),
-  });
-  expect(items(el, "warnings")).toEqual([
-    t("menu_preview.shortcut_missing").replace("{name}", "Lemonade").replace("{layout}", "Home"),
-  ]);
-  expect(text(q(el, '[data-test="warnings-note"]'))).toBe(t("menu_preview.warnings_note"));
-  expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(false);
-});
+it.each(["en-GB", "es-ES"])(
+  "counts missing shortcuts by layout before confirmation and after publishing (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount({
+      menuName: "Evening",
+      preview: preview(
+        [],
+        [
+          { kind: "shortcut_missing", layoutName: "Counter", name: "Beer" },
+          { kind: "shortcut_missing", layoutName: "Counter", name: "Wine" },
+          { kind: "shortcut_missing", layoutName: "Home", name: "Soup" },
+        ],
+      ),
+    });
+    const expected =
+      locale === "en-GB"
+        ? "2 shortcuts on Evening's Counter layout point at things no longer in this menu. They stay as empty spaces until you remove or replace them."
+        : "2 accesos directos de la página Counter de Evening apuntan a elementos que ya no están en este menú. Permanecen como espacios vacíos hasta que los quites o reemplaces.";
+    expect(items(el, "warnings")).toHaveLength(2);
+    expect(items(el, "warnings")[0]).toBe(expected);
+    const asked = capture(el, "wt-menu-publish");
+    q(el, '[data-test="publish"]')!.click();
+    await el.updateComplete;
+    expect(asked).toEqual([]);
+    expect(text(q(el, '[data-test="publish-confirmation"]'))).toContain(expected);
+    q(el, '[data-test="publish-confirm"]')!.click();
+    expect(asked).toEqual([{ hash: NEW_HASH }]);
+    el.result = { kind: "published", number: 3 };
+    await el.updateComplete;
+    expect(text(q(el, '[data-test="result"]'))).toContain(expected);
+  },
+);
 
 it("holds the publish button while a publish is out, saying what it is doing", async () => {
   const el = await mount({
@@ -728,3 +748,9 @@ it("lists unresolved clashes above Publish and disables publishing", async () =>
   publish.dispatchEvent(new MouseEvent("click"));
   expect(heard).not.toHaveBeenCalled();
 });
+
+function capture(el: HTMLElement, type: string): unknown[] {
+  const seen: unknown[] = [];
+  el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
+  return seen;
+}

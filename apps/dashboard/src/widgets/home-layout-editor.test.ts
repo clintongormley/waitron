@@ -191,7 +191,11 @@ it("edits the chosen layout's tiles in the member-list editor, offering only wha
   expect(editor.members).toEqual([
     { id: "t-burger", position: 0, ref: { kind: "product", productId: "p-burger" } },
     { id: "t-drinks", position: 1, ref: { kind: "section", sectionId: "s-drinks" } },
-    { id: "t-salad", position: 2, ref: { kind: "product", productId: "p-salad" } },
+    {
+      id: "t-salad",
+      position: 2,
+      ref: { kind: "missing", name: t("home.missing").replace("{name}", "Salad") },
+    },
   ]);
   const offered = [...editor.shadowRoot!.querySelectorAll('select[name="member-ref"] option')]
     .map((option) => (option as HTMLOptionElement).value)
@@ -207,17 +211,17 @@ it("edits the chosen layout's tiles in the member-list editor, offering only wha
   );
 });
 
-it("marks a tile whose target left the menu 'Not on this menu', in the list and the preview", async () => {
+it("marks an unreachable target as missing and leaves its preview cell blank", async () => {
   const el = await mount();
-  const row = (id: string) => members(el).shadowRoot!.querySelector(`tr[data-member="${id}"]`)!;
-  expect(text(row("t-salad").querySelector('[data-test="note"]'))).toBe(t("home.not_on_menu"));
-  expect(row("t-burger").querySelector('[data-test="note"]')).toBeNull();
+  const row = members(el).shadowRoot!.querySelector('[data-member="t-salad"]')!;
+  expect(text(row.querySelector('[data-test="name"]'))).toBe(
+    t("home.missing").replace("{name}", "Salad"),
+  );
   for (const which of ["handheld", "till"]) {
     const tile = q(el, `[data-test="preview-${which}"] [data-tile="t-salad"]`)!;
-    expect(text(tile)).toContain(t("home.not_on_menu"));
-    expect(
-      q(el, `[data-test="preview-${which}"] [data-tile="t-burger"]`)!.textContent,
-    ).not.toContain(t("home.not_on_menu"));
+    expect(text(tile)).toBe("");
+    expect(tile.getAttribute("aria-hidden")).toBe("true");
+    expect(tile.getBoundingClientRect().height).toBeGreaterThan(0);
   }
 });
 
@@ -235,8 +239,7 @@ it("shows product and section tiles differently in words and in shape, not by co
   expect(section.boxShadow).not.toBe("none");
   expect(product.boxShadow).toBe("none");
   expect(section.borderTopLeftRadius).not.toBe(product.borderTopLeftRadius);
-  // A tile off the menu is drawn dashed, besides saying so.
-  expect(getComputedStyle(tile("t-salad")).borderTopStyle).toBe("dashed");
+  expect(getComputedStyle(tile("t-salad")).visibility).toBe("hidden");
   expect(product.borderTopStyle).toBe("solid");
 });
 
@@ -247,8 +250,8 @@ it("previews the layout at 3 columns for a handheld and 6 for a till, in the sam
       .length;
   expect(columns("handheld")).toBe(3);
   expect(columns("till")).toBe(6);
-  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks", "Salad"]);
-  expect(tileNames(el, "till")).toEqual(["Burger", "Drinks", "Salad"]);
+  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks"]);
+  expect(tileNames(el, "till")).toEqual(["Burger", "Drinks"]);
   expect(text(q(el, '[data-test="preview-handheld-caption"]'))).toBe(t("home.preview_handheld"));
   expect(text(q(el, '[data-test="preview-till-caption"]'))).toBe(t("home.preview_till"));
 });
@@ -257,8 +260,8 @@ it("previews the tiles in position order, whatever order they arrive in", async 
   const shuffled = layouts();
   shuffled[0]!.tiles.reverse();
   const el = await mount({ layouts: shuffled });
-  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks", "Salad"]);
-  expect(tileNames(el, "till")).toEqual(["Burger", "Drinks", "Salad"]);
+  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks"]);
+  expect(tileNames(el, "till")).toEqual(["Burger", "Drinks"]);
 });
 
 it("shows another layout's tiles once it is the one being edited", async () => {
@@ -306,8 +309,8 @@ it("previews a keyboard move at once, before the host confirms it", async () => 
   handle.focus();
   handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await el.updateComplete;
-  expect(tileNames(el, "handheld")).toEqual(["Burger", "Salad", "Drinks"]);
-  expect(tileNames(el, "till")).toEqual(["Burger", "Salad", "Drinks"]);
+  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks"]);
+  expect(tileNames(el, "till")).toEqual(["Burger", "Drinks"]);
 });
 
 it("names the layouts list after the menu", async () => {
@@ -330,8 +333,153 @@ it("keeps a missing tile in the editable list by its recorded name, with remove 
   const el = await mount({ layouts: rows });
   const list = members(el);
   const row = list.shadowRoot!.querySelector('[data-member="t-missing"]')!;
-  expect(text(row.querySelector('[data-test="name"]'))).toContain("Drinks › Beer");
+  expect(text(row.querySelector('[data-test="name"]'))).toBe(
+    t("home.missing").replace("{name}", "Drinks › Beer"),
+  );
   expect(row.querySelector('[data-test="remove-t-missing"]')).not.toBeNull();
   expect(list.members.map((m) => m.id)).toEqual(["t-burger", "t-missing", "t-salad"]);
-  expect(tileNames(el, "handheld")).toEqual(["Burger", "Drinks › Beer", "Salad"]);
+  expect(tileNames(el, "handheld")).toEqual(["Burger"]);
+  const removes = capture(el, "wt-tile-remove");
+  const moves = capture(el, "wt-tile-move");
+  const replaces = capture(el, "wt-tile-replace");
+  row.querySelector<HTMLElement>('[data-test="remove-t-missing"]')!.click();
+  row
+    .querySelector<HTMLElement>('[data-test="drag-t-missing"]')!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  await list.updateComplete;
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-missing"]')!.click();
+  await list.updateComplete;
+  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
+  select.value = "section:s-beer";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await list.updateComplete;
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+  expect(removes).toEqual([{ layoutId: "l-home", memberId: "t-missing" }]);
+  expect(moves).toEqual([{ layoutId: "l-home", memberId: "t-missing", to: 0 }]);
+  expect(replaces).toEqual([
+    { layoutId: "l-home", memberId: "t-missing", ref: { kind: "section", sectionId: "s-beer" } },
+  ]);
+});
+
+it("cancels a replacement when a refresh replaces the tile list or another layout is selected", async () => {
+  const el = await mount();
+  const list = members(el);
+  const replaces = capture(el, "wt-tile-replace");
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
+  await list.updateComplete;
+  expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).not.toBeNull();
+  el.selected = "l-counter";
+  await el.updateComplete;
+  await list.updateComplete;
+  expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).toBeNull();
+  expect(replaces).toEqual([]);
+});
+
+it("keeps a replacement choice through an unchanged passive snapshot and cancels when its target disappears", async () => {
+  const el = await mount();
+  const list = members(el);
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
+  await list.updateComplete;
+  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
+  select.value = "section:s-beer";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await list.updateComplete;
+  el.layouts = layouts();
+  await el.updateComplete;
+  await list.updateComplete;
+  expect(select.value).toBe("section:s-beer");
+  expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).not.toBeNull();
+  const next = layouts();
+  next[0]!.tiles = next[0]!.tiles.filter((tile) => tile.memberId !== "t-salad");
+  el.layouts = next;
+  await el.updateComplete;
+  await list.updateComplete;
+  expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).toBeNull();
+});
+
+it("explains an empty replacement beside its picker and before its disabled action", async () => {
+  const el = await mount();
+  const list = members(el);
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
+  await list.updateComplete;
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+  await list.updateComplete;
+  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
+  const error = list.shadowRoot!.querySelector('[data-test="add-error"]')!;
+  const action =
+    list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!;
+  expect(select.getAttribute("aria-invalid")).toBe("true");
+  expect(list.shadowRoot!.activeElement).toBe(select);
+  expect(action.disabled).toBe(true);
+  expect(error.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("keeps a blank cell between its neighbours at both column counts", async () => {
+  const rows = layouts();
+  rows[0]!.tiles[1] = {
+    memberId: "t-missing",
+    position: 1,
+    ref: { kind: "missing", name: "Drinks › Beer" },
+    name: "Drinks › Beer",
+    missingName: "Drinks › Beer",
+    reachable: false,
+  };
+  rows[0]!.tiles[2]!.reachable = true;
+  const el = await mount({ layouts: rows });
+  for (const which of ["handheld", "till"]) {
+    const grid = q(el, `[data-test="preview-${which}"]`)!;
+    const cells = [...grid.children];
+    expect(cells.map((cell) => cell.getAttribute("data-tile"))).toEqual([
+      "t-burger",
+      "t-missing",
+      "t-salad",
+    ]);
+    const [first, blank, last] = cells.map((cell) => cell.getBoundingClientRect());
+    expect(blank!.width).toBeCloseTo(first!.width, 0);
+    expect(blank!.height).toBeCloseTo(first!.height, 0);
+    expect(last!.left - first!.left).toBeCloseTo(2 * (blank!.left - first!.left), 0);
+    expect(last!.top).toBe(first!.top);
+    expect(cells[1]!.textContent?.trim()).toBe("");
+  }
+});
+
+it("closes the missing row menu before focusing the replacement picker", async () => {
+  const el = await mount();
+  const list = members(el);
+  const actions = list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    '[data-test="actions-t-salad"]',
+  )!;
+  await actions.updateComplete;
+  actions.show();
+  expect(actions.shadowRoot!.querySelector("#actions")!.matches(":popover-open")).toBe(true);
+  const replace = list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="replace-t-salad"]',
+  )!;
+  await replace.updateComplete;
+  replace.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  await list.updateComplete;
+  expect(actions.shadowRoot!.querySelector("#actions")!.matches(":popover-open")).toBe(false);
+  expect(list.shadowRoot!.activeElement).toBe(list.shadowRoot!.querySelector("select"));
+});
+
+it("cancels the picker when the same tile row has already been replaced by a refresh", async () => {
+  const el = await mount();
+  const list = members(el);
+  const replacements = capture(el, "wt-tile-replace");
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
+  await list.updateComplete;
+  const next = layouts();
+  next[0]!.tiles[2] = {
+    memberId: "t-salad",
+    position: 2,
+    ref: { kind: "section", sectionId: "s-beer" },
+    name: "Beer",
+    missingName: null,
+    reachable: true,
+  };
+  el.layouts = next;
+  await el.updateComplete;
+  await list.updateComplete;
+  expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).toBeNull();
+  expect(replacements).toEqual([]);
 });

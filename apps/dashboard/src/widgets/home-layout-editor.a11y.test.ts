@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { page } from "vitest/browser";
 import type { HomeLayout } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import type { MemberListEditor } from "./member-list-editor.js";
 import { HomeLayoutEditor } from "./home-layout-editor.js";
 
 afterEach(cleanupWidgets);
@@ -69,6 +70,48 @@ describe.each(["light", "dark"] as const)("home layout editor (%s)", (theme) => 
     }
     await expectNoA11yViolations(host);
   });
+
+  it.each(["actions", "replacement", "invalid replacement"])(
+    "renders a missing tile's %s accessibly",
+    async (state) => {
+      const rows = layouts();
+      rows[0]!.tiles[1] = {
+        memberId: "t-missing",
+        position: 1,
+        ref: { kind: "missing", name: "Drinks › Beer" },
+        name: "Drinks › Beer",
+        missingName: "Drinks › Beer",
+        reachable: false,
+      };
+      const { el, host } = await mountWidget<HomeLayoutEditor>(
+        "dashboard-home-layout-editor",
+        {
+          layouts: rows,
+          menuName: "Evening",
+          sections: [{ id: "s-wines", internalName: "Drinks › Wines" }],
+        },
+        theme,
+      );
+      const list = el.shadowRoot!.querySelector<MemberListEditor>("dashboard-member-list-editor")!;
+      await list.updateComplete;
+      if (state === "actions") {
+        const actions = list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+          '[data-test="actions-t-missing"]',
+        )!;
+        await actions.updateComplete;
+        actions.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+        await actions.updateComplete;
+      } else {
+        list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-missing"]')!.click();
+        await list.updateComplete;
+        if (state === "invalid replacement") {
+          list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+          await list.updateComplete;
+        }
+      }
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders accessibly at a phone's width", async () => {
     const frame = { width: window.innerWidth, height: window.innerHeight };

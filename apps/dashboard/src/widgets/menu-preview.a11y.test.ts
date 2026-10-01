@@ -75,6 +75,17 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
 };
 
 describe.each(["light", "dark"] as const)("menu preview (%s)", (theme) => {
+  it("renders the warning confirmation accessibly", async () => {
+    const { el, host } = await mountWidget<MenuPreviewPanel>(
+      "dashboard-menu-preview",
+      { menuName: "Evening", status: live, preview: changes },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish"]')!.click();
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+    await expectNoA11yViolations(host);
+  });
   it.each(Object.keys(states))("renders %s accessibly", async (state) => {
     const { host } = await mountWidget<MenuPreviewPanel>(
       "dashboard-menu-preview",

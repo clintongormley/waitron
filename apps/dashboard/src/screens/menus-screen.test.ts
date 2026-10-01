@@ -308,6 +308,7 @@ const WRITES = [
   "deleteHomeLayout",
   "setDefaultHomeLayout",
   "addHomeTile",
+  "replaceHomeTile",
   "removeHomeTile",
   "moveHomeTile",
 ] as const;
@@ -517,6 +518,7 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     renameHomeLayout: vi.fn().mockResolvedValue(undefined),
     deleteHomeLayout: vi.fn().mockResolvedValue(undefined),
     setDefaultHomeLayout: vi.fn().mockResolvedValue(undefined),
+    replaceHomeTile: vi.fn().mockResolvedValue(sectionMember("t-chips", 2, "included-beer")),
     addHomeTile: vi.fn().mockResolvedValue(productMember("t-new", 3, "p-lager")),
     removeHomeTile: vi.fn().mockResolvedValue(undefined),
     moveHomeTile: vi.fn(async (_layout: string, memberId: string, to: number) => {
@@ -3040,6 +3042,8 @@ describe("publishing", () => {
 
   async function publish(el: MenusScreen): Promise<void> {
     inPanel(el, "publish")!.click();
+    await panel(el).updateComplete;
+    inPanel(el, "publish-confirm")?.click();
     await el.updateComplete;
   }
 
@@ -3299,7 +3303,7 @@ describe("publishing", () => {
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
     expect(text(inPanel(el, "live"))).toBe(`Version 2, published ${formatIsoMinute(PUBLISHED_AT)}`);
     expect(text(inPanel(el, "warnings"))).toBe(
-      "The shortcut to Lager is left out of Home: it is not offered on this menu.",
+      "1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
     );
     const reads = client.getMenuPreview.mock.calls.length;
     await chooseTab(el, "structure");
@@ -3395,7 +3399,9 @@ describe("publishing", () => {
     });
     await publish(el);
     await vi.waitFor(() =>
-      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+      expect(text(inPanel(el, "result"))).toBe(
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+      ),
     );
     expect(client.publishMenu).toHaveBeenCalledWith("menu-lunch", LUNCH_HASH);
     expect(writeCalls(client)).toEqual(["publishMenu"]);
@@ -3419,7 +3425,9 @@ describe("publishing", () => {
     client.getMenuPreview.mockRejectedValue(new Error("offline"));
     await publish(el);
     await vi.waitFor(() =>
-      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+      expect(text(inPanel(el, "result"))).toBe(
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+      ),
     );
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
@@ -3567,7 +3575,9 @@ describe("publishing", () => {
     expect(button()!.loading).toBe(true);
     lunchOut.resolve({ versionId: "v-lunch-3", number: 3 });
     await vi.waitFor(() =>
-      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+      expect(text(inPanel(el, "result"))).toBe(
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+      ),
     );
   });
 
@@ -3712,9 +3722,72 @@ describe("home page", () => {
       "p-lager",
       "p-lemonade",
     ]);
-    expect(editor.products.find(({ id }) => id === "p-lager")!.name).toBe("Lager");
+    expect(editor.products.find(({ id }) => id === "p-lager")!.name).toBe("Drinks › Lager");
     expect(editor.sections.map(({ id }) => id).sort()).toEqual(["s-beer", "s-drinks", "s-fav"]);
     expect(editor.sections.find(({ id }) => id === "s-fav")!.internalName).toBe("Favourites");
+  });
+
+  it("offers included targets by their structure path and replaces through the Home route", async () => {
+    const client = api({
+      getMenuStructure: vi.fn().mockResolvedValue({
+        menuId: "menu-lunch",
+        rootSectionId: "root-lunch",
+        nodes: [
+          {
+            memberId: "m-drinks",
+            ref: { kind: "section", sectionId: "included-drinks" },
+            internalName: "Drinks",
+            includedMenuId: "menu-drinks",
+            children: [
+              {
+                memberId: "m-beer",
+                ref: { kind: "section", sectionId: "included-beer" },
+                internalName: "Beer",
+                children: [productNode("m-lager", "p-lager")],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const el = await mountHome(client);
+    const editor = homeEditor(el);
+    expect(editor.sections).toEqual([
+      { id: "included-drinks", internalName: "Drinks" },
+      { id: "included-beer", internalName: "Drinks › Beer" },
+    ]);
+    expect(editor.products).toEqual([{ id: "p-lager", name: "Drinks › Beer › Lager" }]);
+    emit(editor, "wt-tile-replace", {
+      layoutId: "l-home",
+      memberId: "t-chips",
+      ref: { kind: "section", sectionId: "included-beer" },
+    });
+    await vi.waitFor(() =>
+      expect(client.replaceHomeTile).toHaveBeenCalledWith("l-home", "t-chips", {
+        kind: "section",
+        sectionId: "included-beer",
+      }),
+    );
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+    expect(writeCalls(client)).toEqual(["replaceHomeTile"]);
+  });
+
+  it("keeps a late replacement refusal off another layout", async () => {
+    const out = deferred<SectionMember>();
+    const client = api({ replaceHomeTile: vi.fn(() => out.promise) });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-replace", {
+      layoutId: "l-home",
+      memberId: "t-chips",
+      ref: { kind: "section", sectionId: "s-beer" },
+    });
+    await vi.waitFor(() => expect(client.replaceHomeTile).toHaveBeenCalledTimes(1));
+    emit(homeEditor(el), "wt-layout-select", { layoutId: "l-counter" });
+    await el.updateComplete;
+    out.reject({ code: "menu.shortcut_unreachable" });
+    await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
+    expect(q(el, '[data-test="home-error"]')).toBeNull();
+    expect(homeEditor(el).selected).toBe("l-counter");
   });
 
   it("follows the layouts while the tab is shown, and stops once another tab is", async () => {
@@ -3911,8 +3984,8 @@ describe("home page", () => {
     )!;
     await list.updateComplete;
     expect(
-      text(list.shadowRoot!.querySelector('tr[data-member="t-chips"] [data-test="note"]')),
-    ).toBe(t("home.not_on_menu"));
+      text(list.shadowRoot!.querySelector('tr[data-member="t-chips"] [data-test="name"]')),
+    ).toBe(t("home.missing").replace("{name}", "Chips"));
   });
 
   it("edits another layout when asked, and keeps editing it when the layouts are read again", async () => {
@@ -4917,12 +4990,10 @@ it("sends only an offered reset and leaves the replacement variant set untouched
 });
 it("shows the current clash count from the menus status read", async () => {
   const client = api({
-    getMenuStatuses: vi
-      .fn()
-      .mockResolvedValue({
-        ...statuses(),
-        "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
-      }),
+    getMenuStatuses: vi.fn().mockResolvedValue({
+      ...statuses(),
+      "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
+    }),
   });
   const el = await mount(client);
   await table(el).updateComplete;

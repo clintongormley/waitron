@@ -539,7 +539,6 @@ export class MenusScreen extends LitElement {
   #listMembers: SectionMember[] = [];
   #inSection: string[] = [];
   #onMenu: string[] = [];
-  #onMenuSections = new Set<string>();
   #memberProducts: Product[] = [];
   #addable: Product[] = [];
   /** What a home page tile may point at: the active products and the sections the structure
@@ -585,7 +584,6 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       const reached = reachable(this.structure?.nodes ?? []);
       this.#onMenu = reached.products;
-      this.#onMenuSections = reached.sections;
     }
     if (changed.has("products") || changed.has("structure") || changed.has("path")) {
       const held = new Set(this.#inSection);
@@ -595,14 +593,28 @@ export class MenusScreen extends LitElement {
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
     if (changed.has("structure") || changed.has("products")) {
-      const products = new Set(this.#onMenu);
-      const sections = this.#onMenuSections;
-      this.#tileProducts = this.products
-        .filter((product) => product.active && products.has(product.id))
-        .map(({ id, name }) => ({ id, name }));
-      this.#tileSections = this.sections
-        .filter((section) => sections.has(section.id))
-        .map(({ id, internalName }) => ({ id, internalName }));
+      const products = new Map(
+        this.products.filter((product) => product.active).map(({ id, name }) => [id, name]),
+      );
+      const foundProducts = new Map<string, string>();
+      const foundSections = new Map<string, string>();
+      const visit = (nodes: MenuStructureNode[], path: string[]) => {
+        for (const node of nodes) {
+          if (node.ref.kind === "product") {
+            const name = products.get(node.ref.productId);
+            if (name !== undefined && !foundProducts.has(node.ref.productId))
+              foundProducts.set(node.ref.productId, [...path, name].join(" › "));
+          } else {
+            const next = [...path, node.internalName ?? ""];
+            if (!foundSections.has(node.ref.sectionId))
+              foundSections.set(node.ref.sectionId, next.join(" › "));
+            visit(node.children ?? [], next);
+          }
+        }
+      };
+      visit(this.structure?.nodes ?? [], []);
+      this.#tileProducts = [...foundProducts].map(([id, name]) => ({ id, name }));
+      this.#tileSections = [...foundSections].map(([id, internalName]) => ({ id, internalName }));
     }
   }
 
@@ -1039,11 +1051,16 @@ export class MenusScreen extends LitElement {
     if (this.publishing.has(menuId)) return;
     const name = this.#menuName();
     const live = this.status;
+    const warnings = this.preview?.warnings ?? [];
     this.publishing = new Set([...this.publishing, menuId]);
     this.publishResult = null;
     let result: PublishResult;
     try {
-      result = { kind: "published", number: (await this.api.publishMenu(menuId, hash)).number };
+      result = {
+        kind: "published",
+        number: (await this.api.publishMenu(menuId, hash)).number,
+        warnings,
+      };
     } catch (error) {
       const code = codeOf(error);
       result =
@@ -1259,7 +1276,7 @@ export class MenusScreen extends LitElement {
 
   /** Adds, removes and a new default hold `busy` until the layouts are read again. A tile write's
    * scope is its layout, as a move's is, so a move knows when another write to it waits behind. */
-  #homeWrite(scope: string, write: () => Promise<unknown>): void {
+  #homeWrite(scope: string, write: () => Promise<unknown>, replacement = false): void {
     const menuId = this.menuId!;
     this.homeError = null;
     this.busy = true;
@@ -1267,12 +1284,16 @@ export class MenusScreen extends LitElement {
       try {
         await write();
       } catch (error) {
-        if (this.menuId === menuId) this.homeError = codeMessage(codeOf(error));
-        this.busy = false;
+        const shownLayout =
+          this.homeLayouts?.find((layout) => layout.id === this.homeLayoutId)?.id ??
+          this.homeLayouts?.[0]?.id;
+        if (this.menuId === menuId && (!replacement || shownLayout === scope))
+          this.homeError = codeMessage(codeOf(error));
+        if (!replacement || this.menuId === menuId) this.busy = false;
         return;
       }
       await this.#rereadHome(menuId);
-      this.busy = false;
+      if (!replacement || this.menuId === menuId) this.busy = false;
     });
   }
 
@@ -1979,6 +2000,13 @@ export class MenusScreen extends LitElement {
           event.stopPropagation();
           const { layoutId: id, ref } = event.detail;
           this.#homeWrite(id, () => this.api.addHomeTile(id, ref));
+        }}
+        @wt-tile-replace=${(
+          event: CustomEvent<{ layoutId: string; memberId: string; ref: MemberRef }>,
+        ) => {
+          event.stopPropagation();
+          const { layoutId: id, memberId, ref } = event.detail;
+          this.#homeWrite(id, () => this.api.replaceHomeTile(id, memberId, ref), true);
         }}
         @wt-tile-remove=${(event: CustomEvent<{ layoutId: string; memberId: string }>) => {
           event.stopPropagation();

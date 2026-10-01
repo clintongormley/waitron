@@ -1621,6 +1621,14 @@ export class DashboardApi {
     return this.#request(`/management-api/home-layouts/${layoutId}/tiles`, "POST", { ref });
   }
 
+  replaceHomeTile(layoutId: string, memberId: string, ref: MemberRef): Promise<SectionMember> {
+    return this.#request(
+      `/management-api/home-layouts/${layoutId}/tiles/${memberId}/replace`,
+      "POST",
+      { ref },
+    );
+  }
+
   removeHomeTile(layoutId: string, memberId: string): Promise<void> {
     return this.#request<void>(
       `/management-api/home-layouts/${layoutId}/tiles/${memberId}`,

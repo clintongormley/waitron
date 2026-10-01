@@ -1777,8 +1777,8 @@ export const en = {
     "The default layout cannot be deleted. To delete it, make another layout the default first.",
   "home.tiles_heading": "Shortcuts on {name}",
   "home.tiles_help":
-    "Only products and sections that are on this menu can be added. Changes are saved straight away; publish the menu to make them live.",
-  "home.not_on_menu": "Not on this menu",
+    "Add products and sections from this menu or its included menus. Changes are saved straight away; publish the menu to make them live.",
+  "home.missing": "Missing: {name}",
   "home.preview_heading": "Preview",
   "home.preview_handheld": "Handheld, 3 columns",
   "home.preview_till": "Till, 6 columns",
@@ -1855,8 +1855,10 @@ export const en = {
   "menu_preview.document_heading": "The menu as it will be published",
   "menu_preview.document_heading_live": "The menu as it is live",
   "menu_preview.warnings_note": "Warnings do not stop you publishing.",
+  "menu_preview.shortcut_missing_one":
+    "1 shortcut on {menu}'s {layout} layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
   "menu_preview.shortcut_missing":
-    "The shortcut to {name} is left out of {layout}: it is not offered on this menu.",
+    "{count} shortcuts on {menu}'s {layout} layout point at things no longer in this menu. They stay as empty spaces until you remove or replace them.",
   "menu_preview.publish": "Publish {menu}",
   "menu_preview.publishing": "Publishing {menu}…",
   "menu_preview.only_this_menu":
@@ -3675,8 +3677,8 @@ export const es: Record<StringKey, string> = {
     "La página de inicio predeterminada no se puede eliminar. Para eliminarla, haz predeterminada otra antes.",
   "home.tiles_heading": "Accesos directos de {name}",
   "home.tiles_help":
-    "Solo se pueden añadir productos y secciones que están en esta carta. Los cambios se guardan al momento; publica la carta para que entren en vigor.",
-  "home.not_on_menu": "No está en esta carta",
+    "Puedes añadir productos y secciones de esta carta o de las cartas incluidas. Los cambios se guardan al momento; publica la carta para que entren en vigor.",
+  "home.missing": "Falta: {name}",
   "home.preview_heading": "Vista previa",
   "home.preview_handheld": "Terminal de mano, 3 columnas",
   "home.preview_till": "Caja registradora, 6 columnas",
@@ -3754,8 +3756,10 @@ export const es: Record<StringKey, string> = {
   "menu_preview.document_heading": "La carta tal como se publicará",
   "menu_preview.document_heading_live": "La carta tal como está publicada",
   "menu_preview.warnings_note": "Los avisos no impiden publicar.",
+  "menu_preview.shortcut_missing_one":
+    "1 acceso directo de la página {layout} de {menu} apunta a un elemento que ya no está en este menú. Permanece como un espacio vacío hasta que lo quites o reemplaces.",
   "menu_preview.shortcut_missing":
-    "El acceso directo a {name} se omite en {layout}: no se ofrece en esta carta.",
+    "{count} accesos directos de la página {layout} de {menu} apuntan a elementos que ya no están en este menú. Permanecen como espacios vacíos hasta que los quites o reemplaces.",
   "menu_preview.publish": "Publicar {menu}",
   "menu_preview.publishing": "Publicando {menu}…",
   "menu_preview.only_this_menu":

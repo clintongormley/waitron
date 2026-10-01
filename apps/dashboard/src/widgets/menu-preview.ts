@@ -1,7 +1,9 @@
-import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { formatMoney } from "@waitron/shared";
 import "./menu-structure-tree.js";
 import type {
@@ -22,7 +24,9 @@ import type { StringKey } from "../i18n/strings.js";
 
 /** How the host's last publish ended, for the panel to say. */
 export type PublishResult =
-  { kind: "published"; number: number } | { kind: "stale" } | { kind: "failed"; reason: string };
+  | { kind: "published"; number: number; warnings?: MenuPreview["warnings"] }
+  | { kind: "stale" }
+  | { kind: "failed"; reason: string };
 
 const PRODUCT_FIELDS: Record<ProductChangeField, StringKey> = {
   names: "menu_preview.field_names",
@@ -217,6 +221,26 @@ export class MenuPreviewPanel extends LitElement {
   @property({ type: Boolean }) publishing = false;
   @property({ attribute: false }) result: PublishResult | null = null;
 
+  @state() private confirmingHash: string | null = null;
+  #publishedWarnings: MenuPreview["warnings"] = [];
+
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("preview") || changed.has("menuName")) this.confirmingHash = null;
+  }
+
+  #warningWords(warnings = this.preview?.warnings ?? []): string[] {
+    const groups = new Map<string, number>();
+    for (const warning of warnings)
+      groups.set(warning.layoutName, (groups.get(warning.layoutName) ?? 0) + 1);
+    return [...groups].map(([layout, count]) =>
+      fill(count === 1 ? "menu_preview.shortcut_missing_one" : "menu_preview.shortcut_missing", {
+        count: String(count),
+        menu: this.menuName,
+        layout,
+      }),
+    );
+  }
+
   /** One place inside a sentence. */
   #place(path: readonly string[]): string {
     return path.length === 0 ? t("menu_preview.top_level") : path.join(" › ");
@@ -319,9 +343,16 @@ export class MenuPreviewPanel extends LitElement {
     return status.state !== "unpublished" && status.hash === preview.hash ? status.version : null;
   }
 
-  #publish(event: Event): void {
+  #publish(event: Event, confirmed = false): void {
     event.stopPropagation();
     if (this.publishing || this.preview === null || this.preview.clashes.length > 0) return;
+    if (this.preview.warnings.length && !confirmed) {
+      this.confirmingHash = this.preview.hash;
+      return;
+    }
+    if (confirmed && this.confirmingHash !== this.preview.hash) return;
+    this.#publishedWarnings = this.preview.warnings;
+    this.confirmingHash = null;
     this.dispatchEvent(
       new CustomEvent("wt-menu-publish", {
         detail: { hash: this.preview.hash },
@@ -363,6 +394,7 @@ export class MenuPreviewPanel extends LitElement {
           menu: this.menuName,
           number: String(result.number),
         })}
+        ${this.#warningWords(result.warnings ?? this.#publishedWarnings).map((words) => html`<span>${words}</span>`)}
       </p>`;
     const message =
       result.kind === "stale"
@@ -423,15 +455,7 @@ export class MenuPreviewPanel extends LitElement {
       <h2 id="warnings-heading">${t("menu_preview.warnings_heading")}</h2>
       <p class="help" data-test="warnings-note">${t("menu_preview.warnings_note")}</p>
       <ul data-test="warnings">
-        ${warnings.map(
-          (warning) =>
-            html`<li>
-              ${fill("menu_preview.shortcut_missing", {
-                name: warning.name,
-                layout: warning.layoutName,
-              })}
-            </li>`,
-        )}
+        ${this.#warningWords().map((words) => html`<li>${words}</li>`)}
       </ul>
     </section>`;
   }
@@ -533,7 +557,38 @@ export class MenuPreviewPanel extends LitElement {
   override render() {
     return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderChanges()}
     ${this.#renderWarnings()} ${this.#renderClashes()} ${this.#renderPublish()}
-    ${this.#renderDocument()}`;
+    ${this.#renderDocument()}
+    ${
+      this.confirmingHash === null
+        ? nothing
+        : html`<wt-dialog
+            .open=${this.confirmingHash !== null}
+            heading=${fill("menu_preview.publish", { menu: this.menuName })}
+            data-test="publish-confirmation"
+            @wt-close=${(event: Event) => {
+              event.stopPropagation();
+              this.confirmingHash = null;
+            }}
+          >
+            ${this.#warningWords().map((words) => html`<p>${words}</p>`)}
+            <wt-form-actions slot="footer">
+              <wt-button
+                slot="cancel"
+                variant="secondary"
+                @click=${() => {
+                  this.confirmingHash = null;
+                }}
+                >${t("action.cancel")}</wt-button
+              >
+              <wt-button
+                data-test="publish-confirm"
+                .disabled=${this.publishing || this.preview === null || !!this.preview.clashes.length}
+                @click=${(event: Event) => this.#publish(event, true)}
+                >${fill("menu_preview.publish", { menu: this.menuName })}</wt-button
+              >
+            </wt-form-actions>
+          </wt-dialog>`
+    }`;
   }
 }
 

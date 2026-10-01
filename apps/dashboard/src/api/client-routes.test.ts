@@ -784,3 +784,20 @@ describe("DashboardApi routes", () => {
     ]);
   });
 });
+
+it("replaces a missing home tile through its own route with a structural reference", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(
+      jsonResponse({ id: "t1", position: 1, ref: { kind: "section", sectionId: "s-wines" } }),
+    );
+  const api = new DashboardApi("", fetchImpl);
+  await api.replaceHomeTile("l-counter", "t1", { kind: "section", sectionId: "s-wines" });
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/home-layouts/l-counter/tiles/t1/replace",
+      "POST",
+      { ref: { kind: "section", sectionId: "s-wines" } },
+    ],
+  ]);
+});

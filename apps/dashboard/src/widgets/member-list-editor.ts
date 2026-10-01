@@ -6,6 +6,7 @@ import type { MenuStructureNode } from "../api/client.js";
 import type { MemberRef, SectionMember, TileRef } from "@waitron/catalogue/src/section-types.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel } from "./category-form.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
@@ -122,6 +123,11 @@ export class MemberListEditor extends LitElement {
         gap: var(--wt-space-2);
         margin-top: var(--wt-space-4);
       }
+      .replacement .field,
+      .replacement-summary,
+      wt-form-actions {
+        flex-basis: 100%;
+      }
       .add,
       .error {
         max-width: var(--wt-field-max-width);
@@ -172,6 +178,10 @@ export class MemberListEditor extends LitElement {
   @property({ attribute: false }) notes: ReadonlyMap<string, string> = new Map();
   /** The members in display order, which a move rewrites before the host confirms it. */
   @state() private order: SectionMember<TileRef>[] = [];
+  @property({ attribute: false }) replaceable: ReadonlySet<string> = new Set();
+  @property() replacementScope = "";
+  #replacementName = "";
+  @state() private replacing: string | null = null;
   @state() private choice = "";
   @state() private addError = false;
   #productNames = new Map<string, string>();
@@ -190,6 +200,23 @@ export class MemberListEditor extends LitElement {
   } satisfies ReorderModel);
 
   override willUpdate(changed: PropertyValues): void {
+    if (
+      this.replacing !== null &&
+      (changed.has("members") || changed.has("replaceable") || changed.has("replacementScope"))
+    ) {
+      const target = this.members.find((member) => member.id === this.replacing);
+      if (
+        changed.has("replacementScope") ||
+        !target ||
+        !this.replaceable.has(target.id) ||
+        target.ref.kind !== "missing" ||
+        target.ref.name !== this.#replacementName
+      ) {
+        this.replacing = null;
+        this.choice = "";
+        this.addError = false;
+      }
+    }
     if (changed.has("members"))
       this.order = [...this.members].sort((a, b) => a.position - b.position);
     if (changed.has("products"))
@@ -278,6 +305,8 @@ export class MemberListEditor extends LitElement {
     const at = this.choice.indexOf(":");
     if (at < 0) {
       this.addError = true;
+      if (this.replacing !== null)
+        this.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!.focus();
       return;
     }
     const id = this.choice.slice(at + 1);
@@ -285,7 +314,12 @@ export class MemberListEditor extends LitElement {
       ? { kind: "product", productId: id }
       : { kind: "section", sectionId: id };
     this.choice = "";
-    this.#emit("wt-member-add", { ref });
+    const memberId = this.replacing;
+    this.replacing = null;
+    this.#emit(
+      memberId === null ? "wt-member-add" : "wt-member-replace",
+      memberId === null ? { ref } : { memberId, ref },
+    );
   }
 
   #action(
@@ -343,6 +377,29 @@ export class MemberListEditor extends LitElement {
                   { memberId: member.id },
                 )
               : nothing
+          }${
+            this.replaceable.has(member.id)
+              ? html`<wt-button
+                  align="start"
+                  variant="ghost"
+                  data-test=${`replace-${member.id}`}
+                  .disabled=${this.busy}
+                  @click=${async (event: Event) => {
+                    event.stopPropagation();
+                    if (this.busy) return;
+                    (event.currentTarget as HTMLElement).closest("wt-row-actions")?.hide();
+                    this.replacing = member.id;
+                    this.#replacementName = member.ref.kind === "missing" ? member.ref.name : "";
+                    this.choice = "";
+                    this.addError = false;
+                    await this.updateComplete;
+                    this.shadowRoot!.querySelector<HTMLSelectElement>(
+                      'select[name="member-ref"]',
+                    )!.focus();
+                  }}
+                  >${t("action.replace")}</wt-button
+                >`
+              : nothing
           }</wt-row-actions
         >
       </td>
@@ -387,9 +444,11 @@ export class MemberListEditor extends LitElement {
 
   override render() {
     return html`${this.#reorder.liveRegion()} ${this.#list()}
-      <div class="add">
+      <div class=${this.replacing === null ? "add" : "add replacement"}>
         <label class="field">
-          <span class="field-label">${t("members.add_label")}</span>
+          <span class="field-label"
+            >${this.replacing === null ? t("members.add_label") : t("action.replace")}</span
+          >
           <select
             name="member-ref"
             .disabled=${this.busy}
@@ -407,16 +466,42 @@ export class MemberListEditor extends LitElement {
             ${this.#group(t("members.products"), this.#offer.products)}
             ${this.sectionChoices ? this.#group(t("members.sections"), this.#offer.sections) : nothing}
           </select>
+          ${this.replacing !== null && this.addError ? html`<span class="error" id="member-add-error" data-test="add-error">${t("members.tile_choose_first")}</span>` : nothing}
         </label>
-        <wt-button
-          data-test="add"
-          .disabled=${this.busy}
-          @click=${(event: Event) => this.#add(event)}
-          >${t("action.add")}</wt-button
-        >
+        ${this.replacing !== null && this.addError ? html`<p class="replacement-summary error" role="alert">${t("form.fix_fields")}</p>` : nothing}
+        ${
+          this.replacing === null
+            ? html`<wt-button
+                data-test="add"
+                .disabled=${this.busy}
+                @click=${(event: Event) => this.#add(event)}
+                >${t("action.add")}</wt-button
+              >`
+            : html`<wt-form-actions>
+                <wt-button
+                  slot="cancel"
+                  variant="secondary"
+                  data-test="replace-cancel"
+                  .disabled=${this.busy}
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    this.replacing = null;
+                    this.choice = "";
+                    this.addError = false;
+                  }}
+                  >${t("action.cancel")}</wt-button
+                >
+                <wt-button
+                  data-test="add"
+                  .disabled=${this.busy || this.addError}
+                  @click=${(event: Event) => this.#add(event)}
+                  >${t("action.replace")}</wt-button
+                >
+              </wt-form-actions>`
+        }
       </div>
       ${
-        this.addError
+        this.addError && this.replacing === null
           ? html`<p class="error" id="member-add-error" data-test="add-error">
               ${t(this.sectionChoices ? "members.tile_choose_first" : "members.choose_first")}
             </p>`
