@@ -1111,6 +1111,9 @@ reporting-category screen and is not changed here.**
   - it uses `ReorderController` (`widgets/reorder-table.ts`) for drag and ArrowUp/ArrowDown.
   - Each row names its kind (product or section) in text, never by colour alone.
 - **`dashboard-section-add-products`**, the §10.2 flow:
+  _2026-10-01 (A183, [backlog](../../backlog.md)): a product already in the section is no longer
+  offered, so it can no longer be ticked here; only the "On this menu" mark remains. The original
+  text, and its Step 1 and Task 8 test instructions, follow._
   - props:
     - `products` (id, name, reporting category id);
     - `categories` (the reporting tree);

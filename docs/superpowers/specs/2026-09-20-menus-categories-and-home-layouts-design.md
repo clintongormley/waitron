@@ -405,6 +405,8 @@ relationships above do the job groups were standing in for. A section and a labe
   in the tree, and select several products at once.
 - It marks which products are already on this menu and which are already in this section, as two
   different marks.
+  _2026-10-01 (A183): a product already in this section is no longer offered; only the On this
+  menu mark remains, and a section holding every product says so in one sentence._
 - **Creating a product** offers an optional "Add to menus…" step, which places it in chosen
   sections. These are explicit placements. Like every other menu change, they become visible on a
   till only when that menu is published.
