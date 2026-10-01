@@ -4597,7 +4597,7 @@ describe("till-app", () => {
         );
       });
 
-      it("a refusal to split held kitchen work keeps the origin open and says to send it or fire its group first", async () => {
+      it("a refusal to split held kitchen work keeps the origin open and says to send it first", async () => {
         const splitBill = vi.fn().mockRejectedValue({ code: "tab.split_held_line" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
