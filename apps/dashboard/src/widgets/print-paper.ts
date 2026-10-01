@@ -59,9 +59,13 @@ function altText(run: ImageRun): string {
   return lines.length > 0 ? lines.join("\n").trim() : t("printers.preview_image");
 }
 
+/** What the run's picture is drawn from, so two runs with the same key draw the same picture. */
+function pictureKey(run: ImageRun): string {
+  return `${run.blocks[0]!.width}:${run.blocks.map((block) => `${block.height}:${block.data}`).join(",")}`;
+}
+
 /** The run's own printed images stacked into one PNG. */
 function bitmapUrl(run: ImageRun): string {
-  if (run.url !== undefined) return run.url;
   const { blocks, height } = run;
   const width = blocks[0]!.width;
   const canvas = document.createElement("canvas");
@@ -89,8 +93,7 @@ function bitmapUrl(run: ImageRun): string {
     top += block.height;
   }
   context.putImageData(pixels, 0, 0);
-  run.url = canvas.toDataURL("image/png");
-  return run.url;
+  return canvas.toDataURL("image/png");
 }
 
 function renderPiece(piece: Piece, widthDots: number) {
@@ -109,7 +112,7 @@ function renderPiece(piece: Piece, widthDots: number) {
       return html`<img
         data-kind="image"
         data-align=${piece.blocks[0]!.align ?? nothing}
-        src=${bitmapUrl(piece)}
+        src=${piece.url}
         style=${`width:${(piece.blocks[0]!.width / widthDots) * 100}%`}
         alt=${altText(piece)}
       />`;
@@ -164,23 +167,25 @@ export const paperStyles = css`
 
 /**
  * Draws a print job's preview as the paper it prints on. One instance per host: it keeps the
- * pictures it has drawn for the previews it was last given.
+ * pictures of the last preview it drew, so a picture the next preview repeats is not drawn again.
  */
 export class PrintPaper {
-  #runs = new WeakMap<PrintJobPreview, Map<string, Placed[]>>();
+  #last: { preview: PrintJobPreview; breaks: string; placed: Placed[] } | undefined;
+  #pictures = new Map<string, string>();
 
   #placed(preview: PrintJobPreview, breaks: number[]): Placed[] {
     const key = breaks.join(",");
-    let byBreaks = this.#runs.get(preview);
-    if (byBreaks === undefined) {
-      byBreaks = new Map();
-      this.#runs.set(preview, byBreaks);
+    if (this.#last?.preview === preview && this.#last.breaks === key) return this.#last.placed;
+    const placed = runs(preview.blocks, new Set(breaks));
+    const pictures = new Map<string, string>();
+    for (const { piece } of placed) {
+      if (piece.kind !== "images") continue;
+      const content = pictureKey(piece);
+      piece.url = pictures.get(content) ?? this.#pictures.get(content) ?? bitmapUrl(piece);
+      pictures.set(content, piece.url);
     }
-    let placed = byBreaks.get(key);
-    if (placed === undefined) {
-      placed = runs(preview.blocks, new Set(breaks));
-      byBreaks.set(key, placed);
-    }
+    this.#pictures = pictures;
+    this.#last = { preview, breaks: key, placed };
     return placed;
   }
 

@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { PrintJobPreview } from "../api/client.js";
 import { PrintPaper, paperStyles, type PaperMark } from "./print-paper.js";
@@ -35,7 +35,10 @@ const preview: PrintJobPreview = {
   unsupported: false,
 };
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  vi.restoreAllMocks();
+  cleanupWidgets();
+});
 
 it("draws a marked range's lines as a picture of their own, wrapped and named, and its neighbours apart", async () => {
   const { el } = await mountWidget<TestPrintPaperHost>("test-print-paper-host", {
@@ -91,4 +94,42 @@ it("wraps every piece of a marked range in one element, text and pictures alike"
   expect([...paper.children].map((node) => node.getAttribute("data-kind") ?? node.tagName)).toEqual(
     ["DIV", "image"],
   );
+});
+
+/** A line whose picture is its own: every byte of it is `ink`. */
+const inked = (text: string, ink: number) => ({
+  ...line(text),
+  data: btoa(String.fromCharCode(ink).repeat(4)),
+});
+
+it("encodes a picture once while successive previews keep it, and keeps only the last preview's", async () => {
+  const encode = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL");
+  const marks: PaperMark[] = [
+    { name: "footerMessage", range: { start: 1, end: 2 }, active: false },
+  ];
+  const job = (footer: number): PrintJobPreview => ({
+    ...preview,
+    blocks: [inked("A", 1), inked("F", footer), inked("C", 3)],
+  });
+  const { el } = await mountWidget<TestPrintPaperHost>("test-print-paper-host", {
+    preview: job(2),
+    marks,
+  });
+  const sources = () => [...el.shadowRoot!.querySelectorAll("img")].map((img) => img.src);
+  const first = sources();
+  expect(encode).toHaveBeenCalledTimes(3);
+
+  encode.mockClear();
+  el.preview = job(4);
+  await el.updateComplete;
+  expect(encode).toHaveBeenCalledTimes(1);
+  const second = sources();
+  expect([second[0], second[2]]).toEqual([first[0], first[2]]);
+  expect(second[1]).not.toBe(first[1]);
+
+  encode.mockClear();
+  el.preview = job(2);
+  await el.updateComplete;
+  expect(encode).toHaveBeenCalledTimes(1);
+  expect(sources()).toEqual(first);
 });
