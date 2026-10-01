@@ -117,7 +117,7 @@ after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
 
 `--wt-color-surface-lifted` is the background of something picked up and moving — a table row
-while a pointer drags it (`apps/dashboard/src/widgets/reorder-table.ts`). A dragged row can sit
+while a pointer drags it (`packages/ui/src/reorder-table.ts`). A dragged row can sit
 inside a `wt-modal`, which is painted `--wt-color-surface-raised`, so the lifted surface differs
 from `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both themes, and
 keeps `--wt-color-text` and `--wt-color-text-muted` at 4.5:1 or more; the "lifted surface" test
@@ -165,7 +165,7 @@ and till app suites: one for the app's own text, one for text on the page outsid
 
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
 `--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by
-dragging in `ReorderController` (`apps/dashboard/src/widgets/reorder-table.ts`).
+dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour

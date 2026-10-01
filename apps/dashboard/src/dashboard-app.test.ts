@@ -4347,6 +4347,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       "nav-kitchen",
       "nav-bookings",
       "nav-venue-operations",
+      "nav-prep-stations",
     ]);
   });
 
