@@ -4979,7 +4979,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     with Hand over and Pay. Server:
     `GET /api/orders/counter-waiting` and `GET /api/working-orders/:id/placed`. Open:
     - **DONE — Pay is the main action in a zone that sends without payment** (owner, 2026-10-01;
-      lane B item B26). At the order stage of a `ticket_then_pay` or `invoice_first` zone the till
+      lane B item B26, landed as #998). At the order stage of a `ticket_then_pay` or `invoice_first` zone the till
       shows Pay and Card first, then Place order and Hold as secondary actions. Paying an open
       counter order there sends its unsent dishes to the kitchen in the payment's own transaction,
       the way a pay-first order's are sent (`fireDishesAtPayment`, `apps/server/src/till-sale.ts`):
@@ -4992,14 +4992,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (not the assertions) of "refuses a settled order that was never fired (ticket.not_fired) —
       nothing on the kitchen queue to hand over" in
       `apps/server/src/working-order.pay-and-dispatch.test.ts`, approved by the owner in the item's
-      brief. AWAITING OWNER APPROVAL: the set-up (no `expect` line changed) of "sendToPrep stamps
+      brief. Approved by the owner on 2026-10-01: the set-up (no `expect` line changed) of "sendToPrep stamps
       the settled order's lines sent as it fires them" in
       `apps/server/src/working-order.pay-and-dispatch.test.ts`; "fires the order to its station
       queue and answers 200 with an empty body" and "fires a paid order whose product has since
       sold out: a settled order's lines cannot be removed" in
       `apps/server/src/till-api.fiscal-sale-paths.test.ts`; and "leaves out a handed-over paid
       order, an open order, a table bill, an abandoned order and a paid order with nothing fired"
-      in `apps/server/src/counter-handover.test.ts`. AWAITING OWNER APPROVAL: "Modes I/T at the
+      in `apps/server/src/counter-handover.test.ts`. Approved by the owner on 2026-10-01: "Modes I/T at the
       order stage show Place + Hold, not Pay/Card" in `apps/till/src/widgets/tender-pay.test.ts`,
       renamed "Modes I/T at the order stage show Pay + Card beside Place + Hold", now asserts Pay
       and Card are shown where it asserted they were absent. Renamed only (body and assertions
@@ -5009,6 +5009,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       whose dish no kitchen station can take" in `apps/server/src/till-api.unroutable-dish.test.ts`,
       now "paying a pay-first order, or an open counter order in a zone that sends before payment,
       whose dish no kitchen station can take" (its existing cases unchanged; one case added).
+      OPEN, queued as lane B item B30 (owner, 2026-10-01): the cash button reads Cash/Efectivo
+      instead of Pay or Collect, drawn as strong as Card, and a card paid on a card machine not
+      connected to Waitron opens the drawer for its slip, at the drawer's own till only.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
