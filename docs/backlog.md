@@ -2851,7 +2851,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `packages/printing/src/outbox.test.ts`; each part of the fix was deleted in turn and a case
     failed. The new foreign key is listed in `scripts/schema-constraints.test.ts`.
 - **The till's Reprint and a receipt reprint clear the printer's "stuck" alert once they print
-  (A167) — done (#TBD, 2026-10-01).** Reproduced on `main` first: a kitchen ticket that ran out of
+  (A167) — done (#975, 2026-10-01).** Reproduced on `main` first: a kitchen ticket that ran out of
   attempts, then the till's Reprint of the bill (`POST /api/orders/:id/reprint`) that printed, left
   the printer's `printer.jobs_waiting` alert at 1, though the table's printing problem cleared. A
   receipt that ran out of attempts, then the till's receipt reprint (`POST /api/sales/:id/reprint`)
