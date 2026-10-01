@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { categories, kitchenStations, products, type Transaction } from "@waitron/db";
+import { categories, floorZones, kitchenStations, products, type Transaction } from "@waitron/db";
 import {
   categoryDetails,
   effectiveProductColumns,
@@ -16,10 +16,10 @@ import {
   type RouteTarget,
   type RoutingRules,
 } from "./routing.js";
-import type { ExceptionInput, RoutingModel } from "./routing-types.js";
+import type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
 import { routeExceptions, stationClaims } from "./schema/routing.js";
 import "./errors.js";
-export type { ExceptionInput, RoutingModel } from "./routing-types.js";
+export type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
 
 /** Shared write validation also serves callers that need to check a proposed exception. */
 export async function validateRoutingInput(
@@ -287,6 +287,133 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
 
 export async function loadRoutingRules(tx: Transaction, cfg: VenueScope): Promise<RoutingRules> {
   return (await snapshot(tx, cfg)).rules;
+}
+
+export async function previewRoutingChange(
+  tx: Transaction,
+  cfg: VenueScope,
+  change: RoutingChange,
+): Promise<RoutingMove[]> {
+  const { rules } = await snapshot(tx, cfg);
+  const claims = new Map(rules.claims);
+  const exceptions = [...rules.exceptions];
+  const notFound = (id: string) => new AppError("route.not_found", { routeId: id });
+  if (change.kind === "claim") {
+    if (change.target !== null) {
+      await validateRoutingInput(tx, cfg, {
+        zoneId: null,
+        categoryId: change.categoryId,
+        productId: null,
+        target: change.target,
+      });
+      claims.set(change.categoryId, change.target);
+    } else claims.delete(change.categoryId);
+  } else if (change.kind === "exception") {
+    await validateRoutingInput(tx, cfg, change.input);
+    const index = change.id === null ? -1 : exceptions.findIndex((row) => row.id === change.id);
+    if (change.id !== null && index < 0) throw notFound(change.id);
+    const next = {
+      id: change.id ?? "preview",
+      position:
+        index < 0
+          ? Math.max(-1, ...exceptions.map((row) => row.position)) + 1
+          : exceptions[index]!.position,
+      ...change.input,
+    };
+    if (index < 0) exceptions.push(next);
+    else exceptions[index] = next;
+  } else if (change.kind === "exception_delete") {
+    const index = exceptions.findIndex((row) => row.id === change.id);
+    if (index < 0) throw notFound(change.id);
+    exceptions.splice(index, 1);
+  } else if (change.kind === "exception_order") {
+    const known = new Set(exceptions.map((row) => row.id));
+    if (
+      change.ids.length !== exceptions.length ||
+      new Set(change.ids).size !== change.ids.length ||
+      change.ids.some((id) => !known.has(id))
+    )
+      throw new AppError("management.request_invalid", { field: "ids" });
+    for (const [position, id] of change.ids.entries()) {
+      const index = exceptions.findIndex((row) => row.id === id);
+      exceptions[index] = { ...exceptions[index]!, position };
+    }
+  } else {
+    const [product] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(
+        and(
+          productWithId(change.productId, "top-level"),
+          eq(products.active, true),
+          isNull(products.categoryId),
+        ),
+      );
+    if (product === undefined)
+      throw new AppError("route.subject_not_found", { subject: "product", id: change.productId });
+    await validateRoutingInput(tx, cfg, {
+      zoneId: null,
+      categoryId: null,
+      productId: change.productId,
+      target: change.target,
+    });
+    const existing = exceptions
+      .filter(
+        (row) =>
+          row.zoneId === null && row.categoryId === null && row.productId === change.productId,
+      )
+      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+    for (const row of existing) exceptions.splice(exceptions.indexOf(row), 1);
+    exceptions.push({
+      id: existing[0]?.id ?? "preview",
+      position: Math.min(0, ...exceptions.map((row) => row.position)) - 1,
+      zoneId: null,
+      categoryId: null,
+      productId: change.productId,
+      target: change.target,
+    });
+  }
+  const after: RoutingRules = { ...rules, claims, exceptions };
+  const zones = await tx
+    .select({ id: floorZones.id, name: floorZones.name })
+    .from(floorZones)
+    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)));
+  const productsToCheck = await tx
+    .select({
+      id: products.id,
+      name: products.name,
+      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+      categoryId: effectiveProductColumns.categoryId,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .where(eq(products.active, true));
+  const moves: RoutingMove[] = [];
+  for (const product of productsToCheck)
+    for (const zone of zones.length ? zones : [{ id: null, name: null }]) {
+      const facts = {
+        productId: product.id,
+        routedProductId: product.routedId,
+        categoryId: product.categoryId,
+      };
+      const from = chooseMaker(rules, facts, zone.id).route;
+      const to = chooseMaker(after, facts, zone.id).route;
+      if (JSON.stringify(from) !== JSON.stringify(to))
+        moves.push({
+          productId: product.id,
+          productName: product.name,
+          zoneId: zone.id,
+          zoneName: zone.name,
+          from,
+          to,
+        });
+    }
+  return moves.sort(
+    (a, b) =>
+      a.productName.localeCompare(b.productName) ||
+      (a.zoneName ?? "").localeCompare(b.zoneName ?? "") ||
+      a.productId.localeCompare(b.productId),
+  );
 }
 
 /** Canonical database spelling, also used to group caller spellings of one product. */

@@ -1,5 +1,6 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, ExceptionInput } from "../routing.js";
+import type { RoutingChange, RoutingMove } from "../routing-types.js";
 
 export interface PrepStation {
   id: string;
@@ -60,6 +61,13 @@ export class PrepStationsApi {
       )
     ).flat();
     return { routing, stations, categories, zones, products, printers, stationPrinters, devices };
+  }
+  preview(change: RoutingChange): Promise<RoutingMove[]> {
+    return this.request<RoutingMove[]>(
+      "/management-api/venue-service/routing/preview",
+      "POST",
+      change,
+    );
   }
   async createStation(input: StationInput): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);

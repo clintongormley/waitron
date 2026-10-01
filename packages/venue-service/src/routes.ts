@@ -45,10 +45,12 @@ import {
   removeClaim,
   reorderExceptions,
   routingModel,
+  previewRoutingChange,
   setClaim,
   updateException,
 } from "./routing-store.js";
 import type { ExceptionInput, RouteTarget } from "./routing.js";
+import type { RoutingChange } from "./routing-types.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
@@ -136,6 +138,57 @@ function requireExceptionInput(body: Record<string, unknown>): ExceptionInput {
   return { zoneId, categoryId, productId, target: requireRoutingTarget(body) };
 }
 
+function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
+  const target = (value: unknown): RouteTarget => {
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      throw new AppError("management.request_invalid", { field: "target" });
+    const candidate = value as Record<string, unknown>;
+    if (candidate.kind === "station")
+      return requireRoutingTarget({ stationId: candidate.stationId });
+    if (candidate.kind === "no_preparation") return requireRoutingTarget({ noPreparation: true });
+    throw new AppError("management.request_invalid", { field: "target" });
+  };
+  if (body.kind === "claim")
+    return {
+      kind: "claim",
+      categoryId: requireBodyUuid(body.categoryId, "categoryId"),
+      target: body.target === null ? null : target(body.target),
+    };
+  if (body.kind === "assignment")
+    return {
+      kind: "assignment",
+      productId: requireBodyUuid(body.productId, "productId"),
+      target: target(body.target),
+    };
+  if (body.kind === "exception") {
+    if (typeof body.input !== "object" || body.input === null || Array.isArray(body.input))
+      throw new AppError("management.request_invalid", { field: "input" });
+    const input = body.input as Record<string, unknown>;
+    if (body.id !== null)
+      for (const field of ["zoneId", "categoryId", "productId"])
+        if (input[field] === undefined) throw new AppError("management.request_invalid", { field });
+    const parsed = requireExceptionInput({
+      ...input,
+      ...(target(input.target).kind === "station"
+        ? { stationId: (input.target as { stationId: string }).stationId }
+        : { noPreparation: true }),
+    });
+    return {
+      kind: "exception",
+      id: body.id === null ? null : requireBodyUuid(body.id, "id"),
+      input: parsed,
+    };
+  }
+  if (body.kind === "exception_delete")
+    return { kind: "exception_delete", id: requireBodyUuid(body.id, "id") };
+  if (body.kind === "exception_order") {
+    if (!Array.isArray(body.ids))
+      throw new AppError("management.request_invalid", { field: "ids" });
+    return { kind: "exception_order", ids: body.ids.map((id) => requireBodyUuid(id, "ids")) };
+  }
+  throw new AppError("management.request_invalid", { field: "kind" });
+}
+
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -151,6 +204,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         return c.json(await gated(sessionId, (tx) => routingModel(tx, ctx.cfg)));
+      }),
+    );
+
+    app.post("/management-api/venue-service/routing/preview", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const change = requirePreviewChange(await readJsonBody<Record<string, unknown>>(c));
+        return c.json(await gated(sessionId, (tx) => previewRoutingChange(tx, ctx.cfg, change)));
       }),
     );
 

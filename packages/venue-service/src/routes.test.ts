@@ -1175,3 +1175,59 @@ describe("Prep stations product assignment route", () => {
     ).toEqual([{ productId: product.id, target: { kind: "no_preparation" } }]);
   });
 });
+
+describe("routing preview route", () => {
+  it("requires a manager, returns moves, and leaves the claim unchanged", async () => {
+    const fx = await fixture();
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Lager",
+        categoryId: fx.categoryId,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = "/management-api/venue-service/routing/preview";
+    const body = {
+      kind: "claim",
+      categoryId: fx.categoryId,
+      target: { kind: "no_preparation" },
+    };
+    expect((await send(fx.app, "POST", path, undefined, body)).status).toBe(401);
+    expect((await send(fx.app, "POST", path, fx.staffCookie, body)).status).toBe(403);
+    const result = await send(fx.app, "POST", path, fx.managerCookie, body);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual([
+      expect.objectContaining({
+        productId: product.id,
+        productName: "Lager",
+        zoneId: fx.zoneId,
+        from: { kind: "station", stationId: fx.stationId },
+        to: { kind: "no_preparation" },
+      }),
+    ]);
+    expect(
+      await (
+        await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+      ).json(),
+    ).toMatchObject({ claims: [] });
+  });
+  it("accepts omitted nullable conditions for a new exception as the save route does", async () => {
+    const fx = await fixture();
+    const response = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/routing/preview",
+      fx.managerCookie,
+      {
+        kind: "exception",
+        id: null,
+        input: { categoryId: fx.categoryId, target: { kind: "no_preparation" } },
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+  });
+});

@@ -98,6 +98,30 @@ it("assigns an unfiled product through the prioritized assignment route", async 
     { stationId: "bar" },
   );
 });
+it("sends the assignment preview as a no-write request", async () => {
+  const move = {
+    productId: "bread",
+    productName: "Bread",
+    zoneId: null,
+    zoneName: null,
+    from: null,
+    to: { kind: "station", stationId: "bar" },
+  };
+  const request = vi.fn(async () => [move]);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await expect(
+    api.preview({
+      kind: "assignment",
+      productId: "bread",
+      target: { kind: "station", stationId: "bar" },
+    }),
+  ).resolves.toEqual([move]);
+  expect(request).toHaveBeenCalledWith("/management-api/venue-service/routing/preview", "POST", {
+    kind: "assignment",
+    productId: "bread",
+    target: { kind: "station", stationId: "bar" },
+  });
+});
 
 it("creates station and its timing thresholds with one POST", async () => {
   const request = vi.fn(async () => ({ id: "new-bar" }));

@@ -27,6 +27,7 @@ import {
   createException,
   deleteException,
   loadRoutingRules,
+  previewRoutingChange,
   removeClaim,
   resolveMakers,
   reorderExceptions,
@@ -552,5 +553,146 @@ describe("assigning an unfiled product from Prep stations", () => {
       expect(
         model.exceptions.filter((e) => e.id === broad || e.id === unrelated).map((e) => e.id),
       ).toEqual([broad, unrelated]);
+    }));
+});
+
+describe("routing previews", () => {
+  it("shows a claim move in every active zone without writing it", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const [inside] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Inside" })
+        .returning();
+      const menu = await createCatalogue(tx, { name: "Drinks menu" });
+      const lager = await createProduct(tx, {
+        catalogueId: menu.id,
+        name: "Lager",
+        categoryId: f.beer,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
+      const before = await routingModel(tx, f.cfg);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "claim",
+        categoryId: f.drinks,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(moves.filter((m) => m.productId === f.mojito && m.zoneId === f.terrace)).toEqual([
+        {
+          productId: f.mojito,
+          productName: "Mojito",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: { kind: "station", stationId: f.bar },
+          to: { kind: "station", stationId: f.terraceBar },
+        },
+      ]);
+      expect(moves.some((m) => m.productId === f.variant && m.zoneId === f.terrace)).toBe(true);
+      expect(moves.filter((m) => m.productId === lager.id)).toEqual([
+        {
+          productId: lager.id,
+          productName: "Lager",
+          zoneId: inside!.id,
+          zoneName: "Inside",
+          from: { kind: "station", stationId: f.bar },
+          to: { kind: "station", stationId: f.terraceBar },
+        },
+        {
+          productId: lager.id,
+          productName: "Lager",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: { kind: "station", stationId: f.bar },
+          to: { kind: "station", stationId: f.terraceBar },
+        },
+      ]);
+      expect(await routingModel(tx, f.cfg)).toEqual(before);
+    }));
+  it("rejects an inactive destination with the write code", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await expect(
+        previewRoutingChange(tx, f.cfg, {
+          kind: "claim",
+          categoryId: f.drinks,
+          target: { kind: "station", stationId: f.switchedOff },
+        }),
+      ).rejects.toMatchObject({ code: "route.station_inactive" });
+    }));
+  it("previews a no-change edit as no moves", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const id = await createException(tx, f.cfg, f.input);
+      expect(
+        await previewRoutingChange(tx, f.cfg, { kind: "exception", id, input: f.input }),
+      ).toEqual([]);
+    }));
+  it("uses one zone-less comparison when every service zone is off", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.terrace));
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "claim",
+        categoryId: f.drinks,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(moves.filter((m) => m.productId === f.mojito)).toEqual([
+        expect.objectContaining({ productId: f.mojito, zoneId: null, zoneName: null }),
+      ]);
+    }));
+  it("reorders terrace exceptions and moves Mojito there only", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const [inside] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Inside" })
+        .returning();
+      const first = await createException(tx, f.cfg, {
+        ...f.input,
+        target: { kind: "station", stationId: f.bar },
+      });
+      const second = await createException(tx, f.cfg, {
+        ...f.input,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "exception_order",
+        ids: [second, first],
+      });
+      expect(moves.filter((m) => m.productId === f.mojito)).toEqual([
+        {
+          productId: f.mojito,
+          productName: "Mojito",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: { kind: "station", stationId: f.bar },
+          to: { kind: "station", stationId: f.terraceBar },
+        },
+      ]);
+      expect(moves.some((m) => m.zoneId === inside!.id)).toBe(false);
+      expect((await routingModel(tx, f.cfg)).exceptions.map((e) => e.id)).toEqual([first, second]);
+    }));
+  it("puts an unfiled assignment before a broader zone exception", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await createException(tx, f.cfg, {
+        zoneId: f.terrace,
+        categoryId: null,
+        productId: null,
+        target: noPrep,
+      });
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "assignment",
+        productId: f.bread,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(moves.find((m) => m.productId === f.bread && m.zoneId === f.terrace)).toMatchObject({
+        from: noPrep,
+        to: { kind: "station", stationId: f.terraceBar },
+      });
+      expect((await routingModel(tx, f.cfg)).exceptions).toHaveLength(1);
     }));
 });

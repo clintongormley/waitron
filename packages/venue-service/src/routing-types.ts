@@ -7,6 +7,22 @@ export interface ExceptionInput {
   target: RouteTarget;
 }
 
+export type RoutingChange =
+  | { kind: "claim"; categoryId: string; target: RouteTarget | null }
+  | { kind: "exception"; id: string | null; input: ExceptionInput }
+  | { kind: "exception_delete"; id: string }
+  | { kind: "exception_order"; ids: string[] }
+  | { kind: "assignment"; productId: string; target: RouteTarget };
+
+export interface RoutingMove {
+  productId: string;
+  productName: string;
+  zoneId: string | null;
+  zoneName: string | null;
+  from: RouteTarget | null;
+  to: RouteTarget | null;
+}
+
 export interface RoutingModel {
   claims: { categoryId: string; target: RouteTarget; stationOff: boolean }[];
   exceptions: (RouteException & { neverMatches: boolean; stationOff: boolean })[];

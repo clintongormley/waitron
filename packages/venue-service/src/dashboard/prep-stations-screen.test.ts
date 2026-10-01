@@ -53,6 +53,7 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     createException: vi.fn(),
     assignProduct: vi.fn(),
     removeClaim: vi.fn(),
+    preview: vi.fn().mockResolvedValue([]),
     createStation: vi.fn(),
     updateStation: vi.fn(),
     deactivateStation: vi.fn(),
@@ -84,6 +85,58 @@ it("shows station claims by full folder path and unassigned work with default de
   expect(q(el, '[data-test="unassigned"]')!.textContent).toContain("Bread");
   expect(q(el, '[data-test="unassigned"]')!.textContent).toContain("Bar");
 });
+it("previews an assignment and saves only after confirmation", async () => {
+  const a = api({
+    preview: vi.fn().mockResolvedValue([
+      {
+        productId: "bread",
+        productName: "Bread",
+        zoneId: null,
+        zoneName: null,
+        from: { kind: "station", stationId: "bar" },
+        to: { kind: "no_preparation" },
+      },
+    ]),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
+  );
+  await settle(el);
+  expect(a.preview).toHaveBeenCalledWith({
+    kind: "assignment",
+    productId: "bread",
+    target: { kind: "no_preparation" },
+  });
+  expect(q(el, '[data-test="routing-preview"]')?.textContent).toContain("Bread");
+  expect(a.assignProduct).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
+  expect(a.assignProduct).toHaveBeenCalledWith("bread", { kind: "no_preparation" });
+});
+it("cancels a claim preview without saving", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="remove-cocktails"]')!.click();
+  await settle(el);
+  expect(a.removeClaim).not.toHaveBeenCalled();
+  q(el, '[data-test="cancel-routing"]')!.click();
+  await settle(el);
+  expect(a.removeClaim).not.toHaveBeenCalled();
+  expect(q(el, '[data-test="remove-cocktails"]')).not.toBeNull();
+});
+it("clears a cancelled unfiled product choice", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="cancel-routing"]')!.click();
+  await settle(el);
+  expect((q(el, '[data-test="assign-bread"]') as HTMLElement & { value: string }).value).toBe("");
+  expect(a.assignProduct).not.toHaveBeenCalled();
+});
 it("assigns an unassigned folder and removes a claim", async () => {
   const a = api();
   const el = await mount(a);
@@ -91,8 +144,14 @@ it("assigns an unassigned folder and removes a claim", async () => {
     new CustomEvent("wt-change", { detail: { value: "bar" } }),
   );
   await settle(el);
+  expect(a.setClaim).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
   expect(a.setClaim).toHaveBeenCalledWith("food", { kind: "station", stationId: "bar" });
   q(el, '[data-test="remove-cocktails"]')!.click();
+  await settle(el);
+  expect(a.removeClaim).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
   await settle(el);
   expect(a.removeClaim).toHaveBeenCalledWith("cocktails");
 });
@@ -121,6 +180,9 @@ it("assigns an unassigned product through its effective route", async () => {
     new CustomEvent("wt-change", { detail: { value: "bar" } }),
   );
   await settle(el);
+  expect(a.assignProduct).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
   expect(a.assignProduct).toHaveBeenCalledWith("bread", {
     kind: "station",
     stationId: "bar",
@@ -145,7 +207,7 @@ it("shows linked printers and kitchen screens read-only", async () => {
   expect(card.querySelector('a[href="/manage/devices"]')).not.toBeNull();
 });
 it("puts an inactive-station refusal beside the claim choice", async () => {
-  const a = api({ setClaim: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
+  const a = api({ preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
   const el = await mount(a);
   q(el, '[data-test="claim-bar"]')!.click();
   await settle(el);
@@ -219,7 +281,7 @@ it("offers claimed folders by path and names their current station", async () =>
   expect(choice.options.map((o) => o.label)).toContain("Drinks › Cocktails (Bar)");
 });
 it("puts an inactive-station refusal beside an unassigned product choice", async () => {
-  const a = api({ assignProduct: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
+  const a = api({ preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
   const el = await mount(a);
   q(el, '[data-test="assign-bread"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "bar" } }),
@@ -424,6 +486,9 @@ it("moves the second exception up by keyboard and sends the complete new order",
     new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
   );
   await settle(el);
+  expect(a.reorderExceptions).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
   expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
 });
 it("refuses an exception without a subject or zone beside What", async () => {
@@ -452,6 +517,9 @@ it("confirms deletion before calling the exception endpoint", async () => {
   expect(a.deleteException).not.toHaveBeenCalled();
   q(el, '[data-test="confirm-delete-exception"]')!.click();
   await settle(el);
+  expect(a.deleteException).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
   expect(a.deleteException).toHaveBeenCalledWith("a");
 });
 it("drags the second exception above the first and saves the complete order on release", async () => {
@@ -468,7 +536,36 @@ it("drags the second exception above the first and saves the complete order on r
   );
   document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9 }));
   await settle(el);
+  expect(a.reorderExceptions).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
   expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
+});
+it("restores the saved order when a dragged reorder preview is cancelled", async () => {
+  const a = api({ load: vi.fn().mockResolvedValue(exceptionView), reorderExceptions: vi.fn() });
+  const el = await mount(a);
+  const handle = q(el, '[data-test="drag-b"]')!;
+  const first = q(el, '[data-id="a"]')!.getBoundingClientRect();
+  handle.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 10, bubbles: true }));
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 10, clientY: first.top + first.height / 2 }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 10 }));
+  await settle(el);
+  expect(a.preview).toHaveBeenCalledWith({ kind: "exception_order", ids: ["b", "a"] });
+  expect(
+    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
+      row.getAttribute("data-id"),
+    ),
+  ).toEqual(["b", "a"]);
+  q(el, '[data-test="cancel-routing"]')!.click();
+  await settle(el);
+  expect(
+    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
+      row.getAttribute("data-id"),
+    ),
+  ).toEqual(["a", "b"]);
+  expect(a.reorderExceptions).not.toHaveBeenCalled();
 });
 it("writes a chosen folder and zone to the selected station", async () => {
   const a = api({
@@ -489,6 +586,9 @@ it("writes a chosen folder and zone to the selected station", async () => {
   );
   await settle(el);
   q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(a.createException).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
   await settle(el);
   expect(a.createException).toHaveBeenCalledWith({
     zoneId: "terrace",
@@ -516,6 +616,8 @@ it("puts the server's condition refusal beside What", async () => {
   await settle(el);
   q(el, '[data-test="save-exception"]')!.click();
   await settle(el);
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
   expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
     "Choose a folder or product",
   );
@@ -538,7 +640,7 @@ it("restores the server order if reordering is refused", async () => {
   setLocale("en");
   const a = api({
     load: vi.fn().mockResolvedValue(exceptionView),
-    reorderExceptions: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+    preview: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
   });
   const el = await mount(a);
   q(el, '[data-test="drag-b"]')!.dispatchEvent(
@@ -566,6 +668,9 @@ it("edits an existing exception without changing its position", async () => {
   );
   await settle(el);
   q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(a.updateException).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-routing"]')!.click();
   await settle(el);
   expect(a.updateException).toHaveBeenCalledWith("a", {
     zoneId: null,
