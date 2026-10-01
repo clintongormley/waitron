@@ -952,6 +952,21 @@ export interface BillRefundResult {
   balance: BillBalance;
 }
 
+/** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
+ * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid
+ * and not handed over. `canHandOver` says whether {@link TillApi.markCollected} would accept it now. */
+export interface CounterWaitingOrder {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  status: "placed" | "settled";
+  openedAt: string;
+  settledAt: string | null;
+  collectedAt: string | null;
+  total: string;
+  canHandOver: boolean;
+}
+
 /**
  * One row of `GET /api/working-orders` — an open bill, a party's bill included. `total` is the GROSS
  * (VAT-inclusive) draft total; `label` is null when neither the operator nor a move to the counter
@@ -1886,6 +1901,17 @@ export class TillApi {
     return this.#request<HeldOrder>(`/api/working-orders/${id}`, "GET", undefined, options.signal);
   }
 
+  /** A counter order sent without payment, read as {@link retrieveWorkingOrder} reads an open one →
+   * `GET /api/working-orders/:id/placed`. Any other id rejects with `working_order.not_found`. */
+  retrievePlacedOrder(id: string, options: ReadOptions = {}): Promise<HeldOrder> {
+    return this.#request<HeldOrder>(
+      `/api/working-orders/${id}/placed`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
   /**
    * Edit a parked order → `PUT /api/working-orders/:id`. A full REPLACEMENT: the sent `lines` and
    * `label` become the order's new state (`label` absent clears it). Only an `open` order may change
@@ -2066,14 +2092,27 @@ export class TillApi {
   }
 
   /**
-   * Hand a SETTLED, fired order to the customer → `POST /api/orders/:id/collect`. NON-FISCAL: it stamps
+   * Hand a fired order to the customer → `POST /api/orders/:id/collect`: a settled one, or a counter
+   * order sent without payment in a mode that pays after sending. NON-FISCAL: it stamps
    * `collected_at`, which drops the order off the station queue — DISTINCT from {@link collectOrder},
-   * the fiscal placed → settled collect. A non-settled or absent id rejects
-   * `working_order.not_settled`, an already-collected order `working_order.already_collected`, and one
-   * never fired `ticket.not_fired`.
+   * the fiscal placed → settled collect. Any other or absent id rejects `working_order.not_settled`,
+   * an already-collected order `working_order.already_collected`, and one never fired
+   * `ticket.not_fired`. With a `submissionId`, a repeat of it is answered as the first was, and the
+   * same id on a different command of the order is `submission.id_reused`.
    */
-  async markCollected(id: string): Promise<void> {
-    await this.#request<void>(`/api/orders/${id}/collect`, "POST", {});
+  async markCollected(id: string, submissionId?: string, options: ReadOptions = {}): Promise<void> {
+    await this.#request<void>(
+      `/api/orders/${id}/collect`,
+      "POST",
+      submissionId === undefined ? {} : { submissionId },
+      options.signal,
+    );
+  }
+
+  /** The counter orders sent and not paid, or paid and not handed over, oldest first →
+   * `GET /api/orders/counter-waiting`. */
+  listCounterWaiting(): Promise<CounterWaitingOrder[]> {
+    return this.#request<CounterWaitingOrder[]>("/api/orders/counter-waiting", "GET");
   }
 
   /**

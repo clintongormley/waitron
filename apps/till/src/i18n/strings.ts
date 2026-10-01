@@ -95,6 +95,13 @@ export const en = {
   "held.empty": "No held orders",
   "held.retrieve": "Retrieve",
   "held.discard": "Discard",
+  // Counter orders sent and not paid, or paid and not handed over
+  "waiting.title": "Waiting orders",
+  "waiting.sent_not_paid": "Sent, not paid",
+  "waiting.handed_over_not_paid": "Handed over, not paid",
+  "waiting.paid_not_handed_over": "Paid, not handed over",
+  "waiting.hand_over": "Hand over",
+  "waiting.hand_over_error": "Could not hand the order over, try again",
   // Placing and prep
   "action.place": "Place order",
   "action.send_to_prep": "Send to prep",
@@ -600,6 +607,9 @@ export const en = {
     "The sale was recorded, but the list of held orders could not refresh.",
   "refresh.held_after_move": "The bill was moved, but the list of held orders could not refresh.",
   "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
+  "refresh.waiting": "The list of waiting orders could not refresh.",
+  "refresh.waiting_after_hand_over":
+    "The order was handed over, but the list of waiting orders could not refresh.",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
   "refresh.retry_in": "Trying again in {n} seconds.",
   "refresh.retry_in_one": "Trying again in 1 second.",
@@ -902,6 +912,12 @@ export const es: Record<StringKey, string> = {
   "held.empty": "No hay pedidos aparcados",
   "held.retrieve": "Recuperar",
   "held.discard": "Descartar",
+  "waiting.title": "Pedidos pendientes",
+  "waiting.sent_not_paid": "Enviado, sin pagar",
+  "waiting.handed_over_not_paid": "Entregado, sin pagar",
+  "waiting.paid_not_handed_over": "Pagado, sin entregar",
+  "waiting.hand_over": "Entregar",
+  "waiting.hand_over_error": "No se pudo entregar el pedido, inténtalo de nuevo",
   "action.place": "Enviar pedido",
   "action.send_to_prep": "Enviar a cocina",
   "action.collect": "Entregar",
@@ -1373,6 +1389,9 @@ export const es: Record<StringKey, string> = {
     "La cuenta se movió, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.station_after_place":
     "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
+  "refresh.waiting": "La lista de pedidos pendientes no se pudo actualizar.",
+  "refresh.waiting_after_hand_over":
+    "El pedido se entregó, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.retry_in": "Se reintentará en {n} segundos.",
   "refresh.retry_in_one": "Se reintentará en 1 segundo.",
   "refresh.retrying": "Reintentando…",

@@ -230,6 +230,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     menuState: vi.fn(() => new Promise(() => {})),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
+    listCounterWaiting: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7]),
     listZones: vi
       .fn()

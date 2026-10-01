@@ -122,9 +122,11 @@ import type {
   BillPaymentResult,
   BillPaymentView,
   BillRefundResult,
+  CounterWaitingOrder,
   DeviceStation,
   DraftSubmission,
   FloorZone,
+  HeldOrder,
   HeldOrderSummary,
   OrderFlow,
   ServiceZoneSummary,
@@ -211,7 +213,7 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 /** A handheld's screens, in order; `#onLoggedIn` lands it on `HANDHELD_FACES[1]`. */
 const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
-type RefreshList = "held" | "station";
+type RefreshList = "held" | "station" | "waiting";
 
 /** How reading an adjusted order again ended. */
 type Reread = "read" | "unread" | "gone";
@@ -463,6 +465,14 @@ const ACTIONABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
+]);
+
+/** Hand-over refusals shown in their code's own words. */
+const HAND_OVER_REFUSALS = new Set([
+  "working_order.already_collected",
+  "working_order.not_settled",
+  "ticket.not_fired",
+  "submission.id_reused",
 ]);
 
 /** Refusals naming a line the table's offers can mark once they are read again. */
@@ -1127,6 +1137,9 @@ export class TillApp extends LitElement {
   @state() private staff: StaffMember[] = [];
   /** Every open working order in the venue, across tills. */
   @state() private heldOrders: HeldOrderSummary[] = [];
+  @state() private counterWaiting: CounterWaitingOrder[] = [];
+  /** The waiting orders whose hand over is out, each pressed once until it answers. */
+  #handingOver = new Set<string>();
   @state() private zones: FloorZone[] = [];
   @state() private tables: TableState[] = [];
   /**
@@ -1285,7 +1298,7 @@ export class TillApp extends LitElement {
   /** A list whose refresh failed after a successful write, with its automatic retry's countdown. */
   @state() private refreshRetries: Partial<Record<RefreshList, RefreshRetry>> = {};
   #refreshTimers = new Map<RefreshList, ReturnType<typeof setTimeout>>();
-  #refreshGeneration: Record<RefreshList, number> = { held: 0, station: 0 };
+  #refreshGeneration: Record<RefreshList, number> = { held: 0, station: 0, waiting: 0 };
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), tillPath);
 
@@ -1504,6 +1517,7 @@ export class TillApp extends LitElement {
       // Counter-only data: a handheld lands on the floor, which shows neither.
       await this.#refreshHeldOrders();
       await this.#refreshStationQueue();
+      await this.#refreshWaiting();
       // Loaded after the counter is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
         this.staff = await this.api.listStaff();
@@ -1527,6 +1541,11 @@ export class TillApp extends LitElement {
     return this.#refreshList("station");
   }
 
+  /** Never throws: a failure is said in the list's own retry notice. */
+  #refreshWaiting(messageKey: StringKey = "refresh.waiting"): Promise<void> {
+    return this.#refreshList("waiting", messageKey);
+  }
+
   /**
    * For the refresh behind a write that has already succeeded: its failure is a load failure, so it
    * never reaches the write's own error handling.
@@ -1536,7 +1555,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Only the newest refresh of a list may install the list's rows (`heldOrders` or `stationQueue`) or
+   * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue` or
+   * `counterWaiting`) or
    * start, change or end its retry, and {@link TillApp.#abandonListRefreshes} makes every earlier
    * request stale. Without a `messageKey` a failure is also thrown to the caller.
    */
@@ -1557,6 +1577,10 @@ export class TillApp extends LitElement {
 
   async #loadList(list: RefreshList): Promise<() => void> {
     if (list === "station") return this.#loadStationQueue();
+    if (list === "waiting") {
+      const waiting = await this.api.listCounterWaiting();
+      return () => (this.counterWaiting = waiting);
+    }
     const rows = await this.api.listWorkingOrders();
     return () => (this.heldOrders = rows);
   }
@@ -1644,6 +1668,7 @@ export class TillApp extends LitElement {
   #abandonListRefreshes(): void {
     this.#refreshGeneration.held++;
     this.#refreshGeneration.station++;
+    this.#refreshGeneration.waiting++;
     for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
     this.#refreshTimers.clear();
     this.refreshRetries = {};
@@ -2088,6 +2113,7 @@ export class TillApp extends LitElement {
       this.#showTicket(id);
       // A just-paid retrieved order must drop off the held list.
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+      await this.#refreshWaiting();
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
@@ -2151,6 +2177,7 @@ export class TillApp extends LitElement {
         this.result = out.ticket;
         this.#showTicket(id, this.orderFlow !== "invoice_first");
         await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+        await this.#refreshWaiting();
       } else {
         this.cardOutcome = out.outcome;
       }
@@ -2279,6 +2306,7 @@ export class TillApp extends LitElement {
       await this.api.placeOrder(id);
       this.stage = "collect";
       await this.#refreshAfterWrite("station", "refresh.station_after_place");
+      await this.#refreshWaiting();
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
@@ -2309,6 +2337,7 @@ export class TillApp extends LitElement {
     try {
       this.result = await this.api.collectOrder(id, tender);
       this.#showTicket(id, this.orderFlow !== "invoice_first");
+      await this.#refreshWaiting();
     } catch (error) {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
       // permanent refusal takes `sale.refused`.
@@ -2346,6 +2375,55 @@ export class TillApp extends LitElement {
       this.errorKey = "station.collect_error";
     }
     await this.#refreshStationQueue();
+    await this.#refreshWaiting();
+  }
+
+  /**
+   * One submission id per press, sent again only when a send got no answer, so a lost reply is
+   * answered as the first was rather than refused as a second hand over.
+   */
+  async #onHandOverOrder(event: Event): Promise<void> {
+    const { id } = (event as CustomEvent<{ id: string }>).detail;
+    if (this.#handingOver.has(id)) return;
+    this.#handingOver.add(id);
+    this.errorKey = undefined;
+    const submissionId = crypto.randomUUID();
+    const session = this.#operatorSession;
+    const live = () => session === this.#operatorSession;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    let handedOver = false;
+    try {
+      await resendUnanswered(
+        (signal) => this.api.markCollected(id, submissionId, { signal }),
+        limit.signal,
+        live,
+      );
+      handedOver = true;
+    } catch (error) {
+      if (!live()) return;
+      const code = (error as { code?: string } | undefined)?.code;
+      this.errorKey =
+        code !== undefined && HAND_OVER_REFUSALS.has(code) ? { code } : "waiting.hand_over_error";
+    } finally {
+      limit.done();
+      this.#handingOver.delete(id);
+    }
+    if (!live()) return;
+    await this.#refreshWaiting(handedOver ? "refresh.waiting_after_hand_over" : "refresh.waiting");
+  }
+
+  /** Opens the collect stage that follows Place order on a sent order from the waiting list. */
+  async #onPayWaitingOrder(event: Event): Promise<void> {
+    const { id } = (event as CustomEvent<{ id: string }>).detail;
+    if (this.submitting || this.placing) return;
+    this.errorKey = undefined;
+    try {
+      this.#loadIntoBasket(await this.api.retrievePlacedOrder(id), null);
+      this.stage = "collect";
+    } catch {
+      this.errorKey = "held.stale";
+    }
+    await this.#refreshWaiting();
   }
 
   /** The floor's station summary names the station to open; the station screen reads it from the
@@ -2472,6 +2550,12 @@ export class TillApp extends LitElement {
       this.#readStoredLines(id, signal),
     ]);
     if (left?.() === true) return undefined;
+    this.#loadIntoBasket(order, listed);
+    return listed !== null;
+  }
+
+  /** Replaces the basket with `order`, rebuilt against today's live offer. */
+  #loadIntoBasket(order: HeldOrder, listed: StoredLines | null): void {
     const lines: OrderLine[] = [];
     let droppedAProduct = false;
     let extraNotOffered = false;
@@ -2535,7 +2619,6 @@ export class TillApp extends LitElement {
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
     this.counterLines = listed;
     this.cardOutcome = undefined;
-    return listed !== null;
   }
 
   /** Null when the lines cannot be read: the basket then offers no adjustment, and keeps its own
@@ -5369,6 +5452,7 @@ export class TillApp extends LitElement {
         .selectedServiceZoneId=${this.counterServiceZoneId}
         .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
+        .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.#defaultStationId()}
@@ -5401,6 +5485,7 @@ export class TillApp extends LitElement {
       .canConfigureTill=${this.canEdit}
       .products=${tableTab ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
+      .counterWaiting=${this.counterWaiting}
       .stationQueue=${this.stationQueue}
       .defaultStationId=${this.#defaultStationId()}
       .busy=${this.submitting}
@@ -5552,6 +5637,8 @@ export class TillApp extends LitElement {
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
+        @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
+        @pay-waiting-order=${(event: Event) => void this.#onPayWaitingOrder(event)}
         @show-station=${(event: Event) => this.#onShowStation(event)}
         @enrolled=${() => void this.#onEnrolled()}
         @switch-device=${() => void this.#onSwitchDevice()}
@@ -5642,6 +5729,7 @@ export class TillApp extends LitElement {
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
+        ${this.#renderRefreshNotice("waiting")}
         <!-- The waiting-for-promotion banner. On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
              server.waiting_promotion copy compactly here while the router reports no server is accepting
