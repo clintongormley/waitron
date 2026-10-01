@@ -2014,6 +2014,50 @@ describe("dashboard-app", () => {
     }
   });
 
+  it("offers a manager one Receipts page in Settings, where Receipt and Location invoices were, and opens it", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getLocationSettings: vi
+        .fn()
+        .mockResolvedValue({ name: "Sala principal", operationDescription: "Venta" }),
+      previewReceipt: vi.fn(() => new Promise(() => undefined)),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(navItem(el, "receipt")).toBeNull();
+    expect(navItem(el, "location-settings")).toBeNull();
+    const item = navItem(el, "receipts")!;
+    expect(item.textContent!.trim()).toBe(t("nav.receipts"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    expect(panel.contains(item)).toBe(true);
+    item.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-receipts-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/receipts");
+  });
+
+  it("hides the Receipts page from a supervisor", async () => {
+    const supervisor = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p3",
+        role: "supervisor",
+        locale: null,
+        venueLocale: "es-ES",
+        sessionDefault: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
+    await flush(el);
+    expect(navItem(el, "devices")).toBeTruthy();
+    expect(navItem(el, "receipts")).toBeNull();
+  });
+
   it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({

@@ -985,7 +985,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
    `kitchen-screen.ts`, `service-status-screen.ts`.
-6. **The two editors** — `canvas-editor-screen.ts`, `receipt-screen.ts`.
+6. **The two editors** — `canvas-editor-screen.ts`, `receipts-screen.ts` (`receipt-screen.ts` until
+   C116, 2026-10-01).
 7. **Workforce** — `roster-screen.ts`, `my-schedule-screen.ts`, `planned-actual-screen.ts`,
    `approvals-screen.ts`.
 8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
@@ -7613,6 +7614,29 @@ ongoing overhaul listed at the top of Track A.
 
 ### A8. Receipts
 
+- **One "Receipts" settings page, with a live preview (C116, owner 2026-10-01) — done (2026-10-01,
+  branch `feat/receipts-settings-page`).** It replaces the dashboard's "Receipt" and "Location
+  invoices" pages (one Settings entry, managers only). The two old addresses are gone, with no
+  redirect: a search of the apps, packages, scripts and docs on 2026-10-01 found them named only
+  by the dashboard's own nav and its tests.
+  - Two sections: **Every location** holds the header subtitle and the footer message (the
+    venue-wide trim), and a section titled with the location's name holds the invoice operation
+    description. There is no location picker: `location-settings-api.ts` edits only the server's
+    own location (`deps.cfg.locationId`). Each field's hint, shown as its placeholder while it is
+    empty, says what it is for and where it appears.
+  - Beside the fields (below them at phone width) the server draws the sample sale from
+    `sample-receipt.ts` as a receipt would print it, with the unsaved header and footer, the venue's
+    legal name and tax ID, the location's receipt language, and the width of the receipt printer of
+    the location's till first by name (80 mm at 180 dpi, 512 dots, when there is none):
+    `POST /management-api/receipt-preview` (`apps/server/src/receipt-preview-api.ts`), which saves
+    and enqueues nothing ("saves nothing and enqueues no print job, even with a receipt printer
+    registered"). The page draws it with the same code as the print-job preview dialog
+    (`apps/dashboard/src/widgets/print-paper.ts`), outlines the header or footer line while its
+    field has focus, and shows the operation description under the paper as "Sent to the tax agency
+    (not printed)". A preview is sent 300 ms after typing stops, one at a time; text typed while one
+    is out is sent once, as it then stands, when it returns.
+  - One Save sends both settings. If one is refused, the other is still saved, the refusal is
+    shown where it belongs (under its field, or at the bottom), and no "Saved" message appears.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
@@ -11758,8 +11782,9 @@ the next change to the wizard:
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
   (rectificativa). Nothing in the dashboard can change or add a series today.
 - **`operation_description` is a Veri\*Factu field, not a country fact.** It defaults from the fiscal
-  contribution and is editable after setup on the dashboard's **Location invoices** screen, applying to
-  records filed from then on and leaving already-filed records alone.
+  contribution and is editable after setup on the dashboard's **Receipts** page (its location
+  section; the **Location invoices** screen until C116, 2026-10-01), applying to records filed from
+  then on and leaving already-filed records alone.
 
 ### Roles the admin can edit (A7)
 

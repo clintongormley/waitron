@@ -1237,8 +1237,8 @@ A narrower `max-width` on a settings/form screen keeps line length readable, but
 stays anchored to the body's left padding, the same as a full-width `wt-data-table` screen — never
 `margin-inline: auto`. Centering a narrow screen in the *remaining* space beside the sidebar makes
 it read as a visually different app from the wide table screens next to it; anchoring both to the
-same edge and varying only the width does not. `backup-screen.ts` and `receipt-screen.ts` already
-follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
+same edge and varying only the width does not. `backup-screen.ts` and `receipts-screen.ts` (its
+form column) already follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
 screen positioned beside the sidebar any more; it's a modal, bounded by `--wt-modal-max-width`
 like any other, and its fields stop at `--wt-form-max-width`. The one legitimate exception among actual screens is a full-page one with no
 sidebar at all, like the login screen — centering a freestanding form with nothing to anchor to is
