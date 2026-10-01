@@ -202,6 +202,15 @@ test("disabled input dims via the disabled-opacity token", async () => {
   expect(getComputedStyle(input).opacity).toBe("0.3");
 });
 
+test("is no wider than the field cap a container sets, and as wide as its container without one", async () => {
+  const open = await mount('<wt-input label="Name"></wt-input>');
+  host.style.width = "600px";
+  expect(open.getBoundingClientRect().width).toBe(600);
+  host.style.setProperty("--wt-field-max-width", "200px");
+  expect(open.getBoundingClientRect().width).toBe(200);
+  expect(open.shadowRoot!.querySelector("input")!.getBoundingClientRect().width).toBe(200);
+});
+
 test("meets the minimum tap target", async () => {
   const el = await mount("<wt-input></wt-input>");
   const input = el.shadowRoot!.querySelector("input") as HTMLInputElement;

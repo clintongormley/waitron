@@ -16,6 +16,7 @@ export class WtSwitch extends LitElement {
         gap: var(--wt-space-3);
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
+        max-width: var(--wt-field-max-width, none);
       }
 
       .control {

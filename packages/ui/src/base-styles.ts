@@ -40,6 +40,7 @@ export const selectStyles = css`
     background: var(--wt-color-surface);
     color: var(--wt-color-text);
     width: 100%;
+    max-width: var(--wt-field-max-width, none);
   }
 
   select[aria-invalid="true"] {
