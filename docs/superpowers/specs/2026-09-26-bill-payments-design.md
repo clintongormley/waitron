@@ -787,6 +787,9 @@ that holds no payment is not issued by this helper. No product path issues a €
 pay action sends one tender for the total, and `tenders_amount_ck` refuses a zero amount
 (`packages/db/src/schema/sales.ts:254`), although `settleSale` itself accepts no tenders
 (`packages/core/src/settle-sale.ts:106-107`). How a fully comped bill closes is Task 11's to decide.
+_Pointer, 2026-10-01: since B28, Pay on a bill whose total is zero files it at 0.00 and settles it
+with no tender (`fileImmediateSale` in `apps/server/src/till-sale.ts`; the B28 entry in
+`docs/backlog.md`)._
 
 One helper (`issueIfFullyPaid`) is called at the end of every write that can make that true:
 

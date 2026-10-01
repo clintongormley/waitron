@@ -5087,7 +5087,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       so no unsettled sale owing 0.00 is left behind. When every bill owes nothing the party closes
       with no departure row at all, rather than being refused, because the obvious actions do not
       close such a table: measured 2026-10-01, Pay on an open bill whose every line was given away
-      answers 500 (cash and manual card alike), and Finish table refuses it
+      answers 500 (cash and manual card alike; fixed by B28, below), and Finish table refuses it
       `party.bill_outstanding`. Cancelling each given-away line and then finishing did close it
       (measured the same day through the adjustments route), but that takes served dishes off the
       bill, and whether the till offers a cancel on a given-away line was not checked.
@@ -5107,13 +5107,42 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       The dialog then says every listed bill is recorded as unpaid and its button reads "Record
       18.00 unpaid", while the server records no departure row for that bill and settles it. The
       fix is for the dialog to show each invoice's amount due, its total plus its credit notes.
-    - **OPEN — Pay on an open bill whose every line was given away answers 500** (queued as lane B
-      item B28, 2026-10-01).
-      `POST /api/sales` with a cash tender of 0.00 or a manual card tries to file the sale with a
-      tender of 0.00, which `tenders_amount_ck` refuses, and the bill stays open (measured
-      2026-10-01: `CHECK constraint failed: tenders_amount_ck`). Read from the till's code, not run: its Pay
-      confirm is enabled at 0.00 and sends that request. Pay goes through `payWorkingOrder` and
-      `fileImmediateSale` in `apps/server/src/till-sale.ts`, which no B17 commit changes.
+    - **DONE (B28, 2026-10-01): paying a bill that owes €0.00 closes it instead of answering 500.**
+      The owner's answer (2026-10-01): make it work. Measured 2026-10-01 through the routes before
+      the change, these till paths answered 500 on a bill whose total was zero: Pay
+      (`POST /api/sales`) in cash, with 0.00 or 5.00 handed over, or by manual card, on a table's
+      bill whose every line was given away (`CHECK constraint failed: tenders_amount_ck`); the card
+      reader (`POST /api/pay`) on such a bill, which first asked the reader to charge 0.00 (the
+      fake reader's own insert then failed `payments_amount_ck`); collect
+      (`POST /api/working-orders/:id/collect`) of a counter order given away and then presented
+      without an invoice; and a counter sale of a product priced 0.00. The same probe run on
+      `600e09c10`, the commit before B17 (#991), answered the same, so the 500 predates B17; the
+      tender lines came with #324 and the check with #12 (`git blame`, `git log -S`).
+      Now a sale whose total is zero is filed at 0.00 and settled with no tender row, no manual
+      card `payments` row and no cash drawer opening (`fileImmediateSale`,
+      `apps/server/src/till-sale.ts`), because no money changes hands, as C59 settles an invoice
+      that owes nothing; cash typed in is not taken and no change is given. The card reader is
+      not asked at all: the reader pay's first step files and settles the sale (`payIntegrated`),
+      takes no tip, and still refuses a malformed one. The ticket carries the tender
+      `{ method: "unpaid" }`, as C59's does, and a resent Pay or reader Pay returns the same
+      ticket and files nothing more. Read, not run: cash-up reads tender rows, so such a sale adds
+      no line to it (`packages/reporting/src/cash-up.ts`), and the VAT summaries read each sale's
+      own breakdown (`packages/reporting/src/vat-summary.ts`). Not changed: Finish table still
+      refuses a bill still open with lines on it (`party.bill_outstanding`; the till answers it
+      with its wording and a Take payment button, read from
+      `apps/till/src/screens/till-table-order-screen.ts`), and a bill payment of 0.00 is refused
+      `bill.nothing_outstanding` (409, measured). Once Pay has closed the bill, Finish table
+      closes the party (tested). No fiscal code changed; the golden-hash suite
+      (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`) and `inmutabilidad` pass unedited.
+      Whether AEAT accepts a 0.00 simplified invoice was not tested here; B17's departure already
+      files one. Tests: `apps/server/src/pay-owing-nothing.test.ts` — run against the unchanged
+      `fileImmediateSale` and reader step, twelve of its fifteen cases fail; with the zero
+      check removed from `fileImmediateSale` alone the Pay, collect and counter cases fail, and with
+      it removed from the reader's first step alone the three reader cases do; removing the tip
+      check fails the malformed-tip case. A case in `apps/till/src/widgets/tender-pay.test.ts`
+      shows a 0.00 total can be confirmed in cash with nothing typed (sending `0`) and by card; it
+      passed on the unchanged till, which needed no change, and fails when Confirm is disabled at
+      zero.
     - **OPEN — a bill presented without an invoice keeps the label it was placed with when the
       departure invoices it.** Every other path that invoices such a bill saves the receipt label
       (the party's name and tables) in the update that settles it; the departure leaves the bill
