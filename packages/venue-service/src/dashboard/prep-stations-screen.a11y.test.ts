@@ -18,6 +18,7 @@ const empty = {
   categories: [],
   zones: [],
   products: [],
+  testProducts: [],
   printers: [],
   stationPrinters: [],
   devices: [],

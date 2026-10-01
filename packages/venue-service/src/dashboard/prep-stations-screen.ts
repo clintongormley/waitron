@@ -174,7 +174,7 @@ export class PrepStationsScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       this.testProduct = this.#url.read("test") ?? "";
-      if (this.view && this.testProduct) void this.#explain();
+      void this.#explain();
     },
     { basePath: "/manage", primary: "dashboard", children: { "*": { test: "test" } } },
   );
@@ -485,7 +485,7 @@ export class PrepStationsScreen extends LitElement {
           label=${t("prep.test_product")}
           placeholder=${t("prep.test_choose_product")}
           .value=${this.testProduct}
-          .options=${this.view?.products.map((product) => ({ value: product.id, label: product.name })) ?? []}
+          .options=${this.view?.testProducts.map((product) => ({ value: product.id, label: product.name })) ?? []}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             this.testProduct = event.detail.value;
             this.#url.write({ dashboard: "prep-stations", test: this.testProduct || null });

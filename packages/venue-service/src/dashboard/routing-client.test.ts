@@ -25,7 +25,7 @@ it("loads the routing and station context, including each station printer assign
   expect(view.stationPrinters).toEqual([{ stationId: "bar", printerId: "receipt" }]);
 });
 
-it("offers active products and their variants to the route tester", async () => {
+it("keeps top-level names for exceptions and offers active variants only to the tester", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/products"
       ? [
@@ -38,6 +38,7 @@ it("offers active products and their variants to the route tester", async () => 
               { id: "old", name: "Old", active: false },
             ],
           },
+          { id: "retired", name: "Retired lager", active: false, variants: [] },
         ]
       : path === "/management-api/venue-service/routing"
         ? {
@@ -51,6 +52,10 @@ it("offers active products and their variants to the route tester", async () => 
   );
   const result = await new PrepStationsApi(request as DashboardRequest).load();
   expect(result.products).toEqual([
+    { id: "lager", name: "Lager" },
+    { id: "retired", name: "Retired lager" },
+  ]);
+  expect(result.testProducts).toEqual([
     { id: "lager", name: "Lager" },
     { id: "large", name: "Lager · Large" },
   ]);

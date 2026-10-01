@@ -18,6 +18,7 @@ export interface PrepStationsView {
   categories: { id: string; name: string; parentId: string | null }[];
   zones: { id: string; name: string; active?: boolean }[];
   products: { id: string; name: string }[];
+  testProducts: { id: string; name: string }[];
   printers: { id: string; name: string }[];
   stationPrinters: { stationId: string; printerId: string }[];
   devices: { id: string; label: string; stationId: string | null; kind: string; active: boolean }[];
@@ -71,7 +72,8 @@ export class PrepStationsApi {
       stations,
       categories,
       zones,
-      products: products.flatMap((product) =>
+      products: products.map(({ id, name }) => ({ id, name })),
+      testProducts: products.flatMap((product) =>
         product.active === false
           ? []
           : [

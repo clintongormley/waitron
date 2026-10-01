@@ -42,6 +42,7 @@ const view: PrepStationsView = {
   ],
   zones: [],
   products: [{ id: "bread", name: "Bread" }],
+  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -150,13 +151,116 @@ it("opens a product tester link with its product selected", async () => {
   try {
     const el = await mount(
       api({
-        load: vi.fn().mockResolvedValue({ ...view, products: [{ id: "lager", name: "Lager" }] }),
+        load: vi
+          .fn()
+          .mockResolvedValue({ ...view, testProducts: [{ id: "lager", name: "Lager" }] }),
       }),
     );
     expect((q(el, '[data-test="test-product"]') as HTMLElement & { value: string }).value).toBe(
       "lager",
     );
     expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Nothing can make this");
+  } finally {
+    history.replaceState(null, "", before);
+  }
+});
+
+it("keeps inactive product names in retained exceptions without offering variants as exception subjects", async () => {
+  setLocale("en");
+  const named: PrepStationsView = {
+    ...view,
+    products: [
+      { id: "lager", name: "Lager" },
+      { id: "retired", name: "Retired lager" },
+    ],
+    testProducts: [
+      { id: "lager", name: "Lager" },
+      { id: "large", name: "Lager · Large" },
+    ],
+    routing: {
+      ...view.routing,
+      exceptions: [
+        {
+          id: "retained",
+          position: 0,
+          zoneId: null,
+          categoryId: null,
+          productId: "retired",
+          target: { kind: "no_preparation" },
+          stationOff: false,
+          neverMatches: false,
+        },
+      ],
+    },
+  };
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(named) }));
+  expect(q(el, '[data-test="exceptions"]')!.textContent).toContain(
+    "Retired lager → No preparation",
+  );
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  const options = (
+    q(el, '[data-test="exception-what"]') as HTMLElement & { options: { value: string }[] }
+  ).options.map((option) => option.value);
+  expect(options).toContain("product:retired");
+  expect(options).not.toContain("product:large");
+  expect(
+    (
+      q(el, '[data-test="test-product"]') as HTMLElement & { options: { value: string }[] }
+    ).options.map((option) => option.value),
+  ).toContain("large");
+});
+
+it("clears a completed tester answer when Back removes the product", async () => {
+  const before = location.href;
+  history.replaceState(null, "", "/manage/prep-stations/test/lager");
+  try {
+    const el = await mount(
+      api({
+        explain: vi.fn().mockResolvedValue({
+          route: { kind: "station", stationId: "bar" },
+          decidedBy: { kind: "default" },
+          skipped: [],
+          stations: [{ id: "bar", name: "Bar", active: true }],
+        }),
+      }),
+    );
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Made at: Bar");
+    history.replaceState(null, "", "/manage/prep-stations");
+    dispatchEvent(new PopStateEvent("popstate"));
+    await settle(el);
+    expect((q(el, '[data-test="test-product"]') as HTMLElement & { value: string }).value).toBe("");
+    expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
+  } finally {
+    history.replaceState(null, "", before);
+  }
+});
+
+it("ignores a pending tester answer after Back removes the product", async () => {
+  const before = location.href;
+  history.replaceState(null, "", "/manage/prep-stations/test/lager");
+  let complete!: (value: {
+    route: { kind: "station"; stationId: string };
+    decidedBy: { kind: "default" };
+    skipped: [];
+    stations: { id: string; name: string; active: boolean }[];
+  }) => void;
+  const pending = new Promise<Parameters<typeof complete>[0]>((resolve) => {
+    complete = resolve;
+  });
+  try {
+    const el = await mount(api({ explain: vi.fn().mockReturnValue(pending) }));
+    history.replaceState(null, "", "/manage/prep-stations");
+    dispatchEvent(new PopStateEvent("popstate"));
+    await settle(el);
+    complete({
+      route: { kind: "station", stationId: "bar" },
+      decidedBy: { kind: "default" },
+      skipped: [],
+      stations: [{ id: "bar", name: "Bar", active: true }],
+    });
+    await settle(el);
+    expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
   } finally {
     history.replaceState(null, "", before);
   }
