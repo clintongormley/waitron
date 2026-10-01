@@ -6595,7 +6595,7 @@ ongoing overhaul listed at the top of Track A.
   login the setup wizard's Connect form leaves the cursor where it was (an existing test pins that),
   while Reset and the dashboard sign-in move it to the password; the owner's rule covers marking
   fields, not the cursor, so whether Connect should match is the owner's call.
-  **Done since (2026-10-01, lane A's A154):** the password throttle no longer refuses an address it
+  **Done since (2026-10-01, lane A's A154, #977):** the password throttle no longer refuses an address it
   is not tracking because it is full. To make room it forgets the address it heard from longest ago
   (never one whose sign-in is in progress), first copying that address's wrong-try count and any
   wait still running into one of 65,536 counters picked by a secret. A counter holds one address's
