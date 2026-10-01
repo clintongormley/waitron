@@ -41,11 +41,11 @@ async function previewQuery(
 }
 
 async function preview(
-  body: { receipt?: unknown },
+  ask: { receipt?: unknown },
   options: { cookie?: string; cfg?: Partial<TillConfig> } = {},
 ): Promise<Response> {
   const query =
-    "receipt" in body ? `?receipt=${encodeURIComponent(JSON.stringify(body.receipt))}` : "";
+    "receipt" in ask ? `?receipt=${encodeURIComponent(JSON.stringify(ask.receipt))}` : "";
   return previewQuery(query, options);
 }
 
@@ -141,9 +141,16 @@ describe("GET /management-api/receipt-preview", () => {
   it.each([
     ["a request without a receipt", ""],
     ["a receipt that is not JSON", `?receipt=${encodeURIComponent("{headerSubtitle:")}`],
-    ["a receipt given twice", "?receipt=%7B%7D&receipt=%7B%7D"],
   ])("refuses %s as the save does", async (_, query) => {
     const response = await previewQuery(query);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "receipt" } },
+    });
+  });
+
+  it("refuses a receipt given twice with the same code", async () => {
+    const response = await previewQuery("?receipt=%7B%7D&receipt=%7B%7D");
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "management.request_invalid", params: { field: "receipt" } },

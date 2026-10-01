@@ -7657,9 +7657,10 @@ ongoing overhaul listed at the top of Track A.
     `sample-receipt.ts` with the formatter a sale's receipt prints from, with the unsaved header and footer, the venue's
     legal name and tax ID, the location's receipt language, and the width of the receipt printer of
     the location's till first by name (80 mm at 180 dpi, 512 dots, when there is none):
-    `POST /management-api/receipt-preview` (`apps/server/src/receipt-preview-api.ts`), which saves
-    and enqueues nothing ("saves nothing and enqueues no print job, even with a receipt printer
-    registered"). The page draws it with the same code as the print-job preview dialog
+    `POST /management-api/receipt-preview` (a GET since C121, 2026-10-01, below)
+    (`apps/server/src/receipt-preview-api.ts`), which saves and enqueues nothing ("saves nothing
+    and enqueues no print job, even with a receipt printer registered"). The page draws it with the
+    same code as the print-job preview dialog
     (`apps/dashboard/src/widgets/print-paper.ts`), outlines the header or footer line while its
     field has focus, and shows the operation description under the paper as "Sent to the tax agency
     (not printed)". A preview is sent 300 ms after typing stops, one at a time; text typed while one

@@ -186,7 +186,6 @@ export class ReceiptsScreen extends LitElement {
   #previewInFlight = false;
   #previewAgain = false;
   #previewRequested: string | null = null;
-  /** Whether this person opened the page or typed since the last preview was sent. */
   #previewActive = false;
 
   override connectedCallback(): void {

@@ -60,16 +60,13 @@ function addedBlocks(without: PrintPreviewBlock[], withField: PrintPreviewBlock[
   return { start, end: withField.length - tail };
 }
 
-/** The one `receipt` parameter's JSON; missing, repeated or unparseable is refused. */
-function receiptParameter(given: string[] | undefined): unknown {
-  if (given?.length === 1) {
-    try {
-      return JSON.parse(given[0]!);
-    } catch {
-      // Refused below, as a missing one is.
-    }
+function requireReceiptParameter(given: string[] | undefined): unknown {
+  if (given?.length !== 1) throw new AppError("management.request_invalid", { field: "receipt" });
+  try {
+    return JSON.parse(given[0]!);
+  } catch {
+    throw new AppError("management.request_invalid", { field: "receipt" });
   }
-  throw new AppError("management.request_invalid", { field: "receipt" });
 }
 
 /**
@@ -85,7 +82,7 @@ export function mountReceiptPreviewApi(
   app.get("/management-api/receipt-preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const requested = receiptParameter(c.req.queries("receipt"));
+      const requested = requireReceiptParameter(c.req.queries("receipt"));
       const { issuer, printer } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
