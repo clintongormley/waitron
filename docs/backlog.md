@@ -4154,7 +4154,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       not abandon an emptied bill that still holds a tip, and finishes once it is given back" in
       `apps/server/src/parties.test.ts`.
     - **DONE — finishing a table whose bill owes nothing but still holds money gets its own till
-      message** (lane B item B22, 2026-10-01; the owner's "queue it" on B19's FYI). The till now
+      message** (lane B item B22, 2026-10-01, landed as #971, main `07ee8dd42`; the owner's "queue it" on B19's FYI). The till now
       picks the words by the action it sent, not by the code alone: a Finish table refused
       `bill.payments_received` says "A bill on this table owes nothing but still holds money. Give
       it back before finishing the table" (`table.finish_bill_holds_money` in
