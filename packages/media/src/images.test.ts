@@ -583,11 +583,7 @@ it("protects an image used by sections, a menu's own list among them, and counts
   const { createSectionIn, updateSection, sections } = await import("@waitron/catalogue");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(
-      tx,
-      { image: photo, names: { en: "Drinks" } },
-      {},
-    );
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
     const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
       id: catalogues.id,
     });
