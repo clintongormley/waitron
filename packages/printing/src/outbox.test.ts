@@ -2,10 +2,19 @@ import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, printJobs, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  invoiceSeries,
+  locations,
+  printJobs,
+  sales,
+  tills,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { createPrinter, deactivatePrinter } from "./printers.js";
 import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
@@ -209,6 +218,59 @@ describe("resendPrintJob", () => {
       expect(await resendOf(original.jobId)).toBeNull();
       expect(await resendOf(first.jobId)).toBe(original.jobId);
       expect(await resendOf(second.jobId)).toBe(original.jobId);
+    });
+  });
+
+  it("stores the sale a job is enqueued with, and every resend in its chain carries it", async () => {
+    const cfg = await setup();
+    const nodeId = await seedNode(suite.db, brandLocationId(cfg.locationId));
+    await withTransaction(suite.db, async (tx) => {
+      const [till] = await tx
+        .insert(tills)
+        .values({ locationId: cfg.locationId, name: "Till" })
+        .returning({ id: tills.id });
+      const [series] = await tx
+        .insert(invoiceSeries)
+        .values({ nodeId, code: "A" })
+        .returning({ id: invoiceSeries.id });
+      const [sale] = await tx
+        .insert(sales)
+        .values({
+          tillId: till!.id,
+          nodeId,
+          seriesId: series!.id,
+          invoiceNumber: 1,
+          issuedAt: "2026-10-01T12:00:00.000Z",
+          issuedOffsetMinutes: 120,
+          total: 1000,
+          vatBreakdown: [],
+          locale: "es",
+          invoiceLocales: ["es"],
+          fiscalBackend: "fake",
+          fiscalState: "not_applicable",
+        })
+        .returning({ id: sales.id });
+      const printer = await createPrinter(tx, cfg, {
+        name: "Receipts",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const receipt = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]), "document", {
+        saleId: sale!.id,
+      });
+      const unlinked = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([2]));
+      const exhausted = { status: "failed", attempts: 5 } as const;
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, receipt.jobId));
+      const first = await resendPrintJob(tx, receipt.jobId);
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, first.jobId));
+      const second = await resendPrintJob(tx, first.jobId);
+
+      const saleId = async (jobId: string) =>
+        (await tx.select().from(printJobs).where(eq(printJobs.id, jobId)))[0]!.saleId;
+      expect(await saleId(receipt.jobId)).toBe(sale!.id);
+      expect(await saleId(first.jobId)).toBe(sale!.id);
+      expect(await saleId(second.jobId)).toBe(sale!.id);
+      expect(await saleId(unlinked.jobId)).toBeNull();
     });
   });
 

@@ -66,8 +66,8 @@ export function canResendPrintJob(job: {
 
 /**
  * Resend the opaque document to its original printer and location, preserving delivery history. The
- * copy names the first job of its chain, and the sale a receipt prints, which `printJobInTrouble`
- * (apps/server/src/print-job-trouble.ts) reads to clear a failed job once a later copy has printed.
+ * copy names the first job of its chain, which `printJobInTrouble` (apps/server/src/print-job-trouble.ts)
+ * reads to clear a failed job once a later copy has printed, and carries the receipt's sale.
  */
 export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));

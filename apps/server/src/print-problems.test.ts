@@ -65,8 +65,8 @@ import { cancelLine } from "./testing/cancel-line.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
 // and on its station's card, never refuses the next order, and clears once a reprint has printed,
-// once a Reprint would print nothing on that printer for that station, or once a resend of it from
-// the Printers screen has printed.
+// once a Reprint would print nothing on that printer for that station, once a resend of it from
+// the Printers screen has printed, or once a resend of a failed Reprint has printed.
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -724,6 +724,24 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     expect("printProblem" in (await stationCard(v.cocina, destination.tabId))).toBe(false);
   });
 
+  it("does not bring back a merged bill's failure that a printed resend of its failed Reprint had cleared", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Mesa 4");
+    const destination = await firedTable(v, "Mesa 5");
+    await setJob(await jobFor(source.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
+    const reprint = (await links()).at(-1)!.printJobId;
+    await setJob(reprint, exhausted);
+    const resend = await inTx((tx) => resendPrintJob(tx, reprint));
+    await setJob(resend.jobId, { status: "done" });
+    expect(await problemsOf(source.partyId)).toEqual([]);
+
+    await mergeBills(v, source, destination);
+
+    expect(await problemsOf(destination.partyId)).toEqual([]);
+    expect(await waitingAt(v.cocinaPrinter)).toBe(0);
+  });
+
   it("keeps a merged bill's station-printer failure though its pass printer's reprint printed", async () => {
     const v = await setupVenue();
     const pase = await passPrinter(v);
@@ -832,6 +850,63 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
     await setJob((await links()).find((row) => row.reprint)!.printJobId, exhausted);
 
     expect(await waitingAt(v.cocinaPrinter)).toBe(2);
+  });
+
+  it("drops a failed ticket once a Printers-screen resend of its failed Reprint has printed", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const reprint = (await links()).at(-1)!.printJobId;
+    await setJob(reprint, exhausted);
+    const resend = await inTx((tx) => resendPrintJob(tx, reprint));
+    expect(await waitingAt(v.cocinaPrinter)).toBe(2);
+
+    await setJob(resend.jobId, { status: "done" });
+    expect(await waitingAt(v.cocinaPrinter)).toBe(0);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
+  });
+
+  it("clears a two-bill ticket's problem on the bill whose failed Reprint's resend printed, and only there", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    const lineNo = await lineNoOf(mesa4.tabId, "fish");
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, mesa4.tabId, [{ lineNo }], {
+        expectedPartyRevision: (await command(mesa4.partyId)).expectedPartyRevision,
+        operatorId: ALEX,
+      }),
+    );
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, checkId));
+    const reprint = (await links()).at(-1)!;
+    expect(reprint).toMatchObject({ workingOrderId: checkId, reprint: true });
+    await setJob(reprint.printJobId, exhausted);
+    const resend = await inTx((tx) => resendPrintJob(tx, reprint.printJobId));
+    await setJob(resend.jobId, { status: "done" });
+
+    // Mesa 4's own link to the original ticket has no Reprint yet.
+    expect(await waitingAt(v.cocinaPrinter)).toBe(1);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([{ workingOrderId: mesa4.tabId }]);
+  });
+
+  it("keeps counting a failed ticket when the resend of its failed Reprint also runs out of attempts", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    const original = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    const earlier = new Date(Date.now() - 1000).toISOString();
+    await setJob(original, { ...exhausted, createdAt: earlier });
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const reprint = (await links()).at(-1)!.printJobId;
+    await setJob(reprint, exhausted);
+    const resend = await inTx((tx) => resendPrintJob(tx, reprint));
+
+    await setJob(resend.jobId, exhausted);
+    // The original ticket, the Reprint and its resend.
+    expect(await waitingAt(v.cocinaPrinter)).toBe(3);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([
+      { workingOrderId: mesa4.tabId, since: earlier },
+    ]);
   });
 
   it("keeps counting a failed ticket when a later round's ticket prints, which is no Reprint", async () => {

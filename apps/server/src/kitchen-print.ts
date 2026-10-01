@@ -34,7 +34,7 @@ import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { printJobInTrouble } from "./print-job-trouble.js";
+import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
 import { partyFamilies, partyFamily } from "./parties.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
@@ -1138,12 +1138,13 @@ export interface PrintProblem {
 /**
  * The printing problems among the kitchen tickets `scope` selects, abandoned bills left out. A
  * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
- * bill and station, on the same printer, queued after it has printed: only a reprint carries every
- * dish still fired on the bill, and the held dishes of each still-held group whose HOLD ticket was
- * queued, so a later round's ticket printing clears nothing, and another printer's paper says
- * nothing of this one's. It is no problem either once a Reprint of the bill would link nothing on
- * that printer to that station, were the printer switched on ({@link readReprintTargets}), as when
- * its dishes there are voided or the printer is detached from the station.
+ * bill and station, on the same printer, queued after it has printed, itself or through a resend
+ * ({@link printedOrResent}): only a reprint carries every dish still fired on the bill, and the
+ * held dishes of each still-held group whose HOLD ticket was queued, so a later round's ticket
+ * printing clears nothing, and another printer's paper says nothing of this one's. It is no problem
+ * either once a Reprint of the bill would link nothing on that printer to that station, were the
+ * printer switched on ({@link readReprintTargets}), as when its dishes there are voided or the
+ * printer is detached from the station.
  * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
  * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when
  * its job or its bill is deleted, or when {@link writeLinksAfter} writes it again. Oldest first.
@@ -1168,7 +1169,7 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
       and(
         scope,
         ne(workingOrders.status, "abandoned"),
-        or(troubled, and(eq(kitchenPrintJobs.reprint, true), eq(printJobs.status, "done"))),
+        or(troubled, and(eq(kitchenPrintJobs.reprint, true), printedOrResent(printJobs))),
       ),
     );
 
@@ -1213,8 +1214,9 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
 }
 
 /**
- * `orderId`'s link rows that no printed reprint for the same station, on the same printer, queued
- * after them, has covered: the ones still able to name a missing dish. Oldest first.
+ * `orderId`'s link rows that no reprint for the same station, on the same printer, queued after
+ * them and printed itself or through a resend ({@link printedOrResent}), has covered: the ones still
+ * able to name a missing dish. Oldest first.
  */
 async function readUncoveredLinks(tx: Transaction, orderId: string) {
   const rows = await tx
@@ -1226,6 +1228,7 @@ async function readUncoveredLinks(tx: Transaction, orderId: string) {
       createdAt: kitchenPrintJobs.createdAt,
       printerId: printJobs.printerId,
       status: printJobs.status,
+      printed: sql<number>`${printedOrResent(printJobs)}`,
       queued: sql<number>`${kitchenPrintJobs}.rowid`,
     })
     .from(kitchenPrintJobs)
@@ -1237,7 +1240,7 @@ async function readUncoveredLinks(tx: Transaction, orderId: string) {
     `${row.stationId}|${row.printerId}`;
   const lastReprinted = new Map<string, number>();
   for (const row of rows) {
-    if (row.reprint && row.status === "done") lastReprinted.set(printerKey(row), row.queued);
+    if (row.reprint && row.printed) lastReprinted.set(printerKey(row), row.queued);
   }
   return rows.filter((row) => row.queued > (lastReprinted.get(printerKey(row)) ?? 0));
 }
