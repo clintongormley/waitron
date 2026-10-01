@@ -180,8 +180,8 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 the current ranking is *What to work on next*. The small items at the end of each area live in
 Track C.
 
-**Product folders, menus that include menus, and prep station routing — designed, not built
-(owner, 2026-09-30).** The
+**Product folders, menus that include menus, and prep station routing: partly built
+(design approved 2026-09-30).** The
 [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in three
 slices, each with its own plan and pull request:
 
@@ -213,8 +213,12 @@ and the complete upgrade from media0004 that refuses a trigger drop in shipped m
 refusal; shipped SQL is unchanged. Running `pnpm exec vitest run scripts/migration-upgrade.test.ts`
 after that entry reaches catalogue0020 and refuses the copied sections with
 `NOT NULL constraint failed: __new_sections.owner_menu_id`. That newly reached step needs a
-separate decision; it has no reset entry. The walk reaches media0005 before catalogue0018
-without a media0005 refusal, so no media reset entry was added.
+separate decision; it has no reset entry. In an installed disposable checkout, a proposed reset
+at catalogue0020 reaches catalogue0021, which refuses restoration with
+`NOT NULL constraint failed: section_members.id`. Listing both exact refusals as proposed resets
+lets that checkout's chronological test pass; neither entry is implemented or authorised.
+The walk reaches media0005 before catalogue0018 without a media0005 refusal, so no media reset
+entry was added.
 After landing, reset each dev venue with `wa-wt reset demo <worktree-name>` and reset the
 owner's box too: library sections and their placements disappear, menu switched-off
 settings clear, and stored variant switches become explicit on decisions. Per-menu extras are
