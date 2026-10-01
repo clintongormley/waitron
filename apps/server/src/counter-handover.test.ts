@@ -300,12 +300,12 @@ describe("paying a counter order that was handed over before payment", () => {
     expect(after.collectedAt).toBe(handedOverAt);
   });
 
-  it("a placed order paid without a handover is stamped handed over at payment, as before", async () => {
+  it("a placed order paid without a handover is not handed over by the payment", async () => {
     const id = await placed("ticket_then_pay", "Tarta");
     await collectCash(id);
     const after = await orderRow(id);
     expect(after.status).toBe("settled");
-    expect(after.collectedAt).toBe(after.settledAt);
+    expect(after.collectedAt).toBeNull();
   });
 });
 
