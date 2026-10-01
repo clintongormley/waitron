@@ -51,6 +51,9 @@ import {
  * with its served exception and a refusal to move a line off an order that is not open, by
  * `packages/db/drizzle/0033_line_served_exception.sql`. Both are re-created by
  * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
+ * `working_orders_enforce_transition` is re-created again by
+ * `packages/db/drizzle/0056_placed_order_handover.sql`, which lets a sent, unpaid counter order take
+ * its handover stamp.
  * `working_order_lines_require_open_parent_update` is re-created again by
  * `packages/db/drizzle/0050_line_list_price_frozen.sql`, with `list_unit_price_gross` in its
  * unchanged-column lists, and by `packages/db/drizzle/0053_line_sent_after_close.sql`, which lets a
@@ -747,6 +750,94 @@ describe("working_orders_enforce_transition's exception for a presented bill", (
         ),
       ).toBe(TRANSITION_REFUSAL);
     }
+  });
+});
+
+/** Every column of `working_orders` a placed order's handover stamp must leave as it is. */
+const FROZEN_HANDOVER_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_orders') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => name !== "collected_at");
+
+/** A counter order already sent (`placed`), written for one case alone. */
+function placedCounterOrder(id, collectedAt) {
+  connection.exec(workingOrder(id, "placed", collectedAt ? { collectedAt } : {}));
+}
+
+describe("working_orders_enforce_transition's handover exception for a placed order", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_HANDOVER_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "status", "label", "party_id", "revision", "settled_at"]),
+    );
+  });
+
+  it("accepts a placed order's handover stamp alone", () => {
+    placedCounterOrder("wo-handover-alone");
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set collected_at = '${STAMP}' where id = 'wo-handover-alone'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses the stamp on a placed order when its label changes with it", () => {
+    placedCounterOrder("wo-handover-label");
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set collected_at = '${STAMP}', label = 'renamed' ` +
+          `where id = 'wo-handover-label'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it.each(FROZEN_HANDOVER_COLUMNS)(
+    "refuses the stamp on a placed order when %s changes with it",
+    (column) => {
+      const id = `wo-handover-with-${column}`;
+      placedCounterOrder(id);
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set collected_at = '${STAMP}', ${column} = 'changed' ` +
+            `where id = '${id}'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    },
+  );
+
+  it("refuses moving a placed order's handover stamp from one time to another", () => {
+    placedCounterOrder("wo-handover-restamp", STAMP);
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set collected_at = '2026-09-22T11:00:00.000Z' ` +
+          `where id = 'wo-handover-restamp'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("refuses clearing a placed order's handover stamp", () => {
+    placedCounterOrder("wo-handover-cleared", STAMP);
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set collected_at = null where id = 'wo-handover-cleared'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("accepts settling a handed-over placed order with its stamp kept", () => {
+    placedCounterOrder("wo-handover-settles", STAMP);
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
+          `where id = 'wo-handover-settles'`,
+      ),
+    ).toBeUndefined();
   });
 });
 

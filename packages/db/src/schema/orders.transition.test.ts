@@ -268,6 +268,82 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
   });
 
+  it("permits the handover stamp on a placed order alone, and keeps it when the order settles", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const stamp = now();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ collectedAt: stamp }).where(eq(workingOrders.id, id)),
+    );
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: now() })
+        .where(eq(workingOrders.id, id)),
+    );
+    const [row] = await inTx((tx) =>
+      tx
+        .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id)),
+    );
+    expect(row).toEqual({ status: "settled", collectedAt: stamp });
+  });
+
+  it("rejects the handover stamp on a placed order with a label change, and a re-stamp", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const eLabel = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ collectedAt: now(), label: "x" })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(eLabel)).toBe(TRANSITION_REFUSAL);
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ collectedAt: "2026-07-20T19:30:00.000Z" })
+        .where(eq(workingOrders.id, id)),
+    );
+    const eRestamp = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ collectedAt: "2026-07-20T19:40:00.000Z" })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(eRestamp)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("still permits the handover stamp on a settled order", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: now() })
+        .where(eq(workingOrders.id, id)),
+    );
+    const stamp = now();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ collectedAt: stamp }).where(eq(workingOrders.id, id)),
+    );
+    const [row] = await inTx((tx) =>
+      tx
+        .select({ collectedAt: workingOrders.collectedAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id)),
+    );
+    expect(row?.collectedAt).toBe(stamp);
+  });
+
   it("rejects a line write on a placed order (composition freeze via require_open_parent)", async () => {
     const id = await open();
     await insertLine(id, 1); // valid while open — the positive control for the rejections below
