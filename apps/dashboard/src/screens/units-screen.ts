@@ -1,5 +1,5 @@
 import type { ContentLanguages } from "@waitron/shared";
-import { baseStyles, selectStyles, setContentLanguages } from "@waitron/ui";
+import { baseStyles, setContentLanguages } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -10,6 +10,7 @@ import { localizedName } from "../i18n/localized.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -38,7 +39,6 @@ function decimalMarker(locale: string): string {
 export class UnitsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -82,8 +82,7 @@ export class UnitsScreen extends LitElement {
         gap: var(--wt-space-2);
         align-items: center;
       }
-      .reassign select {
-        width: auto;
+      .reassign wt-combobox {
         min-width: 10rem;
       }
     `,
@@ -477,35 +476,29 @@ export class UnitsScreen extends LitElement {
                     }}
                   ></wt-input>
                   <div class="reassign">
-                    <select
+                    <wt-combobox
                       data-test="reassign-unit"
                       name="reassign-unit"
-                      aria-label=${t("units.change_unit")}
+                      label=${t("units.change_unit")}
+                      hide-label
+                      search="auto"
+                      placeholder=${t("units.change_unit_placeholder")}
+                      searchPlaceholder=${t("categories.combobox_search")}
+                      noResultsLabel=${t("categories.combobox_no_results")}
+                      .options=${[
+                        { value: "", label: t("units.change_unit_placeholder") },
+                        { value: REASSIGN_EACH, label: t("units.change_unit_each") },
+                        ...otherUnits.map((unit) => ({
+                          value: unit.id,
+                          label: localizedName(unit.name),
+                        })),
+                      ]}
                       .value=${this.reassignTarget}
-                      @change=${(event: Event) => {
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
-                        this.reassignTarget = (event.target as HTMLSelectElement).value;
+                        this.reassignTarget = event.detail.value;
                       }}
-                    >
-                      <option value="" .selected=${this.reassignTarget === ""}>
-                        ${t("units.change_unit_placeholder")}
-                      </option>
-                      <option
-                        value=${REASSIGN_EACH}
-                        .selected=${this.reassignTarget === REASSIGN_EACH}
-                      >
-                        ${t("units.change_unit_each")}
-                      </option>
-                      ${otherUnits.map(
-                        (unit) =>
-                          html`<option
-                            value=${unit.id}
-                            .selected=${this.reassignTarget === unit.id}
-                          >
-                            ${localizedName(unit.name)}
-                          </option>`,
-                      )}
-                    </select>
+                    ></wt-combobox>
                     <wt-button
                       data-test="change-unit"
                       variant="secondary"

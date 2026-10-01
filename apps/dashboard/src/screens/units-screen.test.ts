@@ -5,7 +5,11 @@ import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import type { UnitsScreen } from "./units-screen.js";
 import "./units-screen.js";
 
@@ -473,9 +477,7 @@ describe("units-screen", () => {
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
       .click();
     await el.updateComplete;
-    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
-    select.value = "u2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(dialog.querySelector("[data-test=reassign-unit]")!, "u2");
     await el.updateComplete;
     dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
     await flush(el);
@@ -518,9 +520,7 @@ describe("units-screen", () => {
     const productTable = dialog.querySelector("wt-data-table")!;
     productTable.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!.click();
     await el.updateComplete;
-    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
-    select.value = "u2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(dialog.querySelector("[data-test=reassign-unit]")!, "u2");
     await el.updateComplete;
     dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
     await flush(el);
@@ -545,9 +545,7 @@ describe("units-screen", () => {
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
       .click();
     await el.updateComplete;
-    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
-    select.value = "u2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(dialog.querySelector("[data-test=reassign-unit]")!, "u2");
     await el.updateComplete;
     dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
     await flush(el);
@@ -629,14 +627,51 @@ describe("units-screen", () => {
       .click();
     await flush(el);
 
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
-    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+    const select = el.shadowRoot!.querySelector("[data-test=reassign-unit]") as HTMLElement & {
+      options: { label: string }[];
+    };
+    expect(select.options.map((option) => option.label)).toEqual([
       t("units.change_unit_placeholder"),
       t("units.change_unit_each"),
       "Gram",
       "kilogram",
       "Litre",
     ]);
+  });
+
+  it("picks the reassign target from a dropdown named by its hidden label, which can be cleared", async () => {
+    const reassignProductsUnit = vi.fn().mockResolvedValue([]);
+    const el = await mount(
+      stubApi({
+        deleteUnit: vi
+          .fn()
+          .mockRejectedValue({ code: "unit.in_use", params: { products: inUseProducts } }),
+        reassignProductsUnit,
+      }),
+    );
+    const dialog = await openInUseModal(el);
+    const target = dialog.querySelector("wt-combobox[name=reassign-unit]") as HTMLElement & {
+      options: { value: string }[];
+      value: string;
+      label: string;
+      hideLabel: boolean;
+      placeholder: string;
+    };
+    expect(target.label).toBe(t("units.change_unit"));
+    expect(target.hideLabel).toBe(true);
+    expect(target.placeholder).toBe(t("units.change_unit_placeholder"));
+    expect(target.value).toBe("");
+    expect(target.options[0]!.value).toBe("");
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
+      .click();
+    await el.updateComplete;
+    await chooseOption(target, "u2");
+    await el.updateComplete;
+    dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
+    await flush(el);
+    expect(reassignProductsUnit).toHaveBeenCalledWith("u1", ["p1"], "u2");
   });
 
   it("offers Each (no unit) as a reassign target and reassigns to it", async () => {
@@ -654,14 +689,15 @@ describe("units-screen", () => {
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
       .click();
     await el.updateComplete;
-    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
+    const select = dialog.querySelector("[data-test=reassign-unit]") as HTMLElement & {
+      options: { value: string; label: string }[];
+    };
     // Pick the Each option by its localized label, then reassign — its value is a sentinel, not a uuid.
-    const eachOption = [...select.options].find(
-      (option) => option.textContent!.trim() === t("units.change_unit_each"),
+    const eachOption = select.options.find(
+      (option) => option.label === t("units.change_unit_each"),
     )!;
     expect(eachOption).toBeTruthy();
-    select.value = eachOption.value;
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, eachOption.value);
     await el.updateComplete;
     dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
     await flush(el);
@@ -848,9 +884,7 @@ describe("units-screen", () => {
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
       .click();
     await el.updateComplete;
-    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
-    select.value = "u2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(dialog.querySelector("[data-test=reassign-unit]")!, "u2");
     await el.updateComplete;
     change.click();
     change.click();
