@@ -247,8 +247,9 @@ export const en = {
   "content_languages.add": "Add language",
   "content_languages.choose": "Choose a language",
   "content_languages.remove": "Remove",
-  "content_languages.preserve":
-    "Removing a language keeps its translations. Choose another default before removing the current default.",
+  "content_languages.set_default": "Set as default",
+  "content_languages.language": "Language",
+  "content_languages.preserve": "Removing a language keeps its translations.",
   "action.close": "Close",
   "action.delete": "Delete",
   "action.add": "Add",
@@ -2143,8 +2144,9 @@ export const es: Record<StringKey, string> = {
   "content_languages.add": "Añadir idioma",
   "content_languages.choose": "Elige un idioma",
   "content_languages.remove": "Quitar",
-  "content_languages.preserve":
-    "Al quitar un idioma se conservan sus traducciones. Elige otro idioma predeterminado antes de quitar el actual.",
+  "content_languages.set_default": "Hacer predeterminado",
+  "content_languages.language": "Idioma",
+  "content_languages.preserve": "Al quitar un idioma se conservan sus traducciones.",
   "action.close": "Cerrar",
   "action.delete": "Eliminar",
   "action.add": "Añadir",

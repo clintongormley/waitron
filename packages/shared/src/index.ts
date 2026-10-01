@@ -90,6 +90,7 @@ export {
   resolveSnapshotText,
 } from "./content-languages.js";
 export type { ContentLanguages } from "./content-languages.js";
+export { capitaliseFirst } from "./capitalise.js";
 export { BAND_RANK, classifyBand, worstBand } from "./timing.js";
 export type { StationThresholds, TimingBand } from "./timing.js";
 export type { KitchenSignal, ReadyAtStation, TableSignal } from "./table-signals.js";

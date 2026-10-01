@@ -1,18 +1,20 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { ContentLanguages } from "@waitron/shared";
-import { baseStyles, setContentLanguages } from "@waitron/ui";
+import { capitaliseFirst, type ContentLanguages } from "@waitron/shared";
+import { baseStyles, formMessage, formMessageStyles, setContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import type { DashboardApi } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
-import "../widgets/content-languages.js";
+import "../widgets/add-content-language.js";
 
 @customElement("dashboard-content-languages-screen")
 export class ContentLanguagesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       :host {
         display: block;
@@ -22,30 +24,53 @@ export class ContentLanguagesScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       wt-card {
+        display: block;
         max-width: 60ch;
         margin-top: var(--wt-space-4);
       }
-      dl {
+      ul {
+        list-style: none;
         margin: 0;
+        padding: 0;
       }
-      dt {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-normal);
+      .action-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2) var(--wt-space-4);
+        padding-block: var(--wt-space-3);
       }
-      dd {
-        margin: var(--wt-space-1) 0 var(--wt-space-3);
+      .action-row + .action-row {
+        border-top: 1px solid var(--wt-color-border);
+      }
+      .text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        min-width: 0;
+      }
+      .field-value {
         color: var(--wt-color-text);
-        font-size: var(--wt-font-size-md);
         font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
       }
-      dd:last-of-type {
-        margin-bottom: 0;
+      .field-meta,
+      .note {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .note {
+        margin: var(--wt-space-2) 0 var(--wt-space-3);
+      }
+      .button-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
       .card-footer {
         display: flex;
         justify-content: flex-end;
-        margin-top: var(--wt-space-3);
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
       }
@@ -56,19 +81,18 @@ export class ContentLanguagesScreen extends LitElement {
         border-color: var(--wt-color-primary);
         color: var(--wt-color-primary);
       }
-      ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: var(--wt-space-1);
+      .card-action.accent-danger::part(button):hover {
+        border-color: var(--wt-color-danger);
+        color: var(--wt-color-danger);
       }
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @state() private config: ContentLanguages | null = null;
   @state() private loadFailed = false;
-  @state() private editing = false;
+  @state() private adding = false;
+  @state() private busy = false;
+  @state() private saveError = "";
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -76,6 +100,10 @@ export class ContentLanguagesScreen extends LitElement {
       this.loadFailed = true;
     },
   );
+  /** How many configurations the server has delivered, so a save can tell whether one arrived while
+   * it was in flight. */
+  #reads = 0;
+  readonly #saveAdded = (config: ContentLanguages) => this.#write(config);
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -86,53 +114,121 @@ export class ContentLanguagesScreen extends LitElement {
     this.loadFailed = false;
     try {
       await this.#queries.watch("getContentLanguages", [], (value) => {
+        this.#reads += 1;
         this.config = value;
         this.loadFailed = false;
+        setContentLanguages(value);
       });
     } catch {
       this.loadFailed = true;
     }
   }
 
+  async #write(config: ContentLanguages): Promise<void> {
+    const reads = this.#reads;
+    await this.api.updateContentLanguages(config);
+    this.saveError = "";
+    if (this.#reads === reads) {
+      this.config = config;
+      setContentLanguages(config);
+    } else {
+      // A configuration read during the save may predate it or follow it; only a fresh read can say.
+      this.api.liveData.invalidate([{ type: "content_languages" }]);
+    }
+  }
+
+  async #save(defaultLanguage: string, languages: string[]): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.saveError = "";
+    const config = {
+      defaultLanguage,
+      languages: [defaultLanguage, ...languages.filter((code) => code !== defaultLanguage)],
+    };
+    try {
+      await this.#write(config);
+    } catch (error) {
+      this.saveError = codeMessage(codeOf(error));
+    } finally {
+      this.busy = false;
+    }
+  }
+
   #renderConfig(config: ContentLanguages) {
-    const names = new Intl.DisplayNames([currentLocale()], { type: "language" });
+    const locale = currentLocale();
+    const names = new Intl.DisplayNames([locale], { type: "language" });
+    const name = (code: string) => capitaliseFirst(names.of(code)!, locale);
+    const collator = new Intl.Collator(locale);
+    const others = config.languages
+      .filter((code) => code !== config.defaultLanguage)
+      .map((code) => ({ code, name: name(code) }))
+      .sort((a, b) => collator.compare(a.name, b.name));
     return html`<wt-card>
-        <dl>
-          <dt>${t("content_languages.default")}</dt>
-          <dd data-test="default-language">${names.of(config.defaultLanguage)}</dd>
-          <dt>${t("content_languages.enabled")}</dt>
-          <dd>
-            <ul data-test="enabled-languages">
-              ${config.languages.map((code) => html`<li>${names.of(code)}</li>`)}
-            </ul>
-          </dd>
-        </dl>
+        <ul data-test="languages" aria-label=${t("content_languages.enabled")}>
+          <li class="action-row">
+            <div class="text">
+              <span class="field-value">${name(config.defaultLanguage)}</span>
+              <span class="field-meta">${t("content_languages.default")}</span>
+            </div>
+          </li>
+          ${others.map(
+            ({ code, name }) =>
+              html`<li class="action-row">
+                <span class="field-value">${name}</span>
+                <div class="button-group">
+                  <wt-button
+                    data-test=${`set-default-${code}`}
+                    variant="secondary"
+                    class="card-action accent-primary"
+                    ?disabled=${this.busy}
+                    aria-label=${`${t("content_languages.set_default")}: ${name}`}
+                    @click=${() => void this.#save(code, config.languages)}
+                    >${t("content_languages.set_default")}</wt-button
+                  >
+                  <wt-button
+                    data-test=${`remove-${code}`}
+                    variant="secondary"
+                    class="card-action accent-danger"
+                    ?disabled=${this.busy}
+                    aria-label=${`${t("content_languages.remove")}: ${name}`}
+                    @click=${() =>
+                      void this.#save(
+                        config.defaultLanguage,
+                        config.languages.filter((language) => language !== code),
+                      )}
+                    >${t("content_languages.remove")}</wt-button
+                  >
+                </div>
+              </li>`,
+          )}
+        </ul>
+        <p class="note">${t("content_languages.preserve")}</p>
+        ${formMessage(this.saveError)}
         <div class="card-footer">
           <wt-button
-            data-test="edit-languages"
+            data-test="add-language"
             variant="secondary"
             class="card-action accent-primary"
+            ?disabled=${this.busy}
             @click=${() => {
-              this.editing = true;
+              this.adding = true;
             }}
-            >${t("action.edit")}</wt-button
+            >${t("content_languages.add")}</wt-button
           >
         </div>
       </wt-card>
-      <dashboard-content-languages
-        .open=${this.editing}
+      <dashboard-add-content-language
+        .open=${this.adding}
         .config=${config}
-        .api=${this.api}
+        .save=${this.#saveAdded}
         @languages-closed=${() => {
-          this.editing = false;
+          this.adding = false;
         }}
-        @languages-saved=${(event: CustomEvent<ContentLanguages>) => {
+        @languages-saved=${(event: Event) => {
           event.stopPropagation();
-          this.editing = false;
-          this.config = event.detail;
-          setContentLanguages(event.detail);
+          this.adding = false;
         }}
-      ></dashboard-content-languages>`;
+      ></dashboard-add-content-language>`;
   }
 
   override render() {

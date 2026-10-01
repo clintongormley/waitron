@@ -15,7 +15,7 @@ import {
   codeOf,
   subscribeLocale,
 } from "@waitron/dashboard-kit";
-import { resolveEnabledContentText } from "@waitron/shared";
+import { capitaliseFirst, resolveEnabledContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -446,7 +446,7 @@ export class ImageLibrary extends LitElement {
           (language) =>
             html`<fieldset>
               <legend>
-                ${languageNames.of(language)}${language === config.defaultLanguage ? ` (${t("image.default")})` : ""}
+                ${capitaliseFirst(languageNames.of(language)!, currentLocale())}${language === config.defaultLanguage ? ` (${t("image.default")})` : ""}
               </legend>
               <wt-input
                 name=${`name-${language}`}

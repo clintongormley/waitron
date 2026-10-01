@@ -241,8 +241,8 @@ describe("catalogue-screen", () => {
     });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=edit-languages]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("dashboard-content-languages")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=add-language]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-add-content-language")).toBeNull();
     expect(editor(el).locales).toEqual(["es", "en"]);
   });
 

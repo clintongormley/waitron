@@ -1,3 +1,4 @@
+import { capitaliseFirst } from "./capitalise.js";
 import { AppError } from "./errors.js";
 
 export interface ContentLanguages {
@@ -18,7 +19,8 @@ export function contentLanguageChoices(displayLocale: string): { code: string; n
   const add = (code: string): void => {
     if (["und", "mul", "zxx"].includes(code)) return;
     const name = names.of(code);
-    if (name !== undefined && new Intl.Locale(code).language === code) choices.push({ code, name });
+    if (name !== undefined && new Intl.Locale(code).language === code)
+      choices.push({ code, name: capitaliseFirst(name, displayLocale) });
   };
   for (let first = 97; first <= 122; first++) {
     for (let second = 97; second <= 122; second++) {

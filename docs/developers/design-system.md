@@ -213,7 +213,8 @@ field's error stop together: the profile screen's `.select-field` (the Language 
 error in the edit details modal), the adjustments reasons screen's `.select-field` (each role
 select with its `<label for>` and error, in the reason editor), every `label` in the venue operations
 screen's editor modals (each holds one field's text and control, and its error when it has one), and the
-content-languages editor's two select labels and their `.error` lines. A screen whose own layout
+`.error` line under the content languages Add language dialog's select, whose label and select take
+`selectStyles`. A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
 button beside the ruler's answer, and the section member list's `.add` row does, for its Add button, along with that row's
@@ -225,7 +226,7 @@ at 1280px; wide content and the footer row at full width; each field at the
 body's width at 390px; each field at its container's width outside a modal); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
 `apps/dashboard/src/screens/profile-screen.test.ts`,
-`apps/dashboard/src/widgets/content-languages.test.ts`,
+`apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that
@@ -1110,7 +1111,7 @@ inside it does something different. Four shapes cover what's needed so far:
   in.
 - **A field whose value can't be shown** (a password, a PIN): don't render a fake masked value —
   there's nothing real to show. Put the label and its one action ("Change") on the same row.
-- **A repeatable list** (passkeys today; the same shape applies to printers, staff, devices): each
+- **A repeatable list** (passkeys and content languages today; the same shape applies to printers, staff, devices): each
   item is its own row carrying its own action ("Remove"), and an "Add" action sits in the same
   footer position the single-form case uses for "Edit".
 - **A purely informational card** (a status sentence, nothing to edit): just the sentence, muted,
@@ -1124,7 +1125,9 @@ from these cards: the edit form no longer needs to fit the page's own (narrower)
 modal sizes itself independently; and there's no more "why doesn't the current page highlight in
 the sidebar while editing" confusion, since the page never stopped being the page. See "Card action
 buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
-above for the close-event race a shared, reused modal needs to guard against.
+above for the close-event race a shared, reused modal needs to guard against. One exception (C111,
+owner 2026-09-30): Content languages' Set as default and Remove save straight away, without a modal
+(removing a language keeps its translations); its Add language still opens one.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the
