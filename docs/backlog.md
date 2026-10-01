@@ -1032,6 +1032,8 @@ What it left open:
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
+  _2026-10-01: this route is retired by product-folders slice 1; folder deletion uses the bulk
+  selection summary and delete operations described in [Product categories](developers/product-categories.md)._
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
   screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
@@ -1039,6 +1041,7 @@ What it left open:
 **Categories screen rebuilt — LANDED #353 (2026-09-14).** `/manage/categories` became a table
 switchable between a tree and a flat list with a name filter, a per-category colour swatch and a
 per-category products window with bulk add; what it left open is recorded in the #340 list above.
+_2026-10-01: product-folders slice 1 retires this screen; folders are managed on Products._
 
 **Category management reworked — LANDED #362 (2026-09-14).** The category screens share one layout
 with searchable `wt-combobox` pickers, and the shared `wt-data-table` gained opt-in search,
@@ -1534,6 +1537,8 @@ What Task 11 left open:
   the modal.
 - **DONE (lane C's C23): the Categories screen places a refused save through
   `categoryRefusalErrors`.**
+  _2026-10-01: product-folders slice 1 retires the screen; the folder form retains
+  `categoryRefusalErrors`._
 - **DONE (lane C's C24): with no colour chosen, the colour field's Custom square reads as
   empty.**
 - **DONE (lane C's C25): with a custom colour chosen, the colour field's Custom square is ringed
