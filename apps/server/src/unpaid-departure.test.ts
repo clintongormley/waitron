@@ -596,26 +596,6 @@ describe("bills already presented", () => {
 });
 
 describe("a bill that owes nothing", () => {
-  it("records no departure for a bill whose invoice a credit note has brought to nothing, and records the rest", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
-    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
-    await credit(placedId, "14.88", "-18.00");
-
-    const answer = await depart(party.partyId, {
-      expectedPartyRevision: revisionOf(party.partyId),
-      reason: REASON,
-    });
-
-    expect(answer.status).toBe(200);
-    expect(answer.json.departures).toEqual([
-      expect.objectContaining({ workingOrderId: party.tabId, amount: "30.00" }),
-    ]);
-    expect(await departuresOf(placedId)).toEqual([]);
-    expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
-    expect(registroCount(venue, placedId)).toBe(1);
-    expect((await partyState(party.partyId)).state).toBe("closed");
-  });
-
   it("settles a presented bill whose credit note brought it to nothing, so no sale is left owing nothing", async () => {
     const party = await seatedWith(venue, "Botella tinto");
     const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
@@ -628,8 +608,12 @@ describe("a bill that owes nothing", () => {
     });
 
     expect(answer.status).toBe(200);
+    expect(answer.json.departures).toEqual([
+      expect.objectContaining({ workingOrderId: party.tabId, amount: "30.00" }),
+    ]);
     expect(await departuresOf(placedId)).toEqual([]);
     expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
+    expect((await partyState(party.partyId)).state).toBe("closed");
     expect(await salesOf(placedId)).toEqual([
       { id: invoiced!.id, total: 1800, settledAt: expect.any(String) },
     ]);

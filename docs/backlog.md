@@ -5071,11 +5071,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       shows what each invoice owes now, net of its credit notes, and leaves out one a credit note
       has brought to nothing; the row keeps the amount owed when the party left. Cases in
       `apps/server/src/unpaid-departure.test.ts` ("a bill that owes nothing", "refuses a party with
-      nothing outstanding, which Finish table then closes", and the list's credit-note cases). The
-      till's dialog lists each bill at what `GET /api/parties/:id/bills` says it owes, which is its
-      lines' total less payments and reads no credit note: measured 2026-10-01, an open bill whose
-      every line was given away read 0.00 and is left out, but a presented bill credited to nothing
-      read 18.00, its full amount.
+      nothing outstanding, which Finish table then closes", and the list's credit-note cases).
+    - **OPEN — the till's departure dialog lists a presented bill credited to nothing as owing its
+      full amount, so staff confirm a debt the server does not record.** The dialog lists each bill
+      at what `GET /api/parties/:id/bills` says it owes, which is its lines' total less payments and
+      reads no credit note (`#departingBills` in `apps/till/src/till-app.ts` keeps every bill whose
+      figure is above 0). Measured 2026-10-01: an open bill whose every line was given away read
+      0.00 and is left out, but a presented bill credited to nothing read 18.00, its full amount.
+      The dialog then says every listed bill is recorded as unpaid and its button reads "Record
+      18.00 unpaid", while the server records no departure row for that bill and settles it. The
+      fix is for the dialog to show each invoice's amount due, its total plus its credit notes.
     - **OPEN — Pay on an open bill whose every line was given away answers 500.**
       `POST /api/sales` with a cash tender of 0.00 or a manual card tries to file the sale with a
       tender of 0.00, which `tenders_amount_ck` refuses, and the bill stays open (measured
@@ -5090,9 +5095,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Measured 2026-10-01: saving the label on such a bill made the departure answer 500; without
       it the bill's label stayed null while the open bill invoiced beside it was given the
       table's. Not measured: what its invoice's reprint and the debt list then show, both of which
-      read the stored label. Fixing it needs that trigger to allow the label to change. A bill
-      the departure settles because it owes nothing goes through collect's settle-owing-nothing
-      path, which saves no label. Whether a bill presented without an invoice can owe nothing was
+      read the stored label. For a bill the departure leaves placed, fixing it needs that trigger
+      to allow the label to change. A bill the departure settles because it owes nothing goes
+      through collect's settle-owing-nothing path (`settleIssuedOwingNothing` in
+      `apps/server/src/till-sale.ts`), which sets no label, although the trigger's
+      placed-to-settled clause allows one to be set. Whether a bill presented without an invoice can owe nothing was
       not established: giving a line away on a presented bill is refused `tab.not_open` (measured
       2026-10-01).
   - **The service plan's acceptance checks (spec §12), swept against `main` plus B17 on
