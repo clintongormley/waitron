@@ -31,16 +31,29 @@ remain visible where the translation is still missing.
 
 Required fields need text in the default language. Other translations can wait. To change the
 default to English, first complete the required English translations and image names.
-If the change is refused, check your products, modifiers, sections and image metadata for
-missing translations. Sections are edited in **Products and menus**, **Sections**.
+If the change is refused, look under **Missing translations**, further down the same page: the
+names marked **Partly translated** under English hold it up, and each has an **Open** link to the
+screen where it is edited. Image names are checked too but are not listed there, so check them in
+the **Image library**. Something you have deleted or switched off can also hold the change up
+without appearing in the list.
 
 A product's and a variant's customer-facing name is the exception, because it is optional: leave it
 empty in every language and Waitron falls back to the staff name, so it never blocks the change. Fill
 it in for Spanish and leave English blank, though, and that *is* a missing translation — you clearly
-meant to translate it — so it does hold the change up until you finish it or clear it. A reusable
-section's customer names work the same way: none at all never blocks the change, but a section with
-some names and none in the new default language does. Edit a reusable section's customer names in
-**Products and menus**, **Sections**.
+meant to translate it — so it does hold the change up until you finish it or clear it. A section's
+customer names work the same way: none at all never blocks the change, but a section with some names
+and none in the new default language does. Edit a section's customer names on its menu's
+**Structure** tab, in **Products and menus**, **Menus**. A menu's own customer names are edited
+through **Rename** on the menu's row in that list, not on its **Structure** tab, although the
+**Missing translations** link for a menu's own name opens that tab.
+
+**Missing translations** lists, for each of your content languages, the customer-facing names that
+have no text in it. A language your region requires comes first, opens by itself when something is
+missing, and has a note saying how many names still need translating into it. A name filled in for
+some languages but not this one is marked **Partly translated**. Something with no customer-facing
+name at all is listed under your other languages as **No customer-facing name**, because there its
+staff name is shown instead; an extras list is the exception, because its own name never reaches a
+receipt. Deleted products and switched-off lists and menus are not listed.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. The default language's row has no
@@ -101,8 +114,10 @@ The photograph stays in the library for your other products.
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products,
 including inactive products, and to those sections, a section shown by its internal name. Remove
-the photograph from each of them before trying deletion again. A section's link opens its editor in
-**Products and menus**, **Sections**, where **Remove image** clears it when you save the section.
+the photograph from each of them before trying deletion again. A section's link opens its menu's
+**Structure** tab, in **Products and menus**, **Menus**, where **Remove image** in the section's
+editor clears it when you save the section. A menu's own photograph is removed the same way
+through **Rename** on the menu's row in **Products and menus**, **Menus**.
 
 A published menu also holds every photograph its last publish included, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by

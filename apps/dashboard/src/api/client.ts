@@ -59,6 +59,13 @@ export type {
   SectionMember,
 };
 import type {
+  LanguageTranslationGaps,
+  TranslationGap,
+  TranslationGapKind,
+  TranslationGapReason,
+} from "@waitron/catalogue/src/content-translation-report-types.js";
+export type { LanguageTranslationGaps, TranslationGap, TranslationGapKind, TranslationGapReason };
+import type {
   MenuPriceRow,
   MenuVariant,
   MenuVariantWrite,
@@ -1566,6 +1573,13 @@ export class DashboardApi {
 
   getContentLanguageRules(): Promise<ContentLanguageRules> {
     return this.#request<ContentLanguageRules>("/management-api/content-language-rules", "GET");
+  }
+
+  getContentTranslationGaps(): Promise<LanguageTranslationGaps[]> {
+    return this.#request<LanguageTranslationGaps[]>(
+      "/management-api/content-translation-gaps",
+      "GET",
+    );
   }
 
   updateContentLanguages(config: ContentLanguages): Promise<void> {

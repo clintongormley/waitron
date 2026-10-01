@@ -443,6 +443,57 @@ describe("content-language configuration", () => {
   });
 });
 
+describe("the missing-translations report", () => {
+  const PATH = "/management-api/content-translation-gaps";
+
+  beforeEach(async () => {
+    await suite.db.execute(sql`delete from content_languages`);
+  });
+
+  it("answers a manager each enabled language's gaps under the saved configuration", async () => {
+    const app = mountApp("es-ES");
+    const settings = { defaultLanguage: "es", languages: ["es", "ca", "en"] };
+    expect(
+      (await send(app, "PUT", "/management-api/content-languages", { body: settings })).status,
+    ).toBe(204);
+    const menu = await createCatalogueVia(app, "Gap report");
+    const created = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId: menu,
+        categoryId: null,
+        name: "STAFF Pan gap report",
+        customerName: { es: "CLIENT-ES Pan con tomate" },
+        kitchenName: "KITCHEN Pan",
+        pricingUnit: "each",
+        unitPrice: "3",
+        vatClass: "reduced",
+      },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+
+    const response = await send(app, "GET", PATH);
+    expect(response.status).toBe(200);
+    const report = (await response.json()) as {
+      language: string;
+      gaps: { kind: string; id: string; name: string; reason: string }[];
+    }[];
+    expect(report.map((entry) => entry.language)).toEqual(["es", "ca", "en"]);
+    const gapsIn = (language: string) =>
+      report.find((entry) => entry.language === language)!.gaps.filter((gap) => gap.id === id);
+    expect(gapsIn("ca")).toEqual([
+      { kind: "product", id, name: "STAFF Pan gap report", reason: "partial" },
+    ]);
+    expect(gapsIn("es")).toEqual([]);
+  });
+
+  it("answers the report only under the content-languages read's authorisation", async () => {
+    const app = mountApp("es-ES");
+    expect((await send(app, "GET", PATH, { cookie: null })).status).toBe(401);
+    expect((await send(app, "GET", PATH, { cookie: staffCookie })).status).toBe(403);
+  });
+});
+
 /** JSON POST/PATCH helper with the manager cookie unless overridden. */
 async function send(
   app: Hono,

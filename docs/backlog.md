@@ -1388,6 +1388,17 @@ third changes all five.
   whether it is still a gap once English falls back to the Spanish name is a decision to make
   with the owner before building. "Main language" here means the venue's default content
   language.
+  _(Correction 2026-10-01, C122: measured, the receipt already falls back to the main language's
+  customer-facing name, so "a blank name in any language falls back straight to Name" and "English
+  would show the staff name" above are wrong for it. Default
+  Spanish, a product whose customer-facing name is `{es}` only: a Catalan and an English receipt
+  both printed its Spanish name, and an option's receipt text did the same (a direct call to
+  `customerOptionSnapshotLabels`); only a thing with no customer-facing name at all printed Name.
+  So this hint already matches the receipt while the main language's customer-facing name has
+  text. When it has none but another language does, the hint would show Name and the receipt prints a
+  blank goods line (the OPEN entry "A customer-facing name with no text in the default language
+  prints a blank goods line", under A9). The till's buttons and basket show Name in every case.
+  Receipts: the C122 entry under A9.)_
 
 Each hint follows the field it copies as the owner types: change Name and the blank fields' hints
 change with it.
@@ -7938,6 +7949,70 @@ ongoing overhaul listed at the top of Track A.
   Catalan; and two writers skip the check — the Prepare-to-Live configuration copy
   (`packages/catalogue/src/configuration-transfer.ts`), which copies the saved row as it is, and the
   demo seed (`apps/server/scripts/demo-seed/seed-catalogue.ts`).)_
+  _(2026-10-01, C122: C112 left a required language's missing names shown nowhere — the gap report
+  was read only when a save changed the default. Done: the Content languages page now lists them,
+  entry below.)_
+- **A visible list of missing translations (C122, owner 2026-10-01) — done (2026-10-01).** The
+  Content languages page gains a **Missing translations** section under the language card, rather
+  than a page of its own: the page already holds the languages and the region's rules, and a new
+  page would need its own menu entry and permission.
+  - Each enabled language has a fold-out with a count, holding a searchable table of what has no
+    customer-facing name in it: products, variants, options lists, options, extras lists, menus,
+    sections and units, each by its staff name (a variant, an option and a section after what holds
+    it), with Kind and Why filters and an **Open** link. Products and variants open their editor in
+    the dashboard; an options or extras list opens its editor through a new address
+    (`/manage/modifiers/view/<tab>/list/<id>`); an option links to its list, a menu or a section to
+    the menu's Structure tab, a unit to Units. A required language comes first, says Required, opens
+    by itself when something is missing and gets a note with the count. Categories are not listed:
+    they have one plain name.
+  - Which names count: the customer-facing name only; staff and kitchen names are plain text with no
+    language (`docs/developers/products.md`, "The three names"). "Partly translated" is
+    `listContentTranslationGaps`'s gap for that language, the only kind that blocks a change of
+    default, less the left-out rows below; "No customer-facing name" is listed under every language except the default (never
+    for an extras list, whose name reaches no receipt). Deleted products and their variants,
+    switched-off lists and their options, and what a switched-off menu owns are left out of the
+    list. One read implementation: `listTranslationGapReport` runs `listContentTranslationGaps`'s
+    query unchanged.
+  - What a diner sees when a name is missing (measured 2026-10-01 by running the planner's two
+    temporary probes again, then deleting them: a cash sale through `POST /api/sales` on a
+    `useVenueDb` venue, reprinted and decoded with `printedLines`, and the till's own name functions
+    in Chromium). Default Spanish, receipt in Catalan: a customer name `{es}` printed its Spanish
+    text, a product with no customer name printed its staff name, and the control `{es, ca}` printed
+    its Catalan text; a receipt in English printed the Spanish text likewise. An option's receipt
+    text (a direct call to `customerOptionSnapshotLabels`, not through a sale) did the same under
+    either default. Default Catalan with a customer name holding only Spanish (written
+    straight to the row; no save allows it): the receipt's goods line printed no name at all
+    (`sale_lines.descriptions` stored `{"ca-ES":""}`), while the printed allergen sheet showed the
+    staff name. The till's buttons and basket always show the staff name; a menu section's tab with
+    names `{es}` showed the Spanish name under default Spanish and the internal name under default
+    Catalan. The kitchen name has no language, so nothing is missing from the kitchen.
+  - Left out: image names. They come from the media module through the
+    `contentTranslations` seat, which carries only a kind and an id; naming or linking them from
+    the generic screen would break the module boundary (`scripts/module-seams.test.ts`), so widening
+    the seat is its own change. The page says they are checked on a change of default but not
+    listed.
+  - Open, for the owner: something with no customer-facing name at all is listed under each
+    non-default language as "No customer-facing name" (it shows its staff name there), so a venue
+    that never filled customer names sees most of its menu under each extra language. Under the
+    default it is not listed, because the staff name stands as that language's text — so in a new
+    Barcelona venue (default Catalan) a Spanish staff name with no customer name is not flagged
+    under Catalan.
+  - Open: a section's own form has no address, so a section links to its menu's Structure tab.
+- **A customer-facing name with no text in the default language prints a blank goods line — OPEN
+  (found 2026-10-01 by C122).** Measured above: under default Catalan, a customer name holding
+  only Spanish printed `1 u` and the price with no name on the receipt, and stored `{"ca-ES":""}`
+  on the sale line (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`,
+  then `lineName` in `apps/server/src/receipt-ticket.ts`). No save path writes such a row today
+  (product and variant saves refuse it), only a direct write. It shows under the default language
+  in the Missing translations list.
+- **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
+  C122; I believe this predates the branch).** `listContentTranslationGaps`
+  (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
+  options lists, extras lists or a menu's sections, and keeps a variant whose product is deleted, so
+  a deleted product's partly translated name blocks a change of default while the Missing
+  translations list leaves it out. Its product branch has read that way since #528 (`git log -S`),
+  and C122 did not change the query. The case "a deleted product, which the default-change check
+  still counts" in `packages/catalogue/src/content-translation-report.test.ts` pins today's answer.
 - **Folder-driven routing to multiple printers/destinations** (owner, 2026-09-30): the
   [approved routing design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)
   replaces the former label-driven proposal. Prep stations claim folders, with ordered exceptions

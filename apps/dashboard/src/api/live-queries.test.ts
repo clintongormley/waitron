@@ -130,6 +130,22 @@ it.each([
   ["getReportPrinters", [], ["printers"]],
   // The server works the rules out once at boot, so no table change moves them.
   ["getContentLanguageRules", [], []],
+  // `listTranslationGapReport` (packages/catalogue/src/content-translation-report.ts): the setting,
+  // then each table it names a row from.
+  [
+    "getContentTranslationGaps",
+    [],
+    [
+      "content_languages",
+      "products",
+      "option_lists",
+      "option_labels",
+      "extra_lists",
+      "sections",
+      "catalogues",
+      "units",
+    ],
+  ],
 ] as const)(
   "subscribes %s to exactly the tables its read selects from",
   async (name, args, types) => {

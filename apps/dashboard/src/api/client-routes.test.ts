@@ -134,6 +134,24 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads the missing-translations report from the management route", async () => {
+    const report = [
+      { language: "es", gaps: [] },
+      {
+        language: "ca",
+        gaps: [{ kind: "product", id: "prod-1", name: "STAFF Pan", reason: "partial" }],
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(report));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getContentTranslationGaps()).resolves.toEqual(report);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/content-translation-gaps", "GET", undefined],
+    ]);
+  });
+
   it("lists a unit's products and reassigns them, sending a null target for Each", async () => {
     const using = [{ id: "prod-1", name: "Olives" }];
     const fetchImpl = vi
