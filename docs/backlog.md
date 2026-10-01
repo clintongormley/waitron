@@ -1624,7 +1624,7 @@ has moved by that much — the case a slot-to-slot jump fails.
 
 **The extras list editor's "Add product" dropdown offered products already in the list (A181, owner
 2026-10-01: "when create extras lists, the products dropdown should remove already chosen
-products") — DONE 2026-10-01.** The picker was handed every product (`.options=${this.products.map(…)}`,
+products") — DONE 2026-10-01, #990.** The picker was handed every product (`.options=${this.products.map(…)}`,
 `apps/dashboard/src/widgets/extra-list-form.ts`), while a list may hold each product once: the
 unique index `extra_list_items_list_product_uq` (`packages/catalogue/src/schema/extras.ts`) and
 `parseExtraListInput` refuse a second, because a diner's pick is matched to an item by product id.
