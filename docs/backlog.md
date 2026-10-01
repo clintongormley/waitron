@@ -1622,18 +1622,32 @@ OPEN.** Two kinds of drag exist in the dashboard:
 and add a browser test that moves the pointer part way between two rows and checks the dragged row
 has moved by that much — the case a slot-to-slot jump fails.
 
-**The extras list editor's "Add product" dropdown offers products already in the list (A181, owner
+**The extras list editor's "Add product" dropdown offered products already in the list (A181, owner
 2026-10-01: "when create extras lists, the products dropdown should remove already chosen
-products") — OPEN.** The picker is handed every product (`.options=${this.products.map(…)}`,
+products") — DONE 2026-10-01.** The picker was handed every product (`.options=${this.products.map(…)}`,
 `apps/dashboard/src/widgets/extra-list-form.ts`), while a list may hold each product once: the
 unique index `extra_list_items_list_product_uq` (`packages/catalogue/src/schema/extras.ts`) and
 `parseExtraListInput` refuse a second, because a diner's pick is matched to an item by product id.
-So today picking a product already in the list can only end in a refusal. **Wanted:** the dropdown
+So picking a product already in the list could only end in a refusal. **Wanted:** the dropdown
 leaves out every product the draft list already holds, on creating AND editing a list; deleting a
 row makes its product pickable again; with every product used, the dropdown says so (its
 `noResultsLabel`, or a sentence of its own) rather than opening empty. Worth checking the same in
 the other "pick a product to add" lists while there (the menu section's Add products,
 `section-add-products.ts`; the product editor's attach-a-list picker).
+
+**What was built:** the picker now offers only the products the draft list does not hold, on a
+new list and an edited one; removing a row offers its product again; and with every product on the
+list the open picker says _"Every product is already on the list."_ (Spanish: _"Todos los
+productos ya están en la lista."_) in place of the no-match sentence, which stays for a search
+that matches nothing and for a venue with no products at all. The form's own duplicate check and
+the server's refusal stay. **The other two pickers, checked and left alone:** the product editor's
+attach-a-list picker already leaves out a list the product holds (`product-editor.ts`, the `held`
+filter); the menu section's Add products deliberately keeps a product already in the section
+tickable and marks it _In this section_ — a test pins that it stays enabled
+(`section-add-products.test.ts`) — so hiding it there would reverse a design rather than finish
+this one. Whether to hide it there too is the owner's call; the route's documentation
+(`docs/developers/product-categories.md`, `POST /management-api/sections/:id/members/products`)
+says "a product the list already holds is skipped"; this change did not test that.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
