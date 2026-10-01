@@ -13,6 +13,7 @@ export * from "./kitchen-stations.js";
 export * from "./kitchen-courses.js";
 export * from "./ticket-items.js";
 export * from "./devices.js";
+export * from "./device-made-here-stations.js";
 export * from "./join-requests.js";
 export * from "./print-agents.js";
 export * from "./printers.js";

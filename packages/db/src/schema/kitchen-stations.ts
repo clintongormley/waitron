@@ -20,6 +20,7 @@ export const kitchenStations = table(
     forgottenAfterMinutes: count("forgotten_after_minutes").notNull().default(15),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
+    showsRestOfOrder: flag("shows_rest_of_order").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
