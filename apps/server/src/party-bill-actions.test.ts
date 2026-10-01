@@ -548,7 +548,7 @@ describe("a held dish split onto a check", () => {
     expect(sent!.sentAt).not.toBeNull();
   });
 
-  // Whether the line is stamped sent is not asserted here: on a paid bill it is not (docs/backlog.md).
+  // Not asserted: the line's sent stamp; see the sent-stamp gap noted in docs/backlog.md (B20).
   it("reaches the kitchen once and is charged on the check alone when the check is paid before it is fired", async () => {
     const held = await heldFlanOnCheck("Mesa held paid first");
 

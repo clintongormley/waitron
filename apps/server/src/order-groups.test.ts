@@ -2000,7 +2000,7 @@ describe("a group split across bills of its party", () => {
     const [steak] = await linesIn(s.partyId, s.mains);
     const revision = await revisionOf(s.partyId);
 
-    const checkId = await splitToCheck(v, s, [{ lineNo: steak!.lineNo }], revision);
+    const checkId = await splitToCheck(v, s, [{ lineNo: steak!.lineNo }], revision, MIA);
 
     expect(await linesOfBill(checkId)).toMatchObject([
       { id: steak!.id, groupId: s.mains, creditedTo: ALEX, quantity: 2000, sentAt: null },
@@ -2078,9 +2078,19 @@ describe("a group split across bills of its party", () => {
       { workingOrderId: s.tabId, lineId: steak!.id, firedAt: null, quantity: 1000 },
       { workingOrderId: checkId, lineId: split!.id, firedAt: null, quantity: 1000 },
     ]);
+    const jobsBefore = (await printed(v)).length;
 
     await fire(v, s.partyId, s.mains);
 
+    expect((await printed(v)).slice(jobsBefore).map(ticketLines)).toEqual([
+      [
+        ...(await billHead(v, s, s.tabId)),
+        "GROUP 4",
+        `1.000 x ${DISHES.steak.kitchen}`,
+        `1.000 x ${DISHES.fish.kitchen}`,
+      ],
+      [...(await billHead(v, s, checkId)), "GROUP 4", `1.000 x ${DISHES.steak.kitchen}`],
+    ]);
     const fired = sortedByBill(await dishTickets(s.partyId, v.productId.steak), s.tabId);
     expect(fired).toMatchObject([
       { workingOrderId: s.tabId, lineId: steak!.id, quantity: 1000 },
@@ -2181,6 +2191,33 @@ async function ticketsOfBill(billId: string) {
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, billId))
     .orderBy(ticketItems.id);
+}
+
+/** A printed ticket's lines, minus the blank line the cut leaves. */
+function ticketLines(ticket: string): string[] {
+  return ticket.split("\n").filter((text) => text !== "");
+}
+
+/** What a kitchen ticket for this bill of the party prints under its mark: station, table, bill, time. */
+async function billHead(v: Venue, s: Seated, billId: string): Promise<unknown[]> {
+  const [station] = await db
+    .select({ name: kitchenStations.name })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.id, v.stationId));
+  const [table] = await db
+    .select({ label: diningTables.label })
+    .from(diningTables)
+    .where(eq(diningTables.id, s.tableId));
+  const [bill] = await db
+    .select({ orderNumber: workingOrders.orderNumber })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  return [
+    station!.name,
+    table!.label,
+    String(bill!.orderNumber),
+    expect.stringMatching(/^\d\d:\d\d$/),
+  ];
 }
 
 /** How many times the kitchen name appears across these printed jobs. */
@@ -3396,21 +3433,18 @@ describe("the kitchen and the pass read a party's groups", () => {
 });
 
 describe("kitchen tickets for a party's groups (Task 5)", () => {
-  /** A printed ticket's lines, minus the blank line the cut leaves. */
-  const linesOfTicket = (ticket: string) => ticket.split("\n").filter((text) => text !== "");
-
   // Fails if a group's fire ticket stops naming its group, or names it anywhere but under the header.
   it("names the group under the header of each group's fire ticket", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const [drinks, cold] = (await printed(v)).map(linesOfTicket);
+    const [drinks, cold] = (await printed(v)).map(ticketLines);
     expect(drinks![4]).toBe("GROUP 1");
     expect(drinks!.slice(5).join("\n")).toContain(DISHES.beer.kitchen);
     expect(cold![4]).toBe("GROUP 2");
 
     await fire(v, s.partyId, s.warm);
 
-    const warm = linesOfTicket((await printed(v)).at(-1)!);
+    const warm = ticketLines((await printed(v)).at(-1)!);
     expect(warm[4]).toBe("GROUP 3");
     expect(warm.filter((text) => text.startsWith("GROUP"))).toEqual(["GROUP 3"]);
   });
@@ -3437,7 +3471,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
 
     const jobs = await printed(v);
     expect(jobs).toHaveLength(jobsBefore + 1);
-    const reprint = linesOfTicket(jobs.at(-1)!);
+    const reprint = ticketLines(jobs.at(-1)!);
     expect(reprint[0]).toBe("*** REPRINT ***");
     const at = (text: string) => reprint.findIndex((row) => row.includes(text));
     expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
@@ -3464,7 +3498,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
 
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
 
-    const reprint = linesOfTicket((await printed(v)).at(-1)!);
+    const reprint = ticketLines((await printed(v)).at(-1)!);
     const at = (text: string) => reprint.findIndex((row) => row.includes(text));
     expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
       "GROUP 1",
@@ -3481,7 +3515,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
   it("prints Steak x3 as one 3 x entry under combined and three 1 x entries under separate, leaving the bill alone", async () => {
     const v = await setupVenue();
     const steaksOn = (ticket: string) =>
-      linesOfTicket(ticket).filter((text) => text.includes(DISHES.steak.kitchen));
+      ticketLines(ticket).filter((text) => text.includes(DISHES.steak.kitchen));
     const bill = (tabId: string) =>
       db
         .select({
@@ -3556,7 +3590,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     });
     const hake = (quantity: string): GroupLine => ({ menuItemId: sold.hake, quantity });
     const ofDish = (ticket: string, kitchenName: string) =>
-      linesOfTicket(ticket).filter((text) => text.endsWith(`x ${kitchenName}`));
+      ticketLines(ticket).filter((text) => text.endsWith(`x ${kitchenName}`));
 
     const first = await seated(v);
     await submit(v, first.partyId, [
@@ -3602,7 +3636,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
 
       const steaks = await linesIn(s.partyId, groups[0]!.id);
       expect(steaks.map((row) => row.quantity)).toEqual([1000, 1000, 1000]);
-      const ticket = linesOfTicket((await printed(v)).at(-1)!);
+      const ticket = ticketLines((await printed(v)).at(-1)!);
       expect(ticket.filter((text) => text.includes(DISHES.steak.kitchen))).toEqual([
         expect.stringMatching(/^3\.000 .*x K-STEAK$/),
       ]);
@@ -3611,31 +3645,14 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
 });
 
 describe("advance HOLD tickets (Task 6)", () => {
-  /** A printed ticket's lines, minus the blank line the cut leaves. */
-  const linesOfTicket = (ticket: string) => ticket.split("\n").filter((text) => text !== "");
-  const TIME = expect.stringMatching(/^\d\d:\d\d$/);
   const printHeldWork = (on: boolean) => inTx((tx) => writePrintHeldWork(tx, on));
 
-  /** What every ticket and slip for the party's tab prints under its mark: station, table, bill, time. */
-  async function head(v: Venue, s: Seated): Promise<unknown[]> {
-    const [station] = await db
-      .select({ name: kitchenStations.name })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.id, v.stationId));
-    const [table] = await db
-      .select({ label: diningTables.label })
-      .from(diningTables)
-      .where(eq(diningTables.id, s.tableId));
-    const [bill] = await db
-      .select({ orderNumber: workingOrders.orderNumber })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, s.tabId));
-    return [station!.name, table!.label, String(bill!.orderNumber), TIME];
-  }
+  /** What every ticket and slip for the party's tab prints under its mark. */
+  const head = (v: Venue, s: Seated) => billHead(v, s, s.tabId);
 
   /** The jobs printed since `from`, each as its lines. */
   async function printedSince(v: Venue, from: number): Promise<string[][]> {
-    return (await printed(v)).slice(from).map(linesOfTicket);
+    return (await printed(v)).slice(from).map(ticketLines);
   }
 
   async function noticesAt(v: Venue) {
@@ -3852,6 +3869,62 @@ describe("advance HOLD tickets (Task 6)", () => {
           `1.000 x ${DISHES.fish.kitchen}`,
         ],
       ]);
+    });
+
+    it("prints nothing when a Steak of the printed mains is split onto a check, then one FIRE slip from each bill for its own dishes", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const steak = await lineOf(s, s.mains, "steak", v);
+      const holdJob = (await jobIds(v))[3]!;
+      expect((await printedSince(v, 3))[0]).toEqual([
+        "*** HOLD ***",
+        ...(await head(v, s)),
+        "GROUP 4",
+        `2.000 x ${DISHES.steak.kitchen}`,
+        `1.000 x ${DISHES.fish.kitchen}`,
+      ]);
+
+      const checkId = await splitToCheck(
+        v,
+        s,
+        [{ lineNo: steak.lineNo, quantity: "1" }],
+        undefined,
+        MIA,
+      );
+
+      expect(await printedSince(v, 5)).toEqual([]);
+      expect(await noticesAt(v)).toEqual([]);
+
+      await fire(v, s.partyId, s.mains);
+
+      expect(await printedSince(v, 5)).toEqual([
+        [
+          "*** FIRE ***",
+          ...(await head(v, s)),
+          "GROUP 4",
+          `1.000 x ${DISHES.steak.kitchen}`,
+          `1.000 x ${DISHES.fish.kitchen}`,
+        ],
+        [
+          "*** FIRE ***",
+          ...(await billHead(v, s, checkId)),
+          "GROUP 4",
+          `1.000 x ${DISHES.steak.kitchen}`,
+        ],
+      ]);
+      const [tabSlip, checkSlip] = (await jobIds(v)).slice(5);
+      const linksOf = async (billId: string) =>
+        (
+          await db
+            .select({ printJobId: kitchenPrintJobs.printJobId })
+            .from(kitchenPrintJobs)
+            .where(eq(kitchenPrintJobs.workingOrderId, billId))
+            .orderBy(sql`${kitchenPrintJobs}.rowid`)
+        ).map((row) => row.printJobId);
+      // A printing problem on the check can name the HOLD ticket its Steak was announced on.
+      expect(await linksOf(checkId)).toEqual([holdJob, checkSlip]);
+      expect(await linksOf(s.tabId)).toEqual([...(await jobIds(v)).slice(0, 5), tabSlip]);
     });
 
     it("prints +1 for a Steak joined to the printed mains, with an added notice", async () => {
@@ -4206,7 +4279,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         .from(printJobs)
         .where(eq(printJobs.printerId, pass));
       const [station, ...rest] = await head(v, s);
-      expect(jobs.map((job) => linesOfTicket(printedLines(job.payload).join("\n")))).toEqual([
+      expect(jobs.map((job) => ticketLines(printedLines(job.payload).join("\n")))).toEqual([
         ["*** HOLD ***", "PASE", ...rest, "GROUP 1", station, `1.000 x ${DISHES.fish.kitchen}`],
       ]);
       expect(await linkedJobs()).toEqual([...(await jobIds(v)), jobs[0]!.id]);
@@ -4285,7 +4358,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       await submit(v, s.partyId, groups, opts);
       await submit(v, s.partyId, groups, opts);
 
-      expect((await printed(v)).map((job) => linesOfTicket(job)[0])).toEqual(["*** HOLD ***"]);
+      expect((await printed(v)).map((job) => ticketLines(job)[0])).toEqual(["*** HOLD ***"]);
     });
 
     it("prints a repeated move's corrections once", async () => {

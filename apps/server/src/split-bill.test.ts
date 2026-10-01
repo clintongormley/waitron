@@ -894,7 +894,7 @@ describe("splitting held kitchen work onto a check", () => {
     ["whole", undefined],
     ["part", "1"],
   ] as const)(
-    "refuses to move a held line (%s) onto a check, moving nothing, and still splits a fired one",
+    "refuses to move a held line of no group (%s) onto a check, moving nothing, and still splits a fired one",
     async (_, quantity) => {
       const { cfg, aguaId, tableId } = await setupVenue();
       await withKitchen(cfg);
