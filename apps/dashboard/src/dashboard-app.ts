@@ -613,7 +613,8 @@ export class DashboardApp extends LitElement {
   /** Keeps the footer's Edit disabled until profile-screen has loaded the data `editDetails()` reads. */
   @state() private profileReady = false;
 
-  /** A group in this set still renders expanded if it holds the CURRENT screen. */
+  /** Arriving at a screen opens its group (`willUpdate`, `#selectScreen`); a header click can then
+   * collapse it like any other. */
   @state() private collapsedGroups = new Set<NavGroupId>(
     NAV_GROUPS.filter((group) => group.headerKey).map((group) => group.id),
   );
@@ -622,8 +623,6 @@ export class DashboardApp extends LitElement {
   #toggleGroup(id: NavGroupId, trigger: HTMLElement): void {
     const before = trigger.getBoundingClientRect().top;
     const next = new Set(this.collapsedGroups);
-    // What the header shows, not set membership: the current screen's group shows open whatever
-    // the set holds.
     if (trigger.getAttribute("aria-expanded") === "true") next.add(id);
     else next.delete(id);
     this.collapsedGroups = next;
@@ -965,6 +964,20 @@ export class DashboardApp extends LitElement {
   }
 
   #canOpenScreen = (screen: string): boolean => this.#permittedScreen(screen) === screen;
+
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("screen")) this.#openGroupOf(this.screen);
+  }
+
+  #openGroupOf(screen: ScreenId): void {
+    const group =
+      NAV_GROUPS.find((entry) => entry.items.some((item) => item.screen === screen))?.id ??
+      this.#activeScreens.get(screen)?.screen.group;
+    if (group === undefined || !this.collapsedGroups.has(group)) return;
+    const next = new Set(this.collapsedGroups);
+    next.delete(group);
+    this.collapsedGroups = next;
+  }
 
   override updated(changed: PropertyValues): void {
     // An open pop-up whose new text equals the old changes no toast property, so its countdown
@@ -1336,6 +1349,8 @@ export class DashboardApp extends LitElement {
   #selectScreen(screen: ScreenId): void {
     diag.record("info", "nav", { screen });
     this.screen = this.#permittedScreen(screen);
+    // Picking the page already shown changes no `screen`, so `willUpdate` would leave its group shut.
+    this.#openGroupOf(this.screen);
     this.#writeScreenUrl(this.screen);
     this.drawerOpen = false;
   }
@@ -1431,7 +1446,7 @@ export class DashboardApp extends LitElement {
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
    * language; `pages` is undefined for a group the search hides whole. */
-  #shownNav(): { group: NavGroup; holdsCurrent: boolean; pages?: NavPage[] }[] {
+  #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
     const term = foldForSearch(this.navSearch.trim());
     return NAV_GROUPS.map((group) => {
       const permitted: NavPage[] = [
@@ -1443,16 +1458,13 @@ export class DashboardApp extends LitElement {
           label: tKit(screen.navLabelKey),
         })),
       ];
-      const holdsCurrent =
-        group.items.some((item) => item.screen === this.screen) ||
-        permitted.some((page) => page.screen === this.screen);
-      if (term === "") return { group, holdsCurrent, pages: permitted };
+      if (term === "") return { group, pages: permitted };
       const headerMatches =
         group.headerKey !== undefined && foldForSearch(t(group.headerKey)).includes(term);
       const pages = headerMatches
         ? permitted
         : permitted.filter((page) => foldForSearch(page.label).includes(term));
-      return { group, holdsCurrent, pages: pages.length > 0 ? pages : undefined };
+      return { group, pages: pages.length > 0 ? pages : undefined };
     });
   }
 
@@ -1494,12 +1506,11 @@ export class DashboardApp extends LitElement {
           @input=${(e: Event) => (this.navSearch = (e.target as HTMLInputElement).value)}
           @keydown=${(e: KeyboardEvent) => this.#onNavSearchKeydown(e)}
         />
-        ${sections.map(({ group, holdsCurrent, pages }) => {
+        ${sections.map(({ group, pages }) => {
           if (pages === undefined) return nothing;
           // A search shows its matches open without touching `collapsedGroups`, and its headers
-          // are plain labels rather than toggles, so clearing it brings back the nav exactly as it
-          // was.
-          const collapsed = !searching && this.collapsedGroups.has(group.id) && !holdsCurrent;
+          // are plain labels rather than toggles.
+          const collapsed = !searching && this.collapsedGroups.has(group.id);
           const panelId = `nav-group-panel-${group.id}`;
           return html`
             ${

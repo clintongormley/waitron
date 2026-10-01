@@ -931,12 +931,15 @@ is also its own disclosure toggle, except while a search term is typed (below): 
 `wt-icon` that rotates 180° when expanded (pointing down at rest — "expand this way" — up when open
 — "collapse"). Every headed group starts collapsed (owner decision 2026-09-28, replacing
 expanded-by-default). Collapsed state is a plain `Set<NavGroupId>` in component state, not
-persisted, so each load starts collapsed again. A group that contains the CURRENT screen always
-renders expanded regardless of that set, so opening the dashboard on a page shows that page's group
-open and the rest closed. A header click records the opposite of what the header shows. The group
-holding the current screen always shows open, so clicking its header leaves a collapse recorded that
-a further click cannot clear; the collapse shows once you open a screen outside that group, and
-never hides the page you are on.
+persisted, so each load starts collapsed again — except the group holding the page it opens.
+Whenever the current screen changes (the first load, a reload, the Back button, a nav click, a
+search pick), and whenever a nav row or a search pick opens a page even if it is the page already
+shown, that page's group is taken out of the set, so it shows open. After that its header collapses
+and reopens it like any other group's (A161, owner 2026-09-30): a header click records the opposite
+of what the header shows, and outside a search the header's `aria-expanded` and the item list's
+`hidden` follow the set alone. A collapsed group holding the current page hides that page's row;
+arriving at another page in it opens it again. A group opened on arrival stays open after you leave
+it, as one opened by hand does.
 
 A search box sits at the top of the sidebar, above the groups: a native `<input type="search">`
 named `nav-search`, whose accessible name and placeholder are both **Search pages**. A staff session
@@ -947,10 +950,10 @@ narrows the rows the nav would already show, so a page this person may not open 
 however exactly its name is typed. A group with no match is hidden, header and all. A group with a
 match shows open whatever its collapsed state. While a term is typed each shown header stops being a
 collapse control: it is a plain `<div>` with no `aria-expanded`, no click handler and no chevron (an
-empty space of the chevron's width keeps the label where it was). Nothing clicked during a search
-can therefore change the recorded collapsed state, so clearing the term brings the nav back exactly
-as it was. When nothing matches, the nav says **No pages match.** in a `role="status"` message. Enter
-opens the first page shown, in nav order, and does nothing when nothing matches or the box is blank.
+empty space of the chevron's width keeps the label where it was), so clicking one changes nothing.
+Picking a page opens its group, as any arrival does. When nothing matches, the nav says **No pages
+match.** in a `role="status"` message. Enter opens the first page shown, in nav order, and does
+nothing when nothing matches or the box is blank.
 Opening a page from a search, by Enter or by click, clears the term and closes the phone-width
 drawer, as any nav click does. Escape clears a term and goes no further, so an open drawer stays
 open; Escape in an empty box closes the drawer as it does anywhere else in the shell. An Enter or

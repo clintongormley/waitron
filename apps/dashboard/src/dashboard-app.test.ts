@@ -1739,33 +1739,7 @@ describe("dashboard-app", () => {
     expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe(heading);
   });
 
-  it("keeps a group expanded once collapsed if it holds the current screen, so you never lose your place", async () => {
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-    });
-    await flush(el);
-    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
-    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-menu")!;
-    header.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-    navItem(el, "catalogue")!.click();
-    await flush(el);
-
-    header.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-    expect(panel.hidden).toBe(false);
-    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
-
-    // The collapse recorded while on catalogue applies once the current screen is elsewhere.
-    navItem(el, "overview")!.click();
-    await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("false");
-    expect(panel.hidden).toBe(true);
-  });
-
-  it("does not clear a group's collapse when its header is clicked while it shows open only for holding the current page", async () => {
+  it("collapses the current page's group when its header is clicked, and opens it on a second click", async () => {
     history.replaceState(null, "", "/manage/catalogue");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
@@ -1777,12 +1751,60 @@ describe("dashboard-app", () => {
 
     header.click();
     await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
+    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
+  });
+
+  it("opens a collapsed group when the Back button arrives at a page in it", async () => {
+    history.replaceState(null, "", "/manage/staff");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-team")!;
     expect(header.getAttribute("aria-expanded")).toBe("true");
 
-    navItem(el, "overview")!.click();
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/catalogue");
+    header.click();
     await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(panel.hidden).toBe(true);
+
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(el);
+
+    expect(location.pathname).toBe("/manage/staff");
+    expect(el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hidden).toBe(false);
+    expect(navItem(el, "staff")!.checkVisibility()).toBe(true);
+  });
+
+  it("starts with a module page's group expanded when that page is opened", async () => {
+    history.replaceState(null, "", "/manage/bookings");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      request: stubRequest,
+    });
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-service"]')!;
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(navItem(el, "bookings")!.checkVisibility()).toBe(true);
   });
 
   it("keeps the clicked group header at the same on-screen position when collapsing shrinks the list above the fold", async () => {
@@ -4451,6 +4473,37 @@ describe("the nav search", () => {
     expect(searchBox(el).value).toBe("");
     expect(expandedHeaders(el)).toEqual(["nav-group-configuration"]);
     expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
+  });
+
+  it("opens the current page's group again when a search picks another page in it after it was collapsed", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const el = await mountSession(sessionIn("en-GB"));
+    const menu = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
+    menu().click();
+    await flush(el);
+    expect(expandedHeaders(el)).toEqual([]);
+
+    await search(el, "Units");
+    await press(el, "Enter");
+
+    expect(new URL(location.href).pathname).toBe("/manage/units");
+    expect(expandedHeaders(el)).toEqual(["nav-group-menu"]);
+    expect(navItem(el, "units")!.checkVisibility()).toBe(true);
+  });
+
+  it("opens the current page's collapsed group when a search picks that same page", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const el = await mountSession(sessionIn("en-GB"));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!.click();
+    await flush(el);
+    expect(expandedHeaders(el)).toEqual([]);
+
+    await search(el, "Products");
+    await press(el, "Enter");
+
+    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+    expect(expandedHeaders(el)).toEqual(["nav-group-menu"]);
+    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
   });
 
   it("does nothing on Enter when no page matches", async () => {
