@@ -139,6 +139,13 @@ export class CatalogueScreen extends LitElement {
       this.errorKey = codeOf(error);
     },
   );
+  readonly #routingQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.routing = null;
+    },
+  );
   // A re-read that fails after the step's first load keeps the menus it already shows.
   readonly #placementQueries = new DashboardQueries(
     this,
@@ -190,9 +197,13 @@ export class CatalogueScreen extends LitElement {
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
-        this.#queries.watch("getFolderRouting", [], (value) => {
-          this.routing = value;
-        }),
+        this.#routingQueries
+          .watch("getFolderRouting", [], (value) => {
+            this.routing = value;
+          })
+          .catch(() => {
+            this.routing = null;
+          }),
         this.#queries.watch("listUnits", [], (value) => {
           this.units = value;
         }),

@@ -291,6 +291,17 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
+  it("keeps products available when the optional folder routing read is refused", async () => {
+    const api = stubApi({
+      getFolderRouting: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(list(el).products).toEqual(products);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(list(el).routing).toBeNull();
+  });
+
   it("leaves the content languages to their own Settings page while still handing them to the editor", async () => {
     const api = stubApi({
       getContentLanguages: vi
