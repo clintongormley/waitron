@@ -196,6 +196,14 @@ jobs:
             && grep -q "^## Litestream" /app/third-party/README.md'
           docker exec "$app" grep -qx "Litestream version: $pinned" /app/third-party/litestream/NOTICES.txt
 
+      - name: The image carries the licence of the font printed text is drawn in
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          docker exec "$app" sh -c 'test -s /app/third-party/iosevka/LICENSE.md \
+            && grep -q "SIL Open Font License" /app/third-party/iosevka/LICENSE.md \
+            && grep -q "^## Iosevka" /app/third-party/README.md'
+
       - name: The print agent came up and picked up its server URL
         run: |
           set -euo pipefail

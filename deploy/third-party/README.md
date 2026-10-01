@@ -1,8 +1,9 @@
 # Third-party software in the Waitron box image
 
 The box image carries software written by others under their own licences. This folder is
-copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream
-and the Moby template the print agent's AppArmor profile is copied from; the npm packages bundled
+copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream,
+the Iosevka font printed text is drawn from, and the Moby template the print agent's AppArmor
+profile is copied from; the npm packages bundled
 into the server, the web apps and the print-agent have no notice file yet (`docs/backlog.md`).
 The print-agent image, built by the same `deploy/Dockerfile`, does not carry this folder; its own
 `/app/third-party/` holds the notices of its Python, described below.
@@ -64,6 +65,18 @@ the package's copyright and licences, into `/app/third-party/python3-minimal/` i
 `<package>/copyright`. `PACKAGES.txt` in the same folder names each of those packages and the
 version installed. The build fails if the list does not include `python3-minimal`, or if a listed
 package has no copyright file.
+
+## Iosevka Term Bold
+
+The server draws the text of every printout as pictures, from a table of letter pictures derived
+from the font Iosevka Term Bold, release 34.9.0, Copyright (c) 2015-2026, Renzhi Li (aka. Belleve
+Invis). The image carries no font file, only that table, which is compiled into the server. The
+font and the table derived from it are licensed under the SIL Open Font License, Version 1.1.
+
+- `iosevka/LICENSE.md` is that licence with the font's copyright line, copied unchanged from the
+  font's repository at the release's tag.
+- `iosevka/README.md` says where the font came from, with the SHA-256 of each file, and how the
+  table was made from it.
 
 ## Litestream
 
