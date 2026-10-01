@@ -795,8 +795,9 @@ export type PrintPreviewBlock =
     };
 
 export interface PrintJobPreview {
+  /** The dots across the job's line, which the paper stands for. */
+  widthDots: number;
   columns: number;
-  dpi: number;
   text: string;
   blocks: PrintPreviewBlock[];
   qrData: string[];

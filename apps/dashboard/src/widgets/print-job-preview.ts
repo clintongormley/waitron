@@ -6,20 +6,49 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { PrintJobPreview, PrintPreviewBlock } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import {
-  DOTS_PER_COLUMN,
-  columnsFor,
-  textGrid,
-  type PaperWidth,
-} from "@waitron/printing/src/layout.js";
 
-const PAPER_WIDTHS: readonly PaperWidth[] = ["58mm", "80mm"];
+type ImageBlock = Extract<PrintPreviewBlock, { kind: "image" }>;
+/** Images drawn as one picture: a QR code alone, or a run of other images of one width. */
+type ImageRun = { kind: "images"; blocks: ImageBlock[]; height: number };
+type Piece = Exclude<PrintPreviewBlock, ImageBlock> | ImageRun;
 
-/** The dots across the printer's line, which the preview's paper stands for. */
-function lineDots({ columns, dpi }: PrintJobPreview): number {
-  const paperWidth = PAPER_WIDTHS.find((width) => columnsFor(width) === columns);
-  if (paperWidth === undefined) return columns * DOTS_PER_COLUMN;
-  return textGrid(paperWidth, dpi === 203 ? "203dpi" : "180dpi").widthDots;
+/** Well inside approximate browser canvas limits: 32,767 px a side, or 16,777,216 px of area on older iOS Safari. */
+const MAX_RUN_HEIGHT = 8_192;
+
+/** Consecutive images of one width and alignment join one run, so a long job is a few pictures. */
+function runs(blocks: readonly PrintPreviewBlock[]): Piece[] {
+  const out: Piece[] = [];
+  for (const block of blocks) {
+    if (block.kind !== "image") {
+      out.push(block);
+      continue;
+    }
+    const last = out.at(-1);
+    const run = last?.kind === "images" ? last : undefined;
+    const first = run?.blocks[0];
+    if (
+      run !== undefined &&
+      first !== undefined &&
+      first.qrData === undefined &&
+      block.qrData === undefined &&
+      first.width === block.width &&
+      first.align === block.align &&
+      run.height + block.height <= MAX_RUN_HEIGHT
+    ) {
+      run.height += block.height;
+      run.blocks.push(block);
+    } else {
+      out.push({ kind: "images", blocks: [block], height: block.height });
+    }
+  }
+  return out;
+}
+
+function altText(run: ImageRun): string {
+  const qrData = run.blocks[0]!.qrData;
+  if (qrData !== undefined) return `${t("printers.preview_qr_data")}: ${qrData}`;
+  const lines = run.blocks.flatMap((block) => (block.text === undefined ? [] : [block.text]));
+  return lines.length > 0 ? lines.join("\n").trim() : t("printers.preview_image");
 }
 
 @customElement("dashboard-print-job-preview")
@@ -83,33 +112,54 @@ export class PrintJobPreviewDialog extends LitElement {
     `,
   ];
 
-  #images = new WeakMap<object, string>();
+  #runs = new WeakMap<PrintJobPreview, Piece[]>();
+  #images = new WeakMap<ImageBlock, string>();
 
-  #bitmapUrl(block: Extract<PrintPreviewBlock, { kind: "image" }>): string {
-    const cached = this.#images.get(block);
+  /** The run's own printed images stacked into one PNG, keyed by the run's first block. */
+  #bitmapUrl({ blocks, height }: ImageRun): string {
+    const cached = this.#images.get(blocks[0]!);
     if (cached) return cached;
+    const width = blocks[0]!.width;
     const canvas = document.createElement("canvas");
-    canvas.width = block.width;
-    canvas.height = block.height;
+    canvas.width = width;
+    canvas.height = height;
     const context = canvas.getContext("2d")!;
-    const pixels = context.createImageData(block.width, block.height);
-    const bytes = atob(block.data);
-    const stride = Math.ceil(block.width / 8);
-    for (let y = 0; y < block.height; y++) {
-      for (let x = 0; x < block.width; x++) {
-        const dark = bytes.charCodeAt(y * stride + (x >> 3)) & (0x80 >> (x % 8));
-        const offset = (y * block.width + x) * 4;
-        pixels.data[offset] = pixels.data[offset + 1] = pixels.data[offset + 2] = dark ? 0 : 255;
-        pixels.data[offset + 3] = 255;
+    const pixels = context.createImageData(width, height);
+    pixels.data.fill(255);
+    const stride = Math.ceil(width / 8);
+    let top = 0;
+    for (const block of blocks) {
+      const bytes = atob(block.data);
+      for (let y = 0; y < block.height; y++) {
+        for (let byte = 0; byte < stride; byte++) {
+          const bits = bytes.charCodeAt(y * stride + byte);
+          if (bits === 0) continue;
+          for (let bit = 0; bit < 8; bit++) {
+            const x = byte * 8 + bit;
+            if (x >= width || (bits & (0x80 >> bit)) === 0) continue;
+            const offset = ((top + y) * width + x) * 4;
+            pixels.data[offset] = pixels.data[offset + 1] = pixels.data[offset + 2] = 0;
+          }
+        }
       }
+      top += block.height;
     }
     context.putImageData(pixels, 0, 0);
     const url = canvas.toDataURL("image/png");
-    this.#images.set(block, url);
+    this.#images.set(blocks[0]!, url);
     return url;
   }
 
-  #renderBlock(block: PrintPreviewBlock, widthDots: number) {
+  #runsOf(preview: PrintJobPreview): Piece[] {
+    let cached = this.#runs.get(preview);
+    if (cached === undefined) {
+      cached = runs(preview.blocks);
+      this.#runs.set(preview, cached);
+    }
+    return cached;
+  }
+
+  #renderBlock(block: Piece, widthDots: number) {
     switch (block.kind) {
       case "text":
         return html`<pre data-kind="text" data-align=${block.align ?? nothing}>${block.text}</pre>`;
@@ -121,13 +171,13 @@ export class PrintJobPreviewDialog extends LitElement {
         ></div>`;
       case "cut":
         return html`<hr data-kind="cut" class="cut" aria-label=${t("printers.preview_cut")} />`;
-      case "image":
+      case "images":
         return html`<img
           data-kind="image"
-          data-align=${block.align ?? nothing}
+          data-align=${block.blocks[0]!.align ?? nothing}
           src=${this.#bitmapUrl(block)}
-          style=${`width:${(block.width / widthDots) * 100}%`}
-          alt=${block.qrData === undefined ? (block.text ?? "") : `${t("printers.preview_qr_data")}: ${block.qrData}`}
+          style=${`width:${(block.blocks[0]!.width / widthDots) * 100}%`}
+          alt=${altText(block)}
         />`;
     }
   }
@@ -143,7 +193,7 @@ export class PrintJobPreviewDialog extends LitElement {
 
   override render() {
     const preview = this.preview;
-    const widthDots = preview ? lineDots(preview) : 0;
+    const widthDots = preview?.widthDots ?? 0;
     return html`
       <wt-modal .open=${this.open} heading=${t("printers.preview_title")} @wt-close=${this.#close}>
         <p>${t("printers.preview_notice")}</p>
@@ -161,7 +211,7 @@ export class PrintJobPreviewDialog extends LitElement {
                         aria-label=${t("printers.preview_paper")}
                       >
                         <div class="paper" style=${`width:${preview.columns}ch`}>
-                          ${preview.blocks.map((block) => this.#renderBlock(block, widthDots))}
+                          ${this.#runsOf(preview).map((block) => this.#renderBlock(block, widthDots))}
                         </div>
                       </div>`
                     : nothing

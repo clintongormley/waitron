@@ -30,7 +30,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { textGrid } from "@waitron/printing/src/layout.js";
+import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
 import type {
   BluetoothCommandStatus,
   DashboardApi,
@@ -122,14 +122,6 @@ const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, 
 
 const commandKey = (agentId: string, address: string): string =>
   `${agentId}:${address.toUpperCase()}`;
-
-/** Each paper width and resolution with the dots it prints across: the numbers on the width ruler. */
-const RULER_SETTINGS = (["58mm", "80mm"] as const).flatMap((paperWidth) =>
-  (["180dpi", "203dpi"] as const).map((resolution) => ({
-    paperWidth,
-    widthDots: textGrid(paperWidth, resolution).widthDots,
-  })),
-);
 
 /** The printer editor's checks that have a field of their own; the rest name only the bottom message. */
 const PRINTER_FIELDS: readonly string[] = ["name", "host", "port"];
@@ -2453,7 +2445,7 @@ export class PrintersScreen extends LitElement {
                 name="printer-ruler-number"
                 @change=${(e: Event) => {
                   this.rulerNumber = (e.target as HTMLSelectElement).value;
-                  const setting = RULER_SETTINGS.find(
+                  const setting = SETTING_WIDTHS.find(
                     ({ widthDots }) => String(widthDots) === this.rulerNumber,
                   );
                   if (setting) this.#editPrinter(p.id, { paperWidth: setting.paperWidth });
@@ -2462,7 +2454,7 @@ export class PrintersScreen extends LitElement {
                 <option value="" .selected=${this.rulerNumber === ""}>
                   ${t("printers.test_answer_choose")}
                 </option>
-                ${RULER_SETTINGS.map(
+                ${SETTING_WIDTHS.map(
                   ({ widthDots }) =>
                     html`<option
                       value=${widthDots}

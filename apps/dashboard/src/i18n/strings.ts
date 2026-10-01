@@ -315,6 +315,7 @@ export const en = {
   "printers.preview_notice":
     "Approximate paper layout of the stored job. The printer’s own settings can change the printed result.",
   "printers.preview_qr_data": "QR code content",
+  "printers.preview_image": "Printed image",
   "printers.preview_graphics_omitted": "Some images could not be shown.",
   "printers.preview_incomplete": "Some content could not be previewed.",
   "printers.preview_empty": "This job has no printable content.",
@@ -2211,6 +2212,7 @@ export const es: Record<StringKey, string> = {
   "printers.preview_notice":
     "Diseño aproximado del trabajo guardado. Los ajustes de la propia impresora pueden cambiar el resultado impreso.",
   "printers.preview_qr_data": "Contenido del código QR",
+  "printers.preview_image": "Imagen impresa",
   "printers.preview_graphics_omitted": "No se han podido mostrar algunas imágenes.",
   "printers.preview_incomplete": "No se ha podido mostrar parte del contenido.",
   "printers.preview_empty": "Este trabajo no contiene contenido imprimible.",
