@@ -5007,10 +5007,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       card sale, a collect of a placed order by hand-keyed card, and a hand-keyed card bill payment
       each enqueue a separate `drawer` job and a `drawer_opens` row of the new reason `card_slip`
       when something is owed (a sale or collect that owes nothing opens no drawer, by card or cash,
-      since B28; guarded by the card cases in `apps/server/src/pay-owing-nothing.test.ts`), naming
-      the sale or, for a bill payment, the bill payment (even when that payment issues the
-      invoice). The condition is the one cash uses: the device is not a handheld, and the calling
-      till's active receipt printer has a drawer attached. A card on a connected machine (Stripe,
+      as B28 and C67 settle it; guarded by the card cases in
+      `apps/server/src/pay-owing-nothing.test.ts` and, for collecting an invoice that owes nothing,
+      the card case in `apps/server/src/collect-by-invoice.test.ts`), naming the sale or, for a
+      bill payment, the bill payment (even when that payment issues the invoice). The condition is
+      the one cash uses: the device is not a handheld, and the calling till's active receipt
+      printer has a drawer attached. A card on a connected machine (Stripe,
       SumUp, the practice simulator) opens nothing, and a replay opens nothing more. Lane B's B29
       (queued, owner 2026-10-01) narrows "the till" to the drawer printer's primary owner. Both
       review seats reproduced the case B29 must close: two tills that share one drawer-equipped
