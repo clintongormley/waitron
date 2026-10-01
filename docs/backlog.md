@@ -7819,7 +7819,7 @@ ongoing overhaul listed at the top of Track A.
     `assertPassiveManagementReads` in `apps/server/src/boot.test.ts`, which sends a preview through
     the booted server with and without the passive header and checks that only the second moves the
     session's last-seen time.
-- **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01).** AEAT's «Detalle de
+- **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** AEAT's «Detalle de
   las especificaciones técnicas del código «QR» de la factura y de la «URL» del servicio de cotejo o
   remisión de información por parte del receptor de la factura», version 0.5.0 of 10/12/2025, section
   3, says: «La presentación del código «QR» incluirá también un texto que siempre deberá ir
@@ -7834,14 +7834,15 @@ ongoing overhaul listed at the top of Track A.
   (`apps/till/src/screens/till-ticket-view.ts`). Checked and left alone: the two printer test pages
   (`apps/server/src/printer-test-page.ts`, `apps/server/src/test-page.ts`) print a QR that is not an
   invoice's, and the payment slip prints no QR. Nothing about the filed record changed.
-  - Still open, for the owner to decide: the same section 3 also says «El código «QR» se situará al
+  - Queued as C123 (owner, 2026-10-01: move the caption, the QR and the VERI\*FACTU line to the
+    start of the invoice). The same section 3 also says «El código «QR» se situará al
     principio de la factura, antes de que empiece el contenido de ésta generado por el sistema
     informático de facturación, a menos que se justifique la existencia de algún obstáculo para
     ello, en cuyo caso, deberá quedar siempre bien visible y estar claramente separado y
     diferenciado –de forma que destaque– del resto de contenidos y otros posibles «QR», ocupando un
     lugar preeminente.» Waitron prints the QR near the END of the receipt, just above the
     VERI\*FACTU line, and shows it there on the till's screen too. Not changed here.
-  - Still open, for the owner to decide: the same section 3 also says «Tanto el texto que siempre
+  - Left as it is (owner, 2026-10-01: "leave it"). The same section 3 also says «Tanto el texto que siempre
     debe preceder al código «QR», como, en su caso, la frase que habrán de incluir los sistemas
     «VERI\*FACTU» deberán tener un tipo de letra y tamaño legibles, siempre iguales o superiores a
     los del resto de datos de la factura.» That is, the caption and the VERI\*FACTU line must be in
