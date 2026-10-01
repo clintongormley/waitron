@@ -105,6 +105,10 @@ export class MemberListEditor extends LitElement {
         gap: var(--wt-space-2);
         margin-top: var(--wt-space-4);
       }
+      .add,
+      .error {
+        max-width: var(--wt-field-max-width);
+      }
       .field {
         display: grid;
         flex: 1;

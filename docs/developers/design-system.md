@@ -215,13 +215,17 @@ screen draws (each holds one field's text and control, and its error when it has
 content-languages editor's two select labels and their `.error` lines. A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print block"
-button. Guards: the form-width cases in `packages/ui/src/components/wt-modal.test.ts` (every shared
-field, a native select field's label, select, hint and error, and the message at 1280px; the select
-below its label text at 1280px; wide content and the footer row at full width; each field at the
+button, and the section member list's `.add` row does, for its Add button, along with that row's
+`.error` line (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
+the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
+cases in `packages/ui/src/components/wt-modal.test.ts` (every shared field, a native select
+field's label, select, hint and error, and the message at 1280px; the select below its label text
+at 1280px; wide content and the footer row at full width; each field at the
 body's width at 390px; each field at its container's width outside a modal); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
 `apps/dashboard/src/screens/profile-screen.test.ts`,
 `apps/dashboard/src/widgets/content-languages.test.ts`,
+`apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that
 does not read `--wt-field-max-width` is seen by none of them, and neither is a screen-styled native
