@@ -1004,6 +1004,14 @@ it("products and categories carry no station of their own", async () => {
 
 ### Task 6: The drag-to-reorder helper moves into `@waitron/ui`
 
+> **Note, 2026-10-01:** A180 (branch `fix/drag-row-follows-pointer`) grew `reorder-table.ts`, so
+> the line number and line count below are out of date. Find the string by its call,
+> `t("action.reordered")`, which sets `#announcement`, rather than by line 201. The new slide
+> code falls under `packages/ui`'s mutation floor of 90 once moved. The moved test calls
+> `commands.emulateReducedMotion`, a browser test command that only `apps/dashboard/vitest.config.ts`
+> defines and only `apps/dashboard/src/widgets/test-helpers.ts` declares; the move must carry it
+> into `packages/ui`'s vitest config and test helpers, or the reduced-motion test fails there.
+
 **Files:**
 - Move: `apps/dashboard/src/widgets/reorder-table.ts` → `packages/ui/src/reorder-table.ts`, with
   `reorder-table.test.ts`; `apps/dashboard/src/widgets/reorder.ts` (+ test) → `packages/ui/src/reorder.ts`

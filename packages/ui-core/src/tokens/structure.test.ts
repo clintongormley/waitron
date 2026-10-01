@@ -50,6 +50,7 @@ test("defines the structural contract", () => {
     "--wt-stepper-field-width-wide",
     "--wt-price-field-width",
     "--wt-duration-fade",
+    "--wt-duration-move",
   ]) {
     expect(token(el, name), `${name} should be defined`).not.toBe("");
   }

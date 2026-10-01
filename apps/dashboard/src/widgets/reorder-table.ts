@@ -34,6 +34,11 @@ function releasePageCursor(): void {
   document.body.style.removeProperty(DRAG_CURSOR);
 }
 
+/** How far a transform currently draws the row from where it rests, mid-transition included. */
+function offsetY(row: Element): number {
+  return new DOMMatrixReadOnly(getComputedStyle(row).transform).m42;
+}
+
 export interface ReorderModel {
   /** Row ids in current display order, top to bottom. The tbody renders one `<tr>` per id in this
    * order — the invariant the pointer geometry relies on. */
@@ -51,7 +56,8 @@ export interface ReorderModel {
 export class ReorderController implements ReactiveController {
   readonly #host: ReorderHost;
   readonly #model: ReorderModel;
-  #drag: { id: string; pointerId: number } | null = null;
+  /** `grab` is how far below the row's top the pointer pressed; `y` is where the pointer is now. */
+  #drag: { id: string; pointerId: number; grab: number; y: number } | null = null;
   /** Each row's id and vertical bounds, measured from the top of the table body so scrolling the
    * host does not move them. The id is a SCREEN SNAPSHOT taken at measurement time: the i-th `<tr>`
    * is `order()[i]` only while the rendered DOM matches the data, so binding the id here — rather
@@ -61,7 +67,13 @@ export class ReorderController implements ReactiveController {
   #refocus: string | null = null;
   #announcement = "";
   /** Relies on the host keying its rows (`repeat` by id), so this element moves with the row. */
-  #draggedRow: Element | null = null;
+  #draggedRow: HTMLTableRowElement | null = null;
+  /** Where each row was drawn and where it rested before a render during a drag; null when no slide
+   * is waiting for its frame. */
+  #before: Map<HTMLElement, { drawn: number; rest: number }> | null = null;
+  #frame = 0;
+  /** Everything a scroll listener was added to for the current drag. */
+  #scrollTargets: EventTarget[] = [];
 
   static readonly styles: CSSResult = css`
     .handle {
@@ -85,8 +97,18 @@ export class ReorderController implements ReactiveController {
     .handle:disabled {
       ${disabledStyles}
     }
+    tr[data-sliding] {
+      transition: transform var(--wt-duration-move) ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      tr[data-sliding] {
+        transition: none;
+      }
+    }
     /* A lifted row, marked by the controller while a pointer drag is in progress. */
     tr[data-dragging] {
+      position: relative;
+      z-index: 1;
       background: var(--wt-color-surface-lifted);
       box-shadow: var(--wt-shadow-2);
     }
@@ -140,9 +162,22 @@ export class ReorderController implements ReactiveController {
     host.addController(this);
   }
 
+  hostUpdate(): void {
+    if (this.#drag === null || this.#before !== null) return;
+    this.#before = new Map();
+    for (const row of this.#rows()) {
+      const drawn = row.getBoundingClientRect().top;
+      this.#before.set(row, { drawn, rest: drawn - offsetY(row) });
+    }
+    // The slide starts in the frame after the render, so a box read straight after an update is
+    // where the row rests, which is the position the hit test uses.
+    this.#frame = requestAnimationFrame(() => this.#slidePassedRows());
+  }
+
   hostUpdated(): void {
     // A render can move rows, so the next move re-measures.
     this.#rowBounds = null;
+    if (this.#drag !== null) this.#follow(this.#drag);
     const id = this.#refocus;
     if (id === null) return;
     this.#refocus = null;
@@ -151,6 +186,8 @@ export class ReorderController implements ReactiveController {
 
   hostDisconnected(): void {
     this.#endDrag();
+    cancelAnimationFrame(this.#frame);
+    this.#before = null;
   }
 
   /** Its `data-test` also anchors the post-move refocus. */
@@ -208,22 +245,50 @@ export class ReorderController implements ReactiveController {
     if (this.#model.busy() || this.#drag !== null) return;
     // Keep the press from selecting the row's text or starting the browser's own drag.
     event.preventDefault();
-    this.#drag = { id, pointerId: event.pointerId };
-    this.#draggedRow = (event.currentTarget as HTMLElement).closest("tr");
-    this.#draggedRow?.setAttribute("data-dragging", "");
+    const row = (event.currentTarget as HTMLElement).closest("tr")!;
+    this.#draggedRow = row;
+    const grab = event.clientY - row.getBoundingClientRect().top;
+    this.#drag = { id, pointerId: event.pointerId, grab, y: event.clientY };
+    this.#stopSlide(row);
+    row.setAttribute("data-dragging", "");
     holdPageCursor();
     document.addEventListener("pointermove", this.#onPointerMove);
     document.addEventListener("pointerup", this.#onPointerEnd);
     document.addEventListener("pointercancel", this.#onPointerEnd);
+    // A scroll of any ancestor moves the rows under a pointer that has not moved. An element's scroll
+    // event does not bubble, and a capturing listener outside a shadow root does not hear one fired
+    // inside it, so each ancestor in the flattened tree gets its own listener; the document's hears
+    // the page itself.
+    this.#scrollTargets = [document];
+    let at: Element | null = row;
+    while (at !== null) {
+      const parent: Node | null = at.parentNode;
+      at =
+        at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null);
+      if (at !== null) this.#scrollTargets.push(at);
+    }
+    for (const target of this.#scrollTargets) {
+      target.addEventListener("scroll", this.#onScroll, { passive: true });
+    }
   }
 
   readonly #onPointerMove = (event: PointerEvent): void => {
     const drag = this.#drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
-    const over = this.#rowAt(event.clientY);
+    drag.y = event.clientY;
+    this.#track(drag);
+  };
+
+  readonly #onScroll = (): void => {
+    this.#track(this.#drag!);
+  };
+
+  #track(drag: { id: string; grab: number; y: number }): void {
+    this.#follow(drag);
+    const over = this.#rowAt(drag.y, drag.id);
     if (over === null || over === drag.id) return;
     this.#model.move(drag.id, this.#model.order().indexOf(over), "pointer");
-  };
+  }
 
   /** A cancelled pointer (the OS interrupting a touch) ends the drag like a release: each crossed
    * row has already moved on screen. */
@@ -237,25 +302,94 @@ export class ReorderController implements ReactiveController {
 
   #endDrag(): void {
     if (this.#drag !== null) releasePageCursor();
-    this.#draggedRow?.removeAttribute("data-dragging");
+    const row = this.#draggedRow;
+    if (row !== null) {
+      row.removeAttribute("data-dragging");
+      // A slide still waiting for its frame would restart this one from before the last render.
+      this.#before?.delete(row);
+      this.#slideHome(row);
+    }
     this.#draggedRow = null;
     this.#drag = null;
     this.#rowBounds = null;
     document.removeEventListener("pointermove", this.#onPointerMove);
     document.removeEventListener("pointerup", this.#onPointerEnd);
     document.removeEventListener("pointercancel", this.#onPointerEnd);
+    for (const target of this.#scrollTargets) target.removeEventListener("scroll", this.#onScroll);
+    this.#scrollTargets = [];
   }
 
-  #rowAt(clientY: number): string | null {
+  #rows(): NodeListOf<HTMLElement> {
+    return this.#host.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr");
+  }
+
+  #slidePassedRows(): void {
+    const before = this.#before!;
+    this.#before = null;
+    for (const row of this.#rows()) {
+      const was = before.get(row);
+      if (was === undefined || row === this.#draggedRow) continue;
+      if (Math.abs(row.getBoundingClientRect().top - offsetY(row) - was.rest) < 0.5) continue;
+      this.#stopSlide(row);
+      row.style.transform = `translateY(${was.drawn - row.getBoundingClientRect().top}px)`;
+      this.#slideHome(row);
+    }
+  }
+
+  /** Removing the attribute alone does not stop a transition already running. */
+  #stopSlide(row: HTMLElement): void {
+    row.removeAttribute("data-sliding");
+    for (const animation of row.getAnimations()) animation.cancel();
+    row.style.removeProperty("transform");
+  }
+
+  /** Slides the row from where its transform draws it to where it rests. The transform must have
+   * been through a style recalculation before it is cleared, or no transition starts. */
+  #slideHome(row: HTMLElement): void {
+    void row.offsetHeight;
+    row.setAttribute("data-sliding", "");
+    row.style.removeProperty("transform");
+    row.addEventListener("transitionend", this.#onSlideEnd);
+  }
+
+  readonly #onSlideEnd = (event: Event): void => {
+    (event.currentTarget as HTMLElement).removeAttribute("data-sliding");
+  };
+
+  #follow(drag: { grab: number; y: number }): void {
+    const row = this.#draggedRow!;
+    if (!row.isConnected) return;
+    const box = row.getBoundingClientRect();
+    const rest = box.top - offsetY(row);
+    const body = row.parentElement!.getBoundingClientRect();
+    const dy = Math.min(
+      Math.max(drag.y - drag.grab - rest, body.top - rest),
+      body.bottom - box.height - rest,
+    );
+    row.style.transform = `translateY(${dy}px)`;
+  }
+
+  /** The row the dragged one should take the place of, or null. Moving onto a row below, the pointer
+   * must be within the dragged row's height of that row's bottom (onto a row above, of its top), so
+   * a short row pushed into a tall one does not swap back and forth on every pixel. */
+  #rowAt(clientY: number, draggedId: string): string | null {
     const body = this.#host.shadowRoot?.querySelector("tbody");
     if (!body) return null;
     const origin = body.getBoundingClientRect().top;
     const snapshot = this.#model.order();
+    // Where each row RESTS, not where it is drawn: the dragged row is drawn under the pointer.
     this.#rowBounds ??= [...body.querySelectorAll("tr")].map((row, index) => {
       const box = row.getBoundingClientRect();
-      return { id: snapshot[index]!, top: box.top - origin, bottom: box.bottom - origin };
+      const top = box.top - origin - offsetY(row);
+      return { id: snapshot[index]!, top, bottom: top + box.height };
     });
     const y = clientY - origin;
-    return this.#rowBounds.find((row) => y >= row.top && y <= row.bottom)?.id ?? null;
+    const over = this.#rowBounds.find((row) => y >= row.top && y <= row.bottom);
+    if (over === undefined) return null;
+    const dragged = this.#rowBounds.find((row) => row.id === draggedId);
+    if (dragged === undefined) return over.id;
+    const height = dragged.bottom - dragged.top;
+    const crossed = over.top > dragged.top ? y >= over.bottom - height : y <= over.top + height;
+    return crossed ? over.id : null;
   }
 }

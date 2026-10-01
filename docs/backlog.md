@@ -1612,39 +1612,60 @@ A173 (the dropdown's arrow) disappears if A178 replaces the native dropdown.
 
 **Dragging a row: the row being dragged cannot be seen, everywhere (A180, owner 2026-10-01: "drag
 and drop works, but you don't see the row being dragged. this should be fixed everywhere") —
-OPEN.** Two kinds of drag exist in the dashboard:
+OPEN: reorder lists DONE 2026-10-01, #994; the Products drag
+and the canvas tiles WAIT on the owner.** The owner's words about the reorder lists, 2026-10-01:
+_"you see the background colour, but the row itself doesn't move smoothly as you drag it, it
+jumps"_. Wanted (owner, 2026-10-01): the dragged row follows the pointer smoothly, lifted, while
+the rows it passes slide out of its way; and _"we should use the same drag mechanism
+everywhere"_.
 
-- **Reordering a list by its handle** — `ReorderController`
-  (`apps/dashboard/src/widgets/reorder-table.ts`), used by the options list and extras list editors
-  (`option-list-form.ts`, `extra-list-form.ts`), the variant table (`variant-table.ts`), a menu
-  list's members (`member-list-editor.ts`) and the product editor's modifiers (`product-editor.ts`).
-  It uses pointer events, not the browser's own drag: the row stays in the table and jumps slot to
-  slot as the pointer crosses rows, and while it moves the controller marks it `data-dragging`, for
-  which its styles (included by all five) paint `--wt-color-surface-lifted` and `--wt-shadow-2` on
-  the `tr` (A64 added that look). **The owner, 2026-10-01:** _"you see the background colour, but
-  the row itself doesn't move smoothly as you drag it, it jumps"_ — the lifted colour works; what is
-  missing is a row that travels with the pointer.
-- **Dragging a product onto a folder** on the Products screen (`apps/dashboard/src/widgets/product-list.ts`,
-  #968) — the browser's own drag (`draggable="true"` and `dragstart`); the folder under the pointer
-  is lit (`::part(drop-target)`), and the browser draws its own picture of what is dragged.
+- **Reorder lists — DONE 2026-10-01** (`ReorderController`,
+  `apps/dashboard/src/widgets/reorder-table.ts`, used by the options list and extras list editors,
+  the variant table, a menu or section's members, the home layout and the product editor's
+  modifiers): the dragged row follows the pointer, held inside its list; rows it passes slide out
+  of its way over `--wt-duration-move`, and land at once under reduced motion; a row moves past a
+  taller one only once the pointer is a row's height from its far edge, so rows of different
+  heights no longer swap back and forth. Looked at in light and dark, English and Spanish, at 1280
+  and 390px. Two things seen then and left as they were: the lifted row shows a faint line at
+  each cell boundary, most visible in the dark theme; and a row lifted at the bottom of its list
+  has its shadow cut off where the table ends. Each shows the same with the row lifted in place
+  before any slide, but that was not compared against the code before this branch, so whether
+  this branch's lifting (`position: relative`, `z-index: 1`) contributes is not known. The likely
+  cause, not checked, is the sideways-scroll wrapper each list puts round its table
+  (`.table-wrap`, or `.wrap` in the variant table; `overflow-x: auto`), which also clips top and
+  bottom.
+- **Products — WAITING on the owner.** Dragging a product onto a folder on the Products screen
+  (`apps/dashboard/src/widgets/product-list.ts`, `apps/dashboard/src/widgets/catalogue-browser.ts`,
+  #968) uses the browser's own drag (`draggable="true"`, `dragstart`); the folder under the
+  pointer is lit (`::part(drop-target)`) and the browser draws its own picture of what is dragged.
+  Moving it onto the reorder lists' pointer mechanism means rewriting seven existing tests that
+  assert the browser's own drag: in `catalogue-browser.test.ts`, "moves a dragged product into a
+  folder", "drags the whole selected group and clears selection after moving", "refuses dragover
+  and drop of a folder onto itself or its descendants but accepts a sibling", "moves a product to
+  the top level through the first breadcrumb", "refuses a dragged folder's ancestor or current
+  breadcrumb when it is inside that folder" and "shows a refused drop at the bottom and keeps the
+  selection for correction"; and in `product-list.test.ts`, "drags a product outside the selection
+  alone and never offers a variant as a drag source". Options: (A) replace the browser's drag and
+  rewrite those seven tests to drive pointer events, asserting the same moves, refusals and lit
+  targets — one mechanism, recommended; (B) keep the browser's drag on the name cell and add a grip
+  handle using the pointer mechanism — two ways to drag one product; (C) keep the browser's drag
+  and draw a lifted copy of the row in place of the browser's picture — the look without the shared
+  mechanism, touch or keyboard handling. A keyboard way to move a product into a folder exists
+  today: **Select** turns on the row checkboxes and **Move to…** opens a dialog with a required
+  destination (`catalogue-browser.ts`, the `select` and `move` buttons), tested by "requires a move
+  destination, excludes selected folders and descendants, and clears after success" and "moves
+  products to the explicitly chosen top level" in `catalogue-browser.test.ts`.
+- **The canvas editor's tile drag (`apps/dashboard/src/screens/canvas-editor/canvas-grid-preview.ts`)
+  — WAITING on the owner.** It also leaves the dragged tile in place, dimmed (`opacity: 0.4`), with
+  an insertion mark, and its tests assert that design ("marks the dragged tile and an insertion
+  point while dragging", and the `.dragging`/`.drop-before` checks after it, in
+  `canvas-grid-preview.test.ts`), so bringing it onto the same look changes assertions. The owner's
+  "fixed everywhere" covers it; does the owner want it? A182, recorded the same day, plans to
+  retire the canvas editor, so this question may fall away with it. The floor plan already moves the table with
+  the pointer (`packages/ui/src/components/wt-floor-canvas.ts`, `#onPointerMove`).
 
-**Wanted (owner, 2026-10-01):**
-
-- **The dragged row follows the pointer smoothly**, lifted, while the rows it passes slide out of
-  its way to open the gap where it will land — not a jump from slot to slot.
-- **One drag mechanism everywhere** (_"we should use the same drag mechanism everywhere"_): the
-  handle reorder and the drag onto a folder become one shared piece, so they look and behave the
-  same. The pointer-event approach `ReorderController` already uses is the natural base: it serves
-  mouse, touch and pen alike and already carries keyboard reordering and a screen-reader
-  announcement (`action.reordered`), which the browser's own drag gives none of. Dropping onto a
-  target (a folder) then becomes a second thing the shared piece can do, beside reordering.
-  Whether the products drag has a keyboard way to move a product into a folder today is not
-  checked; the shared piece must offer one.
-
-**Next action:** design the shared drag piece (where it lives — `apps/dashboard/src/widgets/` or
-`packages/ui` — and how a host declares "reorder" and "drop onto"), move the six places onto it,
-and add a browser test that moves the pointer part way between two rows and checks the dragged row
-has moved by that much — the case a slot-to-slot jump fails.
+**Next action:** the owner chooses (A), (B) or (C) for Products, and yes or no for the canvas
+tiles (unless A182's retirement of canvases makes that moot). Then a new branch executes the matching plan.
 
 **The extras list editor's "Add product" dropdown offered products already in the list (A181, owner
 2026-10-01: "when create extras lists, the products dropdown should remove already chosen
