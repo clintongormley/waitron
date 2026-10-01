@@ -3047,7 +3047,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       measured. The preview shrinks a picture wider than the job's line instead of cutting it, so on
       the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every
       printer.
-- **"Print test page" in each printer's row menu (C108, owner 2026-09-30) — done (2026-10-01, #PR).**
+- **"Print test page" in each printer's row menu (C108, owner 2026-09-30) — done (2026-10-01, #976).**
   The owner: _"i think we need to add a 'Print test page' to the printer kebab menu"_.
   - What it prints: one page, at the printer's SAVED paper width and resolution, in the language
     the calibration ruler page would use: a title, the printer's name, its paper width and
