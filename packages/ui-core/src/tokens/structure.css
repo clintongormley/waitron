@@ -25,6 +25,12 @@
 
   --wt-tap-min: 44px;
 
+  --wt-field-height: 56px;
+  --wt-field-label-rest-size: 16px;
+  --wt-field-line-width: 1px;
+  --wt-field-line-width-active: 2px;
+  --wt-dropdown-row-height: 48px;
+
   --wt-opacity-disabled: 0.5;
   --wt-opacity-hover: 0.85;
 

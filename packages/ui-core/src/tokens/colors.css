@@ -19,6 +19,11 @@
   --wt-color-border: #d6d9e0;
   --wt-color-focus: #1f6feb;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
+  --wt-color-field-fill: #f0f1f4;
+  --wt-color-field-line: #7d8390;
+  --wt-color-field-label-focus: #1a5fd0;
+  --wt-color-field-fill-disabled: #f7f7f8;
+  --wt-color-field-value: #000000;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,6 +45,11 @@
     --wt-color-border: #333945;
     --wt-color-focus: #4c8dff;
     --wt-color-scrim: rgb(0 0 0 / 0.4);
+    --wt-color-field-fill: #262a33;
+    --wt-color-field-line: #7a8291;
+    --wt-color-field-label-focus: #5c98ff;
+    --wt-color-field-fill-disabled: #1f2229;
+    --wt-color-field-value: #ffffff;
   }
 }
 
@@ -61,6 +71,11 @@
   --wt-color-border: #d6d9e0;
   --wt-color-focus: #1f6feb;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
+  --wt-color-field-fill: #f0f1f4;
+  --wt-color-field-line: #7d8390;
+  --wt-color-field-label-focus: #1a5fd0;
+  --wt-color-field-fill-disabled: #f7f7f8;
+  --wt-color-field-value: #000000;
 }
 
 :where([data-wt-theme-root][data-theme="dark"]) {
@@ -81,4 +96,9 @@
   --wt-color-border: #333945;
   --wt-color-focus: #4c8dff;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
+  --wt-color-field-fill: #262a33;
+  --wt-color-field-line: #7a8291;
+  --wt-color-field-label-focus: #5c98ff;
+  --wt-color-field-fill-disabled: #1f2229;
+  --wt-color-field-value: #ffffff;
 }

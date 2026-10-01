@@ -1,4 +1,4 @@
-import { expect, test, afterEach } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
 // The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same
@@ -10,6 +10,18 @@ declare module "vitest/browser" {
     emulateColorScheme: (colorScheme: "light" | "dark" | null) => Promise<void>;
   }
 }
+
+const luminance = (hex: string) => {
+  expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+  const [r, g, b] = [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+};
+const ratio = (a: string, b: string) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+};
 
 let host: HTMLElement;
 
@@ -114,17 +126,6 @@ test("a nested theme root does not inherit the outer root's scheme", async () =>
 });
 
 test("the lifted surface stands apart from every other surface and keeps text readable, in both themes", () => {
-  const luminance = (hex: string) => {
-    expect(hex).toMatch(/^#[0-9a-f]{6}$/);
-    const [r, g, b] = [1, 3, 5]
-      .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
-  };
-  const ratio = (a: string, b: string) => {
-    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-    return (hi! + 0.05) / (lo! + 0.05);
-  };
   for (const theme of ["light", "dark"] as const) {
     const el = mount(theme);
     const lifted = token(el, "--wt-color-surface-lifted");
@@ -140,4 +141,44 @@ test("the lifted surface stands apart from every other surface and keeps text re
     }
     el.remove();
   }
+});
+
+const FIELD_TOKENS = [
+  "--wt-color-field-fill",
+  "--wt-color-field-line",
+  "--wt-color-field-label-focus",
+  "--wt-color-field-fill-disabled",
+  "--wt-color-field-value",
+] as const;
+
+describe.each(["light", "dark"] as const)("field tokens (%s)", (theme) => {
+  test("every field token is set", () => {
+    const el = mount(theme);
+    for (const name of FIELD_TOKENS) expect(token(el, name), name).not.toBe("");
+  });
+
+  test("the field's marks meet WCAG on the fill and around it", () => {
+    const el = mount(theme);
+    const fill = token(el, "--wt-color-field-fill");
+    const onFill = (name: string, on = fill) => ratio(token(el, name), on);
+    // Non-text (1.4.11): the bottom line marks the field out, on the fill and on what surrounds it.
+    expect(onFill("--wt-color-field-line")).toBeGreaterThanOrEqual(3);
+    expect(onFill("--wt-color-field-line", token(el, "--wt-color-surface"))).toBeGreaterThanOrEqual(
+      3,
+    );
+    expect(onFill("--wt-color-field-line", token(el, "--wt-color-bg"))).toBeGreaterThanOrEqual(3);
+    expect(onFill("--wt-color-primary")).toBeGreaterThanOrEqual(3);
+    // Small text (1.4.3): label, hint, value, error.
+    for (const name of [
+      "--wt-color-field-label-focus",
+      "--wt-color-text-muted",
+      "--wt-color-text",
+      "--wt-color-danger",
+      "--wt-color-field-value",
+    ])
+      expect(onFill(name), name).toBeGreaterThanOrEqual(4.5);
+    expect(
+      ratio(token(el, "--wt-color-text-muted"), token(el, "--wt-color-field-fill-disabled")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
 });
