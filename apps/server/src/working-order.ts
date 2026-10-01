@@ -4823,12 +4823,13 @@ export interface CounterWaitingOrder {
   settledAt: string | null;
   /** When it was handed over; set on a placed order handed over before payment. */
   collectedAt: string | null;
-  /** What collecting a placed order charges: the invoice placing issued, net of its credit notes,
-   * else the sum of its lines. A settled order's is the sum of its lines. */
+  /** What collecting a placed order charges: the sale already issued for it, net of its credit
+   * notes (`readIssuedSales`), else the sum of its lines. A settled order's is the sum of its lines. */
   total: string;
-  /** {@link markCollected} would accept it now. */
+  /** {@link handOverOrder} would accept it now. */
   canHandOver: boolean;
-  /** A placed order's frozen service mode; null on a settled one. */
+  /** A placed order's frozen service mode, or `cfg.orderFlow` when it has none frozen; null on a
+   * settled one. */
   serviceMode: ServiceMode | null;
 }
 

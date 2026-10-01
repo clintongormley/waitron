@@ -966,7 +966,8 @@ export interface CounterWaitingOrder {
   /** What collecting a placed order charges, credit notes included. */
   total: string;
   canHandOver: boolean;
-  /** A placed order's own service mode, frozen when it was opened; null on a settled one. */
+  /** A placed order's own service mode, frozen when it was opened, or the order flow of the till's
+   * location when the order has none frozen; null on a settled one. */
   serviceMode: OrderFlow | "table_tab" | null;
 }
 

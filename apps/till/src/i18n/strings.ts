@@ -102,6 +102,7 @@ export const en = {
   "waiting.paid_not_handed_over": "Paid, not handed over",
   "waiting.hand_over": "Hand over",
   "waiting.hand_over_error": "Could not hand the order over, try again",
+  "waiting.pay_error": "Could not open the order to take its payment, try again",
   // Placing and prep
   "action.place": "Place order",
   "action.send_to_prep": "Send to prep",
@@ -609,6 +610,7 @@ export const en = {
   "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
   "refresh.station_after_hand_over":
     "The order was handed over, but the kitchen queue could not refresh.",
+  "refresh.station_after_sale": "The sale was recorded, but the kitchen queue could not refresh.",
   "refresh.waiting": "The list of waiting orders could not refresh.",
   "refresh.waiting_after_sale":
     "The sale was recorded, but the list of waiting orders could not refresh.",
@@ -924,6 +926,7 @@ export const es: Record<StringKey, string> = {
   "waiting.paid_not_handed_over": "Pagado, sin entregar",
   "waiting.hand_over": "Entregar",
   "waiting.hand_over_error": "No se pudo entregar el pedido, inténtalo de nuevo",
+  "waiting.pay_error": "No se pudo abrir el pedido para cobrarlo, inténtalo de nuevo",
   "action.place": "Enviar pedido",
   "action.send_to_prep": "Enviar a cocina",
   "action.collect": "Entregar",
@@ -1397,6 +1400,8 @@ export const es: Record<StringKey, string> = {
     "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
   "refresh.station_after_hand_over":
     "El pedido se entregó, pero la cola de cocina no se pudo actualizar.",
+  "refresh.station_after_sale":
+    "La venta se registró, pero la cola de cocina no se pudo actualizar.",
   "refresh.waiting": "La lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_sale":
     "La venta se registró, pero la lista de pedidos pendientes no se pudo actualizar.",

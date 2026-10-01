@@ -128,8 +128,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
    taking a reason is done by lane B item B11a, Task 15, several payments on the till, has
    landed as lane B item B15 (#956; the server side landed as #721), and Task 16, counter
-   handover, is built by lane B item B16 (not yet landed; what it left open is in the B16 entry
-   under A4). Left: a table that leaves without paying (17).
+   handover, is built by lane B item B16 (what it left open is in the B16 entry under A4). Left:
+   a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
@@ -4827,11 +4827,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       "Take the rest". Left as it is.
     - Giving money back after the invoice stays out of scope for `BillPaymentView` (bill payments
       design §6).
-  - **Task 16, counter handover, is built by lane B item B16** (2026-10-01, B16's pull request, not
-    yet landed). A counter order sent to the kitchen without payment (`ticket_then_pay` or
-    `invoice_first`) can be handed over before it is paid, and paying it afterwards keeps the
-    handover time. The counter's held-orders card lists the orders still waiting (sent, not paid;
-    handed over, not paid; paid, not handed over) with Hand over and Pay. Server:
+  - **Task 16, counter handover, is built by lane B item B16** (2026-10-01). A counter order sent
+    to the kitchen without payment (`ticket_then_pay` or `invoice_first`) can be handed over before
+    it is paid, and paying it afterwards keeps the handover time. The counter's held-orders card
+    lists the orders still waiting (sent, not paid; handed over, not paid; paid, not handed over)
+    with Hand over and Pay. Server:
     `GET /api/orders/counter-waiting` and `GET /api/working-orders/:id/placed`. Open:
     - **OPEN — Pay is not the main action in a zone that sends without payment.** The till keeps
       "Place order" there. Making Pay the main action needs an open order's dishes sent to the
@@ -4847,9 +4847,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       leave it listed until it is handed over?
     - **OPEN — the kitchen queue's Collect sends no submission id**, on the station screen and on
       the counter's prep-queue card, so a Collect resent after a lost reply is refused
-      `working_order.already_collected`. The waiting list's Hand over sends one. Three assertions
-      pin the call without one: `apps/till/src/till-app.test.ts`,
-      `apps/till/src/screens/till-station-screen.test.ts` and `apps/till/src/api/client.test.ts`.
+      `working_order.already_collected`. The waiting list's Hand over sends one. Two assertions pin
+      the kitchen queue's Collect calling without one: on the counter's prep-queue card in
+      `apps/till/src/till-app.test.ts`, and on the station screen in
+      `apps/till/src/screens/till-station-screen.test.ts`. A third, in
+      `apps/till/src/api/client.test.ts`, pins the body the client sends when it is given none.
+    - **OPEN — a collect straight after Place order does not re-read the kitchen queue.** Collecting
+      sets the order's handover time when none was set, so the order leaves the kitchen queue, but
+      the till re-reads the queue after a collect only when the collect was opened from the waiting
+      list, so the counter's prep-queue card can keep showing the order until the queue is next
+      read. Re-reading it after every collect makes an existing case read
+      the queue four times where it asserts three: "a switch to a prepay zone ends a kitchen-queue
+      retry, and that retry's late failure does not bring the notice back"
+      (`apps/till/src/till-app.test.ts`), so B16 left it.
     - **OPEN — completed orders cannot be looked up.** The plan's "completed orders stay reachable"
       was not built: no till or dashboard screen lists completed orders (the dashboard's Sales
       screen shows totals).
@@ -10113,8 +10123,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    has no tenant clause to be missing (`CLAUDE.md` §3) — but the location half is untouched and is
    NOT covered by item 3, which names a different set of verbs. All four are in
    `apps/server/src/working-order.ts` and were read on 2026-09-16 rather than inferred:
-   `markCollected` uses its `TillConfig` only to read a placed order's service mode (since B16,
-   2026-10-01), and selects and updates on `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
+   `handOver`, the handover the collect route reaches through `handOverOrder` (`markCollected` is a
+   wrapper only tests call), uses its `TillConfig` only to read a placed order's service mode
+   (since B16, 2026-10-01), and selects and updates on `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
    only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, nor does
    `priceStoredOrder`, which calls it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`,
    which the filing sites in `till-sale.ts` and `working-order.ts` call. Named by function rather than by line, because the line numbers

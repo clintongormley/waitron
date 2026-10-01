@@ -533,7 +533,7 @@ describe("GET /api/orders/counter-waiting", () => {
     });
   });
 
-  it("totals a placed order whose invoice was issued at placing as that invoice net of its credit notes, which is what collecting it charges", async () => {
+  it("totals a placed order by the sale already issued for it (here the invoice issued at placing), net of its credit notes, which is what collecting it charges", async () => {
     const credited = await placed("invoice_first", "Tarta");
     await creditWholeInvoice(credited);
     const uncredited = await placed("invoice_first", "Tarta");

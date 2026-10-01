@@ -1142,7 +1142,8 @@ export class TillApp extends LitElement {
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
   #payWaitingRequest = 0;
-  /** Each pay, card payment, place, collect or hold sent from the counter basket. */
+  /** Each pay, card payment, place, collect or hold sent from the counter basket, and each bill
+   * payment opened on it. */
   #counterSends = 0;
   /** The service mode of the waiting order the collect stage was opened on: its own, not the till's
    * zone's. Unset when the basket holds anything else. */
@@ -2345,10 +2346,15 @@ export class TillApp extends LitElement {
     this.#counterSends++;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const id = this.#store.id;
+    const fromWaitingList = this.collectFlow !== undefined;
     this.errorKey = undefined;
     try {
       this.result = await this.api.collectOrder(id, tender);
       this.#showTicket(id, this.#basketFlow() !== "invoice_first");
+      // A collect sets the handover time when none was set, which takes the order off the
+      // counter's prep-queue card. Only a collect opened from the waiting list re-reads it
+      // (docs/backlog.md, B16).
+      if (fromWaitingList) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
@@ -2381,13 +2387,16 @@ export class TillApp extends LitElement {
   async #onMarkCollected(event: Event): Promise<void> {
     const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
     this.errorKey = undefined;
+    let collected = false;
     try {
       await this.api.markCollected(orderId);
+      collected = true;
     } catch {
       this.errorKey = "station.collect_error";
     }
     await this.#refreshStationQueue();
-    await this.#refreshWaiting();
+    if (collected) await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
+    else await this.#refreshWaiting();
   }
 
   /**
@@ -2458,9 +2467,10 @@ export class TillApp extends LitElement {
       // Only an invoice_first order's invoice was issued when it was placed (`placeOrder`); any
       // other files its invoice when it is collected.
       this.collectFlow = serviceMode === "invoice_first" ? "invoice_first" : "ticket_then_pay";
-    } catch {
+    } catch (error) {
       if (movedOn()) return;
-      this.errorKey = "held.stale";
+      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
+      this.errorKey = gone ? "held.stale" : "waiting.pay_error";
     } finally {
       limit.done();
       unlock();
@@ -2599,6 +2609,7 @@ export class TillApp extends LitElement {
     ]);
     if (left?.() === true) return undefined;
     this.#loadIntoBasket(order, listed);
+    this.stage = "order";
     return listed !== null;
   }
 
@@ -4889,6 +4900,7 @@ export class TillApp extends LitElement {
   async #onCounterBillPay(event: Event): Promise<void> {
     const { amount } = (event as CustomEvent<{ amount: string }>).detail;
     if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
+    this.#counterSends++;
     const id = this.#store.id;
     const session = this.#operatorSession;
     try {
