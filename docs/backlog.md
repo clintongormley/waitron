@@ -1538,7 +1538,7 @@ the fill in both themes.
 dropdown's keyboard and screen-reader behaviour, and whether the till follows) are still the
 spec's to settle. The mockups are drawn at 14px in the system font, which is A179.
 
-**Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01.** The owner:
+**Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
 `--wt-font-size-sm` 13px, `--wt-font-size-lg` 19px and `--wt-font-size-xl` 24px
 (`packages/ui-core/src/tokens/structure.css`), in each device's own system font
