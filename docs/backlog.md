@@ -1044,7 +1044,7 @@ library screen waits 250 ms after the last keystroke before searching (in
 section forms open waits too); the sort and direction dropdowns still search at once, carrying any
 text typed but not yet searched, and removing the screen drops a search still waiting. Any load
 made while a search is still waiting — a page button or Retry included — starts from the first page.
-The server parses the query untrimmed, so the 500-character limit counts surrounding spaces too.
+The server parses the query untrimmed, so the 500-character limit counts surrounding spaces too. Landed as #983.
 
 **Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is
 resized to at most 1600 pixels on its longer side, turned upright, stripped of its metadata (GPS
