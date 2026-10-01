@@ -175,33 +175,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(row!.ticketScope).toBe("station");
     expect(row!.paperWidth).toBe("80mm");
     expect(row!.resolution).toBe("180dpi");
-    expect(row!.characterSet).toBe("wpc1252");
-    expect(row!.characterTable).toBe(16);
     expect(row!.active).toBe(false);
-
-    await inTx((tx) => tx.update(printers).set({ characterTable: 6 }).where(eq(printers.id, id)));
-    const [updated] = await inTx((tx) =>
-      tx
-        .select({ characterTable: printers.characterTable })
-        .from(printers)
-        .where(eq(printers.id, id)),
-    );
-    expect(updated!.characterTable).toBe(6);
-  });
-
-  it("printers: rejects a character table outside the ESC/POS byte range", async () => {
-    const err = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(printers).values({
-          locationId: LOCATION_A,
-          name: "Bad table",
-          transport: "network_tcp",
-          host: "10.0.0.6",
-          characterTable: 256,
-        }),
-      ),
-    );
-    expect(isRefusal(err, CHECK_VIOLATION)).toBe(true);
   });
 
   it("printers: the transport-fields CHECK admits a well-formed cloud_poll printer", async () => {

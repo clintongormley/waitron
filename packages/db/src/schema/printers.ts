@@ -16,8 +16,6 @@ export const printTicketScope = enumType(["station", "order"]);
 export const printPaperWidth = enumType(["58mm", "80mm"]);
 /** The print head's dot density; it sets the QR dot size for the legal 30-40 mm. */
 export const printResolution = enumType(["180dpi", "203dpi"]);
-/** The character table the printer is switched to, so accents and the euro sign print correctly. */
-export const printCharacterSet = enumType(["wpc1252", "pc858", "plain"]);
 
 /**
  * A managed printer. Config lives centrally; printing runs on whichever `print_agents` agent can see
@@ -42,12 +40,9 @@ export const printers = table(
     pollId: label("poll_id"),
     pollTokenHash: label("poll_token_hash"),
     ticketScope: printTicketScope("ticket_scope").notNull().default("station"),
-    // Defaults match the TM-T88III: 80mm, 180 dpi, character table 16 (WPC1252).
+    // Defaults match the TM-T88III: 80mm, 180 dpi.
     paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
     resolution: printResolution("resolution").notNull().default("180dpi"),
-    characterSet: printCharacterSet("character_set").notNull().default("wpc1252"),
-    // `ESC t n` is model/firmware-specific even when the byte-to-glyph encoding is the same.
-    characterTable: count("character_table").notNull().default(16),
     hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
     // Deactivate via active := false, never a hard delete (print_jobs reference it).
     active: flag("active").notNull().default(true),
@@ -61,8 +56,6 @@ export const printers = table(
     check("printers_ticket_scope_ck", enumCheck(t.ticketScope)),
     check("printers_paper_width_ck", enumCheck(t.paperWidth)),
     check("printers_resolution_ck", enumCheck(t.resolution)),
-    check("printers_character_set_ck", enumCheck(t.characterSet)),
-    check("printers_character_table_ck", sql`${t.characterTable} between 0 and 255`),
     check(
       "printers_transport_fields_ck",
       sql`(${t.transport} = 'usb' and ${t.localKey} is not null)

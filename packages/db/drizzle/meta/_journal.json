@@ -386,6 +386,13 @@
       "when": 1790847914109,
       "tag": "0054_print_job_sale_id",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1790851054888,
+      "tag": "0055_drop_printer_character_set",
+      "breakpoints": true
     }
   ]
 }
