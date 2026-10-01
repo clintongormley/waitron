@@ -1688,7 +1688,7 @@ hidden. The route's documentation (`docs/developers/product-categories.md`,
 skipped"; this change did not test that.
 
 **A menu section's "Add products" checklist offered products already in that section (A183, owner
-2026-10-01: "hide in this section products", on A181's report) — DONE 2026-10-01.** The checklist
+2026-10-01: "hide in this section products", on A181's report) — DONE 2026-10-01, #997.** The checklist
 (`apps/dashboard/src/widgets/section-add-products.ts`) listed every product and marked one the
 section held _In this section_, still tickable. Ticking one added nothing: `addProducts`
 (`packages/catalogue/src/sections.ts`) skips a product the list already holds, which the case
