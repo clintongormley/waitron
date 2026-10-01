@@ -7211,29 +7211,24 @@ ongoing overhaul listed at the top of Track A.
   role is too low; a signed-in
   person's re-check of their OWN password or code (`profile.ts`) still names the field. A
   password-reset request for a known address wrote a token row before answering and one for an
-  unknown address did not; measured in-process through the route (`app.request` on a Mac, no
-  network) 200 times each, known answered at a median 0.307 ms against 0.091 ms. It now answers 202
-  first and does the lookup, the write and the email afterwards, logging a failure as
+  unknown address did not; measured in-process through the route (`app.request` on a Mac, no network)
+  200 times each, known answered at a median 0.307 ms against 0.091 ms. It now answers 202 first and
+  does the lookup, the write and the email afterwards, logging a failure as
   `account_action.request_failed` (A147, #942): re-measured the same way, 0.025 ms against 0.026 ms.
-  Still open: that later work still shows in the answer time of a second password-reset request for
-  the same address sent as soon as the first answered (other routes, and requests sent later, were
-  not measured); the owner chose on 2026-09-30 to close it by giving an unknown address equivalent
-  background database work, queued as A159. Measured 2026-09-30
-  on a Mac: a separate Node process sent pairs of password-reset requests over loopback HTTP to the
-  management routes served by `@hono/node-server`, both requests of a pair for the SAME address, the
-  first to a newly mounted copy of the routes (fresh rate-limit and repeat-request state) and the
-  second, sent as soon as the first answered, to that same copy; every answer was 202. After 40
-  warm-up pairs, 200 pairs of each kind, interleaved: the first request answered at a median
-  0.864 ms for a known address against 0.862 ms for an unknown one, and the second at 1.065 ms
-  against 0.326 ms. In the control the route did no later work at all (no lookup, write or email):
-  the second request answered at 0.251 ms against 0.258 ms. Refusals thrown in `apps/server`
-  itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
-  (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
-  approval routes no longer send for an approver; and the dashboard's
-  password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
-  is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
-  a flood of made-up addresses delays the sign-in of anyone it is not already tracking (no longer
-  true since A154, below).
+  Still open after A147: that later work still showed in the answer time of a second password-reset
+  request for the same address sent as soon as the first answered (other routes, and requests sent
+  later, were not measured). Measured 2026-09-30 on a Mac over loopback HTTP, the second request
+  answered at a median 1.065 ms after a known address against 0.326 ms after an unknown one, and at
+  0.251 ms against 0.258 ms in a control where the route did no later work; that control removed the
+  lookup, the write and the email together, so it did not show which of them caused the gap. The
+  owner chose on 2026-09-30 to give an unknown address equivalent background database work (A159,
+  below). Also still open: refusals thrown in `apps/server` itself (a malformed id or PIN) carry no
+  `reason`; the till's `APPROVER_REFUSALS` (`apps/till/src/till-app.ts`) still lists
+  `person.not_found` and `person.suspended`, which the approval routes no longer send for an
+  approver; and the dashboard's password throttle (`apps/server/src/password-throttle.ts`, unchanged
+  by C95) answers any email it is not already tracking with `password.throttled` (retry in 60
+  seconds) while it tracks 1000, so a flood of made-up addresses delays the sign-in of anyone it is
+  not already tracking (no longer true since A154, below).
   **Done since (2026-09-30, lane A's A153, #952):** the setup wizard's `shell.adopt.bundle_fetch_failed` sentence
   (`apps/setup/src/i18n/strings/shell.ts`, English and Spanish) no longer names a refused login among
   its causes, a refused login now arriving as `password.invalid` and showing
@@ -7263,6 +7258,51 @@ ongoing overhaul listed at the top of Track A.
   of its slots is full, fed by paired tills and signed-in routes rather than strangers; and each
   password throttle's counters take about 1.3 MiB once the first address is forgotten (arithmetic,
   not measured).
+  **Done since (2026-10-01, lane C's A159):** a password-reset request for a well-formed address
+  with no active or pending account now runs, against a person id nobody has, the statements
+  `issueAccountAction` runs for an active account's password reset (read the person, delete its used
+  or expired links, retire its live one, insert a link), then deletes the inserted row before
+  commit, with foreign keys checked at commit (`writeAndRemoveDecoyAction`,
+  `packages/identity/src/account-action.ts`). Measured 2026-10-01 on a Mac (Node v26.7.0) with a
+  scratch script that is not in the tree: a separate Node process sent pairs of requests for the
+  same address over loopback HTTP to the routes served by `@hono/node-server`, a fresh copy of the
+  routes per pair, 40 warm-up pairs then 200 of each kind interleaved, the database a `useVenueDb`
+  venue. With no email sender, before the change the second request answered at a median 0.276 and
+  0.280 ms after a known address against 0.119 and 0.116 ms after an unknown one (two runs); after
+  it, at 0.258, 0.282 and 0.259 ms against 0.260, 0.285 and 0.257 ms (three runs). A147's own setup
+  (1.065 ms against 0.326 ms) was not re-run. Two reviewers then seeded a known person with 5,000
+  and with 10,000 used reset links and measured, with only that change, 0.455 ms against 0.260 ms
+  and 1.166 ms against 0.306 ms. So issuing a link now also deletes the person's used or expired
+  links of the same purpose, for every purpose `issueAccountAction` issues (invitations and
+  email-change links as well as password resets), and after an issue the person holds at most two
+  links of that purpose, the new one and the one it retired; only the most recently retired link's
+  `used_at` survives per person and purpose. `issueAccountAction` is the only code that inserts a
+  kept link, and nothing reads a used or expired one: `inspectAccountAction`,
+  `completeAccountAction` and `confirmEmailChangeByCode` each require an unused, unexpired row, and
+  `packages/identity/src/staff.ts`, `packages/identity/src/profile.ts` and
+  `apps/server/src/break-glass-command.ts` only mark rows used. Pinned by the "keeps a person's
+  history of that purpose bounded" cases in `packages/identity/src/account-action.test.ts`.
+  Re-measured with 5,000 seeded, which the first known request deletes: 0.443 ms against 0.460 ms,
+  and 0.590 ms against 0.595 ms; with none seeded: 0.563 ms against 0.585 ms, and 0.510 ms against
+  0.524 ms. All on the same Mac; absolute times differ between sessions, so compare within a run.
+  Nothing pins that the decoy runs the same statements as a known address: the tests see its insert
+  and delete through triggers, but its read, its dead-link delete and its retire change no row, so
+  deleting any one of them left the `@waitron/identity` suite and `apps/server`'s two
+  `management-api` suites green (run 2026-10-01); only the timing script shows them. What a later
+  request or a copy of the database shows: the table's row count is unchanged and a later query
+  finds no row, but the database file is not unchanged. A reviewer measured, with `secure_delete` at
+  0, the decoy's random person id and token hash still present in the file's bytes after commit and
+  checkpoint, and an unknown-address request sometimes changing the `page_count` and
+  `freelist_count` pragmas (265 to 266 pages, 1 to 2 free pages, 17 rows before and after). It
+  follows, though it was not separately measured, that the freed record also still holds its
+  `created_at` and `expires_at` and a person id matching no account, so a copy of the database can
+  show that, and when, an unknown-address request happened; the row's values are taken from no part
+  of the address (read from `writeAndRemoveDecoyAction`, not measured), so not for which address.
+  Still open: the email. With a sender that reads in one transaction, as the product's reads the
+  mail settings, and then sends nothing, the second request still answered about 0.02 ms slower
+  after a known address (0.283, 0.285 and 0.285 ms against 0.260, 0.266 and 0.262 ms; measured
+  before links were deleted on issue; not re-run). The real mail-server conversation, which only a
+  known address starts, was not measured, and no way to match it was tried.
 - **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, #934, owner
   2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
   the current password now carries a hidden, read-only `autocomplete="username"` field holding the
@@ -9800,13 +9840,16 @@ than the file, so nothing refuses them and nothing routes them back. A temporary
 `ATTACH` have no site in this tree: searched 2026-09-23, a `create temp table`/`create temporary
 table` grep over `packages`, `apps` and `scripts` matched nothing, and the same search for `ATTACH`
 was recorded in `packages/store/src/index.ts` until #568 pruned it. A connection-scoped pragma is a different matter — those are
-issued through routed handles already. The one that runs on a request path,
-`pragma defer_foreign_keys = on` in `apps/server/src/configuration-transfer.ts`'s import, is issued
-INSIDE the provisioning transaction's body, which is exactly where the routing sends a statement to
-the writer; the others are test setup issued outside any body, where the reader would serve them if
-a body happened to be running, and none of those suites runs one. **Next action:** none needed while
-that holds; a temporary table, an attachment or a connection pragma issued from OUTSIDE a running
-body has to be put on the writer deliberately, and a guard for that does not exist.
+issued through routed handles already. The two that run on a request path, both
+`pragma defer_foreign_keys = on`, are each issued INSIDE a running transaction body, which is
+exactly where the routing sends a statement to the writer: `apps/server/src/configuration-transfer.ts`'s
+import issues it inside the provisioning transaction's body, and `writeAndRemoveDecoyAction`
+(`packages/identity/src/account-action.ts`) inside `issueRecovery`'s `withTransaction` body
+(`apps/server/src/management-api.ts`); the others are test setup issued outside any body, where the
+reader would serve them if a body happened to be running, and none of those suites runs one.
+**Next action:** none needed while that holds; a temporary table, an attachment or a connection
+pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and a guard for
+that does not exist.
 
 Two more things #493's review left behind rather than fixed. The routing cases are a weaker set than
 their name suggests: with the routing replaced by a plain return of the write connection, some of

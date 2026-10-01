@@ -1,5 +1,11 @@
-import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, captureError, triggerRaised, withTransaction } from "@waitron/db";
+import { randomBytes, randomUUID } from "node:crypto";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  engineErrorMessage,
+  triggerRaised,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -322,6 +328,80 @@ describe("management account actions", () => {
     ).resolves.toMatchObject({ personId, session: { personId } });
   });
 
+  it("writes and then removes one reset row, for a person nobody has, when the address has no account", async () => {
+    try {
+      await suite.db.execute(
+        sql`create table tmp_recovery_writes (op text not null, person_id text not null, token_hash text not null)`,
+      );
+      await suite.db
+        .execute(sql`create trigger tmp_recovery_writes_insert after insert on management_account_actions
+        begin insert into tmp_recovery_writes values ('insert', new.person_id, new.token_hash); end`);
+      await suite.db
+        .execute(sql`create trigger tmp_recovery_writes_delete after delete on management_account_actions
+        begin insert into tmp_recovery_writes values ('delete', old.person_id, old.token_hash); end`);
+      const known = await seedManager(suite.db, { email: "decoy-known@x.com" });
+      await expect(
+        run((tx) => requestAccountRecoveryAction(tx, { email: "decoy-unknown@x.com" })),
+      ).resolves.toBeNull();
+      const writes = (
+        await suite.db.execute<{ op: string; person_id: string; token_hash: string }>(
+          sql`select op, person_id, token_hash from tmp_recovery_writes order by rowid`,
+        )
+      ).rows;
+      expect(writes.map((w) => w.op)).toEqual(["insert", "delete"]);
+      expect(writes[1]).toMatchObject({
+        person_id: writes[0]!.person_id,
+        token_hash: writes[0]!.token_hash,
+      });
+      const owner = await suite.db.execute(
+        sql`select id from persons where id = ${writes[0]!.person_id}`,
+      );
+      expect(owner.rows).toEqual([]);
+
+      // A known address with no earlier links writes its link and removes nothing.
+      await suite.db.execute(sql`delete from tmp_recovery_writes`);
+      await run((tx) => requestAccountRecoveryAction(tx, { email: "decoy-known@x.com" }));
+      const knownWrites = (
+        await suite.db.execute<{ op: string; person_id: string }>(
+          sql`select op, person_id from tmp_recovery_writes order by rowid`,
+        )
+      ).rows;
+      expect(knownWrites).toEqual([{ op: "insert", person_id: known }]);
+    } finally {
+      await suite.db.execute(sql`drop trigger if exists tmp_recovery_writes_insert`);
+      await suite.db.execute(sql`drop trigger if exists tmp_recovery_writes_delete`);
+      await suite.db.execute(sql`drop table if exists tmp_recovery_writes`);
+    }
+  });
+
+  it("leaves no reset link behind for an address with no account, and the next write still checks its person at once", async () => {
+    const count = async () =>
+      (
+        await suite.db.execute<{ n: string }>(
+          sql`select cast(count(*) as text) as n from management_account_actions`,
+        )
+      ).rows[0]!.n;
+    const before = await count();
+    await expect(
+      run((tx) => requestAccountRecoveryAction(tx, { email: "nobody-at-all@x.com" })),
+    ).resolves.toBeNull();
+    expect(await count()).toBe(before);
+    // Refused at the statement, not deferred to commit: the deferral ended with the decoy's
+    // transaction. The delete lets a deferred check pass at commit, so only the statement can fail.
+    const ghostId = randomUUID();
+    const error = await captureError(() =>
+      run(async (tx) => {
+        await tx.execute(sql`insert into management_account_actions
+          (id, person_id, purpose, token_hash, created_at, expires_at)
+          values (${ghostId}, ${randomUUID()}, 'password_reset', ${"0".repeat(64)},
+                  '2026-10-01T00:00:00.000Z', '2026-10-02T00:00:00.000Z')`);
+        await tx.execute(sql`delete from management_account_actions where id = ${ghostId}`);
+      }),
+    );
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
+    expect(await count()).toBe(before);
+  });
+
   it("does not issue recovery actions for suspended or malformed accounts", async () => {
     const personId = await seedManager(suite.db, { email: "recovery-suspended@x.com" });
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
@@ -470,6 +550,95 @@ describe("issuing an account action refuses an account that cannot receive one",
       sql`select id from management_account_actions where person_id = ${personId}`,
     );
     expect(rows.rows).toEqual([]);
+  });
+});
+
+describe("issuing an account action keeps a person's history of that purpose bounded", () => {
+  const NOW = new Date("2026-10-01T12:00:00.000Z");
+
+  async function seedAction(
+    personId: string,
+    purpose: "invitation" | "password_reset" | "email_change",
+    state: "used" | "expired",
+  ): Promise<string> {
+    const id = randomUUID();
+    const targetEmail = purpose === "email_change" ? "elsewhere@x.com" : null;
+    const expiresAt = state === "expired" ? "2026-10-01T11:00:00.000Z" : "2026-10-01T13:00:00.000Z";
+    const usedAt = state === "used" ? "2026-10-01T10:30:00.000Z" : null;
+    await suite.db.execute(sql`insert into management_account_actions
+      (id, person_id, purpose, target_email, token_hash, created_at, expires_at, used_at)
+      values (${id}, ${personId}, ${purpose}, ${targetEmail}, ${randomBytes(32).toString("hex")},
+              '2026-10-01T10:00:00.000Z', ${expiresAt}, ${usedAt})`);
+    return id;
+  }
+
+  async function actionsOf(
+    personId: string,
+    purpose: string,
+  ): Promise<{ id: string; used_at: string | null }[]> {
+    return (
+      await suite.db.execute<{ id: string; used_at: string | null }>(
+        sql`select id, used_at from management_account_actions
+            where person_id = ${personId} and purpose = ${purpose} order by created_at, id`,
+      )
+    ).rows;
+  }
+
+  it("deletes the person's used and expired links of that purpose, leaving only the new one", async () => {
+    const personId = await seedManager(suite.db, { email: "history-pruned@x.com" });
+    for (let i = 0; i < 25; i++) {
+      await seedAction(personId, "password_reset", "used");
+      await seedAction(personId, "password_reset", "expired");
+    }
+    expect(await actionsOf(personId, "password_reset")).toHaveLength(50);
+    const issued = await run((tx) =>
+      requestAccountRecoveryAction(tx, { email: "history-pruned@x.com", now: NOW }),
+    );
+    expect(await actionsOf(personId, "password_reset")).toEqual([
+      { id: issued!.id, used_at: null },
+    ]);
+  });
+
+  it("retires a still-live link rather than deleting it, and deletes it on the issue after", async () => {
+    const personId = await seedManager(suite.db, { email: "history-retired@x.com" });
+    const issue = (now: Date) =>
+      run((tx) => issueAccountAction(tx, { personId, purpose: "password_reset", now }));
+    const first = await issue(NOW);
+    const second = await issue(new Date(NOW.getTime() + 1_000));
+    expect(await actionsOf(personId, "password_reset")).toEqual([
+      { id: first.id, used_at: new Date(NOW.getTime() + 1_000).toISOString() },
+      { id: second.id, used_at: null },
+    ]);
+    const third = await issue(new Date(NOW.getTime() + 2_000));
+    expect(await actionsOf(personId, "password_reset")).toEqual([
+      { id: second.id, used_at: new Date(NOW.getTime() + 2_000).toISOString() },
+      { id: third.id, used_at: null },
+    ]);
+  });
+
+  it("leaves dead links of another purpose, and another person's dead links, in place", async () => {
+    const personId = await seedManager(suite.db, { email: "history-kept@x.com" });
+    const otherId = await seedManager(suite.db, { email: "history-other@x.com" });
+    const kept = {
+      invitation: [
+        await seedAction(personId, "invitation", "used"),
+        await seedAction(personId, "invitation", "expired"),
+      ],
+      email_change: [
+        await seedAction(personId, "email_change", "used"),
+        await seedAction(personId, "email_change", "expired"),
+      ],
+      other: [
+        await seedAction(otherId, "password_reset", "used"),
+        await seedAction(otherId, "password_reset", "expired"),
+      ],
+    };
+    await run((tx) => issueAccountAction(tx, { personId, purpose: "password_reset", now: NOW }));
+    const ids = async (person: string, purpose: string) =>
+      (await actionsOf(person, purpose)).map((row) => row.id).sort();
+    expect(await ids(personId, "invitation")).toEqual([...kept.invitation].sort());
+    expect(await ids(personId, "email_change")).toEqual([...kept.email_change].sort());
+    expect(await ids(otherId, "password_reset")).toEqual([...kept.other].sort());
   });
 });
 

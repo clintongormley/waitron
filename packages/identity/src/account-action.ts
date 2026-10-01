@@ -1,6 +1,13 @@
 import "./errors.js";
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { indexViolated, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
@@ -47,7 +54,11 @@ export interface IssuedAccountAction {
   expiresAt: string;
 }
 
-/** Issue a fresh action and invalidate any still-live predecessor of the same purpose. */
+/**
+ * Issue a fresh action and invalidate any still-live predecessor of the same purpose. It also
+ * deletes the person's used or expired actions of that purpose, so retiring a known person's link
+ * walks no history the unknown-address decoy lacks (A159 in `docs/backlog.md`).
+ */
 export async function issueAccountAction(
   tx: Transaction,
   input: {
@@ -84,6 +95,7 @@ export async function issueAccountAction(
     input.purpose === "email_change" ? normalizeEmail(input.targetEmail ?? "") : person.email;
   if (!isValidEmail(deliveryEmail)) throw new AppError("person.email_invalid", {});
 
+  await deleteDeadActions(tx, input.personId, input.purpose, nowIso);
   await tx
     .update(managementAccountActions)
     .set({ usedAt: nowIso })
@@ -130,6 +142,26 @@ export async function issueAccountAction(
     ...(code === undefined ? {} : { code, codeExpiresAt }),
     expiresAt,
   };
+}
+
+async function deleteDeadActions(
+  tx: Transaction,
+  personId: string,
+  purpose: AccountActionPurpose,
+  nowIso: string,
+): Promise<void> {
+  await tx
+    .delete(managementAccountActions)
+    .where(
+      and(
+        eq(managementAccountActions.personId, personId),
+        eq(managementAccountActions.purpose, purpose),
+        or(
+          isNotNull(managementAccountActions.usedAt),
+          lte(managementAccountActions.expiresAt, nowIso),
+        ),
+      ),
+    );
 }
 
 interface CompletionInput {
@@ -298,7 +330,11 @@ async function finishClaimedAction(
   };
 }
 
-/** Returns null for an unknown or unavailable account, so the caller's response stays silent. */
+/**
+ * Returns null for an unknown or unavailable account, so the caller's response stays silent. When
+ * a well-formed address finds no active or pending account, it leaves foreign keys deferred for the
+ * rest of the caller's transaction.
+ */
 export async function requestAccountRecoveryAction(
   tx: Transaction,
   input: { email: string; now?: Date },
@@ -315,12 +351,64 @@ export async function requestAccountRecoveryAction(
         inArray(persons.status, ["active", "pending"]),
       ),
     );
-  if (person === undefined) return null;
+  if (person === undefined) {
+    await writeAndRemoveDecoyAction(tx, input.now ?? new Date());
+    return null;
+  }
   return issueAccountAction(tx, {
     personId: person.id,
     purpose: person.status === "pending" ? "invitation" : "password_reset",
     now: input.now,
   });
+}
+
+/**
+ * The statements `issueAccountAction` runs for an active account's password reset (read, delete
+ * dead links, retire, insert with the password_reset lifetime), against a person id nobody has,
+ * plus a final delete, so an unknown address's commit writes too (measured: A159 in
+ * `docs/backlog.md`). A pending account's invitation lifetime is not copied. The foreign key is
+ * checked at commit, when the row is already gone. The deferral lasts until the ENCLOSING
+ * transaction ends (rolling back a savepoint does not end it), so the caller must end the
+ * transaction straight after; `issueRecovery` (`apps/server/src/management-api.ts`) does.
+ */
+async function writeAndRemoveDecoyAction(tx: Transaction, now: Date): Promise<void> {
+  const personId = randomUUID();
+  const nowIso = now.toISOString();
+  await tx.execute(sql`pragma defer_foreign_keys = on`);
+  await tx
+    .select({
+      email: persons.email,
+      displayName: persons.displayName,
+      locale: persons.locale,
+      status: persons.status,
+    })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  await deleteDeadActions(tx, personId, "password_reset", nowIso);
+  await tx
+    .update(managementAccountActions)
+    .set({ usedAt: nowIso })
+    .where(
+      and(
+        eq(managementAccountActions.personId, personId),
+        eq(managementAccountActions.purpose, "password_reset"),
+        isNull(managementAccountActions.usedAt),
+      ),
+    );
+  const [row] = await tx
+    .insert(managementAccountActions)
+    .values({
+      personId,
+      purpose: "password_reset",
+      targetEmail: null,
+      tokenHash: hashToken(randomBytes(32).toString("base64url")),
+      codeHash: null,
+      codeExpiresAt: null,
+      createdAt: nowIso,
+      expiresAt: new Date(now.getTime() + ACCOUNT_ACTION_TTL_MS.password_reset).toISOString(),
+    })
+    .returning({ id: managementAccountActions.id });
+  await tx.delete(managementAccountActions).where(eq(managementAccountActions.id, row!.id));
 }
 
 export async function completeAccountAction(
