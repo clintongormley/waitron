@@ -1399,7 +1399,14 @@ What it touches: every text-field primitive — `wt-input` (`packages/ui-core/sr
 (`selectStyles`, `packages/ui/src/base-styles.ts`; A173 is the same control), textareas a screen
 styles itself (the product editor's descriptions), and `docs/developers/design-system.md` → Forms
 and the primitives table, which is the UI contract and describes today's label-above-a-bordered-box
-look. Things to settle in the spec:
+look. **The change lives in the shared primitives** (owner, 2026-10-01), so every screen built on
+them changes with them. What does not follow by itself is markup a screen writes directly. Counted
+by `grep` on 2026-10-01 across `apps/dashboard/src`, `apps/setup/src` and `packages/*/src`, test
+files left out: 38 files contain a native `<select>`, 3 a `<textarea>`, and up to 35 an `<input>`
+that is not marked as a checkbox, radio, file, range, colour or hidden field (an upper bound: an
+`<input>` whose `type` sits on a later line is counted too). The `<select>`s each need moving to the
+new dropdown primitive, since a native list cannot be restyled; the plan should list the rest file by
+file and move each onto a primitive rather than restyle it in place. Things to settle in the spec:
 
 - **It fits the existing hint rule.** A field's hint is already its placeholder (CLAUDE.md §3,
   Forms; `hint` is shown inside the empty field). Point 6 adds: where a field has no hint, the label
