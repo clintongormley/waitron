@@ -932,6 +932,9 @@ ticket-vs-full-invoice by **separate numbering series** (art. 7.1.a), not a prin
   also encoded in the QR per art. 21.2.b.3º, but it must *also* be printed on the face) — corrected in
   the design.
 
+> **Pointer, 2026-10-01 (C115).** AEAT's QR specification v0.5.0 (10/12/2025) §3 also requires the
+> text «QR tributario:» above the QR; see the C115 entry in `docs/backlog.md`.
+
 **Provenance caveat (§1).** art. 7.1, 7.2 and Orden arts. 20–21 were read as clean verbatim text from
 the BOE consolidated pages (high confidence). The RD 1007/2023 art. 6.5 / 15 / 16 wording came back
 lightly compressed by the fetch layer; its substance is independently corroborated verbatim by Orden
@@ -1122,6 +1125,7 @@ an operator configuration choice, not a code defect; flagged for the asesor, not
 | AEAT `FAQs-Desarrolladores.pdf` v1.3 (4 Dec 2025) | primary |
 | AEAT `Validaciones_Errores_Veri-Factu.pdf` v1.2.2 (changelog to 08/04/2026) | primary |
 | AEAT `Veri-Factu_Descripcion_SWeb.pdf` v1.0.3 | primary |
+| AEAT `DetalleEspecificacTecnCodigoQRfactura.pdf` v0.5.0 (10/12/2025), §3 | primary — extracted locally with `pdftotext -layout` 2026-10-01 (C115 in `docs/backlog.md`) |
 | LGT art. 201 bis (introduced by Ley 11/2021) | primary |
 | LGT art. 29.2.j) (Ley 58/2003) — quoted in the developer FAQ, §8 above | primary |
 | BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 1, 2, 4, 6.5, 7 (7.1/7.2/7.5), 9, 11, 13, 14, 18 | primary — arts. 1, 4, 11, 13, 14 read verbatim from the BOE consolidated page 2026-09-12 (§15) |

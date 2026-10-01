@@ -586,7 +586,8 @@ describe("till-ticket-view", () => {
       // 7.1.g total
       expect(t).toContain("TOTAL");
       expect(t).toContain("9,40 €");
-      // QR + VERI*FACTU legend
+      // «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend
+      expect(t).toContain("QR tributario:");
       expect(el.shadowRoot!.querySelector("svg")).not.toBeNull();
       expect(t).toContain("VERI*FACTU");
       // The trim renders ONLY in its two slots — the core order is untouched: the issuer header still

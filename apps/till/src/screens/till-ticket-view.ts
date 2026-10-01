@@ -233,7 +233,7 @@ function renderTender(result: TillSaleResult, locale: string) {
  *  - the tipo(s) impositivo(s) and the base imponible per rate (7.1.f) — per-item VAT is NOT required;
  *    the cuota per rate is shown as an allowed extra;
  *  - contraprestación total (7.1.g);
- *  - QR + VERI*FACTU legend.
+ *  - «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend.
  *
  * It renders in the INVOICE locale ({@link invoiceLocale}), INDEPENDENT of the operator's UI language:
  * an English-speaking operator still hands the customer a Spanish ticket. So nothing here goes through

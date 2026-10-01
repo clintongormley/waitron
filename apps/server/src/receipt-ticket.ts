@@ -7,8 +7,9 @@
  *
  * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
  * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1 plus the
- * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21); sources in
- * `docs/compliance/verifactu-findings.md` §14. The owner's non-fiscal trim renders around that core
+ * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21), with AEAT's «QR tributario:» caption
+ * above the QR (its QR specification v0.5.0, §3); sources in `docs/compliance/verifactu-findings.md`
+ * §14 and the C115 entry in `docs/backlog.md`. The owner's non-fiscal trim renders around that core
  * and is never read by it.
  *
  * The receipt is issued in the INVOICE locale, not the operator's UI language: the fiscal labels

@@ -251,6 +251,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       expect(s).toContain("Efectivo");
       expect(s).toContain("Cambio");
 
+      // AEAT's caption above the QR (its QR specification v0.5.0, §3).
+      expect(s).toContain("QR tributario:");
+
       // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
       expect(s).toContain("VERI*FACTU");
 

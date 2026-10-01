@@ -7791,7 +7791,8 @@ ongoing overhaul listed at the top of Track A.
     the booted server with and without the passive header and checks that only the second moves the
     session's last-seen time.
 - **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01).** AEAT's «Detalle de
-  las especificaciones técnicas del código «QR» de la factura», version 0.5.0 of 10/12/2025, section
+  las especificaciones técnicas del código «QR» de la factura y de la «URL» del servicio de cotejo o
+  remisión de información por parte del receptor de la factura», version 0.5.0 of 10/12/2025, section
   3, says: «La presentación del código «QR» incluirá también un texto que siempre deberá ir
   precediéndolo: «QR tributario:», y que se situará encima del propio código «QR» (preferiblemente
   centrado con respecto a este), de manera que sirva para identificarlo y distinguirlo de otros
@@ -7811,6 +7812,20 @@ ongoing overhaul listed at the top of Track A.
     diferenciado –de forma que destaque– del resto de contenidos y otros posibles «QR», ocupando un
     lugar preeminente.» Waitron prints the QR near the END of the receipt, just above the
     VERI\*FACTU line, and shows it there on the till's screen too. Not changed here.
+  - Still open, for the owner to decide: the same section 3 also says «Tanto el texto que siempre
+    debe preceder al código «QR», como, en su caso, la frase que habrán de incluir los sistemas
+    «VERI\*FACTU» deberán tener un tipo de letra y tamaño legibles, siempre iguales o superiores a
+    los del resto de datos de la factura.» That is, the caption and the VERI\*FACTU line must be in
+    a readable typeface and size, equal to or larger than the rest of the invoice's data. On the
+    till's screen (read from its styles, not measured) the caption (`.qr-caption`,
+    `apps/till/src/screens/till-ticket-view.ts:359`) and the legend (`.legend`, `:375`) set no text
+    size, so they take the ticket's ordinary size, like the goods, VAT and payment rows, while the
+    venue name (`.venue`, `:279`) and the TOTAL row (`.total-row`, `:351`) are drawn larger, at
+    `--wt-font-size-lg`, and in bold (the legend is bold too; the caption is not). On the printed
+    receipt every line of text is drawn at one size: each is an image band `TEXT_BAND_HEIGHT` dots
+    tall on one grid (`packages/printing/src/escpos.ts:42`, `line()` at `:68`, which takes no size),
+    and `apps/server/src/receipt-ticket.ts` uses no other way of drawing text — read, not checked on
+    paper. Not changed here.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
