@@ -454,6 +454,45 @@ async function orderGroups(
   });
 }
 
+/** A new printer attached to the station of the bill's line `lineNo`, so it prints only what fires next. */
+async function printerAtStationOf(billId: string, lineNo: number): Promise<string> {
+  const [station] = v.db.all<{ stationId: string }>(sql`
+    select t.station_id as stationId from ticket_items t
+    where t.working_order_line_id = (
+      select id from working_order_lines where working_order_id = ${billId} and line_no = ${lineNo})`);
+  return inTx(v, async (tx) => {
+    const { id } = await createPrinter(
+      tx,
+      { locationId: v.cfg.locationId },
+      {
+        name: `P-${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      },
+    );
+    await attachPrinterToStation(tx, { stationId: station!.stationId, printerId: id });
+    return id;
+  });
+}
+
+/** How many print jobs on `printerId` print `kitchenName`. */
+async function ticketsPrinting(printerId: string, kitchenName: string): Promise<number> {
+  const jobs = await inTx(v, (tx) =>
+    tx
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId)),
+  );
+  return jobs.filter((job) => printedLines(job.payload).join("\n").includes(kitchenName)).length;
+}
+
+/** The kitchen's fired stamp for a line, or null when it has no fired ticket item. */
+function firedAtOf(lineId: string): string | null {
+  const [row] = v.db.all<{ firedAt: string | null }>(sql`
+    select fired_at as firedAt from ticket_items where working_order_line_id = ${lineId}`);
+  return row?.firedAt ?? null;
+}
+
 describe("a held dish split onto a check", () => {
   const filed = (billId: string) =>
     v.db.all(sql`
@@ -487,23 +526,7 @@ describe("a held dish split onto a check", () => {
       ]),
     );
     const [, flan] = await linesOf(v, tabId);
-    const [station] = v.db.all<{ stationId: string }>(sql`
-      select t.station_id as stationId from ticket_items t
-      where t.working_order_line_id = (
-        select id from working_order_lines where working_order_id = ${tabId} and line_no = 2)`);
-    const printerId = await inTx(v, async (tx) => {
-      const { id } = await createPrinter(
-        tx,
-        { locationId: v.cfg.locationId },
-        {
-          name: `P-${randomUUID().slice(0, 8)}`,
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        },
-      );
-      await attachPrinterToStation(tx, { stationId: station!.stationId, printerId: id });
-      return id;
-    });
+    const printerId = await printerAtStationOf(tabId, 2);
     const checkId = await splitOff(partyId, tabId, [2]);
     return { partyId, tabId, checkId, groupId: flan!.groupId!, printerId };
   }
@@ -548,7 +571,6 @@ describe("a held dish split onto a check", () => {
     expect(sent!.sentAt).not.toBeNull();
   });
 
-  // Not asserted: the line's sent stamp; see the sent-stamp gap noted in docs/backlog.md (B20).
   it("reaches the kitchen once and is charged on the check alone when the check is paid before it is fired", async () => {
     const held = await heldFlanOnCheck("Mesa held paid first");
 
@@ -557,6 +579,89 @@ describe("a held dish split onto a check", () => {
     await pay(v, held.tabId, "12.00");
 
     expect(await outcome(held)).toEqual(KITCHEN_ONCE_AND_CHARGED_ON_THE_CHECK(held.checkId));
+  });
+
+  it("is stamped sent when its group fires after the check it was split onto is paid", async () => {
+    const held = await heldFlanOnCheck("Mesa held paid then sent");
+
+    await pay(v, held.checkId, "5.00");
+    const [before] = await lineRows(held.checkId);
+    await fireHeld(held.partyId, held.groupId);
+
+    const [flan] = await lineRows(held.checkId);
+    expect((await billRow(v, held.checkId)).status).toBe("settled");
+    expect({ name: flan!.name, sentBefore: before!.sentAt }).toEqual({
+      name: "Flan",
+      sentBefore: null,
+    });
+    expect(flan!.sentAt).not.toBeNull();
+    expect(flan!.sentAt).toBe(firedAtOf(flan!.id));
+    expect(await ticketsPrinting(held.printerId, "FLAN")).toBe(1);
+    expect(flanTickets(held.partyId)).toEqual([{ billId: held.checkId, fired: 1 }]);
+  });
+});
+
+describe("a held dish on a whole table bill paid before its group fires", () => {
+  it("is stamped sent when its group fires, and a dish in a group that never fires stays unsent", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("Mesa paid whole then sent"));
+    await inTx(v, (tx) =>
+      orderGroups(tx, partyId, [
+        { names: ["Burger"], release: "fire" },
+        { names: ["Flan", "Agua"], release: "hold" },
+        { names: ["Tarta"], release: "hold" },
+      ]),
+    );
+    const printerId = await printerAtStationOf(tabId, 2);
+    const [, flanBefore] = await linesOf(v, tabId);
+
+    await pay(v, tabId, "34.00");
+    const command = await commandFor(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, flanBefore!.groupId!, {
+        ...command,
+        submissionId: randomUUID(),
+      }),
+    );
+
+    expect((await billRow(v, tabId)).status).toBe("settled");
+    const lines = await lineRows(tabId);
+    const byName = new Map(lines.map((line) => [line.name, line]));
+    const flan = byName.get("Flan")!;
+    expect(flan.sentAt).not.toBeNull();
+    expect(flan.sentAt).toBe(firedAtOf(flan.id));
+    expect(byName.get("Agua")!.sentAt).toBe(flan.sentAt);
+    expect(byName.get("Tarta")!.sentAt).toBeNull();
+    expect(firedAtOf(byName.get("Tarta")!.id)).toBeNull();
+    expect(await ticketsPrinting(printerId, "FLAN")).toBe(1);
+    expect(
+      v.db.all(sql`select fired_at is not null as fired from ticket_items
+      where working_order_line_id = ${flan.id}`),
+    ).toEqual([{ fired: 1 }]);
+  });
+  it("is stamped sent when its group fires after the bill is presented, before it is paid", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("Mesa presented then sent"));
+    await inTx(v, (tx) =>
+      orderGroups(tx, partyId, [
+        { names: ["Burger"], release: "fire" },
+        { names: ["Flan"], release: "hold" },
+      ]),
+    );
+    const [, flanBefore] = await linesOf(v, tabId);
+    await placeByHand(v, tabId);
+
+    const command = await commandFor(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, flanBefore!.groupId!, {
+        ...command,
+        submissionId: randomUUID(),
+      }),
+    );
+
+    expect((await billRow(v, tabId)).status).toBe("placed");
+    const [, flan] = await lineRows(tabId);
+    expect(flan!.name).toBe("Flan");
+    expect(flan!.sentAt).not.toBeNull();
+    expect(flan!.sentAt).toBe(firedAtOf(flan!.id));
   });
 });
 

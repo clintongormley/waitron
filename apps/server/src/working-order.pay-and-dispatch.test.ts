@@ -2092,6 +2092,37 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     expect(queueB.map((g) => g.orderId)).toEqual([idA, idB]);
   });
 
+  it("sendToPrep stamps the settled order's lines sent as it fires them", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const sentAt = async () =>
+      (
+        await suite.db
+          .select({ sentAt: workingOrderLines.sentAt })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id))
+      ).map((row) => row.sentAt);
+    expect(await ticketStateOf(id)).toBeNull();
+    expect(await sentAt()).toEqual([null]);
+
+    await sendToPrep({ db: suite.db }, cfg, id);
+
+    expect(await ticketStateOf(id)).toBe("queued");
+    const [stamp] = await sentAt();
+    expect(stamp).not.toBeNull();
+  });
+
   it("sendToPrep refuses to fire an order it may not (working_order.not_settled) — an open one and an absent id", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
 
