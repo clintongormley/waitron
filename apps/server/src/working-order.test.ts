@@ -3245,6 +3245,58 @@ describe("opening hours", () => {
     });
   });
 
+  it("sends added units to the sent dish's closed station without a make-at choice", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, cfg.locationId));
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-02T18:30:00Z"));
+      try {
+        await addRound(tx, cfg, tabId, [line(product)]);
+        const [original] = await tx
+          .select({ id: workingOrderLines.id, makeAtStationId: workingOrderLines.makeAtStationId })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, tabId));
+        expect(original!.makeAtStationId).toBeNull();
+        expect((await ticketItemsFor(tx, tabId))[0]!.stationId).toBe(upstairs.id);
+
+        await setStationToday(tx, cfg, upstairs.id, "closed", new Date());
+        const [{ revision }] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId));
+        await updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, revision!, OPERATOR);
+
+        const lines = await tx
+          .select({ id: workingOrderLines.id, makeAtStationId: workingOrderLines.makeAtStationId })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, tabId));
+        expect(lines).toHaveLength(2);
+        expect(lines.every((row) => row.makeAtStationId === null)).toBe(true);
+        const sent = await tx
+          .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, tabId));
+        expect(sent).toHaveLength(2);
+        expect(new Map(sent.map((item) => [item.lineId, item.stationId]))).toEqual(
+          new Map(lines.map((row) => [row.id, upstairs.id])),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it("uses one clock reading for both routing and the fire stamp", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
