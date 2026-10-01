@@ -4513,17 +4513,16 @@ export async function abandonHeldOrder(
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
-    await refusePaymentInFlight(tx, [id]);
-    await refuseBillHoldingMoney(tx, [id]);
-    const updated = await tx
-      .update(workingOrders)
-      .set({ status: "abandoned" })
-      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
-      .returning({ id: workingOrders.id });
-
-    if (updated.length === 0) {
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+    await refusePaymentInFlight(tx, [id]);
+    await refuseBillHoldingMoney(tx, [id]);
+    await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
   });
 }
 

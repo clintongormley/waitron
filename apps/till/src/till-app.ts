@@ -488,7 +488,9 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
 function discardError(error: unknown): CounterError {
   if (isPaymentsReceived(error)) return "held.discard_holds_money";
   const code = (error as { code?: string } | undefined)?.code;
-  return code === "order.payment_in_flight" ? { code } : "held.stale";
+  return code === "order.payment_in_flight" || code === "bill.refund_in_progress"
+    ? { code }
+    : "held.stale";
 }
 
 /** An adjustment dialog: where it was opened, the bill and the revision its lines were read at
@@ -2740,9 +2742,8 @@ export class TillApp extends LitElement {
     return said && failure === "held.stale" ? "gone" : "unread";
   }
 
-  /** The server checks for money before it checks the order is still open, so a refusal for an
-   * order the held list no longer holds after the refresh is shown as the order gone:
-   * `held.stale`. */
+  /** A refusal for an order the held list no longer holds after the refresh is shown as the order
+   * gone, `held.stale` — for example, another till closed it after the server answered. */
   async #onDiscardOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     this.errorKey = undefined;

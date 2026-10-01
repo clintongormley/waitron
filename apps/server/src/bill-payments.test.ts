@@ -456,6 +456,22 @@ describe("a bill holding money", () => {
     await abandonHeldOrder({ db: suite.db }, venue.cfg, billId);
     expect(await statusOf(billId)).toBe("abandoned");
   });
+
+  it("answers working_order.not_open, not its money, when discarding a bill already closed", async () => {
+    const billId = await tabWith("Chuletón");
+    await take(billId, cash("10.00"));
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    expect(await codeOf(abandonHeldOrder({ db: suite.db }, venue.cfg, billId))).toBe(
+      "working_order.not_open",
+    );
+    expect(await statusOf(billId)).toBe("settled");
+  });
 });
 
 describe("settling a card payment of part of the bill", () => {
