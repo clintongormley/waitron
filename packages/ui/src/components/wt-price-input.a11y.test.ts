@@ -108,6 +108,10 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
       theme,
     );
     await expectNoA11yViolations(host);
+    const input = host.querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
+    const placeholder = getComputedStyle(input, "::placeholder").color;
+    const field = getComputedStyle(input).backgroundColor;
+    expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
   test("disabled currency sign", async () => {

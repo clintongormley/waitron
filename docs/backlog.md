@@ -321,7 +321,9 @@ with no warning, where the old tab asked first (the owner decided 2026-09-26 tha
 the main-category filter offers every category, not only those on the menu; and the product
 editor's help lines, and the price window's variant help sentence (`menu_prices.variants_help`), are
 still paragraphs beside their inputs rather than `wt-input`'s `hint`, so they are not linked to their
-inputs.
+inputs. _(2026-10-01, C104: a `hint` now shows as the field's placeholder, and only to screen readers
+when the field sets its own placeholder; moving these lines into it would hide them from sight
+whenever the field holds a value, and always where the field sets its own placeholder.)_
 **The Prices tab shows variants, price ranges and a choice of columns, landed as #680 (2026-09-26,
 the owner's answers to #670's FYI):** each product's Active variants are rows under it, a product
 sold only as its variants shows price ranges, #541's struck-out "Price on this menu" column is kept
@@ -5751,25 +5753,26 @@ ongoing overhaul listed at the top of Track A.
   the modal's form width is the owner's call.
 
 - **A field's hint shows inside the empty field as its placeholder, not as a line under it (C104,
-  owner 2026-09-30) — DONE (2026-10-01, branch `fix/hint-as-placeholder`).** The owner, on the Pair
-  a Bluetooth device dialog's PIN field: "put the hint line in the field, not under it", and "that
-  should be a standard". The three shared fields that take a `hint` (`wt-input`, `wt-price-input`,
-  `wt-number-stepper`; no other shared field has one) now use it as the placeholder when the
-  screen sets none, so every hinted field follows without its screen changing. A placeholder the
-  screen sets wins, and the hint is then the field's screen-reader description only. The hint stays
-  in the field, hidden from sight, as that description in every case. A hint too long for the field
-  is cut with "…", but only while the field is not focused: Chromium clips a focused field's
-  placeholder at its edge with no "…". `docs/developers/design-system.md` → Forms records the
-  standard. Looked at in light and dark, English and Spanish, 1280 and 390 px wide: the PIN field,
-  the extras form's two steppers, a menu price, the adjustments limit and a reason's two limits, and
-  the till's party name and seat dialogs. Left open, the owner's call: the adjustments screen's bill
-  discount limit carries a hint of several sentences in a narrow percentage box, so only its first
-  few letters show ("Discoun…", "Los des…"); a menu price's "Leave it empty to use the product
-  price" and the extras form's "Blank means no limit" are no longer seen by anyone sighted, because
-  those fields set a placeholder of their own; and the extras form's minimum starts at 0, so its
-  "0 makes the list optional" shows only once the box is cleared. Help written as a paragraph
-  beside a field, not as its `hint` (the sections screen's internal name help, the product editor's
-  help lines), still sits under its field.
+  owner 2026-09-30) — DONE (2026-10-01).** The owner, on the Pair a Bluetooth device dialog's PIN
+  field: "put the hint line in the field, not under it", and "that should be a standard". The three
+  shared fields that take a `hint` (`wt-input`, `wt-price-input`, `wt-number-stepper`; no other
+  shared field has one) now use it as the placeholder when the screen sets none, so every hinted
+  field follows without its screen changing. A placeholder the screen sets wins, and the hint is
+  then the field's screen-reader description only. The hint stays in the field, hidden from sight,
+  as that description in every case. A hint too long for the field is cut with "…", but only while
+  the field is not focused: Chromium clips a focused field's placeholder at its edge with no "…"
+  (seen in Chromium screenshots of three 250px fields, one focused).
+  `docs/developers/design-system.md` → Forms records the standard. Looked at in light and dark,
+  English and Spanish, 1280 and 390 px wide: the PIN field, the extras form's two steppers, a menu
+  price, the adjustments limit and a reason's two limits, and the till's party name and seat
+  dialogs. Left open, the owner's call: the adjustments screen's bill discount limit carries a hint
+  of several sentences in a narrow percentage box, so only its first few letters show ("Discoun…",
+  "Los des…"); a menu price's "Leave it empty to use the product price" and the extras form's "Blank
+  means no limit" are no longer seen by anyone sighted, because those fields set a placeholder of
+  their own; and the extras form's minimum starts at 0, so its "0 makes the list optional" shows
+  only once the box is cleared. Help written as a paragraph beside a field, not as its `hint` (the
+  sections screen's internal name help, the product editor's help lines), still sits under its
+  field.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now

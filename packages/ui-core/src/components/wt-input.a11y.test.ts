@@ -50,6 +50,10 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
       theme,
     );
     await expectNoA11yViolations(host);
+    const input = host.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+    const placeholder = getComputedStyle(input, "::placeholder").color;
+    const field = getComputedStyle(input).backgroundColor;
+    expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
   test("disabled input", async () => {

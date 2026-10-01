@@ -582,7 +582,6 @@ it("shows the product price as an empty menu price's placeholder and in its hint
   const el = await mount({ editing: "mi-burger" });
   expect(field(el, "grossPrice").value).toBe("");
   expect(field(el, "grossPrice").placeholder).toBe("12.00");
-  // The help line is the price field's own hint, which is what its input is described by.
   const help = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
   expect(text(help)).toBe(t("menu_prices.override_help").replace("{price}", eur("12.00")));
   // Read first, then the euro sign the field draws.
