@@ -1764,19 +1764,31 @@ describe("dashboard-app", () => {
   });
 
   it("opens a collapsed group when the Back button arrives at a page in it", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/staff");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
     const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-team")!;
-    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(header.getAttribute("aria-expanded")).toBe("true");
 
-    history.replaceState(null, "", "/manage/staff");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/catalogue");
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
+
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
     await flush(el);
 
+    expect(location.pathname).toBe("/manage/staff");
     expect(el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
     expect(header.getAttribute("aria-expanded")).toBe("true");
     expect(panel.hidden).toBe(false);
