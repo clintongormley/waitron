@@ -27,7 +27,6 @@ export interface ReceiptPrinter extends EscSetting {
   drawerTillId: string | null;
 }
 
-/** A register, with the receipt printer it names. */
 export interface PrintingRegister {
   id: string;
   locationId: string;
@@ -35,15 +34,22 @@ export interface PrintingRegister {
 }
 
 /**
- * The register whose till alone may open `printer`'s drawer: the one the printer names, else the one
- * register at its location that prints there, else none — several registers sharing a printer must
- * name an owner before any of them opens its drawer.
+ * The register whose till alone may open `printer`'s drawer: the one the printer names while that
+ * register's receipts print there, else the one register at its location that prints there, else
+ * none — several registers sharing a printer must name an owner before any of them opens its drawer,
+ * and a named owner whose receipts have moved elsewhere leaves the drawer with no owner at all.
  */
 export function drawerOwnerOf(
   printer: { id: string; locationId: string; drawerTillId: string | null },
   registers: readonly PrintingRegister[],
 ): string | null {
-  if (printer.drawerTillId !== null) return printer.drawerTillId;
+  if (printer.drawerTillId !== null) {
+    const named = registers.some(
+      (register) =>
+        register.id === printer.drawerTillId && register.receiptPrinterId === printer.id,
+    );
+    return named ? printer.drawerTillId : null;
+  }
   const printingHere = registers.filter(
     (register) =>
       register.locationId === printer.locationId && register.receiptPrinterId === printer.id,
@@ -51,15 +57,10 @@ export function drawerOwnerOf(
   return printingHere.length === 1 ? printingHere[0]!.id : null;
 }
 
-/** Every printer's drawer owner by {@link drawerOwnerOf}, keyed by printer id. */
-export async function listDrawerOwners(tx: Transaction): Promise<Map<string, string | null>> {
-  const rows = await tx
-    .select({
-      id: printers.id,
-      locationId: printers.locationId,
-      drawerTillId: printers.drawerTillId,
-    })
-    .from(printers);
+export async function listDrawerOwners(
+  tx: Transaction,
+  printerRows: readonly { id: string; locationId: string; drawerTillId: string | null }[],
+): Promise<Map<string, string | null>> {
   const registers = await tx
     .select({
       id: tills.id,
@@ -67,15 +68,31 @@ export async function listDrawerOwners(tx: Transaction): Promise<Map<string, str
       receiptPrinterId: tills.receiptPrinterId,
     })
     .from(tills);
-  return new Map(rows.map((printer) => [printer.id, drawerOwnerOf(printer, registers)]));
+  const byPrinter = new Map<string, PrintingRegister[]>();
+  for (const register of registers) {
+    if (register.receiptPrinterId === null) continue;
+    const printing = byPrinter.get(register.receiptPrinterId);
+    if (printing === undefined) byPrinter.set(register.receiptPrinterId, [register]);
+    else printing.push(register);
+  }
+  return new Map(
+    printerRows.map((printer) => [
+      printer.id,
+      drawerOwnerOf(printer, byPrinter.get(printer.id) ?? []),
+    ]),
+  );
 }
 
-/** Whether the calling register owns its receipt printer's drawer. */
+/**
+ * Whether the calling register owns `printer`'s drawer. `printer` must be the caller's own receipt
+ * printer ({@link resolveReceiptPrinter}), so a named owner owns it exactly when it is the caller.
+ */
 export async function ownsDrawer(
   tx: Transaction,
   cfg: TillConfig,
   printer: ReceiptPrinter,
 ): Promise<boolean> {
+  if (printer.drawerTillId !== null) return printer.drawerTillId === cfg.tillId;
   const registers = await tx
     .select({
       id: tills.id,
@@ -88,9 +105,9 @@ export async function ownsDrawer(
 }
 
 /**
- * The calling register's receipt printer when this request may open its drawer: the device may (a
- * handheld never does), the printer has a drawer, and the register owns it. Otherwise `undefined`,
- * and the automatic paths open nothing.
+ * The calling register's receipt printer when this request may open its drawer: the request's
+ * configuration allows a drawer, the printer has one, and the register owns it. Otherwise
+ * `undefined`, and the automatic paths open nothing.
  */
 async function drawerPrinter(
   tx: Transaction,
@@ -278,7 +295,10 @@ async function enqueueBillDrawer(
   await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
 }
 
-/** Cash taken against a bill before its invoice opens the drawer naming the bill payment. */
+/**
+ * Cash taken against a bill before its invoice opens the drawer {@link drawerPrinter} finds, naming
+ * the bill payment.
+ */
 export async function enqueueBillPaymentDrawer(
   tx: Transaction,
   cfg: TillConfig,
@@ -289,8 +309,8 @@ export async function enqueueBillPaymentDrawer(
 }
 
 /**
- * A hand-keyed card taken against a bill opens the drawer for its slip, naming the bill payment, even
- * when the payment issues the invoice.
+ * A hand-keyed card taken against a bill opens the drawer {@link drawerPrinter} finds, for its slip,
+ * naming the bill payment, even when the payment issues the invoice.
  */
 export async function enqueueBillCardSlipDrawer(
   tx: Transaction,
@@ -302,8 +322,8 @@ export async function enqueueBillCardSlipDrawer(
 }
 
 /**
- * Cash given back from a bill payment before the invoice opens the drawer naming that payment, with
- * whoever authorised the refund.
+ * Cash given back from a bill payment before the invoice opens the drawer {@link drawerPrinter}
+ * finds, naming that payment and whoever authorised the refund.
  */
 export async function enqueueBillRefundDrawer(
   tx: Transaction,
@@ -317,8 +337,8 @@ export async function enqueueBillRefundDrawer(
 
 /**
  * A sale paid in cash, or by a card hand-keyed on a machine Waitron does not talk to (whose slip is
- * kept in the drawer), opens the drawer of the till's receipt printer when its register owns that
- * drawer ({@link drawerOwnerOf}), independently of document printing.
+ * kept in the drawer), opens the drawer {@link drawerPrinter} finds, independently of document
+ * printing.
  */
 export async function enqueueSaleDrawer(
   tx: Transaction,

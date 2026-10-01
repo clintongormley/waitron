@@ -1,7 +1,6 @@
 import type { Context, Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
-import { kindOfFormFactor } from "@waitron/layouts";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { invalid } from "./bill-allocation.js";
@@ -15,7 +14,11 @@ import {
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { assertDeviceCapability, requireSaleTillId, tryReadDevice } from "./device-session.js";
+import {
+  assertDeviceCapability,
+  deviceSaleCfg as deviceTillCfg,
+  tryReadDevice,
+} from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
@@ -179,21 +182,16 @@ function requireBillParam(id: string): string {
   return id;
 }
 
-/** A sale made during a device's request files on that device's own till. */
-async function deviceSaleCfg(deps: TillApiDeps, c: Context): Promise<TillConfig> {
-  return deviceSaleCfgOf(deps, c, await tryReadDevice(deps, c));
-}
-
-async function deviceSaleCfgOf(
+/** A sale made during a device's request files on that device's own till ({@link deviceTillCfg}). */
+async function deviceSaleCfg(
   deps: TillApiDeps,
   c: Context,
-  device: DeviceBinding | null,
+  device?: DeviceBinding | null,
 ): Promise<TillConfig> {
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
   return {
-    ...deps.cfg,
-    tillId: await requireSaleTillId(deps, c, device),
-    allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
-    sendingDeviceId: device?.deviceId,
+    ...(await deviceTillCfg(deps, c, resolved)),
+    sendingDeviceId: resolved?.deviceId,
     madeHereSink: madeHereSinkFor(c),
   };
 }
@@ -269,7 +267,7 @@ export function mountBillPaymentsApi(
       if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
         throw invalid("simulationOutcome");
       }
-      const saleCfg = await deviceSaleCfgOf(deps, c, device);
+      const saleCfg = await deviceSaleCfg(deps, c, device);
       const { provider, reader } = await resolveCardCollector(deps, device?.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(
@@ -297,8 +295,9 @@ export function mountBillPaymentsApi(
     }),
   );
 
-  // The refund is recorded on the device's own till. Cash opens its drawer; a connected card goes
-  // through its provider, while a separately charged card needs staff confirmation and a manager PIN.
+  // The refund is recorded on the device's own till. Cash opens a drawer only where
+  // `enqueueBillRefundDrawer` finds one this till may open; a connected card goes through its
+  // provider, while a separately charged card needs staff confirmation and a manager PIN.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
     run(c, log, async () => {
       const { personId, sessionId, tillId } = await requireSession(deps, c);

@@ -1696,31 +1696,10 @@ describe("the register that owns a printer's drawer", () => {
     expect(row.locationId).toBe(locationId);
   });
 
-  it("names the owner when the printer is created", async () => {
-    const app = mountApp();
-    const owner = await register(locationId);
-    const res = await send(app, "POST", "/management-api/printers", {
-      cookie: managerCookie,
-      body: {
-        name: "Created owned",
-        transport: "network_tcp",
-        host: "10.0.0.92",
-        hasCashDrawer: true,
-        drawerTillId: owner,
-      },
-    });
-    expect(res.status).toBe(201);
-    const id = ((await res.json()) as { id: string }).id;
-    expect(await drawerOwnership(app, id)).toEqual({
-      drawerTillId: owner,
-      drawerOwnerTillId: owner,
-    });
-  });
-
   it("refuses an owner that is not a register at the printer's location, changing nothing", async () => {
     const app = mountApp();
     const id = await createNetworkPrinter(app, "10.0.0.93", 9100, "Refused owner");
-    const owner = await register(locationId);
+    const owner = await register(locationId, id);
     expect((await patch(app, id, owner)).status).toBe(204);
     const [elsewhere] = await suite.db
       .insert(locations)
@@ -1755,6 +1734,64 @@ describe("the register that owns a printer's drawer", () => {
     expect(await drawerOwnership(app, id)).toEqual({
       drawerTillId: owner,
       drawerOwnerTillId: owner,
+    });
+  });
+
+  it("refuses an owner at the printer's location whose receipts print elsewhere, changing nothing", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.96", 9100, "Drawer here");
+    const elsewhere = await createNetworkPrinter(app, "10.0.0.97", 9100, "Receipts elsewhere");
+    const refusal = {
+      error: { code: "management.request_invalid", params: { field: "drawerTillId" } },
+    };
+
+    for (const owner of [await register(locationId, elsewhere), await register(locationId)]) {
+      const response = await patch(app, id, owner);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual(refusal);
+    }
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: null,
+      drawerOwnerTillId: null,
+    });
+  });
+
+  it("refuses any owner when the printer is created, since no register prints there yet, and accepts none", async () => {
+    const app = mountApp();
+    const owner = await register(locationId);
+    const created = (drawerTillId: unknown) =>
+      send(app, "POST", "/management-api/printers", {
+        cookie: managerCookie,
+        body: { name: "Created", transport: "network_tcp", host: "10.0.0.98", drawerTillId },
+      });
+
+    const refused = await created(owner);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "drawerTillId" } },
+    });
+    const accepted = await created(null);
+    expect(accepted.status).toBe(201);
+    const id = ((await accepted.json()) as { id: string }).id;
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: null,
+      drawerOwnerTillId: null,
+    });
+  });
+
+  it("reports no owner once the named register's receipts move to another printer, even with one register still printing there", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.99", 9100, "Drawer left behind");
+    const other = await createNetworkPrinter(app, "10.0.1.1", 9100, "New receipts");
+    const named = await register(locationId, id);
+    await register(locationId, id);
+    expect((await patch(app, id, named)).status).toBe(204);
+
+    await suite.db.update(tills).set({ receiptPrinterId: other }).where(eq(tills.id, named));
+
+    expect(await drawerOwnership(app, id)).toEqual({
+      drawerTillId: named,
+      drawerOwnerTillId: null,
     });
   });
 });

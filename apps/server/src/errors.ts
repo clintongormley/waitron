@@ -796,11 +796,7 @@ declare module "@waitron/shared" {
      */
     "drawer.no_printer": { tillId: string };
     "drawer.not_attached": { printerId: string };
-    /**
-     * A manual open-drawer request came from a till whose register does not own its receipt
-     * printer's drawer: the printer names another register, or several registers print there and
-     * none is named. `printerId` names the printer whose drawer stayed shut.
-     */
+    /** A manual open-drawer request came from a register that does not own the printer's drawer. */
     "drawer.not_owner": { printerId: string };
     /**
      * A promote was requested without the operator attesting that the OLD node is physically

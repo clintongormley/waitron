@@ -64,7 +64,13 @@ import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limi
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
-import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
+import {
+  requireBodyUuid,
+  requireEnum,
+  requireNullableBodyUuid,
+  requireString,
+  requireUuidParam,
+} from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { listDrawerOwners } from "./receipt-print.js";
@@ -167,9 +173,7 @@ function nullableOptionalString(v: unknown, field: string): string | null | unde
 }
 
 function nullableOptionalUuid(v: unknown, field: string): string | null | undefined {
-  if (v === undefined) return undefined;
-  if (v === null) return null;
-  return requireBodyUuid(v, field);
+  return v === undefined ? undefined : requireNullableBodyUuid(v, field);
 }
 
 function nullableOptionalInt(v: unknown, field: string): number | null | undefined {
@@ -181,22 +185,30 @@ function nullableOptionalInt(v: unknown, field: string): number | null | undefin
   return v;
 }
 
+function drawerTillRefused(): AppError {
+  return new AppError("management.request_invalid", { field: "drawerTillId" });
+}
+
 /**
- * A drawer owner must be a register at the printer's location; anything else is refused as the
- * request's `drawerTillId`.
+ * A drawer owner must be a register at the printer's location whose receipts print on it, because
+ * drawer commands go only to the opening register's own receipt printer.
  */
 async function assertDrawerRegister(
   tx: Transaction,
-  locationId: string,
+  printer: { id: string; locationId: string },
   tillId: string,
 ): Promise<void> {
   const [till] = await tx
     .select({ id: tills.id })
     .from(tills)
-    .where(and(eq(tills.id, tillId), eq(tills.locationId, locationId)));
-  if (till === undefined) {
-    throw new AppError("management.request_invalid", { field: "drawerTillId" });
-  }
+    .where(
+      and(
+        eq(tills.id, tillId),
+        eq(tills.locationId, printer.locationId),
+        eq(tills.receiptPrinterId, printer.id),
+      ),
+    );
+  if (till === undefined) throw drawerTillRefused();
 }
 
 function optionalBool(v: unknown, field: string): boolean | undefined {
@@ -866,14 +878,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) input.hasCashDrawer = hasCashDrawer;
-      const drawerTillId = nullableOptionalUuid(body.drawerTillId, "drawerTillId");
-      if (drawerTillId !== undefined) input.drawerTillId = drawerTillId;
-      const created = await gated(sessionId, async (tx) => {
-        if (typeof drawerTillId === "string") {
-          await assertDrawerRegister(tx, deps.cfg.locationId, drawerTillId);
-        }
-        return createPrinter(tx, deps.cfg, input);
-      });
+      // No register prints on a printer not yet created, so none can own its drawer.
+      if (typeof nullableOptionalUuid(body.drawerTillId, "drawerTillId") === "string") {
+        throw drawerTillRefused();
+      }
+      const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
       return c.json(created, 201);
     }),
   );
@@ -883,7 +892,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, async (tx) => {
         const configured = await listPrinters(tx, deps.cfg);
-        const drawerOwners = await listDrawerOwners(tx);
+        const drawerOwners = await listDrawerOwners(tx, configured);
         // Aggregated over the full history, unlike the job list's bounded completed history.
         // `max(delivered_at)` is the latest instant only because every writer stores the canonical
         // `toISOString()` spelling.
@@ -959,20 +968,24 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const active = optionalBool(body.active, "active");
       if (active !== undefined) patch.active = active;
       await gated(sessionId, async (tx) => {
+        // Either key field can make the stored key a Bluetooth address, so both need the other's value.
+        const rekeys = patch.transport !== undefined || typeof patch.localKey === "string";
+        const [current] =
+          typeof drawerTillId === "string" || rekeys
+            ? await tx
+                .select({
+                  locationId: printers.locationId,
+                  transport: printers.transport,
+                  localKey: printers.localKey,
+                })
+                .from(printers)
+                .where(eq(printers.id, id))
+            : [];
         if (typeof drawerTillId === "string") {
-          const [printer] = await tx
-            .select({ locationId: printers.locationId })
-            .from(printers)
-            .where(eq(printers.id, id));
-          if (printer === undefined) throw new AppError("printer.not_found", { id });
-          await assertDrawerRegister(tx, printer.locationId, drawerTillId);
+          if (current === undefined) throw new AppError("printer.not_found", { id });
+          await assertDrawerRegister(tx, { id, locationId: current.locationId }, drawerTillId);
         }
-        // Either field can make the stored key a Bluetooth address, so both need the other's value.
-        if (patch.transport !== undefined || typeof patch.localKey === "string") {
-          const [current] = await tx
-            .select({ transport: printers.transport, localKey: printers.localKey })
-            .from(printers)
-            .where(eq(printers.id, id));
+        if (rekeys) {
           const key = patch.localKey === undefined ? current?.localKey : patch.localKey;
           const transport = patch.transport ?? current?.transport;
           if (typeof key === "string" && transport !== undefined) {

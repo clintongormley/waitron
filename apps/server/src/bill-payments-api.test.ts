@@ -241,14 +241,15 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
   );
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
-  const handheld = await enrolDeviceForTest(db, cfg, {
-    name: "Terraza",
-    profileId: seeded.handheldProfileId,
-    registerId: cfg.tillId,
-  });
   const [deviceRow] = db.all<{ till_id: string }>(
     sql`select till_id from devices where id = ${device.deviceId}`,
   );
+  // On the register that owns the drawer, so only the handheld rule keeps its drawer shut.
+  const handheld = await enrolDeviceForTest(db, cfg, {
+    name: "Terraza",
+    profileId: seeded.handheldProfileId,
+    registerId: deviceRow!.till_id,
+  });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
   // Every till, so the device's own till prints whichever one it is; the drawer opens only for the
   // register it names, the device's.
@@ -1965,6 +1966,32 @@ describe("a cash refund before the invoice (design §6)", () => {
       },
     ]);
     expect(await saleOf(billId)).toEqual([]);
+  });
+
+  it("gives cash back on a handheld at the register that owns the drawer without opening it", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const before = drawerJobCount();
+
+    const refunded = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        reason: "Cobrado de más",
+        override: { personId: venue.adminId, pin: "1234" },
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+      },
+      venue.handheldCookie,
+    );
+
+    expect(refunded.status).toBe(200);
+    expect(await refundRows(paymentId)).toMatchObject([
+      { state: "completed", tillId: venue.deviceTillId },
+    ]);
+    expect(await refundDrawerOpens(paymentId)).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
   });
 
   it("refuses an operator without the refund permission and no override, writing nothing", async () => {

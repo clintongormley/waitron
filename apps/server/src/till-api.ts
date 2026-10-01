@@ -22,13 +22,7 @@ import {
   listAvailableProducts,
   readReceiptLanguage,
 } from "@waitron/catalogue";
-import {
-  kindOfFormFactor,
-  getReceipt,
-  getCanvas,
-  getCanvasForFormFactor,
-  getDeviceProfile,
-} from "@waitron/layouts";
+import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
@@ -146,6 +140,7 @@ import {
 import {
   assertDeviceCapability,
   assertNotHandheld,
+  deviceSaleCfg,
   requireDevice,
   requireSaleTillId,
   tryReadDevice,
@@ -1148,9 +1143,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
       const device = await tryReadDevice(deps, c);
       const saleCfg: TillConfig = {
-        ...deps.cfg,
-        tillId: await requireSaleTillId(deps, c, device),
-        allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
+        ...(await deviceSaleCfg(deps, c, device)),
         sendingDeviceId: device?.deviceId,
         madeHereSink: madeHereSinkFor(c),
       };
@@ -1509,20 +1502,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Audited: records a `drawer_opens('manual')` row beside a kick-only job to the pressing till's
-  // receipt printer — the device's register, or the configured till when no device is presented. The
-  // `drawer_open_policy` gate runs before the printer lookup, so an unpermitted operator is refused
-  // whatever the printer state.
+  // The `drawer_open_policy` gate runs before the printer lookup, so an unpermitted operator is
+  // refused whatever the printer state.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId, tillId } = await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "drawer_open", device);
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
-      const drawerCfg: TillConfig =
-        device === null
-          ? deps.cfg
-          : { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
+      const drawerCfg: TillConfig = {
+        ...deps.cfg,
+        tillId: await requireSaleTillId(deps, c, device),
+      };
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTransaction(deps.db, async (tx) => {
         const [loc] = await tx
@@ -1575,15 +1566,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const device = await tryReadDevice(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
-      const saleCfg: TillConfig = {
-        ...deps.cfg,
-        tillId: await requireSaleTillId(deps, c, device),
-        allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
-      };
+      const saleCfg = await deviceSaleCfg(deps, c);
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,

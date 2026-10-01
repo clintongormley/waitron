@@ -44,8 +44,7 @@ export const printers = table(
     paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
     resolution: printResolution("resolution").notNull().default("180dpi"),
     hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
-    // The register whose till alone may open this printer's drawer. Null: the one register at its
-    // location printing here, else none (`drawerOwnerOf`, apps/server/src/receipt-print.ts).
+    // The register named to open this printer's drawer; who may open it: `drawerOwnerOf`.
     /* v8 ignore start */
     drawerTillId: id("drawer_till_id").references((): AnySQLiteColumn => tills.id),
     /* v8 ignore stop */

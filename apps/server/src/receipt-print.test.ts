@@ -954,10 +954,21 @@ describe("drawerOwnerOf", () => {
   it("is the register the printer names, whoever prints there", () => {
     expect(
       drawerOwnerOf({ ...printer, drawerTillId: "named" }, [
+        at("named", "here", "p"),
         at("a", "here", "p"),
         at("b", "here", "p"),
       ]),
     ).toBe("named");
+  });
+
+  it("is none when the register the printer names prints elsewhere, even with one register printing there", () => {
+    expect(
+      drawerOwnerOf({ ...printer, drawerTillId: "named" }, [
+        at("named", "here", "q"),
+        at("a", "here", "p"),
+      ]),
+    ).toBeNull();
+    expect(drawerOwnerOf({ ...printer, drawerTillId: "named" }, [at("a", "here", "p")])).toBeNull();
   });
 
   it("is the one register at the printer's location printing there, ignoring one elsewhere", () => {

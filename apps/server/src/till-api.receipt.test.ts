@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
+  devices,
   drawerOpens,
   locations,
   printJobs,
@@ -350,6 +351,38 @@ async function enrolTillCookie(cfg: TillConfig): Promise<string> {
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
+/** A till device that may open a drawer, bound to the configured till `cfg.tillId`. */
+async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
+  tillDeviceCounter += 1;
+  const n = tillDeviceCounter;
+  const [profile] = await suite.db
+    .insert(deviceProfiles)
+    .values({
+      name: `Configured till profile ${n}`,
+      formFactor: "till",
+      capabilities: ["open-cash-drawer"],
+    })
+    .returning({ id: deviceProfiles.id });
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
+    name: `Configured till ${n}`,
+    profileId: profile!.id,
+  });
+  await suite.db.update(devices).set({ tillId: cfg.tillId }).where(eq(devices.id, dev.deviceId));
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
+
+/** Log in as `operatorId` at the configured till's device; the cookie carries both. */
+async function loginAtTill(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
+  const deviceCookie = await enrolConfiguredTillCookie(cfg);
+  const res = await app.request("/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: deviceCookie },
+    body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+  });
+  expect(res.status).toBe(200);
+  return `${res.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
+}
+
 /** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the reprint route keys on it). */
 async function ringSale(
   app: Hono,
@@ -521,7 +554,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(200);
@@ -557,7 +590,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     await setDrawerPolicy(cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(400);
@@ -576,7 +609,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     await setDrawerPolicy(cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
@@ -592,6 +625,25 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     mountTillApi(app, apiDeps(cfg), noopLog);
     const res = await app.request("/api/drawer/open", { method: "POST" });
     expect(res.status).toBe(401);
+  });
+
+  it("refuses an operator session presented without a device with device.unauthorized, writing nothing", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await setDrawerPolicy(cfg, "open");
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const sessionOnly = (await login(app, cfg, operatorId)).split(";")[0]!;
+
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { cookie: sessionOnly },
+    });
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "device.unauthorized", params: {} } });
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 });
 
@@ -765,7 +817,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, supervisorId);
+    const cookie = await loginAtTill(app, cfg, supervisorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(200); // the operator's OWN role satisfies the gate — no override needed
@@ -788,7 +840,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId); // logged in as STAFF (lacks cash.drawer)
+    const cookie = await loginAtTill(app, cfg, operatorId); // logged in as STAFF (lacks cash.drawer)
 
     const res = await app.request(
       "/api/drawer/open",
@@ -820,7 +872,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(403);
@@ -837,7 +889,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     // No printer configured. If the printer resolution ran first this would be 400 drawer.no_printer.
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(403);
@@ -852,7 +904,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const res = await app.request(
       "/api/drawer/open",
@@ -874,7 +926,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     // The override names ANOTHER staff person? There is only one staff here — use the operator's own
     // id as the override: a valid credential (correct PIN) whose role (staff) lacks cash.drawer.
@@ -897,7 +949,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const res = await app.request(
       "/api/drawer/open",
@@ -916,7 +968,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     // A malformed body: a well-formed supervisor id but a NUMERIC pin. `override.pin` must be a string;
     // a non-string is refused pin.invalid (401) before it can reach verifyPin as a non-string.
@@ -938,7 +990,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const res = await app.request(
       "/api/drawer/open",
@@ -966,7 +1018,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     const causes = {
       unknown: { personId: randomUUID(), pin: "5555" },
@@ -996,7 +1048,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     // An empty JSON object body — parsed cleanly, no override → the gate refuses. (Proves the optional
     // body is handled without a throw: a malformed/empty body must not become a 500.)
@@ -1033,7 +1085,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
       body: JSON.stringify({ personId, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    return res.headers.get("set-cookie")!;
+    return `${res.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
   }
 
   function openWith(app: Hono, cookie: string, override: { personId: string; pin: string }) {
@@ -1048,7 +1100,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
     const { app, clockAt } = throttledApp(cfg);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
 
     for (let i = 0; i < 4; i += 1) {
       const wrong = await openWith(app, cookie, { personId: supervisorId, pin: "0000" });
@@ -1076,7 +1128,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
     const { app } = throttledApp(cfg);
-    const cookie = await login(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, operatorId);
     const wrongThrice = async () => {
       for (let i = 0; i < 3; i += 1) {
         const wrong = await openWith(app, cookie, { personId: supervisorId, pin: "0000" });
@@ -1095,7 +1147,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
     const { app } = throttledApp(cfg);
-    const device = await enrolTillCookie(cfg);
+    const device = await enrolConfiguredTillCookie(cfg);
     const first = await loginOn(app, device, operatorId);
 
     for (let i = 0; i < 4; i += 1) {
@@ -1114,7 +1166,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
     const { app } = throttledApp(cfg);
-    const device = await enrolTillCookie(cfg);
+    const device = await enrolConfiguredTillCookie(cfg);
     const staff = await loginOn(app, device, operatorId);
     const supervisor = await loginOn(app, device, supervisorId);
 

@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { workingOrders } from "@waitron/db";
+import { deviceProfiles, workingOrders } from "@waitron/db";
 import {
   adjustments,
   deactivateAdjustmentReason,
@@ -22,6 +22,8 @@ import {
   rowsOf,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
@@ -262,9 +264,18 @@ describe("approval through the route (plan D6)", () => {
     it("counts wrong PINs sent to the cash drawer from the same till toward the same approver", async () => {
       const { app } = throttledApp();
       const { billId } = await billWith(venue, [{ name: "Burger" }]);
-      // The session alone: the drawer route is reached without the device, whose profile may not
-      // open a drawer.
-      const staffSession = venue.cookie.staff.split("; ")[0]!;
+      // The staff session on a second till device of the venue, whose profile may open a drawer.
+      const [drawerProfile] = await inTx(venue, (tx) =>
+        tx
+          .insert(deviceProfiles)
+          .values({ name: "Drawer till", formFactor: "till", capabilities: ["open-cash-drawer"] })
+          .returning({ id: deviceProfiles.id }),
+      );
+      const drawerDevice = await enrolDeviceForTest(venue.db, venue.cfg, {
+        name: "Drawer till device",
+        profileId: drawerProfile!.id,
+      });
+      const staffSession = `${venue.cookie.staff.split("; ")[0]!}; ${DEVICE_COOKIE}=${drawerDevice.deviceId}.${drawerDevice.token}`;
 
       for (let i = 0; i < 4; i += 1) {
         const drawer = await send(app, staffSession, "POST", "/api/drawer/open", {

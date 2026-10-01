@@ -41,8 +41,6 @@ export interface CreatePrinterInput {
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   hasCashDrawer?: boolean;
-  /** The register whose till alone opens this printer's drawer; the route checks it is one. */
-  drawerTillId?: string | null;
 }
 
 /**
@@ -83,7 +81,6 @@ export async function createPrinter(
         paperWidth: input.paperWidth,
         resolution: input.resolution,
         hasCashDrawer: input.hasCashDrawer,
-        drawerTillId: input.drawerTillId,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
