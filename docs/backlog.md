@@ -1575,9 +1575,11 @@ is A179. The work lands in six pull requests, A178a to A178f, in order.
 
 **For A178b–e: main's #1004 (prep stations) changed the hand-drawn field list the spec counted.**
 `packages/venue-service/src/dashboard/venue-operations-screen.ts` gained a native `<select>`, the
-per-till "starts in" zone (`part="till-zone-select"`), which the spec's file list does not include;
-the station field the spec lists for `apps/dashboard/src/widgets/product-editor.ts` is gone; and the
-new `packages/venue-service/src/dashboard/prep-stations-screen.ts` shows field errors as a separate
+per-till "starts in" zone (`part="till-zone-select"`), which the spec's row for that file does not
+count, and the `#select` helper's preparation-route fields (subject, zone, target) are gone,
+leaving 6 of the spec's 9; the station field the spec lists for
+`apps/dashboard/src/widgets/product-editor.ts` is gone; and the new
+`packages/venue-service/src/dashboard/prep-stations-screen.ts` shows field errors as a separate
 `<p class="error">` beside the field rather than through its `error` property, so it should move
 onto `error`.
 

@@ -438,9 +438,9 @@ view. While the list is open, the arrows, Home and End on the trigger move the a
 focus back on the search box or list; when the options change, the active row follows its option by
 value (the add row stays active while it is still offered), else the chosen row, else the first,
 while a list opened by a click with no row active keeps none; and a `search="auto"` list whose new
-options cross the threshold stays open and puts focus on whichever control now takes the keys. The
-"No results" text sits outside the list box; the
-reason is in the code (`wt-combobox.ts`, the comment above it).
+options cross the threshold stays open, and focus that was in the search box or list moves to
+whichever of them now takes the keys. The "No results" text sits outside the list box; the reason
+is in the code (`wt-combobox.ts`, the comment above it).
 
 Set a `wt-data-table` column’s `activatesRow: false` when it has an action separate from `rowClick`.
 Clicking blank space in that column does not open the row; its controls keep their own actions. This
