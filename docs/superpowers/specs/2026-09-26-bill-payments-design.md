@@ -46,6 +46,10 @@ not built yet. Task 14's Step 0 re-maps every function named here against the `m
   a transaction, P2 calls `provider.collect` for `total + tip` with no transaction open, and P3
   (`finalizeCapture`, `:768-861`) issues the invoice with one card tender of `total + tip`, links the
   provider's payment row to the sale and settles the order.
+  _(2026-10-01, B28: when either path files a sale whose total is zero — an open bill or a new
+  counter order on Pay, those or a placed order on the reader — it has no tender, no `payments`
+  row and no drawer job. Collecting an order presented without an invoice now does the same;
+  collecting an invoice that owes nothing already did, C59.)_
 - **Retries.** The only retry key is the working order's id: at most one sale per working order
   (`sales_working_order_id_key`, `packages/db/src/schema/sales.ts:136`), and a repeat of a settled
   order replays its stored ticket (`till-sale.ts:329-331`, `:660-665`).
@@ -787,6 +791,10 @@ that holds no payment is not issued by this helper. No product path issues a €
 pay action sends one tender for the total, and `tenders_amount_ck` refuses a zero amount
 (`packages/db/src/schema/sales.ts:254`), although `settleSale` itself accepts no tenders
 (`packages/core/src/settle-sale.ts:106-107`). How a fully comped bill closes is Task 11's to decide.
+_(2026-10-01, B28: "No product path issues a €0.00 sale" had already stopped being true with B17,
+whose unpaid departure files a 0.00 sale. Since B28, Pay on a bill whose total is zero also files
+it at 0.00 and settles it with no tender (`fileImmediateSale` in `apps/server/src/till-sale.ts`;
+the B28 entry in `docs/backlog.md`).)_
 
 One helper (`issueIfFullyPaid`) is called at the end of every write that can make that true:
 

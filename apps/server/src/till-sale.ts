@@ -490,25 +490,16 @@ export async function payWorkingOrder(
       }
 
       // A walk-up is created with no party.
-      const notSent = await fireDishesAtPayment(tx, cfg, req.id, locked?.partyId ?? null);
-
-      const ticket = await fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
-      if (notSent !== null) {
-        const [sale] = await tx
-          .select({ id: sales.id })
-          .from(sales)
-          .where(eq(sales.workingOrderId, req.id));
-        await raiseDishesNotSent(
-          tx,
-          cfg,
-          sale!.id,
-          req.id,
-          notSent,
-          deps.clock.now().instant,
-          deps.log,
-        );
-      }
-      return ticket;
+      return fireAndFileSale(
+        tx,
+        deps,
+        cfg,
+        req.id,
+        req.tender,
+        order,
+        locked?.partyId ?? null,
+        operatorId,
+      );
     });
   } catch (error) {
     // Step 6. Anything but a unique violation is a real failure and surfaces unchanged.
@@ -530,6 +521,43 @@ export async function payWorkingOrder(
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
   }
+}
+
+/**
+ * Give the kitchen the dishes paying sends ({@link fireDishesAtPayment}), file the sale
+ * ({@link fileImmediateSale}), and once the sale exists raise the alert naming any dish no station
+ * could take. `partyId` is the order's party as the caller read it, or `null` for an order the
+ * caller has just created.
+ */
+async function fireAndFileSale(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  workingOrderId: string,
+  tender: TillTender | null,
+  order: GrossOrder,
+  partyId: string | null,
+  operatorId?: string,
+): Promise<TillSaleResult> {
+  const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, partyId);
+
+  const ticket = await fileImmediateSale(tx, deps, cfg, workingOrderId, tender, order, operatorId);
+  if (notSent !== null) {
+    const [sale] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, workingOrderId));
+    await raiseDishesNotSent(
+      tx,
+      cfg,
+      sale!.id,
+      workingOrderId,
+      notSent,
+      deps.clock.now().instant,
+      deps.log,
+    );
+  }
+  return ticket;
 }
 
 /** Reconstruct the filed invoice and persisted payment facts for original, duplicate or pay replay. */
@@ -628,13 +656,18 @@ function settlementFor(tender: TillTender, total: string): { settledAmount: stri
  * so the sale, its tender/settlement, its chained fiscal record and the → `settled` transition commit
  * as one unit. It does NOT read or guard the order status: the caller resolved it, and one write
  * transaction runs on the venue file at a time, so nothing has moved the row in between.
+ *
+ * A sale whose total is zero (every line given away, or free) is settled with no tender, no
+ * `payments` row and no drawer opening, as {@link settleOwingNothing} settles an invoice that owes
+ * nothing. `tender` is `null` only where nothing can be owed; a `null` tender on a sale that owes
+ * something is refused `sale.tender_shortfall`.
  */
 async function fileImmediateSale(
   tx: Transaction,
   deps: TillSaleDeps,
   cfg: TillConfig,
   workingOrderId: string,
-  tender: TillTender,
+  tender: TillTender | null,
   order: GrossOrder,
   operatorId?: string,
 ): Promise<TillSaleResult> {
@@ -642,8 +675,9 @@ async function fileImmediateSale(
     deps.clock,
     await issuancePass(tx, cfg, workingOrderId, order),
   );
-  const isCard = tender.method === "card";
-  const { settledAmount } = settlementFor(tender, priced.total);
+  // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
+  const settled = tender === null ? null : { ...tender, ...settlementFor(tender, priced.total) };
+  const taken = compareDecimal(decimal(priced.total), ZERO) > 0 ? settled : null;
 
   // The issue reading, shared by the invoice, the tender and the order's `settled_at`.
   const settledAt = clock.now().instant;
@@ -663,26 +697,29 @@ async function fileImmediateSale(
     operatorId,
     settlement: {
       kind: "immediate",
-      tenders: [
-        {
-          method: tender.method,
-          amount: settledAmount,
-          tipAmount: "0.00",
-          cashTendered: tender.method === "cash" ? tender.amount : null,
-          settledAt,
-        },
-      ],
+      tenders:
+        taken === null
+          ? []
+          : [
+              {
+                method: taken.method,
+                amount: taken.settledAmount,
+                tipAmount: "0.00",
+                cashTendered: taken.method === "cash" ? taken.amount : null,
+                settledAt,
+              },
+            ],
     },
   });
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
   // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
-  if (isCard) {
+  if (taken?.method === "card") {
     const { provider, paymentRef } = await recordManualCardPayment(tx, {
       workingOrderId,
       amount: decimal(priced.total),
       settledAt,
-      externalRef: tender.externalRef,
+      externalRef: taken.externalRef,
     });
     await associatePaymentWithSale(tx, { provider, paymentRef, saleId });
   }
@@ -714,7 +751,7 @@ async function fileImmediateSale(
   };
 
   await enqueueSaleReceipt(tx, cfg, ticket, saleId);
-  if (tender.method === "cash") await enqueueCashSaleDrawer(tx, cfg, saleId, operatorId);
+  if (taken?.method === "cash") await enqueueCashSaleDrawer(tx, cfg, saleId, operatorId);
   return ticket;
 }
 
@@ -736,7 +773,7 @@ async function readOutstandingSaleForOrder(
  * every other writer, so this is three phases:
  *
  *  - P1 (tx A). Resolve the order and decide what to do; a bill whose amount due is exactly zero is
- *    settled here, and one below zero is refused.
+ *    settled here, or filed and settled here when it has no sale yet, and one below zero is refused.
  *    A WALK-UP is created `open` and COMMITTED here, because the provider's payment row carries a
  *    foreign key to `working_orders` (`payments_working_order_fk`).
  *  - P2 (no tx). Drive the reader for the amount plus tip. A non-captured result files NOTHING and is
@@ -754,8 +791,9 @@ async function readOutstandingSaleForOrder(
  *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 never ran).
  *    Finish it WITHOUT charging again: file a sale, or settle the already-issued invoice when there is
  *    one, since a second `recordSale` would collide with it.
- *  - `owes-nothing` — a sale was already issued and its corrections leave nothing owed: settled
- *    here without asking the reader, as {@link collectOrder} does; below zero it is refused.
+ *  - `owes-nothing` — a sale was already issued and its corrections leave nothing owed, or there is
+ *    no sale and the order's total is zero: settled here, with the sale filed first when there is
+ *    none, without asking the reader, as {@link collectOrder} does; below zero it is refused.
  *  - `settle` — a sale was already issued for the order: collect the amount due and SETTLE it.
  *  - `collect` — no sale yet: collect the priced total and file the sale.
  */
@@ -789,7 +827,11 @@ async function payIntegrated(
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt })
+      .select({
+        status: workingOrders.status,
+        attemptAt: workingOrders.paymentAttemptAt,
+        partyId: workingOrders.partyId,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
@@ -860,10 +902,31 @@ async function payIntegrated(
             creditedTo: operatorId,
           })
         : await priceStoredOrderForIssuance(tx, req.id);
+    const wasPlaced = locked?.status === "placed";
+    if (compareDecimal(order.gross.total, ZERO) === 0) {
+      // Nothing to charge, so the reader is not asked and no tip is taken; called only to refuse a
+      // malformed tip when tips are on. A placed order's dishes were sent when it was placed, and a
+      // walk-up is created with no party.
+      tipOf(cfg, req);
+      return {
+        kind: "owes-nothing" as const,
+        ticket: wasPlaced
+          ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, operatorId)
+          : await fireAndFileSale(
+              tx,
+              deps,
+              cfg,
+              req.id,
+              null,
+              order,
+              locked?.partyId ?? null,
+              operatorId,
+            ),
+      };
+    }
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
     const gross = await issuancePass(tx, cfg, req.id, order);
-    const wasPlaced = locked?.status === "placed";
     // An open order's lines could still change under the reader, so it is marked in flight (plan
     // D22). A placed order's priced columns are already frozen, and
     // `working_orders_enforce_transition` refuses its `payment_attempt_at` being set.
