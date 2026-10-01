@@ -17,7 +17,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { departments, preparationRoutes } from "@waitron/venue-service";
+import { departments, routeExceptions } from "@waitron/venue-service";
 import {
   createPinThrottle,
   endSession,
@@ -227,8 +227,9 @@ const suite = useVenueDb({
           productId: p.id,
           grossPrice: "1.75",
         });
-        await tx.insert(preparationRoutes).values({
+        await tx.insert(routeExceptions).values({
           locationId: loc!.id,
+          position: 0,
           productId: p.id,
           stationId: defaultStationId,
         });

@@ -2124,7 +2124,7 @@ export class TillApi {
   /**
    * FIRE a SETTLED order to the kitchen → `POST /api/working-orders/:id/prep` — for an order that pays
    * at order and so never places. A non-settled or absent id rejects `working_order.not_settled`; a
-   * re-fire `ticket.already_fired`; incomplete routing `route.missing`.
+   * re-fire `ticket.already_fired`; missing prep station `station.no_default`.
    */
   async sendToPrep(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});

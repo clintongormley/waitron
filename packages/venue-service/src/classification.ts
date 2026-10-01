@@ -9,7 +9,6 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("zone_service_policies", "state", STATE),
   classify("zone_menus", "state", STATE),
   classify("device_zone_defaults", "state", STATE),
-  classify("preparation_routes", "state", STATE),
   classify("station_claims", "state", STATE),
   classify("route_exceptions", "state", STATE),
   classify("department_hours", "state", STATE),

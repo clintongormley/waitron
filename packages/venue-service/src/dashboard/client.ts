@@ -16,14 +16,6 @@ export interface ServiceZone {
   serviceMode: ServiceMode;
   serviceModeOverride: ServiceMode | null;
 }
-export interface PreparationRoute {
-  id: string;
-  zoneId: string | null;
-  categoryId: string | null;
-  productId: string | null;
-  stationId: string | null;
-  noPreparation: boolean;
-}
 export interface HoursInterval {
   departmentId: string;
   weekday: number;
@@ -37,6 +29,7 @@ export interface ZoneMenu {
   isDefault: boolean;
 }
 export type VenueReadinessIssue =
+  | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
   | { code: "zone.department_missing"; zoneId: string; zoneName: string }
   | { code: "zone.menu_missing"; zoneId: string; zoneName: string }
@@ -47,13 +40,6 @@ export type VenueReadinessIssue =
       zoneName: string;
       menuId: string;
       menuName: string;
-    }
-  | {
-      code: "zone.route_missing";
-      zoneId: string;
-      zoneName: string;
-      productId: string;
-      productName: string;
     };
 export interface NamedRow {
   id: string;
@@ -65,7 +51,6 @@ export interface FloorZone extends NamedRow {
 export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
-  routes: PreparationRoute[];
   hours: HoursInterval[];
   zoneMenus: ZoneMenu[];
   readiness: VenueReadinessIssue[];
@@ -82,16 +67,7 @@ export interface VenueServiceSettings {
 export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
   menus: (NamedRow & { active: boolean })[];
-  categories: { id: string; name: string }[];
-  stations: (NamedRow & { isDefault?: boolean })[];
   floorZones: FloorZone[];
-  products: Product[];
-}
-/** The subset of `@waitron/catalogue`'s `Product` these screens read. `name` is the plain staff name
- * every dashboard surface shows. */
-export interface Product {
-  id: string;
-  name: string;
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -111,26 +87,15 @@ export class VenueServiceApi {
   }
 
   async load(): Promise<VenueServiceView> {
-    const [model, menus, categories, stations, floorZones] = await Promise.all([
+    const [model, menus, floorZones] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
       this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
-      this.#read<{ id: string; name: string }[]>("/management-api/categories"),
-      this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
       this.#read<FloorZone[]>("/management-api/zones"),
     ]);
-    const productLists = await Promise.all(
-      menus.map((menu) => this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`)),
-    );
-    const products = [
-      ...new Map(productLists.flat().map((product) => [product.id, product])).values(),
-    ];
     return {
       ...model,
       menus,
-      categories,
-      stations,
       floorZones,
-      products,
     };
   }
 
@@ -186,29 +151,6 @@ export class VenueServiceApi {
     );
   }
 
-  createRoute(input: {
-    zoneId?: string | null;
-    categoryId?: string | null;
-    productId?: string | null;
-    stationId?: string | null;
-    noPreparation?: boolean;
-  }): Promise<{ id: string }> {
-    return this.request("/management-api/venue-service/routes", "POST", input);
-  }
-
-  updateRoute(
-    routeId: string,
-    input: {
-      zoneId: string | null;
-      categoryId?: string | null;
-      productId?: string | null;
-      stationId?: string | null;
-      noPreparation?: boolean;
-    },
-  ): Promise<void> {
-    return this.request(`/management-api/venue-service/routes/${routeId}`, "PUT", input);
-  }
-
   saveSettings(settings: VenueServiceSettings): Promise<void> {
     return this.request("/management-api/venue-service/settings", "PUT", settings);
   }
@@ -229,9 +171,5 @@ export class VenueServiceApi {
     return this.request("/management-api/venue-service/settings/release-reminder-minutes", "PUT", {
       releaseReminderMinutes,
     });
-  }
-
-  deleteRoute(routeId: string): Promise<void> {
-    return this.request(`/management-api/venue-service/routes/${routeId}`, "DELETE");
   }
 }

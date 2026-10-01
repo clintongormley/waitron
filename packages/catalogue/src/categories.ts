@@ -64,8 +64,8 @@ export async function validateParent(
 /**
  * Has an optional module's table been migrated into this database?
  *
- * `media_images` and `preparation_routes` both belong to modules a venue need not have, so every
- * path that names one in raw SQL asks first. The count is read rather than a boolean expression:
+ * Optional module tables belong to modules a venue need not have, so every path that names one
+ * in raw SQL asks first. The count is read rather than a boolean expression:
  * this is a raw statement, so no drizzle column mapping runs over the result and SQLite has no
  * boolean type — a `... is not null` expression comes back as the number 1 or 0.
  */
@@ -109,8 +109,6 @@ export async function updateCategory(
 }
 export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
   const category = await readCategory(tx, id);
-  // No lock: one write transaction runs on the venue file at a time, so no concurrent route insert
-  // can slip between these steps; see the note above `listCategories`.
   await tx
     .update(products)
     .set({ categoryId: category.parentId, updatedAt: now() })
@@ -120,8 +118,6 @@ export async function deleteCategory(tx: Transaction, id: string): Promise<void>
     .update(categoryDetails)
     .set({ parentId: category.parentId })
     .where(eq(categoryDetails.parentId, id));
-  if (await tablePresent(tx, "preparation_routes"))
-    await tx.execute(sql`delete from preparation_routes where category_id = ${id}`);
   // category_details cascades via its FK.
   await tx.delete(categories).where(eq(categories.id, id));
 }

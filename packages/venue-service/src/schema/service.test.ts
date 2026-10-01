@@ -6,7 +6,6 @@ import {
   departments,
   deviceZoneDefaults,
   orderServiceContexts,
-  preparationRoutes,
   workingLineContexts,
   zoneMenus,
   zoneServicePolicies,
@@ -68,26 +67,6 @@ const EXPECTED: Record<
     indexes: [],
     uniqueConstraints: [],
     primaryKeys: ["device_zone_defaults_pk"],
-  },
-  preparation_routes: {
-    table: preparationRoutes,
-    foreignKeys: [
-      "preparation_routes_location_fk",
-      "preparation_routes_zone_fk",
-      "preparation_routes_category_fk",
-      "preparation_routes_product_fk",
-      "preparation_routes_station_fk",
-    ],
-    checks: ["preparation_routes_subject_ck", "preparation_routes_target_ck"],
-    indexes: [
-      "preparation_routes_lookup_idx",
-      "preparation_routes_zone_product_key",
-      "preparation_routes_zone_category_key",
-      "preparation_routes_venue_product_key",
-      "preparation_routes_venue_category_key",
-    ],
-    uniqueConstraints: [],
-    primaryKeys: [],
   },
   station_claims: {
     table: stationClaims,
@@ -182,8 +161,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers all twelve of the package's tables", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(12);
+  it("covers all eleven of the package's tables", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(11);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {
@@ -206,16 +185,11 @@ describe("venue-service schema", () => {
     const partial = [
       ...getTableConfig(departments).indexes,
       ...getTableConfig(zoneServicePolicies).indexes,
-      ...getTableConfig(preparationRoutes).indexes,
       ...getTableConfig(kitchenNotices).indexes,
     ].filter((index) => index.config.where !== undefined);
     expect(partial.map((index) => [index.config.name, index.config.unique])).toEqual([
       ["departments_one_default_per_location_key", true],
       ["zone_service_policies_one_counter_default_key", true],
-      ["preparation_routes_zone_product_key", true],
-      ["preparation_routes_zone_category_key", true],
-      ["preparation_routes_venue_product_key", true],
-      ["preparation_routes_venue_category_key", true],
       ["kitchen_notices_open_idx", false],
     ]);
   });

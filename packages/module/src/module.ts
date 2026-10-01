@@ -299,24 +299,6 @@ export interface VenueServiceContribution {
     zoneId: string | null,
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute | null>>;
-  /** Resolves every product in one batch. An unknown zone throws `service_zone.not_found` before any
-   *  product error; otherwise throws the first failing product's coded error in input order. Keys are
-   *  the caller's spelling of each id (the first, when two spellings name one product). An empty list
-   *  returns an empty map without querying. */
-  resolvePreparationRoutes(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-    productIds: readonly string[],
-  ): Promise<ReadonlyMap<string, PreparationRoute>>;
-  /** As `resolvePreparationRoutes`, but each failing product's coded error is returned in its place
-   *  rather than thrown. An unknown zone still throws. */
-  resolvePreparationRouteOutcomes(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-    productIds: readonly string[],
-  ): Promise<ReadonlyMap<string, PreparationRoute | AppError>>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
    *  the zone's active menus. With `menuItemIds`, only the offers it names are served. Each menu's home
    *  layout is the one `deviceProfileId` chose for it when the menu's live version holds it, and

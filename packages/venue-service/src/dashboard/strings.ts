@@ -1,8 +1,6 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
-  "venue.route_duplicate":
-    "A route already exists for this product or category in that service zone. Edit the existing route instead.",
   "venue.department_has_zones":
     "Move its active service zones to another department before deactivating this department.",
   "venue.status": "Status",
@@ -23,7 +21,6 @@ const en = {
   "venue.edit_department": "Edit department",
   "venue.edit_hours": "Edit hours",
   "venue.edit_assignment": "Edit menu assignment",
-  "venue.edit_route": "Edit route",
   "venue.order_invalid": "Enter a whole number of zero or more.",
 
   "nav.venue_operations": "Venue operations",
@@ -47,21 +44,12 @@ const en = {
   "venue.hours": "Opening hours",
   "venue.menus": "Menus",
   "venue.menu_name": "Menu name",
-  "venue.product": "Product",
   "venue.actions": "Actions",
   "venue.columns": "Columns",
   "venue.weekday": "Day",
   "venue.opens": "Opens",
   "venue.closes": "Closes",
   "venue.add_hours": "Add hours",
-  "venue.routing": "Preparation routing",
-  "venue.category": "Product category",
-  "venue.product_or_category": "Product or category",
-  "venue.all_zones": "All service zones",
-  "venue.station": "Preparation station",
-  "venue.no_preparation": "No preparation",
-  "venue.add_route": "Add route",
-  "venue.remove_route": "Remove route",
   "venue.required": "Fill in every required field.",
   "venue.fix_fields": "Correct the highlighted fields to continue.",
   "venue.field_required": "This field is required.",
@@ -80,11 +68,12 @@ const en = {
   "venue.readiness": "Ready for service",
   "venue.readiness.ok": "Every active service zone is ready to take orders.",
   "venue.readiness.department_missing": "Create an active department before service.",
+  "venue.readiness.default_station_missing":
+    "No default prep station is switched on. Items no rule sends anywhere cannot be sent.",
   "venue.readiness.zone_department_missing": "needs an active department.",
   "venue.readiness.zone_menu_missing": "needs a default menu.",
   "venue.readiness.menu_empty": "has no products for",
   "venue.readiness.zone_menu_unpublished": "needs an active, published menu.",
-  "venue.readiness.route_missing": "needs a preparation route in",
   "venue.deactivate_department": "Deactivate department",
   "venue.kitchen_changes": "Changes after sending",
   "venue.edit_sent_lines": "Allow changes to items already sent to the kitchen",
@@ -105,8 +94,6 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
-  "venue.route_duplicate":
-    "Ya existe una ruta para este producto o categoría en esa zona de servicio. Edita la ruta existente.",
   "venue.department_has_zones":
     "Mueve sus zonas de servicio activas a otro departamento antes de desactivar este departamento.",
   "venue.status": "Estado",
@@ -127,7 +114,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.edit_department": "Editar departamento",
   "venue.edit_hours": "Editar horario",
   "venue.edit_assignment": "Editar asignación de carta",
-  "venue.edit_route": "Editar ruta",
   "venue.order_invalid": "Introduce un número entero igual o mayor que cero.",
 
   "nav.venue_operations": "Operaciones del local",
@@ -151,21 +137,12 @@ const es: Record<keyof typeof en, string> = {
   "venue.hours": "Horario de apertura",
   "venue.menus": "Cartas",
   "venue.menu_name": "Nombre de la carta",
-  "venue.product": "Producto",
   "venue.actions": "Acciones",
   "venue.columns": "Columnas",
   "venue.weekday": "Día",
   "venue.opens": "Abre",
   "venue.closes": "Cierra",
   "venue.add_hours": "Añadir horario",
-  "venue.routing": "Rutas de preparación",
-  "venue.category": "Categoría de producto",
-  "venue.product_or_category": "Producto o categoría",
-  "venue.all_zones": "Todas las zonas de servicio",
-  "venue.station": "Estación de preparación",
-  "venue.no_preparation": "Sin preparación",
-  "venue.add_route": "Añadir ruta",
-  "venue.remove_route": "Quitar ruta",
   "venue.required": "Completa todos los campos obligatorios.",
   "venue.fix_fields": "Corrige los campos marcados para continuar.",
   "venue.field_required": "Este campo es obligatorio.",
@@ -184,11 +161,12 @@ const es: Record<keyof typeof en, string> = {
   "venue.readiness": "Preparado para el servicio",
   "venue.readiness.ok": "Todas las zonas activas están preparadas para aceptar pedidos.",
   "venue.readiness.department_missing": "Crea un departamento activo antes del servicio.",
+  "venue.readiness.default_station_missing":
+    "Ninguna estación de preparación predeterminada está activa. Los artículos que ninguna regla envía a una estación no se pueden enviar.",
   "venue.readiness.zone_department_missing": "necesita un departamento activo.",
   "venue.readiness.zone_menu_missing": "necesita una carta predeterminada.",
   "venue.readiness.menu_empty": "no tiene productos para",
   "venue.readiness.zone_menu_unpublished": "necesita una carta activa y publicada.",
-  "venue.readiness.route_missing": "necesita una ruta de preparación en",
   "venue.deactivate_department": "Desactivar departamento",
   "venue.kitchen_changes": "Cambios tras el envío",
   "venue.edit_sent_lines": "Permitir cambios en los artículos ya enviados a cocina",

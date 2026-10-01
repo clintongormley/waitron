@@ -144,7 +144,8 @@ export async function summariseFolders(
 ): Promise<FolderSummary[]> {
   const tree = new FolderTree(await listCategories(tx));
   for (const id of categoryIds) tree.require(id);
-  const routesPresent = await tablePresent(tx, "preparation_routes");
+  const claimsPresent = await tablePresent(tx, "station_claims");
+  const exceptionsPresent = await tablePresent(tx, "route_exceptions");
   const summaries: FolderSummary[] = [];
   for (const id of categoryIds) {
     const subtree = tree.subtree(id);
@@ -156,14 +157,23 @@ export async function summariseFolders(
         .from(products)
         .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
       productCount += Number(row!.n);
-      if (routesPresent) {
-        const routes = await tx.execute<{ n: number }>(
-          sql`select count(*) as n from preparation_routes where category_id in (${sql.join(
-            batch.map((folder) => sql`${folder}`),
-            sql`, `,
-          )})`,
+      if (claimsPresent || exceptionsPresent) {
+        const folderIds = sql.join(
+          batch.map((folder) => sql`${folder}`),
+          sql`, `,
         );
-        routeCount += Number(routes.rows[0]!.n);
+        if (claimsPresent) {
+          const claims = await tx.execute<{ n: number }>(
+            sql`select count(*) as n from station_claims where category_id in (${folderIds})`,
+          );
+          routeCount += Number(claims.rows[0]!.n);
+        }
+        if (exceptionsPresent) {
+          const exceptions = await tx.execute<{ n: number }>(
+            sql`select count(*) as n from route_exceptions where category_id in (${folderIds})`,
+          );
+          routeCount += Number(exceptions.rows[0]!.n);
+        }
       }
     }
     summaries.push({ id, folders: subtree.length - 1, products: productCount, routes: routeCount });

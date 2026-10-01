@@ -6,7 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { createOptionList } from "@waitron/catalogue";
-import { preparationRoutes } from "@waitron/venue-service";
+import { routeExceptions, stationClaims } from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -15,8 +15,8 @@ import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
 
 /**
- * The catalogue routes over the FULL migration manifest, so venue-service's `preparation_routes`
- * exists. `catalogue-api.test.ts` migrates
+ * The catalogue routes over the FULL migration manifest, so venue-service's routing tables
+ * exist. `catalogue-api.test.ts` migrates
  * core + catalogue + identity only and covers the absent-table arm.
  */
 const LOCALE = "es-ES";
@@ -29,7 +29,7 @@ const suite = useVenueDb({
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-it("folder summaries include descendant preparation routes and subtree deletion removes them", async () => {
+it("folder summaries count claims and exceptions in the subtree and deletion removes them", async () => {
   const v = await setupVenue();
   const app = mountApp();
   const parent = await createCategory(app, v.managerCookie, "Drinks");
@@ -42,8 +42,11 @@ it("folder summaries include descendant preparation routes and subtree deletion 
     ).status,
   ).toBe(200);
   await suite.db
-    .insert(preparationRoutes)
+    .insert(stationClaims)
     .values({ locationId: v.locationId, categoryId: child, noPreparation: true });
+  await suite.db
+    .insert(routeExceptions)
+    .values({ locationId: v.locationId, categoryId: child, position: 0, noPreparation: true });
   const summary = await send(
     app,
     "GET",
@@ -51,7 +54,7 @@ it("folder summaries include descendant preparation routes and subtree deletion 
     v.managerCookie,
   );
   expect(summary.status).toBe(200);
-  expect(await summary.json()).toEqual([{ id: parent, folders: 1, products: 0, routes: 1 }]);
+  expect(await summary.json()).toEqual([{ id: parent, folders: 1, products: 0, routes: 2 }]);
   expect(
     (
       await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
@@ -62,7 +65,10 @@ it("folder summaries include descendant preparation routes and subtree deletion 
     ).status,
   ).toBe(204);
   expect(
-    (await suite.db.execute(sql`select id from preparation_routes where category_id = ${child}`))
+    (await suite.db.execute(sql`select id from station_claims where category_id = ${child}`)).rows,
+  ).toEqual([]);
+  expect(
+    (await suite.db.execute(sql`select id from route_exceptions where category_id = ${child}`))
       .rows,
   ).toEqual([]);
 });
@@ -333,7 +339,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
 });
 
 describe("sections and the reporting and routing they do not touch", () => {
-  it("adds, moves and removes a routed product and deletes its section, and the product keeps its category and routes", async () => {
+  it("adds, moves and removes a routed product and deletes its section without changing its folder or rules", async () => {
     const v = await setupVenue();
     const app = mountApp();
     const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
@@ -348,26 +354,38 @@ describe("sections and the reporting and routing they do not touch", () => {
         })
       ).status,
     ).toBe(204);
-    await suite.db.insert(preparationRoutes).values([
-      { locationId: v.locationId, categoryId, noPreparation: true },
-      { locationId: v.locationId, productId, noPreparation: true },
-    ]);
-    const routes = async () =>
-      (
-        await suite.db.execute<{
-          id: string;
-          category_id: string | null;
-          product_id: string | null;
-        }>(sql`select id, category_id, product_id from preparation_routes order by id`)
-      ).rows;
+    await suite.db.insert(stationClaims).values({
+      locationId: v.locationId,
+      categoryId,
+      noPreparation: true,
+    });
+    await suite.db.insert(routeExceptions).values({
+      locationId: v.locationId,
+      position: 0,
+      productId,
+      noPreparation: true,
+    });
+    const rules = async () => ({
+      claims: (
+        await suite.db.execute(
+          sql`select id, category_id from station_claims where category_id = ${categoryId}`,
+        )
+      ).rows,
+      exceptions: (
+        await suite.db.execute(
+          sql`select id, product_id from route_exceptions where product_id = ${productId}`,
+        )
+      ).rows,
+    });
     const categoryOf = async () =>
       (
         await suite.db.execute<{ category_id: string | null }>(
           sql`select category_id from products where id = ${productId}`,
         )
       ).rows[0]!.category_id;
-    const before = await routes();
-    expect(before).toHaveLength(2);
+    const before = await rules();
+    expect(before.claims).toHaveLength(1);
+    expect(before.exceptions).toHaveLength(1);
 
     const root = (
       (await (
@@ -405,13 +423,13 @@ describe("sections and the reporting and routing they do not touch", () => {
     ).toBe(200);
     expect((await send(app, "DELETE", `${members}/${memberId}`, v.managerCookie)).status).toBe(204);
     expect(await categoryOf()).toBe(categoryId);
-    expect(await routes()).toEqual(before);
+    expect(await rules()).toEqual(before);
     await add();
     expect(
       (await send(app, "DELETE", `/management-api/sections/${sectionId}`, v.managerCookie)).status,
     ).toBe(204);
 
     expect(await categoryOf()).toBe(categoryId);
-    expect(await routes()).toEqual(before);
+    expect(await rules()).toEqual(before);
   });
 });

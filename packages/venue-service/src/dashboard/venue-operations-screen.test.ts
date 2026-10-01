@@ -26,15 +26,7 @@ afterEach(() => {
 });
 
 const model: VenueServiceView = {
-  readiness: [
-    {
-      code: "zone.route_missing",
-      zoneId: "z1",
-      zoneName: "Dining room",
-      productId: "p1",
-      productName: "Negroni",
-    },
-  ],
+  readiness: [{ code: "venue.default_station_missing" }],
   departments: [
     {
       id: "d1",
@@ -61,29 +53,16 @@ const model: VenueServiceView = {
       serviceModeOverride: "prepay",
     },
   ],
-  routes: [
-    {
-      id: "r1",
-      zoneId: "z1",
-      categoryId: "c1",
-      productId: null,
-      stationId: "s1",
-      noPreparation: false,
-    },
-  ],
   hours: [{ departmentId: "d2", weekday: 1, opensAt: "09:00:00", closesAt: "18:00:00" }],
   zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
   menus: [
     { id: "m1", name: "Casa Delgado", active: true },
     { id: "m2", name: "Deli takeaway", active: true },
   ],
-  categories: [{ id: "c1", name: "Cocktails" }],
-  stations: [{ id: "s1", name: "Bar" }],
   floorZones: [
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
   ],
-  products: [{ id: "p1", name: "Negroni" }],
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
@@ -280,7 +259,7 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     expect(el.shadowRoot!.querySelector('[data-test="readiness-issue-0"]')!.textContent).toContain(
-      "Negroni",
+      "No default prep station is switched on.",
     );
     await selectTab(el, "departments");
     expect(tableText(el, "departments")).toContain("Restaurant and bar");
@@ -353,16 +332,6 @@ describe("venue operations screen", () => {
     });
   });
 
-  it("shows the staff name, never the customer-facing one, on every product surface", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "routing");
-    await action(el, "new-route");
-    expect(field(el, "route-subject").textContent).toContain("Negroni");
-    expect(field(el, "route-subject").textContent).not.toContain("House Aperitivo");
-  });
-
   // A real click lets the screen re-render between its own click handler and the menu's: the
   // save it starts disables every action, which the menu must not read as a disabled click.
   it("closes the row menu when a zones action saves straight away", async () => {
@@ -391,48 +360,11 @@ describe("venue operations screen", () => {
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
-  it("routes a product exception for one zone", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      createRoute: vi.fn().mockResolvedValue({ id: "r1" }),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "routing");
-    await action(el, "new-route");
-    field(el, "route-subject").value = "product:p1";
-    field(el, "route-zone").value = "z1";
-    field(el, "route-target").value = "s1";
-    await action(el, "save-editor");
-    expect(api.createRoute).toHaveBeenCalledWith({
-      productId: "p1",
-      zoneId: "z1",
-      stationId: "s1",
-    });
-  });
-
-  it("routes a category across all zones without preparation", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      createRoute: vi.fn().mockResolvedValue({ id: "r2" }),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "routing");
-    await action(el, "new-route");
-    field(el, "route-subject").value = "category:c1";
-    field(el, "route-zone").value = "";
-    field(el, "route-target").value = "none";
-    await action(el, "save-editor");
-    expect(api.createRoute).toHaveBeenCalledWith({
-      categoryId: "c1",
-      zoneId: null,
-      noPreparation: true,
-    });
-  });
-
-  it("renders every readiness issue and both preparation-route shapes", async () => {
+  it("renders every readiness issue", async () => {
     const variedModel: VenueServiceView = {
       ...model,
       readiness: [
+        { code: "venue.default_station_missing" },
         { code: "venue.department_missing" },
         { code: "zone.department_missing", zoneId: "z1", zoneName: "Dining room" },
         { code: "zone.menu_missing", zoneId: "z2", zoneName: "Deli counter" },
@@ -445,39 +377,17 @@ describe("venue operations screen", () => {
           menuName: "Casa Delgado",
         },
       ],
-      routes: [
-        {
-          id: "r1",
-          zoneId: null,
-          categoryId: "c1",
-          productId: null,
-          stationId: null,
-          noPreparation: true,
-        },
-        {
-          id: "r2",
-          zoneId: "z1",
-          categoryId: null,
-          productId: "p1",
-          stationId: "s1",
-          noPreparation: false,
-        },
-      ],
     };
     const el = await mount({
       load: vi.fn().mockResolvedValue(variedModel),
     } as unknown as VenueServiceApi);
     const text = el.shadowRoot!.querySelector('[data-test="readiness"]')!.textContent!;
+    expect(text).toContain("No default prep station is switched on.");
     expect(text).toContain("Create an active department");
     expect(text).toContain("Dining room needs an active department");
     expect(text).toContain("Deli counter needs a default menu");
     expect(text).toContain("Terrace needs an active, published menu");
     expect(text).toContain("Casa Delgado has no products for Dining room");
-    await selectTab(el, "routing");
-    expect(tableText(el, "preparation-routes")).toContain("All service zones");
-    expect(tableText(el, "preparation-routes")).toContain("No preparation");
-    expect(tableText(el, "preparation-routes")).toContain("Negroni");
-    expect(tableText(el, "preparation-routes")).toContain("Bar");
   });
 
   it("asks in Spanish for an active, published menu for a zone with none", async () => {
@@ -490,20 +400,6 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi);
     const text = el.shadowRoot!.querySelector('[data-test="readiness"]')!.textContent!;
     expect(text).toContain("Terraza necesita una carta activa y publicada.");
-  });
-
-  it("removes a preparation route from the shared data table", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      deleteRoute: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "routing");
-    table(el, "preparation-routes");
-    await action(el, "remove-route-r1");
-    expect(api.deleteRoute).not.toHaveBeenCalled();
-    await action(el, "save-editor");
-    expect(api.deleteRoute).toHaveBeenCalledWith("r1");
   });
 });
 it("shows four tabs, read-only tables, and creates departments in a cancellable modal", async () => {
@@ -541,7 +437,7 @@ it("offers no Menus tab: a menu's contents and prices are edited on the Menus sc
     "status",
     "departments",
     "zones",
-    "routing",
+    "kitchen",
   ]);
   expect(tabs.map((tab) => tab.textContent!.trim())).not.toContain("Menus");
   expect(el.shadowRoot!.querySelector('[slot="menus"]')).toBeNull();
@@ -577,28 +473,6 @@ it("edits a department and retains its draft when saving fails", async () => {
     defaultServiceMode: "ticket_then_pay",
   });
   expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
-});
-
-it("edits a preparation route from a category station to a product without preparation", async () => {
-  const api = {
-    load: vi.fn().mockResolvedValue(model),
-    updateRoute: vi.fn().mockResolvedValue(undefined),
-  } as unknown as VenueServiceApi;
-  const el = await mount(api);
-  await selectTab(el, "routing");
-  await action(el, "edit-route-r1");
-  expect(field(el, "route-subject").value).toBe("category:c1");
-  expect(field(el, "route-zone").value).toBe("z1");
-  expect(field(el, "route-target").value).toBe("s1");
-  field(el, "route-subject").value = "product:p1";
-  field(el, "route-zone").value = "";
-  field(el, "route-target").value = "none";
-  await action(el, "save-editor");
-  expect(api.updateRoute).toHaveBeenCalledWith("r1", {
-    productId: "p1",
-    zoneId: null,
-    noPreparation: true,
-  });
 });
 
 it("creates, edits and deletes hours while preserving other intervals in the department", async () => {
@@ -732,20 +606,6 @@ it("ignores change events from controls inside a tab panel", async () => {
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("zones");
 });
 
-it("explains a duplicate route and keeps the edit open", async () => {
-  const api = {
-    load: vi.fn().mockResolvedValue(model),
-    updateRoute: vi.fn().mockRejectedValue({ code: "route.duplicate" }),
-  } as unknown as VenueServiceApi;
-  const el = await mount(api);
-  await selectTab(el, "routing");
-  await action(el, "edit-route-r1");
-  await action(el, "save-editor");
-  expect(await bottom(el)).toContain("A route already exists");
-  expect(pageAlert(el)).toBe("");
-  expect(field(el, "route-subject").value).toBe("category:c1");
-});
-
 it("explains why a department with active zones cannot be deactivated", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
@@ -830,22 +690,13 @@ describe("the venue lists", () => {
     expect(column(el, "zone-menus", 1)).toEqual(["Yes", "No"]);
   });
 
-  it("labels a zone-menu row's actions with the stored menu id, and shows a route's stored category or product id, when they are not loaded", async () => {
+  it("labels a zone-menu row's actions with its stored id when it is not loaded", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
         zoneMenus: [
           ...model.zoneMenus,
           { zoneId: "z1", menuId: "m-gone", displayOrder: 1, isDefault: false },
-        ],
-        routes: [
-          { ...model.routes[0]!, id: "r1", categoryId: "c-gone" },
-          {
-            ...model.routes[0]!,
-            id: "r2",
-            categoryId: null,
-            productId: "p-gone",
-          },
         ],
       }),
     } as unknown as VenueServiceApi);
@@ -856,8 +707,6 @@ describe("the venue lists", () => {
         menu.getAttribute("label"),
       ),
     ).toEqual(["Actions: Casa Delgado", "Actions: m-gone"]);
-    await selectTab(el, "routing");
-    expect(column(el, "preparation-routes", 0)).toEqual(["c-gone", "p-gone"]);
   });
 
   it("makes another of a zone's menus its default straight from the list", async () => {
@@ -899,7 +748,6 @@ describe("the venue lists' column choosers", () => {
     ["departments", "hours", "waitron.venue.hours.table", ["day", "opens", "closes"]],
     ["zones", "zones", "waitron.venue.zones.table", ["department", "mode", "default"]],
     ["zones", "zone-menus", "waitron.venue.zone-menus.table", ["default", "order"]],
-    ["routing", "preparation-routes", "waitron.venue.routes.table", ["zone", "station"]],
   ] as const)(
     "the %s tab's %s list offers every column but the first and the actions, and remembers a hidden one",
     async (tab, name, viewKey, keys) => {
@@ -937,8 +785,6 @@ describe("the venue lists' column choosers", () => {
     await action(el, "zone-menus-z1");
     expect(chooser(el, "zones")).toBe("Columnas");
     expect(chooser(el, "zone-menus")).toBe("Columnas");
-    await selectTab(el, "routing");
-    expect(chooser(el, "preparation-routes")).toBe("Columnas");
   });
 });
 
@@ -1022,21 +868,6 @@ describe("the venue editors refuse an incomplete form", () => {
     field(el, "assignment-order").value = "0";
     await action(el, "save-editor");
     expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 0, makeDefault: false });
-  });
-
-  it("requires a product or category to route when the venue has neither", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue({ ...model, categories: [], products: [] }),
-      createRoute: vi.fn(),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "routing");
-    await action(el, "new-route");
-    await action(el, "save-editor");
-    expect(fieldError(el, "route-subject")).toBe("This field is required.");
-    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
-    expect(fieldError(el, "route-target")).toBeUndefined();
-    expect(api.createRoute).not.toHaveBeenCalled();
   });
 });
 
@@ -1285,48 +1116,6 @@ describe("an editor's messages", () => {
       name: "displayOrder",
       control: "assignment-order",
     },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      name: "subject",
-      control: "route-subject",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      name: "categoryId",
-      control: "route-subject",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      name: "productId",
-      control: "route-subject",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      name: "zoneId",
-      control: "route-zone",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      name: "target",
-      control: "route-target",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      name: "stationId",
-      control: "route-target",
-    },
   ])("puts a refused $name under $control", async ({ tab, open, method, name, control }) => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1363,27 +1152,6 @@ describe("an editor's messages", () => {
       method: "allowMenu",
       code: "catalogue.not_found",
       control: "assignment-menu",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      code: "route.subject_not_found",
-      control: "route-subject",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      code: "service_zone.not_found",
-      control: "route-zone",
-    },
-    {
-      tab: "routing",
-      open: ["edit-route-r1"],
-      method: "updateRoute",
-      code: "route.station_inactive",
-      control: "route-target",
     },
   ])("puts a refused $code under $control", async ({ tab, open, method, code, control }) => {
     const el = await mount({
@@ -1436,29 +1204,6 @@ it("says a refused list action at the top of the screen, with no editor open", a
   expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
     "alert",
   );
-});
-
-it("opens a product route that needs no preparation on that product and on no station", async () => {
-  const el = await mount({
-    load: vi.fn().mockResolvedValue({
-      ...model,
-      routes: [
-        {
-          id: "r2",
-          zoneId: null,
-          categoryId: null,
-          productId: "p1",
-          stationId: null,
-          noPreparation: true,
-        },
-      ],
-    }),
-  } as unknown as VenueServiceApi);
-  await selectTab(el, "routing");
-  await action(el, "edit-route-r2");
-  expect(field(el, "route-subject").value).toBe("product:p1");
-  expect(field(el, "route-zone").value).toBe("");
-  expect(field(el, "route-target").value).toBe("none");
 });
 
 it("shows the general save error when a write is refused without a reason", async () => {
@@ -1574,13 +1319,13 @@ describe("the setting that allows changes to items already sent to the kitchen",
   }
 
   // Fails if the switch stops reading the stored value, or loses its label or hint.
-  it("shows the stored value on the Preparation routing tab, on by default", async () => {
+  it("shows the stored value on the Changes after sending tab, on by default", async () => {
     const on = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(on, "routing");
+    await selectTab(on, "kitchen");
     const { host, input } = kitchenSwitch(on);
-    expect(host.closest('[slot="routing"]')).not.toBeNull();
+    expect(host.closest('[slot="kitchen"]')).not.toBeNull();
     expect(host.shadowRoot!.querySelector("label")!.textContent).toBe(
       "Allow changes to items already sent to the kitchen",
     );
@@ -1602,7 +1347,7 @@ describe("the setting that allows changes to items already sent to the kitchen",
       saveSettings: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     kitchenSwitch(el).input.click();
     await settle(el);
     expect(api.saveSettings).toHaveBeenCalledWith({ editSentLines: false });
@@ -1642,7 +1387,7 @@ describe("the setting that allows changes to items already sent to the kitchen",
       saveSettings: vi.fn().mockRejectedValue(new Error("offline")),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     kitchenSwitch(el).input.click();
     await settle(el);
     expect(api.saveSettings).toHaveBeenCalledWith({ editSentLines: false });
@@ -1659,7 +1404,7 @@ describe("the setting that allows changes to items already sent to the kitchen",
       saveSettings: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     kitchenSwitch(el).input.click();
     await settle(el);
     expect(api.load).toHaveBeenCalledTimes(2);
@@ -1716,13 +1461,13 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
   }
 
   // Fails if the select stops reading the stored value, or loses its label, choices or hint.
-  it("shows the stored value on the Preparation routing tab, combined by default", async () => {
+  it("shows the stored value on the Changes after sending tab, combined by default", async () => {
     const combined = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(combined, "routing");
+    await selectTab(combined, "kitchen");
     const select = groupingSelect(combined);
-    expect(select.closest('[slot="routing"]')).not.toBeNull();
+    expect(select.closest('[slot="kitchen"]')).not.toBeNull();
     expect(select.labels![0]!.textContent).toContain("Identical dishes on a kitchen ticket");
     expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
       [
@@ -1748,7 +1493,7 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
       saveKitchenTicketGrouping: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     await choose(el, "separate");
     expect(api.saveKitchenTicketGrouping).toHaveBeenCalledWith("separate");
     expect(groupingSelect(el).disabled).toBe(true);
@@ -1768,7 +1513,7 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
       saveKitchenTicketGrouping: vi.fn().mockRejectedValue(new Error("refused")),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     await choose(el, "separate");
     expect(api.saveKitchenTicketGrouping).toHaveBeenCalledWith("separate");
     expect(pageAlert(el)).toContain("could not be saved");
@@ -1809,11 +1554,11 @@ describe("the setting that prints held groups in advance", () => {
 
   // Fails if the switch stops reading the stored value, leaves the kitchen changes section, or
   // loses its label or hint.
-  it("shows the stored value on the Preparation routing tab, off by default", async () => {
+  it("shows the stored value on the Changes after sending tab, off by default", async () => {
     const off = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(off, "routing");
+    await selectTab(off, "kitchen");
     const { host, input } = printSwitch(off);
     expect(host.closest('[data-test="kitchen-changes"]')).not.toBeNull();
     expect(host.shadowRoot!.querySelector("label")!.textContent).toBe(
@@ -1839,7 +1584,7 @@ describe("the setting that prints held groups in advance", () => {
       saveSettings: vi.fn(),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     printSwitch(el).input.click();
     await settle(el);
     expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
@@ -1880,7 +1625,7 @@ describe("the setting that prints held groups in advance", () => {
       savePrintHeldWork: vi.fn().mockRejectedValue(new Error("offline")),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     printSwitch(el).input.click();
     await settle(el);
     expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
@@ -1929,11 +1674,11 @@ describe("the setting for the reminder to fire the next group", () => {
 
   // Fails if the select stops reading the stored value, leaves the kitchen changes section, or
   // loses its label, choices or hint.
-  it("shows the stored value on the Preparation routing tab, ten minutes by default", async () => {
+  it("shows the stored value on the Changes after sending tab, ten minutes by default", async () => {
     const ten = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(ten, "routing");
+    await selectTab(ten, "kitchen");
     const select = reminderSelect(ten);
     expect(select.closest('[data-test="kitchen-changes"]')).not.toBeNull();
     expect(select.labels![0]!.textContent).toContain("Reminder to fire the next group");
@@ -1982,7 +1727,7 @@ describe("the setting for the reminder to fire the next group", () => {
         .mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     await choose(el, "20");
     expect(api.saveReleaseReminderMinutes).toHaveBeenCalledWith(20);
     expect(reminderSelect(el).disabled).toBe(true);
@@ -2005,7 +1750,7 @@ describe("the setting for the reminder to fire the next group", () => {
       saveReleaseReminderMinutes: vi.fn().mockRejectedValue(new Error("refused")),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "routing");
+    await selectTab(el, "kitchen");
     await choose(el, "5");
     expect(api.saveReleaseReminderMinutes).toHaveBeenCalledWith(5);
     expect(pageAlert(el)).toContain("could not be saved");
@@ -2053,25 +1798,12 @@ describe("the venue tables at phone width", () => {
       { id: "m1", name: "Carta de temporada de la casa con maridajes y postres", active: true },
       model.menus[1]!,
     ],
-    products: [{ id: "p1", name: "Negroni de la casa con naranja amarga y vermú rojo" }],
-    routes: [
-      ...model.routes,
-      {
-        id: "r2",
-        zoneId: null,
-        categoryId: null,
-        productId: "p1",
-        stationId: "s1",
-        noPreparation: false,
-      },
-    ],
   };
   const tables: { name: string; tab: string; open?: string; rows: number }[] = [
     { name: "departments", tab: "departments", rows: phoneModel.departments.length },
     { name: "hours", tab: "departments", rows: phoneModel.hours.length },
     { name: "zones", tab: "zones", rows: phoneModel.floorZones.length },
     { name: "zone-menus", tab: "zones", open: "zone-menus-z1", rows: 1 },
-    { name: "preparation-routes", tab: "routing", rows: phoneModel.routes.length },
   ];
   it.each(tables.flatMap((table) => ["en", "es"].map((locale) => ({ ...table, locale }))))(
     "keeps every $name row's menu on screen and uncovered while the other columns scroll sideways (390 px, $locale)",

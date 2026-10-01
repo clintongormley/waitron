@@ -15,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createPreparationRoute } from "./operations.js";
+import { createException, setClaim } from "./routing-store.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -30,20 +30,30 @@ async function venue() {
   return { locationId: location!.id as LocationId };
 }
 
-it("deleting a category removes its preparation routes and the category", async () => {
+it("deleting a category removes its claim and exception with the category", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
     const category = await createCategory(tx, { name: "Drinks" });
-    await createPreparationRoute(
+    await setClaim(tx, { locationId }, category.id, { kind: "no_preparation" });
+    await createException(
       tx,
       { locationId },
-      { categoryId: category.id, target: { kind: "no_preparation" } },
+      {
+        zoneId: null,
+        categoryId: category.id,
+        productId: null,
+        target: { kind: "no_preparation" },
+      },
     );
     await expect(deleteCategory(tx, category.id)).resolves.toBeUndefined();
-    const routes = await tx.execute(
-      sql`select 1 from preparation_routes where category_id = ${category.id}`,
+    const claims = await tx.execute(
+      sql`select 1 from station_claims where category_id = ${category.id}`,
     );
-    expect(routes.rows).toHaveLength(0);
+    const exceptions = await tx.execute(
+      sql`select 1 from route_exceptions where category_id = ${category.id}`,
+    );
+    expect(claims.rows).toHaveLength(0);
+    expect(exceptions.rows).toHaveLength(0);
     await expect(readCategory(tx, category.id)).rejects.toMatchObject({
       code: "category.not_found",
     });

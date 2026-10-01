@@ -1,24 +1,11 @@
-import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import {
-  catalogues,
-  categories,
-  devices,
-  floorZones,
-  isUniqueViolation,
-  kitchenStations,
-  products,
-  workingOrderLines,
-} from "@waitron/db";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { catalogues, devices, floorZones, kitchenStations, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   applyLiveFields,
   assertLiveVersions,
   documentOffers,
-  effectiveProductColumns,
   isEachUnit,
-  parentJoin,
-  parentProducts,
-  productWithId,
   readLiveDocuments,
   readUnavailable,
   resolveDeviceHomeLayouts,
@@ -28,14 +15,13 @@ import {
   type MenuState,
   type ServedMenu,
 } from "@waitron/catalogue";
-import type { PreparationRoute, ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
-import { AppError, type LocationId, normaliseUuid } from "@waitron/shared";
+import type { ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
+import { AppError, type LocationId } from "@waitron/shared";
 import {
   departments,
   departmentHours,
   deviceZoneDefaults,
   orderServiceContexts,
-  preparationRoutes,
   workingLineContexts,
   zoneMenus,
   zoneServicePolicies,
@@ -251,6 +237,7 @@ export async function deactivateDepartment(
 }
 
 export type VenueReadinessIssue =
+  | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
   | { code: "zone.department_missing"; zoneId: string; zoneName: string }
   | { code: "zone.menu_missing"; zoneId: string; zoneName: string }
@@ -261,13 +248,6 @@ export type VenueReadinessIssue =
       zoneName: string;
       menuId: string;
       menuName: string;
-    }
-  | {
-      code: "zone.route_missing";
-      zoneId: string;
-      zoneName: string;
-      productId: string;
-      productName: string;
     };
 
 /** Describe configuration that prevents an active zone from accepting new orders. */
@@ -275,11 +255,24 @@ export async function listVenueReadiness(
   tx: Transaction,
   cfg: VenueScope,
 ): Promise<VenueReadinessIssue[]> {
+  const [defaultStation] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(
+        eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.isDefault, true),
+        eq(kitchenStations.active, true),
+      ),
+    )
+    .limit(1);
+  const issues: VenueReadinessIssue[] =
+    defaultStation === undefined ? [{ code: "venue.default_station_missing" }] : [];
   const activeDepartments = await tx
     .select({ id: departments.id })
     .from(departments)
     .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
-  if (activeDepartments.length === 0) return [{ code: "venue.department_missing" }];
+  if (activeDepartments.length === 0) return [...issues, { code: "venue.department_missing" }];
 
   const zones = await tx
     .select({
@@ -303,15 +296,17 @@ export async function listVenueReadiness(
     .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
 
-  const issues = zones.flatMap((zone): VenueReadinessIssue[] => {
-    if (zone.departmentId === null || zone.departmentActive !== true) {
-      return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
-    }
-    if (zone.defaultMenuId === null || zone.assignedMenuId === null) {
-      return [{ code: "zone.menu_missing", zoneId: zone.id, zoneName: zone.name }];
-    }
-    return [];
-  });
+  issues.push(
+    ...zones.flatMap((zone): VenueReadinessIssue[] => {
+      if (zone.departmentId === null || zone.departmentActive !== true) {
+        return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
+      }
+      if (zone.defaultMenuId === null || zone.assignedMenuId === null) {
+        return [{ code: "zone.menu_missing", zoneId: zone.id, zoneName: zone.name }];
+      }
+      return [];
+    }),
+  );
   const ready = zones.filter(
     (zone) =>
       zone.departmentId !== null &&
@@ -341,32 +336,6 @@ export async function listVenueReadiness(
           menuName: live.get(menuId)!.document.menuName,
         });
       }
-    }
-    // A sold-out product is served marked, so it still fills its menu and still needs a route.
-    // Staff-facing, so each product is named by its staff name. `products.name`
-    // (`packages/db/src/schema/catalogue.ts`) is NOT NULL with no non-blank check, so a blank one
-    // falls back to the id.
-    const productsById = new Map(
-      published.flatMap(({ offers }) =>
-        offers.map((offer) => [offer.productId, offer.name || offer.productId] as const),
-      ),
-    );
-    const outcomes = await resolvePreparationRouteOutcomes(tx, cfg, zone.id, [
-      ...productsById.keys(),
-    ]);
-    for (const [productId, productName] of productsById) {
-      const outcome = outcomes.get(productId);
-      if (!(outcome instanceof AppError)) continue;
-      if (outcome.code !== "route.missing" && outcome.code !== "route.station_inactive") {
-        throw outcome;
-      }
-      issues.push({
-        code: "zone.route_missing",
-        zoneId: zone.id,
-        zoneName: zone.name,
-        productId,
-        productName,
-      });
     }
   }
   return issues;
@@ -936,302 +905,4 @@ export async function copyWorkingLineContext(
     ...context,
     workingOrderLineId: toWorkingOrderLineId,
   });
-}
-
-export interface PreparationRouteInput {
-  zoneId?: string | null;
-  categoryId?: string | null;
-  productId?: string | null;
-  target: PreparationRoute;
-}
-
-async function validatePreparationRoute(
-  tx: Transaction,
-  cfg: VenueScope,
-  input: PreparationRouteInput,
-): Promise<void> {
-  if (input.zoneId !== undefined && input.zoneId !== null) {
-    await resolveZoneContext(tx, cfg, input.zoneId);
-  }
-  if (input.categoryId !== undefined && input.categoryId !== null) {
-    const [category] = await tx
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.id, input.categoryId));
-    if (category === undefined) {
-      throw new AppError("route.subject_not_found", {
-        subject: "category",
-        id: input.categoryId,
-      });
-    }
-  }
-  if (input.productId !== undefined && input.productId !== null) {
-    const [product] = await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(productWithId(input.productId, "top-level"));
-    if (product === undefined) {
-      throw new AppError("route.subject_not_found", { subject: "product", id: input.productId });
-    }
-  }
-  if (input.target.kind === "station") {
-    const [station] = await tx
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(
-        and(
-          eq(kitchenStations.locationId, cfg.locationId),
-          eq(kitchenStations.id, input.target.stationId),
-          eq(kitchenStations.active, true),
-        ),
-      );
-    if (station === undefined) {
-      throw new AppError("route.station_inactive", { stationId: input.target.stationId });
-    }
-  }
-}
-
-export async function createPreparationRoute(
-  tx: Transaction,
-  cfg: VenueScope,
-  input: PreparationRouteInput,
-): Promise<string> {
-  await validatePreparationRoute(tx, cfg, input);
-  try {
-    const [row] = await tx
-      .insert(preparationRoutes)
-      .values({
-        locationId: cfg.locationId,
-        zoneId: input.zoneId ?? null,
-        categoryId: input.categoryId ?? null,
-        productId: input.productId ?? null,
-        stationId: input.target.kind === "station" ? input.target.stationId : null,
-        noPreparation: input.target.kind === "no_preparation",
-      })
-      .returning({ id: preparationRoutes.id });
-    return row!.id;
-  } catch (error) {
-    if (isUniqueViolation(error)) throw new AppError("route.duplicate", {});
-    throw error;
-  }
-}
-
-export async function updatePreparationRoute(
-  tx: Transaction,
-  cfg: VenueScope,
-  routeId: string,
-  input: PreparationRouteInput,
-): Promise<void> {
-  await validatePreparationRoute(tx, cfg, input);
-  try {
-    const [row] = await tx
-      .update(preparationRoutes)
-      .set({
-        zoneId: input.zoneId ?? null,
-        categoryId: input.categoryId ?? null,
-        productId: input.productId ?? null,
-        stationId: input.target.kind === "station" ? input.target.stationId : null,
-        noPreparation: input.target.kind === "no_preparation",
-      })
-      .where(
-        and(eq(preparationRoutes.id, routeId), eq(preparationRoutes.locationId, cfg.locationId)),
-      )
-      .returning({ id: preparationRoutes.id });
-    if (row === undefined) throw new AppError("route.not_found", { routeId });
-  } catch (error) {
-    if (isUniqueViolation(error)) throw new AppError("route.duplicate", {});
-    throw error;
-  }
-}
-
-export async function listPreparationRoutes(tx: Transaction, cfg: VenueScope) {
-  return tx
-    .select({
-      id: preparationRoutes.id,
-      zoneId: preparationRoutes.zoneId,
-      categoryId: preparationRoutes.categoryId,
-      productId: preparationRoutes.productId,
-      stationId: preparationRoutes.stationId,
-      noPreparation: preparationRoutes.noPreparation,
-    })
-    .from(preparationRoutes)
-    .where(eq(preparationRoutes.locationId, cfg.locationId))
-    .orderBy(
-      desc(preparationRoutes.zoneId),
-      desc(preparationRoutes.productId),
-      asc(preparationRoutes.id),
-    );
-}
-
-export async function deletePreparationRoute(
-  tx: Transaction,
-  cfg: VenueScope,
-  routeId: string,
-): Promise<void> {
-  const [row] = await tx
-    .delete(preparationRoutes)
-    .where(and(eq(preparationRoutes.id, routeId), eq(preparationRoutes.locationId, cfg.locationId)))
-    .returning({ id: preparationRoutes.id });
-  if (row === undefined) throw new AppError("route.not_found", { routeId });
-}
-
-type PreparationRouteOutcome = PreparationRoute | AppError;
-
-/**
- * The spelling a product id is stored in. An id column is text and compares byte for byte, so this
- * is both the key a caller's spellings are grouped under and the value bound into SQL.
- */
-function storedUuid(id: string): string {
-  return normaliseUuid(id, "ProductId");
-}
-
-/** Most specific first: zone+product, zone+category, venue+product, venue+category. Within one
- *  location and zone, the partial unique indexes on `preparation_routes` allow at most one row per
- *  rank for a product, so ranks never tie. */
-function routeRank(route: { zoneId: string | null; productId: string | null }): number {
-  if (route.zoneId !== null) return route.productId !== null ? 4 : 3;
-  return route.productId !== null ? 2 : 1;
-}
-
-/** Resolve each distinct product in `productIds` to its route or its coded error, in input order,
- *  in at most three reads whatever the number of products. A missing zone still throws. */
-export async function resolvePreparationRouteOutcomes(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  productIds: readonly string[],
-): Promise<Map<string, PreparationRouteOutcome>> {
-  // Keyed by the STORED spelling, valued by the caller's, in input order — the first spelling wins
-  // when two name one product. The keys are what reaches SQL and the values are what the returned
-  // map is keyed by, which is the contract on `resolvePreparationRoutes` below.
-  const spellingByUuid = new Map<string, string>();
-  for (const id of productIds) {
-    const uuid = storedUuid(id);
-    if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
-  }
-  const ids = [...spellingByUuid.keys()];
-  const outcomes = new Map<string, PreparationRouteOutcome>();
-  if (ids.length === 0) return outcomes;
-  await resolveZoneContext(tx, cfg, zoneId);
-  // A variant takes the product-level routes of its PARENT, which is the product a route can name
-  // (`createPreparationRoute` refuses a variant), and the category routes of its EFFECTIVE
-  // category — its own where it sets one, else its parent's.
-  const productRows = await tx
-    .select({
-      id: products.id,
-      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-      categoryId: effectiveProductColumns.categoryId,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(inArray(products.id, ids));
-  const categoryById = new Map(productRows.map((row) => [storedUuid(row.id), row.categoryId]));
-  const routedIdById = new Map(
-    productRows.map((row) => [storedUuid(row.id), storedUuid(row.routedId)]),
-  );
-  const routedIds = [...new Set(routedIdById.values())];
-  const categoryIds = [
-    ...new Set(productRows.flatMap((row) => (row.categoryId === null ? [] : [row.categoryId]))),
-  ];
-  const routes = await tx
-    .select({
-      zoneId: preparationRoutes.zoneId,
-      productId: preparationRoutes.productId,
-      categoryId: preparationRoutes.categoryId,
-      stationId: preparationRoutes.stationId,
-      noPreparation: preparationRoutes.noPreparation,
-      stationActive: kitchenStations.active,
-    })
-    .from(preparationRoutes)
-    .leftJoin(
-      kitchenStations,
-      and(
-        eq(kitchenStations.id, preparationRoutes.stationId),
-        eq(kitchenStations.locationId, cfg.locationId),
-      ),
-    )
-    .where(
-      and(
-        eq(preparationRoutes.locationId, cfg.locationId),
-        or(eq(preparationRoutes.zoneId, zoneId), isNull(preparationRoutes.zoneId)),
-        categoryIds.length === 0
-          ? inArray(preparationRoutes.productId, routedIds)
-          : or(
-              inArray(preparationRoutes.productId, routedIds),
-              inArray(preparationRoutes.categoryId, categoryIds),
-            ),
-      ),
-    );
-
-  type RouteRow = (typeof routes)[number];
-  const routesByProduct = new Map<string, RouteRow[]>();
-  const routesByCategory = new Map<string, RouteRow[]>();
-  for (const route of routes) {
-    // Exactly one of productId and categoryId is set on every route row.
-    const [index, key] =
-      route.productId !== null
-        ? [routesByProduct, storedUuid(route.productId)]
-        : [routesByCategory, route.categoryId!];
-    const listed = index.get(key);
-    if (listed === undefined) index.set(key, [route]);
-    else listed.push(route);
-  }
-  const winners = new Map<string, RouteRow>();
-  for (const [uuid, id] of spellingByUuid) {
-    if (!categoryById.has(uuid)) continue;
-    const categoryId = categoryById.get(uuid) ?? null;
-    const candidates = [
-      ...(routesByProduct.get(routedIdById.get(uuid)!) ?? []),
-      ...(categoryId === null ? [] : (routesByCategory.get(categoryId) ?? [])),
-    ];
-    const ranked = candidates.sort((a, b) => routeRank(b) - routeRank(a));
-    const winner = ranked[0];
-    if (winner === undefined) continue;
-    // A station switched off falls back to the highest-ranked route whose station is on. A
-    // no-preparation route has no station (`preparation_routes_target_ck`), so it is never the
-    // fallback: taking it would drop a dish meant to be cooked.
-    const usable = winner.noPreparation
-      ? winner
-      : ranked.find((route) => route.stationActive === true);
-    winners.set(id, usable ?? winner);
-  }
-
-  for (const [uuid, id] of spellingByUuid) {
-    const winner = winners.get(id);
-    if (!categoryById.has(uuid)) {
-      outcomes.set(id, new AppError("route.subject_not_found", { subject: "product", id }));
-    } else if (winner === undefined) {
-      outcomes.set(id, new AppError("route.missing", { zoneId, productId: id }));
-    } else if (winner.noPreparation) {
-      outcomes.set(id, { kind: "no_preparation" });
-    } else {
-      // A station in another location joins as null, and reads as inactive here.
-      const stationId = winner.stationId!;
-      outcomes.set(
-        id,
-        winner.stationActive === true
-          ? { kind: "station", stationId }
-          : new AppError("route.station_inactive", { stationId }),
-      );
-    }
-  }
-  return outcomes;
-}
-
-/** Resolve every product's preparation route in one batch; throws the first failing product's
- *  coded error in input order. The map is keyed by the caller's spelling of each id, the first one
- *  when two spellings name one product. An empty list returns an empty map without querying. */
-export async function resolvePreparationRoutes(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  productIds: readonly string[],
-): Promise<ReadonlyMap<string, PreparationRoute>> {
-  const outcomes = await resolvePreparationRouteOutcomes(tx, cfg, zoneId, productIds);
-  const routes = new Map<string, PreparationRoute>();
-  for (const [productId, outcome] of outcomes) {
-    if (outcome instanceof AppError) throw outcome;
-    routes.set(productId, outcome);
-  }
-  return routes;
 }

@@ -18,7 +18,6 @@ import type {
   FloorZone,
   HoursInterval,
   KitchenTicketGrouping,
-  PreparationRoute,
   ServiceMode,
   VenueReadinessIssue,
   VenueServiceApi,
@@ -30,14 +29,13 @@ const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_th
 const GROUPINGS: KitchenTicketGrouping[] = ["combined", "separate"];
 const REMINDER_MINUTES = [5, 10, 15, 20, 30];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const VIEWS = ["status", "departments", "zones", "routing"] as const;
+const VIEWS = ["status", "departments", "zones", "kitchen"] as const;
 type View = (typeof VIEWS)[number];
 type Editor =
   | { kind: "department"; row?: Department }
   | { kind: "hours"; row?: HoursInterval; index?: number }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
-  | { kind: "route"; row?: PreparationRoute }
   | { kind: "delete"; name: string; action: () => Promise<unknown> };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
 /** `check` reads the fields and returns a message per invalid one; `save` runs only once `check`
@@ -233,11 +231,9 @@ export class VenueOperationsScreen extends LitElement {
     }
   }
   #refusal(code: string): string {
-    return code === "route.duplicate"
-      ? t("venue.route_duplicate")
-      : code === "department.has_active_zones"
-        ? t("venue.department_has_zones")
-        : t("venue.save_error");
+    return code === "department.has_active_zones"
+      ? t("venue.department_has_zones")
+      : t("venue.save_error");
   }
   #refused(error: unknown, { fields = {}, codes = {} }: ServerFields): void {
     const code = codeOf(error ?? {});
@@ -484,8 +480,8 @@ export class VenueOperationsScreen extends LitElement {
         return `${issue.zoneName} ${t("venue.readiness.zone_menu_unpublished")}`;
       case "zone.menu_empty":
         return `${issue.menuName} ${t("venue.readiness.menu_empty")} ${issue.zoneName}.`;
-      case "zone.route_missing":
-        return `${issue.productName} ${t("venue.readiness.route_missing")} ${issue.zoneName}.`;
+      case "venue.default_station_missing":
+        return t("venue.readiness.default_station_missing");
     }
   }
 
@@ -755,65 +751,6 @@ export class VenueOperationsScreen extends LitElement {
       }
     </section>`;
   }
-  #routing() {
-    const model = this.model!;
-    return html`<section>
-      ${this.#toolbar(t("venue.routing"))}
-      ${this.#table(
-        "preparation-routes",
-        "waitron.venue.routes.table",
-        t("venue.routing"),
-        model.routes,
-        [
-          {
-            key: "subject",
-            label: t("venue.product_or_category"),
-            cell: (row) =>
-              row.productId === null
-                ? (model.categories.find((c) => c.id === row.categoryId)?.name ?? row.categoryId)
-                : (model.products.find((p) => p.id === row.productId)?.name ?? row.productId),
-          },
-          {
-            key: "zone",
-            label: t("venue.zone"),
-            choosable: "shown",
-            cell: (row) =>
-              row.zoneId === null
-                ? t("venue.all_zones")
-                : model.floorZones.find((z) => z.id === row.zoneId)?.name,
-          },
-          {
-            key: "station",
-            label: t("venue.station"),
-            choosable: "shown",
-            cell: (row) =>
-              row.noPreparation
-                ? t("venue.no_preparation")
-                : model.stations.find((s) => s.id === row.stationId)?.name,
-          },
-          {
-            key: "actions",
-            label: t("venue.actions"),
-            pinned: "end",
-            cell: (row) =>
-              this.#actions(t("venue.routing"), [
-                {
-                  key: `edit-route-${row.id}`,
-                  label: t("venue.edit"),
-                  run: () => this.#open({ kind: "route", row }),
-                },
-                {
-                  key: `remove-route-${row.id}`,
-                  label: t("venue.remove_route"),
-                  run: () => this.#confirm(t("venue.routing"), () => this.api.deleteRoute(row.id)),
-                },
-              ]),
-          },
-        ],
-        (row) => row.id,
-      )}
-    </section>`;
-  }
   #kitchenChanges() {
     return html`<section data-test="kitchen-changes">
       <h2>${t("venue.kitchen_changes")}</h2>
@@ -1060,41 +997,6 @@ export class VenueOperationsScreen extends LitElement {
           },
         };
       }
-      case "route": {
-        const row = editor.row;
-        return {
-          heading: t(row ? "venue.edit_route" : "venue.add_route"),
-          body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${category.name}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${product.name}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
-          check: () => this.#required(["route-subject", "route-target"]),
-          save: () => {
-            const [kind, id] = this.#value("route-subject").split(":");
-            const target = this.#value("route-target");
-            const input = {
-              ...(kind === "category" ? { categoryId: id } : { productId: id }),
-              zoneId: this.#value("route-zone") || null,
-              ...(target === "none" ? { noPreparation: true } : { stationId: target }),
-            };
-            void this.#save(
-              () => (row ? this.api.updateRoute(row.id, input) : this.api.createRoute(input)),
-              {
-                fields: {
-                  subject: "route-subject",
-                  categoryId: "route-subject",
-                  productId: "route-subject",
-                  zoneId: "route-zone",
-                  target: "route-target",
-                  stationId: "route-target",
-                },
-                codes: {
-                  "route.subject_not_found": "route-subject",
-                  "service_zone.not_found": "route-zone",
-                  "route.station_inactive": "route-target",
-                },
-              },
-            );
-          },
-        };
-      }
       case "delete":
         return {
           heading: t("venue.confirm_remove"),
@@ -1197,7 +1099,7 @@ export class VenueOperationsScreen extends LitElement {
                   { key: "status", label: t("venue.status") },
                   { key: "departments", label: t("venue.departments") },
                   { key: "zones", label: t("venue.zones") },
-                  { key: "routing", label: t("venue.routing") },
+                  { key: "kitchen", label: t("venue.kitchen_changes") },
                 ]}
                 @wt-tab-change=${this.#selectView}
               >
@@ -1205,7 +1107,7 @@ export class VenueOperationsScreen extends LitElement {
                 <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
-                <div slot="routing">${this.#routing()}${this.#kitchenChanges()}</div> </wt-tabs
+                <div slot="kitchen">${this.#kitchenChanges()}</div> </wt-tabs
               >${this.#modal()}`
           : nothing
       }`;
