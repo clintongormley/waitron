@@ -6350,6 +6350,52 @@ bill is refused.
     warning.
 
   **Next action:** check each against `main`, then fix or file it on its own.
+- **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
+  The owner decided on 2026-09-20 to ship well-designed built-in screens instead of a screen
+  designer that venues drag and resize; customisation beyond that, if it is ever needed, means
+  screens written in code that plug in
+  ([service design §11](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md)).
+  Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list
+  of tabs, each tab a grid of cards, chosen per device profile. Not ranked yet. What exists today:
+  - A default canvas per form factor, in code (`packages/layouts/src/default-canvases.ts`): the
+    till gets a Counter tab (product grid, basket, total, pay, held orders) and a Floor tab; a phone
+    or tablet handheld gets Floor and Order; a kitchen screen gets one Kitchen tab. The card types
+    are `CARD_TYPES` (`packages/layouts/src/canvas.ts`).
+  - Stored canvases in the `canvases` table (`packages/db/src/schema/canvases.ts`); a device
+    profile may name one (`device_profiles.canvas_id`), and otherwise gets its form factor's
+    default. The till's start-up answer carries the chosen canvas (`apps/server/src/till-api.ts`),
+    the till shows its tabs only once it has one (`apps/till/src/till-app.ts`), and it draws each
+    tab's cards in `apps/till/src/widgets/card-grid.ts`.
+  - The dashboard's canvas editor (`apps/dashboard/src/screens/canvas-editor-screen.ts` and
+    `canvas-editor/`), the canvas picker on the device profiles screen, the
+    `/management-api/canvases` routes, the `listCanvases` and `getCanvas` live queries, and the
+    `canvas.*` error codes (`packages/layouts/src/errors.ts`).
+  - A canvas may carry a theme override (`CanvasDef.theme`); a grep of `apps/` for `.theme` finds
+    nothing that reads it.
+
+  One fault already traced to canvases: the till draws each tab's name straight from the canvas's
+  stored `title` (`apps/till/src/widgets/tab-shell.ts`), and the defaults store English titles,
+  which is why "Counter", "Floor" and "Order" stay in English in Spanish (one of the seven faults
+  in the entry above).
+
+  The work, each part its own brainstorm, spec and plan:
+  1. **Design the screens for each kind of device** — the till at the counter, the handheld (phone
+     and tablet), the kitchen screen and the pass — starting from the till screens that already
+     exist (`apps/till/src/screens/`) and [ui-review.md](ui-review.md)'s walk of the three displays.
+     Decide what each one shows, how it fits narrow and wide screens (a responsive grid inside a
+     screen is fine, §11), and what a venue may still choose per device, such as its home layout
+     or kitchen station — set on the device profile, not drawn in an editor.
+  2. **Retire canvases** once those screens replace them: the till's canvas tabs and card grid, the
+     `canvases` table and `device_profiles.canvas_id`, the canvas code in `packages/layouts`, the
+     dashboard's editor, its navigation entry and the profile screen's picker, the routes, the live
+     queries, the error codes and their translations. No data is carried over (§3's pre-live rule).
+     Trace every consumer before deleting; the tests that build a canvas for the till go too.
+
+  **Separate, and staying** (§11): a menu's home layouts (how its shortcuts are arranged), receipt
+  configuration, and the floor-plan editor.
+
+  **Until this lands, build no new feature as a canvas card or card setting** — put it in the
+  screen itself. Slice 3d already kept its kitchen-group choice off the `expo` card (its P15).
 
 ### A5. Incidents and notifications
 
@@ -7549,11 +7595,9 @@ ongoing overhaul listed at the top of Track A.
   names — the waiter asks the kitchen or pass when that is not the waiter.
 - **Handheld live updates** — the app is pull-only, so two waiters on one table see stale data until
   a refetch. A sizable new subsystem; spec it when it matters.
-- **Configurable per-device face-set editor** — persist a face-set per device profile with the
-  `HANDHELD_FACES` constant as fallback; the heavier half makes the table-order screen canvas-driven.
-- **Layout designer follow-ons**: the aggregated device-profile bundle (till, station, hardware, area,
-  order routing, printer target on the profile); truly-real card renders in the editor (needs a
-  neutral shared card package); the visual theme editor; community canvas sharing.
+- **Device profile follow-ons**: the aggregated device-profile bundle (till, station, hardware, area,
+  order routing, printer target on the profile); the visual theme editor. The canvas-editor
+  follow-ons that stood here, and a canvas-driven table-order screen, gave way to A4's A182.
 - **Language resolution follow-ons**
   ([original design](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
   configurable content languages and their shared fallback landed in #339, separately from interface
