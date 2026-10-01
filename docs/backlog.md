@@ -2785,7 +2785,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     A165: fixed for the Printers screen's Reprint only; the till's kitchen Reprint and a receipt
     reprint still leave the printer's alert up — see A165's entry.)_
 - **A printed resend clears the printer's "stuck" alert for the job it copies (A165, owner
-  2026-10-01: "queue it") — done (2026-10-01).** Reproduced on `main` first: a job that ran out of
+  2026-10-01: "queue it") — done (#972, 2026-10-01).** Reproduced on `main` first: a job that ran out of
   attempts, then a resend of it that printed, left the printer's `printer.jobs_waiting` alert up,
   dated from the failed job. Nothing linked a resend to the job it copies: the Printers screen's
   Reprint button (`resendPrintJob`, `packages/printing/src/outbox.ts`) enqueued the same bytes as a
