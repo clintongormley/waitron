@@ -11,6 +11,11 @@ test("renders default and header slots", async () => {
   expect(slots).toContain(null);
 });
 
+test("its text is body text, 14px", async () => {
+  const el = await mount("<wt-card><span>12,40 €</span></wt-card>");
+  expect(getComputedStyle(el.querySelector("span")!).fontSize).toBe("14px");
+});
+
 test("does not add a spurious gap when no header content is provided", async () => {
   const el = await mount("<wt-card>x</wt-card>");
   const header = el.shadowRoot!.querySelector(".header")!;

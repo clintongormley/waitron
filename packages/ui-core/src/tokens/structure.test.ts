@@ -55,6 +55,20 @@ test("defines the structural contract", () => {
   }
 });
 
+test("the type scale is 12px small, 14px body, 18px large and 22px extra large", () => {
+  const el = mount();
+  const probe = document.createElement("span");
+  el.appendChild(probe);
+  const size = (name: string) => {
+    probe.style.fontSize = `var(${name})`;
+    return getComputedStyle(probe).fontSize;
+  };
+  expect(size("--wt-font-size-sm")).toBe("12px");
+  expect(size("--wt-font-size-md")).toBe("14px");
+  expect(size("--wt-font-size-lg")).toBe("18px");
+  expect(size("--wt-font-size-xl")).toBe("22px");
+});
+
 test("dialog max width is 48rem, capped at 90% of the viewport", () => {
   const el = mount();
   expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");

@@ -1,6 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
+import indexHtml from "../index.html?raw";
 import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
@@ -231,6 +232,26 @@ async function expectAdoptIncompleteWithReset(el: SetupApp): Promise<void> {
 }
 
 describe("setup-app", () => {
+  it("draws text on the page itself, outside the app, at the 14px body size", () => {
+    // In the app, tokens sit on <html> and index.html styles <body>; anything rendered straight into
+    // the page rather than inside the app's own element inherits the body's size.
+    const style = document.createElement("style");
+    style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+    document.head.append(style);
+    applyTokens(document.documentElement);
+    try {
+      expect(getComputedStyle(document.body).fontSize).toBe("14px");
+    } finally {
+      style.remove();
+      document.documentElement.removeAttribute("data-wt-theme-root");
+    }
+  });
+
+  it("draws its text at the 14px body size", async () => {
+    const el = await mountSetupApp();
+    expect(getComputedStyle(wizard(el)).fontSize).toBe("14px");
+  });
+
   it("ignores an old failed boot read after a newer connection check succeeds", async () => {
     let rejectOld!: (error: Error) => void;
     const getStatus = vi
