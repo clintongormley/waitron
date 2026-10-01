@@ -4243,7 +4243,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       two wordings pinned in `apps/till/src/i18n/codes.test.ts` and
       `apps/till/src/i18n/strings.test.ts`.
     - **DONE — discarding a parked order that holds money, or has a card payment under way, says
-      so on the till** (lane B item B23, 2026-10-01; the owner's "(a) queue it"). Before, every
+      so on the till** (lane B item B23, #973, 2026-10-01; the owner's "(a) queue it"). Before, every
       refused discard on the counter said "That order is no longer available" (`held.stale`). Now
       a discard refused `bill.payments_received` says "This order still holds money from a
       payment. Give it back before discarding the order" (`held.discard_holds_money` in
