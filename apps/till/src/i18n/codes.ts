@@ -116,8 +116,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido ya se ha entregado",
   },
   "working_order.not_settled": {
-    en: "This order cannot be handed over until it is paid",
-    es: "Este pedido no se puede entregar hasta que esté pagado",
+    en: "This order can no longer be handed over",
+    es: "Este pedido ya no se puede entregar",
   },
   "ticket.not_fired": {
     en: "Nothing on this order has gone to the kitchen, so there is nothing to hand over",

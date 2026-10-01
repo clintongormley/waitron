@@ -186,7 +186,7 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
   });
 
-  it("permits a collected_at NULL→non-null stamp on a settled order (the Mode-P handover marker, 0056)", async () => {
+  it("permits a collected_at NULL→non-null stamp on a settled order (the Mode-P handover marker)", async () => {
     // A walk-up settles BEFORE it is fired, so its `collected_at` handover marker can only be
     // written by a settled → settled UPDATE — the ONE relaxation the trigger carries.
     const id = await open();
@@ -208,7 +208,7 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(row?.id).toBe(id);
   });
 
-  it("rejects any OTHER change to a settled order, and a re-stamp of an already-collected one (0056 keeps the settled-state freeze)", async () => {
+  it("rejects any OTHER change to a settled order, and a re-stamp of an already-collected one (the settled-state freeze holds)", async () => {
     // The relaxation permits the collected_at stamp and NOTHING ELSE.
     const id = await open();
     await inTx((tx) =>
@@ -258,8 +258,8 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(e1)).toBe(TRANSITION_REFUSAL);
-    // placed → placed may change only the party, the delivery table and the revision, so a label
-    // edit is refused.
+    // placed → placed may change only the party, the delivery table and the revision, or take its
+    // handover stamp alone, so a label edit is refused.
     const e2 = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ label: "late label" }).where(eq(workingOrders.id, id)),
