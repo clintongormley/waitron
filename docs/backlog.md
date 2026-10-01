@@ -198,7 +198,9 @@ four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
 ([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), approved, lane D's PF3 after
 PF1); 3b, opening hours, by-hand open and close, fallbacks, and down-printer and dark-screen alerts
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), written and reviewed
-four times); 3c, split-off extras and what a ticket shows; 3d, watchers. **Next action:** the owner
+four times); 3c, split-off extras, what a ticket shows, and sending one dish to another station
+from the till (any waiter, closed stations included, when sending or after) plus re-routing a held
+dish whose station closed before it was released (owner, 2026-10-01); 3d, watchers. **Next action:** the owner
 approves the 3b plan; then it is queued after 3a, and the 3c plan is written.
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
@@ -2235,6 +2237,24 @@ by the first version of the new case in `apps/dashboard/src/api/client.test.ts`)
 now stands, which asserts that a response body was read, failed under
 `pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts` with
 `expected [] to not have a length of +0`.
+
+**A venue's time zone must come from its country pack's list (A166, owner 2026-10-01) — OPEN.** The
+owner: _"in fact this should be chosen from a dropdown, and the options specified in the country
+package, eg Spain has two time zones, one for mainland and one for las canarias"_. Today setup does
+not let anyone choose it: it takes the zone from the province of the venue's address (Spain's pack,
+`packages/country-es/src/spain.ts:180`, gives Las Palmas and Santa Cruz de Tenerife
+`Atlantic/Canary` and every other province `Europe/Madrid`; the UK pack gives `Europe/London`). But
+the column, `locations.time_zone`, is plain text, and configuration import checks only that the
+value is a string (`apps/server/src/configuration-transfer.ts:297-309`), so an imported file can set
+a zone no pack offers; provisioning copies whatever it is given (`packages/provisioning/src/venue-apply.ts`).
+Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
+emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
+and every writer of a venue's time zone — setup, configuration import, provisioning — refuses one
+not on its country's list. A dropdown is needed only if a venue could ever need a zone other than
+its province's; for Spain the province decides. (Aside: a Canary venue cannot be set up yet — the
+pack marks the Canary tax territory unsupported.) Slice 3b's station opening hours ignore hours
+when the zone cannot be read, as a last defence
+([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
 
 **A country pack's `name` is gone — DONE (C72, #871, 2026-09-29).** C41 (#835) left `CountryPack.name`
 read only by `packages/country-packs/src/registry.test.ts`, because the wizard names countries

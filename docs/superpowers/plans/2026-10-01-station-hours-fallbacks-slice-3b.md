@@ -105,10 +105,13 @@ and approving the plan approves them.
   `venue.clock_unreadable` (new), because "today" cannot be worked out.
 - **S9. One clock reading per send.** `fireLines` reads the time once, before routing, and uses that
   same instant for the hours check and for the fire time it stamps.
-- **S10. A held dish keeps the station it was first sent to.** The station is fixed when the dish
-  is first sent on hold, and releasing it later prints there even if that station has closed in
-  between. The reason: the HOLD ticket may already have printed at that station (research note
-  `slice3b-research-reachability.md` §4). A backlog entry records it.
+- **S10. In 3b, a held dish keeps the station it was first sent to.** The station is fixed when
+  the dish is first sent on hold, and releasing it later prints there even if that station has
+  closed in between, because the HOLD ticket may already have printed at that station (research
+  note `slice3b-research-reachability.md` §4). **Slice 3c changes this (owner, 2026-10-01):** a
+  held dish released after its station closed is re-routed by the rules, with a "moved" slip at
+  the old station when its HOLD ticket printed there; and any waiter can send a single dish to
+  another station from the till, closed stations included — when sending, or after.
 - **S11. Opening and closing by hand is on the dashboard only (owner).** The till gets it later,
   through a backlog entry.
 - **S12. Hours, fallback and by-hand changes get a one-line confirmation, not the full routing
@@ -1373,7 +1376,6 @@ false: "The venue's time zone cannot be read, so opening hours are not applied."
       dishes ready on its screen, with that screen switched off, is alerted for up to an hour after
       each send; a kitchen screen opened through the dev stack's device chooser never records a
       check-in, `apps/server/src/device-session.ts:176-186`, so a send to its station alerts);
-    - "A held dish keeps a station that has since closed" (S10);
     - "Opening or closing a station from the till" (S11: a core till route calling a new
       `VENUE_SERVICE` seat method, a manager's PIN as the cash drawer route takes it,
       `till-api.ts:1468-1478`, and `authorize` widened as `authorizeManager` was,
