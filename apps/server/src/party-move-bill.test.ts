@@ -1051,12 +1051,11 @@ describe("the dishes of an open bill moved between service modes", () => {
         .insert(floorZones)
         .values({ locationId: v.cfg.locationId, name: `Barra ${name}` })
         .returning({ id: floorZones.id });
-      // Tarta alone and no routes written, so the suite's other routes stand.
+      // Offering Tarta here writes no prep-station rule; the suite's other rules remain.
       return offerProducts(tx, v.cfg, {
         zone: { zoneId: zone!.id },
         serviceMode: "ticket_then_pay",
         productIds: [v.productId("Tarta")],
-        routes: "none",
       });
     });
     const [orderId, walkUp] = [randomUUID(), randomUUID()];

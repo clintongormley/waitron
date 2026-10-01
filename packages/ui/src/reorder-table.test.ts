@@ -7,6 +7,12 @@ import { cleanup, mount as mountHtml } from "./test-helpers.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import { reorder } from "./reorder.js";
 
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateReducedMotion: (reducedMotion: "reduce" | "no-preference" | null) => Promise<void>;
+  }
+}
+
 afterEach(cleanup);
 
 const announcement = () => "{item} moved to position {index} of {total}";

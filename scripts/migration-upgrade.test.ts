@@ -271,6 +271,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0055_drop_printer_character_set": {
     refused: ["DROP TABLE `printers`", "FOREIGN KEY constraint failed"],
   },
+  // The product rebuild refuses a non-cascading child after the category rebuild carried its rows.
+  "core/0059_drop_routing_station_columns": {
+    refused: ["DROP TABLE `products`", "FOREIGN KEY constraint failed"],
+  },
   "catalogue/0018_sections_owned_prepare": {
     refused: ["DELETE FROM sections WHERE role = 'library'", "FOREIGN KEY constraint failed"],
   },

@@ -487,7 +487,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
 /**
  * Review Focus 6 of the menus plan (spec sections 11.3 and 11.7 examples 4 and 5, and 10.7 example
  * 5), as the owner restated it on 2026-09-26: a line that was sent stays payable however its
- * product's availability changes, through a split and with no preparation route; one that was never
+ * product's availability changes, through a split and with a line that makes no kitchen work; one that was never
  * sent does not; and the split's two Burgers are one on each check.
  */
 describe("a sent line is payable whatever its availability; an unsent one is not", () => {

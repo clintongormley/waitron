@@ -7440,7 +7440,7 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("takes the preparation route of the parent's category, and one in its own category that one's", async () => {
+  it("takes a category exception for the parent, and one in its own category for the variant", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {

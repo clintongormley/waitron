@@ -256,8 +256,7 @@ async function fireNewOrder(
 
 /**
  * Open an order with NO service context holding one dish line and one child line per pick, then FIRE
- * it, so the dish takes `fireLines`' context-less station chain (product, then category, then the
- * default station) rather than a preparation route. The lines are written straight to the table
+ * it, so the dish's zone-less product exception selects its station. The lines are written straight to the table
  * because pricing one needs a zone; the price and name columns are placeholders nothing here reads.
  */
 async function fireContextlessDish(

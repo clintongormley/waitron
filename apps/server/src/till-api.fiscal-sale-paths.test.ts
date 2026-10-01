@@ -2500,12 +2500,15 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     const deviceCookie = await enrolTillCookie(cfg);
 
     const workingOrderId = randomUUID();
-    // With no route any station can take, the sale leaves the dish unsent; the route is restored
-    // before the prep call, which then sends what the sale could not.
-    const routes = await suite.db
-      .delete(preparationRoutes)
-      .where(eq(preparationRoutes.locationId, cfg.locationId))
-      .returning();
+    const stations = (await (
+      await app.request("/api/stations", { headers: { cookie } })
+    ).json()) as { id: string; isDefault: boolean }[];
+    const defaultStation = stations.find((s) => s.isDefault)!;
+    // With the default station off, the sale leaves the dish unsent; turning it back on before
+    // the prep call lets that call send the same stored dish.
+    await suite.db.execute(sql`
+      update kitchen_stations set active = 0
+      where location_id = ${cfg.locationId} and is_default`);
     const sale = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -2516,10 +2519,6 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
       }),
     });
     expect(sale.status).toBe(200);
-    const stations = (await (
-      await app.request("/api/stations", { headers: { cookie } })
-    ).json()) as { id: string; isDefault: boolean }[];
-    const defaultStation = stations.find((s) => s.isDefault)!;
     const queue = async () =>
       (
         (await (
@@ -2528,7 +2527,9 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
       ).items;
     expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeUndefined();
 
-    await suite.db.insert(preparationRoutes).values(routes);
+    await suite.db.execute(sql`
+      update kitchen_stations set active = 1
+      where location_id = ${cfg.locationId} and is_default`);
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -2553,12 +2554,11 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg);
     const workingOrderId = randomUUID();
-    // With no route any station can take, the sale leaves the dish unsent; the route is restored
-    // before the prep call, which then sends what the sale could not.
-    const routes = await suite.db
-      .delete(preparationRoutes)
-      .where(eq(preparationRoutes.locationId, cfg.locationId))
-      .returning();
+    // With the default station off, the sale leaves the dish unsent; turning it back on before
+    // the prep call lets that call send the same stored dish.
+    await suite.db.execute(sql`
+      update kitchen_stations set active = 0
+      where location_id = ${cfg.locationId} and is_default`);
     const sale = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -2571,7 +2571,9 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     expect(sale.status).toBe(200);
     await suite.db.execute(sql`update products set available = 0 where id = ${each.id}`);
 
-    await suite.db.insert(preparationRoutes).values(routes);
+    await suite.db.execute(sql`
+      update kitchen_stations set active = 1
+      where location_id = ${cfg.locationId} and is_default`);
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },

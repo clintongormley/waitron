@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
+  floorZones,
   incidents,
   kitchenStations,
   sales,
@@ -31,9 +32,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { markCollected, parkOrder } from "./working-order.js";
 
 // A pay-first order, or an open counter order in a zone that sends before payment, is sent to the
-// kitchen when it is paid. A zoned order's dish no station can take (its route's station switched
-// off with no fallback, or no route at all) does not refuse the payment: the money is taken and
-// filed, that dish is not sent, and one `route.dish_not_sent` alert per sale names it and the zone
+// kitchen when it is paid. A dish no rule or active default station can take does not refuse the
+// payment: the money is taken and filed, that dish is not sent, and one `route.dish_not_sent` alert per sale names it and the order
 // — or, if the database refuses that alert, a log line under that code does.
 
 const suite = useVenueDb({
@@ -401,7 +401,6 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         await offerProducts(tx, v.cfg, {
           zone: { zoneId: zone!.id },
           serviceMode: "ticket_then_pay",
-          routes: "none",
           productIds: [made.productId],
         })
       ).zoneId;
@@ -420,10 +419,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(await statusOf(id)).toBe("settled");
     expect(await kitchenItems(id)).toEqual([]);
     expect(await alertsFor(await saleOf(id))).toEqual([
-      expect.objectContaining({
-        code: "route.dish_not_sent",
-        params: expect.objectContaining({ zoneId, dishes: made.name }),
-      }),
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), null)),
     ]);
     await expect(markCollected({ db: suite.db }, v.cfg, id)).rejects.toMatchObject({
       code: "ticket.not_fired",

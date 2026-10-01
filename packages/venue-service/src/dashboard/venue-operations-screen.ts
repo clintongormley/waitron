@@ -452,15 +452,6 @@ export class VenueOperationsScreen extends LitElement {
           : nothing
       }
       ${
-        this.view === "routing"
-          ? this.#tabAction({
-              key: "new-route",
-              label: t("venue.add_route"),
-              run: () => this.#open({ kind: "route" }),
-            })
-          : nothing
-      }
-      ${
         this.view === "zones" && zone
           ? this.#tabAction({
               key: `new-assignment-${zone.id}`,
