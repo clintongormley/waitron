@@ -179,6 +179,34 @@ describe("till-tab-shell", () => {
     expect(el.shadowRoot!.querySelector<HTMLElement>(".drill")!.hasAttribute("hidden")).toBe(false);
   });
 
+  it("keeps a drill-in over a long tab after the tab is scrolled", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs,
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    const content = document.createElement("div");
+    content.style.height = "3000px";
+    el.appendChild(content);
+    await el.updateComplete;
+    const region = el.shadowRoot!.querySelector<HTMLElement>(".region")!;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    body.scrollTop = body.scrollHeight;
+    expect(body.scrollTop).toBeGreaterThan(0);
+    const drillContent = document.createElement("div");
+    drillContent.slot = "drill";
+    drillContent.textContent = "Order details";
+    el.appendChild(drillContent);
+    await el.updateComplete;
+    await el.updateComplete;
+    const drill = el.shadowRoot!.querySelector<HTMLElement>(".drill")!;
+    expect(drill.getBoundingClientRect().top).toBeCloseTo(region.getBoundingClientRect().top, 0);
+    expect(drill.getBoundingClientRect().bottom).toBeCloseTo(
+      region.getBoundingClientRect().bottom,
+      0,
+    );
+    expect(el.shadowRoot!.querySelector<HTMLElement>("main.body")!.inert).toBe(true);
+  });
+
   it("suppresses the whole operator header in kiosk mode, rendering only the body", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs: [{ key: "kitchen", title: "Kitchen", columns: 24, cards: [] }],

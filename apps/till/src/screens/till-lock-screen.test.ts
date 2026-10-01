@@ -305,6 +305,20 @@ describe("till-lock-screen", () => {
     expect(footer.previousElementSibling).toBe(el.shadowRoot!.querySelector(".screen"));
   });
 
+  it("puts server status above the language footer when the till cannot reach its primary", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: [
+        { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
+      ],
+    });
+    await flush(el);
+    const footer = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const status = el.shadowRoot!.querySelector("[data-server-status]")!;
+    expect(footer.previousElementSibling).toBe(status);
+    expect(status.previousElementSibling).toBe(el.shadowRoot!.querySelector(".screen"));
+  });
+
   it("updates its footer when the till locale changes while sign-in stays open", async () => {
     setLocale("es-ES");
     try {

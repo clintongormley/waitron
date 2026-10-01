@@ -90,6 +90,13 @@ export class TillTabShell extends LitElement {
 
       .region {
         position: relative;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .body {
         flex: 1;
         min-height: 0;
         overflow: auto;

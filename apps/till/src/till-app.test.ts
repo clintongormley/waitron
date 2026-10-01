@@ -7395,8 +7395,8 @@ it("keeps the counter's language footer in view below its content", async () => 
     const footer = shell(el)!.shadowRoot!.querySelector("wt-language-footer")!;
     const trigger = footer.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
     expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
-    const region = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".region")!;
-    region.scrollTop = region.scrollHeight;
+    const body = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    body.scrollTop = body.scrollHeight;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const hold = tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".hold")!;
     expect(hold.getBoundingClientRect().bottom).toBeLessThanOrEqual(

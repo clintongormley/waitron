@@ -209,7 +209,6 @@ export class TillMenuBrowser extends LitElement {
         position: sticky;
         bottom: 0;
         z-index: 2;
-        padding-inline-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
         background: var(--wt-color-bg);
       }
     `,
