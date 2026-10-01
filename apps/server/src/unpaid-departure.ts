@@ -51,9 +51,9 @@ export interface RecordedDeparture {
 }
 
 /**
- * The party's guests left without paying: every bill of its family still to pay is invoiced in full
- * and left unpaid, one `unpaid_departures` row records each with the reason and who authorised it,
- * and the party then closes as Finish table closes it ({@link closeParty}). Needs
+ * The party's guests left without paying: each invoice of its family's bills still to pay that
+ * still owes something gets one `unpaid_departures` row with the reason, who recorded it and who
+ * authorised it, and the party then closes as Finish table closes it ({@link closeParty}). Needs
  * `sale.void` from the operator or the override.
  *
  * An open bill is invoiced now, as an invoice-first placing invoices it, without a receipt; a

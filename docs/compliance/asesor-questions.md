@@ -788,8 +788,10 @@ venue's own business and is not built. The basis, quoted from the BOE consolidat
   (<https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696>, last updated there 31/03/2026).
 
 Built on this decision (service plan Task 17, lane B item B17): **Record unpaid departure** on the
-till issues each unpaid bill's invoice for its full amount, files it, records the debt with the
-reason and the person who recorded it, and closes the table. Collecting the debt later in full uses
+till issues an invoice for the full amount for each unpaid bill not yet invoiced (a bill already
+invoiced keeps its invoice), files it, records what each invoice still owes, when it owes anything,
+with the reason, who recorded it and who authorised it (an invoice owing nothing is settled
+instead), and closes the table. Collecting the debt later in full uses
 the existing collect route; collecting PART of it is not built, because `settleSale`
 (`packages/core/src/settle-sale.ts`) refuses a second settlement of one invoice and a settlement
 whose payments do not add up to the amount due. The question stays open: if the asesor

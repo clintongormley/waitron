@@ -2034,7 +2034,9 @@ code and by the database (read in both places on `main` at `72e7e65fb`).
 
 Spec §8; asesor Q28. **Does not start until Q28 is answered or the owner decides without it.** The
 default below is Q28's option (a). *(2026-10-01: built on the owner's decision without the
-asesor — see Q28 in `docs/compliance/asesor-questions.md`.)*
+asesor — see Q28 in `docs/compliance/asesor-questions.md`. On the owner's instruction
+(2026-10-01) the departure is gated on the existing `sale.void`, not a new permission; see the B17
+entry in `docs/backlog.md`.)*
 
 - [ ] **Step 1: Write the failing tests:**
   - With a €30.00 bill outstanding, "Record unpaid departure" needs a permission (a new module or

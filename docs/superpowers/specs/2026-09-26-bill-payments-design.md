@@ -395,8 +395,8 @@ in full first (§6), then abandon.
 **When the rest of the table walks out** after someone contributed, there is nobody to refund. That
 is an unpaid departure, plan Task 17, which waits on asesor Q28; until it lands such a bill stays
 open and visible on the table. Open point §11.8. *(2026-10-01: Task 17 as built refuses a bill
-holding any payment, even one given back in full (`unpaid_departure.bill_holds_payment`); that is
-an open owner question in the B17 entry of [the backlog](../../backlog.md).)*
+holding any payment, even one given back in full (`unpaid_departure.bill_holds_payment`); the owner
+decided on 2026-10-01 to keep that refusal — the B17 entry of [the backlog](../../backlog.md).)*
 
 ---
 
@@ -1052,8 +1052,8 @@ The owner answered each on 2026-09-26. The design above is written with these an
    amount that can be charged without one.
 8. **A walk-out after a contribution** (§4.5): **the default, pending Q28.** The unpaid bill stays
    visible; Task 14 adds no close-without-invoice route. *(2026-10-01: Task 17 as built refuses a
-   bill holding any payment (`unpaid_departure.bill_holds_payment`), an open owner question in the
-   B17 entry of [the backlog](../../backlog.md).)*
+   bill holding any payment (`unpaid_departure.bill_holds_payment`); the owner decided on 2026-10-01
+   to keep that refusal — the B17 entry of [the backlog](../../backlog.md).)*
 9. **Offline card acceptance for a payment that does not complete the bill** (§5.4): **the direction
    is accepted for the future Tap to Pay work, and Task 14 does not enable it.** That work must test
    declines both before and after the invoice, including releasing an item payment's lines when an

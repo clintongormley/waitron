@@ -129,8 +129,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    taking a reason is done by lane B item B11a, Task 15, several payments on the till, has
    landed as lane B item B15 (#956; the server side landed as #721), and Task 16, counter
    handover, has landed as lane B item B16 (#981; what it left open is in the B16 entry under A4).
-   Task 17, a table that leaves without paying, is built as lane B item B17 and waits for the
-   owner's review (the B17 entry under A4).
+   Task 17, a table that leaves without paying, is built as lane B item B17, approved by the owner
+   on 2026-10-01 and ready to land (the B17 entry under A4).
    **Send asesor Q27–Q29 now:** the owner decided Q28 without the asesor on 2026-10-01 and Task 17
    is built on it, so Q28 is asked to confirm; how Task 11's discount appears on the invoice is
    Q29, and printing the invoice before payment is Q27.
@@ -5031,7 +5031,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       so the basket is believed to show their sum. Reported by B16's review fixer from reading; no
       test shows it.
   - **Task 17, a table that leaves without paying, is built as lane B item B17** (2026-10-01,
-    waiting for the owner's review; asesor Q28 decided by the owner without the asesor: the full
+    approved by the owner on 2026-10-01; asesor Q28 decided by the owner without the asesor: the full
     simplified invoice is issued when the table leaves). When Finish table is refused because a bill still owes, the till offers **Record unpaid
     departure** beside Take payment. It needs the existing permission `sale.void`
     (supervisor and up, or a supervisor's PIN; owner, 2026-10-01: no new permission) and a reason. Each owing bill with no invoice yet is
@@ -5042,8 +5042,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     receipt is printed and nothing is sent to the kitchen. The counter's held-orders card lists the
     departures still unpaid under "Left without paying". Server:
     `POST /api/parties/:id/unpaid-departure`, `GET /api/unpaid-departures`,
-    `GET /api/unpaid-departure-authorizers`. Open:
-    - **OPEN, owner question — a bill holding a payment cannot be left unpaid.** The departure
+    `GET /api/unpaid-departure-authorizers`. The owner's other answers of 2026-10-01: printing
+    no receipt is kept; a handheld may record a departure, gated on `sale.void` alone like any
+    till (the route does not call `assertNotHandheld`); and a party whose bills all owe nothing is
+    settled and closed by the departure rather than refused (the €0.00 Pay error is queued
+    separately). Open:
+    - **Known limit, kept by the owner's decision of 2026-10-01 — a bill holding a payment cannot
+      be left unpaid.** The departure
       refuses a bill holding any bill payment, even one given back in full
       (`unpaid_departure.bill_holds_payment`): its invoice would have to be settled in part, and
       `settleSale` (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not
@@ -5053,7 +5058,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **OPEN — a dish never sent, on hold or recalled blocks the departure**
       (`unpaid_departure.unfired_dishes`); staff cancel it first.
     - **OPEN — handhelds never see the list.** It sits in the counter's held-orders card, which the
-      default phone and tablet layouts lack. The dashboard may be the better home.
+      default phone and tablet layouts lack. The owner kept the counter list as a stopgap
+      (2026-10-01) and wants a dashboard Orders screen listing every order, with an "unpaid"
+      filter, queued as a separate spec item.
     - A bill that owes nothing once invoiced — one already invoiced whose credit notes bring it to
       zero, or an open bill whose every line was given away — gets no departure row. The departure
       invoices it (at 0.00, for the open bill) and settles it with no payment, as collecting a bill
@@ -5159,7 +5166,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Tasks left: 16 and 17** (2026-09-30; 10 to 14 have landed, and Task 15, the till side of
     Task 14, is built by lane B item B15). _(2026-10-01: Task 16 has landed as lane B item B16, #981; see
     the B16 entry above. Task 17 is left.)_ _(Later on 2026-10-01: Task 17 is built as lane B item
-    B17 and waits for the owner's review; see the B17 entry above.)_ The menus tasks that change the same order and till code
+    B17, approved by the owner on 2026-10-01; see the B17 entry above.)_ The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
     plan's order among them: 16 after 10.
   - **Task 17** (unpaid departure) ~~also waits for asesor Q28~~ — built on the owner's Q28

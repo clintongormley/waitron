@@ -37,7 +37,8 @@ export const parties = table(
     state: partyState("state").notNull().default("open"),
     openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),
     openedBy: id("opened_by").notNull(),
-    // Set by Finish table, which moves the party out of `open`, or by a merge that closes it.
+    // Set by Finish table or Record unpaid departure (both through `closeParty`), or by a merge
+    // that closes it.
     closedAt: tsString("closed_at"),
     closedBy: id("closed_by"),
     mergedIntoPartyId: id("merged_into_party_id"),

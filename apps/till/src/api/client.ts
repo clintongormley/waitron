@@ -959,7 +959,7 @@ export interface UnpaidDepartureRequest {
   override?: { personId: string; pin: string };
 }
 
-/** Each bill the departure invoiced and left unpaid. */
+/** Each bill the departure left unpaid, with the invoice it owes on. */
 export interface UnpaidDepartureResult {
   state: "closed";
   departures: {
@@ -2251,8 +2251,9 @@ export class TillApi {
   }
 
   /**
-   * The party's guests left without paying → `POST /api/parties/:partyId/unpaid-departure`: every
-   * bill still to pay is invoiced in full and left unpaid, and the party closes as Finish closes it.
+   * The party's guests left without paying → `POST /api/parties/:partyId/unpaid-departure`: each
+   * bill still to pay with no invoice yet is invoiced for its full amount, each invoice still owing
+   * is recorded unpaid and one owing nothing is settled, and the party closes as Finish closes it.
    * Refusals: the route in `apps/server/src/unpaid-departure-api.ts` and what it calls.
    */
   recordUnpaidDeparture(

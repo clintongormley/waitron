@@ -307,9 +307,9 @@ declare module "@waitron/shared" {
     /** A party still holds the table, so no party may be seated at it (`openTab`). */
     "tab.already_open": { tableId: string };
     /**
-     * A party verb found the party is not open — Finish, a new service command, or a bill action on
-     * a party's bill (`guardParty`) — or the id names no party, or a party id in a route is not
-     * a UUID. One code for all, as `tab.not_open` is.
+     * A party verb found the party is not open — Finish, a new service command, an unpaid
+     * departure, or a bill action on a party's bill (`guardParty`) — or the id names no party, or a
+     * party id in a route is not a UUID. One code for all, as `tab.not_open` is.
      */
     "party.not_open": { partyId: string };
     /**
