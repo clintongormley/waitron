@@ -3,7 +3,7 @@ import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } fro
 import { currentContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, LanguageTranslationGaps, TranslationGap } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -20,6 +20,7 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
     getContentLanguages: vi.fn().mockResolvedValue(CONFIG),
     getContentLanguageRules: vi.fn().mockResolvedValue(NO_RULES),
     updateContentLanguages: vi.fn().mockResolvedValue(undefined),
+    getContentTranslationGaps: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -679,5 +680,321 @@ describe("content languages screen", () => {
       expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(t("content_languages.load_error")),
     );
     expect(shown(el)).toEqual(["Catalán", "Alemán", "Inglés"]);
+  });
+});
+
+describe("missing translations", () => {
+  const PAN: TranslationGap = {
+    kind: "product",
+    id: "prod-1",
+    name: "STAFF Pan",
+    reason: "partial",
+  };
+  const SPANISH_DEFAULT: ContentLanguages = {
+    defaultLanguage: "es",
+    languages: ["es", "ca", "en"],
+  };
+  const report = (byLanguage: Record<string, TranslationGap[]>): LanguageTranslationGaps[] =>
+    Object.entries(byLanguage).map(([language, gaps]) => ({ language, gaps }));
+
+  function gapsApi(
+    config: ContentLanguages,
+    rules: ContentLanguageRules,
+    gaps: LanguageTranslationGaps[] | (() => Promise<LanguageTranslationGaps[]>),
+  ) {
+    return api({
+      getContentLanguages: vi.fn().mockResolvedValue(config),
+      getContentLanguageRules: vi.fn().mockResolvedValue(rules),
+      getContentTranslationGaps:
+        typeof gaps === "function" ? vi.fn(gaps) : vi.fn().mockResolvedValue(gaps),
+    });
+  }
+
+  const disclosure = (el: ContentLanguagesScreen, code: string) =>
+    q(el, `[data-test=gaps-${code}]`) as
+      (HTMLElement & { heading: string; summary: string; open: boolean }) | null;
+  const disclosures = (el: ContentLanguagesScreen) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-disclosure")].map(
+      (each) => each.dataset.test,
+    );
+  const table = (el: ContentLanguagesScreen, code: string) =>
+    q(el, `[data-test=gaps-table-${code}]`) as
+      | (HTMLElement & {
+          rows: TranslationGap[];
+          columns: { key: string; filter?: { options: { value: string }[] } }[];
+          updateComplete: Promise<unknown>;
+        })
+      | null;
+  async function links(el: ContentLanguagesScreen, code: string) {
+    const found = table(el, code)!;
+    await found.updateComplete;
+    return [...found.shadowRoot!.querySelectorAll<HTMLAnchorElement>("tbody a")];
+  }
+  /** Whether the screen cancelled the click. The window listener then cancels it in any case, so a
+   * test never navigates the page it runs in. */
+  function clickPrevented(link: HTMLAnchorElement, held: MouseEventInit): boolean {
+    let prevented = false;
+    const guard = (event: Event) => {
+      prevented = event.defaultPrevented;
+      event.preventDefault();
+    };
+    window.addEventListener("click", guard);
+    try {
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...held }),
+      );
+    } finally {
+      window.removeEventListener("click", guard);
+    }
+    return prevented;
+  }
+  const warning = (el: ContentLanguagesScreen, code: string) =>
+    q(el, `[data-test=required-gaps-${code}]`);
+  const lower = (code: string) =>
+    new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code)!;
+
+  it("lists a product missing its Catalan name under Catalan, flagged as required, in a Barcelona venue whose default is Spanish", async () => {
+    const el = await mount(
+      gapsApi(
+        SPANISH_DEFAULT,
+        BARCELONA,
+        report({ es: [], ca: [PAN], en: [{ ...PAN, reason: "absent" }] }),
+      ),
+    );
+    expect(q(el, "[data-test=missing-translations] h2")!.textContent).toBe(t("content_gaps.title"));
+    const catalan = disclosure(el, "ca")!;
+    expect(catalan.open).toBe(true);
+    expect(catalan.heading).toBe(`${name("ca")} · ${t("content_languages.required")}`);
+    expect(catalan.summary).toBe(t("content_gaps.count").replace("{count}", "1"));
+    expect(warning(el, "ca")!.getAttribute("role")).toBe("note");
+    expect(warning(el, "ca")!.textContent!.trim()).toBe(
+      t("content_gaps.required_warning_one").replace("{language}", lower("ca")),
+    );
+    expect(table(el, "ca")!.rows).toEqual([PAN]);
+    const [link] = await links(el, "ca");
+    expect(link!.getAttribute("href")).toBe("/manage/catalogue/product/prod-1");
+    expect(link!.getAttribute("aria-label")).toBe(
+      t("content_gaps.open_named").replace("{name}", "STAFF Pan"),
+    );
+    expect(table(el, "ca")!.shadowRoot!.querySelector("tbody")!.textContent).toContain("STAFF Pan");
+    expect(table(el, "ca")!.shadowRoot!.querySelector("tbody")!.textContent).toContain(
+      t("content_gaps.partial"),
+    );
+  });
+
+  it("orders the required languages first, then the default, then the rest, and says a language with nothing missing is complete", async () => {
+    const el = await mount(
+      gapsApi(
+        { defaultLanguage: "en", languages: ["en", "fr", "es", "ca"] },
+        BARCELONA,
+        report({ en: [], fr: [PAN], es: [], ca: [PAN] }),
+      ),
+    );
+    expect(disclosures(el)).toEqual(["gaps-ca", "gaps-es", "gaps-en", "gaps-fr"]);
+    const spanish = disclosure(el, "es")!;
+    expect(spanish.open).toBe(false);
+    expect(spanish.summary).toBe(t("content_gaps.none"));
+    expect(spanish.textContent!.trim()).toBe(
+      t("content_gaps.complete").replace("{language}", lower("es")),
+    );
+    expect(table(el, "es")).toBeNull();
+    expect(warning(el, "es")).toBeNull();
+    expect(disclosure(el, "en")!.heading).toBe(`${name("en")} · ${t("content_languages.default")}`);
+    expect(disclosure(el, "fr")!.heading).toBe(name("fr"));
+    expect(disclosure(el, "fr")!.open).toBe(false);
+    expect(warning(el, "fr")).toBeNull();
+  });
+
+  it("flags Spanish where it is required and the default is Catalan, since no save can leave Catalan out there", async () => {
+    const absent = { ...PAN, reason: "absent" as const };
+    const el = await mount(
+      gapsApi(
+        { defaultLanguage: "ca", languages: ["ca", "es", "en"] },
+        BARCELONA,
+        report({
+          ca: [],
+          es: [absent, { ...PAN, id: "prod-2", name: "STAFF Croqueta" }],
+          en: [absent],
+        }),
+      ),
+    );
+    expect(disclosure(el, "ca")!.heading).toBe(
+      `${name("ca")} · ${t("content_languages.default")} · ${t("content_languages.required")}`,
+    );
+    expect(disclosure(el, "es")!.open).toBe(true);
+    expect(disclosure(el, "es")!.summary).toBe(t("content_gaps.count").replace("{count}", "2"));
+    expect(warning(el, "es")!.textContent!.trim()).toBe(
+      t("content_gaps.required_warning").replace("{language}", lower("es")).replace("{count}", "2"),
+    );
+    expect(warning(el, "ca")).toBeNull();
+    expect(table(el, "es")!.shadowRoot!.querySelector("tbody")!.textContent).toContain(
+      t("content_gaps.absent"),
+    );
+  });
+
+  it("drops the row and the warning when the live data delivers a report without it", async () => {
+    const liveData = new LiveData();
+    const client = Object.assign(
+      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
+      { liveData },
+    );
+    const el = await mount(client);
+    expect(warning(el, "ca")).not.toBeNull();
+    vi.mocked(client.getContentTranslationGaps).mockResolvedValue(
+      report({ es: [], ca: [], en: [] }),
+    );
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(warning(el, "ca")).toBeNull());
+    expect(disclosure(el, "ca")!.summary).toBe(t("content_gaps.none"));
+    expect(table(el, "ca")).toBeNull();
+  });
+
+  it("shows a failed read of the list, with its own Try again, while the languages stay usable", async () => {
+    const client = gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] }));
+    vi.mocked(client.getContentTranslationGaps).mockRejectedValueOnce(new Error("offline"));
+    const el = await mount(client);
+    expect(q(el, "[data-test=gaps-error]")!.textContent!.trim()).toBe(t("content_gaps.load_error"));
+    expect(q(el, "[data-test=gaps-error]")!.getAttribute("role")).toBe("alert");
+    expect(shown(el)).toEqual(["Español", "Catalán", "Inglés"]);
+    expect(q(el, "[data-test=retry]")).toBeNull();
+    q(el, "[data-test=gaps-retry]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=gaps-error]")).toBeNull();
+    expect(table(el, "ca")!.rows).toEqual([PAN]);
+  });
+
+  it("reports a failed refresh of the list in the list alone, keeping the rows it last read", async () => {
+    const liveData = new LiveData();
+    const client = Object.assign(
+      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
+      { liveData },
+    );
+    const el = await mount(client);
+    vi.mocked(client.getContentTranslationGaps).mockRejectedValue(new Error("offline"));
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=gaps-error]")).not.toBeNull());
+    expect(q(el, "[data-test=retry]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("content_languages.load_error"));
+    expect(table(el, "ca")!.rows).toEqual([PAN]);
+  });
+
+  it("shows a loading status for the list once the languages are shown", async () => {
+    const el = await mount(gapsApi(SPANISH_DEFAULT, BARCELONA, () => new Promise(() => {})));
+    expect(q(el, "[data-test=gaps-loading]")!.textContent!.trim()).toBe(t("content_gaps.loading"));
+    expect(q(el, "[data-test=gaps-loading]")!.getAttribute("role")).toBe("status");
+    expect(shown(el)).toEqual(["Español", "Catalán", "Inglés"]);
+  });
+
+  it("links each kind to the screen that edits it, naming a variant, an option and a section with what holds it", async () => {
+    const menu = { id: "menu-1", name: "Lunch" };
+    const gaps: TranslationGap[] = [
+      PAN,
+      {
+        kind: "variant",
+        id: "var-1",
+        name: "STAFF Small",
+        reason: "partial",
+        parent: { id: "prod-1", name: "STAFF Pan" },
+      },
+      { kind: "option_list", id: "list-1", name: "STAFF Doneness", reason: "partial" },
+      {
+        kind: "option_label",
+        id: "label-1",
+        name: "STAFF Rare",
+        reason: "absent",
+        parent: { id: "list-1", name: "STAFF Doneness" },
+      },
+      { kind: "extra_list", id: "extras-1", name: "STAFF Sides", reason: "partial" },
+      { kind: "menu", id: "root-1", name: "Lunch", reason: "absent", parent: menu },
+      { kind: "section", id: "section-1", name: "STAFF Drinks", reason: "partial", parent: menu },
+      { kind: "unit", id: "unit-1", name: "ración", reason: "partial" },
+    ];
+    const el = await mount(gapsApi(SPANISH_DEFAULT, MADRID, report({ es: [], ca: gaps, en: [] })));
+    disclosure(el, "ca")!.open = true;
+    await flush(el);
+    const found = await links(el, "ca");
+    const byName = Object.fromEntries(
+      found.map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]),
+    );
+    const open = (label: string) => t("content_gaps.open_named").replace("{name}", label);
+    expect(byName).toEqual({
+      [open("STAFF Pan")]: "/manage/catalogue/product/prod-1",
+      [open("STAFF Pan › STAFF Small")]: "/manage/catalogue/product/var-1",
+      [open("STAFF Doneness")]: "/manage/modifiers/view/options/list/list-1",
+      [open("STAFF Doneness › STAFF Rare")]: "/manage/modifiers/view/options/list/list-1",
+      [open("STAFF Sides")]: "/manage/modifiers/view/extras/list/extras-1",
+      [open("Lunch")]: "/manage/menus/menu/menu-1/view/structure",
+      [open("Lunch › STAFF Drinks")]: "/manage/menus/menu/menu-1/view/structure",
+      [open("ración")]: "/manage/units",
+    });
+    const filters = Object.fromEntries(
+      table(el, "ca")!
+        .columns.filter((column) => column.filter)
+        .map((column) => [column.key, column.filter!.options.map((option) => option.value)]),
+    );
+    expect(filters).toEqual({
+      kind: [
+        "product",
+        "variant",
+        "option_list",
+        "option_label",
+        "extra_list",
+        "menu",
+        "section",
+        "unit",
+      ],
+      reason: ["partial", "absent"],
+    });
+  });
+
+  it("opens a product's editor inside the dashboard rather than reloading the page", async () => {
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
+    );
+    const asked: string[] = [];
+    el.addEventListener("wt-edit-product", (event) =>
+      asked.push((event as CustomEvent<{ productId: string }>).detail.productId),
+    );
+    const [link] = await links(el, "ca");
+    expect(clickPrevented(link!, {})).toBe(true);
+    expect(asked).toEqual(["prod-1"]);
+  });
+
+  it("leaves a click with Ctrl or Cmd held to the browser, to open the editor in a new tab", async () => {
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
+    );
+    const asked: string[] = [];
+    el.addEventListener("wt-edit-product", () => asked.push("asked"));
+    const [link] = await links(el, "ca");
+    expect(clickPrevented(link!, { ctrlKey: true })).toBe(false);
+    expect(clickPrevented(link!, { metaKey: true })).toBe(false);
+    expect(asked).toEqual([]);
+  });
+
+  it("names the section's text in each UI language", () => {
+    expect(en["content_gaps.title"]).toBe("Missing translations");
+    expect(es["content_gaps.title"]).toBe("Traducciones que faltan");
+    expect(en["content_gaps.count"]).toBe("{count} missing");
+    expect(es["content_gaps.count"]).toBe("{count} sin traducir");
+    expect(en["content_gaps.complete"]).toBe("Every name has a {language} translation.");
+    expect(es["content_gaps.complete"]).toBe("Todos los nombres están traducidos al {language}.");
+  });
+
+  it("writes the required-language warning in English when the UI is in English", async () => {
+    setLocale("en-GB");
+    const el = await mount(
+      gapsApi(
+        SPANISH_DEFAULT,
+        BARCELONA,
+        report({ es: [], ca: [PAN, { ...PAN, id: "prod-2" }], en: [] }),
+      ),
+    );
+    expect(warning(el, "ca")!.textContent!.trim()).toBe(
+      "Catalan is required in this region, and 2 names are not translated into it yet.",
+    );
+    expect(disclosure(el, "ca")!.heading).toBe("Catalan · Required");
+    expect(disclosure(el, "ca")!.summary).toBe("2 missing");
+    expect(disclosure(el, "es")!.textContent!.trim()).toBe("Every name has a Spanish translation.");
   });
 });

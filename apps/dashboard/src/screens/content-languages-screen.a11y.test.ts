@@ -21,11 +21,13 @@ function stubApi(
   read: () => Promise<unknown>,
   save: () => Promise<void> = () => Promise.resolve(),
   rules: unknown = NO_RULES,
+  gaps: unknown = [],
 ): DashboardApi {
   return {
     getContentLanguages: vi.fn(read),
     getContentLanguageRules: vi.fn().mockResolvedValue(rules),
     updateContentLanguages: vi.fn(save),
+    getContentTranslationGaps: vi.fn().mockResolvedValue(gaps),
   } as unknown as DashboardApi;
 }
 
@@ -65,6 +67,62 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
     );
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=foreign-language-notice]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    [
+      "a required language with missing names",
+      [
+        { language: "es", gaps: [] },
+        {
+          language: "ca",
+          gaps: [
+            { kind: "product", id: "prod-1", name: "STAFF Pan", reason: "partial" },
+            {
+              kind: "section",
+              id: "section-1",
+              name: "STAFF Drinks",
+              reason: "absent",
+              parent: { id: "menu-1", name: "Lunch" },
+            },
+          ],
+        },
+        {
+          language: "en",
+          gaps: [{ kind: "unit", id: "unit-1", name: "ración", reason: "partial" }],
+        },
+      ],
+    ],
+    [
+      "nothing missing anywhere",
+      [
+        { language: "es", gaps: [] },
+        { language: "ca", gaps: [] },
+        { language: "en", gaps: [] },
+      ],
+    ],
+  ])("renders the missing translations with %s accessibly", async (_state, gaps) => {
+    const { el, host } = await mountWidget<ContentLanguagesScreen>(
+      "dashboard-content-languages-screen",
+      { api: stubApi(LOADED, undefined, VALENCIA, gaps) },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("wt-disclosure")).toHaveLength(3);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a failed read of the missing translations accessibly", async () => {
+    const api = stubApi(LOADED, undefined, VALENCIA);
+    vi.mocked(api.getContentTranslationGaps).mockRejectedValue(new Error("offline"));
+    const { el, host } = await mountWidget<ContentLanguagesScreen>(
+      "dashboard-content-languages-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=gaps-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

@@ -26,6 +26,18 @@ export const QUERY_DEPENDENCIES = {
   getContentLanguages: ["content_languages"],
   // The server works the rules out once at boot, so no table change moves them.
   getContentLanguageRules: [],
+  // `listTranslationGapReport` (packages/catalogue/src/content-translation-report.ts): the setting,
+  // then each table it names a row from.
+  getContentTranslationGaps: [
+    "content_languages",
+    "products",
+    "option_lists",
+    "option_labels",
+    "extra_lists",
+    "sections",
+    "catalogues",
+    "units",
+  ],
   listPrinters: ["printers", "print_jobs"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
