@@ -4869,6 +4869,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       screen shows totals).
     - **OPEN — the waiting list is drawn only inside the held-orders card**, so a canvas without
       that card shows no waiting list.
+    - **OPEN, not measured — Pay on a sent `invoice_first` order whose invoice was credited may
+      show the wrong total in the basket.** The waiting row shows what collecting charges (the
+      invoice net of its credit notes, `readIssuedSales` in `apps/server/src/sale-due.ts`), but Pay
+      loads the basket from `GET /api/working-orders/:id/placed`, which carries the order's lines,
+      so the basket is believed to show their sum. Reported by B16's review fixer from reading; no
+      test shows it.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
