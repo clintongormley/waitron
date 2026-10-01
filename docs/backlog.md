@@ -2794,14 +2794,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - Not changed: the till's kitchen Reprint and a receipt's reprint make new jobs through
     `enqueuePrintJob`, which names no `resend_of`, so they clear no failed job in
     `printJobInTrouble`; the table's printing problem keeps its own rule for the kitchen Reprint
-    (`readPrintProblems`, `apps/server/src/kitchen-print.ts`). Read, not run. So a kitchen ticket
-    or receipt that ran out of attempts and was then reprinted from the till still keeps the
-    printer's `printer.jobs_waiting` alert up. Left open, not queued yet.
-  - Decided: a resend that runs out of attempts after an earlier copy printed counts on the
-    printer's alert but is not a table printing problem — a resend is a byte-for-byte copy, so the
-    kitchen already has every dish on it, while the alert is about the printer's queue. Pinned by
-    the "stays clear when a resend of the printed copy then runs out of attempts" case in
-    `apps/server/src/print-problems.test.ts`.
+    (`readPrintProblems`, `apps/server/src/kitchen-print.ts`). So a kitchen ticket or receipt that
+    ran out of attempts and was then reprinted from the till still keeps the printer's
+    `printer.jobs_waiting` alert up. Left open, not queued yet. Read, not run.
+  - Chosen by this branch (not an owner decision): a resend that runs out of attempts after an
+    earlier copy printed counts on the printer's alert but is not a table printing problem — a
+    resend is a byte-for-byte copy, so the kitchen already has every dish on it, while the alert is
+    about the printer's queue. Pinned by the "stays clear when a resend of the printed copy then
+    runs out of attempts" case in `apps/server/src/print-problems.test.ts`.
   - Run: the resend cases in `apps/server/src/alert-sources.test.ts` and
     `apps/server/src/print-problems.test.ts`, and the chain case in
     `packages/printing/src/outbox.test.ts`; each part of the fix was deleted in turn and a case
@@ -3030,7 +3030,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
   printed reprint's links brings back the failures it cleared, so a sweep must remove a bill's
-  kitchen print jobs all together or not at all.
+  kitchen print jobs all together or not at all. It must also keep or remove a resend chain
+  together: deleting a printed resend brings back the "in trouble" state of the job it copied, and
+  deleting a chain's first job while a resend still names it is refused by the `resend_of` key
+  (read, not run).
 - **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
   It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
   invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
@@ -3230,7 +3233,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       there is no way to dismiss one: a detached or replaced printer leaves it showing. _(B6a,
       2026-09-28: a printer detached from the station now drops the problem, tested. A printer
       switched off keeps it showing until the printer is switched on and a Reprint prints there.
-      A resend still clears nothing.)_
+      A resend still clears nothing.)_ _(2026-10-01, A165: a printed resend from the Printers screen
+      now clears it — `printJobInTrouble`, `apps/server/src/print-job-trouble.ts`.)_
     - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of every
       station it covered, even where that station's own printer printed. _(B6a, 2026-09-28: it
       stops showing at a station once a Reprint of the bill would not link that pass printer to

@@ -16,7 +16,8 @@ const copy = alias(printJobs, "resend_copy");
  * printer's alert also leaves out jobs a succeeded Unpair ended (`printingAlertSource`,
  * apps/server/src/alert-sources.ts).
  * "After" is `rowid`, not `created_at`, which two jobs can share to the millisecond: SQLite gives a
- * new row one more than the table's largest `rowid`, and no product code deletes `print_jobs` rows.
+ * new row one more than the table's largest `rowid`.
+ * `VACUUM` and `VACUUM INTO` kept that order when measured (node:sqlite, Node v26.7.0, 2026-10-01).
  */
 export function printJobInTrouble(now: Date): SQL {
   const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();
