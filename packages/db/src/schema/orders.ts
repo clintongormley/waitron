@@ -25,8 +25,8 @@ import { parties } from "./parties.js";
 
 export const workingOrderStatus = enumType([
   "open",
-  // placed: finalized — composition FROZEN (a line may change only what was served once the order
-  // leaves open)
+  // placed: finalized — composition FROZEN (what a line may still change once the order leaves
+  // open: `OPEN_PARENT_REFUSAL`'s comment, packages/db/src/trigger-refusals.ts)
   // and the fiscal issuance basis fixed. Not terminal: it still ends settled or abandoned.
   "placed",
   "settled",

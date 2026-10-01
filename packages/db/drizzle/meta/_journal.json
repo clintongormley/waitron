@@ -372,6 +372,13 @@
       "when": 1790843038280,
       "tag": "0052_print_job_resend_of",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "6",
+      "when": 1790846636768,
+      "tag": "0053_line_sent_after_close",
+      "breakpoints": true
     }
   ]
 }

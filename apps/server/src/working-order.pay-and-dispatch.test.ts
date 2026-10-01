@@ -1231,7 +1231,8 @@ describe("cross-till end-to-end", () => {
 });
 
 // Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
-// freezes composition (for free — a placed order's lines are already frozen by require_open_parent, their served count aside);
+// freezes composition (for free — a placed order's lines are already frozen by require_open_parent;
+// `OPEN_PARENT_REFUSAL`'s comment, packages/db/src/trigger-refusals.ts, lists what still changes);
 // cancelling a placed order (placed → abandoned) appends an `order_cancelled` amendment.
 // The append-only guarantee on `order_amendments` is a trigger this suite's database carries
 // (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`), so a rewrite is refused
@@ -2090,6 +2091,37 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // reads do not separate by node.
     expect(queueA.map((g) => g.orderId)).toEqual([idA, idB]);
     expect(queueB.map((g) => g.orderId)).toEqual([idA, idB]);
+  });
+
+  it("sendToPrep stamps the settled order's lines sent as it fires them", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const sentAt = async () =>
+      (
+        await suite.db
+          .select({ sentAt: workingOrderLines.sentAt })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id))
+      ).map((row) => row.sentAt);
+    expect(await ticketStateOf(id)).toBeNull();
+    expect(await sentAt()).toEqual([null]);
+
+    await sendToPrep({ db: suite.db }, cfg, id);
+
+    expect(await ticketStateOf(id)).toBe("queued");
+    const [stamp] = await sentAt();
+    expect(stamp).not.toBeNull();
   });
 
   it("sendToPrep refuses to fire an order it may not (working_order.not_settled) — an open one and an absent id", async () => {

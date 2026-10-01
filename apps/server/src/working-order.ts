@@ -1351,9 +1351,8 @@ export async function fireLines(
  * Stamp `sent_at` on dish lines not stamped yet, and on their extras children, which follow their
  * dish. A line already stamped keeps its first stamp, so a recalled line sent again keeps it.
  *
- * Only while the order is open: `working_order_lines_require_open_parent_update` refuses a
- * `sent_at` stamp on any other order. `placeOrder` stamps its lines itself before the order leaves `open`,
- * and a settled order sent to preparation is stamped by nothing.
+ * An abandoned order's lines are left alone: `working_order_lines_require_open_parent_update`
+ * refuses a stamp there.
  */
 async function stampSent(
   tx: Transaction,
@@ -1377,7 +1376,7 @@ async function stampSent(
           tx
             .select({ one: sql`1` })
             .from(workingOrders)
-            .where(and(eq(workingOrders.id, orderId), eq(workingOrders.status, "open"))),
+            .where(and(eq(workingOrders.id, orderId), ne(workingOrders.status, "abandoned"))),
         ),
       ),
     );
@@ -2258,8 +2257,7 @@ async function servableLines(
 /**
  * Whether a dish line is released work, which is what serving needs: a line in a held group, or
  * whose kitchen item has not fired, is not, nor is a line with neither an item nor a group that was
- * never sent. `sent_at` is read only for that last kind, because a group fired after its bill was
- * paid releases its lines without stamping them (`stampSent` writes only while the bill is open).
+ * never sent.
  */
 export function isReleased(
   line: Pick<ServableLine, "groupState" | "ticketItemId" | "ticketFiredAt" | "sentAt">,
@@ -4552,7 +4550,6 @@ export async function placeOrder(
       lines.map((line) => line.id),
     );
     // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
-    // Stamped while the order is still open, which is the only time a line may be written.
     await tx
       .update(workingOrderLines)
       .set({ sentAt: nowIso() })

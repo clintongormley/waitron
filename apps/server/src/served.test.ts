@@ -1078,7 +1078,6 @@ describe("served on a bill paid before its group was fired (D18)", () => {
       .from(workingOrders)
       .where(eq(workingOrders.id, s.tabId));
     expect(bill!.status).toBe("settled");
-    // Firing on the paid bill released the Flan to the kitchen; nothing stamps a settled line sent.
     const [ticket] = await suite.db
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
@@ -1088,7 +1087,7 @@ describe("served on a bill paid before its group was fired (D18)", () => {
       .select({ sentAt: workingOrderLines.sentAt })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.id, water.id));
-    expect(sent!.sentAt).toBeNull();
+    expect(sent!.sentAt).not.toBeNull();
     const before = await snapshot(s.partyId);
 
     await serve(v, s.partyId, [{ lineId: flan.id, quantity: "1" }]);
