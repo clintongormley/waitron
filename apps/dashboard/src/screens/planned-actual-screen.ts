@@ -2,6 +2,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-input.js";
 // This import also registers `<dashboard-location-picker>`.
 import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
@@ -36,19 +37,7 @@ export class PlannedActualScreen extends LitElement {
        * matches the shared dashboard-location-picker widget's own bottom margin and the two align in
        * the flex row — the location picker moved into that widget, which carries the same margin. */
       .picker {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
         margin-bottom: var(--wt-space-4);
-        color: var(--wt-color-text);
-      }
-      input[type="date"] {
-        font: inherit;
-        padding: var(--wt-space-2);
-        border-radius: var(--wt-radius-md);
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
       }
       table {
         width: 100%;
@@ -149,9 +138,9 @@ export class PlannedActualScreen extends LitElement {
     }
   }
 
-  async #onSelectWeek(event: Event): Promise<void> {
+  async #onSelectWeek(event: CustomEvent<{ value: string }>): Promise<void> {
     event.stopPropagation();
-    const value = (event.target as HTMLInputElement).value;
+    const value = event.detail.value;
     // A cleared date input gives "", which parses to NaN.
     if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
     this.weekMonday = mondayOf(value);
@@ -195,15 +184,15 @@ export class PlannedActualScreen extends LitElement {
           @location-changed=${(e: CustomEvent<{ locationId: string }>) =>
             void this.#onSelectLocation(e)}
         ></dashboard-location-picker>
-        <label class="picker"
-          >${t("planned.week")}
-          <input
-            type="date"
-            data-test="week-picker"
-            .value=${this.weekMonday}
-            @change=${(e: Event) => void this.#onSelectWeek(e)}
-          />
-        </label>
+        <wt-input
+          class="picker"
+          type="date"
+          data-test="week-picker"
+          name="week"
+          label=${t("planned.week")}
+          .value=${this.weekMonday}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#onSelectWeek(e)}
+        ></wt-input>
       </div>
       ${
         this.rows.length === 0
