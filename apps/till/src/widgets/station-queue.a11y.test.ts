@@ -358,6 +358,37 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("a rail card listing another station's dishes has no violations", async () => {
+    const { host, el } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [
+          {
+            ...groups[0]!,
+            elsewhere: [
+              {
+                id: "other-burger",
+                name: "Burger",
+                quantity: "2.000",
+                unitName: null,
+                unitPrecision: null,
+                soldInEach: true,
+                stationName: "Grill",
+                state: "preparing",
+                held: false,
+              },
+            ],
+          },
+        ],
+        stationId: "st-1",
+        view: "rail",
+      },
+      theme,
+    );
+    if (!el.shadowRoot!.querySelector(".elsewhere")) throw new Error("other station missing");
+    await expectNoA11yViolations(host);
+  });
+
   it("whole-ticket bump mode has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",

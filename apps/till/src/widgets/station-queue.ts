@@ -182,6 +182,34 @@ export class TillStationQueue extends LitElement {
         list-style: none;
       }
 
+      .elsewhere {
+        border-top: 1px solid var(--wt-color-border);
+        padding-top: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .elsewhere-head {
+        margin: 0 0 var(--wt-space-2);
+        font-size: inherit;
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .elsewhere-lines {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .elsewhere-lines li {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-1) var(--wt-space-2);
+      }
+
       /* A line cell — the tappable bump target (a plain button so it themes like the floor cards). A
          ready-tail cell renders the same box as a non-interactive span (.line.terminal). Column layout so
          the dish row (.line-main) can carry an indented modifiers list beneath it. */
@@ -805,10 +833,29 @@ export class TillStationQueue extends LitElement {
                   this.#groupSection(group, group.party!, section),
                 )
           }
-          ${this.#collectAction(group)} ${this.#reprintAction(group)}
+          ${this.#elsewhere(group)} ${this.#collectAction(group)} ${this.#reprintAction(group)}
         </article>`;
       })}
     </div>`;
+  }
+
+  #elsewhere(group: StationQueueGroup): TemplateResult | typeof nothing {
+    if (!group.elsewhere?.length) return nothing;
+    return html`<section class="elsewhere" data-elsewhere=${group.orderId}>
+      <h3 class="elsewhere-head">${t("station.elsewhere")}</h3>
+      <ul class="elsewhere-lines">
+        ${group.elsewhere.map(
+          (item) =>
+            html`<li data-elsewhere-item=${item.id}>
+              <span class="elsewhere-name">${dishLine(item, item.name)}</span>
+              <span class="elsewhere-station">${item.stationName}</span>
+              <span class="elsewhere-state"
+                >${item.held ? t("station.elsewhere_held") : t(`station.state.${item.state}` as const)}</span
+              >
+            </li>`,
+        )}
+      </ul>
+    </section>`;
   }
 
   #courseSection(group: StationQueueGroup, section: CourseSection): TemplateResult {
