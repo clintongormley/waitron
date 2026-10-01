@@ -1720,6 +1720,16 @@ for (const [name, keys] of [
   });
 }
 
+test("Space on the closed trigger leaves the search box it opens empty", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { trigger } = fieldParts(el);
+  trigger.focus();
+  await userEvent.keyboard(" ");
+  await afterRelease();
+  expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+  expect(searchBox(el).value).toBe("");
+});
+
 test("opening from the keyboard with nothing chosen makes the first row active", async () => {
   const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
   fieldParts(el).trigger.focus();

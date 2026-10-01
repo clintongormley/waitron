@@ -506,7 +506,7 @@ export class WtCombobox extends LitElement {
       return;
     }
     if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
-      // Prevented, or the button's own click on the same key closes the list again.
+      // Prevented, or Space also types into the search box this opens.
       event.preventDefault();
       void this.openList("chosen", "");
       return;
@@ -598,9 +598,9 @@ export class WtCombobox extends LitElement {
 
   /** A press on the label while the list is open closes it (the popover's own light dismiss);
    * forwarding the click to the trigger would open it again straight away. The click is matched to
-   * its press by pointerId because a touch tap's click can arrive a task after its release. Hiding
-   * the panel that held focus leaves no element of the component focused, with or without a search
-   * box, so focus goes back to the trigger, as a select keeps it. */
+   * its press by pointerId because a touch tap's click can arrive a task after its release. The
+   * dismissal leaves focus on the hidden search box or list, which the browser then drops to the
+   * page, so focus goes back to the trigger, as a select keeps it. */
   private onLabelClick(event: PointerEvent): void {
     if (event.pointerId !== this.labelPressOnOpenList) return;
     event.preventDefault();

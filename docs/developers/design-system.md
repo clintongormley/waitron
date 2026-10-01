@@ -414,9 +414,11 @@ this floor — removing the `min-width` regresses that guard.
 
 `wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
 Alt+ArrowDown, Enter and Space open the list with the chosen row active (the first row when nothing
-is chosen), and the key's default is prevented, so the trigger button's own click on that key does
-not close the list again; in a form bound with `submitOnEnter`, Enter on the trigger opens the list
-and submits nothing (the "Enter on a closed trigger" case in `wt-combobox.test.ts`). A printable key on the closed trigger opens a list that has a search box
+is chosen), and Space leaves the search box it opens empty (the "… on the closed trigger opens the
+list" cases and "Space on the closed trigger leaves the search box it opens empty" in
+`wt-combobox.test.ts`). In a form bound with `submitOnEnter`, Enter on the closed trigger opens the
+list and submits nothing ("Enter on a closed trigger in a form wired with submitOnEnter…"). A
+printable key on the closed trigger opens a list that has a search box
 with that character already searched for; on one without a search box it chooses the next option
 whose label starts with the typed text, without opening (the typed text starts again 500 ms after
 the last key, pressing one letter again steps on through the options starting with it, an action
@@ -670,13 +672,13 @@ registerIcons({ check: "M2 8 L6 12 L14 4" });
 An unregistered `name` renders nothing — there is no broken-icon fallback markup. When a
 `packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
 trigger, for one), that name becomes part of the primitive's contract: every consuming app must
-register it itself, or that primitive's icon silently disappears there. Each app's registration is
-the list of what it draws: the dashboard's set, each a plain geometric shape at the same 16x16
-viewBox, is `DASHBOARD_ICONS` in `apps/dashboard/src/icons.ts` (its header carries the Material
-Symbols attribution), registered once in `main.ts`; the till registers its own in
-`apps/till/src/till-app.ts` (and its station queue's notice icons in
-`apps/till/src/widgets/station-queue.ts`); setup registers its own in `apps/setup/src/setup-app.ts`.
-Each of the three includes `wt-combobox`'s `chevron-down` and `check`. Each app's
+register it itself, or that primitive's icon silently disappears there. `grep -rn "registerIcons("
+apps` lists the registrations; on 2026-10-01 the production ones were `apps/dashboard/src/main.ts`
+(registering `DASHBOARD_ICONS` from `apps/dashboard/src/icons.ts`, whose header carries the Material
+Symbols attribution), `apps/till/src/till-app.ts`, `apps/till/src/widgets/station-queue.ts`,
+`apps/till/src/widgets/menu-browser.ts` and `apps/setup/src/setup-app.ts`. `chevron-down` and
+`check`, which `wt-combobox` draws, are in `DASHBOARD_ICONS`, the till's `till-app.ts` set and
+setup's. Each app's
 `src/dropdown-icons.test.ts` mounts a `wt-combobox` and checks that its chevron and its chosen row's
 tick draw: the till's and setup's import the app module, so they check the app's own registration;
 the dashboard's registers `DASHBOARD_ICONS` itself, so it checks the icon set, not that `main.ts`
