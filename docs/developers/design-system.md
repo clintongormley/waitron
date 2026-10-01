@@ -213,7 +213,8 @@ field's error stop together: the profile screen's `.select-field` (the Language 
 error in the edit details modal), the adjustments reasons screen's `.select-field` (each role
 select with its `<label for>` and error, in the reason editor), every `label` in the venue operations
 screen's editor modals (each holds one field's text and control, and its error when it has one), and the
-content-languages editor's two select labels and their `.error` lines. A screen whose own layout
+`.error` line under the content languages Add language dialog's select, whose label and select take
+`selectStyles`. A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
 button beside the ruler's answer, and the section member list's `.add` row does, for its Add button, along with that row's
@@ -225,7 +226,7 @@ at 1280px; wide content and the footer row at full width; each field at the
 body's width at 390px; each field at its container's width outside a modal); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
 `apps/dashboard/src/screens/profile-screen.test.ts`,
-`apps/dashboard/src/widgets/content-languages.test.ts`,
+`apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that

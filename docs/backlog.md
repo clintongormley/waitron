@@ -4938,8 +4938,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     deleted with product labels on 2026-09-30),
     the three "keeps the … open against Escape" cases in
     `apps/dashboard/src/screens/categories-screen.test.ts` (retired by product-folders slice 1
-    on 2026-10-01), "holds the draft open and unchanged
-    while a save is in flight" (`apps/dashboard/src/widgets/content-languages.test.ts`), "ignores
+    on 2026-10-01), "stays open and unchanged while a save is in flight"
+    (`apps/dashboard/src/widgets/add-content-language.test.ts`; before C111 it was the content
+    languages Edit dialog's "holds the draft open and unchanged while a save is in flight"), "ignores
     Escape while a save is in flight and honours it once the save has settled"
     (`packages/media/src/dashboard/image-library.test.ts`) and "stays open on Escape while a save is
     still pending" (`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`). The
@@ -6587,13 +6588,37 @@ ongoing overhaul listed at the top of Track A.
   and Nutrition sections, among others) and a screen's own paragraphs still run the modal's full
   width; the product editor's description `<textarea>`, which the screen styles itself, is not
   capped; the content-languages editor's rows of enabled languages still put each Remove button at
-  the modal's far edge (left for C111, which rewrites that screen); a native select labelled by a
+  the modal's far edge (left for C111, which rewrites that screen; _2026-10-01, C111: that editor is
+  gone, the rows are on the page itself_); a native select labelled by a
   separate `<label for>` keeps that label, and an error outside it, at the modal's full width unless
   its screen caps the element wrapping them (the adjustments reasons screen does; no other one was
   found in a modal); an inline label around a select is not capped, so its select would sit beside
   the label text (none was found in a modal); and forms built in `wt-dialog` rather than `wt-modal`
   (the ingredient form, the till's party name dialog, among others) are held only by the dialog's
   own 768px limit — whether they should follow the modal's form width is the owner's call.
+
+- **Content languages are managed on the page itself (C111, owner 2026-09-30) — DONE (2026-10-01,
+  no pull request yet).** The Content languages page used to show the default and the enabled
+  languages as text with an Edit button, and Edit opened a dialog with a "Default language" select,
+  each language with Remove, a two-sentence note, and an "Add language" select and button. Now the
+  page lists the enabled languages as rows in one card, in the repeatable-list shape the design
+  system describes (a hairline between rows, none above the first, Add in the card's footer), drawn
+  like the passkey rows on the profile screen. The first row is the default and says so, and has no
+  actions; every other row has "Set as default" and "Remove", which save at once. The other rows are
+  in alphabetical order of their names in the dashboard's language. While a save is in flight every
+  action waits; a refused save shows one message in the card, above Add language, and the actions
+  keep working. "Add language" opens a `wt-modal` holding only the language list and Cancel / Add;
+  Add with nothing chosen marks the field, and a refused save shows at the end of the dialog's body
+  and leaves it open. The note reads "Removing a language keeps its translations." Language names
+  shown on their own now start with a capital letter (`capitaliseFirst`, `packages/shared`): the
+  browser gives Spanish names in lower case. That applies to the page's rows, the Add dialog's list
+  (`contentLanguageChoices`) and the photo library's per-language section headings; the adjustment
+  reasons editor's "Nombre en inglés" label keeps the lower case, because there the name is
+  mid-sentence. Left open: the Add dialog is the one standard modal size, so it is a tall, mostly
+  empty sheet with one field; whether a one-field form should use something smaller is the owner's
+  call. At 390px the Spanish "Hacer predeterminado" and "Quitar" fit side by side with the
+  dashboard's own padding (16px a side), and stack one under the other when the page is padded
+  24px a side (both seen in screenshots), so on a phone narrower than 390px they can stack.
 
 - **A field's hint shows inside the empty field as its placeholder, not as a line under it (C104,
   owner 2026-09-30) — DONE (2026-10-01, #966).** _(2026-10-01, C119: the bill discount limit's
@@ -9364,8 +9389,14 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
-**The content-languages dialog keeps the languages it opened with — OPEN (found 2026-09-29,
-reviewing C44's content-languages page, #829).** `apps/dashboard/src/widgets/content-languages.ts` copies
+**The content-languages dialog keeps the languages it opened with — DONE (2026-10-01, C111, no
+pull request yet).** _C111 removed the Edit dialog. Set as default and Remove save from the
+languages the page shows at the press, and the Add language dialog adds to the languages the page
+holds when Add is pressed, so a live update that arrives while it is open is kept: the screen case
+"adds to the languages as they are now, after a change made elsewhere while the dialog was open"
+(`apps/dashboard/src/screens/content-languages-screen.test.ts`) adds French after a live update
+added Italian, and fails when the dialog is made to copy the list as it opens (tried
+2026-10-01)._ (Found 2026-09-29, reviewing C44's content-languages page, #829.) `apps/dashboard/src/widgets/content-languages.ts` copies
 the settings it is given when the dialog opens and does not take a newer copy while it is open. A
 throwaway browser test opened Edit with Spanish and English enabled, then delivered a live update
 adding French (as a change saved from another tab would), then saved without touching anything: the

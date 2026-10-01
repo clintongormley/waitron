@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { capitaliseFirst } from "./capitalise.js";
 import {
   contentLanguageCode,
   contentLanguageChoices,
@@ -26,13 +27,13 @@ describe("content languages", () => {
     for (const choice of choices) {
       expect(choice).toEqual({ code: expect.any(String), name: expect.any(String) });
       expect(choice.code).toBe(new Intl.Locale(choice.code).language);
-      expect(choice.name).toBe(names.of(choice.code));
+      expect(choice.name).toBe(capitaliseFirst(names.of(choice.code)!, "en-GB"));
       expect(["und", "mul", "zxx", "zz"]).not.toContain(choice.code);
     }
     expect(choices.map(({ name }) => name)).toEqual(
       choices.map(({ name }) => name).sort((a, b) => a.localeCompare(b, "en-GB")),
     );
-    expect(contentLanguageChoices("es-ES").find(({ code }) => code === "fr")?.name).toBe("francés");
+    expect(contentLanguageChoices("es-ES").find(({ code }) => code === "fr")?.name).toBe("Francés");
   });
   it("returns independent choices when another editor changes its copy", () => {
     const first = contentLanguageChoices("fr-FR");

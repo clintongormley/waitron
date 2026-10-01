@@ -1349,3 +1349,15 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(await bottomOf()).toBe("");
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
+
+it("names each language section with a capital letter in Spanish, where the browser's name is lower case", async () => {
+  setLocale("es-ES");
+  await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  const legends = [...el.shadowRoot!.querySelectorAll("wt-modal legend")].map((legend) =>
+    legend.textContent!.trim(),
+  );
+  expect(new Intl.DisplayNames(["es-ES"], { type: "language" }).of("fr")).toBe("francés");
+  expect(legends).toEqual(["Español (Predeterminado)", "Francés"]);
+});
