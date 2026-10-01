@@ -180,6 +180,30 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("posts the receipt text to preview and returns the drawn receipt", async () => {
+    const answer = {
+      preview: {
+        widthDots: 512,
+        columns: 42,
+        text: "Bar Pepe\n",
+        blocks: [{ kind: "text", text: "Bar Pepe\n" }],
+        qrData: [],
+        omittedGraphics: false,
+        truncated: false,
+        unsupported: false,
+      },
+      marks: { headerSubtitle: { start: 1, end: 2 }, footerMessage: null },
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.previewReceipt({ headerSubtitle: "Calle Mayor 1" })).resolves.toEqual(answer);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/receipt-preview", "POST", { headerSubtitle: "Calle Mayor 1" }],
+    ]);
+  });
+
   it("unwraps the canvas and device-profile list envelopes, and addresses one profile by id", async () => {
     const canvases = [{ id: "cv-1", name: "Bar grid", definition: {} }];
     const profile = { id: "dp-1", name: "Bar till" };
