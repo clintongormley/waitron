@@ -3,11 +3,11 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
-import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
-import type { MemberRef } from "./section-types.js";
+import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
+import type { MemberRef, SectionInput, SectionDetails } from "./section-types.js";
 import "./errors.js";
 
 /** One member of a menu's structure; `children` is present exactly when the member is a section. */
@@ -15,6 +15,12 @@ export interface MenuStructureNode {
   memberId: string;
   ref: MemberRef;
   children?: MenuStructureNode[];
+  internalName?: string;
+  names?: Record<string, string>;
+  image?: string | null;
+  color?: string | null;
+  ownerMenuId?: string;
+  includedMenuId?: string;
 }
 
 const HOME_LAYOUT_NAME = "Home";
@@ -24,10 +30,11 @@ export async function createMenuShell(
   tx: Transaction,
   menuId: string,
   menuName: string,
+  presentation: Partial<SectionInput> = {},
 ): Promise<{ rootSectionId: string; defaultHomeLayoutId: string }> {
   const [root] = await tx
     .insert(sections)
-    .values({ internalName: menuName, role: "menu_root", ownerMenuId: menuId })
+    .values({ ...presentation, internalName: menuName, role: "menu_root", ownerMenuId: menuId })
     .returning({ id: sections.id });
   const [layout] = await tx
     .insert(sections)
@@ -71,22 +78,56 @@ export async function requireMenuRoot(tx: Transaction, menuId: string): Promise<
 }
 
 function nodesOf(graph: SectionGraph, sectionId: string): MenuStructureNode[] {
-  return graph
-    .children(sectionId)
-    .map(({ id, ref }) =>
-      ref.kind === "product"
-        ? { memberId: id, ref }
-        : { memberId: id, ref, children: nodesOf(graph, ref.sectionId) },
-    );
+  return graph.children(sectionId).map(({ id, ref }) =>
+    ref.kind === "product"
+      ? { memberId: id, ref }
+      : {
+          memberId: id,
+          ref,
+          children: nodesOf(graph, ref.sectionId),
+          internalName: graph.section(ref.sectionId)!.internalName!,
+          names: graph.section(ref.sectionId)!.names!,
+          image: graph.section(ref.sectionId)!.image!,
+          color: graph.section(ref.sectionId)!.color!,
+          ownerMenuId: graph.ownerMenu(ref.sectionId)!,
+          ...(graph.role(ref.sectionId) === "menu_root"
+            ? { includedMenuId: graph.ownerMenu(ref.sectionId)! }
+            : {}),
+        },
+  );
 }
 
 export async function readMenuStructure(
   tx: Transaction,
   menuId: string,
-): Promise<{ rootSectionId: string; nodes: MenuStructureNode[] }> {
+): Promise<{
+  rootSectionId: string;
+  root: SectionDetails;
+  nodes: MenuStructureNode[];
+  includable: { id: string; name: string; rootSectionId: string }[];
+  includedBy: { id: string; name: string }[];
+}> {
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const graph = await loadSectionGraph(tx);
-  return { rootSectionId, nodes: nodesOf(graph, rootSectionId) };
+  const includable = includableMenus(graph, menuId).map((id) => ({
+    id,
+    name: graph.menu(id)!.name,
+    rootSectionId: graph.roots().find((root) => root.menuId === id)!.sectionId,
+  }));
+  const includedBy = graph
+    .roots()
+    .filter((root) => directIncludedMenus(graph, root.menuId).includes(menuId))
+    .map((root) => ({ id: root.menuId, name: graph.menu(root.menuId)!.name }));
+  const details = graph.section(rootSectionId)!;
+  const root: SectionDetails = {
+    id: rootSectionId,
+    internalName: details.internalName!,
+    names: details.names!,
+    image: details.image!,
+    color: details.color!,
+    members: graph.children(rootSectionId),
+  };
+  return { rootSectionId, root, nodes: nodesOf(graph, rootSectionId), includable, includedBy };
 }
 
 /**
@@ -160,15 +201,13 @@ export async function syncMenuOffers(
       await tx
         .delete(menuItemVariantOverrides)
         .where(inArray(menuItemVariantOverrides.menuItemId, batch));
-      await tx.delete(menuItemExtraItems).where(inArray(menuItemExtraItems.menuItemId, batch));
-      await tx.delete(menuItemExtraLists).where(inArray(menuItemExtraLists.menuItemId, batch));
       await tx
         .update(menuItems)
-        .set({ grossPrice: null, active: true })
+        .set({ grossPrice: null, offered: null })
         .where(
           and(
             inArray(menuItems.id, batch),
-            or(isNotNull(menuItems.grossPrice), eq(menuItems.active, false)),
+            or(isNotNull(menuItems.grossPrice), isNotNull(menuItems.offered)),
           ),
         );
     }

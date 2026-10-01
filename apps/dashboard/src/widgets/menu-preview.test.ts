@@ -27,6 +27,7 @@ const NEW_HASH = "b".repeat(64);
 
 const changedStatus: MenuStatus = {
   state: "changed",
+  clashes: 0,
   version: 2,
   publishedAt: PUBLISHED_AT,
   hash: LIVE_HASH,
@@ -42,7 +43,14 @@ const DOCUMENT = menuDocument(
 );
 
 function preview(changes: MenuChange[], warnings: MenuPreview["warnings"] = []): MenuPreview {
-  return { hash: NEW_HASH, changes, warnings, status: changedStatus, document: DOCUMENT };
+  return {
+    clashes: [],
+    hash: NEW_HASH,
+    changes,
+    warnings,
+    status: changedStatus,
+    document: DOCUMENT,
+  };
 }
 
 async function mountIn(props: Partial<MenuPreviewPanel>) {
@@ -102,14 +110,14 @@ it("words every kind of change, each with where it came from", async () => {
         sectionId: "s-drinks",
         name: "Drinks",
         fields: ["names"],
-        source: "shared_section",
+        source: "included_menu",
       },
       {
         kind: "product_removed",
         productId: "p-lager",
         name: "Lager",
         under: ["Drinks", "Beer"],
-        source: "shared_section",
+        source: "included_menu",
         alsoOn: ["Dinner Menu", "Terrace Menu"],
       },
       {
@@ -160,17 +168,17 @@ it("words every kind of change, each with where it came from", async () => {
         sectionId: "s-beer",
         name: "Beer",
         under: ["Drinks"],
-        source: "shared_section",
+        source: "included_menu",
       },
       {
         kind: "section_changed",
         sectionId: "s-mains",
         name: "Mains",
         fields: ["names", "image", "color"],
-        source: "shared_section",
+        source: "included_menu",
       },
       { kind: "order_changed", list: [], source: "this_menu" },
-      { kind: "order_changed", list: ["Drinks"], source: "shared_section" },
+      { kind: "order_changed", list: ["Drinks"], source: "included_menu" },
       { kind: "layout_changed", layoutId: "l-bar", name: "Bar", source: "this_menu" },
       { kind: "default_layout_changed", from: "Home", to: "Bar", source: "this_menu" },
       { kind: "menu_renamed", from: "Midday Menu", to: "Lunch Menu", source: "this_menu" },
@@ -180,18 +188,18 @@ it("words every kind of change, each with where it came from", async () => {
     "Lemonade added under Drinks — this menu",
     "Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu",
     "Lemonade: allergens — shared product, also on Dinner Menu",
-    "Drinks renamed — shared section",
-    "Lager removed from Drinks › Beer — shared section, also on Dinner Menu and Terrace Menu",
+    "Drinks renamed — included menu",
+    "Lager removed from Drinks › Beer — included menu, also on Dinner Menu and Terrace Menu",
     "Chips added at the top level — this menu",
     "Soup moved from Starters to the top level and Mains › Hot — this menu",
     "Cola: names, description, photo, unit, diet, variants, extras, options — shared product",
     "Section Desserts added at the top level — this menu",
     "Bread removed from the top level — this menu",
     "Section Specials removed from the top level — this menu",
-    "Section Beer removed from Drinks — shared section",
-    "Mains: name, photo, colour — shared section",
+    "Section Beer removed from Drinks — included menu",
+    "Mains: name, photo, colour — included menu",
     "Order changed at the top level — this menu",
-    "Order changed in Drinks — shared section",
+    "Order changed in Drinks — included menu",
     "Home page layout Bar changed — this menu",
     "Default home page layout changed from Home to Bar — this menu",
     "Menu renamed from Midday Menu to Lunch Menu — this menu",
@@ -351,7 +359,7 @@ it("shows the live version and when it was published, apart from the pending cha
 
 it("says a menu never published has no live version, and offers to publish it", async () => {
   const el = await mount({
-    status: { state: "unpublished" },
+    status: { state: "unpublished", clashes: 0 },
     preview: preview([
       {
         kind: "product_added",
@@ -383,6 +391,7 @@ it("names the one menu on the publish button, and asks to publish the hash it pr
 it("says there is nothing to publish when the working menu matches its live version, and offers no publish", async () => {
   const current: MenuStatus = {
     state: "current",
+    clashes: 0,
     version: 4,
     publishedAt: PUBLISHED_AT,
     hash: NEW_HASH,
@@ -397,6 +406,7 @@ it("says there is nothing to publish when the working menu matches its live vers
 it("judges whether there is anything to publish by the state read with the preview", async () => {
   const current: MenuStatus = {
     state: "current",
+    clashes: 0,
     version: 4,
     publishedAt: PUBLISHED_AT,
     hash: NEW_HASH,
@@ -467,19 +477,39 @@ it("offers the publish when the menu differs from its live version but no change
   expect(q(el, '[data-test="publish"]')).not.toBeNull();
 });
 
-it("lists an omitted shortcut as a warning that does not block publishing", async () => {
-  const el = await mount({
-    preview: preview(
-      [{ kind: "layout_changed", layoutId: "l-home", name: "Home", source: "this_menu" }],
-      [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lemonade" }],
-    ),
-  });
-  expect(items(el, "warnings")).toEqual([
-    t("menu_preview.shortcut_omitted").replace("{name}", "Lemonade").replace("{layout}", "Home"),
-  ]);
-  expect(text(q(el, '[data-test="warnings-note"]'))).toBe(t("menu_preview.warnings_note"));
-  expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(false);
-});
+it.each(["en-GB", "es-ES"])(
+  "counts missing shortcuts by layout before confirmation and after publishing (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount({
+      menuName: "Evening",
+      preview: preview(
+        [],
+        [
+          { kind: "shortcut_missing", layoutName: "Counter", name: "Beer" },
+          { kind: "shortcut_missing", layoutName: "Counter", name: "Wine" },
+          { kind: "shortcut_missing", layoutName: "Home", name: "Soup" },
+        ],
+      ),
+    });
+    const expected =
+      locale === "en-GB"
+        ? "2 shortcuts on Evening's Counter layout point at things no longer in this menu. They stay as empty spaces until you remove or replace them."
+        : "2 accesos directos de la página Counter de Evening apuntan a elementos que ya no están en este menú. Permanecen como espacios vacíos hasta que los quites o reemplaces.";
+    expect(items(el, "warnings")).toHaveLength(2);
+    expect(items(el, "warnings")[0]).toBe(expected);
+    const asked = capture(el, "wt-menu-publish");
+    q(el, '[data-test="publish"]')!.click();
+    await el.updateComplete;
+    expect(asked).toEqual([]);
+    expect(text(q(el, '[data-test="publish-confirmation"]'))).toContain(expected);
+    q(el, '[data-test="publish-confirm"]')!.click();
+    expect(asked).toEqual([{ hash: NEW_HASH }]);
+    el.result = { kind: "published", number: 3 };
+    await el.updateComplete;
+    expect(text(q(el, '[data-test="result"]'))).toContain(expected);
+  },
+);
 
 it("holds the publish button while a publish is out, saying what it is doing", async () => {
   const el = await mount({
@@ -541,7 +571,7 @@ const results: [string, PublishResult, MenuStatus | null, () => string][] = [
   [
     "a failed first publish",
     { kind: "failed", reason: "The server is busy." },
-    { state: "unpublished" },
+    { state: "unpublished", clashes: 0 },
     () =>
       "Lunch Menu was not published, so nothing new is live. Your changes are still saved. The server is busy.",
   ],
@@ -583,6 +613,7 @@ it("shows the whole menu the publish would make live, read-only, under its own h
 it("still shows the whole menu, as it is live, when there is nothing to publish", async () => {
   const current: MenuStatus = {
     state: "current",
+    clashes: 0,
     version: 4,
     publishedAt: PUBLISHED_AT,
     hash: NEW_HASH,
@@ -597,8 +628,8 @@ it("still shows the whole menu, as it is live, when there is nothing to publish"
 
 it("shows a never-published menu whole, as its first publish would make it live", async () => {
   const el = await mount({
-    status: { state: "unpublished" },
-    preview: { ...preview([]), status: { state: "unpublished" } },
+    status: { state: "unpublished", clashes: 0 },
+    preview: { ...preview([]), status: { state: "unpublished", clashes: 0 } },
   });
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
   const tree = documentView(el);
@@ -616,6 +647,7 @@ it("names the whole-menu view in Spanish when there is nothing to publish", asyn
   setLocale("es-ES");
   const current: MenuStatus = {
     state: "current",
+    clashes: 0,
     version: 4,
     publishedAt: PUBLISHED_AT,
     hash: NEW_HASH,
@@ -688,3 +720,37 @@ it("names a product the document offers nothing for as no longer available", asy
   await tree.updateComplete;
   expect(topNames(tree)).toEqual([t("members.missing")]);
 });
+
+it("lists unresolved clashes above Publish and disables publishing", async () => {
+  const value = preview([]);
+  value.clashes = [
+    {
+      productId: "p-burger",
+      variantId: null,
+      field: "price",
+      candidates: [
+        { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
+        {
+          place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+          value: "14.00" as never,
+          source: { kind: "own" },
+        },
+      ],
+    },
+  ];
+  const el = await mount({ preview: value });
+  const publish = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
+  expect(publish.disabled).toBe(true);
+  expect(text(q(el, '[data-test="clashes"]'))).toContain("Burger");
+  expect(text(q(el, '[data-test="clash-count"]'))).toBe("Resolve 1 clash before publishing.");
+  const heard = vi.fn();
+  el.addEventListener("wt-menu-publish", heard);
+  publish.dispatchEvent(new MouseEvent("click"));
+  expect(heard).not.toHaveBeenCalled();
+});
+
+function capture(el: HTMLElement, type: string): unknown[] {
+  const seen: unknown[] = [];
+  el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
+  return seen;
+}

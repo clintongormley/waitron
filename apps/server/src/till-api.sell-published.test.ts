@@ -15,8 +15,9 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  addMember,
   addProductToMenu,
+  addMember,
+  removeMember,
   addShortcut,
   addProducts,
   assignCatalogueToLocation,
@@ -26,7 +27,7 @@ import {
   createOptionList,
   createHomeLayout,
   createProduct,
-  createSection,
+  createSectionIn,
   deactivateCatalogue,
   deleteHomeLayout,
   listHomeLayouts,
@@ -35,7 +36,6 @@ import {
   renameHomeLayout,
   requireMenuRoot,
   setDeviceHomeLayout,
-  setMenuItemExtraLists,
   updateExtraList,
   updateMenuItem,
   updateProduct,
@@ -125,7 +125,6 @@ interface Lunch {
   extraLemon: { productId: string; listId: string };
   /** Burger's "Punto" options list; `poco` is one of its labels. */
   punto: { listId: string; poco: string };
-  /** A library section on Lunch holding Flan, which no basket here orders from. */
   postresId: string;
   flanId: string;
 }
@@ -228,10 +227,9 @@ async function setupLunch(): Promise<Lunch> {
     await assignCatalogueToLocation(tx, venue.locationId, lunch.id);
     const lemonadeOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: lemonade.id });
     const burgerOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: burger.id });
-    await setMenuItemExtraLists(tx, lemonadeOffer.id, [{ listId: lemon.id, items: [] }]);
-    const postres = await createSection(tx, { internalName: "Postres" });
+
     const rootId = await requireMenuRoot(tx, lunch.id);
-    await addMember(tx, rootId, { kind: "section", sectionId: postres.id });
+    const postres = await createSectionIn(tx, rootId, { internalName: "Postres" });
     await addProducts(tx, postres.id, [flan.id]);
     const zone = await tx.execute<{ id: string }>(sql`
       select zone_id as id from zone_service_policies
@@ -362,7 +360,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
 
     // v4 takes Lemonade off Lunch.
     await withTransaction(suite.db, (tx) =>
-      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { active: false }),
+      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { offered: false }),
     );
     const v4 = await publish(v.menuId);
     const removed = await pay(v, [lemonadeLine(v, v4)]);
@@ -522,7 +520,7 @@ describe("the extras a line picks are priced from the published version", () => 
     expect(((await response.json()) as { total: string }).total).toBe("3.50");
   });
 
-  it("refuses an extra made unavailable, or withdrawn from the offer, after publishing", async () => {
+  it("refuses an extra made unavailable after publishing", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
     await withTransaction(suite.db, (tx) =>
@@ -532,22 +530,6 @@ describe("the extras a line picks are priced from the published version", () => 
     const soldOut = await pay(v, [withLemon(v)]);
     expect(soldOut.status).toBe(400);
     expect(await soldOut.json()).toMatchObject({
-      error: { code: "extras.invalid", params: { field: "productId" } },
-    });
-    await withTransaction(suite.db, (tx) =>
-      updateProduct(tx, v.extraLemon.productId, { available: true }),
-    );
-    await withTransaction(suite.db, (tx) =>
-      setMenuItemExtraLists(tx, v.lemonade.offerId, [
-        {
-          listId: v.extraLemon.listId,
-          items: [{ productId: v.extraLemon.productId, price: null, available: false }],
-        },
-      ]),
-    );
-    const withdrawn = await pay(v, [withLemon(v)]);
-    expect(withdrawn.status).toBe(400);
-    expect(await withdrawn.json()).toMatchObject({
       error: { code: "extras.invalid", params: { field: "productId" } },
     });
     expect(await written()).toEqual(before);
@@ -627,7 +609,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         { kind: "options", id: v.punto.listId },
         { kind: "extras", id: toppings.id },
       ]);
-      await setMenuItemExtraLists(tx, v.burger.offerId, [{ listId: toppings.id, items: [] }]);
+
       const offer = await addProductToMenu(tx, { menuId: v.menuId, productId: bacon.id });
       return { productId: bacon.id, offerId: offer.id, toppingsId: toppings.id };
     });
@@ -855,7 +837,6 @@ describe("GET /api/menu-state", () => {
     unavailable: {
       products: string[];
       optionLabels: string[];
-      extraItems: { menuItemId: string; productId: string; extraListId: string }[];
     };
   };
   /** The answer, each menu narrowed to its version: the layout fields have their own cases. */
@@ -865,7 +846,7 @@ describe("GET /api/menu-state", () => {
     const body = (await response.json()) as MenuState;
     return { ...body, menus: body.menus.map(({ menuId, versionId }) => ({ menuId, versionId })) };
   };
-  const nothing = { products: [], optionLabels: [], extraItems: [] };
+  const nothing = { products: [], optionLabels: [] };
 
   it("lists a product made unavailable without moving the version, and clears it when restored", async () => {
     const v = await setupLunch();
@@ -888,32 +869,18 @@ describe("GET /api/menu-state", () => {
     expect((await state(v)).unavailable).toEqual(nothing);
   });
 
-  it("lists an option label and a per-offer extras item switched off, and clears them", async () => {
+  it("lists an unavailable option label and extras product, and clears them", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
     const setPoco = (available: boolean) =>
       suite.db.update(optionLabels).set({ available }).where(eq(optionLabels.id, v.punto.poco));
     const setLemon = (available: boolean) =>
-      withTransaction(suite.db, (tx) =>
-        setMenuItemExtraLists(tx, v.lemonade.offerId, [
-          {
-            listId: v.extraLemon.listId,
-            items: [{ productId: v.extraLemon.productId, price: null, available }],
-          },
-        ]),
-      );
+      withTransaction(suite.db, (tx) => updateProduct(tx, v.extraLemon.productId, { available }));
     await setPoco(false);
     await setLemon(false);
     expect((await state(v)).unavailable).toEqual({
-      products: [],
+      products: [v.extraLemon.productId],
       optionLabels: [v.punto.poco],
-      extraItems: [
-        {
-          menuItemId: v.lemonade.offerId,
-          productId: v.extraLemon.productId,
-          extraListId: v.extraLemon.listId,
-        },
-      ],
     });
     await setPoco(true);
     await setLemon(true);
@@ -1085,4 +1052,38 @@ describe("the home layout each menu shows the device (D14)", () => {
       { ...lunch, homeLayoutId: home },
     ]);
   });
+});
+
+it("sells a product reached only through an included menu at that menu's price", async () => {
+  const v = await setupLunch();
+  await withTransaction(suite.db, async (tx) => {
+    const child = await createCatalogue(tx, { name: "Drinks" });
+    const childRoot = await requireMenuRoot(tx, child.id);
+    const parentRoot = await requireMenuRoot(tx, v.menuId);
+    const members = await tx.execute<{ id: string }>(
+      sql`select id from section_members where section_id=${parentRoot} and product_id=${v.lemonade.productId}`,
+    );
+    await removeMember(tx, parentRoot, members.rows[0]!.id);
+    await addMember(tx, childRoot, { kind: "product", productId: v.lemonade.productId });
+    const offers = await tx.execute<{ id: string }>(
+      sql`select id from menu_items where menu_id=${child.id} and product_id=${v.lemonade.productId}`,
+    );
+    await updateMenuItem(tx, child.id, offers.rows[0]!.id, { grossPrice: "3.50" });
+    await addMember(tx, parentRoot, { kind: "section", sectionId: childRoot });
+  });
+  const version = await publish(v.menuId);
+  const offers = await suite.db.execute<{ id: string }>(
+    sql`select id from menu_items where menu_id=${v.menuId} and product_id=${v.lemonade.productId}`,
+  );
+  const response = await pay(v, [
+    { menuItemId: offers.rows[0]!.id, menuVersionId: version, quantity: "1" },
+  ]);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ total: "3.50" });
+  const lines = await suite.db.select({ price: saleLines.unitPrice }).from(saleLines);
+  expect(lines.map((l) => l.price)).toContain(318);
+  const held = await suite.db
+    .select({ gross: workingOrderLines.unitPriceGross })
+    .from(workingOrderLines);
+  expect(held.map((l) => l.gross)).toContain(350);
 });

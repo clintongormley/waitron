@@ -1,3 +1,10 @@
+import type {
+  Setting,
+  CombinedOffer,
+  ValueSource,
+  Place,
+} from "@waitron/catalogue/src/menu-combine-types.js";
+export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguages } from "@waitron/shared";
 
 /**
@@ -37,24 +44,26 @@ import type {
   DeviceMenuHomeLayouts,
   HomeLayout,
   HomeTile,
-  LibrarySection,
+  SectionDetails,
   MemberRef,
   SectionInput,
   SectionMember,
-  SectionUsages,
 } from "@waitron/catalogue/src/section-types.js";
 export type {
   DeviceMenuHomeLayouts,
   HomeLayout,
   HomeTile,
-  LibrarySection,
+  SectionDetails,
   MemberRef,
   SectionInput,
   SectionMember,
-  SectionUsages,
 };
-import type { MenuPriceRow, MenuVariant } from "@waitron/catalogue/src/menu-types.js";
-export type { MenuPriceRow, MenuVariant };
+import type {
+  MenuPriceRow,
+  MenuVariant,
+  MenuVariantWrite,
+} from "@waitron/catalogue/src/menu-types.js";
+export type { MenuPriceRow, MenuVariant, MenuVariantWrite };
 import type {
   DocumentMember,
   FrozenOffer,
@@ -84,11 +93,20 @@ export interface MenuStructureNode {
   memberId: string;
   ref: MemberRef;
   children?: MenuStructureNode[];
+  internalName?: string;
+  names?: Record<string, string>;
+  image?: string | null;
+  color?: string | null;
+  ownerMenuId?: string;
+  includedMenuId?: string;
 }
 
 export interface MenuStructure {
   rootSectionId: string;
+  root: SectionDetails;
   nodes: MenuStructureNode[];
+  includable: { id: string; name: string; rootSectionId: string }[];
+  includedBy: { id: string; name: string }[];
 }
 
 export type {
@@ -1534,8 +1552,14 @@ export class DashboardApi {
     return this.#request<void>("/management-api/content-languages", "PUT", config);
   }
 
-  createCatalogue(name: string): Promise<CatalogueSummary> {
-    return this.#request<CatalogueSummary>("/management-api/catalogues", "POST", { name });
+  createCatalogue(
+    name: string,
+    details: Omit<SectionInput, "internalName"> = {},
+  ): Promise<CatalogueSummary> {
+    return this.#request<CatalogueSummary>("/management-api/catalogues", "POST", {
+      name,
+      ...details,
+    });
   }
 
   renameCatalogue(id: string, name: string): Promise<void> {
@@ -1597,6 +1621,14 @@ export class DashboardApi {
     return this.#request(`/management-api/home-layouts/${layoutId}/tiles`, "POST", { ref });
   }
 
+  replaceHomeTile(layoutId: string, memberId: string, ref: MemberRef): Promise<SectionMember> {
+    return this.#request(
+      `/management-api/home-layouts/${layoutId}/tiles/${memberId}/replace`,
+      "POST",
+      { ref },
+    );
+  }
+
   removeHomeTile(layoutId: string, memberId: string): Promise<void> {
     return this.#request<void>(
       `/management-api/home-layouts/${layoutId}/tiles/${memberId}`,
@@ -1624,7 +1656,7 @@ export class DashboardApi {
   updateMenuItem(
     menuId: string,
     menuItemId: string,
-    input: { grossPrice?: string | null; active?: boolean },
+    input: { grossPrice?: string | null; offered?: boolean | null },
   ): Promise<void> {
     return this.#request<void>(
       `/management-api/catalogues/${menuId}/items/${menuItemId}`,
@@ -1636,7 +1668,7 @@ export class DashboardApi {
   setMenuVariants(
     menuId: string,
     menuItemId: string,
-    variants: MenuVariant[],
+    variants: MenuVariantWrite[],
   ): Promise<MenuVariant[]> {
     return this.#request<MenuVariant[]>(
       `/management-api/catalogues/${menuId}/items/${menuItemId}/variants`,
@@ -1843,19 +1875,19 @@ export class DashboardApi {
     ).dependants;
   }
 
-  // ── Sections library (`/management-api/sections`) ─────────────────────────────────────────────
+  // ── Menu sections (`/management-api/sections`) ─────────────────────────────────────────────
 
-  listSections(): Promise<LibrarySection[]> {
-    return this.#request("/management-api/sections", "GET");
+  createSectionIn(id: string, input: SectionInput): Promise<SectionDetails> {
+    return this.#request(`/management-api/sections/${id}/sections`, "POST", input);
   }
-  /** Every library section's usages, keyed by section id. */
-  listSectionUsages(): Promise<Record<string, SectionUsages>> {
-    return this.#request("/management-api/sections/usages", "GET");
+  updateMenuDetails(id: string, input: SectionInput): Promise<void> {
+    const { internalName, ...details } = input;
+    return this.#request(`/management-api/catalogues/${id}`, "PATCH", {
+      name: internalName,
+      ...details,
+    });
   }
-  createSection(input: SectionInput): Promise<LibrarySection> {
-    return this.#request("/management-api/sections", "POST", input);
-  }
-  updateSection(id: string, patch: Partial<SectionInput>): Promise<LibrarySection> {
+  updateSection(id: string, patch: Partial<SectionInput>): Promise<SectionDetails> {
     return this.#request(`/management-api/sections/${id}`, "PATCH", patch);
   }
   deleteSection(id: string): Promise<void> {
@@ -1881,20 +1913,6 @@ export class DashboardApi {
     return this.#request(`/management-api/sections/${id}/members/${memberId}/position`, "PUT", {
       to,
     });
-  }
-  /** With `replaceIn`, the copy also takes that member's place, in the same transaction. */
-  duplicateSection(
-    id: string,
-    input: {
-      internalName: string;
-      memberIds: string[];
-      replaceIn?: { sectionId: string; memberId: string };
-    },
-  ): Promise<LibrarySection> {
-    return this.#request(`/management-api/sections/${id}/duplicate`, "POST", input);
-  }
-  getSectionUsages(id: string): Promise<SectionUsages> {
-    return this.#request(`/management-api/sections/${id}/usages`, "GET");
   }
 
   get imageLibraryRequest(): DashboardRequest {

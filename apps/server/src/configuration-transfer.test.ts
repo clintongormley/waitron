@@ -1,5 +1,8 @@
 import {
   addMember,
+  addShortcut,
+  deleteSection,
+  listHomeLayouts,
   createCatalogue,
   createHomeLayout,
   deviceHomeLayouts,
@@ -8,11 +11,10 @@ import {
   addProductToMenu,
   createOptionList,
   createProduct,
-  createSection,
+  createSectionIn,
   listExtraLists,
   listMenuOffers,
   listOptionLists,
-  listSections,
   menuStatus,
   menuVersions,
   previewMenu,
@@ -20,7 +22,6 @@ import {
   readMenuStructure,
   readSection,
   sections,
-  setMenuItemExtraLists,
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -647,7 +648,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
         minPicks: 0,
         maxPicks: 2,
         active: true,
-        items: [{ productId: shot.id, maxQuantity: 3, preselected: true, price: "1.50" }],
+        items: [{ productId: shot.id, maxQuantity: 3, preselected: true, price: "0.90" }],
       },
       "es",
     );
@@ -657,17 +658,12 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       { kind: "extras", id: extraList.id },
       { kind: "options", id: withDefault.id },
     ]);
-    const offer = await addProductToMenu(tx, {
+    await addProductToMenu(tx, {
       menuId: menu.id,
       productId: product.id,
       grossPrice: "2.75",
     });
-    // An extras list reaches a menu offer only when the offer PUBLISHES it (`readMenuExtras`,
-    // packages/catalogue/src/offered-modifiers.ts), and this offer republishes the shot at its own
-    // price rather than the list's 1.50.
-    await setMenuItemExtraLists(tx, offer.id, [
-      { listId: extraList.id, items: [{ productId: shot.id, price: "0.90", available: true }] },
-    ]);
+
     // A menu that sets no price of its own: blank has to arrive blank, not as zero.
     const tea = await createProduct(tx, {
       catalogueId: menu.id,
@@ -697,8 +693,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
   expect(transferred.tables.extra_lists).toHaveLength(1);
   expect(transferred.tables.extra_list_items).toHaveLength(1);
   expect(transferred.tables.product_modifiers).toHaveLength(2);
-  expect(transferred.tables.menu_item_extra_lists).toHaveLength(1);
-  expect(transferred.tables.menu_item_extra_items).toHaveLength(1);
   await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -725,7 +719,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     expect(extraLists[0]!.items[0]).toMatchObject({
       maxQuantity: 3,
       preselected: true,
-      price: "1.50",
+      price: "0.90",
     });
     expect(extraLists[0]!.items[0]!.productId).not.toBe(original.shotId);
     const shot = await tx.execute<{ ordering: string }>(
@@ -771,14 +765,18 @@ it("transfers sections and their members, remapping ids, with a section's image"
       unitPrice: "1.00",
       vatClass: "general",
     });
-    const drinks = await createSection(tx, {
-      internalName: "Bebidas (interno)",
+    const drinksMenu = await createCatalogue(tx, {
+      name: "Bebidas (interno)",
       names: { es: "Bebidas" },
       image: image.filename,
+      color: "#aabbcc",
     });
-    const beer = await createSection(tx, { internalName: "Cervezas" });
-    await addMember(tx, drinks.id, { kind: "product", productId: water.id });
-    await addMember(tx, drinks.id, { kind: "section", sectionId: beer.id });
+    const drinks = await readSection(
+      tx,
+      (await readMenuStructure(tx, drinksMenu.id)).rootSectionId,
+    );
+    await createSectionIn(tx, drinks.id, { internalName: "Cervezas" });
+    await addMember(tx, drinks.id, { kind: "product", productId: water.id }, 0);
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
     await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
     return { drinks: drinks.id, image: image.filename };
@@ -791,10 +789,9 @@ it("transfers sections and their members, remapping ids, with a section's image"
     new Date("2026-09-25T12:00:00Z"),
     versions,
   );
-  // The two library sections, and the top level and home layout of each of the source's two menus
-  // (the one provisioning made, and "Sections menu").
-  expect(transferred.tables.sections).toHaveLength(6);
-  expect(transferred.tables.menu_details).toHaveLength(2);
+  // Three menu shells and Drinks' own Beer section.
+  expect(transferred.tables.sections).toHaveLength(7);
+  expect(transferred.tables.menu_details).toHaveLength(3);
   expect(transferred.tables.section_members).toHaveLength(3);
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
@@ -803,11 +800,22 @@ it("transfers sections and their members, remapping ids, with a section's image"
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
-    const library = await listSections(tx);
-    expect(library.map((row) => row.internalName)).toEqual(["Bebidas (interno)", "Cervezas"]);
-    const [drinks, beer] = library;
-    expect(drinks!.id).not.toBe(original.drinks);
-    expect(drinks).toMatchObject({ names: { es: "Bebidas" }, image: original.image });
+    const [importedDrinks] = await tx
+      .select({ id: catalogues.id })
+      .from(catalogues)
+      .where(eq(catalogues.name, "Bebidas (interno)"));
+    const drinks = await readSection(
+      tx,
+      (await readMenuStructure(tx, importedDrinks!.id)).rootSectionId,
+    );
+    const [beer] = await tx.select().from(sections).where(eq(sections.internalName, "Cervezas"));
+    expect(drinks.id).not.toBe(original.drinks);
+    expect(drinks).toMatchObject({
+      names: { es: "Bebidas" },
+      image: original.image,
+      color: "#aabbcc",
+    });
+    expect(beer!.ownerMenuId).toBe(importedDrinks!.id);
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
@@ -975,7 +983,10 @@ it("leaves publication behind, so an imported venue's menus arrive unpublished",
       .select({ id: catalogues.id })
       .from(catalogues)
       .where(eq(catalogues.name, "Published menu"));
-    expect((await menuStatus(tx, [menu!.id])).get(menu!.id)).toEqual({ state: "unpublished" });
+    expect((await menuStatus(tx, [menu!.id])).get(menu!.id)).toEqual({
+      state: "unpublished",
+      clashes: 0,
+    });
     expect(await tx.select().from(menuVersions)).toEqual([]);
     // The working menu came across whole, so publishing it on the new venue has something to show.
     expect((await readMenuStructure(tx, menu!.id)).nodes).toHaveLength(1);
@@ -1081,4 +1092,62 @@ it("leaves a table's clearing state behind", async () => {
   for (const row of rows) {
     expect(row).not.toHaveProperty("needs_clearing_since");
   }
+});
+
+it("round-trips missing home slots alongside live tiles with fresh ids and unchanged positions", async () => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Missing slots" });
+    const root = (await readMenuStructure(tx, menu.id)).rootSectionId;
+    const beer = await createSectionIn(tx, root, { internalName: "Beer" });
+    const water = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Water",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+    await addMember(tx, root, { kind: "product", productId: water.id });
+    const [home] = await listHomeLayouts(tx, menu.id);
+    const tile = await addShortcut(tx, home!.id, { kind: "section", sectionId: beer.id });
+    await addShortcut(tx, home!.id, { kind: "product", productId: water.id });
+    await deleteSection(tx, beer.id);
+    return { menu: menu.id, tile: tile.id, home: home!.id };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-25T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const [menu] = await tx.select().from(catalogues).where(eq(catalogues.name, "Missing slots"));
+    const [home] = await listHomeLayouts(tx, menu!.id);
+    expect(menu!.id).not.toBe(original.menu);
+    expect(home!.id).not.toBe(original.home);
+    expect(home!.tiles[0]!.memberId).not.toBe(original.tile);
+    expect(
+      home!.tiles.map((tile) => [tile.position, tile.ref.kind, tile.name, tile.missingName]),
+    ).toEqual([
+      [0, "missing", "Missing slots › Beer", "Missing slots › Beer"],
+      [1, "product", "Water", null],
+    ]);
+    const preview = await previewMenu(tx, menu!.id);
+    expect(preview.document.homeLayouts[0]!.tiles[0]).toEqual({ kind: "empty" });
+    expect(preview.warnings).toEqual([
+      { kind: "shortcut_missing", layoutName: "Home", name: "Missing slots › Beer" },
+    ]);
+  });
 });

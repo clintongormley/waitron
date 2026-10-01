@@ -234,6 +234,9 @@ unchanged, apart from three points:
    - The editor warns before and after publishing, for example "2 shortcuts on Evening's Counter
      layout point at things no longer in this menu".
    - The empty slot is a new kind of tile, on the till and in the published menu.
+     _2026-10-01: [slice 2](../plans/2026-09-30-menus-include-menus-slice-2.md) implements this
+     contract as `{ kind: "empty" }`, with till rendering and an editor offering Remove and Replace;
+     its focused checks pass and landing is pending._
 
 A deliberate blank tile, for spacing, is left out.
 

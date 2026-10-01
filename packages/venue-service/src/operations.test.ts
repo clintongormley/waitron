@@ -14,12 +14,11 @@ import {
   addMember,
   addProductToMenu,
   createProduct,
-  createSection,
+  createSectionIn,
   deactivateCatalogue,
   menuDocumentHash,
   publishMenu,
   readMenuStructure,
-  setMenuItemExtraLists,
   setProductVariants,
   updateMenuItem,
   updateOptionList,
@@ -194,10 +193,8 @@ describe("venue service routing", () => {
       const menu = await createCatalogue(tx, { name: "Terrace menu" });
       await allowMenuInZone(tx, { locationId }, zone, menu.id, { makeDefault: true });
       const { rootSectionId } = await readMenuStructure(tx, menu.id);
-      const drinks = await createSection(tx, { internalName: "Drinks" });
-      const soft = await createSection(tx, { internalName: "Soft drinks" });
-      await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
-      await addMember(tx, drinks.id, { kind: "section", sectionId: soft.id });
+      const drinks = await createSectionIn(tx, rootSectionId, { internalName: "Drinks" });
+      const soft = await createSectionIn(tx, drinks.id, { internalName: "Soft drinks" });
       const menuEmpty = {
         code: "zone.menu_empty",
         zoneId: zone,
@@ -1805,7 +1802,7 @@ async function seedTwoMenuVenue() {
     ]);
     const lemonadeOffer = (await addProductToMenu(tx, { menuId: dinner.id, productId: lemonade }))
       .id;
-    await setMenuItemExtraLists(tx, lemonadeOffer, [{ listId: extrasList, items: [] }]);
+
     const burgerOffer = (await addProductToMenu(tx, { menuId: dinner.id, productId: burger })).id;
     await allowMenuInZone(tx, cfg, venue.diningZone, dinner.id, { displayOrder: 1 });
     return {
@@ -2162,7 +2159,7 @@ describe("zone offers from the published menus", () => {
       const before = await menuState(tx, venue.diningZone);
       expect({ ...before, menus: before.menus.map(stateVersionOf) }).toEqual({
         menus,
-        unavailable: { products: [], optionLabels: [], extraItems: [] },
+        unavailable: { products: [], optionLabels: [] },
       });
 
       await updateProduct(tx, venue.burger, { available: false });
@@ -2208,33 +2205,18 @@ describe("zone offers from the published menus", () => {
         },
         "en",
       );
-      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
-        {
-          listId: venue.extrasList,
-          items: [{ productId: venue.extraLemon, price: null, available: false }],
-        },
-        { listId: sides, items: [{ productId: venue.burger, price: null, available: false }] },
-      ]);
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
-      // The zone's menus, their live versions, then products, option labels and extras items.
-      expect(prepared).toHaveBeenCalledTimes(5);
+      expect(prepared).toHaveBeenCalledTimes(4);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
-        extraItems: [
-          {
-            menuItemId: venue.lemonadeOffer,
-            productId: venue.extraLemon,
-            extraListId: venue.extrasList,
-          },
-        ],
       });
       await expect(menuState(tx, UNKNOWN_ID)).resolves.toEqual({
         menus: [],
-        unavailable: { products: [], optionLabels: [], extraItems: [] },
+        unavailable: { products: [], optionLabels: [] },
       });
     });
   });
@@ -2304,43 +2286,6 @@ describe("zone offers from the published menus", () => {
       expect(sqlOf.filter((text) => /from "zone_menus"/.test(text))).toHaveLength(1);
     });
   });
-
-  it("names the list of a withdrawn extras item, so the same product in another list stays offered", async () => {
-    const venue = await seedTwoMenuVenue();
-    await scoped(async (tx) => {
-      const garnish = (
-        await createExtraList(
-          tx,
-          { name: "Garnish", minPicks: 0, maxPicks: 1, items: [{ productId: venue.extraLemon }] },
-          "en",
-        )
-      ).id;
-      await writeProductModifiers(tx, venue.lemonade, [
-        { kind: "extras", id: venue.extrasList },
-        { kind: "extras", id: garnish },
-        { kind: "options", id: venue.iceList },
-      ]);
-      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
-        { listId: venue.extrasList, items: [] },
-        { listId: garnish, items: [] },
-      ]);
-      await publish(tx, venue.dinner);
-      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
-        {
-          listId: venue.extrasList,
-          items: [{ productId: venue.extraLemon, price: null, available: false }],
-        },
-        { listId: garnish, items: [] },
-      ]);
-      expect((await menuState(tx, venue.diningZone)).unavailable.extraItems).toEqual([
-        {
-          menuItemId: venue.lemonadeOffer,
-          productId: venue.extraLemon,
-          extraListId: venue.extrasList,
-        },
-      ]);
-    });
-  });
 });
 
 describe("each served menu's structure and home layouts", () => {
@@ -2363,11 +2308,12 @@ describe("each served menu's structure and home layouts", () => {
         })
       ).id;
       const drinks = (
-        await createSection(tx, { internalName: "Drinks", names: { en: "Something to drink" } })
+        await createSectionIn(tx, (await readMenuStructure(tx, venue.dinner)).rootSectionId, {
+          internalName: "Drinks",
+          names: { en: "Something to drink" },
+        })
       ).id;
       await addMember(tx, drinks, { kind: "product", productId: cola });
-      const root = (await readMenuStructure(tx, venue.dinner)).rootSectionId;
-      await addMember(tx, root, { kind: "section", sectionId: drinks });
       const counter = (await createHomeLayout(tx, venue.dinner, "Counter")).id;
       await addShortcut(tx, counter, { kind: "section", sectionId: drinks });
       await addShortcut(tx, counter, { kind: "product", productId: venue.burger });
@@ -2493,7 +2439,7 @@ describe("each served menu's structure and home layouts", () => {
       const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,
       )!.id;
-      await updateMenuItem(tx, venue.dinner, colaOffer, { active: false });
+      await updateMenuItem(tx, venue.dinner, colaOffer, { offered: false });
       await publish(tx, venue.dinner);
       const served = await listZoneOffers(tx, venue.cfg, venue.diningZone);
       expect(served.offers.map((offer) => offer.id)).not.toContain(colaOffer);

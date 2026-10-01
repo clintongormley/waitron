@@ -233,7 +233,7 @@ it("has English and Spanish copy for each menu section code", () => {
     "menu_section.translation_required",
     "menu_section.member_cycle",
     "menu_section.member_duplicate",
-    "menu_section.not_library",
+    "menu_section.wrong_role",
     "menu_section.membership_invalid",
   ]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));

@@ -154,6 +154,7 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     const LEAVES = [
       "packages/catalogue/src/product-types.ts",
       "packages/catalogue/src/menu-types.ts",
+      "packages/catalogue/src/menu-combine-types.ts",
       "packages/catalogue/src/modifier-list-types.ts",
       "packages/catalogue/src/section-types.ts",
       "packages/catalogue/src/menu-document-types.ts",

@@ -26,7 +26,8 @@ import { t } from "./strings.js";
 
 /** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
-  if (use.kind === "section") return `/manage/sections?section=${encodeURIComponent(use.id)}`;
+  if (use.kind === "section")
+    return `/manage/menus/menu/${encodeURIComponent(use.ownerMenuId)}/view/structure`;
   if (use.kind === "menu_version") return `/manage/menus/menu/${encodeURIComponent(use.menuId)}`;
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
 }

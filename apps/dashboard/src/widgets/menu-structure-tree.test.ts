@@ -17,20 +17,25 @@ const products = [
 
 /** Each section's customer names read differently from its internal name, so a tree showing the
  * customer wording fails rather than passing by coincidence. */
-const sections = [
-  { id: "s-drinks", internalName: "Drinks", names: { es: "Bebidas frías" } },
-  { id: "s-beer", internalName: "Beer", names: { es: "Cervezas" } },
-  { id: "s-fav", internalName: "Favourites", names: { es: "Favoritos" } },
-];
 
 const drinks = (memberId: string): MenuStructureNode => ({
   memberId,
   ref: { kind: "section", sectionId: "s-drinks" },
+  internalName: "Drinks",
+  names: {},
+  image: null,
+  color: null,
+  ownerMenuId: "menu-lunch",
   children: [
     { memberId: "m-lager", ref: { kind: "product", productId: "p-lager" } },
     {
       memberId: "m-beer",
       ref: { kind: "section", sectionId: "s-beer" },
+      internalName: "Beer",
+      names: {},
+      image: null,
+      color: null,
+      ownerMenuId: "menu-lunch",
       children: [{ memberId: "m-lager-2", ref: { kind: "product", productId: "p-lager" } }],
     },
     { memberId: "m-lemonade", ref: { kind: "product", productId: "p-lemonade" } },
@@ -44,6 +49,11 @@ const nodes = (): MenuStructureNode[] => [
   {
     memberId: "m-fav",
     ref: { kind: "section", sectionId: "s-fav" },
+    internalName: "Favourites",
+    names: {},
+    image: null,
+    color: null,
+    ownerMenuId: "menu-lunch",
     children: [drinks("m-fav-drinks")],
   },
 ];
@@ -52,7 +62,6 @@ async function mount(props: Partial<MenuStructureTree> = {}) {
   const { el } = await mountWidget<MenuStructureTree>("dashboard-menu-structure-tree", {
     nodes: nodes(),
     products,
-    sections,
     label: "Lunch Menu",
     ...props,
   });
@@ -211,3 +220,61 @@ it("edits by default: the same click on a section's name asks to edit it", async
   q(el, 'li[data-path="m-drinks"] > .row [data-test="name"]')!.click();
   expect(heard).toEqual([{ path: ["m-drinks"] }]);
 });
+it("shows an included menu with a link and keeps its entire subtree read-only", async () => {
+  const { el } = await mountWidget<MenuStructureTree>("dashboard-menu-structure-tree", {
+    nodes: [
+      {
+        memberId: "included",
+        ref: { kind: "section", sectionId: "drinks-root" },
+        internalName: "Drinks",
+        includedMenuId: "drinks",
+        children: [
+          {
+            memberId: "beer",
+            ref: { kind: "section", sectionId: "beer-section" },
+            internalName: "Beer",
+            children: [],
+          },
+        ],
+      },
+    ],
+    products: [],
+    current: ["included", "beer"],
+  });
+  expect(el.shadowRoot!.querySelector('[data-test="name"]')?.textContent).toContain("Drinks");
+  expect(el.shadowRoot!.querySelector("a")?.getAttribute("href")).toBe(
+    "/manage/menus/menu/drinks/view/structure",
+  );
+  expect(el.shadowRoot!.querySelectorAll(".edit")).toHaveLength(0);
+});
+
+it.each(["light", "dark"] as const)(
+  "uses theme tokens and a full hit target for an included menu link in %s",
+  async (theme) => {
+    const { el } = await mountWidget<MenuStructureTree>(
+      "dashboard-menu-structure-tree",
+      {
+        nodes: [
+          {
+            memberId: "included",
+            ref: { kind: "section", sectionId: "drinks-root" },
+            internalName: "Drinks",
+            includedMenuId: "drinks",
+            children: [],
+          },
+        ],
+        label: "Lunch",
+      },
+      theme,
+    );
+    el.style.setProperty("--wt-color-text", "rgb(17, 93, 201)");
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a")!;
+    expect(link.getAttribute("href")).toBe("/manage/menus/menu/drinks/view/structure");
+    expect(getComputedStyle(link).color).toBe("rgb(17, 93, 201)");
+    expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(link.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    link.focus();
+    expect(el.shadowRoot!.activeElement).toBe(link);
+    expect(getComputedStyle(link).outlineStyle).not.toBe("none");
+  },
+);

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { page } from "vitest/browser";
 import type { HomeLayout } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import type { MemberListEditor } from "./member-list-editor.js";
 import { HomeLayoutEditor } from "./home-layout-editor.js";
 
 afterEach(cleanupWidgets);
@@ -20,6 +21,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "product", productId: "p-burger" },
           name: "Burger",
           reachable: true,
+          missingName: null,
         },
         {
           memberId: "t-drinks",
@@ -27,6 +29,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "section", sectionId: "s-drinks" },
           name: "Drinks",
           reachable: true,
+          missingName: null,
         },
         {
           memberId: "t-salad",
@@ -34,6 +37,7 @@ function layouts(): HomeLayout[] {
           ref: { kind: "product", productId: "p-salad" },
           name: "Salad",
           reachable: false,
+          missingName: "Salad",
         },
       ],
     },
@@ -63,6 +67,60 @@ describe.each(["light", "dark"] as const)("home layout editor (%s)", (theme) => 
         el.shadowRoot!.querySelector('[data-test="preview-handheld"] [data-tile="t-salad"]'),
       ).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-test="preview-till"]')).not.toBeNull();
+    }
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    "actions",
+    "replacement",
+    "invalid replacement",
+    "refused replacement",
+    "field refusal",
+  ])("renders a missing tile's %s accessibly", async (state) => {
+    const rows = layouts();
+    rows[0]!.tiles[1] = {
+      memberId: "t-missing",
+      position: 1,
+      ref: { kind: "missing", name: "Drinks › Beer" },
+      name: "Drinks › Beer",
+      missingName: "Drinks › Beer",
+      reachable: false,
+    };
+    const { el, host } = await mountWidget<HomeLayoutEditor>(
+      "dashboard-home-layout-editor",
+      {
+        layouts: rows,
+        menuName: "Evening",
+        sections: [{ id: "s-wines", internalName: "Drinks › Wines" }],
+      },
+      theme,
+    );
+    const list = el.shadowRoot!.querySelector<MemberListEditor>("dashboard-member-list-editor")!;
+    await list.updateComplete;
+    if (state === "actions") {
+      const actions = list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-t-missing"]',
+      )!;
+      await actions.updateComplete;
+      actions.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+      await actions.updateComplete;
+    } else {
+      list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-missing"]')!.click();
+      await list.updateComplete;
+      if (state === "refused replacement" || state === "field refusal") {
+        const select = list.shadowRoot!.querySelector<HTMLSelectElement>(
+          'select[name="member-ref"]',
+        )!;
+        select.value = "section:s-wines";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        el.replacementCompletion("t-missing")("Request refused", state === "field refusal");
+        await list.updateComplete;
+      }
+      if (state === "invalid replacement") {
+        list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+        await list.updateComplete;
+      }
     }
     await expectNoA11yViolations(host);
   });

@@ -742,7 +742,14 @@ it("links a section using the image by its internal name to its editor, and bloc
   const client = api();
   client.getImage.mockResolvedValue({
     image,
-    uses: [{ kind: "section", id: "drinks", internalName: "Drinks (internal)" }],
+    uses: [
+      {
+        kind: "section",
+        id: "drinks",
+        internalName: "Drinks (internal)",
+        ownerMenuId: "drinks-menu",
+      },
+    ],
   });
   await mount(client);
   click("[data-test=delete-one]");
@@ -750,7 +757,7 @@ it("links a section using the image by its internal name to its editor, and bloc
     expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe("Drinks (internal)"),
   );
   expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
-    "/manage/sections?section=drinks",
+    "/manage/menus/menu/drinks-menu/view/structure",
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });

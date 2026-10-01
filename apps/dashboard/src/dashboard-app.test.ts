@@ -290,7 +290,6 @@ const NAV_SCREENS = [
   "sales",
   "catalogue",
   "menus",
-  "sections",
   "floor",
   "statuses",
   "kitchen",
@@ -1670,6 +1669,7 @@ describe("dashboard-app", () => {
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
+    expect(navItem(el, "sections")).toBeNull();
     expect(navItem(el, "recipe")).toBeNull();
     expect(navItem(el, "location-menus")).toBeNull();
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
@@ -4187,7 +4187,6 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     });
 
   it.each([
-    ["sections", "dashboard-sections-screen"],
     ["menus", "dashboard-menus-screen"],
     ["location-settings", "dashboard-location-settings-screen"],
     ["device-profiles", "dashboard-device-profiles-screen"],
@@ -4206,6 +4205,17 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(face).not.toBeNull();
     expect(face!.api).toBe(api);
     expect(location.pathname).toMatch(new RegExp(`^/manage/${screen}(/|$)`));
+  });
+
+  it("handles the retired Sections address as an unknown screen", async () => {
+    history.replaceState(null, "", "/manage/sections");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: faceApi(),
+      request: stubRequest,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-sections-screen")).toBeNull();
+    expect(location.pathname).toBe("/manage/overview");
   });
 
   it("hands the payments face the request primitive and the venue's onboarding mode", async () => {

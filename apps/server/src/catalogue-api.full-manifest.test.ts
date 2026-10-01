@@ -369,9 +369,25 @@ describe("sections and the reporting and routing they do not touch", () => {
     const before = await routes();
     expect(before).toHaveLength(2);
 
-    const created = await send(app, "POST", "/management-api/sections", v.managerCookie, {
-      internalName: "Bebidas (sección)",
-    });
+    const root = (
+      (await (
+        await send(
+          app,
+          "GET",
+          `/management-api/catalogues/${catalogueId}/structure`,
+          v.managerCookie,
+        )
+      ).json()) as { rootSectionId: string }
+    ).rootSectionId;
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/sections/${root}/sections`,
+      v.managerCookie,
+      {
+        internalName: "Bebidas (sección)",
+      },
+    );
     expect(created.status).toBe(201);
     const sectionId = ((await created.json()) as { id: string }).id;
     const members = `/management-api/sections/${sectionId}/members`;

@@ -121,8 +121,13 @@ export class TillMenuBrowser extends LitElement {
         );
       }
 
-      .tile {
+      .tile,
+      .slot {
         width: 100%;
+      }
+
+      .slot {
+        min-height: calc(var(--wt-tap-min) * 1.5);
       }
 
       .tile::part(button) {
@@ -347,6 +352,7 @@ export class TillMenuBrowser extends LitElement {
   /** The button for a section or product the index holds, else nothing; `path` is where a section
    * opens beneath. */
   #tile(ref: DocumentTile, path: string[], index: MenuIndex): TemplateResult | typeof nothing {
+    if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       const section = index.sections.get(ref.sectionId);
       return section === undefined
@@ -364,13 +370,18 @@ export class TillMenuBrowser extends LitElement {
     return this.#grid(members.map((member) => this.#tile(member, path, index)));
   }
 
+  #homeTile(ref: DocumentTile, index: MenuIndex): TemplateResult {
+    const tile = this.#tile(ref, [], index);
+    return tile === nothing ? html`<span class="slot" aria-hidden="true"></span>` : tile;
+  }
+
   #home(menu: TillZoneMenu, index: MenuIndex): TemplateResult {
     const layouts = menu.homeLayouts;
     const layout = layouts.find(({ id }) => id === menu.homeLayoutId) ?? layouts[0];
     return html`
       <section data-region="shortcuts" aria-labelledby="shortcuts-heading">
         <h2 id="shortcuts-heading">${t("menu.shortcuts")}</h2>
-        ${this.#grid((layout?.tiles ?? []).map((tile) => this.#tile(tile, [], index)))}
+        ${this.#grid((layout?.tiles ?? []).map((tile) => this.#homeTile(tile, index)))}
       </section>
       <section data-region="structure" aria-labelledby="structure-heading">
         <h2 id="structure-heading">${t("menu.full")}</h2>

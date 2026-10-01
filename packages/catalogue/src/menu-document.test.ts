@@ -19,16 +19,19 @@ import {
   type MenuDocument,
 } from "./menu-document.js";
 import * as vatRates from "./vat-rates.js";
-import { deactivateProduct, renameCatalogue, updateMenuItem, updateProduct } from "./operations.js";
-import { addMember, moveMember, removeMember, updateSection } from "./sections.js";
+import {
+  deactivateProduct,
+  updateMenuDetails,
+  updateMenuItem,
+  updateProduct,
+} from "./operations.js";
+import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
-import { setMenuItemExtraLists } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { extraListItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";
-import { menuItemExtraItems } from "./schema/extras.js";
 
 const fx = useCatalogueDb();
 
@@ -100,6 +103,7 @@ describe("buildMenuDocument", () => {
           kind: "section",
           sectionId: f.drinks,
           internalName: "Drinks",
+          includedMenu: { id: f.drinksMenu, name: "Drinks" },
           names: { en: "Something to drink" },
           image: null,
           color: null,
@@ -181,12 +185,6 @@ describe("buildMenuDocument", () => {
     await app(async (tx) => {
       await tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, WITH_ICE));
       await updateProduct(tx, f.extraLemon, { available: false });
-      await tx.insert(menuItemExtraItems).values({
-        menuItemId: await offerOf(tx, f.dinner, f.lemonade),
-        listId: f.extrasList,
-        productId: f.extraLemon,
-        available: false,
-      });
     });
     for (const menuId of [f.lunch, f.dinner]) {
       const document = await build(menuId);
@@ -211,7 +209,7 @@ describe("buildMenuDocument", () => {
   it("omits a product the menu switches off, and one that is deleted", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { active: false });
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { offered: false });
       await updateProduct(tx, f.lager, { active: false });
     });
     const document = await build(f.lunch);
@@ -256,7 +254,7 @@ describe("buildMenuDocument", () => {
     ).rejects.toMatchObject({ code: "catalogue.not_found" });
   });
 
-  it("leaves a shortcut whose target is not on the menu out of the layout, and reports it (D13)", async () => {
+  it("keeps an empty slot for a shortcut whose target is not on the menu, and reports it", async () => {
     const f = await menusFixture(fx.db);
     const layout = await defaultLayout(f.lunch);
     await addTile(layout, { productId: f.lemonade });
@@ -266,7 +264,9 @@ describe("buildMenuDocument", () => {
     const { document, omittedShortcuts } = await app((tx) => buildMenuDocument(tx, f.lunch));
     expect(document.homeLayouts[0]!.tiles).toEqual([
       { kind: "product", productId: f.lemonade },
+      { kind: "empty" },
       { kind: "section", sectionId: f.beer },
+      { kind: "empty" },
     ]);
     expect(omittedShortcuts).toEqual([
       { layoutId: layout, ref: product(f.burger) },
@@ -344,16 +344,6 @@ describe("menuDocumentHash", () => {
     [
       "the extra's ordering",
       (tx, f) => updateProduct(tx, f.extraLemon, { ordering: "not_sold_separately" }),
-    ],
-    [
-      "whether the offer withdraws the extra",
-      async (tx, f) =>
-        tx.insert(menuItemExtraItems).values({
-          menuItemId: await offerOf(tx, f.dinner, f.lemonade),
-          listId: f.extrasList,
-          productId: f.extraLemon,
-          available: false,
-        }),
     ],
   ];
 
@@ -463,13 +453,8 @@ describe("applyLiveFields", () => {
       await updateProduct(tx, f.soup, { categoryId: null });
       await updateProduct(tx, f.large, { available: false });
       await updateProduct(tx, f.lager, { active: false });
+      await updateProduct(tx, f.extraLemon, { available: false });
       await tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, WITH_ICE));
-      await tx.insert(menuItemExtraItems).values({
-        menuItemId: await offerOf(tx, f.dinner, f.lemonade),
-        listId: f.extrasList,
-        productId: f.extraLemon,
-        available: false,
-      });
     });
     const live = await app((tx) => applyLiveFields(tx, [lunch, dinner]));
     const lunchOffers = live.get(f.lunch)!;
@@ -498,16 +483,15 @@ describe("applyLiveFields", () => {
     const [extras, options] = lemonade.offeredModifiers;
     if (extras?.kind !== "extras" || options?.kind !== "options") throw new Error("lists");
     expect(extras.items).toMatchObject([
-      { productId: f.extraLemon, available: true, vatClass: "reduced" },
+      { productId: f.extraLemon, available: false, vatClass: "reduced" },
     ]);
+    const dinnerExtras = live.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!
+      .offeredModifiers[0]!;
+    expect(dinnerExtras.kind === "extras" && dinnerExtras.items[0]!.available).toBe(false);
     expect(options.labels.map((label) => [label.name, label.available])).toEqual([
       ["No ice", true],
       ["With ice", false],
     ]);
-    // Withdrawn from Dinner's offer alone.
-    const dinnerLemonade = live.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!;
-    const dinnerExtras = dinnerLemonade.offeredModifiers[0]!;
-    expect(dinnerExtras.kind === "extras" && dinnerExtras.items[0]!.available).toBe(false);
   });
 
   it("serves the VAT class the version froze, whatever each product's class is now", async () => {
@@ -665,21 +649,24 @@ describe("diffMenuDocuments", () => {
         sectionId: f.beer,
         name: "Beer",
         under: ["Drinks"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_added",
         productId: f.lemonade,
         name: "Lemonade",
         under: ["Drinks"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_added",
         productId: f.lager,
         name: "Lager",
         under: ["Drinks", "Beer"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       { kind: "product_added", productId: f.soup, name: "Soup", under: [], source: "this_menu" },
     ]);
@@ -709,7 +696,12 @@ describe("diffMenuDocuments", () => {
       moveMember(tx, f.drinks, await memberOf(f.drinks, { sectionId: f.beer }), 0),
     );
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
-      { kind: "order_changed", list: ["Drinks"], source: "shared_section" },
+      {
+        kind: "order_changed",
+        list: ["Drinks"],
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
+      },
     ]);
   });
 
@@ -727,7 +719,8 @@ describe("diffMenuDocuments", () => {
         productId: f.lager,
         name: "Lager",
         under: ["Drinks", "Beer"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_moved",
@@ -735,7 +728,8 @@ describe("diffMenuDocuments", () => {
         name: "Soup",
         from: [[]],
         to: [["Drinks"]],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
     ]);
   });
@@ -743,23 +737,23 @@ describe("diffMenuDocuments", () => {
   it("names a section removed and its products", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
-    await app(async (tx) =>
-      removeMember(tx, f.drinks, await memberOf(f.drinks, { sectionId: f.beer })),
-    );
+    await app(async (tx) => deleteSection(tx, f.beer));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       {
         kind: "section_removed",
         sectionId: f.beer,
         name: "Beer",
         under: ["Drinks"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
       {
         kind: "product_removed",
         productId: f.lager,
         name: "Lager",
         under: ["Drinks", "Beer"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
     ]);
   });
@@ -768,7 +762,7 @@ describe("diffMenuDocuments", () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
     await app(async (tx) => {
-      await updateSection(tx, f.drinks, { internalName: "Soft drinks", color: "#112233" });
+      await updateMenuDetails(tx, f.drinksMenu, { name: "Soft drinks", color: "#112233" });
       await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
       await updateSection(tx, f.beer, { names: { en: "Cold beers" } });
     });
@@ -778,14 +772,16 @@ describe("diffMenuDocuments", () => {
         sectionId: f.drinks,
         name: "Soft drinks",
         fields: ["names", "image", "color"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Soft drinks" },
       },
       {
         kind: "section_changed",
         sectionId: f.beer,
         name: "Beer",
         fields: ["names"],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Soft drinks" },
       },
     ]);
   });
@@ -850,11 +846,24 @@ describe("diffMenuDocuments", () => {
 
   it("names a product and a section placed a second time", async () => {
     const f = await menusFixture(fx.db);
+    f.beer = await app(async (tx) => {
+      await deleteSection(tx, f.beer);
+      const included = await (
+        await import("../test/included-menu.js")
+      ).createIncludedMenu(tx, { internalName: "Beer", names: { en: "On tap" } });
+      await addMember(tx, included.id, product(f.lager));
+      await addMember(tx, f.drinks, section(included.id));
+      return included.id;
+    });
     const live = await build(f.lunch);
     await app(async (tx) => {
       await addMember(tx, f.lunchRoot, section(f.beer));
       await addMember(tx, f.lunchRoot, product(f.lemonade));
     });
+    const [beerRow] = await fx.db
+      .select({ menuId: sections.ownerMenuId })
+      .from(sections)
+      .where(eq(sections.id, f.beer));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       { kind: "section_added", sectionId: f.beer, name: "Beer", under: [], source: "this_menu" },
       {
@@ -871,7 +880,8 @@ describe("diffMenuDocuments", () => {
         name: "Lager",
         from: [["Drinks", "Beer"]],
         to: [["Drinks", "Beer"], ["Beer"]],
-        source: "shared_section",
+        source: "included_menu",
+        includedMenu: { id: beerRow!.menuId!, name: "Beer" },
       },
     ]);
   });
@@ -880,9 +890,7 @@ describe("diffMenuDocuments", () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: f.extrasList }]);
-      await setMenuItemExtraLists(tx, await offerOf(tx, f.lunch, f.soup), [
-        { listId: f.extrasList, items: [] },
-      ]);
+
       await addMember(tx, f.lunchRoot, product(f.extraLemon));
     });
     const live = await build(f.lunch);
@@ -1157,7 +1165,7 @@ describe("diffMenuDocuments", () => {
       .update(menuDetails)
       .set({ defaultHomeLayoutId: counter!.id })
       .where(eq(menuDetails.menuId, f.lunch));
-    await app((tx) => renameCatalogue(tx, f.lunch, "Midday Menu"));
+    await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Midday Menu" }));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       { kind: "menu_renamed", from: "Lunch Menu", to: "Midday Menu", source: "this_menu" },
       { kind: "layout_changed", layoutId: counter!.id, name: "Counter", source: "this_menu" },

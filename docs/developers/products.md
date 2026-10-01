@@ -199,12 +199,11 @@ an options label's customer-facing name are what the printed receipt puts under 
 (`customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`), which is also where
 the fallback to the staff name happens, so a missing one still is not a gap. An extras list's own
 name reaches no order or receipt surface at all — a pick becomes its own line carrying the picked
-PRODUCT's names, and nothing copies the list's name onto it. A library section's customer names
-(`sections.names`, kind `library_section`) are optional too, and only a partly filled map is
-reported. Only library sections are read: a menu's own lists in `sections` are left out. The other
+PRODUCT's names, and nothing copies the list's name onto it. A menu section's customer names
+(`sections.names`, kind `menu_section`) are optional too, and only a partly filled map is
+reported. The report reads owned sections and menu roots; a menu's customer names are its root's. The other
 kind the query reports, `unit`, has no optional customer-facing name to fall back from and stays
-required. A category is not in the report: its name is one plain internal name, not a set of
-translations. An options list contributes two of the report's kinds and not one, both
+required. A category has one plain internal name and is not in the report. An options list contributes two of the report's kinds and not one, both
 of them in the optional group: the list's own name (`option_list`) and each of its labels
 (`option_label`), each with its own table. An extras list contributes one kind, `extra_list`, and no
 second one: each of its items names a product and carries no name of its own, so `extra_list_items`
@@ -271,9 +270,8 @@ Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operat
 that is Unavailable, or has become Inactive since, is served in its place marked unavailable
 (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). As served, whether a menu has
 switched a variant off is read from the published version, so a switch-off made since reaches the
-tills only when the menu is published again; whether an offer has switched an extras item off is
-read from the current rows, as is whether each product and variant is Active and Available
-(`applyLiveFields`).
+tills only when the menu is published again. Whether each product and variant is Active and
+Available, including products picked as extras, is read from the current rows (`applyLiveFields`).
 
 ### On the till
 

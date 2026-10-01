@@ -104,15 +104,16 @@ row menu offers **Remove** or **Restore** there too, and an Inactive variant is 
 change the **Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
-In the menu offer you can optionally give a variant its own price on that menu, or clear its
-**Offered on this menu** box to stop offering it there. An order charges the first of these that is
-set: the variant's price on that menu, the variant's own price, then the product's price on that
-menu, then the product's own price.
+On the menu you can give it a price of its own, switch it off, or let it follow the menus it comes
+from. A price you set for this menu wins. Otherwise, prices set for that size on included menus
+and on the product contribute to its price. If there is no size-level price, it follows the
+combined product price.
 
-You can leave a menu offer's price empty, with variants or without. The menu then charges the
-product's own price, and follows it when you change that price. The empty field shows the product's
-price greyed out as a hint. For a product without variants that hint is what the menu charges; for
-one with variants, each variant shows its own price hint.
+Leave a menu price empty to let those contributions decide it. For example, if Drinks prices beer
+at €3.00 and Evening includes only Drinks' beer, Evening charges €3.00. If Evening also puts that
+beer in its own section at the product's €2.80, the prices disagree. Set Evening's beer price to
+resolve that disagreement before publishing. The Prices view shows where each price comes from
+and which settings still need your decision.
 
 ## Declare allergens and dietary suitability directly
 
@@ -146,16 +147,17 @@ Menus**.
 Create reusable extras lists and options lists on the two tabs of **Modifiers**, then attach them in
 the product's own **Modifiers** section, in the order you want. See
 [Reuse choices across your products](modifiers.md) for what each kind holds, its defaults and
-limits, and menu-specific extra prices.
+limits, and extra prices.
 
 When you park or complete an order, Waitron saves the chosen product and variant names, kitchen name,
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with a custom unit, two variants, a separate kitchen name
-and direct dietary declarations. The demo menus set no price
-of their own for anything except the Negroni, at 9.00 on the Menú del Día, so everything else,
-including each coffee variant, sells at its own price. The demo sirloin carries a seeded options
+and direct dietary declarations. Casa Delgado and Menú del Día include a
+**Drinks** menu as a folder. Drinks prices Caña at 3.00 instead of its product price of 2.80; both
+including menus inherit that price. Menú del Día sets its own Negroni price of 9.00. The coffee
+variants keep their own prices. The demo sirloin carries a seeded options
 list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras list, so
 nothing in it shows an extra being added to a dish.
 

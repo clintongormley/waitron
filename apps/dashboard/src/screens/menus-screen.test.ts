@@ -1,3 +1,4 @@
+import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
@@ -15,7 +16,7 @@ import type {
   CategorySummary,
   DashboardApi,
   HomeLayout,
-  LibrarySection,
+  SectionDetails,
   MemberRef,
   MenuPreview,
   MenuPriceRow,
@@ -24,7 +25,6 @@ import type {
   MenuStructureNode,
   Product,
   SectionMember,
-  SectionUsages,
 } from "../api/client.js";
 import type { HomeLayoutEditor } from "../widgets/home-layout-editor.js";
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
@@ -110,7 +110,7 @@ const sectionMember = (id: string, position: number, sectionId: string): Section
 });
 
 /** Each section's customer names read differently from its internal name. */
-function sections(): LibrarySection[] {
+function sections(): SectionDetails[] {
   return [
     {
       id: "s-drinks",
@@ -163,11 +163,21 @@ function drinksNode(memberId: string, sectionId = "s-drinks"): MenuStructureNode
   return {
     memberId,
     ref: { kind: "section", sectionId },
+    internalName: "Drinks",
+    names: { en: "Something to drink", es: "Bebidas frías" },
+    image: null,
+    color: null,
+    ownerMenuId: "menu-lunch",
     children: [
       productNode("m-lager", "p-lager"),
       {
         memberId: "m-beer",
         ref: { kind: "section", sectionId: "s-beer" },
+        internalName: "Beer",
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
         children: [productNode("m-lager-2", "p-lager")],
       },
       productNode("m-lemonade", "p-lemonade"),
@@ -183,21 +193,14 @@ function lunchNodes(): MenuStructureNode[] {
     {
       memberId: "m-fav",
       ref: { kind: "section", sectionId: "s-fav" },
+      internalName: "Favourites",
+      names: {},
+      image: null,
+      color: null,
+      ownerMenuId: "menu-lunch",
       children: [productNode("m-fav-lemonade", "p-lemonade"), drinksNode("m-fav-drinks")],
     },
   ];
-}
-
-const lunch = { id: "menu-lunch", name: "Lunch Menu" };
-const dinner = { id: "menu-dinner", name: "Dinner Menu" };
-
-function usages(): Record<string, SectionUsages> {
-  return {
-    "s-drinks": { menus: [dinner, lunch], sections: [{ id: "s-fav", internalName: "Favourites" }] },
-    "s-beer": { menus: [dinner, lunch], sections: [{ id: "s-drinks", internalName: "Drinks" }] },
-    "s-fav": { menus: [lunch], sections: [] },
-    "s-desserts": { menus: [], sections: [] },
-  };
 }
 
 /** Lemonade sits in Favourites and Drinks; Lager only inside Drinks' Beer. */
@@ -205,6 +208,7 @@ function lunchPrices(): MenuPriceRow[] {
   return [
     {
       menuItemId: "mi-burger",
+      combined: combinedFixture("p-burger", "12.00", true, [], null, "12.00", {}),
       productId: "p-burger",
       name: "Burger",
       categoryId: "c-mains",
@@ -212,11 +216,23 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "12.00",
       override: null,
       effectivePrice: "12.00",
-      active: true,
+      offered: true,
       variants: [],
     },
     {
       menuItemId: "mi-lemonade",
+      combined: combinedFixture(
+        "p-lemonade",
+        "2.50",
+        true,
+        [
+          { variantId: "v-small", price: null, offered: true },
+          { variantId: "v-large", price: "3.75", offered: false },
+        ],
+        "2.50",
+        "3.00",
+        { "v-large": "3.40" },
+      ),
       productId: "p-lemonade",
       name: "Lemonade",
       categoryId: "c-drinks",
@@ -224,7 +240,7 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "3.00",
       override: "2.50",
       effectivePrice: "2.50",
-      active: true,
+      offered: true,
       variants: [
         { variantId: "v-small", price: null, offered: true },
         { variantId: "v-large", price: "3.75", offered: false },
@@ -232,6 +248,7 @@ function lunchPrices(): MenuPriceRow[] {
     },
     {
       menuItemId: "mi-lager",
+      combined: combinedFixture("p-lager", "2.00", true, [], null, "2.00", {}),
       productId: "p-lager",
       name: "Lager",
       categoryId: "c-beer",
@@ -239,7 +256,7 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "2.00",
       override: null,
       effectivePrice: "2.00",
-      active: true,
+      offered: true,
       variants: [],
     },
   ];
@@ -274,15 +291,14 @@ function variantProducts(): Product[] {
 
 const WRITES = [
   "createCatalogue",
-  "renameCatalogue",
-  "createSection",
+  "updateMenuDetails",
+  "createSectionIn",
   "updateSection",
   "deleteSection",
   "addSectionMember",
   "addSectionProducts",
   "removeSectionMember",
   "moveSectionMember",
-  "duplicateSection",
   "updateMenuItem",
   "setMenuVariants",
   "publishMenu",
@@ -292,6 +308,7 @@ const WRITES = [
   "deleteHomeLayout",
   "setDefaultHomeLayout",
   "addHomeTile",
+  "replaceHomeTile",
   "removeHomeTile",
   "moveHomeTile",
 ] as const;
@@ -305,12 +322,14 @@ function statuses(): Record<string, MenuStatus> {
   return {
     "menu-lunch": {
       state: "changed",
+      clashes: 0,
       version: 2,
       publishedAt: PUBLISHED_AT,
       hash: LUNCH_LIVE_HASH,
     },
     "menu-dinner": {
       state: "current",
+      clashes: 0,
       version: 5,
       publishedAt: "2026-09-20T18:00:00.000Z",
       hash: "d".repeat(64),
@@ -321,6 +340,7 @@ function statuses(): Record<string, MenuStatus> {
 /** Lunch's pending changes: one of its own and one a shared product brings. */
 function lunchPreview(): MenuPreview {
   return {
+    clashes: [],
     hash: LUNCH_HASH,
     changes: [
       {
@@ -339,7 +359,7 @@ function lunchPreview(): MenuPreview {
         alsoOn: ["Dinner Menu"],
       },
     ],
-    warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
+    warnings: [{ kind: "shortcut_missing", layoutName: "Home", name: "Lager" }],
     status: statuses()["menu-lunch"]!,
     document: lunchDocument(),
   };
@@ -366,11 +386,13 @@ function lunchDocument() {
 /** Dinner's working state differs from its live version 5 by nothing a change can list. */
 function dinnerPreview(): MenuPreview {
   return {
+    clashes: [],
     hash: "c".repeat(64),
     changes: [],
     warnings: [],
     status: {
       state: "changed",
+      clashes: 0,
       version: 5,
       publishedAt: "2026-09-20T18:00:00.000Z",
       hash: "d".repeat(64),
@@ -388,6 +410,7 @@ function homeLayouts(): HomeLayout[] {
     ref,
     name,
     reachable: memberId !== "t-chips",
+    missingName: memberId === "t-chips" ? name : null,
   });
   return [
     {
@@ -414,7 +437,6 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
   let root = lunchNodes();
   const client = {
     listCatalogues: vi.fn().mockResolvedValue(menus),
-    listSections: vi.fn().mockResolvedValue(sections()),
     listLibraryProducts: vi.fn().mockResolvedValue(products),
     listCategories: vi.fn().mockResolvedValue(categories),
     getContentLanguages: vi
@@ -422,19 +444,43 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getMenuStructure: vi.fn(async (id: string): Promise<MenuStructure> =>
       id === "menu-lunch"
-        ? { rootSectionId: "root-lunch", nodes: structuredClone(root) }
-        : { rootSectionId: "root-dinner", nodes: [] },
+        ? {
+            rootSectionId: "root-lunch",
+            root: {
+              id: "root-lunch",
+              internalName: "Lunch Menu",
+              names: {},
+              image: null,
+              color: null,
+              members: [],
+            },
+            includable: [],
+            includedBy: [],
+            nodes: structuredClone(root),
+          }
+        : {
+            rootSectionId: "root-dinner",
+            root: {
+              id: "root-dinner",
+              internalName: "Dinner Menu",
+              names: {},
+              image: null,
+              color: null,
+              members: [],
+            },
+            includable: [],
+            includedBy: [],
+            nodes: [],
+          },
     ),
-    listSectionUsages: vi.fn(async () => usages()),
-    getSectionUsages: vi.fn(async (id: string) => usages()[id] ?? { menus: [], sections: [] }),
     createCatalogue: vi.fn(async (name: string) => ({
       id: "menu-new",
       name,
       active: true,
       version: 1,
     })),
-    renameCatalogue: vi.fn().mockResolvedValue(undefined),
-    createSection: vi.fn(async (input: { internalName: string }) => ({
+    updateMenuDetails: vi.fn().mockResolvedValue(undefined),
+    createSectionIn: vi.fn(async (_id: string, input: { internalName: string }) => ({
       id: "s-new",
       internalName: input.internalName,
       names: {},
@@ -455,12 +501,13 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       }
       return root.map((node, position) => ({ id: node.memberId, position, ref: node.ref }));
     }),
-    duplicateSection: vi.fn().mockResolvedValue({ ...sections()[0]!, id: "s-drinks-copy" }),
     getMenuPrices: vi.fn(async (id: string) => (id === "menu-lunch" ? lunchPrices() : [])),
     updateMenuItem: vi.fn().mockResolvedValue(undefined),
     setMenuVariants: vi.fn(async (_menu: string, _item: string, variants: unknown) => variants),
     getMenuStatuses: vi.fn(async () => statuses()),
-    getMenuStatus: vi.fn(async (id: string) => statuses()[id] ?? { state: "unpublished" }),
+    getMenuStatus: vi.fn(
+      async (id: string) => statuses()[id] ?? { state: "unpublished", clashes: 0 },
+    ),
     getMenuPreview: vi.fn(async (id: string) =>
       id === "menu-lunch" ? lunchPreview() : dinnerPreview(),
     ),
@@ -471,6 +518,7 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     renameHomeLayout: vi.fn().mockResolvedValue(undefined),
     deleteHomeLayout: vi.fn().mockResolvedValue(undefined),
     setDefaultHomeLayout: vi.fn().mockResolvedValue(undefined),
+    replaceHomeTile: vi.fn().mockResolvedValue(sectionMember("t-chips", 2, "included-beer")),
     addHomeTile: vi.fn().mockResolvedValue(productMember("t-new", 3, "p-lager")),
     removeHomeTile: vi.fn().mockResolvedValue(undefined),
     moveHomeTile: vi.fn(async (_layout: string, memberId: string, to: number) => {
@@ -530,9 +578,16 @@ async function inTable(el: MenusScreen, testId: string): Promise<void> {
   await table(el).updateComplete;
   table(el).shadowRoot.querySelector<HTMLElement>(`[data-test="${testId}"]`)!.click();
   await el.updateComplete;
+  if (testId.startsWith("rename-"))
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
 }
 
 function modal(el: MenusScreen, testId: string) {
+  if (testId === "menu-form" || testId === "new-section")
+    return q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+      el,
+      `[data-test="${testId === "menu-form" ? "menu-form" : "section-form"}"]`,
+    )!.shadowRoot!.querySelector("wt-modal")!;
   return q<HTMLElementTagNameMap["wt-modal"]>(el, `wt-modal[data-test="${testId}"]`)!;
 }
 
@@ -541,11 +596,22 @@ function inModal<T extends Element = HTMLElement>(
   testId: string,
   selector: string,
 ): T {
-  return modal(el, testId).querySelector<T>(selector)!;
+  return modal(el, testId).querySelector<T>(
+    ["menu-form", "new-section"].includes(testId)
+      ? selector
+          .replace("new-section-save", "save")
+          .replace("menu-save", "save")
+          .replace("menu-form-cancel", "cancel")
+          .replace("new-section-cancel", "cancel")
+          .replace('name="name"', 'name="internalName"')
+      : selector,
+  )!;
 }
 
 /** The one message about a failed submission of `root`'s form. */
 async function bottomIn(root: Element): Promise<string> {
+  const direct = root.querySelector('[data-test="form-error"]');
+  if (direct) return direct.textContent?.trim() ?? "";
   const actions = root.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
@@ -607,6 +673,16 @@ async function editDrinks(el: MenusScreen): Promise<void> {
 async function takeDrinksOff(el: MenusScreen, client: Api, live: LiveData): Promise<void> {
   client.getMenuStructure.mockResolvedValue({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: [productNode("m-burger", "p-burger")],
   });
   live.invalidate([{ type: "section_members" }]);
@@ -708,11 +784,14 @@ it("creating a menu needs a name: an empty one is explained beside the field and
   expect(name.error).toBe("");
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
-  expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch");
+  expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch", {
+    names: {},
+    image: null,
+    color: null,
+  });
   expect(client.listCatalogues).toHaveBeenCalledTimes(2);
   // Only the menus can have changed.
   for (const read of [
-    client.listSections,
     client.listLibraryProducts,
     client.listCategories,
     client.getContentLanguages,
@@ -731,7 +810,13 @@ it("saves a name on Enter in its field", async () => {
   name
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
-  await vi.waitFor(() => expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch"));
+  await vi.waitFor(() =>
+    expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch", {
+      names: {},
+      image: null,
+      color: null,
+    }),
+  );
 });
 
 it("keeps the form and the name when the server refuses a new menu, and says why", async () => {
@@ -776,15 +861,56 @@ it("renames a menu, refusing an empty name", async () => {
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await el.updateComplete;
   expect(name.error).toBe(t("menus.name_required"));
-  expect(client.renameCatalogue).not.toHaveBeenCalled();
+  expect(client.updateMenuDetails).not.toHaveBeenCalled();
   type(name, "Weekday Lunch");
   await el.updateComplete;
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
-  expect(client.renameCatalogue).toHaveBeenCalledExactlyOnceWith("menu-lunch", "Weekday Lunch");
+  expect(client.updateMenuDetails).toHaveBeenCalledExactlyOnceWith("menu-lunch", {
+    internalName: "Weekday Lunch",
+    names: {},
+    image: null,
+    color: null,
+  });
   expect(client.createCatalogue).not.toHaveBeenCalled();
   await vi.waitFor(() => expect(client.listCatalogues).toHaveBeenCalledTimes(2));
-  expect(client.listSections).toHaveBeenCalledOnce();
+  expect(client.getMenuStructure).toHaveBeenCalled();
+});
+
+it("reopens menu details with customer names, image and colour and retains them when renamed", async () => {
+  const value = {
+    rootSectionId: "root-lunch",
+    nodes: lunchNodes(),
+    includable: [],
+    includedBy: [],
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: { en: "Lunch", es: "Almuerzo" },
+      image: "lunch-photo.png",
+      color: "#aa3300",
+      members: [],
+    },
+  };
+  const client = api({ getMenuStructure: vi.fn().mockResolvedValue(value) });
+  const el = await mount(client);
+  await inTable(el, "rename-menu-lunch");
+  const form = q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+    el,
+    '[data-test="menu-form"]',
+  )!;
+  expect(form.value).toEqual(value.root);
+  type(inModal(el, "menu-form", 'wt-input[name="name"]'), "Weekday Lunch");
+  await el.updateComplete;
+  inModal(el, "menu-form", '[data-test="menu-save"]').click();
+  await vi.waitFor(() =>
+    expect(client.updateMenuDetails).toHaveBeenCalledWith("menu-lunch", {
+      internalName: "Weekday Lunch",
+      names: { en: "Lunch", es: "Almuerzo" },
+      image: "lunch-photo.png",
+      color: "#aa3300",
+    }),
+  );
 });
 
 it("says the menus could not be loaded, and tries again", async () => {
@@ -852,123 +978,9 @@ it("edits a section in place, showing the path followed as a text breadcrumb", a
   expect(breadcrumb(el)).toBe("Lunch Menu");
 });
 
-it("shows a shared section's wider use, and duplicates it into this place in ONE request", async () => {
-  const copyName = t("sections.copy_name").replace("{name}", "Drinks");
-  const client = api();
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="shared"]'))).toBe(
-      t("menus.shared").replace("{list}", "Dinner Menu, Favourites"),
-    ),
-  );
-  expect(client.listSectionUsages).toHaveBeenCalledOnce();
-
-  // What the menu reads once the copy has taken Drinks' place.
-  const copied = lunchNodes();
-  copied[1] = drinksNode("m-drinks", "s-drinks-copy");
-  client.getMenuStructure.mockResolvedValue({ rootSectionId: "root-lunch", nodes: copied });
-  client.listSections.mockResolvedValue([
-    ...sections(),
-    { ...sections()[0]!, id: "s-drinks-copy", internalName: copyName },
-  ]);
-
-  await click(el, "duplicate-here");
-  const name = inModal<HTMLElementTagNameMap["wt-input"]>(
-    el,
-    "duplicate",
-    'wt-input[name="internalName"]',
-  );
-  expect(name.value).toBe(copyName);
-  inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
-  await vi.waitFor(() => expect(modal(el, "duplicate").open).toBe(false));
-
-  expect(writeCalls(client)).toEqual(["duplicateSection"]);
-  expect(client.duplicateSection).toHaveBeenCalledExactlyOnceWith("s-drinks", {
-    internalName: copyName,
-    memberIds: ["m-lager", "m-beer", "m-lemonade"],
-    replaceIn: { sectionId: "root-lunch", memberId: "m-drinks" },
-  });
-  await vi.waitFor(() => expect(breadcrumb(el)).toBe(`Lunch Menu › ${copyName}`));
-  await tree(el).updateComplete;
-  expect(topLevel(el).map((item) => item.dataset.path)).toEqual(["m-burger", "m-drinks", "m-fav"]);
-  expect(topLevel(el).map((item) => text(item.querySelector(".row [data-test='name']")))).toEqual([
-    "Burger",
-    copyName,
-    "Favourites",
-  ]);
-});
-
-it("reads a section's wider use from the live usages, and follows them when they change", async () => {
-  const live = new LiveData();
-  const client = api({ liveData: live });
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="shared"]'))).toBe(
-      t("menus.shared").replace("{list}", "Dinner Menu, Favourites"),
-    ),
-  );
-  client.listSectionUsages.mockResolvedValue({
-    ...usages(),
-    "s-drinks": { menus: [lunch], sections: [] },
-  });
-  live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() => expect(q(el, '[data-test="not-shared"]')).not.toBeNull());
-  expect(q(el, '[data-test="shared"]')).toBeNull();
-  expect(client.getSectionUsages).not.toHaveBeenCalled();
-});
-
-it("says so while a section's wider use is being read, and when it cannot be, still offering the copy", async () => {
-  let fail!: (error: unknown) => void;
-  const client = api({
-    listSectionUsages: vi.fn(() => new Promise((_, reject) => (fail = reject))),
-  });
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  expect(text(q(el, '[role="status"].note'))).toBe(t("sections.usages_loading"));
-  fail(new Error("down"));
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="usages-error"]'))).toBe(t("sections.usages_error")),
-  );
-  expect(q(el, '[data-test="duplicate-here"]')).not.toBeNull();
-  expect(q(el, '[data-test="structure-error"]')).toBeNull();
-  expect(q(el, '[data-test="load-error"]')).toBeNull();
-});
-
-it("puts a refused copy's reason beside the name only when the refusal names that field", async () => {
-  const client = api({
-    duplicateSection: vi
-      .fn()
-      .mockRejectedValueOnce({ code: "menu_section.invalid", params: { field: "internalName" } })
-      .mockRejectedValueOnce({
-        code: "menu_section.translation_required",
-        params: { language: "en" },
-      }),
-  });
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  await click(el, "duplicate-here");
-  const name = inModal<HTMLElementTagNameMap["wt-input"]>(
-    el,
-    "duplicate",
-    'wt-input[name="internalName"]',
-  );
-  inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
-  await vi.waitFor(() => expect(name.error).toBe(codeMessage("menu_section.invalid")));
-  expect(await bottom(el, "duplicate")).toBe(t("form.fix_fields"));
-  // A language's name is not on this form, so its refusal is above Save alone.
-  inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
-  await vi.waitFor(async () =>
-    expect(await bottom(el, "duplicate")).toBe(codeMessage("menu_section.translation_required")),
-  );
-  expect(name.error).toBe("");
-  expect(modal(el, "duplicate").open).toBe(true);
-});
-
 it("keeps the new-section form open and explains a refused section", async () => {
   const client = api({
-    createSection: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+    createSectionIn: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
   });
   const el = await mountLunch(client);
   await editDrinks(el);
@@ -981,25 +993,6 @@ it("keeps the new-section form open and explains a refused section", async () =>
   );
   expect(modal(el, "new-section").open).toBe(true);
   expect(client.addSectionMember).not.toHaveBeenCalled();
-});
-
-it("refuses a copy with no name beside the field, sending nothing", async () => {
-  const client = api();
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  await click(el, "duplicate-here");
-  const name = inModal<HTMLElementTagNameMap["wt-input"]>(
-    el,
-    "duplicate",
-    'wt-input[name="internalName"]',
-  );
-  type(name, "");
-  await el.updateComplete;
-  inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
-  await el.updateComplete;
-  expect(name.error).toBe(t("sections.internal_name_required"));
-  expect(await bottom(el, "duplicate")).toBe(t("form.fix_fields"));
-  expect(writeCalls(client)).toEqual([]);
 });
 
 it("creates a section without leaving the editor and adds it to the list being edited", async () => {
@@ -1024,29 +1017,14 @@ it("creates a section without leaving the editor and adds it to the list being e
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
-  expect(client.createSection).toHaveBeenCalledExactlyOnceWith({ internalName: "Ciders" });
-  expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
-    kind: "section",
-    sectionId: "s-new",
+  expect(client.createSectionIn).toHaveBeenCalledExactlyOnceWith("s-drinks", {
+    internalName: "Ciders",
+    names: {},
+    image: null,
+    color: null,
   });
+  expect(client.addSectionMember).not.toHaveBeenCalled();
   expect(breadcrumb(el)).toBe("Lunch Menu › Drinks");
-});
-
-it("says so when a created section could not then be added", async () => {
-  const client = api({
-    addSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.member_cycle" }),
-  });
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  await click(el, "new-section");
-  type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
-  await el.updateComplete;
-  inModal(el, "new-section", '[data-test="new-section-save"]').click();
-  await vi.waitFor(() => expect(q(el, '[data-test="member-error"]')).not.toBeNull());
-  expect(modal(el, "new-section").open).toBe(false);
-  expect(text(q(el, '[data-test="member-error"]'))).toBe(
-    t("menus.section_not_added").replace("{name}", "Ciders"),
-  );
 });
 
 it("closes the new-section form, sending nothing, when another change takes its list off the menu before Save", async () => {
@@ -1070,15 +1048,15 @@ it("closes the new-section form, sending nothing, when another change takes its 
 
 it("keeps the new-section form open while its section is being created and its list leaves the menu, and shows a refusal there", async () => {
   const live = new LiveData();
-  const creating = deferred<LibrarySection>();
-  const client = api({ liveData: live, createSection: vi.fn(() => creating.promise) });
+  const creating = deferred<SectionDetails>();
+  const client = api({ liveData: live, createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
   await click(el, "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
-  await vi.waitFor(() => expect(client.createSection).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(client.createSectionIn).toHaveBeenCalledOnce());
   await takeDrinksOff(el, client, live);
   expect(modal(el, "new-section").open).toBe(true);
   expect(modal(el, "new-section").heading).toBe(
@@ -1095,52 +1073,24 @@ it("keeps the new-section form open while its section is being created and its l
   // Saved again, with its list gone, it closes and sends nothing.
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await new Promise((resolve) => setTimeout(resolve));
-  expect(client.createSection).toHaveBeenCalledOnce();
+  expect(client.createSectionIn).toHaveBeenCalledOnce();
   expect(modal(el, "new-section").open).toBe(false);
   expect(text(q(el, '[data-test="member-error"]'))).toBe(
     t("menus.list_gone").replace("{name}", "Drinks"),
   );
 });
 
-it("names the list a created section could not be added to when that list left the menu meanwhile", async () => {
-  const live = new LiveData();
-  const creating = deferred<LibrarySection>();
-  const client = api({
-    liveData: live,
-    createSection: vi.fn(() => creating.promise),
-    addSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
-  });
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  await click(el, "new-section");
-  type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
-  await el.updateComplete;
-  inModal(el, "new-section", '[data-test="new-section-save"]').click();
-  await vi.waitFor(() => expect(client.createSection).toHaveBeenCalledOnce());
-  await takeDrinksOff(el, client, live);
-  creating.resolve({ ...sections()[3]!, id: "s-ciders", internalName: "Ciders" });
-  await vi.waitFor(() => expect(q(el, '[data-test="member-error"]')).not.toBeNull());
-  expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
-    kind: "section",
-    sectionId: "s-ciders",
-  });
-  expect(modal(el, "new-section").open).toBe(false);
-  expect(text(q(el, '[data-test="member-error"]'))).toBe(
-    t("menus.section_not_added_to").replace("{name}", "Ciders").replace("{list}", "Drinks"),
-  );
-});
-
 it("says a created section was added to its list when that list left the menu while it was being created", async () => {
   const live = new LiveData();
-  const creating = deferred<LibrarySection>();
-  const client = api({ liveData: live, createSection: vi.fn(() => creating.promise) });
+  const creating = deferred<SectionDetails>();
+  const client = api({ liveData: live, createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
   await click(el, "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
-  await vi.waitFor(() => expect(client.createSection).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(client.createSectionIn).toHaveBeenCalledOnce());
   await takeDrinksOff(el, client, live);
   creating.resolve({ ...sections()[3]!, id: "s-ciders", internalName: "Ciders" });
   await vi.waitFor(() =>
@@ -1148,34 +1098,36 @@ it("says a created section was added to its list when that list left the menu wh
       t("menus.list_gone_saved").replace("{name}", "Drinks"),
     ),
   );
-  expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
-    kind: "section",
-    sectionId: "s-ciders",
+  expect(client.createSectionIn).toHaveBeenCalledExactlyOnceWith("s-drinks", {
+    internalName: "Ciders",
+    names: {},
+    image: null,
+    color: null,
   });
+  expect(client.addSectionMember).not.toHaveBeenCalled();
   expect(modal(el, "new-section").open).toBe(false);
 });
 
-it("shows no message when the person opens another list while a created section is being added and the add is saved", async () => {
-  const adding = deferred<SectionMember>();
-  const client = api({ addSectionMember: vi.fn(() => adding.promise) });
+it("shows no message when the person opens another list while a section is being created there and the save succeeds", async () => {
+  const adding = deferred<SectionDetails>();
+  const client = api({ createSectionIn: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
   await click(el, "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
-  await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
-  await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
+  await vi.waitFor(() => expect(client.createSectionIn).toHaveBeenCalledOnce());
   await click(el, "crumb-0");
   expect(breadcrumb(el)).toBe("Lunch Menu");
-  adding.resolve(sectionMember("m-new", 3, "s-new"));
+  adding.resolve({ ...sections()[3]!, id: "s-new", internalName: "Ciders" });
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
-it("names the list a removal takes a member out of, and offers no section delete", async () => {
+it("names the list a product removal takes a member out of, and offers section editing and deletion", async () => {
   const client = api();
   const el = await mountLunch(client);
   const list = () => memberList(el);
@@ -1185,13 +1137,76 @@ it("names the list a removal takes a member out of, and offers no section delete
   await list().updateComplete;
   const actions = list().shadowRoot!.querySelector('[data-test="actions-m-beer"]')!;
   const labels = [...actions.querySelectorAll("wt-button")].map((button) => text(button));
-  expect(labels).toEqual([t("members.open"), t("members.remove_from").replace("{list}", "Drinks")]);
-  expect(labels).not.toContain(t("action.delete"));
+  expect(labels).toEqual([t("members.open"), t("action.edit"), t("action.delete")]);
   list().shadowRoot!.querySelector<HTMLElement>('[data-test="remove-m-lemonade"]')!.click();
   await vi.waitFor(() =>
     expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", "m-lemonade"),
   );
   expect(client.deleteSection).not.toHaveBeenCalled();
+});
+
+it("edits section details and deletes its owned descendants while keeping included menus out of the count", async () => {
+  const snapshot: MenuStructure = {
+    rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    nodes: lunchNodes(),
+    includable: [],
+    includedBy: [],
+  };
+  const client = api({ getMenuStructure: vi.fn().mockResolvedValue(snapshot) });
+  const el = await mountLunch(client);
+  emit(memberList(el), "wt-member-edit", { sectionId: "s-drinks" });
+  await el.updateComplete;
+  const form = q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+    el,
+    '[data-test="section-form"]',
+  )!;
+  expect(form.value?.internalName).toBe("Drinks");
+  emit(form, "wt-submit", {
+    internalName: "Drinks list",
+    names: { en: "Refreshments", es: "Bebidas" },
+    image: null,
+    color: "#aa3300",
+  });
+  await vi.waitFor(() =>
+    expect(client.updateSection).toHaveBeenCalledWith("s-drinks", {
+      internalName: "Drinks list",
+      names: { en: "Refreshments", es: "Bebidas" },
+      image: null,
+      color: "#aa3300",
+    }),
+  );
+  await vi.waitFor(() => expect(form.open).toBe(false));
+  const drinks = snapshot.nodes.find((node) => node.memberId === "m-drinks")!;
+  drinks.children!.push({
+    memberId: "included-other",
+    ref: { kind: "section", sectionId: "wine-root" },
+    internalName: "Wine menu",
+    includedMenuId: "wine",
+    children: [
+      {
+        memberId: "wine-owned",
+        ref: { kind: "section", sectionId: "red-wines" },
+        internalName: "Red wines",
+        children: [],
+      },
+    ],
+  });
+  emit(memberList(el), "wt-member-delete", { sectionId: "s-drinks" });
+  await el.updateComplete;
+  expect(modal(el, "delete-section").textContent).toContain(
+    t("menus.delete_section_one").replace("{name}", "Drinks"),
+  );
+  inModal(el, "delete-section", '[data-test="delete-section-save"]').click();
+  await vi.waitFor(() => expect(client.deleteSection).toHaveBeenCalledWith("s-drinks"));
+  expect(client.removeSectionMember).not.toHaveBeenCalled();
 });
 
 it("adds a product or section chosen in the list to the list being edited", async () => {
@@ -1206,14 +1221,6 @@ it("adds a product or section chosen in the list to the list being edited", asyn
     }),
   );
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
-});
-
-it("offers no section that would contain the list being edited", async () => {
-  const el = await mountLunch();
-  expect(memberList(el).excludeSectionIds).toEqual([]);
-  await editDrinks(el);
-  // Drinks itself, and Favourites, which holds it.
-  expect([...memberList(el).excludeSectionIds].sort()).toEqual(["s-drinks", "s-fav"]);
 });
 
 it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the moved row", async () => {
@@ -1307,7 +1314,20 @@ it("keeps another change's order that lands while a move is out, reading the men
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   // Another change's order reaches the screen before the move's answer does.
   const newer = lunchNodes().reverse();
-  client.getMenuStructure.mockResolvedValue({ rootSectionId: "root-lunch", nodes: newer });
+  client.getMenuStructure.mockResolvedValue({
+    rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: newer,
+  });
   live.invalidate([{ type: "section_members" }]);
   await vi.waitFor(() =>
     expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
@@ -1344,6 +1364,16 @@ it("reads the menu again when another change moves a different item past the mov
   const [burger, drinks, fav] = lunchNodes();
   client.getMenuStructure.mockResolvedValue({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: [drinks!, fav!, burger!],
   });
   live.invalidate([{ type: "section_members" }]);
@@ -1379,6 +1409,16 @@ it("takes a move's answer without reading the menu again when a read already sho
   const [burger, drinks, fav] = lunchNodes();
   client.getMenuStructure.mockResolvedValue({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: [drinks!, burger!, fav!],
   });
   live.invalidate([{ type: "section_members" }]);
@@ -1428,6 +1468,16 @@ it("takes the last queued move's answer when the earlier move's own update lands
   const [burger, drinks, fav] = lunchNodes();
   client.getMenuStructure.mockResolvedValueOnce({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: [drinks!, burger!, fav!],
   });
   live.invalidate([{ type: "section_members" }]);
@@ -1475,6 +1525,16 @@ it("reads the menu again when a later move is out and a read lands in the order 
   const [burger, drinks, fav] = lunchNodes();
   client.getMenuStructure.mockResolvedValue({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: [drinks!, burger!, fav!],
   });
   live.invalidate([{ type: "section_members" }]);
@@ -1503,7 +1563,8 @@ it("reads the menu again when a later move is out and a read lands in the order 
 it("reads the menu again when a move made after a refusal is out and a read lands in the order a move before the refusal answered", async () => {
   const live = new LiveData();
   const client = api({ liveData: live });
-  const move = client.moveSectionMember.getMockImplementation()!;
+  const move =
+    client.moveSectionMember.getMockImplementation()! as DashboardApi["moveSectionMember"];
   const [burger, drinks, fav] = lunchNodes();
   client.moveSectionMember
     .mockImplementationOnce(move)
@@ -1512,6 +1573,16 @@ it("reads the menu again when a move made after a refusal is out and a read land
   // What the menu reads after the refusal: another change's order.
   client.getMenuStructure.mockResolvedValueOnce({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: [fav!, drinks!, burger!],
   });
   emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
@@ -1533,6 +1604,16 @@ it("reads the menu again when a move made after a refusal is out and a read land
   // Another change's read, in the order the first move answered before the refusal.
   client.getMenuStructure.mockResolvedValue({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: [drinks!, burger!, fav!],
   });
   live.invalidate([{ type: "section_members" }]);
@@ -1607,8 +1688,26 @@ it("reads the menu again when a move sent while no menu was shown is answered af
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(3));
 });
 
-it("a move inside a section reorders every place the section appears, without reading the menu again", async () => {
+it("a move reorders the owned section and keeps the other owned section unchanged, without reading the menu again", async () => {
+  const nodes = lunchNodes();
+  nodes.find((node) => node.memberId === "m-fav")!.children = [
+    productNode("m-fav-lemonade", "p-lemonade"),
+  ];
   const client = api({
+    getMenuStructure: vi.fn().mockResolvedValue({
+      rootSectionId: "root-lunch",
+      root: {
+        id: "root-lunch",
+        internalName: "Lunch Menu",
+        names: {},
+        image: null,
+        color: null,
+        members: [],
+      },
+      nodes,
+      includable: [],
+      includedBy: [],
+    }),
     moveSectionMember: vi
       .fn()
       .mockResolvedValue([
@@ -1629,7 +1728,6 @@ it("a move inside a section reorders every place the section appears, without re
   );
   expect(client.moveSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", "m-beer", 2);
   await clickInTree(el, "toggle-m-fav");
-  await clickInTree(el, "toggle-m-fav/m-fav-drinks");
   const inside = (path: string) =>
     [...tree(el).shadowRoot!.querySelectorAll<HTMLElement>("li[data-path]")]
       .map((item) => item.dataset.path!)
@@ -1639,11 +1737,7 @@ it("a move inside a section reorders every place the section appears, without re
     "m-drinks/m-lemonade",
     "m-drinks/m-beer",
   ]);
-  expect(inside("m-fav/m-fav-drinks")).toEqual([
-    "m-fav/m-fav-drinks/m-lager",
-    "m-fav/m-fav-drinks/m-lemonade",
-    "m-fav/m-fav-drinks/m-beer",
-  ]);
+  expect(inside("m-fav")).toEqual(["m-fav/m-fav-lemonade"]);
   expect(client.getMenuStructure).toHaveBeenCalledOnce();
 });
 
@@ -1667,7 +1761,8 @@ it("reads the menu again when a move's answer names members the menu does not sh
 it("explains a refused move, reads the menu again, and drops the moves queued behind it", async () => {
   let refuse!: (error: unknown) => void;
   const client = api();
-  const move = client.moveSectionMember.getMockImplementation()!;
+  const move =
+    client.moveSectionMember.getMockImplementation()! as DashboardApi["moveSectionMember"];
   client.moveSectionMember.mockImplementationOnce(
     () => new Promise((_, reject) => (refuse = reject)),
   );
@@ -1753,6 +1848,16 @@ it("closes the product picker, sending nothing, when another change takes its se
   // A change that leaves Drinks in place keeps the picker open.
   client.getMenuStructure.mockResolvedValue({
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
     nodes: lunchNodes().reverse(),
   });
   live.invalidate([{ type: "section_members" }]);
@@ -1902,7 +2007,20 @@ it("keeps a picker whose add is out open when the person goes to another menu, m
   ) => Promise<MenuStructure>;
   client.getMenuStructure.mockImplementation(async (id: string) =>
     id === "menu-dinner"
-      ? { rootSectionId: "root-dinner", nodes: [productNode("m-dinner-chips", "p-chips")] }
+      ? {
+          rootSectionId: "root-dinner",
+          root: {
+            id: "root-dinner",
+            internalName: "Dinner Menu",
+            names: {},
+            image: null,
+            color: null,
+            members: [],
+          },
+          includable: [],
+          includedBy: [],
+          nodes: [productNode("m-dinner-chips", "p-chips")],
+        }
       : lunchStructure(id),
   );
   const el = await mountLunch(client);
@@ -1951,14 +2069,14 @@ it("closes a picker whose add is refused while the person is on another menu, na
 });
 
 it("closes a new-section form whose section is refused while the person is on the menus list, naming its list and the refusal there", async () => {
-  const creating = deferred<LibrarySection>();
-  const client = api({ createSection: vi.fn(() => creating.promise) });
+  const creating = deferred<SectionDetails>();
+  const client = api({ createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
   await click(el, "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Specials");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
-  await vi.waitFor(() => expect(client.createSection).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(client.createSectionIn).toHaveBeenCalledOnce());
   await click(el, "back");
   expect(table(el)).not.toBeNull();
   creating.reject({ code: "menu_section.invalid" });
@@ -2103,7 +2221,20 @@ it("shows why a refused picker closed while the other menu's structure is still 
   expect(q(el, '[data-test="structure-loading"]')).not.toBeNull();
   expect(text(q(el, '[data-test="member-error"]'))).toBe(drinksNotSaved());
 
-  reading.resolve({ rootSectionId: "root-dinner", nodes: [] });
+  reading.resolve({
+    rootSectionId: "root-dinner",
+    root: {
+      id: "root-dinner",
+      internalName: "Dinner Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: [],
+  });
   await vi.waitFor(() => expect(tree(el)).not.toBeNull());
   await el.updateComplete;
   const shown = el.shadowRoot!.querySelectorAll('[data-test="member-error"]');
@@ -2117,24 +2248,27 @@ it("shows why a refused picker closed when the other menu's structure could not 
 });
 
 it("closes a new-section form quietly when its section is created and added while the person is on another menu", async () => {
-  const creating = deferred<LibrarySection>();
-  const client = api({ createSection: vi.fn(() => creating.promise) });
+  const creating = deferred<SectionDetails>();
+  const client = api({ createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
   await click(el, "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Specials");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
-  await vi.waitFor(() => expect(client.createSection).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(client.createSectionIn).toHaveBeenCalledOnce());
   await visit(el, DINNER_PATH, "Dinner Menu");
   creating.resolve({ ...sections()[3]!, id: "s-new", internalName: "Specials" });
   await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
-  await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
+  expect(client.createSectionIn).toHaveBeenCalledOnce();
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
-  expect(client.addSectionMember).toHaveBeenCalledWith("root-lunch", {
-    kind: "section",
-    sectionId: "s-new",
+  expect(client.createSectionIn).toHaveBeenCalledWith("root-lunch", {
+    internalName: "Specials",
+    names: {},
+    image: null,
+    color: null,
   });
+  expect(client.addSectionMember).not.toHaveBeenCalled();
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
@@ -2163,7 +2297,20 @@ it("keeps a picker whose add was refused open, and sends a second add, when the 
 
   client.addSectionProducts.mockResolvedValue({ added: 1 });
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
-  reading.resolve({ rootSectionId: "root-lunch", nodes: lunchNodes() });
+  reading.resolve({
+    rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: lunchNodes(),
+  });
   await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
@@ -2317,12 +2464,12 @@ it("keeps its tab when a change event bubbles up from a control inside a tab's c
   expect(location.pathname).toBe(PRICES_PATH);
 });
 
-it("opens the Prices tab the address names, with the library's sections, categories and products", async () => {
+it("opens the Prices tab the address names, with the structure's sections, categories and products", async () => {
   const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
   const el = await mountPrices(client);
   expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
   const table = prices(el);
-  expect(table.sections.map(({ id }) => id)).toEqual(sections().map(({ id }) => id));
+  expect(table.sections.map(({ id }) => id)).toEqual(["s-drinks", "s-beer", "s-fav"]);
   expect(table.categories).toEqual(categories);
   expect(table.products.map(({ id }) => id)).toContain("p-lemonade");
   const cells = text(
@@ -2357,15 +2504,15 @@ it("saves a product's settings on the menu with one PATCH and one PUT of its var
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", { grossPrice: "2.80", active: true }],
+    ["menu-lunch", "mi-lemonade", { grossPrice: "2.80" }],
   ]);
   expect(client.setMenuVariants.mock.calls).toEqual([
     [
       "menu-lunch",
       "mi-lemonade",
       [
-        { variantId: "v-small", price: "1.90", offered: true },
-        { variantId: "v-large", price: "3.75", offered: false },
+        { variantId: "v-small", price: "1.90" },
+        { variantId: "v-large", price: "3.75" },
       ],
     ],
   ]);
@@ -2381,7 +2528,7 @@ it("sends no variants for a product without them", async () => {
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-burger", { grossPrice: "11.00", active: true }],
+    ["menu-lunch", "mi-burger", { grossPrice: "11.00" }],
   ]);
   expect(client.setMenuVariants).not.toHaveBeenCalled();
 });
@@ -2394,7 +2541,7 @@ it("sends the PATCH and no PUT when only the price of a product with variants ch
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", { grossPrice: "2.60", active: true }],
+    ["menu-lunch", "mi-lemonade", { grossPrice: "2.60" }],
   ]);
   expect(writeCalls(client)).toEqual(["updateMenuItem"]);
 });
@@ -2413,8 +2560,8 @@ it("sends the PUT and no PATCH when only a variant changed", async () => {
       "menu-lunch",
       "mi-lemonade",
       [
-        { variantId: "v-small", price: "1.90", offered: true },
-        { variantId: "v-large", price: "3.75", offered: false },
+        { variantId: "v-small", price: "1.90" },
+        { variantId: "v-large", price: "3.75" },
       ],
     ],
   ]);
@@ -2440,7 +2587,7 @@ it("'Use product price' sends grossPrice: null", async () => {
   await inOffer(el, "use-product-price");
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
-  expect(client.updateMenuItem.mock.calls[0]![2]).toEqual({ grossPrice: null, active: true });
+  expect(client.updateMenuItem.mock.calls[0]![2]).toEqual({ grossPrice: null });
 });
 
 it("keeps the settings open and says why when the server refuses the price, sending no variants", async () => {
@@ -2492,7 +2639,7 @@ it("sends one save while one is out, and holds the window open until it is answe
       detail: {
         menuItemId: "mi-burger",
         name: "Burger",
-        item: { grossPrice: "11.00", active: true },
+        item: { grossPrice: "11.00" },
         variants: null,
       },
       bubbles: true,
@@ -2895,6 +3042,8 @@ describe("publishing", () => {
 
   async function publish(el: MenusScreen): Promise<void> {
     inPanel(el, "publish")!.click();
+    await panel(el).updateComplete;
+    inPanel(el, "publish-confirm")?.click();
     await el.updateComplete;
   }
 
@@ -2908,7 +3057,7 @@ describe("publishing", () => {
         ]),
       getMenuStatuses: vi
         .fn()
-        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished" } }),
+        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
     });
     const el = await mount(client);
     await table(el).updateComplete;
@@ -2933,7 +3082,7 @@ describe("publishing", () => {
         ]),
       getMenuStatuses: vi
         .fn()
-        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished" } }),
+        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
     });
     const el = await mount(client);
     await vi.waitFor(() => expect(statusCell(el, "menu-brunch")).toBe("Unpublished"));
@@ -3092,7 +3241,7 @@ describe("publishing", () => {
         ]),
       getMenuStatuses: vi
         .fn()
-        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished" } }),
+        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
     });
     const el = await mount(client);
     await vi.waitFor(() => expect(statusCell(el, "menu-brunch")).toBe("Unpublished"));
@@ -3154,7 +3303,7 @@ describe("publishing", () => {
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
     expect(text(inPanel(el, "live"))).toBe(`Version 2, published ${formatIsoMinute(PUBLISHED_AT)}`);
     expect(text(inPanel(el, "warnings"))).toBe(
-      "The shortcut to Lager is left out of Home: it is not offered on this menu.",
+      "1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
     );
     const reads = client.getMenuPreview.mock.calls.length;
     await chooseTab(el, "structure");
@@ -3184,7 +3333,13 @@ describe("publishing", () => {
     const previews = client.getMenuPreview.mock.calls.length;
     client.getMenuPreview.mockResolvedValue({
       ...lunchPreview(),
-      status: { state: "changed", version: 3, publishedAt: PUBLISHED_AT, hash: LUNCH_LIVE_HASH },
+      status: {
+        state: "changed",
+        clashes: 0,
+        version: 3,
+        publishedAt: PUBLISHED_AT,
+        hash: LUNCH_LIVE_HASH,
+      },
     });
     live.invalidate([{ type: "menu_publications" }]);
     await vi.waitFor(() => expect(client.getMenuPreview.mock.calls.length).toBe(previews + 1));
@@ -3236,6 +3391,7 @@ describe("publishing", () => {
       warnings: [],
       status: {
         state: "current",
+        clashes: 0,
         version: 3,
         publishedAt: "2026-09-26T11:00:00.000Z",
         hash: LUNCH_HASH,
@@ -3243,7 +3399,9 @@ describe("publishing", () => {
     });
     await publish(el);
     await vi.waitFor(() =>
-      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+      expect(text(inPanel(el, "result"))).toBe(
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+      ),
     );
     expect(client.publishMenu).toHaveBeenCalledWith("menu-lunch", LUNCH_HASH);
     expect(writeCalls(client)).toEqual(["publishMenu"]);
@@ -3267,7 +3425,9 @@ describe("publishing", () => {
     client.getMenuPreview.mockRejectedValue(new Error("offline"));
     await publish(el);
     await vi.waitFor(() =>
-      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+      expect(text(inPanel(el, "result"))).toBe(
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+      ),
     );
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
@@ -3415,7 +3575,9 @@ describe("publishing", () => {
     expect(button()!.loading).toBe(true);
     lunchOut.resolve({ versionId: "v-lunch-3", number: 3 });
     await vi.waitFor(() =>
-      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+      expect(text(inPanel(el, "result"))).toBe(
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+      ),
     );
   });
 
@@ -3445,7 +3607,13 @@ describe("publishing", () => {
         hash: LUNCH_HASH,
         changes: [],
         warnings: [],
-        status: { state: "current", version: 2, publishedAt: PUBLISHED_AT, hash: LUNCH_HASH },
+        status: {
+          state: "current",
+          clashes: 0,
+          version: 2,
+          publishedAt: PUBLISHED_AT,
+          hash: LUNCH_HASH,
+        },
         document: lunchDocument(),
       }),
     });
@@ -3554,9 +3722,138 @@ describe("home page", () => {
       "p-lager",
       "p-lemonade",
     ]);
-    expect(editor.products.find(({ id }) => id === "p-lager")!.name).toBe("Lager");
+    expect(editor.products.find(({ id }) => id === "p-lager")!.name).toBe("Drinks › Lager");
     expect(editor.sections.map(({ id }) => id).sort()).toEqual(["s-beer", "s-drinks", "s-fav"]);
     expect(editor.sections.find(({ id }) => id === "s-fav")!.internalName).toBe("Favourites");
+  });
+
+  it("offers included targets by their structure path and replaces through the Home route", async () => {
+    const client = api({
+      getMenuStructure: vi.fn().mockResolvedValue({
+        menuId: "menu-lunch",
+        rootSectionId: "root-lunch",
+        nodes: [
+          {
+            memberId: "m-drinks",
+            ref: { kind: "section", sectionId: "included-drinks" },
+            internalName: "Drinks",
+            includedMenuId: "menu-drinks",
+            children: [
+              {
+                memberId: "m-beer",
+                ref: { kind: "section", sectionId: "included-beer" },
+                internalName: "Beer",
+                children: [productNode("m-lager", "p-lager")],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const el = await mountHome(client);
+    const editor = homeEditor(el);
+    expect(editor.sections).toEqual([
+      { id: "included-drinks", internalName: "Drinks" },
+      { id: "included-beer", internalName: "Drinks › Beer" },
+    ]);
+    expect(editor.products).toEqual([{ id: "p-lager", name: "Drinks › Beer › Lager" }]);
+    emit(editor, "wt-tile-replace", {
+      layoutId: "l-home",
+      memberId: "t-chips",
+      ref: { kind: "section", sectionId: "included-beer" },
+    });
+    await vi.waitFor(() =>
+      expect(client.replaceHomeTile).toHaveBeenCalledWith("l-home", "t-chips", {
+        kind: "section",
+        sectionId: "included-beer",
+      }),
+    );
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+    expect(writeCalls(client)).toEqual(["replaceHomeTile"]);
+  });
+
+  it.each([
+    { code: "server.internal", params: {}, field: false },
+    {
+      code: "menu.shortcut_unreachable",
+      params: { layoutId: "l-home", ref: { kind: "section", sectionId: "s-beer" } },
+      field: true,
+    },
+    {
+      code: "menu.shortcut_unreachable",
+      params: { layoutId: "l-home", ref: { kind: "section", sectionId: "s-other" } },
+      field: false,
+    },
+    { code: "menu_section.not_found", params: { sectionId: "s-beer" }, field: true },
+    { code: "menu_section.member_duplicate", params: { sectionId: "l-home" }, field: false },
+  ])(
+    "retains a refused replacement ($code, field=$field) at its picker and closes after success before a failed refresh",
+    async ({ code, params, field }) => {
+      const client = api({ replaceHomeTile: vi.fn().mockRejectedValue({ code, params }) });
+      const el = await mountHome(client);
+      const editor = homeEditor(el);
+      const list = editor.shadowRoot!.querySelector<
+        HTMLElementTagNameMap["dashboard-member-list-editor"]
+      >("dashboard-member-list-editor")!;
+      list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-chips"]')!.click();
+      await list.updateComplete;
+      const select = list.shadowRoot!.querySelector<HTMLSelectElement>(
+        'select[name="member-ref"]',
+      )!;
+      select.value = "section:s-beer";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await list.updateComplete;
+      const replaceButton = list
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+      replaceButton.focus();
+      replaceButton.click();
+      await vi.waitFor(() => expect(client.replaceHomeTile).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(editor.busy).toBe(false));
+      await list.updateComplete;
+      expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).not.toBeNull();
+      expect(select.value).toBe("section:s-beer");
+      const actions =
+        list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+          "wt-form-actions",
+        )!;
+      expect(actions.error).toBe(field ? t("form.fix_fields") : codeMessage(code));
+      if (field) {
+        expect(text(list.shadowRoot!.querySelector('[data-test="add-error"]'))).toBe(
+          codeMessage(code),
+        );
+        expect(list.shadowRoot!.activeElement).toBe(select);
+      }
+      expect(
+        list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!
+          .disabled,
+      ).toBe(false);
+      expect(q(el, '[data-test="home-error"]')).toBeNull();
+      client.replaceHomeTile.mockResolvedValue({} as SectionMember);
+      client.listHomeLayouts.mockRejectedValue({ code: "server.internal" });
+      list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+      await vi.waitFor(() => expect(client.replaceHomeTile).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
+      expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).toBeNull();
+    },
+  );
+
+  it("keeps a late replacement refusal off another layout", async () => {
+    const out = deferred<SectionMember>();
+    const client = api({ replaceHomeTile: vi.fn(() => out.promise) });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-replace", {
+      layoutId: "l-home",
+      memberId: "t-chips",
+      ref: { kind: "section", sectionId: "s-beer" },
+    });
+    await vi.waitFor(() => expect(client.replaceHomeTile).toHaveBeenCalledTimes(1));
+    emit(homeEditor(el), "wt-layout-select", { layoutId: "l-counter" });
+    await el.updateComplete;
+    out.reject({ code: "menu.shortcut_unreachable" });
+    await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
+    expect(q(el, '[data-test="home-error"]')).toBeNull();
+    expect(homeEditor(el).selected).toBe("l-counter");
   });
 
   it("follows the layouts while the tab is shown, and stops once another tab is", async () => {
@@ -3753,8 +4050,8 @@ describe("home page", () => {
     )!;
     await list.updateComplete;
     expect(
-      text(list.shadowRoot!.querySelector('tr[data-member="t-chips"] [data-test="note"]')),
-    ).toBe(t("home.not_on_menu"));
+      text(list.shadowRoot!.querySelector('tr[data-member="t-chips"] [data-test="name"]')),
+    ).toBe(t("home.missing").replace("{name}", "Chips"));
   });
 
   it("edits another layout when asked, and keeps editing it when the layouts are read again", async () => {
@@ -4131,23 +4428,11 @@ describe("the name forms", () => {
       save: "new-section-save",
       field: "internalName",
       required: "sections.internal_name_required",
-      write: "createSection",
+      write: "createSectionIn",
       path: LUNCH_PATH,
       open: async (el) => {
         if (breadcrumb(el) !== "Lunch Menu › Drinks") await editDrinks(el);
         await click(el, "new-section");
-      },
-    },
-    {
-      form: "duplicate",
-      save: "duplicate-save",
-      field: "internalName",
-      required: "sections.internal_name_required",
-      write: "duplicateSection",
-      path: LUNCH_PATH,
-      open: async (el) => {
-        if (breadcrumb(el) !== "Lunch Menu › Drinks") await editDrinks(el);
-        await click(el, "duplicate-here");
       },
     },
     {
@@ -4329,4 +4614,474 @@ describe("the menus list just wider than its narrow layout", () => {
       }
     },
   );
+});
+
+it("creates a section with its customer name, image and colour in one request", async () => {
+  const client = api();
+  const createSectionIn = vi.fn().mockResolvedValue({
+    id: "s-new",
+    internalName: "Starters",
+    names: {},
+    image: null,
+    color: null,
+    members: [],
+  });
+  Object.assign(client, { createSectionIn });
+  const el = await mountLunch(client);
+  await click(el, "new-section");
+  const form = el.shadowRoot!.querySelector("dashboard-section-details-form");
+  expect(form).not.toBeNull();
+  form!.dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: {
+        internalName: "Starters",
+        names: { en: "To begin", es: "Para empezar" },
+        image: null,
+        color: "#aa3300",
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(createSectionIn).toHaveBeenCalledExactlyOnceWith("root-lunch", {
+      internalName: "Starters",
+      names: { en: "To begin", es: "Para empezar" },
+      image: null,
+      color: "#aa3300",
+    }),
+  );
+  expect(client.addSectionMember).not.toHaveBeenCalled();
+});
+
+it("offers only menus that can be included, and includes one as a folder", async () => {
+  const client = api({
+    getMenuStructure: vi.fn().mockResolvedValue({
+      rootSectionId: "root-lunch",
+      root: {
+        id: "root-lunch",
+        internalName: "Lunch Menu",
+        names: {},
+        image: null,
+        color: null,
+        members: [],
+      },
+      nodes: [],
+      includable: [{ id: "drinks", name: "Drinks", rootSectionId: "drinks-root" }],
+      includedBy: [],
+    }),
+  });
+  const el = await mountLunch(client);
+  await click(el, "include-menu");
+  const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[name="included-menu"]')!;
+  expect(picker.required).toBe(true);
+  expect(picker.closest("label")!.textContent).toContain("*");
+  expect(picker.options[0]!.textContent).toBe(t("menus.choose_menu"));
+  const label = picker.closest("label")!;
+  expect(getComputedStyle(label).display).toBe("grid");
+  expect(label.querySelector("span")!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    picker.getBoundingClientRect().top,
+  );
+  expect(
+    [...picker.options].filter((option) => option.value).map((option) => option.textContent),
+  ).toEqual(["Drinks"]);
+  picker.value = "drinks-root";
+  picker.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  await click(el, "include-save");
+  await vi.waitFor(() =>
+    expect(client.addSectionMember).toHaveBeenCalledWith("root-lunch", {
+      kind: "section",
+      sectionId: "drinks-root",
+    }),
+  );
+});
+
+it("lists the menus that include this one, with their clashes", async () => {
+  setLocale("en-GB");
+  const client = api({
+    getMenuStructure: vi.fn().mockResolvedValue({
+      rootSectionId: "root-lunch",
+      root: {
+        id: "root-lunch",
+        internalName: "Lunch Menu",
+        names: {},
+        image: null,
+        color: null,
+        members: [],
+      },
+      nodes: [],
+      includable: [],
+      includedBy: [
+        { id: "evening", name: "Evening" },
+        { id: "afternoon", name: "Afternoon" },
+      ],
+    }),
+    getMenuStatuses: vi.fn().mockResolvedValue({
+      evening: { state: "unpublished", clashes: 0 },
+      afternoon: { state: "unpublished", clashes: 1 },
+    }),
+  });
+  const el = await mountLunch(client);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('[data-test="included-by"]')).not.toBeNull(),
+  );
+  const notice = el.shadowRoot!.querySelector('[data-test="included-by"]')!;
+  expect(notice.textContent).toContain(t("menus.included_in" as StringKey));
+  expect(
+    [...notice.querySelectorAll("a")].map((a) => [a.textContent?.trim(), a.getAttribute("href")]),
+  ).toEqual([
+    ["Evening", "/manage/menus/menu/evening/view/structure"],
+    ["Afternoon (1 clash)", "/manage/menus/menu/afternoon/view/structure"],
+  ]);
+});
+
+describe("review fix: inclusion target and validation", () => {
+  function includeApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+    const client = api(overrides);
+    const read = client.getMenuStructure.getMockImplementation()! as (
+      id: string,
+    ) => Promise<MenuStructure>;
+    client.getMenuStructure.mockImplementation(async (id: string) => ({
+      ...(await read(id)),
+      includable: [{ id: "wine", name: "Wines", rootSectionId: "wine-root" }],
+    }));
+    return client;
+  }
+  async function openInclude(el: MenusScreen, choose = true) {
+    await click(el, "include-menu");
+    const picker = inModal<HTMLSelectElement>(el, "include", '[name="included-menu"]');
+    if (choose) {
+      picker.value = "wine-root";
+      picker.dispatchEvent(new Event("change"));
+      await el.updateComplete;
+    }
+    return picker;
+  }
+  it("closes Include without a write when its original list disappears before Add", async () => {
+    const live = new LiveData();
+    const client = includeApi({ liveData: live });
+    const el = await mountLunch(client);
+    await editDrinks(el);
+    await openInclude(el);
+    await takeDrinksOff(el, client, live);
+    expect(modal(el, "include").open).toBe(false);
+    expect(client.addSectionMember).not.toHaveBeenCalled();
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.list_gone").replace("{name}", "Drinks"),
+    );
+  });
+  it.each(["success", "refusal"] as const)(
+    "keeps the original Include destination during list loss and %s",
+    async (outcome) => {
+      const live = new LiveData();
+      const adding = deferred<SectionMember>();
+      const client = includeApi({ liveData: live, addSectionMember: vi.fn(() => adding.promise) });
+      const el = await mountLunch(client);
+      await editDrinks(el);
+      await openInclude(el);
+      await click(el, "include-save");
+      await vi.waitFor(() =>
+        expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
+          kind: "section",
+          sectionId: "wine-root",
+        }),
+      );
+      await takeDrinksOff(el, client, live);
+      expect(modal(el, "include").open).toBe(true);
+      if (outcome === "success") {
+        adding.resolve(sectionMember("wine", 0, "wine-root"));
+        await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+        await vi.waitFor(() =>
+          expect(text(q(el, '[data-test="member-error"]'))).toBe(
+            t("menus.list_gone_saved").replace("{name}", "Drinks"),
+          ),
+        );
+      } else {
+        adding.reject({ code: "menu_section.not_found" });
+        await vi.waitFor(async () =>
+          expect(await bottom(el, "include")).toBe(codeMessage("menu_section.not_found")),
+        );
+        await click(el, "include-save");
+        expect(modal(el, "include").open).toBe(false);
+        expect(client.addSectionMember).toHaveBeenCalledOnce();
+      }
+    },
+  );
+  it("closes an idle Include on navigation without retargeting the selection", async () => {
+    const client = includeApi();
+    const el = await mountLunch(client);
+    await editDrinks(el);
+    await openInclude(el);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    expect(modal(el, "include").open).toBe(false);
+    expect(client.addSectionMember).not.toHaveBeenCalled();
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+  it.each(["success", "refusal"] as const)(
+    "keeps a pending Include's destination through navigation and %s",
+    async (outcome) => {
+      const adding = deferred<SectionMember>();
+      const client = includeApi({ addSectionMember: vi.fn(() => adding.promise) });
+      const el = await mountLunch(client);
+      await editDrinks(el);
+      await openInclude(el);
+      await click(el, "include-save");
+      await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
+      await visit(el, DINNER_PATH, "Dinner Menu");
+      expect(modal(el, "include").open).toBe(true);
+      if (outcome === "success") adding.resolve(sectionMember("wine", 0, "wine-root"));
+      else adding.reject({ code: "menu_section.not_found" });
+      await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+      expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
+        kind: "section",
+        sectionId: "wine-root",
+      });
+      if (outcome === "refusal")
+        expect(text(q(el, '[data-test="member-error"]'))).toBe(
+          t("menus.change_not_saved")
+            .replace("{name}", "Drinks")
+            .replace("{reason}", codeMessage("menu_section.not_found")),
+        );
+      else expect(q(el, '[data-test="member-error"]')).toBeNull();
+    },
+  );
+  it("explains an empty Include submission, focuses it, rechecks changes and resets on reopen", async () => {
+    const client = includeApi();
+    const el = await mountLunch(client);
+    const picker = await openInclude(el, false);
+    const save = inModal<HTMLElementTagNameMap["wt-button"]>(
+      el,
+      "include",
+      '[data-test="include-save"]',
+    );
+    expect(save.disabled).toBe(false);
+    expect(picker.getAttribute("aria-invalid")).not.toBe("true");
+    await click(el, "include-save");
+    expect(save.disabled).toBe(true);
+    expect(picker.getAttribute("aria-invalid")).toBe("true");
+    const error = inModal(el, "include", "#include-menu-error");
+    expect(text(error)).toBe(t("menus.choose_menu_required"));
+    expect(getComputedStyle(error).color).toBe(
+      getComputedStyle(inModal(el, "include", ".required-mark")).color,
+    );
+    expect(picker.getAttribute("aria-describedby")).toContain(error.id);
+    expect(await bottom(el, "include")).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.activeElement).toBe(picker);
+    picker.value = "wine-root";
+    picker.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(save.disabled).toBe(false);
+    expect(await bottom(el, "include")).toBe("");
+    picker.value = "";
+    picker.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(save.disabled).toBe(true);
+    await click(el, "include-cancel");
+    await openInclude(el, false);
+    expect(save.disabled).toBe(false);
+    expect(await bottom(el, "include")).toBe("");
+    expect(client.addSectionMember).not.toHaveBeenCalled();
+  });
+  it("keeps Include retryable after a request refusal", async () => {
+    const client = includeApi({
+      addSectionMember: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "menu_section.member_cycle" })
+        .mockResolvedValue(sectionMember("wine", 0, "wine-root")),
+    });
+    const el = await mountLunch(client);
+    await openInclude(el);
+    await click(el, "include-save");
+    await vi.waitFor(async () =>
+      expect(await bottom(el, "include")).toBe(codeMessage("menu_section.member_cycle")),
+    );
+    expect(
+      inModal<HTMLElementTagNameMap["wt-button"]>(el, "include", '[data-test="include-save"]')
+        .disabled,
+    ).toBe(false);
+    await click(el, "include-save");
+    await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+  });
+});
+
+describe("review fix: menu details opening", () => {
+  const details = (id: string, name: string): MenuStructure => ({
+    rootSectionId: `root-${id}`,
+    root: {
+      id: `root-${id}`,
+      internalName: name,
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    nodes: [],
+    includable: [],
+    includedBy: [],
+  });
+  async function rename(el: MenusScreen, id: string) {
+    await table(el).updateComplete;
+    table(el).shadowRoot!.querySelector<HTMLElement>(`[data-test="rename-${id}"]`)!.click();
+    await el.updateComplete;
+  }
+  it("keeps B and its draft when A's earlier rename read answers last", async () => {
+    const a = deferred<MenuStructure>();
+    const b = deferred<MenuStructure>();
+    const client = api({
+      getMenuStructure: vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise),
+    });
+    const el = await mount(client);
+    await rename(el, "menu-lunch");
+    await rename(el, "menu-dinner");
+    b.resolve(details("dinner", "Dinner Menu"));
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
+    type(inModal(el, "menu-form", '[name="internalName"]'), "Dinner draft");
+    await el.updateComplete;
+    a.resolve(details("lunch", "Lunch Menu"));
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(
+      inModal<HTMLElementTagNameMap["wt-input"]>(el, "menu-form", '[name="internalName"]').value,
+    ).toBe("Dinner draft");
+    inModal(el, "menu-form", '[data-test="save"]').click();
+    await vi.waitFor(() =>
+      expect(client.updateMenuDetails).toHaveBeenCalledWith("menu-dinner", {
+        internalName: "Dinner draft",
+        names: {},
+        image: null,
+        color: null,
+      }),
+    );
+  });
+  it.each(["answer", "failure"] as const)(
+    "ignores an obsolete rename %s after New menu",
+    async (outcome) => {
+      const pending = deferred<MenuStructure>();
+      const client = api({ getMenuStructure: vi.fn(() => pending.promise) });
+      const el = await mount(client);
+      await rename(el, "menu-lunch");
+      await click(el, "add-menu");
+      type(inModal(el, "menu-form", '[name="internalName"]'), "Brunch draft");
+      await el.updateComplete;
+      if (outcome === "answer") pending.resolve(details("lunch", "Lunch Menu"));
+      else pending.reject({ code: "server.internal" });
+      await new Promise((resolve) => setTimeout(resolve));
+      await el.updateComplete;
+      expect(
+        inModal<HTMLElementTagNameMap["wt-input"]>(el, "menu-form", '[name="internalName"]').value,
+      ).toBe("Brunch draft");
+      expect(q(el, '[data-test="load-error"]')).toBeNull();
+    },
+  );
+  it("ignores a late rename after cancellation", async () => {
+    const a = deferred<MenuStructure>();
+    const client = api({
+      getMenuStructure: vi
+        .fn()
+        .mockReturnValueOnce(a.promise)
+        .mockResolvedValue(details("dinner", "Dinner Menu")),
+    });
+    const el = await mount(client);
+    await rename(el, "menu-lunch");
+    await rename(el, "menu-dinner");
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
+    inModal(el, "menu-form", '[data-test="cancel"]').click();
+    await el.updateComplete;
+    a.resolve(details("lunch", "Lunch Menu"));
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(modal(el, "menu-form").open).toBe(false);
+  });
+  it.each(["answer", "failure"] as const)(
+    "ignores an obsolete rename %s after navigation",
+    async (outcome) => {
+      const pending = deferred<MenuStructure>();
+      const client = api();
+      client.getMenuStructure.mockReturnValueOnce(pending.promise);
+      const el = await mount(client);
+      await rename(el, "menu-lunch");
+      await inTable(el, "open-menu-dinner");
+      if (outcome === "answer") pending.resolve(details("lunch", "Lunch Menu"));
+      else pending.reject({ code: "server.internal" });
+      await new Promise((resolve) => setTimeout(resolve));
+      await el.updateComplete;
+      await click(el, "back");
+      expect(modal(el, "menu-form").open).toBe(false);
+      expect(q(el, '[data-test="load-error"]')).toBeNull();
+    },
+  );
+});
+
+it.each(["light", "dark"] as const)(
+  "review fix: gives includer links theme tokens and full hit targets in %s",
+  async (theme) => {
+    const client = api();
+    const read = client.getMenuStructure.getMockImplementation()! as (
+      id: string,
+    ) => Promise<MenuStructure>;
+    client.getMenuStructure.mockImplementation(async (id: string) => ({
+      ...(await read(id)),
+      includedBy: [{ id: "evening", name: "Evening" }],
+    }));
+    history.replaceState(null, "", LUNCH_PATH);
+    const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client }, theme);
+    await vi.waitFor(() => expect(q(el, '[data-test="included-by"] a')).not.toBeNull());
+    const link = q<HTMLAnchorElement>(el, '[data-test="included-by"] a')!;
+    el.style.setProperty("--wt-color-text", "rgb(17, 93, 201)");
+    expect(getComputedStyle(link).color).toBe("rgb(17, 93, 201)");
+    expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(link.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    link.focus();
+    expect(getComputedStyle(link).outlineStyle).not.toBe("none");
+  },
+);
+
+it("sends only an offered reset and leaves the replacement variant set untouched", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  const select = pricesModal(el).querySelector<HTMLSelectElement>('select[name="offered"]');
+  expect(select).not.toBeNull();
+  select!.value = "";
+  select!.dispatchEvent(new Event("change"));
+  await prices(el).updateComplete;
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() =>
+    expect(client.updateMenuItem).toHaveBeenCalledExactlyOnceWith("menu-lunch", "mi-lemonade", {
+      offered: null,
+    }),
+  );
+  expect(client.setMenuVariants).not.toHaveBeenCalled();
+});
+it("shows the current clash count from the menus status read", async () => {
+  const client = api({
+    getMenuStatuses: vi.fn().mockResolvedValue({
+      ...statuses(),
+      "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
+    }),
+  });
+  const el = await mount(client);
+  await table(el).updateComplete;
+  await vi.waitFor(() =>
+    expect(text(table(el).shadowRoot.querySelector('[data-test="status-menu-lunch"]'))).toContain(
+      "2 clashes",
+    ),
+  );
+});
+it("passes a product-only resolve through without replacing variant settings", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  emit(prices(el), "wt-offer-save", {
+    menuItemId: "mi-lemonade",
+    name: "Lemonade",
+    item: { grossPrice: "3.50" },
+    variants: null,
+  });
+  await vi.waitFor(() =>
+    expect(client.updateMenuItem).toHaveBeenCalledExactlyOnceWith("menu-lunch", "mi-lemonade", {
+      grossPrice: "3.50",
+    }),
+  );
+  expect(client.setMenuVariants).not.toHaveBeenCalled();
 });

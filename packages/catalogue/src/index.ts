@@ -19,6 +19,7 @@ export * from "./categories.js";
 export * from "./schema/categories.js";
 export * from "./section-types.js";
 export * from "./section-graph.js";
+export * from "./menu-inclusion.js";
 export * from "./sections.js";
 export * from "./home-layouts.js";
 export {
@@ -70,6 +71,7 @@ export {
 } from "./variants.js";
 export type {
   MenuVariant,
+  MenuVariantWrite,
   ProductVariant,
   ProductVariantInput,
   VariantWrite,

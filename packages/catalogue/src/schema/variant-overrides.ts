@@ -3,11 +3,7 @@ import { check, foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
 import { flag, id, money, products, table } from "@waitron/db";
 import { menuItems } from "./menu.js";
 
-/**
- * What one menu changes about a variant of the product it offers: its price
- * there, or that it is switched off there. A variant follows its parent onto every menu without a
- * row; a row exists only while it overrides something, which the second check enforces.
- */
+/** A row must set a price or its own switch; null leaves that setting undecided here. */
 export const menuItemVariantOverrides = table(
   "menu_item_variant_overrides",
   {
@@ -16,7 +12,7 @@ export const menuItemVariantOverrides = table(
     variantId: id("variant_id").notNull(),
     // Null follows the variant's own price, then the parent's on this menu, then the parent's own.
     price: money("price"),
-    offered: flag("offered").notNull().default(true),
+    offered: flag("offered"),
   },
   (t) => [
     primaryKey({
@@ -37,7 +33,7 @@ export const menuItemVariantOverrides = table(
     check("menu_item_variant_overrides_price_ck", sql`${t.price} >= 0`),
     check(
       "menu_item_variant_overrides_overrides_ck",
-      sql`${t.price} is not null or ${t.offered} = 0`,
+      sql`${t.price} is not null or ${t.offered} is not null`,
     ),
   ],
 );

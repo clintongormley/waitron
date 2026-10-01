@@ -295,6 +295,93 @@ describe("till-menu-browser", () => {
       expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Drinks (EN)", "Agua"]);
     });
 
+    it("accepts an empty shortcut while keeping the neighboring actions usable", async () => {
+      const { el } = await mount({
+        menu: lunch({
+          homeLayouts: [
+            {
+              id: "lay-home",
+              name: "Home",
+              tiles: [productTile("water"), { kind: "empty" }, sectionTile("sec-drinks")],
+            },
+          ],
+        }),
+      });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Agua", "Drinks (EN)"]);
+      expect(names(entries(el, "structure"))).toContain("Agua");
+    });
+
+    it.each([
+      ["explicit empty", { kind: "empty" }],
+      ["missing offer", productTile("ghost")],
+      ["not sold separately", productTile("cola")],
+      ["section with nothing orderable", sectionTile("sec-empty")],
+      ["missing section", sectionTile("sec-gone")],
+    ] as const)("keeps a blank, untappable home cell for %s", async (_reason, tile) => {
+      const { el, store } = await mount({
+        menu: lunch({
+          homeLayouts: [
+            {
+              id: "lay-home",
+              name: "Home",
+              tiles: [productTile("cafe"), tile, productTile("water")],
+            },
+          ],
+        }),
+        products: PRODUCTS.map((each) =>
+          each === cola ? { ...each, ordering: "not_sold_separately" } : each,
+        ),
+      });
+      const cells = [
+        ...root(el).querySelectorAll<HTMLElement>('[data-region="shortcuts"] .grid > *'),
+      ];
+      expect(cells.map((cell) => cell.localName)).toEqual(["wt-button", "span", "wt-button"]);
+      const blank = cells[1]!;
+      expect(blank.getAttribute("aria-hidden")).toBe("true");
+      expect(blank.tabIndex).toBe(-1);
+      expect(blank.querySelector("button, wt-button")).toBeNull();
+      blank.click();
+      await el.updateComplete;
+      expect(store.lines).toEqual([]);
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+      expect(names(entries(el, "structure"))).toEqual([
+        "Favourites (EN)",
+        "Drinks (EN)",
+        "Comida (ES)",
+        "plain-internal",
+        "Agua",
+      ]);
+      await tap(el, cells[2]!);
+      expect(store.lines).toEqual([{ product: water, quantity: "1" }]);
+    });
+
+    it.each([3, 6])("sizes a blank cell like a tile at %i columns", async (columns) => {
+      const { el, host } = await mount({ columns });
+      await widen(host, columns === 3 ? 390 : 1280);
+      const cells = [
+        ...root(el).querySelectorAll<HTMLElement>('[data-region="shortcuts"] .grid > *'),
+      ];
+      expect(cells).toHaveLength(6);
+      expect(cells[3]!.localName).toBe("span");
+      expect(cells[4]!.localName).toBe("span");
+      const tile = cells[0]!.getBoundingClientRect();
+      const blank = cells[3]!.getBoundingClientRect();
+      expect(blank.width).toBeCloseTo(tile.width, 0);
+      expect(blank.height).toBeGreaterThanOrEqual(66);
+      expect(cells[5]!.getBoundingClientRect().left).toBeGreaterThan(blank.left);
+    });
+
+    it("sizes blank cells from the tile's tap target token", async () => {
+      const { el, host } = await mount({
+        menu: lunch({
+          homeLayouts: [{ id: "lay-home", name: "Home", tiles: [{ kind: "empty" }] }],
+        }),
+      });
+      host.style.setProperty("--wt-tap-min", "60px");
+      const blank = root(el).querySelector<HTMLElement>('[data-region="shortcuts"] .slot')!;
+      expect(getComputedStyle(blank).minHeight).toBe("90px");
+    });
+
     it("shows no shortcuts, and still the structure, for a menu with no layouts", async () => {
       const { el } = await mount({ menu: lunch({ homeLayouts: [] }) });
       expect(entries(el, "shortcuts")).toEqual([]);
@@ -831,9 +918,10 @@ describe("till-menu-browser", () => {
   });
 
   describe("a product the menu does not offer (D5)", () => {
-    it("is left out of the structure, its section, the search and the tiles, and a section left empty goes too", async () => {
+    it("is left out of the structure, its section and search, while home cells stay in place", async () => {
       const { el } = await mount({ products: PRODUCTS.filter((each) => each !== cola) });
       expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Drinks (EN)", "Agua"]);
+      expect(root(el).querySelectorAll('[data-region="shortcuts"] .grid > *')).toHaveLength(6);
       expect(names(entries(el, "structure"))).not.toContain("Empty (EN)");
       await tap(el, entry(el, "structure", "Drinks (EN)"));
       expect(names(entries(el, "section"))).toEqual(["Lemonade", "Beer (EN)"]);
@@ -843,12 +931,13 @@ describe("till-menu-browser", () => {
       expect(entries(el, "results")).toEqual([]);
     });
 
-    it("leaves out a tile for a product in the structure that has no offer", async () => {
+    it("keeps a blank tile for a product in the structure that has no offer", async () => {
       const { el } = await mount({
         menu: lunch({ homeLayoutId: "lay-four" }),
         products: PRODUCTS.filter((each) => each !== cola),
       });
       expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Agua"]);
+      expect(root(el).querySelectorAll('[data-region="shortcuts"] .grid > *')).toHaveLength(4);
     });
   });
 
@@ -861,11 +950,12 @@ describe("till-menu-browser", () => {
         keys.includes(each.id.slice(2)) ? { ...each, ordering } : { ...each, ordering: "public" },
       );
 
-    it("leaves a product not sold separately out of the tiles, the structure, its section and the search, and a section left empty goes too", async () => {
+    it("leaves a product not sold separately out of the structure, its section and search while keeping home cells", async () => {
       const { el } = await mount({
         products: withOrdering("not_sold_separately", "cola", "cana", "cafe"),
       });
       expect(names(entries(el, "shortcuts"))).toEqual(["Burger", "Drinks (EN)", "Agua"]);
+      expect(root(el).querySelectorAll('[data-region="shortcuts"] .grid > *')).toHaveLength(6);
       await tap(el, entry(el, "structure", "Drinks (EN)"));
       expect(names(entries(el, "section"))).toEqual(["Lemonade"]);
       await search(el, "a");
@@ -986,11 +1076,16 @@ describe("till-menu-browser", () => {
       expect(breadcrumb(el)).toBe("Home › Drinks (EN) › Beer (EN)");
     });
 
-    it("drops a shortcut whose target a new menu lacks, with no notice", async () => {
+    it("blanks a shortcut whose target a new menu lacks, with no notice", async () => {
       const { el } = await mount();
       el.menu = lunch({ structure: { members: [favourites, food, member("water")] } });
       await el.updateComplete;
       expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Agua"]);
+      expect(
+        [...root(el).querySelectorAll('[data-region="shortcuts"] .grid > *')].map(
+          (cell) => cell.localName,
+        ),
+      ).toEqual(["wt-button", "wt-button", "span", "span", "span", "wt-button"]);
       expect(notice(el)).toBeNull();
     });
 

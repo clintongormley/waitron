@@ -347,6 +347,10 @@ treat a shortcut whose target has left the working menu is not decided here and 
 first.** The device shows a warning notification, then switches to that menu's default layout.
 What a rename does, and what happens when a device switches to another menu, stay with the plan.
 
+_2026-10-01: [slice 2](../plans/2026-09-30-menus-include-menus-slice-2.md) removes per-menu extras
+(owner decision, 2026-09-30), uses nullable on/off decisions and keeps product and size price
+overrides. This paragraph records the earlier decision._
+
 **Today's per-menu overrides stay.** A menu can still change, for each product it offers, a
 variant's price or switch that variant off there (`menu_item_variant_overrides`), which extras
 lists it offers and each extra's price and availability there (`menu_item_extra_lists`,

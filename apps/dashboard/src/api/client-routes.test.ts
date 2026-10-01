@@ -484,7 +484,29 @@ describe("DashboardApi routes", () => {
     );
     expect(headers).toEqual(["1", null]);
   });
-  it("sends every sections-library request to its route and returns the answers", async () => {
+  it("maps the menu's internal name to the catalogue wire name and sends its presentation fields", async () => {
+    const saved = { id: "c1", name: "Lunch", active: true, version: 1 };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(saved))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const details = {
+      names: { en: "Lunch", es: "Almuerzo" },
+      image: "lunch.png",
+      color: "#aa3300",
+    };
+    await expect(api.createCatalogue("Lunch", details)).resolves.toEqual(saved);
+    await expect(
+      api.updateMenuDetails("c1", { internalName: "Weekday lunch", ...details }),
+    ).resolves.toBeUndefined();
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/catalogues", "POST", { name: "Lunch", ...details }],
+      ["/management-api/catalogues/c1", "PATCH", { name: "Weekday lunch", ...details }],
+    ]);
+  });
+
+  it("sends every section-editor request to its route and returns the answers", async () => {
     const section = {
       id: "s1",
       internalName: "Drinks",
@@ -494,11 +516,8 @@ describe("DashboardApi routes", () => {
       members: [],
     };
     const member = { id: "m1", position: 0, ref: { kind: "product", productId: "p1" } };
-    const usages = { menus: [{ id: "c1", name: "Lunch" }], sections: [] };
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse([section]))
-      .mockResolvedValueOnce(jsonResponse({ s1: usages }))
       .mockResolvedValueOnce(jsonResponse(section))
       .mockResolvedValueOnce(jsonResponse(section))
       .mockResolvedValueOnce(emptyResponse())
@@ -506,17 +525,13 @@ describe("DashboardApi routes", () => {
       .mockResolvedValueOnce(jsonResponse(member))
       .mockResolvedValueOnce(jsonResponse({ added: 2 }))
       .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse([member]))
-      .mockResolvedValueOnce(jsonResponse(section))
-      .mockResolvedValueOnce(jsonResponse(usages));
+      .mockResolvedValueOnce(jsonResponse([member]));
     const api = new DashboardApi("", fetchImpl);
     const ref = { kind: "section" as const, sectionId: "s2" };
 
-    await expect(api.listSections()).resolves.toEqual([section]);
-    await expect(api.listSectionUsages()).resolves.toEqual({ s1: usages });
-    await expect(api.createSection({ internalName: "Drinks", names: {} })).resolves.toEqual(
-      section,
-    );
+    await expect(
+      api.createSectionIn("root", { internalName: "Drinks", names: {} }),
+    ).resolves.toEqual(section);
     await expect(api.updateSection("s1", { color: "#aabbcc" })).resolves.toEqual(section);
     await expect(api.deleteSection("s1")).resolves.toBeUndefined();
     await expect(api.listSectionMembers("s1")).resolves.toEqual([member]);
@@ -524,15 +539,8 @@ describe("DashboardApi routes", () => {
     await expect(api.addSectionProducts("s1", ["p1", "p2"])).resolves.toEqual({ added: 2 });
     await expect(api.removeSectionMember("s1", "m1")).resolves.toBeUndefined();
     await expect(api.moveSectionMember("s1", "m1", 2)).resolves.toEqual([member]);
-    await expect(
-      api.duplicateSection("s1", { internalName: "Drinks (copy)", memberIds: ["m1"] }),
-    ).resolves.toEqual(section);
-    await expect(api.getSectionUsages("s1")).resolves.toEqual(usages);
-
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/sections", "GET", undefined],
-      ["/management-api/sections/usages", "GET", undefined],
-      ["/management-api/sections", "POST", { internalName: "Drinks", names: {} }],
+      ["/management-api/sections/root/sections", "POST", { internalName: "Drinks", names: {} }],
       ["/management-api/sections/s1", "PATCH", { color: "#aabbcc" }],
       ["/management-api/sections/s1", "DELETE", undefined],
       ["/management-api/sections/s1/members", "GET", undefined],
@@ -540,12 +548,6 @@ describe("DashboardApi routes", () => {
       ["/management-api/sections/s1/members/products", "POST", { productIds: ["p1", "p2"] }],
       ["/management-api/sections/s1/members/m1", "DELETE", undefined],
       ["/management-api/sections/s1/members/m1/position", "PUT", { to: 2 }],
-      [
-        "/management-api/sections/s1/duplicate",
-        "POST",
-        { internalName: "Drinks (copy)", memberIds: ["m1"] },
-      ],
-      ["/management-api/sections/s1/usages", "GET", undefined],
     ]);
   });
 
@@ -572,13 +574,13 @@ describe("DashboardApi routes", () => {
 
     await expect(api.getMenuPrices("c1")).resolves.toEqual([row]);
     await expect(
-      api.updateMenuItem("c1", "mi1", { grossPrice: null, active: false }),
+      api.updateMenuItem("c1", "mi1", { grossPrice: null, offered: false }),
     ).resolves.toBeUndefined();
     await expect(api.setMenuVariants("c1", "mi1", variants)).resolves.toEqual(variants);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/catalogues/c1/prices", "GET", undefined],
-      ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null, active: false }],
+      ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null, offered: false }],
       ["/management-api/catalogues/c1/items/mi1/variants", "PUT", { variants }],
     ]);
   });
@@ -690,7 +692,7 @@ describe("DashboardApi routes", () => {
           source: "this_menu" as const,
         },
       ],
-      warnings: [{ kind: "shortcut_omitted" as const, layoutName: "Home", name: "Burger" }],
+      warnings: [{ kind: "shortcut_missing" as const, layoutName: "Home", name: "Burger" }],
     };
     const fetchImpl = vi
       .fn()
@@ -781,4 +783,21 @@ describe("DashboardApi routes", () => {
       ["/management-api/servers/a%2Fb/clear", "POST", undefined],
     ]);
   });
+});
+
+it("replaces a missing home tile through its own route with a structural reference", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(
+      jsonResponse({ id: "t1", position: 1, ref: { kind: "section", sectionId: "s-wines" } }),
+    );
+  const api = new DashboardApi("", fetchImpl);
+  await api.replaceHomeTile("l-counter", "t1", { kind: "section", sectionId: "s-wines" });
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/home-layouts/l-counter/tiles/t1/replace",
+      "POST",
+      { ref: { kind: "section", sectionId: "s-wines" } },
+    ],
+  ]);
 });

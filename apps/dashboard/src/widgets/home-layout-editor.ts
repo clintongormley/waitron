@@ -6,7 +6,8 @@ import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layo
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { HomeLayout, HomeTile, MemberRef, SectionMember } from "../api/client.js";
-import "./member-list-editor.js";
+import type { TileRef } from "@waitron/catalogue/src/section-types.js";
+import { MemberListEditor } from "./member-list-editor.js";
 import { reorder } from "./reorder.js";
 import { t } from "../i18n/t.js";
 
@@ -17,6 +18,12 @@ import { t } from "../i18n/t.js";
  */
 @customElement("dashboard-home-layout-editor")
 export class HomeLayoutEditor extends LitElement {
+  replacementCompletion(memberId: string): (message: string, field?: boolean) => void {
+    return this.shadowRoot!.querySelector<MemberListEditor>(
+      "dashboard-member-list-editor",
+    )!.replacementCompletion(memberId);
+  }
+
   static override styles = [
     baseStyles,
     css`
@@ -150,17 +157,13 @@ export class HomeLayoutEditor extends LitElement {
         margin-block-end: var(--wt-space-1);
       }
       .tile.off-menu {
-        border-style: dashed;
+        visibility: hidden;
       }
       .tile-name {
         font-weight: var(--wt-font-weight-bold);
       }
-      .tile-kind,
-      .tile-note {
+      .tile-kind {
         color: var(--wt-color-text-muted);
-      }
-      .tile-note {
-        font-weight: var(--wt-font-weight-bold);
       }
     `,
   ];
@@ -168,7 +171,7 @@ export class HomeLayoutEditor extends LitElement {
   @property({ attribute: false }) layouts: HomeLayout[] = [];
   /** The layout being edited; the first layout, which is the default, when it names none of them. */
   @property() selected = "";
-  /** The products and library sections the menu's structure reaches: the only tiles on offer. */
+  /** The products and sections reached by the menu, including its included menus. */
   @property({ attribute: false }) products: { id: string; name: string }[] = [];
   @property({ attribute: false }) sections: { id: string; internalName: string }[] = [];
   @property({ type: Boolean }) busy = false;
@@ -178,26 +181,25 @@ export class HomeLayoutEditor extends LitElement {
    * confirms it, so the preview follows the list. */
   @state() private order: HomeTile[] = [];
   #current: HomeLayout | null = null;
-  #members: SectionMember[] = [];
+  #members: SectionMember<TileRef>[] = [];
   #products: { id: string; name: string }[] = [];
   #sections: { id: string; internalName: string }[] = [];
-  #notes: ReadonlyMap<string, string> = new Map();
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("layouts") || changed.has("selected")) {
       this.#current =
         this.layouts.find(({ id }) => id === this.selected) ?? this.layouts[0] ?? null;
       this.order = [...(this.#current?.tiles ?? [])].sort((a, b) => a.position - b.position);
-      this.#members = this.order.map(({ memberId, position, ref }) => ({
-        id: memberId,
-        position,
-        ref,
+      this.#members = this.order.map((tile) => ({
+        id: tile.memberId,
+        position: tile.position,
+        ref: tile.reachable
+          ? tile.ref
+          : {
+              kind: "missing" as const,
+              name: t("home.missing").replace("{name}", tile.missingName ?? tile.name),
+            },
       }));
-      this.#notes = new Map(
-        this.order
-          .filter((tile) => !tile.reachable)
-          .map((tile) => [tile.memberId, t("home.not_on_menu")]),
-      );
     }
     if (
       changed.has("layouts") ||
@@ -205,9 +207,7 @@ export class HomeLayoutEditor extends LitElement {
       changed.has("products") ||
       changed.has("sections")
     ) {
-      // A held tile is named by the layout itself, so a target the menu no longer reaches keeps its
-      // name; the member-list editor never offers what the list already holds.
-      const tiles = this.#current?.tiles ?? [];
+      const tiles = (this.#current?.tiles ?? []).filter((tile) => tile.reachable);
       const heldProducts = tiles.flatMap(({ ref, name }) =>
         ref.kind === "product" ? [{ id: ref.productId, name }] : [],
       );
@@ -290,6 +290,8 @@ export class HomeLayoutEditor extends LitElement {
   }
 
   #tile(tile: HomeTile) {
+    if (!tile.reachable || tile.ref.kind === "missing")
+      return html`<li class="tile off-menu" data-tile=${tile.memberId} aria-hidden="true"></li>`;
     const kind = tile.ref.kind;
     return html`<li
       class=${`tile ${kind}${tile.reachable ? "" : " off-menu"}`}
@@ -299,11 +301,6 @@ export class HomeLayoutEditor extends LitElement {
       <span class="tile-kind" data-test="tile-kind"
         >${t(kind === "product" ? "home.tile_product" : "home.tile_section")}</span
       >
-      ${
-        tile.reachable
-          ? nothing
-          : html`<span class="tile-note" data-test="tile-note">${t("home.not_on_menu")}</span>`
-      }
     </li>`;
   }
 
@@ -348,14 +345,18 @@ export class HomeLayoutEditor extends LitElement {
       <dashboard-member-list-editor
         .members=${this.#members}
         .products=${this.#products}
-        .sections=${this.#sections}
-        .notes=${this.#notes}
+        .nodes=${this.#sections.map((section) => ({ memberId: section.id, ref: { kind: "section" as const, sectionId: section.id }, internalName: section.internalName }))}
+        .sectionChoices=${true}
+        replacementScope=${current.id}
+        .replaceable=${new Set(this.order.filter((tile) => !tile.reachable).map((tile) => tile.memberId))}
         .openable=${false}
         .busy=${this.busy}
         label=${heading}
         listName=${current.name}
         @wt-member-add=${(event: CustomEvent<{ ref: MemberRef }>) =>
           this.#relay(event, "wt-tile-add", { ref: event.detail.ref })}
+        @wt-member-replace=${(event: CustomEvent<{ memberId: string; ref: MemberRef }>) =>
+          this.#relay(event, "wt-tile-replace", event.detail)}
         @wt-member-remove=${(event: CustomEvent<{ memberId: string }>) =>
           this.#relay(event, "wt-tile-remove", { memberId: event.detail.memberId })}
         @wt-member-move=${(event: CustomEvent<{ memberId: string; to: number }>) => {

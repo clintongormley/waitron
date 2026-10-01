@@ -47,9 +47,6 @@ export interface SeedProduct {
 
 export interface SeedCategory {
   name: Record<SeedLocale, string>;
-  /** The internal name of the library section built from this category, where `name` would repeat
-   * another menu's; `name` stays its customer-facing name. */
-  sectionName?: Record<SeedLocale, string>;
   station: "kitchen" | "bar" | "deli" | null;
   products: SeedProduct[];
 }
@@ -531,7 +528,6 @@ export const MENU_DEL_DIA: SeedCatalogue = {
   categories: [
     {
       name: { en: "Starters", es: "Primeros" },
-      sectionName: { en: "Menú del Día starters", es: "Primeros del Menú del Día" },
       station: "kitchen",
       products: [
         {
@@ -572,7 +568,6 @@ export const MENU_DEL_DIA: SeedCatalogue = {
     },
     {
       name: { en: "Mains", es: "Segundos" },
-      sectionName: { en: "Menú del Día mains", es: "Segundos del Menú del Día" },
       station: "kitchen",
       products: [
         {

@@ -4,12 +4,9 @@ import type { Transaction } from "@waitron/db";
 import {
   addProducts,
   createCatalogue,
-  menuItemExtraLists,
   menuItems,
-  readProductModifiers,
   requireMenuRoot,
   resolveAccessibleCatalogueIds,
-  setMenuItemExtraLists,
 } from "@waitron/catalogue";
 import type { ServiceMode } from "@waitron/module";
 import {
@@ -81,28 +78,6 @@ export async function offerProducts(
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
-  const modifiers = await readProductModifiers(tx, productIds);
-  const withoutExtras: string[] = [];
-  for (const productId of productIds) {
-    const extras = (modifiers.get(productId.toLowerCase()) ?? []).filter(
-      (ref) => ref.kind === "extras",
-    );
-    const offerId = offerByProduct.get(productId)!;
-    if (extras.length === 0) withoutExtras.push(offerId);
-    else
-      await setMenuItemExtraLists(
-        tx,
-        offerId,
-        extras.map((ref) => ({ listId: ref.id, items: [] })),
-      );
-  }
-  // What `setMenuItemExtraLists` writes for an offer publishing no list, in one statement: its
-  // reachability check, a whole-graph read per call, is settled by `placeOnTopLevel` above.
-  if (withoutExtras.length > 0)
-    await tx
-      .delete(menuItemExtraLists)
-      .where(inArray(menuItemExtraLists.menuItemId, withoutExtras));
-
   if ((options.routes ?? "mirror-legacy") === "mirror-legacy") {
     await mirrorLegacyRoutes(tx, cfg, productIds);
   }
@@ -195,7 +170,7 @@ async function placeOnTopLevel(
   if (productIds.length === 0) return new Map();
   await addProducts(tx, await requireMenuRoot(tx, menuId), productIds);
   const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, productIds));
-  await tx.update(menuItems).set({ grossPrice: null, active: true }).where(ofMenu);
+  await tx.update(menuItems).set({ grossPrice: null, offered: null }).where(ofMenu);
   const rows = await tx
     .select({ id: menuItems.id, productId: menuItems.productId })
     .from(menuItems)

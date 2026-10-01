@@ -147,7 +147,7 @@ async function counts(db: Database) {
       (select count(*) from catalogues) as menus,
       (select count(*) from zone_menus) as zone_menus,
       (select count(*) from menu_items) as items,
-      (select count(*) from menu_item_extra_lists) as extras,
+      (select count(*) from product_modifiers where extra_list_id is not null) as extras,
       (select count(*) from preparation_routes) as routes`);
   return rows[0]!;
 }

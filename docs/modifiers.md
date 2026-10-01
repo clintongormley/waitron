@@ -61,26 +61,20 @@ start to move it, or focus the handle and use the up and down arrow keys. That s
 **New extras list…** and **New options list…**, so you can build a list without abandoning the
 product you are editing.
 
-A product attachment and a menu offer's extras lists are separate. Attaching a list to the product does not
-change an existing menu offer. A menu offer can carry its own price for one of an extras list's
-products, and that price wins over the price on the list entry, which in turn wins over the
-product's own price — though no dashboard screen sets a menu price for an extra yet.
+Every menu offer carries the product's extras and options lists in the order you set here.
+An extra uses its list entry's price when you set one, otherwise its product's own price.
+Publish each menu to make these changes available on the till.
 
 ## See what uses a list
 
-Each tab's table has a **Used by** column. For an extras list it counts the products that carry the
-list and the menu offers that carry it, for example "2 products · 1 menu item". Each menu offer is
-one dish on one menu, so a list offered with two dishes on the same menu counts as two menu items.
-An options list is attached to products only, so its count is products alone. A list that nothing
-uses reads "Not used". Click the count to open the list of what uses it; a menu offer there is
-named by its dish and then its menu.
+Each tab's table has a **Used by** column counting the products carrying the list, for example
+"2 products". A list that nothing uses reads "Not used". Click the count to see those products.
 
 ## Deleting a list detaches it, and nothing refuses the delete
 
-Deleting a list removes it from every product carrying it, and an extras list also from every menu
-offer carrying it. The confirmation dialog shows what the delete reaches before you confirm: the
-products, and for an extras list the menu offers, each named by its dish and its menu. Deleting
-cannot be undone.
+Deleting a list removes it from every product carrying it. The confirmation dialog lists those
+products before you confirm. Deleting cannot be undone. Publish a menu again to replace its saved
+choices.
 
 **An open order does not block a delete, and you are not told to finish or void one.** It does not
 need to: an open order holds no reference back to the list. An extras pick becomes its own order

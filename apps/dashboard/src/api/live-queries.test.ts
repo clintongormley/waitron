@@ -69,19 +69,11 @@ it.each([
   // packages/catalogue/src/options.ts, `listExtraLists` in extras.ts).
   ["listOptionLists", [], ["option_lists", "option_labels", "product_modifiers"]],
   ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
-  [
-    "listExtraLists",
-    [],
-    ["extra_lists", "extra_list_items", "product_modifiers", "menu_item_extra_lists"],
-  ],
+  ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   ["listLibraryProducts", [], ["products"]],
-  // `listSections` and `librarySectionUsages` (packages/catalogue/src/sections.ts); the usages
-  // also name each menu from `catalogues`.
-  ["listSections", [], ["sections", "section_members"]],
-  ["listSectionUsages", [], ["sections", "section_members", "catalogues"]],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members"]],
+  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members", "catalogues"]],
   [
     "getMenuPrices",
     ["menu-1"],
@@ -93,11 +85,23 @@ it.each([
       "catalogues",
       "products",
       "menu_item_variant_overrides",
+      "content_languages",
+      "product_modifiers",
+      "extra_lists",
+      "extra_list_items",
+      "option_lists",
+      "option_labels",
+      "product_units",
+      "units",
     ],
   ],
   // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default from
   // `menu_details`, the section graph, and each tile's name from `products` or `sections`.
-  ["listHomeLayouts", ["menu-1"], ["menu_details", "sections", "section_members", "products"]],
+  [
+    "listHomeLayouts",
+    ["menu-1"],
+    ["menu_details", "sections", "section_members", "products", "catalogues"],
+  ],
   // `deviceHomeLayouts` (the same file): every menu by name, each menu's layouts, and the choices.
   [
     "getDeviceHomeLayouts",
@@ -143,3 +147,29 @@ it("subscribes no read to the product label tables, which products no longer car
   expect(named).not.toContain("labels");
   expect(named).not.toContain("product_labels");
 });
+
+it.each(["getMenuPrices", "getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
+  "refreshes %s after an included menu's decision changes",
+  async (name) => {
+    const fetchImpl = vi.fn(async () => new Response("[]"));
+    const api = new DashboardApi("", fetchImpl);
+    const args: [] | [string] = name === "getMenuStatuses" ? [] : ["parent"];
+    const observed = api.liveData.observe(dashboardQuery(api, name, args), () => {});
+    try {
+      await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+      for (const type of [
+        "menu_items",
+        "menu_item_variant_overrides",
+        "catalogues",
+        "sections",
+        "section_members",
+      ]) {
+        const before = fetchImpl.mock.calls.length;
+        api.liveData.invalidate([{ type, id: "included-menu-record" }]);
+        await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));
+      }
+    } finally {
+      observed.unsubscribe();
+    }
+  },
+);

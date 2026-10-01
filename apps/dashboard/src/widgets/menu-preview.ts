@@ -1,7 +1,9 @@
-import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { formatMoney } from "@waitron/shared";
 import "./menu-structure-tree.js";
 import type {
@@ -16,12 +18,15 @@ import type {
 } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
+import { describeSetting } from "./price-source.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 /** How the host's last publish ended, for the panel to say. */
 export type PublishResult =
-  { kind: "published"; number: number } | { kind: "stale" } | { kind: "failed"; reason: string };
+  | { kind: "published"; number: number; warnings?: MenuPreview["warnings"] }
+  | { kind: "stale" }
+  | { kind: "failed"; reason: string };
 
 const PRODUCT_FIELDS: Record<ProductChangeField, StringKey> = {
   names: "menu_preview.field_names",
@@ -46,7 +51,7 @@ const SECTION_FIELDS: Record<SectionChangeField, StringKey> = {
 const SOURCES: Record<MenuChange["source"], StringKey> = {
   this_menu: "menu_preview.source_this_menu",
   shared_product: "menu_preview.source_shared_product",
-  shared_section: "menu_preview.source_shared_section",
+  included_menu: "menu_preview.source_included_menu",
 };
 
 /** Fills `{key}` placeholders; each value is inserted once, never re-read as a placeholder. */
@@ -216,6 +221,26 @@ export class MenuPreviewPanel extends LitElement {
   @property({ type: Boolean }) publishing = false;
   @property({ attribute: false }) result: PublishResult | null = null;
 
+  @state() private confirmingHash: string | null = null;
+  #publishedWarnings: MenuPreview["warnings"] = [];
+
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("preview") || changed.has("menuName")) this.confirmingHash = null;
+  }
+
+  #warningWords(warnings = this.preview?.warnings ?? []): string[] {
+    const groups = new Map<string, number>();
+    for (const warning of warnings)
+      groups.set(warning.layoutName, (groups.get(warning.layoutName) ?? 0) + 1);
+    return [...groups].map(([layout, count]) =>
+      fill(count === 1 ? "menu_preview.shortcut_missing_one" : "menu_preview.shortcut_missing", {
+        count: String(count),
+        menu: this.menuName,
+        layout,
+      }),
+    );
+  }
+
   /** One place inside a sentence. */
   #place(path: readonly string[]): string {
     return path.length === 0 ? t("menu_preview.top_level") : path.join(" › ");
@@ -318,9 +343,16 @@ export class MenuPreviewPanel extends LitElement {
     return status.state !== "unpublished" && status.hash === preview.hash ? status.version : null;
   }
 
-  #publish(event: Event): void {
+  #publish(event: Event, confirmed = false): void {
     event.stopPropagation();
-    if (this.publishing || this.preview === null) return;
+    if (this.publishing || this.preview === null || this.preview.clashes.length > 0) return;
+    if (this.preview.warnings.length && !confirmed) {
+      this.confirmingHash = this.preview.hash;
+      return;
+    }
+    if (confirmed && this.confirmingHash !== this.preview.hash) return;
+    this.#publishedWarnings = this.preview.warnings;
+    this.confirmingHash = null;
     this.dispatchEvent(
       new CustomEvent("wt-menu-publish", {
         detail: { hash: this.preview.hash },
@@ -362,6 +394,7 @@ export class MenuPreviewPanel extends LitElement {
           menu: this.menuName,
           number: String(result.number),
         })}
+        ${this.#warningWords(result.warnings ?? this.#publishedWarnings).map((words) => html`<span>${words}</span>`)}
       </p>`;
     const message =
       result.kind === "stale"
@@ -422,15 +455,7 @@ export class MenuPreviewPanel extends LitElement {
       <h2 id="warnings-heading">${t("menu_preview.warnings_heading")}</h2>
       <p class="help" data-test="warnings-note">${t("menu_preview.warnings_note")}</p>
       <ul data-test="warnings">
-        ${warnings.map(
-          (warning) =>
-            html`<li>
-              ${fill("menu_preview.shortcut_omitted", {
-                name: warning.name,
-                layout: warning.layoutName,
-              })}
-            </li>`,
-        )}
+        ${this.#warningWords().map((words) => html`<li>${words}</li>`)}
       </ul>
     </section>`;
   }
@@ -446,14 +471,24 @@ export class MenuPreviewPanel extends LitElement {
         : "menu_preview.document_heading_live",
     );
     const tree = documentTree(preview.document);
+    const sectionNames = new Map(tree.sections.map(({ id, internalName }) => [id, internalName]));
+    const presented = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
+      nodes.map((node) =>
+        node.ref.kind === "section"
+          ? {
+              ...node,
+              internalName: sectionNames.get(node.ref.sectionId),
+              children: presented(node.children ?? []),
+            }
+          : node,
+      );
     return html`<section data-test="document" aria-labelledby="document-heading">
       <h2 id="document-heading">${heading}</h2>
       <dashboard-menu-structure-tree
         readonly
         label=${heading}
-        .nodes=${tree.nodes}
+        .nodes=${presented(tree.nodes)}
         .products=${tree.products}
-        .sections=${tree.sections}
       ></dashboard-menu-structure-tree>
     </section>`;
   }
@@ -467,6 +502,7 @@ export class MenuPreviewPanel extends LitElement {
         variant="primary"
         data-test="publish"
         .loading=${this.publishing}
+        .disabled=${this.preview.clashes.length > 0}
         @click=${(event: Event) => this.#publish(event)}
         >${fill(
           this.publishing ? "menu_preview.publishing" : "menu_preview.publish",
@@ -477,9 +513,82 @@ export class MenuPreviewPanel extends LitElement {
     </div>`;
   }
 
+  #renderClashes() {
+    const clashes = this.preview?.clashes ?? [];
+    if (!clashes.length) return nothing;
+    return html`<section>
+      <h2 data-test="clash-count">
+        ${fill(clashes.length === 1 ? "menu_preview.clash_count" : "menu_preview.clashes_count", { count: String(clashes.length) })}
+      </h2>
+      <ul data-test="clashes">
+        ${clashes.map((clash) => {
+          const offer = Object.values(this.preview!.document.offers).find(
+            (offer) => offer.productId === clash.productId,
+          );
+          const name = offer?.name ?? clash.productId;
+          const variant = clash.variantId
+            ? (offer?.variants.find((variant) => variant.id === clash.variantId)?.name ??
+              clash.variantId)
+            : null;
+          const words =
+            clash.field === "price"
+              ? describeSetting(
+                  {
+                    state: "clash",
+                    candidates:
+                      clash.candidates as import("@waitron/catalogue/src/menu-combine-types.js").Candidate<
+                        import("@waitron/shared").Decimal
+                      >[],
+                  },
+                  { product: name },
+                  t,
+                )
+              : t("menu_prices.sources_disagree");
+          return html`<li>
+            ${name}${variant ? ` — ${variant}` : ""}:
+            ${t(clash.field === "price" ? "menu_prices.menu_price" : "menu_prices.active")} —
+            ${words}
+          </li>`;
+        })}
+      </ul>
+    </section>`;
+  }
+
   override render() {
     return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderChanges()}
-    ${this.#renderWarnings()} ${this.#renderPublish()} ${this.#renderDocument()}`;
+    ${this.#renderWarnings()} ${this.#renderClashes()} ${this.#renderPublish()}
+    ${this.#renderDocument()}
+    ${
+      this.confirmingHash === null
+        ? nothing
+        : html`<wt-dialog
+            .open=${this.confirmingHash !== null}
+            heading=${fill("menu_preview.publish", { menu: this.menuName })}
+            data-test="publish-confirmation"
+            @wt-close=${(event: Event) => {
+              event.stopPropagation();
+              this.confirmingHash = null;
+            }}
+          >
+            ${this.#warningWords().map((words) => html`<p>${words}</p>`)}
+            <wt-form-actions slot="footer">
+              <wt-button
+                slot="cancel"
+                variant="secondary"
+                @click=${() => {
+                  this.confirmingHash = null;
+                }}
+                >${t("action.cancel")}</wt-button
+              >
+              <wt-button
+                data-test="publish-confirm"
+                .disabled=${this.publishing || this.preview === null || !!this.preview.clashes.length}
+                @click=${(event: Event) => this.#publish(event, true)}
+                >${fill("menu_preview.publish", { menu: this.menuName })}</wt-button
+              >
+            </wt-form-actions>
+          </wt-dialog>`
+    }`;
   }
 }
 

@@ -43,6 +43,13 @@
       "when": 1790856146693,
       "tag": "0005_photo_name_only",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790869632077,
+      "tag": "0006_recreate_section_image_triggers",
+      "breakpoints": true
     }
   ]
 }

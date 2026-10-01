@@ -10,10 +10,11 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-  createSection,
+  createSectionIn,
   createUnit,
   menuItems,
-  renameCatalogue,
+  updateMenuDetails,
+  updateMenuItem,
   requireMenuRoot,
   setProductVariants,
   writeContentLanguages,
@@ -35,7 +36,7 @@ export interface SeedCataloguesResult {
   /** image basename → product id; every seeded product appears exactly once. */
   productsByImage: Map<string, string>;
   menuItemsByProduct: Map<string, string>;
-  menuIds: { restaurant: string; lunch: string; deli: string };
+  menuIds: { restaurant: string; lunch: string; deli: string; drinks: string };
 }
 
 type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
@@ -104,7 +105,8 @@ export async function seedCatalogues(
       existingMenuId === undefined
         ? await createCatalogue(tx, { name: data.name[locale] })
         : { id: existingMenuId };
-    if (existingMenuId !== undefined) await renameCatalogue(tx, existingMenuId, data.name[locale]);
+    if (existingMenuId !== undefined)
+      await updateMenuDetails(tx, existingMenuId, { name: data.name[locale] });
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, { name: cat.name.en });
@@ -120,9 +122,11 @@ export async function seedCatalogues(
         stationId: cat.station === null ? null : stationIds[cat.station],
         noPreparation: cat.station === null,
       });
-      const section = await createSection(
+      const section = await createSectionIn(
         tx,
-        { internalName: (cat.sectionName ?? cat.name)[locale], names: cat.name },
+        rootSectionId,
+        { internalName: cat.name[locale], names: cat.name },
+        undefined,
         locale,
       );
       const productIds: string[] = [];
@@ -176,9 +180,6 @@ export async function seedCatalogues(
         productsByImage.set(product.image, created.id);
       }
       await addProducts(tx, section.id, productIds);
-      await addMember(tx, rootSectionId, { kind: "section", sectionId: section.id });
-      // Each product's row sets no menu price, so the menu charges the product's own price and
-      // follows it when it changes.
       const rows = await tx
         .select({ id: menuItems.id, productId: menuItems.productId })
         .from(menuItems)
@@ -190,9 +191,30 @@ export async function seedCatalogues(
     return catalogue.id;
   };
 
-  const casaId = await seedOne(CASA_DELGADO, provisionedMenus[0]?.id);
+  const drinksCategories = CASA_DELGADO.categories.filter((category) => category.station === "bar");
+  const drinksId = await seedOne({
+    name: { en: "Drinks", es: "Bebidas" },
+    categories: drinksCategories,
+  });
+  const casaId = await seedOne(
+    {
+      ...CASA_DELGADO,
+      categories: CASA_DELGADO.categories.filter((category) => category.station !== "bar"),
+    },
+    provisionedMenus[0]?.id,
+  );
   const diaId = await seedOne(MENU_DEL_DIA);
   const deliId = await seedOne(DELI_TAKEAWAY);
+
+  const drinksRoot = await requireMenuRoot(tx, drinksId);
+  for (const menuId of [casaId, diaId])
+    await addMember(tx, await requireMenuRoot(tx, menuId), {
+      kind: "section",
+      sectionId: drinksRoot,
+    });
+  const beerId = productsByImage.get("cana-cerveza.png");
+  if (beerId === undefined) throw new Error("demo-seed: beer product was not created");
+  await updateMenuItem(tx, drinksId, menuItemsByProduct.get(beerId)!, { grossPrice: "3.00" });
 
   const negroniId = productsByImage.get("negroni.png");
   if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");
@@ -201,10 +223,11 @@ export async function seedCatalogues(
   await assignCatalogueToLocation(tx, locationId, casaId);
   await addCatalogueToLocation(tx, locationId, diaId);
   await addCatalogueToLocation(tx, locationId, deliId);
+  await addCatalogueToLocation(tx, locationId, drinksId);
 
   return {
     productsByImage,
     menuItemsByProduct,
-    menuIds: { restaurant: casaId, lunch: diaId, deli: deliId },
+    menuIds: { restaurant: casaId, lunch: diaId, deli: deliId, drinks: drinksId },
   };
 }

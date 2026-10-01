@@ -17,7 +17,7 @@ import type { SectionRole } from "../section-types.js";
 // Not in section-types.ts: the dashboard imports that file, and
 // scripts/dashboard-browser-purity.test.ts refuses a runtime value in it.
 const SECTION_ROLES = [
-  "library",
+  "section",
   "menu_root",
   "home_layout",
 ] as const satisfies readonly SectionRole[];
@@ -33,8 +33,8 @@ export const sections = table(
     id: id("id").primaryKey().$defaultFn(newId),
     internalName: label("internal_name").notNull(),
     names: json<Record<string, string>>("names").notNull().default({}),
-    role: sectionRole("role").notNull().default("library"),
-    ownerMenuId: id("owner_menu_id"),
+    role: sectionRole("role").notNull().default("section"),
+    ownerMenuId: id("owner_menu_id").notNull(),
     image: label("image"),
     color: label("color"),
   },
@@ -45,7 +45,6 @@ export const sections = table(
       name: "sections_owner_menu_fk",
     }),
     check("sections_role_ck", enumCheck(t.role)),
-    check("sections_owner_ck", sql`(${t.role} = 'library') = (${t.ownerMenuId} is null)`),
     index("sections_owner_menu_idx").on(t.ownerMenuId),
   ],
 );
@@ -59,6 +58,7 @@ export const sectionMembers = table(
     position: count("position").notNull(),
     productId: id("product_id"),
     childSectionId: id("child_section_id"),
+    missingName: label("missing_name"),
   },
   (t) => [
     foreignKey({
@@ -78,7 +78,7 @@ export const sectionMembers = table(
     }).onDelete("cascade"),
     check(
       "section_members_one_ref_ck",
-      sql`(${t.productId} is null) <> (${t.childSectionId} is null)`,
+      sql`(${t.productId} is null or ${t.childSectionId} is null) and ((${t.productId} is null and ${t.childSectionId} is null) = (${t.missingName} is not null))`,
     ),
     uniqueIndex("section_members_product_uq").on(t.sectionId, t.productId),
     uniqueIndex("section_members_child_uq").on(t.sectionId, t.childSectionId),

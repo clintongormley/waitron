@@ -411,7 +411,7 @@ interface MenuPriceRow {
   productId: string;
   override: string | null;
   effectivePrice: string;
-  active: boolean;
+  offered: boolean | null;
 }
 
 async function menuPricesVia(app: Hono, menuId: string): Promise<MenuPriceRow[]> {
@@ -850,14 +850,14 @@ describe("mountCatalogueApi — products", () => {
           app,
           "PATCH",
           `/management-api/catalogues/${downstairsMenuId}/items/${downstairsItemId}`,
-          { body: { active: false } },
+          { body: { offered: false } },
         )
       ).status,
     ).toBe(204);
     expect((await menuPricesVia(app, upstairsMenuId))[0]!.override).toBe("12.50");
     // The dashboard still lists it, switched off, so it can be switched back on.
     expect(await menuPricesVia(app, downstairsMenuId)).toMatchObject([
-      { menuItemId: downstairsItemId, active: false },
+      { menuItemId: downstairsItemId, offered: false },
     ]);
   });
 
@@ -1004,7 +1004,7 @@ describe("mountCatalogueApi — products", () => {
     // Every Active variant is listed, the one this menu sets nothing for with the defaults.
     expect(await published.json()).toEqual([
       { variantId: saved.variants[0]!.id, price: "4.10", offered: true },
-      { variantId: saved.variants[1]!.id, price: null, offered: true },
+      { variantId: saved.variants[1]!.id, price: null, offered: null },
     ]);
     const malformed = await send(
       app,
@@ -2972,7 +2972,7 @@ describe("mountCatalogueApi — extras lists", () => {
       kitchenName: "SALSA",
       items: [{ productId: alioli, price: "0.50" }],
     });
-    expect(row.usage).toEqual({ products: 1, menus: 0 });
+    expect(row.usage).toEqual({ products: 1 });
   });
 
   it("GET /management-api/modifiers/extras/:id reads one back", async () => {
@@ -3171,7 +3171,7 @@ describe("mountCatalogueApi — extras lists", () => {
     const res = await send(app, "GET", `/management-api/modifiers/extras/${list.id}/dependants`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      dependants: { products: [{ id: productId, name: "Producto con opciones" }], menus: [] },
+      dependants: { products: [{ id: productId, name: "Producto con opciones" }] },
     });
   });
 });
@@ -3309,20 +3309,25 @@ describe("a menu's structure", () => {
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
     const empty = await send(app, "GET", path);
     expect(empty.status).toBe(200);
-    const { rootSectionId, nodes } = (await empty.json()) as {
+    const { rootSectionId, nodes, root } = (await empty.json()) as {
+      root: {
+        internalName: string;
+        names: Record<string, string>;
+        image: string | null;
+        color: string | null;
+      };
       rootSectionId: string;
       nodes: unknown[];
     };
     expect(nodes).toEqual([]);
     const [shell] = await suite.db.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
     expect(shell).toMatchObject({ menuId, rootSectionId });
+    expect(root).toMatchObject({ names: {}, image: null, color: null });
 
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
-    const drinks = (await (
-      await send(app, "POST", "/management-api/sections", {
-        body: { internalName: `Drinks ${crypto.randomUUID()}` },
-      })
-    ).json()) as { id: string };
+    const drinksName = `Drinks ${crypto.randomUUID()}`;
+    const drinksMenu = await createCatalogueVia(app, drinksName);
+    const drinks = { id: await menuRootVia(app, drinksMenu) };
     const members = `/management-api/sections/${rootSectionId}/members`;
     const onRoot = await send(app, "POST", members, {
       body: { ref: { kind: "section", sectionId: drinks.id } },
@@ -3336,6 +3341,12 @@ describe("a menu's structure", () => {
       {
         memberId: ((await onRoot.json()) as { id: string }).id,
         ref: { kind: "section", sectionId: drinks.id },
+        internalName: drinksName,
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: drinksMenu,
+        includedMenuId: drinksMenu,
         children: [],
       },
       { memberId: ((await item.json()) as { id: string }).id, ref: { kind: "product", productId } },
@@ -3357,15 +3368,15 @@ describe("a menu's structure", () => {
     const items = `/management-api/catalogues/${menuId}/items`;
     const itemId = await offerVia(app, menuId, productId, "2.00");
     const offered = async () =>
-      (await menuPricesVia(app, menuId)).map(({ menuItemId, override, active }) => ({
+      (await menuPricesVia(app, menuId)).map(({ menuItemId, override, offered }) => ({
         menuItemId,
         override,
-        active,
+        offered,
       }));
     expect(
-      (await send(app, "PATCH", `${items}/${itemId}`, { body: { active: false } })).status,
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { offered: false } })).status,
     ).toBe(204);
-    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", active: false }]);
+    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", offered: false }]);
     // Still on the menu's top level, so adding it again is refused rather than duplicated.
     const rootSectionId = await menuRootVia(app, menuId);
     const again = await send(app, "POST", `/management-api/sections/${rootSectionId}/members`, {
@@ -3373,15 +3384,15 @@ describe("a menu's structure", () => {
     });
     expect(again.status).toBe(409);
     expect(await again.json()).toMatchObject({ error: { code: "menu_section.member_duplicate" } });
-    const bad = await send(app, "PATCH", `${items}/${itemId}`, { body: { active: "yes" } });
+    const bad = await send(app, "PATCH", `${items}/${itemId}`, { body: { offered: "yes" } });
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "active" } },
+      error: { code: "management.request_invalid", params: { field: "offered" } },
     });
     expect(
-      (await send(app, "PATCH", `${items}/${itemId}`, { body: { active: true } })).status,
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { offered: true } })).status,
     ).toBe(204);
-    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", active: true }]);
+    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", offered: true }]);
   });
 
   it("takes a product off a menu's top level, and then adds it again on the same row", async () => {
@@ -3402,7 +3413,7 @@ describe("a menu's structure", () => {
     });
     expect(again.status).toBe(201);
     expect(await menuPricesVia(app, menuId)).toMatchObject([
-      { menuItemId: itemId, override: null, active: true },
+      { menuItemId: itemId, override: null, offered: null },
     ]);
   });
 });
@@ -3439,6 +3450,22 @@ describe("a menu's prices", () => {
     expect(await res.json()).toEqual([
       {
         menuItemId: itemId,
+        combined: {
+          productId,
+          offered: { state: "decided", value: true, source: { kind: "product" }, otherwise: null },
+          price: {
+            state: "decided",
+            value: "1.40",
+            source: { kind: "own" },
+            otherwise: {
+              state: "decided",
+              value: "1.00",
+              source: { kind: "product" },
+              otherwise: null,
+            },
+          },
+          variants: [],
+        },
         productId,
         name,
         categoryId: null,
@@ -3446,7 +3473,7 @@ describe("a menu's prices", () => {
         productPrice: "1.00",
         override: "1.40",
         effectivePrice: "1.40",
-        active: true,
+        offered: null,
         variants: [],
       },
     ]);
@@ -3506,10 +3533,59 @@ describe("publishing a menu", () => {
       .orderBy(menuVersions.number);
   }
 
+  it("shows included on/off clashes in prices and refuses publication without a version", async () => {
+    const app = mountApp();
+    const child = await createCatalogueVia(app, `Drinks ${crypto.randomUUID()}`);
+    const parent = await createCatalogueVia(app, `Evening ${crypto.randomUUID()}`);
+    const productId = await createNamedProductVia(app, `Lager ${crypto.randomUUID()}`);
+    const childItem = await offerVia(app, child, productId, "2.00");
+    await offerVia(app, parent, productId);
+    const childRoot = await menuRootVia(app, child);
+    const parentRoot = await menuRootVia(app, parent);
+    const included = await send(app, "POST", `/management-api/sections/${parentRoot}/members`, {
+      body: { ref: { kind: "section", sectionId: childRoot } },
+    });
+    expect(included.status).toBe(201);
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/catalogues/${child}/items/${childItem}`, {
+          body: { offered: false },
+        })
+      ).status,
+    ).toBe(204);
+    const rows = await (
+      await send(app, "GET", `/management-api/catalogues/${parent}/prices`)
+    ).json();
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          productId,
+          combined: expect.objectContaining({
+            offered: { state: "clash", candidates: expect.any(Array) },
+          }),
+        }),
+      ]),
+    );
+    const proposed = await preview(app, parent);
+    expect(proposed.clashes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ productId, field: "offered", variantId: null }),
+      ]),
+    );
+    const refused = await send(app, "POST", `/management-api/catalogues/${parent}/publish`, {
+      body: { expectedHash: proposed.hash },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "menu.clashes_unresolved", params: { menuId: parent, count: 1 } },
+    });
+    expect(await versionsOf(parent)).toEqual([]);
+  });
+
   it("previews, publishes and reports a menu as unpublished, current, then changed", async () => {
     const app = mountApp();
     const { menuId, itemId, name } = await menuWithProduct(app);
-    expect(await status(app, menuId)).toEqual({ state: "unpublished" });
+    expect(await status(app, menuId)).toEqual({ state: "unpublished", clashes: 0 });
 
     const first = await preview(app, menuId);
     expect(first.hash).toMatch(HASH);
@@ -3517,7 +3593,7 @@ describe("publishing a menu", () => {
       expect.objectContaining({ kind: "product_added", name, under: [], source: "this_menu" }),
     ]);
     expect(first.warnings).toEqual([]);
-    expect(first.status).toEqual({ state: "unpublished" });
+    expect(first.status).toEqual({ state: "unpublished", clashes: 0 });
     expect(first.document).toMatchObject({ menuId, menuName: expect.any(String) });
     expect(first.document.root.members).toEqual([
       { kind: "product", menuItemId: itemId, productId: expect.any(String) },
@@ -3532,12 +3608,14 @@ describe("publishing a menu", () => {
     expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
     expect(await status(app, menuId)).toEqual({
       state: "current",
+      clashes: 0,
       version: 1,
       publishedAt: expect.any(String),
       hash: first.hash,
     });
     const current = await status(app, menuId);
     expect(await preview(app, menuId)).toEqual({
+      clashes: [],
       hash: first.hash,
       changes: [],
       warnings: [],
@@ -3552,13 +3630,13 @@ describe("publishing a menu", () => {
         })
       ).status,
     ).toBe(204);
-    expect(await status(app, menuId)).toMatchObject({ state: "changed", version: 1 });
+    expect(await status(app, menuId)).toMatchObject({ state: "changed", clashes: 0, version: 1 });
     const second = await preview(app, menuId);
     expect(second.hash).not.toBe(first.hash);
     expect(second.changes).toEqual([
       expect.objectContaining({ kind: "price_changed", name, from: "2.00", to: "2.50" }),
     ]);
-    expect(second.status).toEqual({ ...current, state: "changed" });
+    expect(second.status).toEqual({ ...current, state: "changed", clashes: 0 });
     const again = await send(app, "POST", publish, { body: { expectedHash: second.hash } });
     expect(again.status).toBe(200);
     const two = (await again.json()) as { versionId: string; number: number };
@@ -3569,7 +3647,7 @@ describe("publishing a menu", () => {
       .from(menuPublications)
       .where(eq(menuPublications.menuId, menuId));
     expect(live).toEqual({ versionId: two.versionId });
-    expect(await status(app, menuId)).toMatchObject({ state: "current", version: 2 });
+    expect(await status(app, menuId)).toMatchObject({ state: "current", clashes: 0, version: 2 });
   });
 
   it("refuses a hash from before the latest edit and writes nothing", async () => {
@@ -3587,7 +3665,7 @@ describe("publishing a menu", () => {
       error: { code: "menu.changed_since_preview", params: { menuId } },
     });
     expect(await versionsOf(menuId)).toEqual([]);
-    expect(await status(app, menuId)).toEqual({ state: "unpublished" });
+    expect(await status(app, menuId)).toEqual({ state: "unpublished", clashes: 0 });
   });
 
   it("answers a publish of an unchanged menu with its live version, writing nothing", async () => {
@@ -3604,7 +3682,7 @@ describe("publishing a menu", () => {
     expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
   });
 
-  it("lists a shortcut that publishing would leave out as a warning", async () => {
+  it("warns about a shortcut that publishing keeps as an empty slot", async () => {
     const app = mountApp();
     const { menuId } = await menuWithProduct(app);
     const offMenu = `Fuera ${crypto.randomUUID()}`;
@@ -3617,7 +3695,7 @@ describe("publishing a menu", () => {
       .insert(sectionMembers)
       .values({ sectionId: details!.layoutId, position: 0, productId });
     expect((await preview(app, menuId)).warnings).toEqual([
-      { kind: "shortcut_omitted", layoutName: expect.any(String), name: offMenu },
+      { kind: "shortcut_missing", layoutName: expect.any(String), name: offMenu },
     ]);
   });
 
@@ -3643,11 +3721,12 @@ describe("publishing a menu", () => {
     const all = (await res.json()) as Record<string, MenuStatus>;
     expect(all[published.menuId]).toEqual({
       state: "current",
+      clashes: 0,
       version: 1,
       publishedAt: expect.any(String),
       hash,
     });
-    expect(all[unpublished.menuId]).toEqual({ state: "unpublished" });
+    expect(all[unpublished.menuId]).toEqual({ state: "unpublished", clashes: 0 });
     const menus = (await (await send(app, "GET", "/management-api/catalogues")).json()) as {
       id: string;
     }[];
@@ -4077,22 +4156,27 @@ describe("mountCatalogueApi — sections", () => {
     return (await response.json()) as T;
   };
   async function createSectionVia(app: Hono, internalName: string): Promise<Section> {
-    return json<Section>(
-      await send(app, "POST", "/management-api/sections", { body: { internalName } }),
-      201,
-    );
+    const menuId = await createCatalogueVia(app, internalName);
+    const root = await menuRootVia(app, menuId);
+    return json<Section>(await send(app, "GET", `/management-api/sections/${root}`), 200);
   }
   const product = (productId: string) => ({ kind: "product", productId });
   const section = (sectionId: string) => ({ kind: "section", sectionId });
 
-  it("creates, reads, lists, updates and deletes a section", async () => {
+  it("creates, reads, updates and deletes an owned section", async () => {
     const app = mountApp();
     const name = `Bebidas ${crypto.randomUUID()}`;
-    const created = await json<Section>(
-      await send(app, "POST", "/management-api/sections", {
+    const menuId = await createCatalogueVia(app, "Owner");
+    const root = await menuRootVia(app, menuId);
+    const { id } = await json<{ id: string }>(
+      await send(app, "POST", `/management-api/sections/${root}/sections`, {
         body: { internalName: ` ${name} `, names: { es: "Bebidas" }, color: "#aabbcc" },
       }),
       201,
+    );
+    const created = await json<Section>(
+      await send(app, "GET", `/management-api/sections/${id}`),
+      200,
     );
     expect(created).toEqual({
       id: created.id,
@@ -4104,8 +4188,6 @@ describe("mountCatalogueApi — sections", () => {
     });
     const path = `/management-api/sections/${created.id}`;
     expect(await json(await send(app, "GET", path), 200)).toEqual(created);
-    const listed = await json<Section[]>(await send(app, "GET", "/management-api/sections"), 200);
-    expect(listed.find((row) => row.id === created.id)).toEqual(created);
     const updated = await json<Section>(
       await send(app, "PATCH", path, { body: { internalName: `${name} 2`, color: null } }),
       200,
@@ -4119,7 +4201,7 @@ describe("mountCatalogueApi — sections", () => {
     });
   });
 
-  it("adds, lists, moves, replaces and removes members, and names a section's usages", async () => {
+  it("adds, lists, moves, replaces and removes members of an included menu", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
     const root = await menuRootVia(app, menuId);
@@ -4171,78 +4253,21 @@ describe("mountCatalogueApi — sections", () => {
       (await json<Member[]>(await send(app, "GET", members), 200)).map((member) => member.ref),
     ).toEqual([product(juice), section(beer.id)]);
 
-    // Drinks goes on the menu, then a copy of it takes its place in one request.
-    const onMenu = await json<Member>(
+    await json(
       await send(app, "POST", `/management-api/sections/${root}/members`, {
         body: { ref: section(drinks.id) },
       }),
       201,
     );
-    const usages = await json<{ menus: { id: string }[]; sections: { id: string }[] }>(
-      await send(app, "GET", `/management-api/sections/${beer.id}/usages`),
+    const included = await json<{ includedBy: { id: string }[] }>(
+      await send(
+        app,
+        "GET",
+        `/management-api/catalogues/${(await suite.db.execute<{ owner: string }>(sql`select owner_menu_id as owner from sections where id=${drinks.id}`)).rows[0]!.owner}/structure`,
+      ),
       200,
     );
-    expect(usages).toEqual({
-      menus: [{ id: menuId, name: expect.stringMatching(/^Carta /) }],
-      sections: [{ id: drinks.id, internalName: drinks.internalName }],
-    });
-    const juiceMember = moved.find(
-      (member) => member.ref.kind === "product" && member.ref.productId === juice,
-    )!;
-    const copy = await json<Section>(
-      await send(app, "POST", `/management-api/sections/${drinks.id}/duplicate`, {
-        body: {
-          internalName: "Bebidas de verano",
-          memberIds: [juiceMember.id],
-          replaceIn: { sectionId: root, memberId: onMenu.id },
-        },
-      }),
-      201,
-    );
-    expect(copy.members.map((member) => member.ref)).toEqual([product(juice)]);
-    expect(
-      (
-        await json<Member[]>(
-          await send(app, "GET", `/management-api/sections/${root}/members`),
-          200,
-        )
-      ).map((member) => member.ref),
-    ).toEqual([section(copy.id)]);
-    const plainCopy = await json<Section>(
-      await send(app, "POST", `/management-api/sections/${drinks.id}/duplicate`, {
-        body: { internalName: "Otra copia", memberIds: [] },
-      }),
-      201,
-    );
-    expect(plainCopy.members).toEqual([]);
-  });
-
-  it("answers every library section's usages in one read, keyed by section id", async () => {
-    const app = mountApp();
-    const menuName = `Carta ${crypto.randomUUID()}`;
-    const menuId = await createCatalogueVia(app, menuName);
-    const root = await menuRootVia(app, menuId);
-    const drinks = await createSectionVia(app, `Bebidas ${crypto.randomUUID()}`);
-    const beer = await createSectionVia(app, `Cervezas ${crypto.randomUUID()}`);
-    const unused = await createSectionVia(app, `Sin uso ${crypto.randomUUID()}`);
-    const members = (id: string) => `/management-api/sections/${id}/members`;
-    await json(
-      await send(app, "POST", members(drinks.id), { body: { ref: section(beer.id) } }),
-      201,
-    );
-    await json(await send(app, "POST", members(root), { body: { ref: section(drinks.id) } }), 201);
-
-    const all = await json<Record<string, unknown>>(
-      await send(app, "GET", "/management-api/sections/usages"),
-      200,
-    );
-    expect(all[beer.id]).toEqual({
-      menus: [{ id: menuId, name: menuName }],
-      sections: [{ id: drinks.id, internalName: drinks.internalName }],
-    });
-    expect(all[drinks.id]).toEqual({ menus: [{ id: menuId, name: menuName }], sections: [] });
-    expect(all[unused.id]).toEqual({ menus: [], sections: [] });
-    expect(all[root]).toBeUndefined();
+    expect(included.includedBy.map((menu) => menu.id)).toContain(menuId);
   });
 
   it("answers a refused member write with its code and status", async () => {
@@ -4258,7 +4283,7 @@ describe("mountCatalogueApi — sections", () => {
     for (const [path, body, status, code] of [
       [members(b.id), { ref: section(a.id) }, 409, "menu_section.member_cycle"],
       [members(a.id), { ref: product(water) }, 409, "menu_section.member_duplicate"],
-      [members(a.id), { ref: section(root) }, 409, "menu_section.not_library"],
+      [members(a.id), { ref: section(a.id) }, 409, "menu_section.member_cycle"],
       [
         members(a.id),
         { ref: product("11111111-1111-4111-8111-111111111111") },
@@ -4278,7 +4303,7 @@ describe("mountCatalogueApi — sections", () => {
       expect(response.status, code).toBe(status);
       expect(await response.json()).toMatchObject({ error: { code } });
     }
-    const blank = await send(app, "POST", "/management-api/sections", {
+    const blank = await send(app, "POST", `/management-api/sections/${root}/sections`, {
       body: { internalName: "  " },
     });
     expect(blank.status).toBe(400);
@@ -4287,7 +4312,7 @@ describe("mountCatalogueApi — sections", () => {
     });
     const owned = await send(app, "DELETE", `/management-api/sections/${root}`);
     expect(owned.status).toBe(409);
-    expect(await owned.json()).toMatchObject({ error: { code: "menu_section.not_library" } });
+    expect(await owned.json()).toMatchObject({ error: { code: "menu_section.wrong_role" } });
     const unknownMember = crypto.randomUUID();
     const missing = await send(app, "DELETE", `${members(a.id)}/${unknownMember}`);
     expect(missing.status).toBe(404);
@@ -4313,13 +4338,33 @@ describe("mountCatalogueApi — sections", () => {
     const uuid = "11111111-1111-4111-8111-111111111111";
     const cases: [method: "POST" | "PATCH" | "PUT", path: string, body: unknown, field: string][] =
       [
-        ["POST", "/management-api/sections", {}, "internalName"],
-        ["POST", "/management-api/sections", { internalName: 7 }, "internalName"],
-        ["POST", "/management-api/sections", { internalName: "X", names: "x" }, "names"],
-        ["POST", "/management-api/sections", { internalName: "X", names: { en: 5 } }, "names"],
+        ["POST", `/management-api/sections/${id}/sections`, {}, "internalName"],
+        ["POST", `/management-api/sections/${id}/sections`, { internalName: 7 }, "internalName"],
+        [
+          "POST",
+          `/management-api/sections/${id}/sections`,
+          { internalName: "X", names: "x" },
+          "names",
+        ],
+        [
+          "POST",
+          `/management-api/sections/${id}/sections`,
+          { internalName: "X", names: { en: 5 } },
+          "names",
+        ],
         ["PATCH", `/management-api/sections/${id}`, { names: { en: "Ok", es: null } }, "names"],
-        ["POST", "/management-api/sections", { internalName: "X", image: 7 }, "image"],
-        ["POST", "/management-api/sections", { internalName: "X", color: 7 }, "color"],
+        [
+          "POST",
+          `/management-api/sections/${id}/sections`,
+          { internalName: "X", image: 7 },
+          "image",
+        ],
+        [
+          "POST",
+          `/management-api/sections/${id}/sections`,
+          { internalName: "X", color: 7 },
+          "color",
+        ],
         ["PATCH", `/management-api/sections/${id}`, { internalName: 7 }, "internalName"],
         ["PATCH", `/management-api/sections/${id}`, { names: [] }, "names"],
         ["POST", `/management-api/sections/${id}/members`, {}, "ref"],
@@ -4357,20 +4402,6 @@ describe("mountCatalogueApi — sections", () => {
         ],
         ["PUT", `/management-api/sections/${id}/members/${member}/position`, {}, "to"],
         ["POST", `/management-api/sections/${id}/members/${member}/replace`, {}, "ref"],
-        ["POST", `/management-api/sections/${id}/duplicate`, { memberIds: [] }, "internalName"],
-        [
-          "POST",
-          `/management-api/sections/${id}/duplicate`,
-          { internalName: "X", memberIds: [7] },
-          "memberIds",
-        ],
-        ["POST", `/management-api/sections/${id}/duplicate`, { internalName: "X" }, "memberIds"],
-        [
-          "POST",
-          `/management-api/sections/${id}/duplicate`,
-          { internalName: "X", memberIds: [], replaceIn: { sectionId: uuid } },
-          "replaceIn",
-        ],
       ];
     for (const [method, path, body, field] of cases) {
       const response = await send(app, method, path, { body });
@@ -4405,24 +4436,6 @@ describe("mountCatalogueApi — sections", () => {
         { productIds: [uuid, "nope"] },
         "ProductId",
       ],
-      [
-        "POST",
-        `/management-api/sections/${id}/duplicate`,
-        { internalName: "X", memberIds: [], replaceIn: { sectionId: "nope", memberId: uuid } },
-        "SectionId",
-      ],
-      [
-        "POST",
-        `/management-api/sections/${id}/duplicate`,
-        { internalName: "X", memberIds: [], replaceIn: { sectionId: uuid, memberId: "nope" } },
-        "SectionMemberId",
-      ],
-      [
-        "POST",
-        `/management-api/sections/${id}/duplicate`,
-        { internalName: "X", memberIds: [uuid, "nope"] },
-        "SectionMemberId",
-      ],
     ];
     for (const [method, path, body, kind] of idCases) {
       const response = await send(app, method, path, { body });
@@ -4434,7 +4447,6 @@ describe("mountCatalogueApi — sections", () => {
     for (const path of [
       "/management-api/sections/nope",
       "/management-api/sections/nope/members",
-      "/management-api/sections/nope/usages",
       `/management-api/sections/${id}/members/nope`,
     ]) {
       const method = path.endsWith("/nope") && path.includes("/members/") ? "DELETE" : "GET";
@@ -4451,9 +4463,7 @@ describe("mountCatalogueApi — sections", () => {
       path: string,
       body?: unknown,
     ][] = [
-      ["GET", "/management-api/sections"],
-      ["GET", "/management-api/sections/usages"],
-      ["POST", "/management-api/sections", { internalName: "X" }],
+      ["POST", `/management-api/sections/${id}/sections`, { internalName: "X" }],
       ["GET", `/management-api/sections/${id}`],
       ["PATCH", `/management-api/sections/${id}`, { internalName: "X" }],
       ["DELETE", `/management-api/sections/${id}`],
@@ -4467,8 +4477,6 @@ describe("mountCatalogueApi — sections", () => {
       ["DELETE", `/management-api/sections/${id}/members/${member}`],
       ["PUT", `/management-api/sections/${id}/members/${member}/position`, { to: 0 }],
       ["POST", `/management-api/sections/${id}/members/${member}/replace`, { ref: section(id) }],
-      ["POST", `/management-api/sections/${id}/duplicate`, { internalName: "X", memberIds: [] }],
-      ["GET", `/management-api/sections/${id}/usages`],
     ];
     for (const [method, path, body] of routes) {
       const options = body === undefined ? {} : { body };
@@ -4509,8 +4517,6 @@ describe("mountCatalogueApi — home layouts", () => {
   const layoutsOf = (menuId: string) => `/management-api/catalogues/${menuId}/home-layouts`;
   const tilesOf = (layoutId: string) => `/management-api/home-layouts/${layoutId}/tiles`;
 
-  /** A menu offering one product on its top level and holding one library section, and a product
-   * it does not reach. */
   async function menuWithTargets(app: Hono) {
     const menuId = await createCatalogueVia(app, `Layouts ${crypto.randomUUID()}`);
     const soupName = `Soup ${crypto.randomUUID()}`;
@@ -4518,23 +4524,55 @@ describe("mountCatalogueApi — home layouts", () => {
     const elsewhere = await createNamedProductVia(app, `Elsewhere ${crypto.randomUUID()}`);
     await offerVia(app, menuId, soup);
     const drinksName = `Drinks ${crypto.randomUUID()}`;
-    const drinks = await json<{ id: string }>(
-      await send(app, "POST", "/management-api/sections", { body: { internalName: drinksName } }),
-      201,
-    );
     const { rootSectionId } = await json<{ rootSectionId: string }>(
       await send(app, "GET", `/management-api/catalogues/${menuId}/structure`),
       200,
     );
-    expect(
-      (
-        await send(app, "POST", `/management-api/sections/${rootSectionId}/members`, {
-          body: { ref: section(drinks.id) },
-        })
-      ).status,
-    ).toBe(201);
+    const drinks = await json<{ id: string }>(
+      await send(app, "POST", `/management-api/sections/${rootSectionId}/sections`, {
+        body: { internalName: drinksName },
+      }),
+      201,
+    );
     return { menuId, soup, soupName, elsewhere, drinks: drinks.id, drinksName, rootSectionId };
   }
+
+  it("replaces a deleted section tile in place and gates/refuses invalid replacements", async () => {
+    const app = mountApp();
+    const m = await menuWithTargets(app);
+    const [home] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
+    const tile = await json<{ id: string }>(
+      await send(app, "POST", tilesOf(home!.id), { body: { ref: section(m.drinks) } }),
+      201,
+    );
+    expect((await send(app, "DELETE", `/management-api/sections/${m.drinks}`)).status).toBe(204);
+    const replace = `${tilesOf(home!.id)}/${tile.id}/replace`;
+    const body = { ref: product(m.soup) };
+    expect((await send(app, "POST", replace, { body, cookie: null })).status).toBe(401);
+    expect((await send(app, "POST", replace, { body, cookie: staffCookie })).status).toBe(403);
+    const refusal = await send(app, "POST", replace, { body: { ref: product(m.elsewhere) } });
+    expect(refusal.status).toBe(409);
+    expect(await refusal.json()).toMatchObject({ error: { code: "menu.shortcut_unreachable" } });
+    const result = await json(await send(app, "POST", replace, { body }), 200);
+    expect(result).toEqual({ id: tile.id, position: 0, ref: product(m.soup) });
+    expect(
+      (await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200))[0]!.tiles,
+    ).toEqual([
+      {
+        memberId: tile.id,
+        position: 0,
+        ref: product(m.soup),
+        name: m.soupName,
+        reachable: true,
+        missingName: null,
+      },
+    ]);
+    const malformed = await send(app, "POST", replace, {
+      body: { ref: { kind: "missing", name: "X" } },
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  });
 
   it("lists, creates, duplicates, renames, deletes and sets the default layout", async () => {
     const app = mountApp();
@@ -4623,7 +4661,7 @@ describe("mountCatalogueApi — home layouts", () => {
     ]);
     for (const [ref, status, code] of [
       [product(m.elsewhere), 409, "menu.shortcut_unreachable"],
-      [section(m.rootSectionId), 409, "menu_section.not_library"],
+      [section(m.rootSectionId), 409, "menu.shortcut_unreachable"],
       [product(m.soup), 409, "menu_section.member_duplicate"],
     ] as const) {
       const response = await send(app, "POST", tilesOf(home!.id), { body: { ref } });
@@ -4635,7 +4673,7 @@ describe("mountCatalogueApi — home layouts", () => {
       body: { ref: product(m.soup) },
     });
     expect(generic.status).toBe(409);
-    expect(await generic.json()).toMatchObject({ error: { code: "menu_section.not_library" } });
+    expect(await generic.json()).toMatchObject({ error: { code: "menu_section.wrong_role" } });
     expect((await send(app, "DELETE", `${tilesOf(home!.id)}/${soup.id}`)).status).toBe(204);
     const missing = await send(app, "DELETE", `${tilesOf(home!.id)}/${soup.id}`);
     expect(missing.status).toBe(404);
@@ -4764,5 +4802,107 @@ describe("mountCatalogueApi — home layouts", () => {
     expect(await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200)).toEqual([
       { id, name: "Home", isDefault: true, tiles: [] },
     ]);
+  });
+});
+
+it("refuses the retired menu-item active field and preserves an unset switch on price edits", async () => {
+  const app = mountApp();
+  const menuId = await createCatalogueVia(app, "Nullable switches");
+  const productId = await createNamedProductVia(app, `Offer ${crypto.randomUUID()}`);
+  const itemId = await offerVia(app, menuId, productId);
+  const path = `/management-api/catalogues/${menuId}/items/${itemId}`;
+  for (const active of [false, true, null]) {
+    const refused = await send(app, "PATCH", path, { body: { active } });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "active" } },
+    });
+  }
+  expect((await send(app, "PATCH", path, { body: { grossPrice: "2.00" } })).status).toBe(204);
+  expect((await menuPricesVia(app, menuId))[0]!.offered).toBeNull();
+  expect((await send(app, "PATCH", path, { body: { offered: false } })).status).toBe(204);
+  expect((await send(app, "PATCH", path, { body: { offered: null } })).status).toBe(204);
+  expect((await menuPricesVia(app, menuId))[0]!.offered).toBeNull();
+});
+
+it("variant price-only requests preserve the own switch and explicit null clears it", async () => {
+  const app = mountApp();
+  const menuId = await createCatalogueVia(app, "Variant switches");
+  const productId = await createNamedProductVia(app, `Wine ${crypto.randomUUID()}`);
+  const editorPath = `/management-api/products/${productId}/editor`;
+  const editor = (await (await send(app, "GET", editorPath)).json()) as Record<string, unknown>;
+  const saved = await send(app, "PUT", editorPath, {
+    body: {
+      ...editor,
+      variants: [
+        {
+          name: "Glass",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: null,
+          available: true,
+          active: true,
+        },
+      ],
+    },
+  });
+  expect(saved.status).toBe(200);
+  const variantId = ((await saved.json()) as { variants: { id: string }[] }).variants[0]!.id;
+  const itemId = await offerVia(app, menuId, productId);
+  const path = `/management-api/catalogues/${menuId}/items/${itemId}/variants`;
+  for (const offered of [null, false, true]) {
+    expect(
+      (
+        await send(app, "PUT", path, {
+          body: { variants: [{ variantId, price: "2.00", offered }] },
+        })
+      ).status,
+    ).toBe(200);
+    const priceOnly = await send(app, "PUT", path, {
+      body: { variants: [{ variantId, price: "3.00" }] },
+    });
+    expect(priceOnly.status).toBe(200);
+    expect(await priceOnly.json()).toEqual([{ variantId, price: "3.00", offered }]);
+  }
+  const cleared = await send(app, "PUT", path, {
+    body: { variants: [{ variantId, price: null, offered: null }] },
+  });
+  expect(cleared.status).toBe(200);
+  expect(await cleared.json()).toEqual([{ variantId, price: null, offered: null }]);
+});
+
+describe("owned section routes", () => {
+  it("creates an owned section in a list and carries menu presentation", async () => {
+    const app = mountApp("en");
+    const created = await send(app, "POST", "/management-api/catalogues", {
+      body: { name: "Internal menu", names: { en: "Guests menu" }, color: "#123456" },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const root = await menuRootVia(app, id);
+    const child = await send(app, "POST", `/management-api/sections/${root}/sections`, {
+      body: { internalName: "Internal child", names: { en: "Guest child" }, position: 0 },
+    });
+    expect(child.status).toBe(201);
+    const { id: sectionId } = (await child.json()) as { id: string };
+    const details = await send(app, "GET", `/management-api/sections/${sectionId}`);
+    expect(await details.json()).toMatchObject({
+      internalName: "Internal child",
+      names: { en: "Guest child" },
+    });
+    expect(await (await send(app, "GET", `/management-api/sections/${root}`)).json()).toMatchObject(
+      { names: { en: "Guests menu" }, color: "#123456" },
+    );
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/catalogues/${id}`, {
+          body: { names: { en: "Updated guest menu" } },
+        })
+      ).status,
+    ).toBe(204);
+    expect(await (await send(app, "GET", `/management-api/sections/${root}`)).json()).toMatchObject(
+      { names: { en: "Updated guest menu" } },
+    );
   });
 });

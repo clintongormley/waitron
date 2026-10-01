@@ -83,7 +83,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This list already contains that item.",
     es: "Esta lista ya contiene ese elemento.",
   },
-  "menu_section.not_library": {
+  "menu_section.wrong_role": {
     en: "A menu's own list cannot be used this way.",
     es: "La lista propia de una carta no se puede usar de esta forma.",
   },
@@ -102,6 +102,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "menu.shortcut_unreachable": {
     en: "Only products and sections that are on this menu can be shortcuts on its home page.",
     es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio.",
+  },
+  "menu.clashes_unresolved": {
+    en: "Resolve the price and on/off clashes before publishing this menu.",
+    es: "Resuelve los conflictos de precio y disponibilidad antes de publicar esta carta.",
   },
   "menu.changed_since_preview": {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",

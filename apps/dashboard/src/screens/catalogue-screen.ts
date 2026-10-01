@@ -13,8 +13,6 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
-  LibrarySection,
-  MenuStructure,
   OptionList,
   OptionListInput,
   Product,
@@ -404,26 +402,14 @@ export class CatalogueScreen extends LitElement {
     this.placementLoadError = null;
     this.placementFailures = [];
     const menus = [...this.catalogues];
-    let structures: MenuStructure[] | null = null;
-    let sections: LibrarySection[] | null = null;
-    const compose = () => {
-      if (structures && sections) this.placementMenus = placementMenus(menus, structures, sections);
-    };
     try {
-      await Promise.all([
-        this.#placementQueries.watchGroup(
-          "getMenuStructure",
-          menus.map(({ id }) => [id]),
-          (value) => {
-            structures = value;
-            compose();
-          },
-        ),
-        this.#placementQueries.watch("listSections", [], (value) => {
-          sections = value;
-          compose();
-        }),
-      ]);
+      await this.#placementQueries.watchGroup(
+        "getMenuStructure",
+        menus.map(({ id }) => [id]),
+        (structures) => {
+          if (this.placing === placing) this.placementMenus = placementMenus(menus, structures);
+        },
+      );
     } catch (error) {
       if (this.placing === placing) this.placementLoadError = codeMessage(codeOf(error));
     }
@@ -457,7 +443,6 @@ export class CatalogueScreen extends LitElement {
     this.placementLoadError = null;
     this.placementFailures = [];
     this.#placementQueries.release("getMenuStructure");
-    this.#placementQueries.release("listSections");
   }
 
   /**

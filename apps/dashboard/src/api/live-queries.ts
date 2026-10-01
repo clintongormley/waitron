@@ -7,8 +7,6 @@ const MENU_PUBLICATION_READS = [
   "extra_list_items",
   "extra_lists",
   "menu_details",
-  "menu_item_extra_items",
-  "menu_item_extra_lists",
   "menu_item_variant_overrides",
   "menu_items",
   "menu_publications",
@@ -104,7 +102,7 @@ export const QUERY_DEPENDENCIES = {
   getCanvas: ["canvases"],
   listCatalogues: ["catalogues"],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  getMenuStructure: ["menu_details", "sections", "section_members"],
+  getMenuStructure: ["menu_details", "sections", "section_members", "catalogues"],
   // `menuPrices` (packages/catalogue/src/operations.ts): the structure's tables for the placements,
   // then each reached product's menu item, menu and price, and its variants' overrides.
   getMenuPrices: [
@@ -115,6 +113,14 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "products",
     "menu_item_variant_overrides",
+    "content_languages",
+    "product_modifiers",
+    "extra_lists",
+    "extra_list_items",
+    "option_lists",
+    "option_labels",
+    "product_units",
+    "units",
   ],
   // The tables `menuStatus` and `previewMenu` (packages/catalogue/src/menu-publication.ts) read
   // over `menusFixture`, recorded from the statements they prepared. `categories` is read too, but
@@ -124,15 +130,12 @@ export const QUERY_DEPENDENCIES = {
   getMenuPreview: MENU_PUBLICATION_READS,
   // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default, the
   // section graph, and each tile's name.
-  listHomeLayouts: ["menu_details", "sections", "section_members", "products"],
+  listHomeLayouts: ["menu_details", "sections", "section_members", "products", "catalogues"],
   // `deviceHomeLayouts` (the same file).
   getDeviceHomeLayouts: ["device_profile_home_layouts", "sections", "menu_details", "catalogues"],
   listCategories: ["categories", "category_details"],
   getCategory: ["categories", "category_details"],
   listLibraryProducts: ["products"],
-  listSections: ["sections", "section_members"],
-  // The usages name each menu from `catalogues` (`librarySectionUsages`, sections.ts).
-  listSectionUsages: ["sections", "section_members", "catalogues"],
   listUnits: ["units"],
   listProducts: [
     "products",
@@ -147,10 +150,10 @@ export const QUERY_DEPENDENCIES = {
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in
   // extras.ts). The two list reads also count what carries each list: `product_modifiers` for
-  // both, and `menu_item_extra_lists` for extras. The single-list reads count nothing.
+  // both. The single-list reads count nothing.
   listOptionLists: ["option_lists", "option_labels", "product_modifiers"],
   getOptionList: ["option_lists", "option_labels"],
-  listExtraLists: ["extra_lists", "extra_list_items", "product_modifiers", "menu_item_extra_lists"],
+  listExtraLists: ["extra_lists", "extra_list_items", "product_modifiers"],
   getExtraList: ["extra_lists", "extra_list_items"],
   listDeviceProfiles: ["device_profiles", "devices", "canvases"],
   getDeviceProfile: ["device_profiles", "canvases"],

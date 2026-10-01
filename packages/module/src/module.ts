@@ -92,7 +92,7 @@ export interface ZoneMenuOffer {
   readonly grossPrice: string | null;
   /** The price this offer charges, resolved along the catalogue's menu price chain. */
   readonly unitPrice: string;
-  readonly active: boolean;
+  readonly offered: boolean | null;
   readonly menuName: string;
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
    * level. */
@@ -198,6 +198,7 @@ export interface ZoneHomeLayout {
   readonly tiles: readonly (
     | { readonly kind: "product"; readonly productId: string }
     | { readonly kind: "section"; readonly sectionId: string }
+    | { readonly kind: "empty" }
   )[];
 }
 
@@ -239,12 +240,6 @@ export interface ZoneUnavailable {
   readonly products: readonly string[];
   /** Every option label that is unavailable, or deleted since the version was published. */
   readonly optionLabels: readonly string[];
-  /** Every extras item an offer has switched off, in the list it is switched off in. */
-  readonly extraItems: readonly {
-    readonly menuItemId: string;
-    readonly productId: string;
-    readonly extraListId: string;
-  }[];
 }
 
 /** A zone's live menu versions with the layout the device shows for each, and what they hold that
@@ -266,6 +261,7 @@ export interface ZoneMenuOfferVariant {
   readonly unitPrice: string;
   readonly menuPrice: string | null;
   readonly offered: boolean;
+  readonly ownOffered: boolean | null;
   readonly available: boolean;
   readonly unit: ZoneMenuOffer["unit"];
   readonly pricingUnit: string;

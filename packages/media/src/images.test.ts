@@ -580,15 +580,10 @@ it("sorts by the default when the requested language was disabled while retainin
 });
 
 it("protects an image used by sections, a menu's own list among them, and counts each use", async () => {
-  const { createSection, updateSection, sections } = await import("@waitron/catalogue");
+  const { createSectionIn, updateSection, sections } = await import("@waitron/catalogue");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
-    const drinks = await createSection(tx, {
-      internalName: "Drinks (internal)",
-      names: { en: "Drinks (customer)" },
-      image: image.filename,
-    });
     const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
       id: catalogues.id,
     });
@@ -601,9 +596,19 @@ it("protects an image used by sections, a menu's own list among them, and counts
         image: image.filename,
       })
       .returning({ id: sections.id });
+    const drinks = await createSectionIn(tx, root!.id, {
+      internalName: "Drinks (internal)",
+      names: { en: "Drinks (customer)" },
+      image: image.filename,
+    });
     const uses = [
-      { kind: "section" as const, id: drinks.id, internalName: "Drinks (internal)" },
-      { kind: "section" as const, id: root!.id, internalName: "Lunch root" },
+      {
+        kind: "section" as const,
+        id: drinks.id,
+        internalName: "Drinks (internal)",
+        ownerMenuId: menu!.id,
+      },
+      { kind: "section" as const, id: root!.id, internalName: "Lunch root", ownerMenuId: menu!.id },
     ].sort((a, b) => a.id.localeCompare(b.id));
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(2);
@@ -671,11 +676,9 @@ it("protects the photo of a product a live menu version offers only as an extra"
     createCatalogue,
     createExtraList,
     createProduct,
-    menuItems,
     previewMenu,
     publishMenu,
     readMenuStructure,
-    setMenuItemExtraLists,
     updateProduct,
     writeProductModifiers,
   } = await import("@waitron/catalogue");
@@ -705,11 +708,7 @@ it("protects the photo of a product a live menu version offers only as an extra"
     await writeProductModifiers(tx, lemonade.id, [{ kind: "extras", id: list.id }]);
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
     await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
-    const [offer] = await tx
-      .select({ id: menuItems.id })
-      .from(menuItems)
-      .where(eq(menuItems.productId, lemonade.id));
-    await setMenuItemExtraLists(tx, offer!.id, [{ listId: list.id, items: [] }]);
+
     const first = await publish(tx, menu.id);
     // The working state lets go; the live version still shows the photo.
     await updateProduct(tx, lemon.id, { image: null });

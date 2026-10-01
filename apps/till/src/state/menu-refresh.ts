@@ -60,11 +60,6 @@ export function withUnavailable(
 ): TillMenuOffer[] {
   const products = new Set(unavailable.products);
   const labels = new Set(unavailable.optionLabels);
-  const withdrawn = new Set(
-    unavailable.extraItems.map(
-      (item) => `${item.menuItemId} ${item.extraListId} ${item.productId}`,
-    ),
-  );
   return offers.map((offer) => ({
     ...offer,
     available: !products.has(offer.productId),
@@ -78,9 +73,7 @@ export function withUnavailable(
           ...entry,
           items: entry.items.map((item) => ({
             ...item,
-            available:
-              !products.has(item.productId) &&
-              !withdrawn.has(`${offer.id} ${entry.id} ${item.productId}`),
+            available: !products.has(item.productId),
           })),
         };
       const withLabels = entry.labels.map((label) => ({

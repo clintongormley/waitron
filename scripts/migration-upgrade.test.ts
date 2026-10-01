@@ -249,6 +249,15 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0055_drop_printer_character_set": {
     refused: ["DROP TABLE `printers`", "FOREIGN KEY constraint failed"],
   },
+  "catalogue/0018_sections_owned_prepare": {
+    refused: ["DELETE FROM sections WHERE role = 'library'", "FOREIGN KEY constraint failed"],
+  },
+  "catalogue/0020_sections_owned": {
+    refused: ["NOT NULL constraint failed: __new_sections.owner_menu_id"],
+  },
+  "catalogue/0021_sections_owned_restore": {
+    refused: ["NOT NULL constraint failed: section_members.id"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

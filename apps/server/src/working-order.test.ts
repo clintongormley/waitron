@@ -1411,18 +1411,11 @@ describe("getHeldOrder", () => {
     const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
-        price: "0.10",
+        price: "0.75",
         maxQuantity: 2,
         maxPicks: 2,
       });
-      // The OFFER reprices what the list charges, so a child at 0.10 would mean the menu's own
-      // override was never read.
-      await catalogue.setMenuItemExtraLists(tx, premiumCafeOfferId, [
-        {
-          listId: attached.listId,
-          items: [{ productId: attached.productId, price: "0.75", available: true }],
-        },
-      ]);
+
       await republishMenus(tx);
       return attached;
     });
@@ -1486,7 +1479,7 @@ describe("getHeldOrder", () => {
           allergens = ${JSON.stringify({ milk: { presence: "contains" } })}
       where id = ${cafeId}`);
     await db.execute(sql`
-      update menu_items set active = false where id = ${premiumCafeOfferId}`);
+      update menu_items set offered = false where id = ${premiumCafeOfferId}`);
 
     const order = await getHeldOrder({ db }, cfg, id);
     expect(order.lines).toEqual([
@@ -1630,16 +1623,11 @@ describe("updateHeldOrder", () => {
     const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
-        price: "0.10",
+        price: "0.75",
         maxQuantity: 2,
         maxPicks: 2,
       });
-      await catalogue.setMenuItemExtraLists(tx, premiumCafeOfferId, [
-        {
-          listId: attached.listId,
-          items: [{ productId: attached.productId, price: "0.75", available: true }],
-        },
-      ]);
+
       await republishMenus(tx);
       return attached;
     });
@@ -1669,7 +1657,8 @@ describe("updateHeldOrder", () => {
     await db.execute(sql`
       update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
     await db.execute(sql`
-      update menu_item_extra_items set price = 400 where menu_item_id = ${premiumCafeOfferId}`);
+      update extra_list_items set price = 400 where list_id = ${extra.listId}`);
+    await withTransaction(db, republishMenus);
     await updateHeldOrder({ db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
@@ -1741,16 +1730,11 @@ describe("updateHeldOrder", () => {
     const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = venue;
     const extra = await withTransaction(db, async (tx) => {
       const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
-        price: "0.10",
+        price: "0.75",
         maxQuantity: 2,
         maxPicks: 2,
       });
-      await catalogue.setMenuItemExtraLists(tx, premiumCafeOfferId, [
-        {
-          listId: attached.listId,
-          items: [{ productId: attached.productId, price: "0.75", available: true }],
-        },
-      ]);
+
       await republishMenus(tx);
       return attached;
     });
@@ -2741,13 +2725,8 @@ describe("basket-wide modifier resolution (perf)", () => {
         productId: aguaId,
         grossPrice: "2.20",
       });
-      const bacon = await addExtraList(tx, catalogueId, cafeId, "Bacon");
-      await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
-        {
-          listId: bacon.listId,
-          items: [{ productId: bacon.productId, price: "1.00", available: true }],
-        },
-      ]);
+      await addExtraList(tx, catalogueId, cafeId, "Bacon");
+
       const cafe = await addOptionList(tx, cafeId, "Punto");
       const agua = await addOptionList(tx, aguaId, "Tamano");
       await republishMenus(tx);
@@ -5869,12 +5848,7 @@ describe("frozen answers through a fractional quantity edit", () => {
     const bacon = await withTransaction(db, async (tx) => {
       await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
       const attached = await addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
-      await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
-        {
-          listId: attached.listId,
-          items: [{ productId: attached.productId, price: "1.00", available: true }],
-        },
-      ]);
+
       await republishMenus(tx);
       return attached;
     });
@@ -5901,18 +5875,11 @@ describe("frozen answers through a fractional quantity edit", () => {
   });
 });
 
-it("does not let an omitted payload waive a required extras list the menu offer has emptied", async () => {
+it("does not let an omitted payload waive a required extras list it cannot satisfy because its only extra product is Unavailable", async () => {
   const { cfg, cafeId, catalogueId, cafeOfferId, zoneId } = await setupVenue();
   const bacon = await withTransaction(db, async (tx) => {
-    // The list REQUIRES one pick, and the offer withdraws its only product — so the offer publishes a
-    // list nothing can satisfy. Sending no answer at all must not waive it.
     const attached = await addExtraList(tx, catalogueId, cafeId, "Bacon", { minPicks: 1 });
-    await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
-      {
-        listId: attached.listId,
-        items: [{ productId: attached.productId, price: null, available: false }],
-      },
-    ]);
+    await catalogue.updateProduct(tx, attached.productId, { available: false });
     await republishMenus(tx);
     return attached;
   });
@@ -7489,15 +7456,7 @@ describe("a variant is sold as the product it is", () => {
         LOCALE,
       );
       await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
-      await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
-        {
-          listId: list.id,
-          items: [
-            { productId: wine.wine125, price: "1.00", available: true },
-            { productId: wine.wine175, price: "2.00", available: true },
-          ],
-        },
-      ]);
+
       await republishMenus(tx);
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
       await insertRoute(tx, cfg, { zoneId, productId: cafeId, stationId: barra.id });
@@ -7748,7 +7707,6 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
   async function wineExtras(
     tx: Transaction,
     cafeId: string,
-    cafeOfferId: string,
     wine: { parentId: string; wine125: string },
   ) {
     // The catalogue refuses a list offering a product with Active variants
@@ -7774,16 +7732,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       LOCALE,
     );
     await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
-    await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
-      {
-        listId: list.id,
-        items: [wine.parentId, wine.wine125].map((productId) => ({
-          productId,
-          price: "1.00",
-          available: true,
-        })),
-      },
-    ]);
+
     await tx.update(products).set({ active: true }).where(eq(products.parentId, wine.parentId));
     await republishMenus(tx);
     return list.id;
@@ -7792,7 +7741,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
   it("refuses a menu offer's extras pick of a parent with an Active variant, and sells its variant", async () => {
     const { cfg, zoneId, catalogueId, cafeId, cafeOfferId } = await setupVenue();
     const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
-    const listId = await withTransaction(db, (tx) => wineExtras(tx, cafeId, cafeOfferId, wine));
+    const listId = await withTransaction(db, (tx) => wineExtras(tx, cafeId, wine));
     const park = (productId: string, id = randomUUID()) =>
       parkOrder({ db }, cfg, {
         id,

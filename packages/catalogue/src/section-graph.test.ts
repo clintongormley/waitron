@@ -10,7 +10,7 @@ import {
   type SectionRow,
 } from "./section-graph.js";
 
-const library = (id: string): SectionRow => ({ id, role: "library", ownerMenuId: null });
+const owned = (id: string): SectionRow => ({ id, role: "section", ownerMenuId: "menu-lunch" });
 const root = (id: string, menu: string): SectionRow => ({
   id,
   role: "menu_root",
@@ -39,10 +39,10 @@ function lunch() {
       root("lunch", "menu-lunch"),
       root("dinner", "menu-dinner"),
       root("brunch", "menu-brunch"),
-      library("favourites"),
-      library("drinks"),
-      library("beer"),
-      library("specials"),
+      owned("favourites"),
+      owned("drinks"),
+      owned("beer"),
+      owned("specials"),
     ],
     [
       ...list("lunch", ["s:favourites", "s:drinks"]),
@@ -81,7 +81,7 @@ describe("wouldCreateCycle", () => {
 describe("reachableFrom", () => {
   it("names every section below the root once, however many paths lead to it, and not the root", () => {
     const graph = buildSectionGraph(
-      [root("brunch", "menu-brunch"), library("drinks"), library("beer"), library("specials")],
+      [root("brunch", "menu-brunch"), owned("drinks"), owned("beer"), owned("specials")],
       [
         ...list("brunch", ["s:drinks", "s:beer"]),
         ...list("drinks", ["s:beer"]),
@@ -110,7 +110,7 @@ describe("reachableProducts", () => {
 
   it("follows the order the members are stored in, not the order they were written", () => {
     const graph = buildSectionGraph(
-      [library("drinks")],
+      [owned("drinks")],
       [
         { id: "b", sectionId: "drinks", position: 1, productId: "water", childSectionId: null },
         { id: "a", sectionId: "drinks", position: 0, productId: "tea", childSectionId: null },
@@ -123,7 +123,7 @@ describe("reachableProducts", () => {
   });
 
   it("is empty for a section with no members and for one the graph does not hold", () => {
-    expect(reachableProducts(buildSectionGraph([library("empty")], []), "empty")).toEqual([]);
+    expect(reachableProducts(buildSectionGraph([owned("empty")], []), "empty")).toEqual([]);
     expect(reachableProducts(lunch(), "absent")).toEqual([]);
   });
 });
@@ -162,7 +162,7 @@ describe("menusContaining", () => {
 
   it("does not count a home layout holding the section as the menu containing it", () => {
     const graph = buildSectionGraph(
-      [{ id: "layout", role: "home_layout", ownerMenuId: "menu-lunch" }, library("drinks")],
+      [{ id: "layout", role: "home_layout", ownerMenuId: "menu-lunch" }, owned("drinks")],
       list("layout", ["s:drinks"]),
     );
     expect(menusContaining(graph, "drinks")).toEqual([]);
@@ -173,7 +173,7 @@ describe("a section reached along two paths", () => {
   // Lunch ∋ Drinks, Favourites; both hold Beer ∋ Lager.
   const diamond = () =>
     buildSectionGraph(
-      [root("lunch", "menu-lunch"), library("drinks"), library("favourites"), library("beer")],
+      [root("lunch", "menu-lunch"), owned("drinks"), owned("favourites"), owned("beer")],
       [
         ...list("lunch", ["s:drinks", "s:favourites"]),
         ...list("drinks", ["s:beer"]),
@@ -197,7 +197,7 @@ describe("a section reached along two paths", () => {
   it("does not loop on stored rows that hold a cycle", () => {
     // The writes refuse a cycle; this graph is built by hand to hold one anyway.
     const graph = buildSectionGraph(
-      [root("lunch", "menu-lunch"), library("a"), library("b")],
+      [root("lunch", "menu-lunch"), owned("a"), owned("b")],
       [...list("lunch", ["s:a"]), ...list("a", ["s:b", "p:tea"]), ...list("b", ["s:a"])],
     );
     expect(reachableProducts(graph, "lunch")).toEqual(["tea"]);
@@ -211,10 +211,10 @@ describe("the graph's own reads", () => {
   it("answers a section's role, owner, members and parents", () => {
     const graph = lunch();
     expect(graph.role("lunch")).toBe("menu_root");
-    expect(graph.role("drinks")).toBe("library");
+    expect(graph.role("drinks")).toBe("section");
     expect(graph.role("absent")).toBeUndefined();
     expect(graph.ownerMenu("lunch")).toBe("menu-lunch");
-    expect(graph.ownerMenu("drinks")).toBeNull();
+    expect(graph.ownerMenu("drinks")).toBe("menu-lunch");
     expect(graph.ownerMenu("absent")).toBeNull();
     expect(graph.children("drinks").map((member) => member.ref)).toEqual([
       { kind: "product", productId: "lemonade" },
@@ -225,4 +225,27 @@ describe("the graph's own reads", () => {
     expect([...graph.parents("beer")].sort()).toEqual(["drinks", "specials"]);
     expect(graph.parents("lunch")).toEqual([]);
   });
+});
+
+it("reads missing rows only as layout tiles, keeping structural walks and placements unchanged", () => {
+  const graph = buildSectionGraph(
+    [root("lunch", "menu-lunch"), { id: "layout", role: "home_layout", ownerMenuId: "menu-lunch" }],
+    [
+      ...list("lunch", ["p:soup"]),
+      {
+        id: "missing",
+        sectionId: "layout",
+        position: 0,
+        productId: null,
+        childSectionId: null,
+        missingName: "Drinks › Beer",
+      },
+    ],
+  );
+  expect(graph.tiles("layout")).toEqual([
+    { id: "missing", position: 0, ref: { kind: "missing", name: "Drinks › Beer" } },
+  ]);
+  expect(graph.children("layout")).toEqual([]);
+  expect(reachableFrom(graph, "lunch")).toEqual({ products: ["soup"], sections: new Set() });
+  expect(placementsByProduct(graph, "lunch")).toEqual(new Map([["soup", [["lunch"]]]]));
 });

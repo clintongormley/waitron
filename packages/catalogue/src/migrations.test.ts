@@ -19,12 +19,7 @@ import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { contentLanguages, menuDetails, menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
 import { categoryDetails } from "./schema/categories.js";
-import {
-  extraListItems,
-  extraLists,
-  menuItemExtraItems,
-  menuItemExtraLists,
-} from "./schema/extras.js";
+import { extraListItems, extraLists } from "./schema/extras.js";
 import { optionLabels } from "./schema/options.js";
 import { productUnits, unitSeedStates, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
@@ -54,8 +49,6 @@ const TABLES = [
   "option_labels",
   "extra_lists",
   "extra_list_items",
-  "menu_item_extra_lists",
-  "menu_item_extra_items",
   "product_modifiers",
   "sections",
   "section_members",
@@ -76,6 +69,13 @@ async function columnsOf(table: string) {
     await db.execute<{ name: string; pk: number }>(sql`pragma table_info(${sql.raw(`'${table}'`)})`)
   ).rows;
 }
+
+it("has no per-menu extras tables", async () => {
+  const rows = await db.execute<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name in ('menu_item_extra_lists', 'menu_item_extra_items')`,
+  );
+  expect(rows.rows).toEqual([]);
+});
 
 describe("the catalogue migration set carries no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
@@ -162,8 +162,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       option_labels: "id",
       extra_lists: "id",
       extra_list_items: "id",
-      menu_item_extra_lists: "menu_item_id, list_id",
-      menu_item_extra_items: "menu_item_id, list_id, product_id",
       product_modifiers: "id",
       sections: "id",
       section_members: "id",
@@ -178,11 +176,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       "category_details(parent_id)": "categories(id) on delete restrict",
       "extra_list_items(list_id)": "extra_lists(id) on delete cascade",
       "extra_list_items(product_id)": "products(id) on delete restrict",
-      "menu_item_extra_items(menu_item_id, list_id)":
-        "menu_item_extra_lists(menu_item_id, list_id) on delete cascade",
-      "menu_item_extra_items(product_id)": "products(id) on delete restrict",
-      "menu_item_extra_lists(list_id)": "extra_lists(id) on delete cascade",
-      "menu_item_extra_lists(menu_item_id)": "menu_items(id) on delete cascade",
       "menu_item_variant_overrides(menu_item_id, product_id)":
         "menu_items(id, product_id) on delete cascade",
       "menu_item_variant_overrides(product_id, variant_id)":
@@ -222,15 +215,13 @@ describe("the catalogue migration set carries no tenant column", () => {
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
       unit_seed_states_singleton_ck: `"unit_seed_states"."id" = 1`,
       menu_item_variant_overrides_price_ck: `"menu_item_variant_overrides"."price" >= 0`,
-      menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null or "menu_item_variant_overrides"."offered" = 0`,
+      menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null or "menu_item_variant_overrides"."offered" is not null`,
       extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
       extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
-      menu_item_extra_items_price_ck: `"menu_item_extra_items"."price" >= 0`,
       product_modifiers_one_reference_ck: `("product_modifiers"."extra_list_id" is null) <> ("product_modifiers"."option_list_id" is null)`,
-      sections_role_ck: `"sections"."role" in ('library', 'menu_root', 'home_layout')`,
-      sections_owner_ck: `("sections"."role" = 'library') = ("sections"."owner_menu_id" is null)`,
-      section_members_one_ref_ck: `("section_members"."product_id" is null) <> ("section_members"."child_section_id" is null)`,
+      sections_role_ck: `"sections"."role" in ('section', 'menu_root', 'home_layout')`,
+      section_members_one_ref_ck: `("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))`,
       menu_versions_number_ck: `"menu_versions"."number" >= 1`,
     });
   });
@@ -267,8 +258,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       category_details_parent_idx: { unique: false, columns: "parent_id" },
       extra_list_items_list_product_uq: { unique: true, columns: "list_id, product_id" },
       extra_list_items_list_sort_idx: { unique: false, columns: "list_id, sort" },
-      menu_item_extra_items_list_product_idx: { unique: false, columns: "list_id, product_id" },
-      menu_item_extra_lists_list_idx: { unique: false, columns: "list_id" },
       menu_details_root_uq: { unique: true, columns: "root_section_id" },
       menu_items_id_product_key: { unique: true, columns: "id, product_id" },
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
@@ -586,7 +575,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const c = await catalogue();
     const row = { menuItemId: c.menuItemId, productId: c.productId, variantId: c.soupBowlId };
     for (const [values, check] of [
-      [{ price: null, offered: true }, "menu_item_variant_overrides_overrides_ck"],
+      [{ price: null, offered: null }, "menu_item_variant_overrides_overrides_ck"],
       [{ price: -1, offered: true }, "menu_item_variant_overrides_price_ck"],
     ] as const) {
       const error = await captureError(() =>
@@ -599,7 +588,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     await db.insert(menuItemVariantOverrides).values({ ...row, price: null, offered: false });
     await db
       .update(menuItemVariantOverrides)
-      .set({ price: 0, offered: true })
+      .set({ price: 0, offered: null })
       .where(sql`${menuItemVariantOverrides.variantId} = ${c.soupBowlId}`);
   });
 
@@ -628,51 +617,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     );
   });
 
-  it("refuses a published extras list whose menu offer or list does not exist", async () => {
-    const c = await catalogue();
-    const listId = await extraList("Breads");
-    await refusal(
-      () => db.insert(menuItemExtraLists).values({ menuItemId: missing, listId }),
-      "menu_item_extra_lists_item_fk",
-    );
-    await refusal(
-      () => db.insert(menuItemExtraLists).values({ menuItemId: c.menuItemId, listId: missing }),
-      "menu_item_extra_lists_list_fk",
-    );
-  });
-
-  it("refuses a menu override whose publication or product does not exist or does not match", async () => {
-    const c = await catalogue();
-    const listId = await extraList("Breads");
-    const otherListId = await extraList("Sauces");
-    await db.insert(menuItemExtraLists).values({ menuItemId: c.menuItemId, listId });
-    await refusal(
-      () =>
-        db
-          .insert(menuItemExtraItems)
-          .values({ menuItemId: missing, listId, productId: c.productId }),
-      "menu_item_extra_items_list_fk",
-    );
-    // The offer and the list both exist; what is wrong is that this offer does not publish THAT
-    // list, so an override under it would be read by nothing.
-    await refusal(
-      () =>
-        db.insert(menuItemExtraItems).values({
-          menuItemId: c.menuItemId,
-          listId: otherListId,
-          productId: c.productId,
-        }),
-      "menu_item_extra_items_list_fk",
-    );
-    await refusal(
-      () =>
-        db
-          .insert(menuItemExtraItems)
-          .values({ menuItemId: c.menuItemId, listId, productId: missing }),
-      "menu_item_extra_items_product_fk",
-    );
-  });
-
   it("refuses an extras item whose list or product does not exist", async () => {
     const c = await catalogue();
     const listId = await extraList("Breads");
@@ -685,4 +629,12 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       "extra_list_items_product_fk",
     );
   });
+});
+
+it("stores nullable offered and removes the retired item active column", async () => {
+  const columns = (
+    await db.execute<{ name: string; notnull: number }>(sql`pragma table_info('menu_items')`)
+  ).rows;
+  expect(columns.find((column) => column.name === "offered")).toMatchObject({ notnull: 0 });
+  expect(columns.map((column) => column.name)).not.toContain("active");
 });

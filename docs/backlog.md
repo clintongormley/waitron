@@ -186,8 +186,8 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 the current ranking is *What to work on next*. The small items at the end of each area live in
 Track C.
 
-**Product folders, menus that include menus, and prep station routing — designed, not built
-(owner, 2026-09-30).** The
+**Product folders, menus that include menus, and prep station routing: partly built
+(design approved 2026-09-30).** The
 [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in three
 slices, each with its own plan and pull request:
 
@@ -211,7 +211,29 @@ The owner confirmed on 2026-10-01 that deleting only empty folders remains immed
 any routing rules attached to them. Confirmation is shown when selected folders contain products
 or subfolders; the approved empty-folder shortcut is retained consciously.
 Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), which also drops
-per-menu extras, is approved and queued for campaign lane E (PF2b) (owner, 2026-10-01). Slice 3 is
+per-menu extras, is approved (owner, 2026-10-01). PF2b Tasks 1–10 are implemented and independently
+reviewed. The branch is rebased over slice 1 and name-only photos; branch finishing and landing
+remain pending. The owner accepted a venue reset for catalogue0018's library-section deletion
+and the complete upgrade from media0004 that refuses a trigger drop in shipped media0005
+(2026-10-01). Catalogue0018 now has an authorised `RESETS` entry matching its foreign-key
+refusal; shipped SQL is unchanged. The owner also authorised reset entries for catalogue0020
+and catalogue0021 (2026-10-01), matching their observed `NOT NULL` refusals. With those entries,
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` passes its chronological walk.
+The walk reaches media0005 before catalogue0018 without a media0005 refusal, so no media reset
+entry was added.
+After landing, reset each dev venue with `wa-wt reset demo <worktree-name>` and reset the
+owner's box too: library sections and their placements disappear, menu switched-off
+settings clear, and stored variant switches become explicit on decisions. Per-menu extras are
+retired; menu extras follow product-level attachments and settings. Reload tills running the older
+build before using the new published document.
+
+A controlled render of the Spanish menu preview at 390 px on 2026-10-01 showed its selected
+Preview tab initially clipped after programmatic selection. Clicking that tab scrolled it fully
+into view. The shared tab component and menu tab labels are unchanged across this branch;
+a base-build render was not run, so this observation does not establish when it began.
+The local lane E receipt `~/waitron-campaign-e/receipts/finish-render-20261001/render-report.md` records the geometry and
+click-path screenshot. Check restored selection visibility before changing the shared component.
+Slice 3 is
 four plans (owner, 2026-10-01): 3a, the rules and the Prep Stations screen
 ([plan](superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md), approved, lane D's PF3 after
 PF1); 3b, opening hours, by-hand open and close, fallbacks (a real replacement; a station with none is a
@@ -309,7 +331,8 @@ screen), landed as #654 (2026-09-25):** **Products and recipes**,
 **Sections** lists every library section with where it is used (one batch read,
 `GET /management-api/sections/usages`), shows each place a section is nested, and edits, duplicates
 and deletes sections and their members.
-_2026-09-30: the Sections screen and library sections are to be removed; each section will belong
+_2026-10-01: menus inclusion slice 2 Task 7 removes the Sections screen and its library API client; sections are edited in their owning menu. The former screen-specific residuals below are retired.
+2026-09-30: the Sections screen and library sections are to be removed; each section will belong
 to one menu, and menus share by including another menu
 ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4). The items #654
 left below go with the screen._
@@ -326,7 +349,8 @@ prices or counts.
 top-level list (a menu-owned `sections` row, pointed at by `menu_details`); `menu_sections` is
 dropped and `menu_items` rebuilt to hang off the menu; an offer carries every section path that
 reaches it (`placements`); the menu's own price, switch, variant prices and extras for a product
-reset when the menu stops reaching it. Left by #659, none blocking: the image library
+reset when the menu stops reaching it. 2026-10-01: the image library now links menu-owned section images to their menu editor (slice 2 Task 5); Task 7 edits menu and section photos there.
+Left by #659, none blocking: the image library
 links a menu-owned section's photo to the sections screen, though nothing puts a photo on one yet;
 and `sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
 today, so it bites only when something does. A product reached through a section offers no extras
@@ -340,6 +364,7 @@ thrower, and the demo seed that function's only caller outside tests. The code a
 **Menus Task 4 (the Menus screen), landed as #664 (2026-09-26):** **Products and recipes → Menus**
 (`/manage/menus`) lists, creates and renames menus; a menu's Structure tab shows and edits its whole
 tree; and creating a product on the Products screen ends with an optional "Add to menus" step.
+2026-10-01: slice 2 Task 7 moves New section here and menu create/rename to the full details form: internal name, customer names, image and colour. The old internal-name-only and Sections-screen editing residuals below are closed. The `librarySectionUsages` comparison below names a removed API.
 Left, none blocking (the blank-name create is DONE, lane C's C9: refused as the rename is, with
 `management.request_invalid` naming `name`): "New section here" asks only for the internal name, so
 a section's customer names, image and colour are still edited on the Sections screen; which
@@ -667,7 +692,9 @@ as removed with "Use the default". Choices are stored in the catalogue's new
 its target, whether or not the product is switched on, active, or the menu active; publishing still
 leaves such a tile out and Preview warns (D13). _2026-09-30: publishing is to keep an empty slot
 in the tile's place instead, so later tiles do not move
-([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4.5)._ **Upgrading** (measured: the new catalogue migration
+([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4.5). 2026-10-01: PF2b
+Tasks 5, 6 and 9 implement the empty-slot document, till rendering and missing-target editor,
+including Remove, Replace and reordering. The focused checks pass; landing is pending._ **Upgrading** (measured: the new catalogue migration
 applied over a database at main's migration state with rows in place): it adds one table and the rows
 survive. **Left open, none blocking:** nothing on a till reads the
 layouts or the device's choice yet — that is Task 9, which also resolves a deleted layout against the
@@ -724,10 +751,13 @@ the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the o
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
 adds tables or columns only and measures its own upgrade. Every dev venue then needs
 `wa-wt reset demo <name>`, and the owner's box should be wiped once now that menus Task 7 has landed (#719).
+2026-10-01: the photo link residual below is closed by slice 2 Task 5; menu-owned section photos link to the menu editor, where Task 7 edits them.
 A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
 `/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
 screen does not list and so does nothing for. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
+
+2026-10-01: the removed Sections screen is no longer the next action for the historical copy-membership proposal below; any follow-up belongs in the owning menu editor under the menu-inclusion model.
 
 **Copying some of a section's products into another section is not built** (found by the menus
 plan's closing sweep, 2026-09-27). The menus spec §2 ("Copy membership when you want independent
@@ -1169,27 +1199,12 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   grepping the whole seed directory for `createExtraList`, which matches nothing. So a demo box
   shows the Options half of the feature and not the Extras half, and `docs/products.md` now says so
   rather than describing extra prices that are not seeded. **Next action:** seed one extras list on
-  a demo dish, with a menu-offer price that differs from the product's own, which is what the
-  removed text used to illustrate.
-- **A menu item created today offers its product's options lists and none of its extras lists, and
-  the function that would publish one has NO non-test caller.** Options need no publication, so they
-  always travel; an extras list reaches an offer only through `setMenuItemExtraLists`
-  (`packages/catalogue/src/extras.ts`), and there is no management route to it. `createMenuItem`
-  (`packages/catalogue/src/operations.ts`) used to auto-seed a new offer with the product's active
-  option groups, and Task 13 removed that with the old model; the new model has no twin, and did not
-  have one before either. Pinned by "omits an extras list the
-  offer does not publish, and keeps the options list"
-  (`packages/catalogue/src/offered-modifiers.test.ts`). **Next action:** decide whether a new menu
-  item should inherit its product's extras lists by default, or whether publication stays explicit
-  and a route is built for it.
-- **Are per-menu extras worth keeping at all? (owner, 2026-09-26: "I'm not sure it is worth the
-  effort.")** A menu can carry its own version of a product's extras lists, with its own prices and
-  availability (`menu_item_extra_lists`, `menu_item_extra_items`); the menus plan keeps them (its
-  D5), and the Modifiers screen's "Used by" popup shows them as menu rows. Options lists have no such
-  per-menu version. Dropping per-menu extras would remove two tables, `setMenuItemExtraLists`, the
-  menu rows in `extraListDependants`, and whatever the menus publish copies from them (not traced);
-  it would also settle the item above. **Next action:** the owner decides keep or drop; if drop, it is a menus-plan
-  change, coordinated with lane C.
+  a demo dish, with a list-item price that differs from the extra product's own price.
+- **CLOSED 2026-10-01: a menu item carries its product's extras and options lists.** Per-menu
+  extras were dropped (owner decision 2026-09-30). A menu offer uses the list item's price, else
+  the extra product's own price; publishing freezes those choices and prices.
+- **CLOSED 2026-10-01: are per-menu extras worth keeping?** Owner decision 2026-09-30: drop them.
+  The two tables, publication API and menu rows in Used by are removed.
 
 **Extras and Options editors — owner review fixes (2026-09-26), campaign lane A items A64–A67 —
 LANDED (A67 last, #718).** The owner's review of the Modifiers screen: Active/Inactive in place of "In use", a Used
@@ -1209,6 +1224,8 @@ options list that always has a default.
   picker, 1024px wide on a 1280px screen, puts each price at the far end of a 1024px row, well
   away from its name (which adds to the "prices are not a column" item in the till layout pass,
   under A4). The stepper's button names were text with a `{label}` slot; A66 made them functions.
+- **2026-10-01 update:** per-menu extras were dropped (owner decision, 2026-09-30). Used by now
+  counts and lists products only; the A65 entry below records the earlier screen.
 - **A65 (the list tables and the Used by popup) — LANDED, #716.** Both tabs'
   Status column and its filter read Active / Inactive; each editor's on/off switch shares the
   "Active" string, so its label now reads "Active" where it read "In use". A new Used by column
@@ -2099,6 +2116,10 @@ What extras lists left open, and what #449 found on the way:
   that sentence was narrowed in #449; this one was left, being pre-existing and out of scope.
 - **The design's stated reason for `min_picks`/`max_picks` is false.** The spelling stands, and a
   dated pointer on the design document says only the reason was wrong.
+**2026-10-01: per-menu extras were dropped (owner decision 2026-09-30).** The historical
+per-menu publication, override and Used by claims below describe the removed path. Current menu
+offers carry product extras; Used by counts and lists products only.
+
 - **An extras list's `dependants` fills its two sides from two different tables.** The plan's
   Task 5 added the per-menu publication row, which options lists do not have, so
   `extraListDependants` (`packages/catalogue/src/extras.ts`) reads the menus a delete would touch
@@ -2133,6 +2154,10 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   transfer pickers (`apps/till/src/screens/till-table-order-screen.ts`), so nothing offers it an
   action it cannot take; whether the drawer should also INDENT it is a display question nobody has
   decided. Deliberately left as it is.
+**2026-10-01: per-menu extras were dropped (owner decision 2026-09-30).** The historical
+per-menu publication, override and Used by claims below describe the removed path. Current menu
+offers carry product extras; Used by counts and lists products only.
+
 - **A published-but-DETACHED extras list is offered by nothing and demanded by the validator, and
   nothing cleans the publication up.** The two sides read different sets on ONE of the three reads
   that build those maps — the MENU-OFFER extras read, which is the read this scenario uses. The
@@ -2249,6 +2274,10 @@ What the product attachment (#456, the plan's Task 6) left behind:
   guards the shape; it is worth looking for in any new racing test.
 - **`scripts/spawn-timeout-budget.test.ts` was failing healthy runs of itself** — fixed in #456; the
   scan it describes has since been retired, and the guard reads `scripts/` alone again.
+
+**2026-10-01: per-menu extras were dropped (owner decision 2026-09-30).** The historical
+per-menu publication, override and Used by claims below describe the removed path. Current menu
+offers carry product extras; Used by counts and lists products only.
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 

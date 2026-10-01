@@ -1,3 +1,4 @@
+import type { CombinedOffer } from "./menu-combine-types.js";
 import type { OptionLabel } from "./modifier-list-types.js";
 import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride, DietProfile } from "./dietary.js";
@@ -22,16 +23,15 @@ export interface MenuItem {
   id: string;
   menuId: string;
   productId: string;
-  /** The price this menu sets, or null when it sets none and the product's own price applies. */
+  /** The price this menu sets, or null when it sets none. */
   grossPrice: string | null;
-  /** This menu's own switch for the product. */
-  active: boolean;
+  /** Null leaves this menu without its own switch for the product. */
+  offered: boolean | null;
 }
 
 /** One sellable identity. The menu-item id, rather than the product id, selects its price. */
 export interface MenuOffer extends MenuItem {
-  /** The price the server's order path charges for this offer, RESOLVED along the chain in
-   * `offer-price.ts`: `grossPrice` when set, else the product's own price. Never null. */
+  combined: CombinedOffer;
   unitPrice: string;
   menuName: string;
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
@@ -52,7 +52,7 @@ export interface MenuOffer extends MenuItem {
   dietaryDeclarations: DietaryLabel[];
   courseId: string | null;
   /** The ordered extras and options lists this OFFER puts in front of a diner — see
-   * {@link OfferedModifier}. Each extras entry is the version this menu offer publishes. */
+   * {@link OfferedModifier}. */
   offeredModifiers: OfferedModifier[];
   /** The product's ACTIVE variants in the one variant order; an Inactive one is left
    * out. A variant is only ever listed here, under its parent's offer, never as an offer itself. */
@@ -69,12 +69,12 @@ export interface MenuOfferVariant {
   customerName: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
-  /** The price charged here, RESOLVED along the chain in `offer-price.ts`. */
   unitPrice: string;
   /** The price this menu sets for the variant, or null when it sets none. */
   menuPrice: string | null;
   /** False when this menu switches the variant off. */
   offered: boolean;
+  ownOffered: boolean | null;
   /** Active, Available and offered on this menu: whether a till may sell it here now. */
   available: boolean;
   unit: SellableUnit;
@@ -89,15 +89,18 @@ export interface MenuOfferVariant {
   courseId: string | null;
 }
 
-/** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
+/** One Active variant's own settings on one menu. */
 export interface MenuVariant {
   variantId: string;
   price: string | null;
-  offered: boolean;
+  offered: boolean | null;
 }
+
+export type MenuVariantWrite = Omit<MenuVariant, "offered"> & { offered?: boolean | null };
 
 /** One product a menu reaches, with what it costs there (`menuPrices`). */
 export interface MenuPriceRow {
+  combined: CombinedOffer;
   menuItemId: string;
   productId: string;
   /** The staff name. */
@@ -108,15 +111,11 @@ export interface MenuPriceRow {
    * level. */
   placements: string[][];
   productPrice: string;
-  /** The price this menu sets, or null when the product's own price applies. */
+  /** The price this menu sets, or null when it sets none. */
   override: string | null;
-  /** This menu's price for the product itself, `override` or else `productPrice`, as
-   * `MenuOffer.unitPrice`. A product with Active variants is sold only as one of them
-   * (`selectMenuVariant`), and a variant with no price on this menu and none of its own is charged
-   * this. */
   effectivePrice: string;
-  /** This menu's own switch for the product. */
-  active: boolean;
+  /** Null leaves this menu without its own switch for the product. */
+  offered: boolean | null;
   variants: MenuVariant[];
 }
 

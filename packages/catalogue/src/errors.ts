@@ -55,6 +55,7 @@ declare module "@waitron/shared" {
     "media.unsupported_type": { detected?: string };
     /** A location-menu write, or a read or write of a menu's structure, names no menu. */
     "catalogue.not_found": { catalogueId: string };
+    "menu.clashes_unresolved": { menuId: string; count: number };
     /** The menu's working state no longer hashes to what its preview showed, so nothing was
      * published. */
     "menu.changed_since_preview": { menuId: string };
@@ -65,8 +66,7 @@ declare module "@waitron/shared" {
     "menu.layout_not_found": { layoutId: string; menuId?: string };
     /** A menu's default home layout cannot be deleted; another must be made the default first. */
     "menu.default_layout_required": { layoutId: string };
-    /** A home tile names a product or section the menu's working structure does not reach
-     * (D13). */
+    /** A home tile names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { layoutId: string; ref: MemberRef };
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
@@ -110,7 +110,7 @@ declare module "@waitron/shared" {
     /** The list already holds that product or that section. */
     "menu_section.member_duplicate": { sectionId: string };
     /** `sectionId` is a list a menu owns, which the write refused. */
-    "menu_section.not_library": { sectionId: string };
+    "menu_section.wrong_role": { sectionId: string; role: string };
     /** A member reference or selection names nothing the write can use. */
     "menu_section.membership_invalid": Record<string, never>;
     /**
@@ -134,7 +134,7 @@ declare module "@waitron/shared" {
      */
     "options.label_required": { optionListId: string };
     /**
-     * An extras list's authoring body, an ORDER-time selection body, or a PER-MENU publication body
+     * An extras list's authoring body or an ORDER-time selection body
      * is refused. `field` is the dotted path of the offending value in that body (`"maxPicks"`,
      * `"items.1.maxQuantity"`, `"lists.0.listId"`), so the editor can put the refusal beside the
      * input that caused it.

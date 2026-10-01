@@ -14,12 +14,14 @@ afterEach(cleanupWidgets);
 
 const live: MenuStatus = {
   state: "changed",
+  clashes: 0,
   version: 2,
   publishedAt: "2026-09-26T10:15:00.000Z",
   hash: "a".repeat(64),
 };
 
 const changes: MenuPreview = {
+  clashes: [],
   hash: "b".repeat(64),
   changes: [
     {
@@ -36,10 +38,10 @@ const changes: MenuPreview = {
       sectionId: "s-drinks",
       name: "Drinks",
       fields: ["names"],
-      source: "shared_section",
+      source: "included_menu",
     },
   ],
-  warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lemonade" }],
+  warnings: [{ kind: "shortcut_missing", layoutName: "Home", name: "Lemonade" }],
   status: live,
   document: menuDocument(
     [
@@ -55,14 +57,14 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
   "live version unread": { status: null, statusFailed: true, preview: changes },
   failed: { preview: null, failed: true },
   "changes and a warning": { preview: changes },
-  unpublished: { status: { state: "unpublished" }, preview: changes },
+  unpublished: { status: { state: "unpublished", clashes: 0 }, preview: changes },
   "nothing to publish": {
-    status: { ...live, state: "current", hash: changes.hash },
+    status: { ...live, state: "current", clashes: 0, hash: changes.hash },
     preview: {
       ...changes,
       changes: [],
       warnings: [],
-      status: { ...live, state: "current", hash: changes.hash },
+      status: { ...live, state: "current", clashes: 0, hash: changes.hash },
     },
   },
   "no changes to list": { preview: { ...changes, changes: [], warnings: [] } },
@@ -73,6 +75,17 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
 };
 
 describe.each(["light", "dark"] as const)("menu preview (%s)", (theme) => {
+  it("renders the warning confirmation accessibly", async () => {
+    const { el, host } = await mountWidget<MenuPreviewPanel>(
+      "dashboard-menu-preview",
+      { menuName: "Evening", status: live, preview: changes },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish"]')!.click();
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+    await expectNoA11yViolations(host);
+  });
   it.each(Object.keys(states))("renders %s accessibly", async (state) => {
     const { host } = await mountWidget<MenuPreviewPanel>(
       "dashboard-menu-preview",

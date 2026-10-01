@@ -1,6 +1,7 @@
+import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { CategorySummary, LibrarySection, MenuPriceRow, Product } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -11,7 +12,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-const sections: LibrarySection[] = [
+const sections: SectionDetails[] = [
   { id: "s-drinks", internalName: "Drinks", names: {}, image: null, color: null, members: [] },
   { id: "s-beer", internalName: "Beer", names: {}, image: null, color: null, members: [] },
 ];
@@ -20,14 +21,15 @@ const lemonade = {
   id: "p-lemonade",
   name: "Lemonade",
   variants: [
-    { id: "v-small", name: "Small", unitPrice: null, active: true },
-    { id: "v-large", name: "Large", unitPrice: "3.40", active: true },
+    { id: "v-small", name: "Small", unitPrice: null, offered: true },
+    { id: "v-large", name: "Large", unitPrice: "3.40", offered: true },
   ],
 } as unknown as Product;
 
 const rows: MenuPriceRow[] = [
   {
     menuItemId: "mi-burger",
+    combined: combinedFixture("p-burger", "12.00", false, [], null, "12.00", {}),
     productId: "p-burger",
     name: "Burger",
     categoryId: null,
@@ -35,11 +37,23 @@ const rows: MenuPriceRow[] = [
     productPrice: "12.00",
     override: null,
     effectivePrice: "12.00",
-    active: false,
+    offered: false,
     variants: [],
   },
   {
     menuItemId: "mi-lemonade",
+    combined: combinedFixture(
+      "p-lemonade",
+      "2.50",
+      true,
+      [
+        { variantId: "v-small", price: null, offered: true },
+        { variantId: "v-large", price: "3.75", offered: false },
+      ],
+      "2.50",
+      "3.00",
+      { "v-large": "3.40" },
+    ),
     productId: "p-lemonade",
     name: "Lemonade",
     categoryId: "c-drinks",
@@ -47,7 +61,7 @@ const rows: MenuPriceRow[] = [
     productPrice: "3.00",
     override: "2.50",
     effectivePrice: "2.50",
-    active: true,
+    offered: true,
     variants: [
       { variantId: "v-small", price: null, offered: true },
       { variantId: "v-large", price: "3.75", offered: false },
@@ -114,4 +128,69 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     ).toBe(t("editor.price_invalid"));
     await expectNoA11yViolations(host);
   });
+});
+
+describe.each(["light", "dark"] as const)("price source and clash states (%s)", (theme) => {
+  it.each(["en-GB", "es-ES"])(
+    "accessible clash resolution and open source tooltip (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const product = rows[0]!;
+      const source = {
+        kind: "menu",
+        menuId: "drinks",
+        menuName: "Drinks",
+        from: { kind: "own" },
+      } as const;
+      const clash = {
+        state: "clash",
+        candidates: [
+          { place: { kind: "own_sections" }, value: "12.00", source: { kind: "product" } },
+          { place: { kind: "menu", menuId: "drinks", menuName: "Drinks" }, value: "14.00", source },
+        ],
+      } as unknown as MenuPriceRow["combined"]["price"];
+      const { el, host } = await mount(theme, {
+        rows: [{ ...product, combined: { ...product.combined, price: clash } }],
+      });
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
+      await actions.updateComplete;
+      actions.show();
+      expect(actions.querySelectorAll("wt-button").length).toBe(3);
+      await expectNoA11yViolations(host);
+      const tip = table.shadowRoot!.querySelector("wt-help-tooltip")!;
+      await tip.updateComplete;
+      tip.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+      await tip.updateComplete;
+      expect(tip.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      await expectNoA11yViolations(host);
+      setLocale("es-ES");
+    },
+  );
+  it.each(["en-GB", "es-ES"])(
+    "accessible three-state editor with disagreeing offered sources (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const product = rows[1]!;
+      const offered = {
+        state: "clash",
+        candidates: [
+          { place: { kind: "own_sections" }, value: true, source: { kind: "product" } },
+          {
+            place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+            value: false,
+            source: { kind: "own" },
+          },
+        ],
+      } as MenuPriceRow["combined"]["offered"];
+      const { el, host } = await mount(theme, {
+        editing: product.menuItemId,
+        rows: [{ ...product, combined: { ...product.combined, offered } }],
+      });
+      expect(el.shadowRoot!.querySelector('select[name="offered"]')).not.toBeNull();
+      await expectNoA11yViolations(host);
+      setLocale("es-ES");
+    },
+  );
 });

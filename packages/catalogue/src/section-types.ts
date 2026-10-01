@@ -1,16 +1,18 @@
-/** A `library` section is reusable; a `menu_root` or `home_layout` list belongs to one menu. */
-export type SectionRole = "library" | "menu_root" | "home_layout";
+/** Every section and layout belongs to one menu. */
+export type SectionRole = "section" | "menu_root" | "home_layout";
 
 export type MemberRef =
   { kind: "product"; productId: string } | { kind: "section"; sectionId: string };
 
-export interface SectionMember {
+export type TileRef = MemberRef | { kind: "missing"; name: string };
+
+export interface SectionMember<Ref extends TileRef = MemberRef> {
   id: string;
   position: number;
-  ref: MemberRef;
+  ref: Ref;
 }
 
-export interface LibrarySection {
+export interface SectionDetails {
   id: string;
   internalName: string;
   /** Customer-facing names by language; `{}` when the section has none. */
@@ -20,12 +22,7 @@ export interface LibrarySection {
   members: SectionMember[];
 }
 
-export interface SectionUsages {
-  menus: { id: string; name: string }[];
-  sections: { id: string; internalName: string }[];
-}
-
-/** A section's details, as creating or changing a library section takes them. */
+/** Details for creating or changing an owned section. */
 export interface SectionInput {
   internalName: string;
   names?: Record<string, string>;
@@ -37,7 +34,8 @@ export interface SectionInput {
 export interface HomeTile {
   memberId: string;
   position: number;
-  ref: MemberRef;
+  ref: TileRef;
+  missingName: string | null;
   /** A product's staff name, or a section's internal name. */
   name: string;
   /** Whether the menu's working structure reaches the target, by membership alone. */

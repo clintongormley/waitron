@@ -19,10 +19,9 @@ import {
   createCategory,
   readCategory,
   updateCategory,
-  listSections,
   listMembers,
   readSection,
-  createSection,
+  createSectionIn,
   updateSection,
   deleteSection,
   addMember,
@@ -30,9 +29,6 @@ import {
   removeMember,
   moveMember,
   replaceMember,
-  duplicateSection,
-  sectionUsages,
-  librarySectionUsages,
   listHomeLayouts,
   createHomeLayout,
   duplicateHomeLayout,
@@ -40,6 +36,7 @@ import {
   deleteHomeLayout,
   setDefaultHomeLayout,
   addShortcut,
+  replaceShortcut,
   removeShortcut,
   moveShortcut,
   type MemberRef,
@@ -70,12 +67,12 @@ import {
   listProducts,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
-  renameCatalogue,
+  updateMenuDetails,
   updateMenuItem,
   updateProduct,
   listMenuVariants,
   setMenuVariants,
-  type MenuVariant,
+  type MenuVariantWrite,
   readProductEditor,
   saveProductEditor,
   productWithId,
@@ -137,7 +134,7 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
   return result;
 }
 
-/** A section body's fields, shape only: `createSection`/`updateSection` check the values. */
+/** A section body's fields, shape only: `createSectionIn`/`updateSection` check the values. */
 function sectionInput(body: Record<string, unknown>, creating: true): SectionInput;
 function sectionInput(body: Record<string, unknown>, creating: false): SectionPatch;
 function sectionInput(body: Record<string, unknown>, creating: boolean): SectionPatch {
@@ -229,9 +226,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 409: the body was well formed, and what the stored lists hold refused it.
   "menu_section.member_cycle": 409,
   "menu_section.member_duplicate": 409,
-  "menu_section.not_library": 409,
+  "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
+  "menu.clashes_unresolved": 409,
   "menu.layout_not_found": 404,
   "menu.default_layout_required": 409,
   "menu.shortcut_unreachable": 409,
@@ -291,8 +289,7 @@ function refuseNegativePrice(value: string, field: string): void {
   if (parsed.startsWith("-")) throw new AppError("management.request_invalid", { field });
 }
 
-/** A menu's settings for the offer's variants: a `price` of null follows the variant's own. */
-function parseMenuVariants(value: unknown): MenuVariant[] {
+function parseMenuVariants(value: unknown): MenuVariantWrite[] {
   if (!Array.isArray(value)) {
     throw new AppError("management.request_invalid", { field: "variants" });
   }
@@ -301,14 +298,14 @@ function parseMenuVariants(value: unknown): MenuVariant[] {
       !isPlainObject(entry) ||
       typeof entry.variantId !== "string" ||
       (entry.price !== null && typeof entry.price !== "string") ||
-      typeof entry.offered !== "boolean"
+      (entry.offered !== undefined && entry.offered !== null && typeof entry.offered !== "boolean")
     ) {
       throw new AppError("management.request_invalid", { field: `variants.${index}` });
     }
     return {
       variantId: requireUuidParam(entry.variantId, "ProductVariantId"),
       price: entry.price,
-      offered: entry.offered,
+      ...(entry.offered === undefined ? {} : { offered: entry.offered }),
     };
   });
 }
@@ -463,7 +460,7 @@ function mountListSurface<TList, TDependants>(
   );
 }
 
-/** `/management-api/sections`: the reusable lists, their members, and a menu's own lists. */
+/** Owned lists, their members, and menu inclusion targets. */
 function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocale: string): void {
   const collection = "/management-api/sections";
   const one = `${collection}/:id` as const;
@@ -472,19 +469,17 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
   const sectionId = (c: Context) => requireUuidParam(c.req.param("id")!, "SectionId");
   const memberId = (c: Context) => requireUuidParam(c.req.param("memberId")!, "SectionMemberId");
 
-  app.get(collection, (c) =>
-    run(c, log, async () => c.json(await gated(requireManagementSession(c), listSections))),
-  );
-  // Registered before `one`, so `usages` is not read as a section id.
-  app.get(`${collection}/usages`, (c) =>
-    run(c, log, async () => c.json(await gated(requireManagementSession(c), librarySectionUsages))),
-  );
-  app.post(collection, (c) =>
+  app.post(`${one}/sections`, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      const input = sectionInput(await readJsonBody<Record<string, unknown>>(c), true);
-      const created = await gated(session, (tx) => createSection(tx, input, venueLocale));
-      return c.json(created, 201);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const input = sectionInput(body, true);
+      const position =
+        body.position === undefined ? undefined : numberField(body.position, "position");
+      const created = await gated(session, (tx) =>
+        createSectionIn(tx, sectionId(c), input, position, venueLocale),
+      );
+      return c.json({ id: created.id }, 201);
     }),
   );
   app.get(one, (c) =>
@@ -565,28 +560,6 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       return c.json(await gated(session, (tx) => replaceMember(tx, id, held, ref)));
     }),
   );
-  app.post(`${one}/duplicate`, (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = sectionId(c);
-      const body = await readJsonBody<Record<string, unknown>>(c);
-      if (typeof body.internalName !== "string")
-        throw new AppError("management.request_invalid", { field: "internalName" });
-      const input = {
-        internalName: body.internalName,
-        memberIds: idList(body.memberIds, "memberIds", "SectionMemberId"),
-        ...(body.replaceIn === undefined ? {} : { replaceIn: replaceTarget(body.replaceIn) }),
-      };
-      return c.json(await gated(session, (tx) => duplicateSection(tx, id, input)), 201);
-    }),
-  );
-  app.get(`${one}/usages`, (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = sectionId(c);
-      return c.json(await gated(session, (tx) => sectionUsages(tx, id)));
-    }),
-  );
 }
 
 /** A menu's home layouts and their tiles. A tile is a member of the layout's section, but tiles have
@@ -663,6 +636,15 @@ function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       return c.json(await gated(session, (tx) => addShortcut(tx, id, ref, position)), 201);
     }),
   );
+  app.post(`${tile}/replace`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      const held = memberId(c);
+      const ref = memberRef((await readJsonBody<{ ref?: unknown }>(c)).ref);
+      return c.json(await gated(session, (tx) => replaceShortcut(tx, id, held, ref)));
+    }),
+  );
   app.delete(tile, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
@@ -682,19 +664,6 @@ function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       return c.json(await gated(session, (tx) => moveShortcut(tx, id, held, to)));
     }),
   );
-}
-
-function replaceTarget(value: unknown): { sectionId: string; memberId: string } {
-  if (
-    !isPlainObject(value) ||
-    typeof value.sectionId !== "string" ||
-    typeof value.memberId !== "string"
-  )
-    throw new AppError("management.request_invalid", { field: "replaceIn" });
-  return {
-    sectionId: requireUuidParam(value.sectionId, "SectionId"),
-    memberId: requireUuidParam(value.memberId, "SectionMemberId"),
-  };
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
@@ -869,10 +838,18 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.post("/management-api/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ name?: unknown }>(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
       const name = requireString(body.name, "name");
       if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
-      const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
+      const presentation = sectionInput({ ...body, internalName: name }, true);
+      const created = await gated(sessionId, (tx) =>
+        createCatalogue(tx, {
+          name,
+          names: presentation.names,
+          image: presentation.image,
+          color: presentation.color,
+        }),
+      );
       return c.json(created, 201);
     }),
   );
@@ -882,9 +859,17 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const name = requireString(body.name, "name");
-      if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
-      await gated(sessionId, (tx) => renameCatalogue(tx, catalogueId, name));
+      const presentation = sectionInput({ ...body, internalName: body.name }, false);
+      if (presentation.internalName !== undefined && presentation.internalName.trim() === "")
+        throw new AppError("management.request_invalid", { field: "name" });
+      await gated(sessionId, (tx) =>
+        updateMenuDetails(tx, catalogueId, {
+          name: presentation.internalName,
+          names: presentation.names,
+          image: presentation.image,
+          color: presentation.color,
+        }),
+      );
       return c.body(null, 204);
     }),
   );
@@ -949,15 +934,22 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         }
         refuseNegativePrice(body.grossPrice, "grossPrice");
       }
-      if (body.active !== undefined && typeof body.active !== "boolean") {
+      if (Object.hasOwn(body, "active")) {
         throw new AppError("management.request_invalid", { field: "active" });
+      }
+      if (
+        body.offered !== undefined &&
+        body.offered !== null &&
+        typeof body.offered !== "boolean"
+      ) {
+        throw new AppError("management.request_invalid", { field: "offered" });
       }
       await gated(sessionId, (tx) =>
         updateMenuItem(tx, menuId, menuItemId, {
           ...(body.grossPrice === undefined
             ? {}
             : { grossPrice: body.grossPrice as string | null }),
-          ...(body.active === undefined ? {} : { active: body.active as boolean }),
+          ...(body.offered === undefined ? {} : { offered: body.offered as boolean | null }),
         }),
       );
       return c.body(null, 204);

@@ -1,3 +1,4 @@
+import type { MenuClash } from "./menu-combine-types.js";
 import type {
   MenuOffer,
   MenuOfferVariant,
@@ -33,7 +34,7 @@ type PublishedOrdering = { ordering?: MenuOffer["ordering"] };
 
 export type FrozenOffer = Omit<
   MenuOffer,
-  OverlayOfferField | "placements" | "offeredModifiers" | "variants" | "ordering"
+  OverlayOfferField | "placements" | "offeredModifiers" | "variants" | "ordering" | "combined"
 > &
   PublishedOrdering & {
     /** The dish's own photo and description, which `MenuOffer` does not carry. */
@@ -48,6 +49,7 @@ export type DocumentMember =
   | { kind: "product"; menuItemId: string; productId: string }
   | {
       kind: "section";
+      includedMenu?: { id: string; name: string };
       sectionId: string;
       internalName: string;
       names: Record<string, string>;
@@ -61,7 +63,9 @@ export interface DocumentList {
 }
 
 export type DocumentTile =
-  { kind: "product"; productId: string } | { kind: "section"; sectionId: string };
+  | { kind: "product"; productId: string }
+  | { kind: "section"; sectionId: string }
+  | { kind: "empty" };
 
 export interface DocumentLayout {
   id: string;
@@ -71,13 +75,15 @@ export interface DocumentLayout {
 
 export interface MenuDocument {
   format: 2;
+  /** Direct active inclusions' working hashes, including their settings for switched-off products. */
+  includedMenuHashes?: Record<string, string>;
   menuId: string;
   menuName: string;
   /** The menu's top level. */
   root: DocumentList;
   /** Keyed by menu-item id: one per distinct product the menu offers. */
   offers: Record<string, FrozenOffer>;
-  /** The default first; a shortcut whose target is not in the document is left out (D13). */
+  /** The default first; a shortcut whose target is not in the document is an empty slot. */
   homeLayouts: DocumentLayout[];
   defaultHomeLayoutId: string;
 }
@@ -109,7 +115,7 @@ export type LiveOfferedModifier =
  * A published offer with the live fields put back from the current rows. Every variant, extras item
  * and option label the document holds is present, each marked with whether it can be sold now.
  */
-export interface LiveOffer extends Omit<MenuOffer, "ordering">, PublishedOrdering {
+export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, PublishedOrdering {
   available: boolean;
   image: string | null;
   description: Record<string, string> | null;
@@ -117,10 +123,11 @@ export interface LiveOffer extends Omit<MenuOffer, "ordering">, PublishedOrderin
 }
 
 /** Where a change came from (spec §11.1). */
-export type MenuChangeSource = "this_menu" | "shared_product" | "shared_section";
+export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu";
 
 export type MenuChange = {
   source: MenuChangeSource;
+  includedMenu?: { id: string; name: string };
   /** The other published menus the same shared change flags, by name. */
   alsoOn?: string[];
 } & (
@@ -164,14 +171,21 @@ export type ProductChangeField =
 export type SectionChangeField = "names" | "image" | "color";
 
 export type MenuStatus =
-  | { state: "unpublished" }
-  | { state: "current" | "changed"; version: number; publishedAt: string; hash: string };
+  | { state: "unpublished"; clashes: number }
+  | {
+      state: "current" | "changed";
+      clashes: number;
+      version: number;
+      publishedAt: string;
+      hash: string;
+    };
 
 /** What publishing the menu's working state now would change, and the hash a publish must match. */
 export interface MenuPreview {
+  clashes: MenuClash[];
   hash: string;
   changes: MenuChange[];
-  warnings: { kind: "shortcut_omitted"; layoutName: string; name: string }[];
+  warnings: { kind: "shortcut_missing"; layoutName: string; name: string }[];
   /** The menu's publication state, as `menuStatus` answers it. */
   status: MenuStatus;
   /** What the publish would make live. */
@@ -190,8 +204,6 @@ export interface MenuUnavailable {
   products: string[];
   /** Every option label that is unavailable, or deleted since the version was published. */
   optionLabels: string[];
-  /** Every extras item an offer has switched off, in the list it is switched off in. */
-  extraItems: { menuItemId: string; extraListId: string; productId: string }[];
 }
 
 /**

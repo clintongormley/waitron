@@ -36,12 +36,12 @@ same six with one path segment different. They are mounted by one helper, `mount
 
 | Route | Answers |
 | --- | --- |
-| `GET /management-api/modifiers/{options,extras}` | `{ optionLists: OptionListRow[] }` / `{ extraLists: ExtraListRow[] }`: each list with a `usage` object: `products`, the number of products carrying it, and for extras `menus`, the number of menu entries publishing it |
+| `GET /management-api/modifiers/{options,extras}` | `{ optionLists: OptionListRow[] }` / `{ extraLists: ExtraListRow[] }`: each list with a `usage` object: `products`, the number of products carrying it |
 | `POST /management-api/modifiers/{options,extras}` | the created list under `optionList` / `extraList`, 201 |
 | `GET /management-api/modifiers/{options,extras}/:id` | the list under `optionList` / `extraList` |
 | `PATCH /management-api/modifiers/{options,extras}/:id` | the updated list, same key. The body is the COMPLETE list, not a patch of changed fields |
 | `DELETE /management-api/modifiers/{options,extras}/:id` | `{ ok: true }` |
-| `GET /management-api/modifiers/{options,extras}/:id/dependants` | `{ dependants }` for the Used by popup and the delete confirmation: for options, `products` alone, the products carrying the list; for extras, those `products` plus `menus`, the menu entries publishing it, each with its `menuName` |
+| `GET /management-api/modifiers/{options,extras}/:id/dependants` | `{ dependants }` for the Used by popup and the delete confirmation: for both kinds, `products`, the products carrying the list |
 
 An id that is not a uuid is refused with `shared.invalid_id`, whose `kind` says which id was meant
 (`OptionListId`, `ExtraListId`). A body fault is `options.invalid` or `extras.invalid` naming the
@@ -91,26 +91,17 @@ serialised by `withTransaction`, and `assertExtraListForWrite` (`packages/catalo
 carries the mechanism for the whole package and points at its receipt, `racePair` in
 `packages/catalogue/test/fixtures.ts`.
 
-### Publishing an extras list on a menu
+### A menu offer carries its product's lists
 
-A menu offer can publish a subset of a dish's extras lists and change the terms:
-`menu_item_extra_lists` says which lists this offer publishes and in what order, and
-`menu_item_extra_items` withdraws or re-prices individual products within one. There is
-no management route for this today — `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`)
-is called from nothing outside `packages/catalogue` and the test suites.
-
-An options list has no per-menu version at all. A dish asks the same questions on every menu,
-so every options list the dish carries is offered on every offer of it, and there is nothing
-to publish. The consequence worth knowing: a menu item created today offers its product's options
-lists and NONE of its extras lists, because an extras list reaches an offer only through
-`setMenuItemExtraLists` and nothing outside `packages/catalogue` and its tests calls that. Pinned by
-"omits an extras list the offer does not publish, and keeps the options list"
-(`packages/catalogue/src/offered-modifiers.test.ts`).
+Every menu offer carries all extras and options lists its product attaches, in
+`product_modifiers.sort` order. `readOfferedModifiers` reads product extras once for the whole set
+of dishes. Publishing freezes those choices and prices into the menu version; there is no separate
+per-menu extras publication or price override.
 
 ### What an extra costs
 
-Three rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras.ts`):
-the menu offer's `menu_item_extra_items.price`, then the list item's own `price`, then the product's
+Two rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras.ts`):
+the list item's own `price`, then the product's
 `unit_price` (its own, or its parent's where a variant leaves it blank). A null at a rung means "ask
 the next one". Every price on the wire is a GROSS (VAT-inclusive) two-place decimal string; the
 column underneath holds a count of whole cents and the row converts (`stringToCents` /
@@ -219,14 +210,13 @@ the edit does not change is not touched.
 
 Neither side's ORDER is part of that comparison (`sameOptionSelections` and `editLineExtras`,
 `apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
-answers, which reads as a fixed thing and is not one: it is a stored position, and THREE columns
+answers, which reads as a fixed thing and is not one: it is a stored position, and the attachment and item sort columns
 hold parts of it, each re-numbered from the body of whatever save writes it.
 
 | Column | What it orders | Written by | A route reaches it |
 | --- | --- | --- | --- |
-| `product_modifiers.sort` | a dish's options lists | `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), from the product save's body | yes — the product write |
+| `product_modifiers.sort` | a dish's extras and options lists | `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), from the product save's body | yes — the product write |
 | `extra_list_items.sort` | the items WITHIN one extras list, which is the order its picks come back in | `writeItems` (`packages/catalogue/src/extras.ts`), from the list save's body | yes — `PATCH /management-api/modifiers/extras/:id`, and the `POST` that creates a list |
-| `menu_item_extra_lists.display_order` | the extras lists of a line naming a MENU OFFER | `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`), from the body that sets a menu offer's extras lists | no — nothing outside `packages/catalogue` and the test suites calls it |
 
 So a line parked before any of those saves keeps the old order while the rebuilt side comes back in
 the new one, and a comparison pairing the two up position by position reads that as a changed answer.
@@ -296,16 +286,11 @@ variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).
 
 Six things it is worth knowing about that payload:
 
-- **The order is the product's own `product_modifiers.sort`, on both reads**. A menu
-  offer changes what is inside an extras entry, and whether the entry is there at all, but not
-  where it sits — so `menu_item_extra_lists.display_order` decides nothing here. It still decides
-  the order in which the order path builds a line's answers, which is the table above.
-- **An extras entry on a MENU offer is that offer's own version** — items withdrawn and repriced by
-  `menu_item_extra_items` — and a list the offer does not publish is left out of the
-  walk entirely.
-- **Every price is settled**: the menu's price, then the list item's, then the product's
-  `unit_price` — its own, or its parent's where a variant leaves it blank. A till has
-  no way to walk that chain itself, because the last rung is not on the list item.
+- **The order is the product's own `product_modifiers.sort`, on both reads.** Each menu offer
+  carries the same product attachment list.
+- **Every price is settled**: the list item's price, then the product's `unit_price`, its own or
+  its parent's where a variant leaves it blank. A till cannot resolve that last step itself,
+  because the product price is not on the list item.
 - **A published version holds the lists that were Active when it was published, and every label of
   each options list; each label is served marked with whether it is Available now**
   (`applyLiveFields`, which reads no list's `active`, so a list switched off after publishing is
@@ -344,7 +329,7 @@ Six things it is worth knowing about that payload:
   "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
   offer" in `apps/server/src/till-sale.test.ts`, and "puts availability, course and category back
   from the current rows, and not VAT" in `packages/catalogue/src/menu-document.test.ts`, which clears an
-  extras item's flag only through the menu withdrawing it, not through its product.
+  extras item's flag from the product's current availability.
   An extras list also leaves out a product that has an Active variant (it is never sold as
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`
@@ -433,7 +418,7 @@ kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage
 
-Seven tables carry the feature, all in the catalogue migration set, plus two columns in the core
+Five tables carry the feature, all in the catalogue migration set, plus two columns in the core
 set that hold what an order froze.
 
 | Table or column | Set | What it holds |
@@ -441,11 +426,10 @@ set that hold what an order froze.
 | `option_lists`, `option_labels` | catalogue | an options list and its labels |
 | `extra_lists`, `extra_list_items` | catalogue | an extras list and the products it offers |
 | `product_modifiers` | catalogue | a dish's one ordered attachment list |
-| `menu_item_extra_lists`, `menu_item_extra_items` | catalogue | a menu offer's published extras and its per-product overrides |
 | `working_order_lines.option_snapshots` | core | an open order line's frozen options answers |
 | `sale_lines.option_snapshots` | core | a filed line's frozen options answers |
 
-All seven catalogue tables are classified `state` in `CATALOGUE_CLASSIFICATION`
+All five catalogue tables are classified `state` in `CATALOGUE_CLASSIFICATION`
 (`packages/catalogue/src/classification.ts`); none is declared `appendOnly()`, so none carries the
 `RAISE(ABORT)` trigger pair `applyMigrations` installs after each set migrates
 (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`).

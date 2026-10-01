@@ -184,7 +184,7 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
       productId: product.productId ?? product.id,
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
-      active: true,
+      offered: true,
       available: true,
       image: null,
       description: null,
@@ -1973,7 +1973,6 @@ describe("till-app table ordering: a menu published while a table is open", () =
         unavailable: {
           products: ["cordero"],
           optionLabels: [],
-          extraItems: [],
         },
       }));
       const { el } = await mountApp({
@@ -2027,7 +2026,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
                 homeLayoutId: menu.homeLayoutId,
                 layoutFallback: menu.layoutFallback,
               })),
-        unavailable: { products: [], optionLabels: [], extraItems: [] },
+        unavailable: { products: [], optionLabels: [] },
       }));
       const { el } = await mountApp({
         menuState,

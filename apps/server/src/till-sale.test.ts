@@ -2039,7 +2039,7 @@ describe("ordering extras and options — parent + child lines", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(menuItems)
-        .set({ active: false })
+        .set({ offered: false })
         .where(inArray(menuItems.id, [menuOffer, burgerOffer, baconOffer]));
       await republishMenus(tx);
     });

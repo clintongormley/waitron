@@ -5,24 +5,25 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import { describeSetting, placeName } from "./price-source.js";
+import type { Setting } from "../api/client.js";
+import type { Decimal } from "@waitron/shared";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { stringToCents } from "@waitron/shared";
 import type {
   CategorySummary,
-  LibrarySection,
+  SectionDetails,
   MenuPriceRow,
+  MenuStructureNode,
   MenuVariant,
+  MenuVariantWrite,
   Product,
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
-import {
-  priceField,
-  priceSearchText,
-  priceText,
-  switchField,
-  type FieldContext,
-} from "./form-fields.js";
+import { priceField, priceSearchText, priceText, type FieldContext } from "./form-fields.js";
 
 /** What saving one product's settings on the menu asks the host to write. `item` is null when the
  * menu's price and switch are unchanged, and `variants` is null when no variant changed, which
@@ -31,14 +32,14 @@ export interface OfferSave {
   menuItemId: string;
   /** The product's staff name, for a refusal reported away from the window. */
   name: string;
-  item: { grossPrice: string | null; active: boolean } | null;
-  variants: MenuVariant[] | null;
+  item: { grossPrice?: string | null; offered?: boolean | null } | null;
+  variants: MenuVariantWrite[] | null;
 }
 
 interface Draft {
   grossPrice: string;
-  active: boolean;
-  variants: { variantId: string; price: string; offered: boolean }[];
+  offered: boolean | null;
+  variants: { variantId: string; price: string; offered: boolean | null }[];
 }
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
@@ -66,14 +67,9 @@ interface Span {
 }
 
 interface LinePrices {
-  /** The catalogue's price, independent of this menu; for a product sold as its variants, the
-   * range over every one of them. */
+  before: Span | null;
   catalogue: Span;
-  /** What this menu charges; for a product sold as its variants, the range over the offered ones,
-   * and null when none is. */
   charged: Span | null;
-  /** Whether a price this menu sets is what is charged; for a product sold as its variants,
-   * whether it is for at least one offered variant. */
   menuApplies: boolean;
 }
 
@@ -86,10 +82,16 @@ function span(prices: readonly string[]): Span | null {
 }
 
 const priced = (
+  before: readonly string[],
   catalogue: readonly string[],
   charged: readonly string[],
   menuApplies: boolean,
-): LinePrices => ({ catalogue: span(catalogue)!, charged: span(charged), menuApplies });
+): LinePrices => ({
+  before: span(before),
+  catalogue: span(catalogue)!,
+  charged: span(charged),
+  menuApplies,
+});
 
 const spanText = ({ low, high, lowCents, highCents }: Span): string =>
   lowCents === highCents
@@ -126,6 +128,32 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(placement) {
         display: block;
         overflow-wrap: anywhere;
+      }
+      wt-data-table::part(price-cell) {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+      wt-data-table::part(clash) {
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .offered-field {
+        display: grid;
+        gap: var(--wt-space-1);
+      }
+      select {
+        min-height: var(--wt-tap-min);
+        max-width: 100%;
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+      select:focus-visible {
+        outline: var(--wt-focus-ring);
       }
       wt-data-table::part(note),
       wt-data-table::part(muted) {
@@ -179,10 +207,10 @@ export class MenuPricesTable extends LitElement {
   ];
 
   @property({ attribute: false }) rows: MenuPriceRow[] = [];
+  @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   @property({ type: Boolean }) loading = false;
   @property({ type: Boolean }) failed = false;
-  /** The section library, for each placement's internal names. */
-  @property({ attribute: false }) sections: LibrarySection[] = [];
+  @property({ attribute: false }) sections: SectionDetails[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   /** The products with their variants, for each variant's name and own price. */
   @property({ attribute: false }) products: Product[] = [];
@@ -257,36 +285,75 @@ export class MenuPricesTable extends LitElement {
     );
   }
 
+  #priceSetting({ item, variant }: Line): Setting<Decimal> {
+    return variant
+      ? item.combined.variants.find((v) => v.variantId === variant.variantId)!.price
+      : item.combined.price;
+  }
+
+  #offeredSetting({ item, variant }: Line): Setting<boolean> {
+    return variant
+      ? item.combined.variants.find((v) => v.variantId === variant.variantId)!.offered
+      : item.combined.offered;
+  }
+
+  #before(setting: Setting<Decimal>): Setting<Decimal> {
+    return setting.state === "decided" ? (setting.otherwise ?? setting) : setting;
+  }
+
   #readLines(): void {
     const lines: Line[] = [];
     const prices = new Map<Line, LinePrices>();
     for (const item of this.rows) {
-      const variants = item.variants.map((variant) => {
-        const own = this.#variants.get(variant.variantId)?.unitPrice ?? null;
+      const product: Line = { item, variant: null };
+      const variants: Line[] = item.variants.map((variant) => ({ item, variant }));
+      const read = (line: Line) => {
+        const setting = this.#priceSetting(line);
+        const before = this.#before(setting);
+        const offered = this.#offeredSetting(line);
         return {
-          line: { item, variant },
-          offered: variant.offered,
-          catalogue: own ?? item.productPrice,
-          // The server's chain, `resolveOfferPrice`.
-          charged: variant.price ?? own ?? item.effectivePrice,
-          menuApplies: variant.price !== null || (own === null && item.override !== null),
+          before: before.state === "decided" ? before.value : null,
+          charged: setting.state === "decided" ? setting.value : null,
+          offered: offered.state === "decided" && offered.value,
+          applies:
+            setting.state === "decided" &&
+            (setting.source.kind === "own" ||
+              (setting.source.kind === "parent" && item.override !== null)),
         };
-      });
-      const offered = variants.filter((variant) => variant.offered);
-      const product = { item, variant: null };
+      };
+      const values = (variants.length ? variants : [product]).map(read);
+      const before = values.every((value) => value.before !== null)
+        ? values.map((value) => value.before!)
+        : [];
+      const offered = variants.length ? values.filter((value) => value.offered) : values;
+      const charged = offered.every((value) => value.charged !== null)
+        ? offered.map((value) => value.charged!)
+        : [];
       prices.set(
         product,
-        variants.length
-          ? priced(
-              variants.map(({ catalogue }) => catalogue),
-              offered.map(({ charged }) => charged),
-              offered.some(({ menuApplies }) => menuApplies),
-            )
-          : priced([item.productPrice], [item.effectivePrice], item.override !== null),
+        priced(
+          before,
+          (variants.length ? variants : [product]).map((line) =>
+            line.variant
+              ? (this.#variants.get(line.variant.variantId)?.unitPrice ?? item.productPrice)
+              : item.productPrice,
+          ),
+          charged,
+          offered.some((value) => value.applies),
+        ),
       );
       lines.push(product);
-      for (const { line, catalogue, charged, menuApplies } of variants) {
-        prices.set(line, priced([catalogue], [charged], menuApplies));
+      for (const line of variants) {
+        const value = read(line);
+        prices.set(
+          line,
+          priced(
+            value.before === null ? [] : [value.before],
+            [this.#variants.get(line.variant!.variantId)?.unitPrice ?? item.productPrice],
+            value.charged === null ? [] : [value.charged],
+            value.applies,
+          ),
+        );
         lines.push(line);
       }
     }
@@ -294,13 +361,137 @@ export class MenuPricesTable extends LitElement {
     this.#prices = prices;
   }
 
+  #isClash(line: Line): boolean {
+    return (
+      this.#priceSetting(line).state === "clash" ||
+      this.#offeredSetting(line).state === "clash" ||
+      (line.variant === null &&
+        line.item.combined.variants.some(
+          (v) => v.price.state === "clash" || v.offered.state === "clash",
+        ))
+    );
+  }
+
+  #tip(line: Line, key: "before" | "menu" | "charged", content: unknown) {
+    const settings =
+      line.variant === null &&
+      line.item.variants.length &&
+      (key !== "menu" || line.item.override === null)
+        ? line.item.variants.map((variant) => ({
+            variant,
+            setting: this.#priceSetting({ item: line.item, variant }),
+          }))
+        : [{ variant: line.variant, setting: this.#priceSetting(line) }];
+    const explanation = settings
+      .map(({ variant, setting }) => {
+        const described = key === "before" ? this.#before(setting) : setting;
+        const words = describeSetting(described, { product: line.item.name }, t);
+        return line.variant === null && variant
+          ? `${this.#variantName(variant.variantId)}: ${described.state === "decided" ? priceText(described.value) : t("menu_prices.clash")}. ${words}`
+          : words;
+      })
+      .join(" ");
+    const name = line.variant
+      ? `${line.item.name} — ${this.#variantName(line.variant.variantId)}`
+      : line.item.name;
+    return html`<span part="price-cell"
+      >${content}<wt-help-tooltip aria-label=${t(`menu_prices.tip_${key}`).replace("{name}", name)}
+        >${explanation}</wt-help-tooltip
+      ></span
+    >`;
+  }
+
+  #resolve(line: Line, change: { grossPrice?: string; offered?: boolean }): void {
+    if (this.busy) return;
+    const { item, variant } = line;
+    this.#emit("wt-offer-save", {
+      menuItemId: item.menuItemId,
+      name: item.name,
+      item: variant ? null : change,
+      variants: variant
+        ? item.variants.map((v) => ({
+            ...v,
+            ...(v.variantId === variant.variantId
+              ? {
+                  ...(change.grossPrice === undefined ? {} : { price: change.grossPrice }),
+                  ...(change.offered === undefined ? {} : { offered: change.offered }),
+                }
+              : {}),
+          }))
+        : item.variants.length
+          ? null
+          : [],
+    } satisfies OfferSave);
+  }
+
+  #resolveActions(line: Line) {
+    const price = this.#priceSetting(line);
+    const offered = this.#offeredSetting(line);
+    if (price.state !== "clash" && offered.state !== "clash") return nothing;
+    return html`<wt-row-actions
+      part="resolve"
+      align="end"
+      label=${`${t("menu_prices.resolve")} ${line.item.name}${line.variant ? ` — ${this.#variantName(line.variant.variantId)}` : ""}`}
+    >
+      ${
+        price.state === "clash"
+          ? html`${price.candidates.map((candidate) =>
+                "value" in candidate
+                  ? html`<wt-button
+                      variant="secondary"
+                      .disabled=${this.busy}
+                      @click=${(event: Event) => {
+                        event.stopPropagation();
+                        (event.currentTarget as HTMLElement)
+                          .closest<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!
+                          .hide();
+                        this.#resolve(line, { grossPrice: candidate.value });
+                      }}
+                      >${t("menu_prices.use_candidate").replace("{price}", priceText(candidate.value)).replace("{place}", placeName(candidate.place, t))}</wt-button
+                    >`
+                  : nothing,
+              )}<wt-button
+                variant="secondary"
+                .disabled=${this.busy}
+                @click=${(event: Event) => {
+                  event.stopPropagation();
+                  (event.currentTarget as HTMLElement)
+                    .closest<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!
+                    .hide();
+                  this.#emit("wt-offer-edit", { menuItemId: line.item.menuItemId });
+                }}
+                >${t("menu_prices.set_price")}</wt-button
+              >`
+          : nothing
+      }
+      ${
+        offered.state === "clash"
+          ? [true, false].map(
+              (value) =>
+                html`<wt-button
+                  variant="secondary"
+                  .disabled=${this.busy}
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    (event.currentTarget as HTMLElement)
+                      .closest<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!
+                      .hide();
+                    this.#resolve(line, { offered: value });
+                  }}
+                  >${t(value ? "menu_prices.sell_it" : "menu_prices.switch_it_off")}</wt-button
+                >`,
+            )
+          : nothing
+      }
+    </wt-row-actions>`;
+  }
+
   #variantName(variantId: string): string {
     return this.#variants.get(variantId)?.name ?? t("members.missing");
   }
 
-  /** The price charged beside the catalogue's, as #541 agreed for the menu offers list: struck
-   * through when a menu price changes it, muted when no menu price applies. */
   #chargedHere(line: Line) {
+    if (this.#isClash(line)) return html`<span part="clash">${t("menu_prices.clash")}</span>`;
     const { catalogue, charged, menuApplies } = this.#prices.get(line)!;
     if (charged === null) return muted(t("menu_prices.no_variant_offered"));
     const text = spanText(charged);
@@ -308,6 +499,7 @@ export class MenuPricesTable extends LitElement {
       return muted(
         html`${text}<span part="visually-hidden"> ${t("menu_prices.price_inherited")}</span>`,
       );
+    if (catalogue === null) return text;
     if (catalogue.lowCents === charged.lowCents && catalogue.highCents === charged.highCents)
       return text;
     return html`<span part="visually-hidden">${t("menu_prices.price_was")} </span
@@ -329,7 +521,7 @@ export class MenuPricesTable extends LitElement {
     this.attempted = false;
     this.draft = {
       grossPrice: row.override ?? "",
-      active: row.active,
+      offered: row.offered,
       variants: row.variants.map(({ variantId, price, offered }) => ({
         variantId,
         price: price ?? "",
@@ -454,17 +646,29 @@ export class MenuPricesTable extends LitElement {
         },
       },
       {
-        ...price("product-price", t("menu_prices.product_price"), (line) => prices(line).catalogue),
-        cell: (line) => spanText(prices(line).catalogue),
+        ...price("product-price", t("menu_prices.product_price"), (line) => prices(line).before),
+        cell: (line) =>
+          this.#tip(
+            line,
+            "before",
+            prices(line).before
+              ? spanText(prices(line).before!)
+              : html`<span part="clash">${t("menu_prices.clash")}</span>`,
+          ),
       },
       {
         ...price("menu-price", t("menu_prices.menu_price"), menuPrice),
         cell: (line) => {
           const set = menuPrice(line);
-          if (set !== null) return priceText(set);
-          return variantPriced(line)
-            ? t("menu_prices.variant_overrides")
-            : muted(t("menu_prices.no_override"));
+          return this.#tip(
+            line,
+            "menu",
+            set !== null
+              ? priceText(set)
+              : variantPriced(line)
+                ? t("menu_prices.variant_overrides")
+                : muted(t("menu_prices.no_override")),
+          );
         },
         filter: {
           label: t("menu_prices.price_filter"),
@@ -482,7 +686,15 @@ export class MenuPricesTable extends LitElement {
         ),
         cell: (line) => {
           const charged = prices(line).charged;
-          return charged ? spanText(charged) : muted(t("menu_prices.no_variant_offered"));
+          return this.#tip(
+            line,
+            "charged",
+            this.#isClash(line)
+              ? html`<span part="clash">${t("menu_prices.clash")}</span>`
+              : charged
+                ? spanText(charged)
+                : muted(t("menu_prices.no_variant_offered")),
+          );
         },
       },
       {
@@ -492,18 +704,51 @@ export class MenuPricesTable extends LitElement {
           (line) => prices(line).charged,
           "hidden",
         ),
-        cell: (line) => this.#chargedHere(line),
+        cell: (line) => this.#tip(line, "charged", this.#chargedHere(line)),
       },
       {
         key: "active",
         label: t("menu_prices.on_menu"),
         choosable: "shown",
-        sortValue: ({ item, variant }) => ((variant ? variant.offered : item.active) ? 0 : 1),
-        cell: ({ item, variant }) => {
-          if (variant)
-            return variant.offered ? t("menu_prices.offered") : muted(t("menu_prices.not_offered"));
-          return item.active ? t("menu_prices.sold_here") : muted(t("menu_prices.switched_off"));
+        sortValue: (line) => {
+          const setting = this.#offeredSetting(line);
+          return setting.state === "clash" ? 2 : setting.value ? 0 : 1;
         },
+        cell: (line) => {
+          const setting = this.#offeredSetting(line);
+          if (setting.state === "clash")
+            return html`<span part="clash">${t("menu_prices.clash")}</span>`;
+          return setting.value
+            ? t(line.variant ? "menu_prices.offered" : "menu_prices.sold_here")
+            : muted(t(line.variant ? "menu_prices.not_offered" : "menu_prices.switched_off"));
+        },
+      },
+      {
+        key: "from",
+        label: t("menu_prices.from"),
+        choosable: "shown",
+        cell: (line) => {
+          if (this.#isClash(line)) return html`<span part="clash">${t("menu_prices.clash")}</span>`;
+          const setting = this.#priceSetting(line);
+          if (setting.state === "clash") return t("menu_prices.clash");
+          const source =
+            setting.source.kind === "parent" && line.item.combined.price.state === "decided"
+              ? line.item.combined.price.source
+              : setting.source;
+          return source.kind === "menu"
+            ? source.menuName
+            : t(
+                source.kind === "own" || (source.kind === "parent" && line.item.override !== null)
+                  ? "menu_prices.this_menu"
+                  : "menu_prices.product",
+              );
+        },
+      },
+      {
+        key: "actions",
+        label: t("menu_prices.resolve"),
+        pinned: "end",
+        cell: (line) => this.#resolveActions(line),
       },
     ];
   }
@@ -561,24 +806,27 @@ export class MenuPricesTable extends LitElement {
       return;
     }
     const grossPrice = blankToNull(draft.grossPrice);
-    const variants = draft.variants.map(({ variantId, price, offered }) => ({
+    const row = this.#opened!;
+    const variants = draft.variants.map(({ variantId, price, offered }, at) => ({
       variantId,
       price: blankToNull(price),
-      offered,
+      ...(offered === row.variants[at]!.offered ? {} : { offered }),
     }));
-    const row = this.#opened!;
     // The draft's variants were built from the opened row's, one for one and in its order.
     const variantsChanged = variants.some(({ price, offered }, at) => {
       const was = row.variants[at]!;
-      return was.offered !== offered || !samePrice(price, was.price);
+      return offered !== undefined || !samePrice(price, was.price);
     });
     this.#emit("wt-offer-save", {
       menuItemId: this.editing!,
       name: row.name,
       item:
-        samePrice(grossPrice, row.override) && draft.active === row.active
+        samePrice(grossPrice, row.override) && draft.offered === row.offered
           ? null
-          : { grossPrice, active: draft.active },
+          : {
+              ...(samePrice(grossPrice, row.override) ? {} : { grossPrice }),
+              ...(draft.offered === row.offered ? {} : { offered: draft.offered }),
+            },
       variants: variantsChanged ? variants : null,
     } satisfies OfferSave);
   }
@@ -588,17 +836,49 @@ export class MenuPricesTable extends LitElement {
     if (!this.busy) this.#emit("wt-offer-cancel", {});
   }
 
+  #offeredField(
+    name: string,
+    label: string,
+    value: boolean | null,
+    setting: Setting<boolean>,
+    change: (value: boolean | null) => void,
+  ) {
+    const inherited = setting.state === "decided" ? (setting.otherwise ?? setting) : setting;
+    const state =
+      inherited.state === "clash"
+        ? t("menu_prices.sources_disagree")
+        : t(inherited.value ? "menu_prices.sold" : "menu_prices.switched_off");
+    const selected = value === null ? "" : String(value);
+    return html`<label class="offered-field"
+      >${label}<select
+        name=${name}
+        .disabled=${this.busy}
+        @change=${(event: Event) => {
+          event.stopPropagation();
+          const value = (event.target as HTMLSelectElement).value;
+          change(value === "" ? null : value === "true");
+        }}
+      >
+        ${[
+          ["", t("menu_prices.follow_offered").replace("{state}", state)],
+          ["true", t("menu_prices.sold")],
+          ["false", t("menu_prices.switched_off")],
+        ].map(
+          ([value, label]) =>
+            html`<option value=${value!} .selected=${value === selected}>${label}</option>`,
+        )}
+      </select></label
+    >`;
+  }
+
   #renderForm(row: MenuPriceRow, draft: Draft, errors: Record<string, string>) {
     const context: FieldContext = {
       busy: this.busy,
       locales: [],
       error: (key) => errors[key] ?? "",
     };
-    const productPrice = row.productPrice;
-    const typed = draft.grossPrice.trim();
-    // A variant with no price of its own sells at the product's price on this menu
-    // (`resolveOfferPrice`), taken from the field while it holds a valid price.
-    const productHere = isProductPrice(typed) ? typed : productPrice;
+    const inheritedPrice = this.#before(row.combined.price);
+    const productPrice = inheritedPrice.state === "decided" ? inheritedPrice.value : "";
     return html`<div
       class="fields"
       @keydown=${(event: KeyboardEvent) =>
@@ -631,9 +911,7 @@ export class MenuPricesTable extends LitElement {
             </div>`
           : nothing
       }
-      ${switchField(context, "active", t("menu_prices.active"), draft.active, (active) =>
-        this.#edit((current) => ({ ...current, active }), "active"),
-      )}
+      ${this.#offeredField("offered", t("menu_prices.active"), draft.offered, row.combined.offered, (offered) => this.#edit((current) => ({ ...current, offered }), "offered"))}
       ${
         draft.variants.length
           ? html`<h3>${t("menu_prices.variants")}</h3>
@@ -649,15 +927,20 @@ export class MenuPricesTable extends LitElement {
                     variant.price,
                     (price) => this.#editVariant(index, { price }, `variants.${index}.price`),
                     false,
-                    known?.unitPrice ?? productHere,
+                    (() => {
+                      const before = this.#before(
+                        row.combined.variants.find((v) => v.variantId === variant.variantId)!.price,
+                      );
+                      return before.state === "decided"
+                        ? before.source.kind === "parent"
+                          ? isProductPrice(draft.grossPrice.trim())
+                            ? draft.grossPrice.trim()
+                            : productPrice
+                          : before.value
+                        : "";
+                    })(),
                   )}
-                  ${switchField(
-                    context,
-                    `variants.${index}.offered`,
-                    t("menu_prices.variant_offered"),
-                    variant.offered,
-                    (offered) => this.#editVariant(index, { offered }, `variants.${index}.offered`),
-                  )}
+                  ${this.#offeredField(`offered-${variant.variantId}`, t("menu_prices.variant_offered"), variant.offered, row.combined.variants.find((v) => v.variantId === variant.variantId)!.offered, (offered) => this.#editVariant(index, { offered }, `variants.${index}.offered`))}
                 </fieldset>`;
               })}`
           : nothing
@@ -716,8 +999,55 @@ export class MenuPricesTable extends LitElement {
     </wt-modal>`;
   }
 
+  #summary() {
+    const own = new Set<string>();
+    const included = new Map<string, { name: string; products: Set<string> }>();
+    const collect = (nodes: readonly MenuStructureNode[], products: Set<string>): void => {
+      for (const node of nodes) {
+        if (node.ref.kind === "product") products.add(node.ref.productId);
+        else collect(node.children ?? [], products);
+      }
+    };
+    const walk = (nodes: readonly MenuStructureNode[]): void => {
+      for (const node of nodes) {
+        if (node.ref.kind === "product") own.add(node.ref.productId);
+        else if (node.includedMenuId) {
+          let menu = included.get(node.includedMenuId);
+          if (!menu) {
+            menu = { name: node.internalName ?? t("members.missing"), products: new Set() };
+            included.set(node.includedMenuId, menu);
+          }
+          collect(node.children ?? [], menu.products);
+        } else walk(node.children ?? []);
+      }
+    };
+    walk(this.nodes);
+    const priced = (row: MenuPriceRow) =>
+      row.override !== null || row.variants.some((variant) => variant.price !== null);
+    const switchedOff = (row: MenuPriceRow) =>
+      row.offered === false || row.variants.some((variant) => variant.offered === false);
+    return html`<div data-test="price-summary">
+      ${[...included.values()].map((menu) => {
+        const rows = this.rows.filter((row) => menu.products.has(row.productId));
+        const prices = rows.filter(priced).length;
+        const off = rows.filter(switchedOff).length;
+        return html`<p>
+          ${t("menu_prices.summary_included")
+            .replace("{prices}", String(prices))
+            .replace("{priceItems}", t(prices === 1 ? "menu_prices.item" : "menu_prices.items"))
+            .replace("{off}", String(off))
+            .replace("{offItems}", t(off === 1 ? "menu_prices.item" : "menu_prices.items"))
+            .replace("{menu}", menu.name)}
+        </p>`;
+      })}
+      <p>
+        ${t("menu_prices.summary_own").replace("{prices}", String(this.rows.filter((row) => own.has(row.productId) && priced(row)).length))}
+      </p>
+    </div>`;
+  }
+
   override render() {
-    return html`<wt-data-table
+    return html`${this.#summary()}<wt-data-table
         aria-label=${t("menu_prices.label").replace("{menu}", this.menuName)}
         viewKey="waitron.menus.prices"
         searchable

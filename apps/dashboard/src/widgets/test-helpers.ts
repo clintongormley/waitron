@@ -269,7 +269,7 @@ function frozenOffer(
     menuId: "menu-lunch",
     productId: member.productId,
     grossPrice: null,
-    active: true,
+    offered: null,
     unitPrice: "3.00",
     menuName,
     name,
@@ -293,5 +293,47 @@ function frozenOffer(
     variants: [],
     placements: [],
     offeredModifiers: [],
+  };
+}
+
+export function combinedFixture(
+  productId: string,
+  price: string,
+  offered: boolean,
+  variants: { variantId: string; price: string | null; offered: boolean | null }[] = [],
+  ownPrice: string | null = null,
+  cataloguePrice = price,
+  catalogueVariants: Record<string, string | null> = {},
+): import("@waitron/catalogue/src/menu-combine-types.js").CombinedOffer {
+  type Decimal = import("@waitron/shared").Decimal;
+  type Setting<T> = import("@waitron/catalogue/src/menu-combine-types.js").Setting<T>;
+  const decided = <T>(
+    value: T,
+    kind: "own" | "product" | "parent" = "product",
+    otherwise: Setting<T> | null = null,
+  ): Setting<T> => ({ state: "decided", value, source: { kind }, otherwise });
+  const product = decided(cataloguePrice as Decimal);
+  const productPrice = ownPrice === null ? product : decided(price as Decimal, "own", product);
+  return {
+    productId,
+    price: productPrice,
+    offered: decided(offered, "own", decided(true)),
+    variants: variants.map((v) => {
+      const catalogue = catalogueVariants[v.variantId] ?? null;
+      const parent = decided(
+        price as Decimal,
+        "parent",
+        ownPrice === null ? null : decided(cataloguePrice as Decimal, "parent"),
+      );
+      const fallback = catalogue === null ? parent : decided(catalogue as Decimal);
+      return {
+        variantId: v.variantId,
+        offered: v.offered === null ? decided(true) : decided(v.offered, "own", decided(true)),
+        price: {
+          ...(v.price === null ? fallback : decided(v.price as Decimal, "own", fallback)),
+          level: v.price !== null || catalogue !== null ? "size" : "product",
+        },
+      };
+    }),
   };
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
+  combinedFixture,
   cleanupWidgets,
   documentProduct,
   documentSection,
@@ -12,7 +13,7 @@ import { MenusScreen } from "./menus-screen.js";
 import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
 import type {
   DashboardApi,
-  LibrarySection,
+  SectionDetails,
   MenuPreview,
   MenuStructureNode,
   Product,
@@ -33,7 +34,7 @@ const lager = {
   variants: [],
 } as unknown as Product;
 
-const sections: LibrarySection[] = [
+const sections: SectionDetails[] = [
   {
     id: "s-drinks",
     internalName: "Drinks",
@@ -52,9 +53,23 @@ const nodes: MenuStructureNode[] = [
   {
     memberId: "m-drinks",
     ref: { kind: "section", sectionId: "s-drinks" },
+    internalName: "Drinks",
+    names: {},
+    image: null,
+    color: null,
+    ownerMenuId: "menu-lunch",
     children: [
       { memberId: "m-lager", ref: { kind: "product", productId: "p-lager" } },
-      { memberId: "m-beer", ref: { kind: "section", sectionId: "s-beer" }, children: [] },
+      {
+        memberId: "m-beer",
+        ref: { kind: "section", sectionId: "s-beer" },
+        internalName: "Beer",
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
     ],
   },
 ];
@@ -86,6 +101,16 @@ function api(state: State): DashboardApi {
         ? vi.fn().mockRejectedValue(new Error("offline"))
         : vi.fn().mockResolvedValue({
             rootSectionId: "root-lunch",
+            root: {
+              id: "root-lunch",
+              internalName: "Lunch Menu",
+              names: {},
+              image: null,
+              color: null,
+              members: [],
+            },
+            includable: [],
+            includedBy: [],
             nodes: state === "empty-menu" ? [] : nodes,
           }),
     listSectionUsages: vi.fn().mockResolvedValue({
@@ -102,19 +127,22 @@ function api(state: State): DashboardApi {
     getMenuStatuses: vi.fn().mockResolvedValue({
       "menu-lunch": {
         state: "changed",
+        clashes: 0,
         version: 2,
         publishedAt: "2026-09-26T10:15:00.000Z",
         hash: "a".repeat(64),
       },
-      "menu-dinner": { state: "unpublished" },
+      "menu-dinner": { state: "unpublished", clashes: 0 },
     }),
     getMenuStatus: vi.fn().mockResolvedValue({
       state: "changed",
+      clashes: 0,
       version: 2,
       publishedAt: "2026-09-26T10:15:00.000Z",
       hash: "a".repeat(64),
     }),
     getMenuPreview: vi.fn().mockResolvedValue({
+      clashes: [],
       hash: "b".repeat(64),
       changes: [
         {
@@ -126,9 +154,10 @@ function api(state: State): DashboardApi {
           alsoOn: ["Dinner Menu"],
         },
       ],
-      warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
+      warnings: [{ kind: "shortcut_missing", layoutName: "Home", name: "Lager" }],
       status: {
         state: "changed",
+        clashes: 0,
         version: 2,
         publishedAt: "2026-09-26T10:15:00.000Z",
         hash: "a".repeat(64),
@@ -172,6 +201,7 @@ function api(state: State): DashboardApi {
     getMenuPrices: vi.fn().mockResolvedValue([
       {
         menuItemId: "mi-lager",
+        combined: combinedFixture("p-lager", "1.80", true, [], "1.80", "2.00"),
         productId: "p-lager",
         name: "Lager",
         categoryId: null,
@@ -179,7 +209,7 @@ function api(state: State): DashboardApi {
         productPrice: "2.00",
         override: "1.80",
         effectivePrice: "1.80",
-        active: true,
+        offered: true,
         variants: [],
       },
     ]),
@@ -213,7 +243,8 @@ async function editDrinks(el: MenusScreen): Promise<void> {
   const tree = q(el, "dashboard-menu-structure-tree");
   tree.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m-drinks"]')!.click();
   await vi.waitFor(() => {
-    if (!el.shadowRoot!.querySelector('[data-test="shared"]')) throw new Error("usages");
+    if (el.shadowRoot!.querySelector("#list-heading")?.textContent !== "Drinks")
+      throw new Error("list");
   });
 }
 
@@ -230,7 +261,9 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const { el, host } = await mount("populated", theme, "/manage/menus");
     q(el, '[data-test="add-menu"]').click();
     await el.updateComplete;
-    q(el, 'wt-modal[data-test="menu-form"] [data-test="menu-save"]').click();
+    q(el, '[data-test="menu-form"]')
+      .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
+      .click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
@@ -243,21 +276,22 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     },
   );
 
-  it("accessible expanded shared section being edited", async () => {
+  it("accessible expanded owned section being edited", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     const tree = q(el, "dashboard-menu-structure-tree");
     tree.shadowRoot!.querySelector<HTMLElement>('[data-test="toggle-m-drinks"]')!.click();
     tree.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m-drinks"]')!.click();
     await vi.waitFor(() => {
-      if (!el.shadowRoot!.querySelector('[data-test="shared"]')) throw new Error("usages");
+      if (el.shadowRoot!.querySelector("#list-heading")?.textContent !== "Drinks")
+        throw new Error("list");
     });
     await expectNoA11yViolations(host);
   });
 
-  it("accessible duplicate-and-use-here form", async () => {
+  it("accessible include-menu picker", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     await editDrinks(el);
-    q(el, '[data-test="duplicate-here"]').click();
+    q(el, '[data-test="include-menu"]').click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
@@ -270,9 +304,13 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       q(el, '[data-test="new-section"]').click();
       await el.updateComplete;
       if (refused) {
-        q(el, 'wt-modal[data-test="new-section"] [data-test="new-section-save"]').click();
+        q(el, '[data-test="section-form"]')
+          .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
+          .click();
         await el.updateComplete;
-        const name = q(el, 'wt-modal[data-test="new-section"] wt-input[name="internalName"]');
+        const name = q(el, '[data-test="section-form"]').shadowRoot!.querySelector(
+          'wt-input[name="internalName"]',
+        )!;
         expect((name as HTMLElementTagNameMap["wt-input"]).error).toBe(
           t("sections.internal_name_required"),
         );

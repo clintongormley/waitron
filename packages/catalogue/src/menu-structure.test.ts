@@ -1,3 +1,4 @@
+import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
@@ -11,25 +12,22 @@ import {
   deactivateProduct,
   listMenuOffers,
   menuPrices,
-  renameCatalogue,
+  updateMenuDetails,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
-import { listContentTranslationGaps } from "./content-languages.js";
-import { createExtraList, setMenuItemExtraLists } from "./extras.js";
+import { createExtraList } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
-import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
 import { createCategory } from "./categories.js";
 import {
   addMember,
-  createSection,
   deleteSection,
-  duplicateSection,
-  listSections,
+  createSectionIn,
+  replaceMember,
   moveMember,
   removeMember,
 } from "./sections.js";
@@ -43,6 +41,13 @@ const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 const product = (productId: string): MemberRef => ({ kind: "product", productId });
 const section = (sectionId: string): MemberRef => ({ kind: "section", sectionId });
 
+function stripPresentation(node: import("./menu-structure.js").MenuStructureNode): object {
+  return {
+    memberId: node.memberId,
+    ref: node.ref,
+    ...(node.children === undefined ? {} : { children: node.children.map(stripPresentation) }),
+  };
+}
 interface Fixture {
   lunch: string;
   dinner: string;
@@ -137,21 +142,11 @@ async function settingsOf(tx: Transaction, menuId: string, productId: string) {
     })
     .from(menuItemVariantOverrides)
     .where(eq(menuItemVariantOverrides.menuItemId, row.id));
-  const extraLists = await tx
-    .select({ listId: menuItemExtraLists.listId })
-    .from(menuItemExtraLists)
-    .where(eq(menuItemExtraLists.menuItemId, row.id));
-  const extraItems = await tx
-    .select({ productId: menuItemExtraItems.productId, price: menuItemExtraItems.price })
-    .from(menuItemExtraItems)
-    .where(eq(menuItemExtraItems.menuItemId, row.id));
   return {
     id: row.id,
     grossPrice: row.grossPrice,
-    active: row.active,
+    offered: row.offered,
     variantOverrides,
-    extraLists,
-    extraItems,
   };
 }
 
@@ -182,14 +177,24 @@ describe("creating a menu", () => {
     });
     expect(await app((tx) => readMenuStructure(tx, menu.id))).toEqual({
       rootSectionId: root.id,
+      root: {
+        id: root.id,
+        internalName: "Lunch menu",
+        names: {},
+        image: null,
+        color: null,
+        members: [],
+      },
       nodes: [],
+      includable: [],
+      includedBy: [],
     });
   });
 
   it("keeps the root's internal name the menu's name when the menu is renamed", async () => {
     await seedTenant(fx.db);
     const menu = await app((tx) => createCatalogue(tx, { name: "Lunch menu" }));
-    await app((tx) => renameCatalogue(tx, menu.id, "Weekday lunch"));
+    await app((tx) => updateMenuDetails(tx, menu.id, { name: "Weekday lunch" }));
     const { rootSectionId } = await app((tx) => readMenuStructure(tx, menu.id));
     const [root] = await app((tx) =>
       tx
@@ -200,6 +205,36 @@ describe("creating a menu", () => {
     expect(root).toEqual({ internalName: "Weekday lunch" });
   });
 
+  it("reads saved menu presentation back when reopening its details", async () => {
+    await seedTenant(fx.db);
+    const menu = await app((tx) =>
+      createCatalogue(tx, {
+        name: "Lunch menu",
+        names: { en: "Lunch", es: "Almuerzo" },
+        color: "#aa3300",
+      }),
+    );
+    const before = await app((tx) => readMenuStructure(tx, menu.id));
+    expect(before.root).toMatchObject({
+      internalName: "Lunch menu",
+      names: { en: "Lunch", es: "Almuerzo" },
+      image: null,
+      color: "#aa3300",
+    });
+    await app((tx) =>
+      updateMenuDetails(tx, menu.id, {
+        name: "Weekday lunch",
+        names: before.root.names,
+        image: before.root.image,
+        color: before.root.color,
+      }),
+    );
+    expect((await app((tx) => readMenuStructure(tx, menu.id))).root).toEqual({
+      ...before.root,
+      internalName: "Weekday lunch",
+    });
+  });
+
   it("refuses the structure of a menu that does not exist", async () => {
     await seedTenant(fx.db);
     await expect(app((tx) => readMenuStructure(tx, crypto.randomUUID()))).rejects.toMatchObject({
@@ -208,33 +243,8 @@ describe("creating a menu", () => {
   });
 });
 
-describe("a menu's own lists stay out of the library", () => {
-  it("never lists the root or the layout, never takes either as a member, and never reports their names", async () => {
-    const f = await fixture();
-    const [details] = await app((tx) =>
-      tx.select().from(menuDetails).where(eq(menuDetails.menuId, f.lunch)),
-    );
-    const listed = await app((tx) => listSections(tx));
-    expect(listed.map((row) => row.internalName)).toEqual(["Drinks", "Favourites"]);
-    for (const owned of [details!.rootSectionId, details!.defaultHomeLayoutId])
-      await expect(app((tx) => addMember(tx, f.drinks, section(owned)))).rejects.toMatchObject({
-        code: "menu_section.not_library",
-      });
-    // A customer name missing Spanish, on the owned lists and on a library section alike: only the
-    // library section is a gap.
-    await fx.db.execute(sql`update sections set names = '{"en":"Named"}'`);
-    const gaps = await app((tx) => listContentTranslationGaps(tx, "es"));
-    expect(
-      gaps
-        .filter((gap) => gap.kind.includes("section"))
-        .map((gap) => gap.id)
-        .sort(),
-    ).toEqual([f.drinks, f.favourites].sort());
-  });
-});
-
 describe("a menu offers what its structure reaches", () => {
-  it("offers a section's products in order, and a product added to a shared section on every menu using it", async () => {
+  it("offers an included menu's products in order on every menu using it", async () => {
     const f = await fixture();
     await app(async (tx) => {
       await addMember(tx, f.drinks, product(f.lemonade));
@@ -260,7 +270,7 @@ describe("a menu offers what its structure reaches", () => {
     }
   });
 
-  it("writes every menu's rows inside the transaction that changed a shared section", async () => {
+  it("writes every including menu's rows inside the transaction that changed the included menu", async () => {
     const f = await fixture();
     await app(async (tx) => {
       await addMember(tx, f.lunchRoot, section(f.drinks));
@@ -303,7 +313,10 @@ describe("a menu offers what its structure reaches", () => {
     const [offer] = await app((tx) => listMenuOffers(tx, [f.lunch]));
     expect(offer!.placements).toEqual([[f.favourites], [f.drinks, beer.id], []]);
     const structure = await app((tx) => readMenuStructure(tx, f.lunch));
-    expect(structure).toEqual({
+    expect({
+      rootSectionId: structure.rootSectionId,
+      nodes: structure.nodes.map(stripPresentation),
+    }).toEqual({
       rootSectionId: f.lunchRoot,
       nodes: [
         {
@@ -372,7 +385,7 @@ describe("a menu offers what its structure reaches", () => {
 describe("a product that leaves a menu starts fresh there", () => {
   /**
    * Review Focus 4: Lemonade under Favourites and Drinks on Lunch, with a Lunch price, a Lunch
-   * price for its Large variant and a Lunch extras publication. Dinner holds Lemonade at its top
+   * price for its Large variant. The product carries Ice extras. Dinner holds Lemonade at its top
    * level with a price of its own, which nothing below may touch.
    */
   async function lemonadeOnLunch() {
@@ -393,9 +406,7 @@ describe("a product that leaves a menu starts fresh there", () => {
       ]);
       const ice = await createExtraList(tx, { name: "Ice", items: [{ productId: f.water }] }, "en");
       await writeProductModifiers(tx, f.lemonade, [{ kind: "extras", id: ice.id }]);
-      await setMenuItemExtraLists(tx, lunchItem.id, [
-        { listId: ice.id, items: [{ productId: f.water, price: "0.20", available: true }] },
-      ]);
+
       return {
         lunch: await settingsOf(tx, f.lunch, f.lemonade),
         dinner: await settingsOf(tx, f.dinner, f.lemonade),
@@ -403,10 +414,8 @@ describe("a product that leaves a menu starts fresh there", () => {
     });
     expect(settings.lunch).toMatchObject({
       grossPrice: 250,
-      active: true,
+      offered: null,
       variantOverrides: [{ variantId: f.large, price: 300, offered: true }],
-      extraLists: [{ listId: expect.any(String) }],
-      extraItems: [{ productId: f.water, price: 20 }],
     });
     return { f, settings };
   }
@@ -429,10 +438,8 @@ describe("a product that leaves a menu starts fresh there", () => {
     expect(after.lunch).toEqual({
       id: before.lunch.id,
       grossPrice: null,
-      active: true,
+      offered: null,
       variantOverrides: [],
-      extraLists: [],
-      extraItems: [],
     });
     expect(after.dinner).toEqual(before.dinner);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
@@ -443,9 +450,9 @@ describe("a product that leaves a menu starts fresh there", () => {
     expect(offer.variants).toEqual([
       expect.objectContaining({ id: f.large, menuPrice: null, unitPrice: "3.50" }),
     ]);
-    // An offer publishes an extras list only through its own `menu_item_extra_lists` row, and a
-    // fresh one has none.
-    expect(offer.offeredModifiers).toEqual([]);
+    expect(offer.offeredModifiers).toMatchObject([
+      { kind: "extras", name: "Ice", items: [{ productId: f.water }] },
+    ]);
   }
 
   it("keeps everything while another path still reaches the product", async () => {
@@ -475,7 +482,12 @@ describe("a product that leaves a menu starts fresh there", () => {
   it("resets when the last section reaching it is deleted", async () => {
     const { f, settings } = await lemonadeOnLunch();
     await removeFromFavourites(f);
-    await app((tx) => deleteSection(tx, f.drinks));
+    await app(async (tx) => {
+      const child = await createSectionIn(tx, f.drinks, { internalName: "Owned drinks" });
+      await addMember(tx, child.id, product(f.lemonade));
+      await removeMember(tx, f.drinks, await memberHolding(f.drinks, product(f.lemonade)));
+      await deleteSection(tx, child.id);
+    });
     await expectFresh(f, settings);
   });
 
@@ -484,7 +496,12 @@ describe("a product that leaves a menu starts fresh there", () => {
     const held = await memberHolding(f.drinks, product(f.lemonade));
     await app((tx) => removeMember(tx, f.drinks, held));
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(settings.lunch);
-    await app((tx) => deleteSection(tx, f.favourites));
+    await app(async (tx) => {
+      const child = await createSectionIn(tx, f.favourites, { internalName: "Owned favourites" });
+      await addMember(tx, child.id, product(f.lemonade));
+      await removeMember(tx, f.favourites, await memberHolding(f.favourites, product(f.lemonade)));
+      await deleteSection(tx, child.id);
+    });
     await expectFresh(f, settings);
   });
 
@@ -512,7 +529,7 @@ describe("a product that leaves a menu starts fresh there", () => {
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(settings.lunch);
   });
 
-  it("keeps the overrides when a section is duplicated and the copy takes its place in one step", async () => {
+  it("keeps the overrides when another included menu takes its place in one step", async () => {
     const f = await fixture();
     const before = await app(async (tx) => {
       await addMember(tx, f.drinks, product(f.lemonade));
@@ -524,14 +541,12 @@ describe("a product that leaves a menu starts fresh there", () => {
       return settingsOf(tx, f.lunch, f.lemonade);
     });
     const drinksMember = await memberHolding(f.lunchRoot, section(f.drinks));
-    const lemonadeMember = await memberHolding(f.drinks, product(f.lemonade));
-    const copy = await app((tx) =>
-      duplicateSection(tx, f.drinks, {
-        internalName: "Lunch drinks",
-        memberIds: [lemonadeMember],
-        replaceIn: { sectionId: f.lunchRoot, memberId: drinksMember },
-      }),
-    );
+    const copy = await app(async (tx) => {
+      const copy = await createSection(tx, { internalName: "Lunch drinks" });
+      await addMember(tx, copy.id, product(f.lemonade));
+      await replaceMember(tx, f.lunchRoot, drinksMember, section(copy.id));
+      return copy;
+    });
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(before);
     const structure = await app((tx) => readMenuStructure(tx, f.lunch));
     expect(structure.nodes.map((node) => node.ref)).toEqual([product(f.burger), section(copy.id)]);
@@ -548,10 +563,11 @@ describe("a product that leaves a menu starts fresh there", () => {
       await updateMenuItem(tx, f.lunch, item.id, { grossPrice: "2.50" });
       await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00", offered: true }]);
     });
-    const lemonadeMember = await memberHolding(f.drinks, product(f.lemonade));
-    const copy = await app((tx) =>
-      duplicateSection(tx, f.drinks, { internalName: "Lunch drinks", memberIds: [lemonadeMember] }),
-    );
+    const copy = await app(async (tx) => {
+      const copy = await createSection(tx, { internalName: "Lunch drinks" });
+      await addMember(tx, copy.id, product(f.lemonade));
+      return copy;
+    });
     const drinksMember = await memberHolding(f.lunchRoot, section(f.drinks));
     await app((tx) => removeMember(tx, f.lunchRoot, drinksMember));
     await app((tx) => addMember(tx, f.lunchRoot, section(copy.id)));
@@ -563,6 +579,19 @@ describe("a product that leaves a menu starts fresh there", () => {
 });
 
 describe("a menu's own switch for a product", () => {
+  it("records no own setting until changed and can clear it again", async () => {
+    const f = await fixture();
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
+    const read = () => app((tx) => menuItemRow(tx, f.lunch, f.lemonade));
+    const item = (await read())!;
+    expect(item.offered).toBeNull();
+    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: false }));
+    expect((await read())!.offered).toBe(false);
+    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: null }));
+    expect((await read())!.offered).toBeNull();
+    expect(await offerNames(f.lunch)).toEqual(["Lemonade (staff)"]);
+  });
+
   it("hides a product the menu reaches on that menu alone, and turns it back on", async () => {
     const f = await fixture();
     await app(async (tx) => {
@@ -572,13 +601,13 @@ describe("a menu's own switch for a product", () => {
       await addMember(tx, f.dinnerRoot, section(f.drinks));
     });
     const item = (await app((tx) => menuItemRow(tx, f.lunch, f.lemonade)))!;
-    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { active: false }));
+    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: false }));
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
     expect(await offerNames(f.dinner)).toEqual(["Lemonade (staff)", "Water (staff)"]);
     // A structure change that keeps it reachable leaves the switch where it was.
     await app((tx) => addMember(tx, f.drinks, product(f.juice)));
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)", "Juice (staff)"]);
-    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { active: true }));
+    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: true }));
     expect(await offerNames(f.lunch)).toEqual([
       "Lemonade (staff)",
       "Water (staff)",
@@ -595,16 +624,15 @@ describe("a menu's own switch for a product", () => {
     for (const write of [
       (tx: Transaction): Promise<unknown> =>
         updateMenuItem(tx, f.lunch, item.id, { grossPrice: "1.00" }),
-      (tx: Transaction) => updateMenuItem(tx, f.lunch, item.id, { active: false }),
+      (tx: Transaction) => updateMenuItem(tx, f.lunch, item.id, { offered: false }),
       (tx: Transaction) => updateMenuItem(tx, f.dinner, item.id, { grossPrice: "1.00" }),
       (tx: Transaction) =>
         setMenuVariants(tx, item.id, [{ variantId: f.large, price: "1.00", offered: true }]),
-      (tx: Transaction) => setMenuItemExtraLists(tx, item.id, []),
     ])
       await expect(app(write)).rejects.toMatchObject({ code: "menu_item.not_found" });
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toMatchObject({
       grossPrice: null,
-      active: true,
+      offered: null,
       variantOverrides: [],
     });
   });
@@ -621,7 +649,7 @@ describe("putting a product on a menu's top level", () => {
       menuId: f.lunch,
       productId: f.lemonade,
       grossPrice: "2.50",
-      active: true,
+      offered: null,
     });
     const blank = await app((tx) => addProductToMenu(tx, { menuId: f.lunch, productId: f.water }));
     expect(blank.grossPrice).toBeNull();
@@ -654,7 +682,7 @@ describe("which rows a sync resets", () => {
     return app(async (tx) => {
       const [row] = await tx
         .insert(menuItems)
-        .values({ menuId: f.lunch, productId: f.lemonade, grossPrice: 250, active: false })
+        .values({ menuId: f.lunch, productId: f.lemonade, grossPrice: 250, offered: false })
         .returning({ id: menuItems.id });
       await tx
         .insert(menuItemVariantOverrides)
@@ -668,7 +696,7 @@ describe("which rows a sync resets", () => {
     const stray = await strayRow(f);
     await app((tx) => syncMenuOffers(tx, [f.lunch]));
     const [row] = await app((tx) => tx.select().from(menuItems).where(eq(menuItems.id, stray)));
-    expect(row).toMatchObject({ grossPrice: null, active: true });
+    expect(row).toMatchObject({ grossPrice: null, offered: null });
     expect(
       await app((tx) =>
         tx
@@ -684,7 +712,7 @@ describe("which rows a sync resets", () => {
     const stray = await strayRow(f);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.water)));
     const [row] = await app((tx) => tx.select().from(menuItems).where(eq(menuItems.id, stray)));
-    expect(row).toMatchObject({ grossPrice: 250, active: false });
+    expect(row).toMatchObject({ grossPrice: 250, offered: false });
     expect(
       await app((tx) =>
         tx
@@ -713,7 +741,12 @@ describe("a menu's prices", () => {
       await addMember(tx, f.lunchRoot, product(f.water));
       await addMember(tx, f.dinnerRoot, section(unrelated.id));
     });
-    expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([
+    expect(
+      (await app((tx) => menuPrices(tx, f.lunch))).map(({ combined, ...row }) => {
+        void combined;
+        return row;
+      }),
+    ).toEqual([
       {
         menuItemId: await itemOf(f.lunch, f.lemonade),
         productId: f.lemonade,
@@ -723,8 +756,8 @@ describe("a menu's prices", () => {
         productPrice: "3.00",
         override: null,
         effectivePrice: "3.00",
-        active: true,
-        variants: [{ variantId: f.large, price: null, offered: true }],
+        offered: null,
+        variants: [{ variantId: f.large, price: null, offered: null }],
       },
       {
         menuItemId: await itemOf(f.lunch, f.water),
@@ -735,7 +768,7 @@ describe("a menu's prices", () => {
         productPrice: "2.00",
         override: null,
         effectivePrice: "2.00",
-        active: true,
+        offered: null,
         variants: [],
       },
     ]);
@@ -778,15 +811,15 @@ describe("a menu's prices", () => {
     });
     const lemonadeItem = await itemOf(f.lunch, f.lemonade);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, lemonadeItem, { active: false });
+      await updateMenuItem(tx, f.lunch, lemonadeItem, { offered: false });
       await updateProduct(tx, f.water, { available: false });
       await deactivateProduct(tx, f.burger);
     });
     const rows = await app((tx) => menuPrices(tx, f.lunch));
-    expect(rows.map(({ name, active }) => ({ name, active }))).toEqual([
-      { name: "Lemonade (staff)", active: false },
-      { name: "Water (staff)", active: true },
-      { name: "Juice (staff)", active: true },
+    expect(rows.map(({ name, offered }) => ({ name, offered }))).toEqual([
+      { name: "Lemonade (staff)", offered: false },
+      { name: "Water (staff)", offered: null },
+      { name: "Juice (staff)", offered: null },
     ]);
   });
 
@@ -838,12 +871,12 @@ describe("a menu's prices", () => {
     const [dinnerRow] = await app((tx) => menuPrices(tx, f.dinner));
     expect(lunchRow!.variants).toEqual([
       { variantId: f.large, price: "3.25", offered: false },
-      { variantId: small, price: null, offered: true },
+      { variantId: small, price: null, offered: null },
     ]);
     expect(lunchRow!.variants).toEqual(await app((tx) => listMenuVariants(tx, lunchItem)));
     expect(dinnerRow!.variants).toEqual([
-      { variantId: f.large, price: null, offered: true },
-      { variantId: small, price: null, offered: true },
+      { variantId: f.large, price: null, offered: null },
+      { variantId: small, price: null, offered: null },
     ]);
   });
 

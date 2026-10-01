@@ -1,7 +1,7 @@
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { products, type Transaction } from "@waitron/db";
-import { readMenuExtras, readProductExtras } from "./extra-projection.js";
+import { readProductExtras } from "./extra-projection.js";
 import type { ResolvedExtraList } from "./extra-projection.js";
 import { readOptionListsByIds } from "./options.js";
 import { readProductModifiers } from "./product-modifiers.js";
@@ -29,9 +29,7 @@ export interface ModifierHolder {
  * them.
  */
 interface WalkedAttachments {
-  /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
-   * the offer when there is one and held by the product when there is not. */
-  extrasByHolder: ReadonlyMap<string, ResolvedExtraList[]>;
+  extrasByProduct: ReadonlyMap<string, ResolvedExtraList[]>;
   /** Keyed by the underlying PRODUCT id on both paths: an options list is attached to the product
    * and a menu offer neither republishes nor narrows one. */
   optionsByProduct: ReadonlyMap<string, OptionList[]>;
@@ -41,31 +39,12 @@ interface WalkedAttachments {
 async function walkAttachedModifiers(
   tx: Transaction,
   dishes: readonly ModifierHolder[],
-  includeEveryModifierItem = false,
 ): Promise<WalkedAttachments> {
   const productIds = [...new Set(dishes.map((dish) => dish.productId))];
-  const menuItemIds = [
-    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [] : [dish.menuItemId]))),
-  ];
-  const productOnlyIds = [
-    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [dish.productId] : []))),
-  ];
   // Read ONCE and handed to `readProductExtras`, which would otherwise read the same rows again.
   const attachments = await readProductModifiers(tx, productIds);
 
-  const extrasByHolder = new Map<string, ResolvedExtraList[]>();
-  if (menuItemIds.length > 0) {
-    for (const [holder, lists] of await readMenuExtras(tx, menuItemIds, {
-      includeEveryModifierItem,
-    })) {
-      extrasByHolder.set(holder, lists);
-    }
-  }
-  if (productOnlyIds.length > 0) {
-    for (const [holder, lists] of await readProductExtras(tx, productOnlyIds, attachments)) {
-      extrasByHolder.set(holder, lists);
-    }
-  }
+  const extrasByProduct = await readProductExtras(tx, productIds, attachments);
   const optionLists = new Map(
     (
       await readOptionListsByIds(tx, [
@@ -86,7 +65,7 @@ async function walkAttachedModifiers(
       }),
     ]),
   );
-  return { attachments, extrasByHolder, optionsByProduct };
+  return { attachments, extrasByProduct, optionsByProduct };
 }
 
 /** The `products` columns an offered extras item borrows — everything its own row deliberately does
@@ -155,9 +134,7 @@ type WalkedList =
  * The ordered extras and options lists each dish offers a till, keyed by the MENU-ITEM id when the
  * dish was reached through an offer and by the PRODUCT id when it was not, LOWER-CASED.
  *
- * The order is the product's own `product_modifiers.sort` on BOTH paths. A menu offer
- * changes what is IN an extras entry, and whether it is there at all; it does not move the entry, so
- * `menu_item_extra_lists.display_order` decides nothing here.
+ * The order is the product's own `product_modifiers.sort`.
  *
  * Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels: exactly what
  * `validateExtraSelections` and `validateOptionSelections` will accept an answer from. An extras
@@ -165,7 +142,7 @@ type WalkedList =
  * Active variant.
  *
  * With `includeEveryModifierItem`, what a published document holds: every label, and an extras
- * item whether or not its product is Available and whether or not the offer withdraws it; an item
+ * item whether or not its product is Available; an item
  * whose product is Inactive, or has an Active variant, is still left out. A default label is then
  * kept while it names any label of its list.
  */
@@ -175,10 +152,9 @@ export async function readOfferedModifiers(
   options: { includeEveryModifierItem?: boolean } = {},
 ): Promise<Map<string, OfferedModifier[]>> {
   const includeEveryModifierItem = options.includeEveryModifierItem === true;
-  const { attachments, extrasByHolder, optionsByProduct } = await walkAttachedModifiers(
+  const { attachments, extrasByProduct, optionsByProduct } = await walkAttachedModifiers(
     tx,
     dishes,
-    includeEveryModifierItem,
   );
 
   const walked = new Map<string, WalkedList[]>();
@@ -186,7 +162,7 @@ export async function readOfferedModifiers(
     const productId = dish.productId.toLowerCase();
     const holder = (dish.menuItemId ?? dish.productId).toLowerCase();
     if (walked.has(holder)) continue;
-    const extras = new Map((extrasByHolder.get(holder) ?? []).map((list) => [list.id, list]));
+    const extras = new Map((extrasByProduct.get(productId) ?? []).map((list) => [list.id, list]));
     const options = new Map((optionsByProduct.get(productId) ?? []).map((list) => [list.id, list]));
     walked.set(
       holder,

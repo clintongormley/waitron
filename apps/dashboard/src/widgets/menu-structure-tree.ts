@@ -16,6 +16,17 @@ export class MenuStructureTree extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      a {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2);
+        border-radius: var(--wt-radius-md);
+        color: var(--wt-color-text);
+        font: inherit;
+        text-decoration: underline;
+      }
       :host {
         display: block;
       }
@@ -82,7 +93,6 @@ export class MenuStructureTree extends LitElement {
 
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   @property({ attribute: false }) products: { id: string; name: string }[] = [];
-  @property({ attribute: false }) sections: { id: string; internalName: string }[] = [];
   /** The path of the list being edited; empty for the menu's own top level. */
   @property({ attribute: false }) current: string[] = [];
   /** The accessible name of the whole structure, such as the menu's name. */
@@ -95,10 +105,18 @@ export class MenuStructureTree extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("products"))
       this.#productNames = new Map(this.products.map((product) => [product.id, product.name]));
-    if (changed.has("sections"))
-      this.#sectionNames = new Map(
-        this.sections.map((section) => [section.id, section.internalName]),
-      );
+    if (changed.has("nodes")) {
+      const names = new Map<string, string>();
+      const walk = (nodes: MenuStructureNode[]) => {
+        for (const node of nodes)
+          if (node.ref.kind === "section") {
+            names.set(node.ref.sectionId, node.internalName ?? t("members.missing"));
+            walk(node.children ?? []);
+          }
+      };
+      walk(this.nodes);
+      this.#sectionNames = names;
+    }
     // The way to the list being edited is opened, however it was reached.
     if (changed.has("current") && this.current.length > 0) {
       const expanded = new Set(this.expanded);
@@ -121,10 +139,12 @@ export class MenuStructureTree extends LitElement {
     );
   }
 
-  #item(node: MenuStructureNode, parent: string[]): TemplateResult {
+  #item(node: MenuStructureNode, parent: string[], included = false): TemplateResult {
     const path = [...parent, node.memberId];
     const key = path.join("/");
-    const name = memberName(node.ref, this.#productNames, this.#sectionNames);
+    const rawName = memberName(node.ref, this.#productNames, this.#sectionNames);
+    const name = node.includedMenuId ? t("menus.menu_prefix").replace("{name}", rawName) : rawName;
+    const readOnly = this.readonly || included || Boolean(node.includedMenuId);
     const kind = html`<span class="kind" data-test="kind">${memberKindLabel(node.ref)}</span>`;
     if (node.ref.kind === "product")
       return html`<li data-path=${key} class="product">
@@ -153,7 +173,7 @@ export class MenuStructureTree extends LitElement {
           ${open ? "▾" : "▸"}
         </button>
         ${
-          this.readonly
+          readOnly
             ? html`<span class="name plain" data-test="name">${name}</span>`
             : html`<button
                 type="button"
@@ -166,17 +186,23 @@ export class MenuStructureTree extends LitElement {
               </button>`
         }
         ${kind}
+        ${node.includedMenuId ? html`<a href=${`/manage/menus/menu/${node.includedMenuId}/view/structure`}>${t("menus.edit_included").replace("{name}", rawName)}</a>` : nothing}
       </div>
-      ${open && children.length > 0 ? this.#list(children, path) : nothing}
+      ${open && children.length > 0 ? this.#list(children, path, undefined, readOnly) : nothing}
     </li>`;
   }
 
-  #list(nodes: MenuStructureNode[], parent: string[], label?: string): TemplateResult {
+  #list(
+    nodes: MenuStructureNode[],
+    parent: string[],
+    label?: string,
+    included = false,
+  ): TemplateResult {
     return html`<ul aria-label=${label ?? nothing}>
       ${repeat(
         nodes,
         (node) => node.memberId,
-        (node) => this.#item(node, parent),
+        (node) => this.#item(node, parent, included),
       )}
     </ul>`;
   }

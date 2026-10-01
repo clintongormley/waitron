@@ -6,22 +6,29 @@ import { requireMenuRoot } from "./menu-structure.js";
 import { deviceProfileHomeLayouts } from "./schema/home-layouts.js";
 import { menuDetails } from "./schema/menu.js";
 import { sectionMembers, sections } from "./schema/sections.js";
-import { loadSectionGraph, reachableFrom, type SectionGraph } from "./section-graph.js";
+import {
+  loadSectionGraph,
+  reachableFrom,
+  sectionPathName,
+  type SectionGraph,
+} from "./section-graph.js";
 import {
   checkRef,
   deleteMember,
   insertMember,
+  heldMember,
+  refColumns,
   membersOf,
   moveMemberTo,
   nameOf,
   requirePosition,
-  writeMembers,
 } from "./section-members.js";
 import type {
   DeviceMenuHomeLayouts,
   HomeLayout,
   MemberRef,
   SectionMember,
+  TileRef,
 } from "./section-types.js";
 import type { DeviceHomeLayout, MenuDocument } from "./menu-document-types.js";
 import "./errors.js";
@@ -73,14 +80,14 @@ async function insertLayout(tx: Transaction, menuId: string, name: string): Prom
 }
 
 /** Whether the menu's working structure reaches a tile's target, whatever the menu's, the
- * product's or the offer's switches (D13). Publishing applies its own, narrower test. */
-function structuralReach(graph: SectionGraph, rootSectionId: string): (ref: MemberRef) => boolean {
+ * product's or the offer's switches. Publishing applies its own, narrower test. */
+function structuralReach(graph: SectionGraph, rootSectionId: string): (ref: TileRef) => boolean {
   const reached = reachableFrom(graph, rootSectionId);
   const reachedProducts = new Set(reached.products);
   return (ref) =>
     ref.kind === "product"
       ? reachedProducts.has(ref.productId)
-      : reached.sections.has(ref.sectionId);
+      : ref.kind === "section" && reached.sections.has(ref.sectionId);
 }
 
 /** The menu's working layouts, the default first and then by name, each with every tile in order,
@@ -131,7 +138,7 @@ export async function listHomeLayouts(tx: Transaction, menuId: string): Promise<
   const names = new Map(named.map((row) => [row.id, row.name]));
   const productIds = new Set(
     ordered.flatMap(({ id }) =>
-      graph.children(id).flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
+      graph.tiles(id).flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
     ),
   );
   for (const batch of batches([...productIds]))
@@ -144,13 +151,25 @@ export async function listHomeLayouts(tx: Transaction, menuId: string): Promise<
     id,
     name,
     isDefault: id === details.defaultHomeLayoutId,
-    tiles: graph.children(id).map(({ id: memberId, position, ref }) => ({
-      memberId,
-      position,
-      ref,
-      name: names.get(ref.kind === "product" ? ref.productId : ref.sectionId)!,
-      reachable: reaches(ref),
-    })),
+    tiles: graph.tiles(id).map(({ id: memberId, position, ref }) => {
+      const reachable = reaches(ref);
+      const name =
+        ref.kind === "missing"
+          ? ref.name
+          : names.get(ref.kind === "product" ? ref.productId : ref.sectionId)!;
+      return {
+        memberId,
+        position,
+        ref,
+        name,
+        reachable,
+        missingName: reachable
+          ? null
+          : ref.kind === "section"
+            ? sectionPathName(graph, ref.sectionId)
+            : name,
+      };
+    }),
   }));
 }
 
@@ -172,13 +191,18 @@ export async function duplicateHomeLayout(
 ): Promise<{ id: string }> {
   const menuId = await readLayout(tx, layoutId);
   const internalName = layoutNameOf(name);
-  const tiles = await membersOf(tx, layoutId);
+  const tiles = await membersOf(tx, layoutId, "home_layout");
   const id = await insertLayout(tx, menuId, internalName);
-  await writeMembers(
-    tx,
-    id,
-    tiles.map(({ ref }) => ref),
-  );
+  for (const batch of batches(tiles))
+    await tx.insert(sectionMembers).values(
+      batch.map(({ position, ref }) => ({
+        sectionId: id,
+        position,
+        ...(ref.kind === "missing"
+          ? { productId: null, childSectionId: null, missingName: ref.name }
+          : refColumns(ref)),
+      })),
+    );
   return { id };
 }
 
@@ -220,11 +244,7 @@ export async function setDefaultHomeLayout(
     .where(eq(menuDetails.menuId, menuId));
 }
 
-/**
- * Appends a tile, or puts it at `position` and renumbers the layout. The target must be a product
- * or library section the menu's working structure reaches (D13); a tile for a product the menu
- * does not offer when it is published is left out of that version.
- */
+/** Appends a shortcut to a target the menu reaches structurally, or inserts at `position`. */
 export async function addShortcut(
   tx: Transaction,
   layoutId: string,
@@ -237,7 +257,23 @@ export async function addShortcut(
   await checkRef(tx, graph, layoutId, ref);
   const reaches = structuralReach(graph, await requireMenuRoot(tx, menuId));
   if (!reaches(ref)) throw new AppError("menu.shortcut_unreachable", { layoutId, ref });
-  return insertMember(tx, layoutId, graph.children(layoutId), ref, position);
+  return insertMember(tx, layoutId, graph.tiles(layoutId), ref, position);
+}
+
+export async function replaceShortcut(
+  tx: Transaction,
+  layoutId: string,
+  memberId: string,
+  ref: MemberRef,
+): Promise<SectionMember> {
+  const graph = await loadSectionGraph(tx);
+  const menuId = graphLayout(graph, layoutId);
+  const current = heldMember(graph.tiles(layoutId), layoutId, memberId);
+  await checkRef(tx, graph, layoutId, ref, current);
+  if (!structuralReach(graph, await requireMenuRoot(tx, menuId))(ref))
+    throw new AppError("menu.shortcut_unreachable", { layoutId, ref });
+  await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
+  return { ...current, ref };
 }
 
 export async function removeShortcut(
@@ -246,7 +282,7 @@ export async function removeShortcut(
   memberId: string,
 ): Promise<void> {
   await readLayout(tx, layoutId);
-  await deleteMember(tx, layoutId, await membersOf(tx, layoutId), memberId);
+  await deleteMember(tx, layoutId, await membersOf(tx, layoutId, "home_layout"), memberId);
 }
 
 /** Moves the tile to index `to` (past the end means last) and renumbers the layout. */
@@ -255,9 +291,9 @@ export async function moveShortcut(
   layoutId: string,
   memberId: string,
   to: number,
-): Promise<SectionMember[]> {
+): Promise<SectionMember<TileRef>[]> {
   await readLayout(tx, layoutId);
-  return moveMemberTo(tx, layoutId, await membersOf(tx, layoutId), memberId, to);
+  return moveMemberTo(tx, layoutId, await membersOf(tx, layoutId, "home_layout"), memberId, to);
 }
 
 /**

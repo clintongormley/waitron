@@ -2,9 +2,11 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, disabledStyles, selectStyles } from "@waitron/ui";
-import type { MemberRef, SectionMember } from "@waitron/catalogue/src/section-types.js";
+import type { MenuStructureNode } from "../api/client.js";
+import type { MemberRef, SectionMember, TileRef } from "@waitron/catalogue/src/section-types.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel } from "./category-form.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
@@ -17,20 +19,21 @@ interface Choice {
 
 /** A member's staff-facing name, or a placeholder when the product or section is not known here. */
 export function memberName(
-  ref: MemberRef,
+  ref: TileRef,
   productNames: ReadonlyMap<string, string>,
   sectionNames: ReadonlyMap<string, string>,
 ): string {
+  if (ref.kind === "missing") return ref.name;
   const name =
     ref.kind === "product" ? productNames.get(ref.productId) : sectionNames.get(ref.sectionId);
   return name ?? t("members.missing");
 }
 
-export function memberKindLabel(ref: MemberRef): string {
+export function memberKindLabel(ref: TileRef): string {
+  if (ref.kind === "missing") return t("members.missing");
   return t(ref.kind === "product" ? "members.kind_product" : "members.kind_section");
 }
 
-/** Each section's id mapped to the library sections that hold it directly. */
 export type SectionParents = ReadonlyMap<string, readonly string[]>;
 
 export function sectionParents(
@@ -44,8 +47,6 @@ export function sectionParents(
   return parents;
 }
 
-/** The section and every library section holding it, however deep: adding any of them to it would
- * make a loop. The server refuses one anyway; this keeps a picker from offering it. */
 export function sectionsHolding(parents: SectionParents, sectionId: string): string[] {
   const found = new Set([sectionId]);
   const pending = [sectionId];
@@ -70,6 +71,20 @@ export class MemberListEditor extends LitElement {
     ReorderController.styles,
     ReorderController.tableStyles,
     css`
+      wt-row-actions a {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        border-radius: var(--wt-radius-md);
+        color: var(--wt-color-text);
+        font: inherit;
+        text-decoration: none;
+        font-weight: var(--wt-font-weight-bold);
+        width: 100%;
+        border: 1px solid transparent;
+        padding: var(--wt-space-2) var(--wt-space-4);
+      }
       :host {
         display: block;
       }
@@ -105,6 +120,10 @@ export class MemberListEditor extends LitElement {
         gap: var(--wt-space-2);
         margin-top: var(--wt-space-4);
       }
+      .replacement .field,
+      wt-form-actions {
+        flex-basis: 100%;
+      }
       .add,
       .error {
         max-width: var(--wt-field-max-width);
@@ -137,9 +156,9 @@ export class MemberListEditor extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) members: SectionMember[] = [];
+  @property({ attribute: false }) members: SectionMember<TileRef>[] = [];
   @property({ attribute: false }) products: { id: string; name: string }[] = [];
-  @property({ attribute: false }) sections: { id: string; internalName: string }[] = [];
+  @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   /** Sections the picker leaves out, such as ones that would contain this list. The server still
    * refuses a cycle; this only keeps the offer honest. */
   @property({ attribute: false }) excludeSectionIds: string[] = [];
@@ -150,10 +169,39 @@ export class MemberListEditor extends LitElement {
   @property() listName = "";
   /** Whether a section member offers Open, which asks the host to edit that section. */
   @property({ type: Boolean }) openable = true;
+  @property({ type: Boolean }) sectionChoices = false;
   /** A line of text shown under a member's name, by member id. */
   @property({ attribute: false }) notes: ReadonlyMap<string, string> = new Map();
   /** The members in display order, which a move rewrites before the host confirms it. */
-  @state() private order: SectionMember[] = [];
+  @state() private order: SectionMember<TileRef>[] = [];
+  @property({ attribute: false }) replaceable: ReadonlySet<string> = new Set();
+  @property() replacementScope = "";
+  #replacementName = "";
+  #replacementGeneration = 0;
+  #focusReplacement = false;
+  @state() private replacementAttempted = false;
+  @state() private replacementError = "";
+  @state() private replacementFieldError = "";
+
+  replacementCompletion(memberId: string): (message: string, field?: boolean) => void {
+    const generation = this.#replacementGeneration;
+    return (message, field = false) => {
+      if (generation !== this.#replacementGeneration || this.replacing !== memberId) return;
+      if (message === "") {
+        this.replacing = null;
+        this.choice = "";
+        this.addError = false;
+        this.replacementAttempted = false;
+        this.replacementError = "";
+        this.replacementFieldError = "";
+      } else {
+        this.replacementError = field ? "" : message;
+        this.replacementFieldError = field ? message : "";
+        this.#focusReplacement = field;
+      }
+    };
+  }
+  @state() private replacing: string | null = null;
   @state() private choice = "";
   @state() private addError = false;
   #productNames = new Map<string, string>();
@@ -172,35 +220,75 @@ export class MemberListEditor extends LitElement {
   } satisfies ReorderModel);
 
   override willUpdate(changed: PropertyValues): void {
+    if (
+      this.replacing !== null &&
+      (changed.has("members") || changed.has("replaceable") || changed.has("replacementScope"))
+    ) {
+      const target = this.members.find((member) => member.id === this.replacing);
+      if (
+        changed.has("replacementScope") ||
+        !target ||
+        !this.replaceable.has(target.id) ||
+        target.ref.kind !== "missing" ||
+        target.ref.name !== this.#replacementName
+      ) {
+        this.replacing = null;
+        this.#replacementGeneration++;
+        this.replacementAttempted = false;
+        this.replacementError = "";
+        this.replacementFieldError = "";
+        this.choice = "";
+        this.addError = false;
+      }
+    }
     if (changed.has("members"))
       this.order = [...this.members].sort((a, b) => a.position - b.position);
     if (changed.has("products"))
       this.#productNames = new Map(this.products.map((product) => [product.id, product.name]));
-    if (changed.has("sections"))
+    if (changed.has("nodes"))
       this.#sectionNames = new Map(
-        this.sections.map((section) => [section.id, section.internalName]),
+        this.nodes.flatMap((node) =>
+          node.ref.kind === "section"
+            ? [[node.ref.sectionId, node.internalName ?? t("members.missing")] as [string, string]]
+            : [],
+        ),
       );
     if (
       changed.has("order") ||
       changed.has("products") ||
-      changed.has("sections") ||
-      changed.has("excludeSectionIds")
+      changed.has("nodes") ||
+      changed.has("excludeSectionIds") ||
+      changed.has("sectionChoices")
     ) {
       this.#offer = this.#choices();
       // A choice the list now holds, or that is now excluded, is no longer on offer.
       const offered = [...this.#offer.products, ...this.#offer.sections];
       if (!offered.some((choice) => choice.value === this.choice)) this.choice = "";
+      if (this.replacing !== null && this.replacementAttempted) this.addError = this.choice === "";
     }
   }
 
-  #name(member: SectionMember): string {
-    return memberName(member.ref, this.#productNames, this.#sectionNames);
+  override updated(): void {
+    if (this.#focusReplacement && !this.busy) {
+      this.#focusReplacement = false;
+      if (this.replacing !== null && this.replacementFieldError)
+        this.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!.focus();
+    }
+  }
+
+  #name(member: SectionMember<TileRef>): string {
+    const name = memberName(member.ref, this.#productNames, this.#sectionNames);
+    return this.nodes.find((node) => node.memberId === member.id)?.includedMenuId
+      ? t("menus.menu_prefix").replace("{name}", name)
+      : name;
   }
 
   #choices(): { products: Choice[]; sections: Choice[] } {
     const held = new Set(
-      this.order.map(({ ref }) =>
-        ref.kind === "product" ? `product:${ref.productId}` : `section:${ref.sectionId}`,
+      this.order.flatMap(({ ref }) =>
+        ref.kind === "missing"
+          ? []
+          : [ref.kind === "product" ? `product:${ref.productId}` : `section:${ref.sectionId}`],
       ),
     );
     const excluded = new Set(this.excludeSectionIds.map((id) => `section:${id}`));
@@ -212,12 +300,9 @@ export class MemberListEditor extends LitElement {
       products: offer(
         this.products.map((product) => ({ value: `product:${product.id}`, label: product.name })),
       ),
-      sections: offer(
-        this.sections.map((section) => ({
-          value: `section:${section.id}`,
-          label: section.internalName,
-        })),
-      ),
+      sections: this.sectionChoices
+        ? offer([...this.#sectionNames].map(([id, label]) => ({ value: `section:${id}`, label })))
+        : [],
     };
   }
 
@@ -250,22 +335,33 @@ export class MemberListEditor extends LitElement {
   #add(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (this.replacing !== null) {
+      this.replacementAttempted = true;
+      this.replacementError = "";
+      this.replacementFieldError = "";
+    }
     const at = this.choice.indexOf(":");
     if (at < 0) {
       this.addError = true;
+      if (this.replacing !== null)
+        this.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!.focus();
       return;
     }
     const id = this.choice.slice(at + 1);
     const ref: MemberRef = this.choice.startsWith("product:")
       ? { kind: "product", productId: id }
       : { kind: "section", sectionId: id };
-    this.choice = "";
-    this.#emit("wt-member-add", { ref });
+    const memberId = this.replacing;
+    if (memberId === null) this.choice = "";
+    this.#emit(
+      memberId === null ? "wt-member-add" : "wt-member-replace",
+      memberId === null ? { ref } : { memberId, ref },
+    );
   }
 
   #action(
-    member: SectionMember,
-    name: "open" | "remove",
+    member: SectionMember<TileRef>,
+    name: "open" | "remove" | "edit" | "delete",
     text: string,
     detail: Record<string, unknown>,
   ) {
@@ -282,9 +378,10 @@ export class MemberListEditor extends LitElement {
     >`;
   }
 
-  #row(member: SectionMember) {
+  #row(member: SectionMember<TileRef>) {
     const name = this.#name(member);
     const { ref } = member;
+    const included = this.nodes.find((node) => node.memberId === member.id)?.includedMenuId;
     return html`<tr data-member=${member.id}>
       <td class="handle-cell">${this.#reorder.handle(member.id)}</td>
       <td class="name" data-test="name">
@@ -301,17 +398,50 @@ export class MemberListEditor extends LitElement {
           data-test=${`actions-${member.id}`}
           label=${`${t("members.actions")}: ${name}`}
           >${
-            ref.kind === "section" && this.openable
+            ref.kind === "section" && this.openable && !included
               ? this.#action(member, "open", t("members.open"), { sectionId: ref.sectionId })
               : nothing
-          }${this.#action(
-            member,
-            "remove",
-            this.listName
-              ? t("members.remove_from").replace("{list}", this.listName)
-              : t("members.remove"),
-            { memberId: member.id },
-          )}</wt-row-actions
+          }${ref.kind === "section" && this.openable && !included ? html`${this.#action(member, "edit", t("action.edit"), { sectionId: ref.sectionId })}${this.#action(member, "delete", t("action.delete"), { sectionId: ref.sectionId })}` : nothing}${included ? html`<a href=${`/manage/menus/menu/${included}/view/structure`}>${t("menus.edit_included").replace("{name}", this.#sectionNames.get(ref.kind === "section" ? ref.sectionId : "") ?? "")}</a>` : nothing}${
+            ref.kind !== "section" || included || !this.openable
+              ? this.#action(
+                  member,
+                  "remove",
+                  included
+                    ? t("menus.remove_included")
+                    : this.listName
+                      ? t("members.remove_from").replace("{list}", this.listName)
+                      : t("members.remove"),
+                  { memberId: member.id },
+                )
+              : nothing
+          }${
+            this.replaceable.has(member.id)
+              ? html`<wt-button
+                  align="start"
+                  variant="ghost"
+                  data-test=${`replace-${member.id}`}
+                  .disabled=${this.busy}
+                  @click=${async (event: Event) => {
+                    event.stopPropagation();
+                    if (this.busy) return;
+                    (event.currentTarget as HTMLElement).closest("wt-row-actions")?.hide();
+                    this.#replacementGeneration++;
+                    this.replacementAttempted = false;
+                    this.replacementError = "";
+                    this.replacementFieldError = "";
+                    this.replacing = member.id;
+                    this.#replacementName = member.ref.kind === "missing" ? member.ref.name : "";
+                    this.choice = "";
+                    this.addError = false;
+                    await this.updateComplete;
+                    this.shadowRoot!.querySelector<HTMLSelectElement>(
+                      'select[name="member-ref"]',
+                    )!.focus();
+                  }}
+                  >${t("action.replace")}</wt-button
+                >`
+              : nothing
+          }</wt-row-actions
         >
       </td>
     </tr>`;
@@ -355,38 +485,75 @@ export class MemberListEditor extends LitElement {
 
   override render() {
     return html`${this.#reorder.liveRegion()} ${this.#list()}
-      <div class="add">
+      <div class=${this.replacing === null ? "add" : "add replacement"}>
         <label class="field">
-          <span class="field-label">${t("members.add_label")}</span>
+          <span class="field-label"
+            >${this.replacing === null ? t("members.add_label") : t("action.replace")}
+            ${this.replacing !== null ? html`<span aria-hidden="true">*</span>` : nothing}</span
+          >
           <select
             name="member-ref"
+            ?required=${this.replacing !== null}
             .disabled=${this.busy}
-            aria-invalid=${this.addError ? "true" : "false"}
-            aria-describedby=${this.addError ? "member-add-error" : nothing}
+            aria-invalid=${this.addError || this.replacementFieldError ? "true" : "false"}
+            aria-describedby=${this.addError || this.replacementFieldError ? "member-add-error" : nothing}
             @change=${(event: Event) => {
               event.stopPropagation();
               this.choice = (event.target as HTMLSelectElement).value;
-              this.addError = false;
+              this.addError =
+                this.replacing !== null && this.replacementAttempted && this.choice === "";
+              this.replacementFieldError = "";
             }}
           >
             <option value="" .selected=${this.choice === ""}>
-              ${t("members.add_placeholder")}
+              ${t(this.sectionChoices ? "members.tile_placeholder" : "members.add_placeholder")}
             </option>
             ${this.#group(t("members.products"), this.#offer.products)}
-            ${this.#group(t("members.sections"), this.#offer.sections)}
+            ${this.sectionChoices ? this.#group(t("members.sections"), this.#offer.sections) : nothing}
           </select>
+          ${this.replacing !== null && (this.addError || this.replacementFieldError) ? html`<span class="error" id="member-add-error" data-test="add-error">${this.addError ? t("members.tile_choose_first") : this.replacementFieldError}</span>` : nothing}
         </label>
-        <wt-button
-          data-test="add"
-          .disabled=${this.busy}
-          @click=${(event: Event) => this.#add(event)}
-          >${t("action.add")}</wt-button
-        >
+        ${
+          this.replacing === null
+            ? html`<wt-button
+                data-test="add"
+                .disabled=${this.busy}
+                @click=${(event: Event) => this.#add(event)}
+                >${t("action.add")}</wt-button
+              >`
+            : html`<wt-form-actions
+                .error=${[this.replacementError, this.addError || this.replacementFieldError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+              >
+                <wt-button
+                  slot="cancel"
+                  variant="secondary"
+                  data-test="replace-cancel"
+                  .disabled=${this.busy}
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    this.#replacementGeneration++;
+                    this.replacementAttempted = false;
+                    this.replacementError = "";
+                    this.replacementFieldError = "";
+                    this.replacing = null;
+                    this.choice = "";
+                    this.addError = false;
+                  }}
+                  >${t("action.cancel")}</wt-button
+                >
+                <wt-button
+                  data-test="add"
+                  .disabled=${this.busy || this.addError}
+                  @click=${(event: Event) => this.#add(event)}
+                  >${t("action.replace")}</wt-button
+                >
+              </wt-form-actions>`
+        }
       </div>
       ${
-        this.addError
+        this.addError && this.replacing === null
           ? html`<p class="error" id="member-add-error" data-test="add-error">
-              ${t("members.choose_first")}
+              ${t(this.sectionChoices ? "members.tile_choose_first" : "members.choose_first")}
             </p>`
           : nothing
       }`;

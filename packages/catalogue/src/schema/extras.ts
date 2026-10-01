@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, flag, id, json, label, money, newId, products, table } from "@waitron/db";
-import { menuItems } from "./menu.js";
 import { optionLists } from "./options.js";
 
 /** A reusable, named list of products a diner may add to a dish, with rules on how many. Its items
@@ -34,9 +33,6 @@ export const extraLists = table(
   ],
 );
 
-/** One product a list offers, on the terms of the OFFER alone: how many of it one dish may take,
- * whether it starts picked, and a price that overrides the product's own. A null `price` means
- * "charge the product's `unit_price`" (`resolveExtraPrice`, extras.ts). */
 export const extraListItems = table(
   "extra_list_items",
   {
@@ -66,79 +62,6 @@ export const extraListItems = table(
     // PRODUCT ID and could not tell two rows apart. The backstop under `parseExtraListInput`.
     uniqueIndex("extra_list_items_list_product_uq").on(t.listId, t.productId),
     index("extra_list_items_list_sort_idx").on(t.listId, t.sort),
-  ],
-);
-
-/** An extras list published on one menu offer, in one position; what the list offers is the list's
- * own rows, narrowed and repriced below.
- *
- * A row is written only for a list the dish's PRODUCT carries in `product_modifiers`
- * (`setMenuItemExtraLists`, extras.ts), but nothing holds that afterwards: there is no key into
- * `product_modifiers`, so detaching the list from the product leaves this row where it is. */
-export const menuItemExtraLists = table(
-  "menu_item_extra_lists",
-  {
-    menuItemId: id("menu_item_id").notNull(),
-    listId: id("list_id").notNull(),
-    displayOrder: count("display_order").notNull().default(0),
-  },
-  (t) => [
-    primaryKey({
-      columns: [t.menuItemId, t.listId],
-      name: "menu_item_extra_lists_pk",
-    }),
-    foreignKey({
-      columns: [t.menuItemId],
-      foreignColumns: [menuItems.id],
-      name: "menu_item_extra_lists_item_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.listId],
-      foreignColumns: [extraLists.id],
-      name: "menu_item_extra_lists_list_fk",
-    }).onDelete("cascade"),
-    // The primary key leads with `menu_item_id`; `extraListDependants` and the cascade from
-    // `extra_lists` filter on `list_id` alone.
-    index("menu_item_extra_lists_list_idx").on(t.listId),
-  ],
-);
-
-/** One published list's item as this menu offer sells it: a price that overrides the list item's own
- * and an `available` flag that withdraws it from this offer alone. A null `price` falls back to the
- * list item's price, then the product's `unit_price`.
- *
- * `(list_id, product_id)` deliberately carries NO foreign key into `extra_list_items`: `writeItems`
- * (extras.ts) replaces a list's items by deleting and re-inserting them, so a cascading key would
- * erase every menu-level override each time a manager saved the list. A row naming a product the
- * list no longer offers is instead ignored by the menu projection and removed by
- * `dropStaleMenuOverrides`. */
-export const menuItemExtraItems = table(
-  "menu_item_extra_items",
-  {
-    menuItemId: id("menu_item_id").notNull(),
-    listId: id("list_id").notNull(),
-    productId: id("product_id").notNull(),
-    price: money("price"),
-    available: flag("available").notNull().default(true),
-  },
-  (t) => [
-    primaryKey({
-      columns: [t.menuItemId, t.listId, t.productId],
-      name: "menu_item_extra_items_pk",
-    }),
-    foreignKey({
-      columns: [t.menuItemId, t.listId],
-      foreignColumns: [menuItemExtraLists.menuItemId, menuItemExtraLists.listId],
-      name: "menu_item_extra_items_list_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.productId],
-      foreignColumns: [products.id],
-      name: "menu_item_extra_items_product_fk",
-    }).onDelete("restrict"),
-    check("menu_item_extra_items_price_ck", sql`${t.price} >= 0`),
-    // The primary key leads with `menu_item_id`; `dropStaleMenuOverrides` deletes on `list_id`.
-    index("menu_item_extra_items_list_product_idx").on(t.listId, t.productId),
   ],
 );
 

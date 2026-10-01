@@ -7,7 +7,7 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
-  LibrarySection,
+  SectionDetails,
   MenuStructure,
   OptionList,
   OptionListInput,
@@ -134,15 +134,55 @@ const value: ProductEditorValue = {
 const drinksNode = {
   memberId: "m-drinks",
   ref: { kind: "section" as const, sectionId: "s-drinks" },
+  internalName: "Drinks list",
+  names: {},
+  image: null,
+  color: null,
+  ownerMenuId: "menu-lunch",
   children: [
-    { memberId: "m-beer", ref: { kind: "section" as const, sectionId: "s-beer" }, children: [] },
+    {
+      memberId: "m-beer",
+      ref: { kind: "section" as const, sectionId: "s-beer" },
+      internalName: "Beer list",
+      names: {},
+      image: null,
+      color: null,
+      ownerMenuId: "menu-lunch",
+      children: [],
+    },
   ],
 };
 const structures: Record<string, MenuStructure> = {
-  "cat-a": { rootSectionId: "root-a", nodes: [drinksNode] },
-  "cat-b": { rootSectionId: "root-b", nodes: [drinksNode] },
+  "cat-a": {
+    rootSectionId: "root-a",
+    root: {
+      id: "root-a",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: [drinksNode],
+  },
+  "cat-b": {
+    rootSectionId: "root-b",
+    root: {
+      id: "root-b",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: [drinksNode],
+  },
 };
-const sections: LibrarySection[] = [
+const sections: SectionDetails[] = [
   {
     id: "s-drinks",
     internalName: "Drinks list",
