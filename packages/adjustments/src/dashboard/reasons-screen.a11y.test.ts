@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
-import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
@@ -151,8 +151,8 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     });
     await press(el, "edit-c");
     await press(el, "save-editor");
-    const actions = el.shadowRoot!.querySelector("wt-modal wt-form-actions")!;
-    expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    const actions = el.shadowRoot!.querySelector("wt-modal")!.querySelector("wt-form-actions")!;
+    expect(await formMessageOf(actions)).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

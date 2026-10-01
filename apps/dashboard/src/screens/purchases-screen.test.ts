@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type { DashboardApi, PurchaseInvoice } from "../api/client.js";
@@ -62,12 +63,11 @@ const list = (el: PurchasesScreen): PurchaseList | null =>
 const form = (el: PurchasesScreen): PurchaseForm =>
   el.shadowRoot!.querySelector("dashboard-purchase-form")!;
 
-/** The one message the form shows beside its action, or "" when it shows none. */
+/** The form's one message about a failed submission, or "" when it shows none. */
 async function bottomOf(form: PurchaseForm): Promise<string> {
   await form.updateComplete;
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function emitFromChild(child: Element, type: string, detail: unknown): void {
@@ -169,7 +169,7 @@ describe("purchases-screen", () => {
     expect(api.listPurchaseInvoices).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the form open and says a create refusal beside Create, not on the page", async () => {
+  it("keeps the form open and says a create refusal in its bottom message, not on the page", async () => {
     const api = stubApi({
       createPurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.duplicate" }),
     });
@@ -184,7 +184,7 @@ describe("purchases-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
-  it("keeps the form open and says an update refusal beside Save, not on the page", async () => {
+  it("keeps the form open and says an update refusal above Save, not on the page", async () => {
     const api = stubApi({
       updatePurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.not_found" }),
     });

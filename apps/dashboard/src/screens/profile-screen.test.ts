@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -134,11 +135,10 @@ async function editDetails(el: ProfileScreen) {
   el.editDetails();
   await flush(el);
 }
-/** The one message beside the modal's action; "" when there is none. */
+/** The modal's one message about a failed submission; "" when there is none. */
 async function bottomOf(el: ProfileScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 function input(el: ProfileScreen, name: string, value: string) {
   el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
@@ -739,6 +739,32 @@ describe("your profile", () => {
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   });
 
+  it("puts the already-registered message at the end of the Add passkey dialog's body, below its last field, not in the footer", async () => {
+    const { el } = await mount();
+    vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
+      new DOMException("already registered", "InvalidStateError"),
+    );
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    const message = body.querySelector<HTMLElement>(":scope > [data-error]");
+    expect(message?.textContent).toBe(codeMessage("passkey.already_registered"));
+    expect(message!.getAttribute("role")).toBe("alert");
+    expect(body.lastElementChild).toBe(message);
+    const fields = [...modal.querySelectorAll("wt-input")];
+    const lastField = fields.at(-1)!.getBoundingClientRect();
+    const box = message!.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(lastField.bottom);
+    expect(box.bottom).toBeLessThanOrEqual(footer.getBoundingClientRect().top);
+    expect(
+      modal.querySelector("wt-form-actions")!.shadowRoot!.querySelector("[data-error]"),
+    ).toBeNull();
+  });
+
   it("shows a passkey-specific message, not the generic banner, for any other ceremony failure", async () => {
     const { el, api } = await mount();
     // The library wraps this in a WebAuthnError whose `.code` must not reach codeOf, or the generic
@@ -1103,7 +1129,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(field(el, "currentPassword").error).toBe("");
   });
 
-  it("puts a taken display name beside its field, the generic sentence beside Save, and clears the field when it is edited", async () => {
+  it("puts a taken display name beside its field, the generic sentence above Save, and clears the field when it is edited", async () => {
     const saveProfile = vi.fn().mockRejectedValue({ code: "person.display_name_taken" });
     const { el } = await mount({ saveProfile });
     await editDetails(el);
@@ -1165,7 +1191,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
   });
 });
 
-describe("your profile — errors beside Save, not above the form", () => {
+describe("your profile — errors at the bottom of the form, not above it", () => {
   function field(el: ProfileScreen, name: string) {
     return el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(`wt-input[name=${name}]`)!;
   }

@@ -4,6 +4,7 @@ import type { DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
@@ -83,11 +84,11 @@ function change(el: PaymentsScreen, selector: string, value: string): void {
 }
 
 async function bottomOf(el: PaymentsScreen): Promise<string> {
-  const actions = q(el, "[data-test=bill-attest-dialog] wt-form-actions") as HTMLElement & {
-    updateComplete: Promise<unknown>;
-  };
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const actions = q(
+    el,
+    "[data-test=bill-attest-dialog] wt-form-actions",
+  ) as HTMLElementTagNameMap["wt-form-actions"];
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const errorOf = (el: PaymentsScreen, testId: string): string =>
@@ -446,7 +447,7 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(attestDisabled(el)).toBe(false);
   });
 
-  it("shows a refusal that names no field beside Record and leaves Record working", async () => {
+  it("shows a refusal that names no field in the dialog's bottom message and leaves Record working", async () => {
     const attest = vi.fn().mockRejectedValue({ code: "bill.attestation_contradicted" });
     const el = await mount(stubApi({ attestStuckBillPayment: attest }));
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();

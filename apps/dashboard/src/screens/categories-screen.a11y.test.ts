@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategorySummary, DashboardApi } from "../api/client.js";
 afterEach(cleanupWidgets);
@@ -217,7 +218,7 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("shows a refused main-category save beside Save accessibly", async () => {
+  it("shows a refused main-category save above Save accessibly", async () => {
     const api = {
       ...membersApi(),
       setMainCategory: () =>
@@ -241,9 +242,7 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
     const dialog = el.shadowRoot!.querySelector('wt-modal[data-test="main-category-dialog"]')!;
     dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
     const actions = dialog.querySelector("wt-form-actions")!;
-    await vi.waitFor(() =>
-      expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull(),
-    );
+    await vi.waitFor(async () => expect(await formMessageOf(actions)).not.toBeNull());
     await expectNoA11yViolations(host);
   });
 

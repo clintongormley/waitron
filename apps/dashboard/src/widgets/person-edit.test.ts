@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -32,8 +33,7 @@ function change(el: PersonEdit, testId: string, value: string): void {
 
 async function bottomOf(el: PersonEdit): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const saveOf = (el: PersonEdit): HTMLElement =>
@@ -390,7 +390,7 @@ describe("person-edit validation and keyboard submit", () => {
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("on an invalid submission shows one message beside a disabled Save and focuses the first invalid field", async () => {
+  it("on an invalid submission shows one message at the bottom of the form, disables Save and focuses the first invalid field", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     change(el, "edit-last-names", "");
     change(el, "edit-email", "ada@");

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
 import { SumUpAddReader, PAIRING_LIFETIME_MS, PAIRING_POLL_MS } from "./sumup-add-reader.js";
@@ -75,9 +76,8 @@ async function setInput(el: SumUpAddReader, testId: string, value: string): Prom
 }
 
 async function bottomOf(el: SumUpAddReader): Promise<string> {
-  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const actions = q(el, "wt-form-actions") as HTMLElementTagNameMap["wt-form-actions"];
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function fieldError(el: SumUpAddReader, testId: string): string {
@@ -406,7 +406,7 @@ describe("sumup-add-reader", () => {
     }
   });
 
-  it("keeps the form and says a refused pair POST beside Pair, and does NOT unpair", async () => {
+  it("keeps the form and says a refused pair POST above Pair, and does NOT unpair", async () => {
     vi.useFakeTimers();
     try {
       const request = stubRequest({
@@ -434,7 +434,7 @@ describe("sumup-add-reader", () => {
     }
   });
 
-  it("says the shared code copy beside Pair for any other refusal of the pair POST", async () => {
+  it("says the shared code copy above Pair for any other refusal of the pair POST", async () => {
     vi.useFakeTimers();
     try {
       registerCodeMessages({
@@ -900,7 +900,7 @@ describe("sumup-add-reader", () => {
     expect(pairDisabled(el)).toBe(false);
   });
 
-  it("on an invalid press marks the fields, says so beside Pair, focuses the first and disables Pair", async () => {
+  it("on an invalid press marks the fields, says so above Pair, focuses the first and disables Pair", async () => {
     const request = stubRequest({});
     const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
 

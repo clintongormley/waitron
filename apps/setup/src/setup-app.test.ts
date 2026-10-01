@@ -205,7 +205,7 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
   return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
 }
 
-/** The one message beside a screen's primary action, or "" when it shows none. */
+/** The one message above a screen's primary action, or "" when it shows none. */
 async function bottomOf(host: HTMLElement): Promise<string> {
   const actions = host.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
     updateComplete: Promise<unknown>;
@@ -1287,7 +1287,7 @@ describe("setup-app", () => {
     ["server.internal", 500, "Couldn't connect"],
     ["some.unexpected_code", 400, "Couldn't connect"],
   ])(
-    "routes the adopt failure %s (HTTP %i) back to the connect form with a message beside Connect",
+    "routes the adopt failure %s (HTTP %i) back to the connect form with a message above Connect",
     async (code, status, fragment) => {
       const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
       const el = await mountSetupApp(stubApi({ adopt }));
@@ -1371,7 +1371,7 @@ describe("setup-app", () => {
     },
   );
 
-  it("keeps an adopt refusal of a field the connect form does not show beside Connect", async () => {
+  it("keeps an adopt refusal of a field the connect form does not show above Connect", async () => {
     const adopt = vi.fn().mockRejectedValue({
       code: "setup.request_invalid",
       params: { field: "credential" },
@@ -1579,7 +1579,7 @@ describe("setup-app", () => {
 
     // Owner rule (C95): a refused login must not say whether the person exists, so it marks no
     // field; a message under the code or the password would say the details before it were right.
-    it("says only that the login failed, beside Connect, when the primary refuses the login", async () => {
+    it("says only that the login failed, above Connect, when the primary refuses the login", async () => {
       const adopt = vi
         .fn()
         .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
@@ -2898,7 +2898,7 @@ describe("restore from my bucket", () => {
     ["oldBoxGone", "Check your answer about the old server."],
     ["venueConfirmed", "Check the confirmation that this is your business."],
   ])(
-    "says to check the %s tick box beside Restore when that tick box is not on the screen",
+    "says above Restore to check the %s tick box when that tick box is not on the screen",
     async (field, message) => {
       const screen = await refusedWith({
         code: "setup.request_invalid",
@@ -3162,7 +3162,7 @@ describe("restoring a backup file whose old server may still be running", () => 
     },
   );
 
-  it("keeps an archive refusal of a field the form does not show beside Restore", async () => {
+  it("keeps an archive refusal of a field the form does not show, above Restore", async () => {
     const el = await mountSetupApp(
       stubApi({
         restore: vi

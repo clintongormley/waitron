@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
@@ -212,10 +212,10 @@ function alert(el: AdjustmentReasonsScreen): string {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim() ?? "";
 }
 
-/** The open form's one message, shown beside its primary action. */
-function bottom(el: AdjustmentReasonsScreen): string {
+/** The open form's one message, shown at the end of the dialog's body. */
+async function bottom(el: AdjustmentReasonsScreen): Promise<string> {
   const actions = modal(el)!.querySelector("wt-form-actions")!;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function button(el: AdjustmentReasonsScreen, test: string): HTMLElement & { disabled: boolean } {
@@ -600,7 +600,7 @@ describe("the editor", () => {
     });
   });
 
-  it("explains an invalid submission beside each field and in one message beside Save, keeping the values", async () => {
+  it("explains an invalid submission beside each field and in one message above Save, keeping the values", async () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "add-reason");
@@ -616,7 +616,7 @@ describe("the editor", () => {
       maxAmount: "Enter an amount above 0 with at most two decimals, such as 30.00.",
       approverRole: "The approving role must be the same as, or above, the role that applies it.",
     };
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     for (const [key, message] of Object.entries(expected)) {
       expect(besideField(el, key), key).toBe(message);
     }
@@ -696,7 +696,7 @@ describe("the editor", () => {
     expect(api.createReason).toHaveBeenCalledTimes(1);
   });
 
-  it("puts the server's refusal of a field beside that field, and says so beside Save", async () => {
+  it("puts the server's refusal of a field beside that field, and says so above Save", async () => {
     const el = await mount(
       fakeApi({
         updateReason: vi.fn().mockRejectedValue({
@@ -709,7 +709,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     const message = "Enter a percentage above 0 and up to 100, with at most two decimals.";
     expect(besideField(el, "maxPercent")).toBe(message);
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(modal(el)).not.toBeNull();
   });
 
@@ -733,7 +733,7 @@ describe("the editor", () => {
     await press(el, "edit-c");
     await press(el, "save-editor");
     expect(besideField(el, fieldName)).toBe(message);
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(button(el, "save-editor").disabled).toBe(false);
   });
 
@@ -751,12 +751,12 @@ describe("the editor", () => {
     await toggleAction(el, "comp");
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Another active reason already has this name");
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(button(el, "save-editor").disabled).toBe(false);
     expect(modal(el)).not.toBeNull();
   });
 
-  it("explains any other refusal beside Save and keeps the editor open", async () => {
+  it("explains any other refusal above Save and keeps the editor open", async () => {
     const el = await mount(
       fakeApi({
         updateReason: vi
@@ -766,7 +766,7 @@ describe("the editor", () => {
     );
     await press(el, "edit-c");
     await press(el, "save-editor");
-    expect(bottom(el)).toBe("That reason could not be found. It may have been removed");
+    expect(await bottom(el)).toBe("That reason could not be found. It may have been removed");
     expect(modal(el)).not.toBeNull();
   });
 
@@ -881,19 +881,19 @@ describe("the editor's messages", () => {
     await press(el, "add-reason");
     await type(el, "maxPercent", "150");
     for (const key of ["name", "actions", "maxPercent"]) expect(besideField(el, key), key).toBe("");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   });
 
-  it("marks the fields on a failed press, says so beside Save, focuses the first and holds Save", async () => {
+  it("marks the fields on a failed press, says so above Save, focuses the first and holds Save", async () => {
     const el = await mount(fakeApi());
     await press(el, "add-reason");
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Enter a name.");
     expect(besideField(el, "actions")).toBe("Choose at least one action.");
     expect(actionBox(el, "cancel").getAttribute("aria-invalid")).toBe("true");
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(el.shadowRoot!.activeElement).toBe(field(el, "name"));
     expect(button(el, "save-editor").disabled).toBe(true);
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
@@ -915,18 +915,18 @@ describe("the editor's messages", () => {
     await press(el, "save-editor");
     await type(el, "name", "Birthday");
     expect(besideField(el, "name")).toBe("");
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(button(el, "save-editor").disabled).toBe(true);
     await toggleAction(el, "comp");
     expect(besideField(el, "actions")).toBe("");
     expect(actionBox(el, "cancel").getAttribute("aria-invalid")).toBe("false");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
     await type(el, "maxPercent", "150");
     expect(besideField(el, "maxPercent")).toBe(
       "Enter a percentage above 0 and up to 100, with at most two decimals.",
     );
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(button(el, "save-editor").disabled).toBe(true);
     await type(el, "maxPercent", "15");
     expect(button(el, "save-editor").disabled).toBe(false);
@@ -954,7 +954,7 @@ describe("the editor's messages", () => {
     expect(button(el, "save-editor").disabled).toBe(false);
     await type(el, "maxPercent", "20");
     expect(besideField(el, "maxPercent")).toBe("");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
   });
 
@@ -974,22 +974,22 @@ describe("the editor's messages", () => {
     expect(button(el, "save-editor").disabled).toBe(false);
   });
 
-  it("says a refusal that names no field beside Save and keeps Save working, until the next press", async () => {
+  it("says a refusal that names no field above Save and keeps Save working, until the next press", async () => {
     const api = fakeApi({
       updateReason: vi.fn().mockRejectedValueOnce({ code: "server.internal" }),
     });
     const el = await mount(api);
     await press(el, "edit-c");
     await press(el, "save-editor");
-    expect(bottom(el)).toBe("Something went wrong, try again");
+    expect(await bottom(el)).toBe("Something went wrong, try again");
     expect(button(el, "save-editor").disabled).toBe(false);
     for (const key of ["name", "actions", "maxPercent", "maxAmount"]) {
       expect(besideField(el, key), key).toBe("");
     }
     await type(el, "name", "");
-    expect(bottom(el)).toBe(`Something went wrong, try again ${FIX_FIELDS}`);
+    expect(await bottom(el)).toBe(`Something went wrong, try again ${FIX_FIELDS}`);
     await press(el, "save-editor");
-    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(await bottom(el)).toBe(FIX_FIELDS);
     await type(el, "name", "Complaint");
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledTimes(2);
@@ -1005,15 +1005,15 @@ describe("the editor's messages", () => {
     await press(el, "cancel-editor");
     await press(el, "add-reason");
     expect(besideField(el, "name")).toBe("");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
     await press(el, "cancel-editor");
     await press(el, "edit-c");
     await press(el, "save-editor");
-    expect(bottom(el)).toBe("Something went wrong, try again");
+    expect(await bottom(el)).toBe("Something went wrong, try again");
     await press(el, "cancel-editor");
     await press(el, "edit-c");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
   });
 
   it("says it in Spanish when the dashboard does", async () => {
@@ -1021,7 +1021,7 @@ describe("the editor's messages", () => {
     const el = await mount(fakeApi());
     await press(el, "add-reason");
     await press(el, "save-editor");
-    expect(bottom(el)).toBe("Corrige los campos marcados para continuar.");
+    expect(await bottom(el)).toBe("Corrige los campos marcados para continuar.");
   });
 });
 
@@ -1092,7 +1092,7 @@ describe("deactivating", () => {
     await press(el, "deactivate-c");
     await press(el, "confirm-deactivate");
     expect(modal(el)).not.toBeNull();
-    expect(bottom(el)).toBe("Something went wrong, try again");
+    expect(await bottom(el)).toBe("Something went wrong, try again");
     expect(button(el, "confirm-deactivate").disabled).toBe(false);
   });
 });
@@ -1216,7 +1216,7 @@ describe("the bill discount limit", () => {
   });
 
   it.each(["0", "0.00", "100.01", "150", "12.345", "abc", "-5", "1e2"])(
-    "refuses %j beside the field and beside Save, focuses it, and holds Save until it is fixed",
+    "refuses %j beside the field and above Save, focuses it, and holds Save until it is fixed",
     async (typed) => {
       const api = withLimit(null);
       const el = await mount(api);
@@ -1258,7 +1258,7 @@ describe("the bill discount limit", () => {
     expect(limitBottom(el)).toBe("");
   });
 
-  it("says any other refusal beside Save, keeps Save working, and says it until the next press", async () => {
+  it("says any other refusal above Save, keeps Save working, and says it until the next press", async () => {
     const api = withLimit(null, {
       saveSettings: vi
         .fn()

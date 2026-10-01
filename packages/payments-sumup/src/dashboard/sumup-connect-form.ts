@@ -74,7 +74,7 @@ export class SumUpConnectForm extends LitElement {
   @state() private merchants: AmbiguousMerchant[] | null = null;
   @state() private merchantCode = "";
   @state() private attempted = false;
-  /** A refusal that names no field, shown beside Connect until the next press. */
+  /** A refusal that names no field, shown above Connect until the next press. */
   @state() private refusal = "";
   @state() private busy = false;
   @state() private connectedName: string | null = null;

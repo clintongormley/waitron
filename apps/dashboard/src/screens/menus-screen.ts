@@ -98,8 +98,8 @@ function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
 }
 
-/** The message beside a form's primary action: every message not under a field `shown` names, then
- * the generic sentence when one is. */
+/** A form's one message at its bottom: every message not under a field `shown` names, then the
+ * generic sentence when one is. */
 function bottomMessage(errors: Record<string, string>, shown: ReadonlySet<string>): string {
   const marked = Object.entries(errors).some(([key, message]) => message && shown.has(key));
   const others = Object.entries(errors)
@@ -1567,11 +1567,14 @@ export class MenusScreen extends LitElement {
     save: string;
     saveLabel: string;
     saveVariant?: "primary" | "danger";
-    /** The message beside Save, and whether a field the form finds wrong holds it. */
+    /** The message above Save, and whether a field the form finds wrong holds it. */
     errors?: { blocked: boolean; bottom: string };
     close: () => void;
     submit: () => void;
   }) {
+    // A shut dialog holds no message: a form's errors clear only when it next opens, and the dialog
+    // scrolls to its footer row's message as it opens, before the row has taken the cleared one.
+    const message = options.open ? (options.errors?.bottom ?? "") : "";
     return html`<wt-modal
       data-test=${options.test}
       .open=${options.open}
@@ -1583,7 +1586,7 @@ export class MenusScreen extends LitElement {
       }}
     >
       ${options.open ? options.body : nothing}
-      <wt-form-actions slot="footer" .error=${options.errors?.bottom ?? ""}
+      <wt-form-actions slot="footer" .error=${message}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -2072,17 +2075,11 @@ export class MenusScreen extends LitElement {
       test: "layout-delete",
       open: target !== null,
       heading: t("home.delete_heading").replace("{name}", target?.name ?? ""),
-      body: html`<p>${t("home.delete_note")}</p>
-        ${
-          this.deleteLayoutError
-            ? html`<p class="error" role="alert" data-test="layout-delete-error">
-                ${this.deleteLayoutError}
-              </p>`
-            : nothing
-        }`,
+      body: html`<p>${t("home.delete_note")}</p>`,
       save: "layout-delete-confirm",
       saveLabel: t("action.delete"),
       saveVariant: "danger",
+      errors: { blocked: false, bottom: this.deleteLayoutError ?? "" },
       close: () => {
         this.deletingLayout = null;
       },

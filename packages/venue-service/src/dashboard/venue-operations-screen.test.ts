@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
@@ -159,14 +159,10 @@ function tableText(el: VenueOperationsScreen, name: string) {
 function pageAlert(el: VenueOperationsScreen) {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')!.textContent!.trim();
 }
-/** The editor's one message beside its buttons. */
-function bottom(el: VenueOperationsScreen) {
-  return (
-    el
-      .shadowRoot!.querySelector("wt-form-actions")!
-      .shadowRoot!.querySelector("[data-error]")
-      ?.textContent?.trim() ?? ""
-  );
+/** The editor's one message, at the end of the dialog's body. */
+async function bottom(el: VenueOperationsScreen): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-modal")!.querySelector("wt-form-actions")!;
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 function saveDisabled(el: VenueOperationsScreen) {
   return find(el, '[data-test="save-editor"]')!.hasAttribute("disabled");
@@ -189,7 +185,7 @@ describe("venue operations screen", () => {
     expect(pageAlert(el)).toContain("could not be loaded");
   });
 
-  it("shows a message under every missing required department field, and one beside Save", async () => {
+  it("shows a message under every missing required department field, and one above Save", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
       createDepartment: vi.fn(),
@@ -198,7 +194,7 @@ describe("venue operations screen", () => {
     await selectTab(el, "departments");
     await action(el, "new-department");
     await action(el, "save-editor");
-    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(pageAlert(el)).toBe("");
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
     expect(fieldError(el, "department-name")).toBe("This field is required.");
@@ -273,7 +269,7 @@ describe("venue operations screen", () => {
     expect(button.hasAttribute("disabled")).toBe(true);
     rejectSave(new Error("write failed"));
     await settle(el);
-    expect(bottom(el)).toContain("could not be saved");
+    expect(await bottom(el)).toContain("could not be saved");
     expect(pageAlert(el)).toBe("");
     expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
   });
@@ -509,7 +505,7 @@ it("edits a department and retains its draft when saving fails", async () => {
   field(el, "trading-name").value = "Casa Delgado To Go";
   field(el, "department-mode").value = "ticket_then_pay";
   await action(el, "save-editor");
-  expect(bottom(el)).toContain("could not be saved");
+  expect(await bottom(el)).toContain("could not be saved");
   expect(pageAlert(el)).toBe("");
   expect(field(el, "department-name").value).toBe("Takeaway");
   expect(field(el, "trading-name").value).toBe("Casa Delgado To Go");
@@ -685,7 +681,7 @@ it("explains a duplicate route and keeps the edit open", async () => {
   await selectTab(el, "routing");
   await action(el, "edit-route-r1");
   await action(el, "save-editor");
-  expect(bottom(el)).toContain("A route already exists");
+  expect(await bottom(el)).toContain("A route already exists");
   expect(pageAlert(el)).toBe("");
   expect(field(el, "route-subject").value).toBe("category:c1");
 });
@@ -699,7 +695,7 @@ it("explains why a department with active zones cannot be deactivated", async ()
   await selectTab(el, "departments");
   await action(el, "deactivate-department-d1");
   await action(el, "save-editor");
-  expect(bottom(el)).toContain("Move its active service zones");
+  expect(await bottom(el)).toContain("Move its active service zones");
   expect(pageAlert(el)).toBe("");
   expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
 });
@@ -898,13 +894,13 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "save-editor");
     expect(fieldError(el, "hours-opens")).toBe("This field is required.");
     expect(fieldError(el, "hours-closes")).toBe("This field is required.");
-    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     field(el, "hours-opens").value = "10:00";
     field(el, "hours-closes").value = "10:00";
     await action(el, "save-editor");
     expect(fieldError(el, "hours-opens")).toBe("Opening and closing times must differ.");
     expect(fieldError(el, "hours-closes")).toBe("Opening and closing times must differ.");
-    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(api.replaceHours).not.toHaveBeenCalled();
   });
 
@@ -921,7 +917,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "edit-zone-z2");
     await action(el, "save-editor");
     expect(fieldError(el, "zone-department-z2")).toBe("This field is required.");
-    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(api.configureZone).not.toHaveBeenCalled();
   });
 
@@ -943,7 +939,7 @@ describe("the venue editors refuse an incomplete form", () => {
     expect(field(el, "assignment-menu").value).toBe("");
     await action(el, "save-editor");
     expect(fieldError(el, "assignment-menu")).toBe("This field is required.");
-    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(api.allowMenu).not.toHaveBeenCalled();
   });
 
@@ -960,7 +956,7 @@ describe("the venue editors refuse an incomplete form", () => {
       field(el, "assignment-order").value = order;
       await action(el, "save-editor");
       expect(fieldError(el, "assignment-order")).toBe("Enter a whole number of zero or more.");
-      expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+      expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     }
     expect(api.allowMenu).not.toHaveBeenCalled();
     field(el, "assignment-order").value = "0";
@@ -978,7 +974,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "new-route");
     await action(el, "save-editor");
     expect(fieldError(el, "route-subject")).toBe("This field is required.");
-    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(fieldError(el, "route-target")).toBeUndefined();
     expect(api.createRoute).not.toHaveBeenCalled();
   });
@@ -1007,19 +1003,19 @@ describe("an editor's messages", () => {
     await type(el, "department-name", "");
     expect(fieldError(el, "department-name")).toBeUndefined();
     expect(invalid(el, "department-name")).toBe("false");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
   });
 
-  // Fails if a failed press stops marking a field, saying so beside Save, moving focus or holding
+  // Fails if a failed press stops marking a field, saying so above Save, moving focus or holding
   // Save.
-  it("marks the fields, says so beside Save, focuses the first and holds Save after a failed press", async () => {
+  it("marks the fields, says so above Save, focuses the first and holds Save after a failed press", async () => {
     const el = await newDepartment();
     await action(el, "save-editor");
     expect(invalid(el, "department-name")).toBe("true");
     expect(invalid(el, "trading-name")).toBe("true");
     expect(fieldError(el, "department-name")).toBe("This field is required.");
-    expect(bottom(el)).toBe(FIX);
+    expect(await bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(true);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field(el, "department-name")));
   });
@@ -1031,19 +1027,19 @@ describe("an editor's messages", () => {
     await type(el, "department-name", "Brunch");
     expect(fieldError(el, "department-name")).toBeUndefined();
     expect(invalid(el, "department-name")).toBe("false");
-    expect(bottom(el)).toBe(FIX);
+    expect(await bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(true);
     await type(el, "trading-name", "Casa Brunch");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
     await type(el, "department-name", " ");
     expect(fieldError(el, "department-name")).toBe("This field is required.");
-    expect(bottom(el)).toBe(FIX);
+    expect(await bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(true);
   });
 
   // Fails if a refusal that names no field disables Save, marks a field, or outlives the next press.
-  it("says a refusal beside Save and leaves Save usable, until Save is pressed again", async () => {
+  it("says a refusal above Save and leaves Save usable, until Save is pressed again", async () => {
     const el = await newDepartment({
       createDepartment: vi
         .fn()
@@ -1053,16 +1049,16 @@ describe("an editor's messages", () => {
     await type(el, "department-name", "Brunch");
     await type(el, "trading-name", "Casa Brunch");
     await action(el, "save-editor");
-    expect(bottom(el)).toBe("The change could not be saved.");
+    expect(await bottom(el)).toBe("The change could not be saved.");
     expect(saveDisabled(el)).toBe(false);
     expect(invalid(el, "department-name")).toBe("false");
     await type(el, "department-name", "");
-    expect(bottom(el)).toBe(`The change could not be saved. ${FIX}`);
+    expect(await bottom(el)).toBe(`The change could not be saved. ${FIX}`);
     expect(saveDisabled(el)).toBe(true);
     await type(el, "department-name", "Brunch");
     expect(saveDisabled(el)).toBe(false);
     await action(el, "save-editor");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
   });
 
   // Fails if closing and reopening an editor keeps the old attempt's messages or its held Save.
@@ -1074,17 +1070,17 @@ describe("an editor's messages", () => {
     await action(el, "cancel-editor");
     await action(el, "new-department");
     expect(fieldError(el, "department-name")).toBeUndefined();
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
     await type(el, "department-name", "");
     expect(fieldError(el, "department-name")).toBeUndefined();
     await type(el, "department-name", "Brunch");
     await type(el, "trading-name", "Casa Brunch");
     await action(el, "save-editor");
-    expect(bottom(el)).toBe("The change could not be saved.");
+    expect(await bottom(el)).toBe("The change could not be saved.");
     await action(el, "cancel-editor");
     await action(el, "new-department");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
   });
 
@@ -1100,17 +1096,17 @@ describe("an editor's messages", () => {
     expect(pageAlert(el)).toBe("");
   });
 
-  // Fails if the Spanish catalogue loses the sentence beside Save.
+  // Fails if the Spanish catalogue loses the sentence above Save.
   it("says it in Spanish", async () => {
     setLocale("es");
     const el = await newDepartment();
     await action(el, "save-editor");
-    expect(bottom(el)).toBe("Corrige los campos marcados para continuar.");
+    expect(await bottom(el)).toBe("Corrige los campos marcados para continuar.");
   });
 
   // Fails if a refresh behind the editor clears a refusal the operator has not answered by saving
   // again, or repeats it at the top of the screen.
-  it("keeps a refusal beside Save when the list refreshes behind the editor", async () => {
+  it("keeps a refusal above Save when the list refreshes behind the editor", async () => {
     const liveData = new LiveData();
     const load = vi.fn().mockResolvedValue(structuredClone(model));
     const el = await newDepartment({
@@ -1121,20 +1117,20 @@ describe("an editor's messages", () => {
     await type(el, "department-name", "Brunch");
     await type(el, "trading-name", "Casa Brunch");
     await action(el, "save-editor");
-    expect(bottom(el)).toBe("The change could not be saved.");
+    expect(await bottom(el)).toBe("The change could not be saved.");
     const updated = structuredClone(model);
     updated.departments[0]!.name = "Updated elsewhere";
     load.mockResolvedValue(updated);
     liveData.invalidate([{ type: "departments", id: "d1" }]);
     await vi.waitFor(() => expect(tableText(el, "departments")).toContain("Updated elsewhere"));
-    expect(bottom(el)).toBe("The change could not be saved.");
+    expect(await bottom(el)).toBe("The change could not be saved.");
     expect(pageAlert(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
   });
 
-  // Fails if a refresh failing behind an open editor is said beside Save, as though the save had
+  // Fails if a refresh failing behind an open editor is said above Save, as though the save had
   // failed, or is said nowhere.
-  it("says a failed refresh at the top of the screen while an editor is open, not beside Save", async () => {
+  it("says a failed refresh at the top of the screen while an editor is open, not above Save", async () => {
     const liveData = new LiveData();
     const load = vi.fn().mockResolvedValue(structuredClone(model));
     const el = await newDepartment({ load, liveData } as Partial<VenueServiceApi>);
@@ -1143,7 +1139,7 @@ describe("an editor's messages", () => {
     await vi.waitFor(() =>
       expect(pageAlert(el)).toBe("The venue configuration could not be loaded."),
     );
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
   });
 
@@ -1166,7 +1162,7 @@ describe("an editor's messages", () => {
     expect(fieldError(el, "trading-name")).toBe(REFUSED);
     expect(invalid(el, "trading-name")).toBe("true");
     expect(fieldError(el, "department-name")).toBeUndefined();
-    expect(bottom(el)).toBe(FIX);
+    expect(await bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(false);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field(el, "trading-name")));
     await type(el, "department-name", "Brunch bar");
@@ -1175,7 +1171,7 @@ describe("an editor's messages", () => {
     await type(el, "trading-name", "Casa Brunch Bar");
     expect(fieldError(el, "trading-name")).toBeUndefined();
     expect(invalid(el, "trading-name")).toBe("false");
-    expect(bottom(el)).toBe("");
+    expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
     await action(el, "save-editor");
     expect(fieldError(el, "trading-name")).toBe(REFUSED);
@@ -1280,7 +1276,7 @@ describe("an editor's messages", () => {
     for (const step of open) await action(el, step);
     await action(el, "save-editor");
     expect(fieldError(el, control)).toBe(REFUSED);
-    expect(bottom(el)).toBe(FIX);
+    expect(await bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(false);
   });
 
@@ -1338,12 +1334,12 @@ describe("an editor's messages", () => {
     for (const step of open) await action(el, step);
     await action(el, "save-editor");
     expect(fieldError(el, control)).toBe(REFUSED);
-    expect(bottom(el)).toBe(FIX);
+    expect(await bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(false);
   });
 
   // Fails if a refusal naming a field the editor does not show marks a field or holds Save.
-  it("says a refusal naming a field the editor does not show beside Save, and leaves Save usable", async () => {
+  it("says a refusal naming a field the editor does not show above Save, and leaves Save usable", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
       replaceHours: vi.fn().mockRejectedValue(invalidRequest("hours.0")),
@@ -1351,7 +1347,7 @@ describe("an editor's messages", () => {
     await selectTab(el, "departments");
     await action(el, "edit-hours-0");
     await action(el, "save-editor");
-    expect(bottom(el)).toBe("The change could not be saved.");
+    expect(await bottom(el)).toBe("The change could not be saved.");
     expect(el.shadowRoot!.querySelector("[data-field-error]")).toBeNull();
     expect(saveDisabled(el)).toBe(false);
     expect(pageAlert(el)).toBe("");
@@ -1414,7 +1410,7 @@ it("shows the general save error when a write is refused without a reason", asyn
   await selectTab(el, "departments");
   await action(el, "deactivate-department-d2");
   await action(el, "save-editor");
-  expect(bottom(el)).toBe("The change could not be saved.");
+  expect(await bottom(el)).toBe("The change could not be saved.");
   expect(pageAlert(el)).toBe("");
   expect(modal(el)).not.toBeNull();
 });

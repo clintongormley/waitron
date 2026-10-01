@@ -87,7 +87,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a refusal beside the action", async () => {
+  it("has no violations with a refusal above the action", async () => {
     const { host } = await mount({ refusal: "bill.line_paid" });
     await expectNoA11yViolations(host);
   });

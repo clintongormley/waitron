@@ -8,7 +8,7 @@ import {
   menuDocument,
   mountWidget,
 } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
   CatalogueSummary,
@@ -546,11 +546,10 @@ function inModal<T extends Element = HTMLElement>(
   return modal(el, testId).querySelector<T>(selector)!;
 }
 
-/** The one message beside the primary action of `root`'s form. */
+/** The one message about a failed submission of `root`'s form. */
 async function bottomIn(root: Element): Promise<string> {
   const actions = root.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function bottom(el: MenusScreen, testId: string): Promise<string> {
@@ -693,7 +692,7 @@ it("replaces an address naming an unknown menu or tab rather than adding a histo
   expect(history.length).toBe(before);
 });
 
-it("creating a menu needs a name: an empty one is explained beside the field and beside Save", async () => {
+it("creating a menu needs a name: an empty one is explained beside the field and above Save", async () => {
   const client = api();
   const el = await mount(client);
   await click(el, "add-menu");
@@ -960,7 +959,7 @@ it("puts a refused copy's reason beside the name only when the refusal names tha
   inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
   await vi.waitFor(() => expect(name.error).toBe(codeMessage("menu_section.invalid")));
   expect(await bottom(el, "duplicate")).toBe(t("form.fix_fields"));
-  // A language's name is not on this form, so its refusal is beside Save alone.
+  // A language's name is not on this form, so its refusal is above Save alone.
   inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
   await vi.waitFor(async () =>
     expect(await bottom(el, "duplicate")).toBe(codeMessage("menu_section.translation_required")),
@@ -3901,15 +3900,60 @@ describe("home page", () => {
     emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
     await el.updateComplete;
     inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
-    await vi.waitFor(() =>
-      expect(text(inModal(el, "layout-delete", '[data-test="layout-delete-error"]'))).toBe(
-        codeMessage("menu.default_layout_required"),
-      ),
+    await vi.waitFor(async () =>
+      expect(await bottom(el, "layout-delete")).toBe(codeMessage("menu.default_layout_required")),
+    );
+    const actions = inModal<HTMLElementTagNameMap["wt-form-actions"]>(
+      el,
+      "layout-delete",
+      "wt-form-actions",
+    );
+    const message = await formMessageOf(actions);
+    expect(modal(el, "layout-delete").shadowRoot!.querySelector(".body")!.contains(message)).toBe(
+      true,
+    );
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(modal(el, "layout-delete").textContent).not.toContain(
+      codeMessage("menu.default_layout_required"),
     );
     expect(modal(el, "layout-delete").open).toBe(true);
     inModal(el, "layout-delete", '[data-test="layout-delete-cancel"]').click();
     await el.updateComplete;
     expect(modal(el, "layout-delete").open).toBe(false);
+  });
+
+  it("drops a refused delete's message on Cancel, so the window neither keeps it shut nor scrolls to it reopened", async () => {
+    const client = api({
+      deleteHomeLayout: vi.fn().mockRejectedValue({ code: "menu.default_layout_required" }),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+    await el.updateComplete;
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    await vi.waitFor(async () =>
+      expect(await bottom(el, "layout-delete")).toBe(codeMessage("menu.default_layout_required")),
+    );
+    inModal(el, "layout-delete", '[data-test="layout-delete-cancel"]').click();
+    await el.updateComplete;
+    expect(modal(el, "layout-delete").open).toBe(false);
+    expect(await bottom(el, "layout-delete")).toBe("");
+
+    const seen: string[] = [];
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (
+      this: Element,
+    ) {
+      seen.push(this.textContent?.trim() ?? "");
+    });
+    try {
+      emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+      await el.updateComplete;
+      await modal(el, "layout-delete").updateComplete;
+    } finally {
+      spy.mockRestore();
+    }
+    expect(modal(el, "layout-delete").open).toBe(true);
+    expect(seen).not.toContain(codeMessage("menu.default_layout_required"));
+    expect(await bottom(el, "layout-delete")).toBe("");
   });
 
   it("makes a layout the menu's default", async () => {
@@ -4235,6 +4279,18 @@ describe("the name forms", () => {
     expect(name().error).toBe("");
     expect(await bottom(el, form.form)).toBe("");
     expect(save().disabled).toBe(false);
+  });
+
+  it.each(forms)("$form keeps no message once it is cancelled", async (form) => {
+    const { el, name, save } = await opened(form);
+    await rename(el, name(), "");
+    save().click();
+    await el.updateComplete;
+    expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
+    inModal(el, form.form, `[data-test="${form.form}-cancel"]`).click();
+    await el.updateComplete;
+    expect(modal(el, form.form).open).toBe(false);
+    expect(await bottom(el, form.form)).toBe("");
   });
 });
 

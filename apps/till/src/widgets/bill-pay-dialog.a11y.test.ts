@@ -72,7 +72,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations contributing by card, with a refusal beside the action", async () => {
+  it("has no violations contributing by card, with a refusal above the action", async () => {
     const { el, host } = await mount({
       way: "contribution",
       refusal: { code: "bill.nothing_outstanding" },

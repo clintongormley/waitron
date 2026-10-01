@@ -14,7 +14,7 @@ import type {
   StuckPaymentRow,
 } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
@@ -366,11 +366,11 @@ async function openAdd(el: PaymentsScreen) {
   await flush(el);
 }
 async function bottomOf(el: PaymentsScreen, dialog: string): Promise<string> {
-  const actions = q(el, `[data-test=${dialog}] wt-form-actions`) as HTMLElement & {
-    updateComplete: Promise<unknown>;
-  };
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const actions = q(
+    el,
+    `[data-test=${dialog}] wt-form-actions`,
+  ) as HTMLElementTagNameMap["wt-form-actions"];
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 const errorOf = (el: PaymentsScreen, testId: string): string =>
   (q(el, `[data-test=${testId}]`) as HTMLElement & { error: string }).error;
@@ -463,7 +463,7 @@ describe("reader discovery and status", () => {
     expect(api.adoptReader).not.toHaveBeenCalled();
   });
 
-  it("shows a refused adoption beside the dialog's actions and leaves Add working", async () => {
+  it("shows a refused adoption in the dialog's bottom message and leaves Add working", async () => {
     const { el, api } = await mount(
       stubApi({
         availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS),
@@ -685,7 +685,7 @@ describe("reader discovery and status", () => {
     expect(isDisabled(el, "save-reader")).toBe(true);
   });
 
-  it("shows a refused rename beside Save and leaves Save working", async () => {
+  it("shows a refused rename above Save and leaves Save working", async () => {
     const { el, api } = await mount(
       stubApi({ renameReader: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     );
@@ -781,7 +781,7 @@ describe("reader dialog request lifetime", () => {
     expect(q(el, "[data-test=reader-discovery]")).toBeNull();
   });
 
-  it("shows an unpair failure beside the confirmation's action, not above it, and permits retry", async () => {
+  it("shows an unpair failure only in the confirmation's bottom message, with no alert of its own, and permits retry", async () => {
     const { el, api } = await mount(
       stubApi({
         unpairReader: vi

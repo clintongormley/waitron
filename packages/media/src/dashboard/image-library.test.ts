@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
 import type { ImageLibrary } from "./image-library.js";
@@ -43,8 +44,7 @@ async function bottomOf(): Promise<string> {
   const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
     "wt-modal wt-form-actions",
   )!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 function field(name: string, value: string) {
   el.shadowRoot!.querySelector(`[name="${name}"]`)!.dispatchEvent(
@@ -562,9 +562,15 @@ it("retains deletion confirmation after a failure and allows it to be dismissed"
     expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
   );
   click("[data-test=confirm-delete]");
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-modal")!.textContent).toContain("could not be deleted"),
+  const dialog = el.shadowRoot!.querySelector("wt-modal")!;
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions))?.textContent).toBe("The image could not be deleted."),
   );
+  const message = await formMessageOf(actions);
+  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(dialog.textContent).not.toContain("could not be deleted");
   el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
@@ -1226,7 +1232,7 @@ it("sends again when Save is pressed with a refused field unchanged, and drops t
   expect(await bottomOf()).toBe("");
 });
 
-it("says a refused translation in a language the form does not show beside Save, and leaves Save working", async () => {
+it("says a refused translation in a language the form does not show above Save, and leaves Save working", async () => {
   const client = api();
   client.updateImage.mockRejectedValueOnce({
     code: "image.translation_required",
@@ -1247,7 +1253,7 @@ it("says a refused translation in a language the form does not show beside Save,
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
 
-it("says a photo refusal on an edit, which has no photo field, beside Save and leaves Save working", async () => {
+it("says a photo refusal on an edit, which has no photo field, above Save and leaves Save working", async () => {
   const client = api();
   client.updateImage.mockRejectedValueOnce({ code: "image.too_large", params: {}, status: 400 });
   await mount(client);

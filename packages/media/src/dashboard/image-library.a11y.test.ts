@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
-import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { ImageApi, LibraryImage } from "./client.js";
 import type { ImageLibrary } from "./image-library.js";
@@ -70,7 +70,7 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
     await library.updateComplete;
     await expectNoA11yViolations(host);
   });
-  it("announces missing upload metadata beside fields and beside the Save button", async () => {
+  it("announces missing upload metadata beside fields and above the Save button", async () => {
     const library = await mount(theme);
     await openDialog(library, "upload");
     library.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
@@ -78,8 +78,7 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
     const actions = library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
       "wt-modal wt-form-actions",
     )!;
-    await actions.updateComplete;
-    expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
+    expect((await formMessageOf(actions))!.getAttribute("role")).toBe("alert");
     await expectNoA11yViolations(host);
   });
   it("labels translated metadata fields in the edit dialog", async () => {

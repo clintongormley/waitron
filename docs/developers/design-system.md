@@ -262,10 +262,10 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `hint` (an always-shown line of help under the field, which the amount's description reads first, before any error, the sign and a fixed unit), `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message. `hide-label` names the field with `label` for assistive technology but draws no label. `fixed-unit` shows `unit` as plain text rather than a button, for a field whose unit is not chosen here; the field's description then reads the unit after any error, and an empty `unit` draws no unit box at all. The amount box is the `amount` part and a fixed unit the `unit` part: the amount box draws the seam between them, so a host can move the unit under it with `flex-basis: 100%` on the unit part and round the amount's trailing corners. The amount box is `--wt-price-field-width` wide where nothing stretches it and no sign is drawn, and fills a wider field unless it carries a fixed unit; a sign drawn by `locale` sits inside the box, and an unstretched box grows by the sign's measured width plus `--wt-space-1`, so the amount keeps the room it had without a sign. A host that lays the field out narrower than that box (a wrapping flex row with a small `min-width`) lets it run under its neighbour; the purchase form's VAT line gives its money fields `min-width: min-content` so the line wraps them instead. `locale` (default empty, which draws no sign) draws the euro sign inside the amount box on the side that locale writes it — before the amount for English, after it for Spanish (the amount then aligned to the sign), `--wt-space-1` from the amount — painted `--wt-color-text-muted`, as the `currency` part, and read in the field's description after any error and before a fixed unit. EUR is the only currency; the sign and its side come from `currencySymbol` in `@waitron/shared`, and a dashboard form sets it to `currentLocale()`. It also serves a value in a fixed unit that is not money, such as a percentage: `fixed-unit` with `unit="%"` and no `locale` draws `%` as text beside the narrow amount box and no euro sign, as the bill discount limit in `packages/adjustments/src/dashboard/reasons-screen.ts` does | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
 | `wt-number-stepper` | `value` (text), `label`, `name`, `min` (default `0`), `max` (default none), `placeholder`, `hint`, `required` (reflected), `disabled` (reflected, and locks the box and both buttons), `invalid` (reflected), `error`, `hide-label` (names the box with `label` for assistive technology but draws no label), `decreaseLabel` and `increaseLabel` (functions given `label` that return the buttons' accessible names, property only, default "Decrease …" and "Increase …"; set translated ones). A whole-number box between a − and a + button, each disabled at its bound. + on a blank or non-number value gives the larger of `min` and 1, never above `max`; − never goes below `min`, so only clearing the box reaches blank. Typing emits exactly what was typed, never a clamped number, so the form's own validation sees a typed 0, a blank or a non-number. Its baseline is the number's, so a row aligned by baseline lines the text up. The box is `--wt-stepper-field-width` wide (a stepper whose blank value shows a word placeholder such as "No limit" sets it to `--wt-stepper-field-width-wide`, and so does a stepper set beside one, so the two boxes match); focusing the element focuses the box. The consuming app registers the `minus` and `plus` icons | `wt-change` — `detail: { value: string }` (on typing, and on each step that changes the value) |
 | `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (hides the drawn text while keeping `label` as the native switch's default accessible name), `accessible-name` (overrides the native switch's accessible name, for a row-specific name in a table whose column heading supplies the action). The drawn label is the `label` part, so a host can hide the text in one case only (the extras list form does on a phone) while the switch keeps its name. Its baseline is its label's text, so a row aligned by baseline lines the label up | `wt-change` — `detail: { checked: boolean }` |
-| `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot | `wt-close` |
+| `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot. The message of a `wt-form-actions` placed directly in the `footer` slot shows at the end of the body instead, every such row's message joined, and is scrolled into view when it changes and when the dialog opens; a `wt-form-actions` in the body keeps its own message, which the dialog scrolls into view when it changes. Neither is scrolled to when it changes from an `input` event inside the dialog until a zero-delay timer the dialog then sets has run | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors`. Retiring: a form no longer shows a summary (see Forms); no product form uses it any more; it is deleted once its remaining users, listed in `docs/backlog.md`, are gone | — |
-| `wt-form-actions` | `error` (the form's one message about a failed submission: shown beside the primary action, announced as an alert, painted `--wt-color-danger`; on a narrow row it wraps onto its own line above the actions); `cancel`, `secondary`, and default slots | — |
+| `wt-form-actions` | `error` (the form's one message about a failed submission: shown on its own line above the buttons, full width and aligned to the start, announced as an alert, painted `--wt-color-danger`); `showError` (property only, default `true`; `wt-dialog` turns it off for each row directly in its footer and shows the message itself); `cancel`, `secondary`, and default slots. The same module exports `formMessage(message)` and `formMessageStyles`, which draw that message for a screen that has to place it itself; a shadow root using `formMessage` includes `formMessageStyles` | `wt-form-error` — `detail: { message: string }` (whenever `error` changes) |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
@@ -424,7 +424,15 @@ query cannot read a custom property, and the no-hardcoded-chrome guard
 `packages/ui` primitive. Unlike `wt-dialog`, it is not held to 90% of the viewport. The body scrolls
 independently, so your footer actions stay visible. It uses the raised surface and shadow tokens:
 white in the light theme, with the matching dark surface in the dark theme. Put `wt-form-actions` in
-its `footer` slot to keep Cancel on the left and Save on the right:
+its `footer` slot to keep Cancel on the left and Save on the right. The dialog then shows that row's
+message at the end of its scrolling body, below the last field, and scrolls it into view — except
+when the message changes from an `input` event inside the dialog until a zero-delay timer the
+dialog then sets has run, which it takes to be the form re-checking that edit.
+Only an edit that fires `input` counts — typing, a native list, a tick box; a `wt-combobox` choice,
+a `wt-number-stepper` −/+ button and `wt-price-input`'s unit button fire none, so a re-check they
+cause is still scrolled to. The footer holds only the buttons. This needs the `wt-form-actions` itself in the footer slot: one wrapped in
+another element keeps its message in the footer. One placed in the body shows its own message above
+its buttons:
 
 ```html
 <wt-modal heading="Add printer">
@@ -618,7 +626,8 @@ does (owner rule, 2026-09-29).
   the native constraint;
 - the primary action works until the first submission. If that submission is invalid, pass a
   plain-language sentence to each invalid field's `error` property, pass ONE localized sentence to
-  `wt-form-actions`'s `error` property (it shows beside the primary action and is announced), move
+  `wt-form-actions`'s `error` property (it shows on its own line at the bottom of the form, above
+  the buttons — in a dialog, at the end of the dialog's body — and is announced), move
   focus to the first invalid field with `focusFirstInvalid(form)`, passing the shadow root when it
   holds only the form, and the form or dialog element when the shadow root holds more (a table,
   other panels), so focus cannot land on a marked control elsewhere on the page, and keep the
@@ -659,7 +668,11 @@ inside the field only while it contains an action.
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
 it stays on the bottom left (the sign-in code step is an exception; see the login section). A
-secondary action that belongs beside the primary action goes in the `secondary` slot.
+secondary action that belongs beside the primary action goes in the `secondary` slot. The row's
+message runs from the form's left edge only when the row is the form's full width. Where the row
+shares a line with something else, show the message with `formMessage` directly before that line,
+as the sign-in steps do, or let the row take the full width while it has a message, as the Add
+printer dialog's address check does.
 
 ```ts
 html`
@@ -900,14 +913,14 @@ Keep the hidden semantic username input for password managers. Ordinary login ha
 Cancel or Forget button.
 
 On password, passkey, Google and code screens, a step's other ways in are ONE persistent bulleted list of links, directly
-after the step's field or hint. On the password screen **I've forgotten my password** is its first
+after the step's field or hint, and after its refusal when one shows. On the password screen **I've forgotten my password** is its first
 item, then the other ways to log in. The step's buttons sit on the row of the list's first item, at
 the right; where that row is too narrow for both, they wrap below the list, still at the right. On
 a form at its full width only the first link has to fit beside the buttons, and a longer later link
 breaks inside the list; on a narrower form the row is sized by the widest link. On the code screen
 Back therefore sits beside Log in at the right, an exception to the Forms rule that puts Back
-bottom left. A refusal's message sits beside the action, so a message too long to share
-the row takes the buttons below the list with it.
+bottom left. A refusal's message sits on its own line above the list and the buttons, from the
+form's left edge.
 Recovery opens **Check your email** with the address, delivery
 guidance and a one-minute resend countdown. Use the same public acknowledgement for every address:
 pending accounts receive a setup link and active accounts receive a reset link. Invitation emails

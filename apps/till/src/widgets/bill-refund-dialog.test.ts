@@ -155,7 +155,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
     expect(asked).toEqual([{ appliedAmount: "35.00", tipAmount: "0.00", reason: "Wrong dish" }]);
   });
 
-  it("marks the reason required, says it under the field and beside the action, and sends nothing", async () => {
+  it("marks the reason required, says it under the field and above the action, and sends nothing", async () => {
     const el = await mount();
     const asked = capture<RefundAsk>(el, "bill-refund-continue");
 
@@ -235,7 +235,7 @@ describe("till-bill-refund-dialog: how much and why", () => {
 });
 
 describe("till-bill-refund-dialog: the server's refusals", () => {
-  it("shows a refusal beside the action in its own words", async () => {
+  it("shows a refusal above the action in its own words", async () => {
     const el = await mount();
     el.refusal = { code: "bill.refund_in_progress" };
     await el.updateComplete;
@@ -258,7 +258,7 @@ describe("till-bill-refund-dialog: the server's refusals", () => {
     expect(field(el, "reason")!.error).toBe("");
   });
 
-  it("puts a refused amount beside the action when the whole payment is given back, and a refusal naming another field there too", async () => {
+  it("puts a refused amount above the action when the whole payment is given back, and a refusal naming another field there too", async () => {
     const el = await mount();
     el.refusal = { code: "bill.refund_exceeds_payment" };
     await el.updateComplete;

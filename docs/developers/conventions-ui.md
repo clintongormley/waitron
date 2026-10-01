@@ -10,7 +10,8 @@ the one-line version of each rule and points here for the rest.
 ## New or changed forms use the shared UI contract in `docs/developers/design-system.md` → Forms
 
 Required fields are visibly marked; an attempted invalid submission shows explanatory text beside
-every bad field and one localized message beside the primary action, which stays disabled until
+every bad field and one localized message at the bottom of the form, on its own line above the
+buttons (in a dialog, at the end of its body; owner, 2026-09-30, C97), and the action stays disabled until
 the form's own checks pass — no summary at the top (owner, 2026-09-28). An error from a request
 never disables the action by itself (owner, 2026-09-29: "Fields with errors should explain the problem";
 "if there is a form validation error leave it disabled; if the error comes from a request leave it
@@ -188,7 +189,7 @@ sign-in answers an unknown account, a suspended or pending one, one with no cred
 password or PIN and a wrong authenticator or recovery code with ONE code, the same params and the
 same status — `password.invalid` for a password login, `pin.invalid` for a PIN — each after the
 same hashing work, and a screen shows it as one sentence for every cause — "the login failed"
-beside the action on the dashboard and the setup wizard's Connect, "Wrong PIN" on the till, where
+as the form's bottom message on the dashboard and the setup wizard's Connect, "Wrong PIN" on the till, where
 the PIN is the only thing typed. A refused sign-in marks no field on any sign-in form, the setup
 wizard's Reset form included (`apps/setup/src/screens/reset-screen.ts`); there a field is marked
 only when its value is missing or malformed (owner, 2026-09-30, A153).

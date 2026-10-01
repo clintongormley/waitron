@@ -544,7 +544,7 @@ export class TillBillPayDialog extends LitElement {
     return errors;
   }
 
-  /** The one message beside the action: the generic one while a field is marked, then a refusal
+  /** The one message above the action: the generic one while a field is marked, then a refusal
    * that names no field, in its own words. */
   #bottomMessage(fieldErrors: ReadonlyMap<Field, string>, extra?: string): string {
     const parts: string[] = [];

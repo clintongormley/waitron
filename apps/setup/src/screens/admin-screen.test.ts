@@ -29,7 +29,7 @@ async function type(el: SetupAdminScreen, field: string, value: string): Promise
   await el.updateComplete;
 }
 
-/** The one message beside Next, as `wt-form-actions` shows it. */
+/** The one message above Next, as `wt-form-actions` shows it. */
 async function bottomOf(el: SetupAdminScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
@@ -123,7 +123,7 @@ describe("setup-admin-screen", () => {
     expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(false);
   });
 
-  it("blocks Next and announces the message beside it when a field is blank", async () => {
+  it("blocks Next and announces the message above it when a field is blank", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
     await type(el, "displayName", "Alba");
@@ -151,7 +151,7 @@ describe("setup-admin-screen", () => {
     expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(true);
   });
 
-  it("clears the message beside Next once the fields are filled and Next succeeds", async () => {
+  it("clears the message above Next once the fields are filled and Next succeeds", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
     q(el, "[data-test=next]")!.click();
@@ -321,7 +321,7 @@ it.each([
   ["first", "firstNames", "lastNames", "Enter your first name(s)."],
   ["last", "lastNames", "firstNames", "Enter your last name(s)."],
 ] as const)(
-  "does not advance without a %s name, and says so under it and beside Next",
+  "does not advance without a %s name, and says so under it and above Next",
   async (_which, blank, filled, message) => {
     const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(el);
@@ -460,7 +460,7 @@ describe("setup-admin-screen form messages", () => {
     expect(next(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("on a failed press marks each blank field, says so beside Next, focuses the first and disables Next", async () => {
+  it("on a failed press marks each blank field, says so above Next, focuses the first and disables Next", async () => {
     const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     await type(el, "firstNames", "Alba");
     await type(el, "displayName", "Alba");

@@ -1,7 +1,7 @@
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, customSquarePixels, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { SectionsScreen } from "./sections-screen.js";
 import type {
   CategorySummary,
@@ -248,11 +248,10 @@ function field(el: SectionsScreen, name: string) {
   return inModal<HTMLElementTagNameMap["wt-input"]>(el, "editor", `wt-input[name="${name}"]`)!;
 }
 
-/** The one message beside a form's primary action. */
+/** A form's one message about a failed submission. */
 async function bottom(el: SectionsScreen, testId: string): Promise<string> {
   const actions = inModal<HTMLElementTagNameMap["wt-form-actions"]>(el, testId, "wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function button(el: SectionsScreen, testId: string, button: string) {
@@ -1030,7 +1029,7 @@ it("adds a member and shows the list the server then holds", async () => {
   expect(client.listSectionMembers).toHaveBeenCalledWith("s-drinks");
 });
 
-it("shows a refused nesting beside the member list, not beside Save", async () => {
+it("shows a refused nesting beside the member list, not above Save", async () => {
   const client = api({
     addSectionMember: vi.fn().mockRejectedValue({
       code: "menu_section.member_cycle",
@@ -1597,11 +1596,18 @@ it("says an unused section is not used, and keeps the dialog open with the reaso
   );
   expect(inModal(el, "delete", '[data-test="delete-menus"]')).toBeNull();
   click(el, '[data-test="confirm-delete"]');
-  await vi.waitFor(() =>
-    expect(inModal(el, "delete", '[data-test="delete-error"]')!.textContent!.trim()).toBe(
-      codeMessage("menu_section.not_found"),
-    ),
+  await vi.waitFor(async () =>
+    expect(await bottom(el, "delete")).toBe(codeMessage("menu_section.not_found")),
   );
+  const actions = inModal<HTMLElementTagNameMap["wt-form-actions"]>(
+    el,
+    "delete",
+    "wt-form-actions",
+  )!;
+  const message = await formMessageOf(actions);
+  expect(modal(el, "delete").shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(modal(el, "delete").textContent).not.toContain(codeMessage("menu_section.not_found"));
   expect(modal(el, "delete").open).toBe(true);
   click(el, '[data-test="delete-cancel"]');
   await el.updateComplete;

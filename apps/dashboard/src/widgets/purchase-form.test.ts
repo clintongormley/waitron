@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
@@ -39,8 +40,7 @@ async function click(el: PurchaseForm, testId: string): Promise<void> {
 
 async function bottomOf(el: PurchaseForm): Promise<Element | null> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]");
+  return formMessageOf(actions);
 }
 
 const errorOf = (el: PurchaseForm, testId: string): string | null =>
@@ -792,7 +792,7 @@ describe("purchase-form — a server refusal", () => {
     expect(el.shadowRoot!.querySelector("[data-test=lines-error]")).toBeNull();
   });
 
-  it("says a refusal naming no field beside Create, leaves Create working, and drops it on the next submit", async () => {
+  it("says a refusal naming no field in the bottom message, leaves Create working, and drops it on the next submit", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     el.fieldErrors = { _form: codeMessage("purchase.duplicate") };

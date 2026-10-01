@@ -41,7 +41,7 @@ export class StripeAddReader extends LitElement {
   @state() private name = "";
   @state() private reference = "";
   @state() private attempted = false;
-  /** A refusal that names no field, shown beside Add until the next press. */
+  /** A refusal that names no field, shown above Add until the next press. */
   @state() private refusal = "";
   @state() private busy = false;
   #closed = false;

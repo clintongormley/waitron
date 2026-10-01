@@ -281,8 +281,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 
 - **New or changed forms use the shared UI contract in [design-system.md](docs/developers/design-system.md) → Forms.**
   Required fields visibly marked; an invalid submission explains itself beside every bad field and in
-  one localized message beside the action, which stays disabled until the fields are fixed — no
-  summary at the top (owner, 2026-09-28). A refusal from a request never disables the action by
+  one localized message at the bottom of the form, on its own line above the buttons (in a dialog, at
+  the end of its body — owner, 2026-09-30), and the action stays disabled until the fields are fixed —
+  no summary at the top (owner, 2026-09-28). A refusal from a request never disables the action by
   itself, and one that names a shown field says so under that field (owner, 2026-09-29) — except a
   sign-in's refusal, which marks no field (below). Every input has a semantic `name`, never a
   generated widget id.

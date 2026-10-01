@@ -50,7 +50,7 @@ export class OptionLabelForm extends LitElement {
     languages: ["en"],
   };
   /** Messages keyed by the input's `name` (`label-name`, `label-customer-name-<lang>`,
-   * `label-kitchen-name`); any other key names no input here and is shown beside Save alone. The
+   * `label-kitchen-name`); any other key names no input here and is shown above Save alone. The
    * list form builds a new object on every render, so only a change of contents counts. */
   @property({
     attribute: false,

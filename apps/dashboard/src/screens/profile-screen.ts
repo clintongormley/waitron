@@ -243,7 +243,7 @@ export class ProfileScreen extends LitElement {
   @state() private refused: Partial<Record<Field, string>> = {};
   /** A request refusal naming a shown field, until the operator changes that field. */
   @state() private requestRefused: Partial<Record<Field, string>> = {};
-  /** The message beside the action that names no field this form shows. */
+  /** The message above the action that names no field this form shows. */
   @state() private error = "";
   #fieldErrors: Partial<Record<Field, string>> = {};
   @state() private saved = false;
@@ -494,7 +494,7 @@ export class ProfileScreen extends LitElement {
     return errors;
   }
 
-  /** Each shown field's message, the one message beside the action, and whether the action waits
+  /** Each shown field's message, the one message above the action, and whether the action waits
    * for a field to be corrected. Only the form's own checks make it wait. */
   #formState(): { fields: Partial<Record<Field, string>>; bottom: string; blocked: boolean } {
     const own = { ...(this.attempted ? this.#validate() : {}), ...this.refused };

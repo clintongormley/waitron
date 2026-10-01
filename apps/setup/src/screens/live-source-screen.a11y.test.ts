@@ -5,7 +5,7 @@ import type { SetupLiveSourceScreen } from "./live-source-screen.js";
 
 afterEach(cleanupWidgets);
 
-/** The message beside the primary action, which `wt-form-actions` draws in its own shadow root. */
+/** The form's one message, which `wt-form-actions` draws in its own shadow root. */
 async function bottomOf(el: HTMLElement): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
     updateComplete: Promise<unknown>;
@@ -24,7 +24,7 @@ describe.each(["light", "dark"] as const)("setup-live-source-screen a11y (%s the
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the fields marked and the message beside Import", async () => {
+  it("has no violations with the fields marked and the message above Import", async () => {
     const { el, host } = await mountWidget<SetupLiveSourceScreen>(
       "setup-live-source-screen",
       {},
@@ -36,7 +36,7 @@ describe.each(["light", "dark"] as const)("setup-live-source-screen a11y (%s the
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a refused import shown beside Import", async () => {
+  it("has no violations with a refused import shown above Import", async () => {
     const { el, host } = await mountWidget<SetupLiveSourceScreen>(
       "setup-live-source-screen",
       { errorMessage: "The configuration export could not be opened." },

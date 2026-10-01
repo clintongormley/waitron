@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
 import type { DashboardApi, ServerListing } from "../api/client.js";
@@ -141,6 +142,10 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-remove]")!.click();
     await flush(el);
     await flush(el);
+    const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      "wt-dialog[data-test=remove-dialog] wt-form-actions",
+    )!;
+    expect(await formMessageOf(actions)).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -197,6 +202,10 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-clear]")!.click();
     await flush(el);
     await flush(el);
+    const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      "wt-dialog[data-test=clear-dialog] wt-form-actions",
+    )!;
+    expect(await formMessageOf(actions)).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

@@ -2,6 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type {
@@ -90,12 +91,11 @@ const editor = (el: RecipeScreen): RecipeEditor =>
 const errorKey = (el: RecipeScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
-/** The one message the form shows beside its action, or "" when it shows none. */
+/** The form's one message about a failed submission, or "" when it shows none. */
 async function bottomOf(form: IngredientForm): Promise<string> {
   await form.updateComplete;
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
@@ -230,7 +230,7 @@ describe("recipe-screen", () => {
     expect(api.createIngredient).not.toHaveBeenCalled();
   });
 
-  it("keeps the form open and says a create refusal beside Create, not on the page", async () => {
+  it("keeps the form open and says a create refusal in its bottom message, not on the page", async () => {
     const api = stubApi({
       createIngredient: vi.fn().mockRejectedValue({ code: "allergen.invalid_code" }),
     });
@@ -249,7 +249,7 @@ describe("recipe-screen", () => {
     expect(api.listIngredients).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the form open and says the fallback beside Save when an update fails without a code", async () => {
+  it("keeps the form open and says the fallback above Save when an update fails without a code", async () => {
     const api = stubApi({ updateIngredient: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
     await flush(el);

@@ -59,7 +59,7 @@ describe.each(["light", "dark"] as const)("till-enrol-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a refusal shown beside Ask to join", async () => {
+  it("has no violations with a refusal shown above Ask to join", async () => {
     const { el, host } = await mountWidget<TillEnrolScreen>(
       "till-enrol-screen",
       { api: stubApi({ join: vi.fn().mockRejectedValue({ code: "device.pairing_closed" }) }) },

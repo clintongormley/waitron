@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { IngredientForm, ingredientRefusalErrors } from "./ingredient-form.js";
@@ -52,8 +53,7 @@ function confirm(el: IngredientForm): void {
 
 async function bottomOf(el: IngredientForm): Promise<Element | null> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]");
+  return formMessageOf(actions);
 }
 
 const nameErrorOf = (el: IngredientForm): string | null =>
@@ -135,7 +135,7 @@ describe("ingredient-form", () => {
     expect("dietaryOrigin" in body).toBe(false);
   });
 
-  it("blocks confirm and shows the name's error under it and one message beside Create", async () => {
+  it("blocks confirm and shows the name's error under it and one message at the bottom of the form", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     let fired = false;
     el.addEventListener("create-ingredient", () => (fired = true));
@@ -455,7 +455,7 @@ describe("ingredient-form — a server refusal", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("says a refusal naming no field beside Create, leaves Create working, and drops it on the next submit", async () => {
+  it("says a refusal naming no field in the bottom message, leaves Create working, and drops it on the next submit", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Sal");
     el.fieldErrors = { _form: codeMessage("server.internal") };

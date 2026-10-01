@@ -109,11 +109,20 @@ function input(el: LoginScreen, name: string, value: string): void {
   );
 }
 
-/** The one message beside the current form's action; "" when there is none. */
-async function bottomOf(el: LoginScreen): Promise<string> {
+/** The current form's one message about a failed submission: shown by the form itself above a
+ * row of links and buttons, or else by its action row. */
+async function bottomMessageOf(el: LoginScreen): Promise<Element | null> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (
+    el.shadowRoot!.querySelector("[data-error]") ??
+    actions.shadowRoot!.querySelector("[data-error]")
+  );
+}
+
+/** The current form's one message about a failed submission; "" when there is none. */
+async function bottomOf(el: LoginScreen): Promise<string> {
+  return (await bottomMessageOf(el))?.textContent?.trim() ?? "";
 }
 
 async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
@@ -925,7 +934,7 @@ describe("login-screen", () => {
     });
   });
 
-  it("explains a missing or malformed email under the field and beside the action", async () => {
+  it("explains a missing or malformed email under the field and above the action", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     const field = el.shadowRoot!.querySelector("wt-input") as HTMLElement & { error: string };
     const go = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
@@ -1340,6 +1349,50 @@ describe("login-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
       "passkey.challenge_expired",
     );
+  });
+
+  it.each([1280, 390])(
+    "puts a refused passkey sign-in's message on its own line at the form's left edge, above the links and the button (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const api = stubApi({
+          passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+        });
+        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+        await continueWithEmail(el);
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+        await flush(el);
+        const message = (await bottomMessageOf(el))!;
+        expect(message.textContent!.trim()).not.toBe("");
+        const row = el.shadowRoot!.querySelector(".links-and-actions")!.getBoundingClientRect();
+        const button = el
+          .shadowRoot!.querySelector("[data-test=passkey-login]")!
+          .getBoundingClientRect();
+        const box = message.getBoundingClientRect();
+        expect(box.bottom).toBeLessThanOrEqual(row.top);
+        expect(box.bottom).toBeLessThanOrEqual(button.top);
+        expect(box.left).toBeCloseTo(row.left, 0);
+        expect(box.right).toBeCloseTo(row.right, 0);
+        expect(getComputedStyle(message).textAlign).toBe("start");
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  it("leaves the spacing token between the hint and a refused passkey sign-in's message", async () => {
+    const api = stubApi({
+      passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await continueWithEmail(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+    await flush(el);
+    el.style.setProperty("--wt-space-4", "23px");
+    const hint = el.shadowRoot!.querySelector(".alternative-hint")!.getBoundingClientRect();
+    const message = (await bottomMessageOf(el))!.getBoundingClientRect();
+    expect(message.top - hint.bottom).toBeCloseTo(23, 0);
   });
 
   it("falls back to passkey.verification_failed when a rejected passkey step carries no code", async () => {
@@ -1875,7 +1928,7 @@ describe("login-screen: emailed account links", () => {
       codeMessage("password.too_short"),
       t("form.fix_fields"),
     ],
-    ["only beside the action", "account_action.invalid", "", codeMessage("account_action.invalid")],
+    ["only at the bottom", "account_action.invalid", "", codeMessage("account_action.invalid")],
   ])("shows a refused completion %s", async (_where, code, fieldError, bottom) => {
     const { el } = await mountValidatedInvitation({
       completeAccountAction: vi.fn().mockRejectedValue({ code }),
@@ -1917,7 +1970,7 @@ describe("login-screen: password and second factor", () => {
     expect(events).toHaveLength(0);
   });
 
-  it("says a refused authenticator code failed the login beside the action and keeps the code step", async () => {
+  it("says a refused authenticator code failed the login above the action and keeps the code step", async () => {
     const login = vi
       .fn()
       .mockRejectedValueOnce({ code: "totp.required" })
@@ -2496,7 +2549,7 @@ describe("login-screen: passkey autofill on the email step", () => {
   });
 });
 
-describe("login-screen: errors beside the action, not above the form", () => {
+describe("login-screen: errors at the bottom of the form, not above it", () => {
   type Form = {
     name: string;
     open: () => Promise<LoginScreen>;
@@ -2854,7 +2907,7 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
   const actionOf = (el: LoginScreen, test: string) =>
     el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`)!;
 
-  it("on the password step, says the login failed beside the action and marks no field", async () => {
+  it("on the password step, says the login failed above the action and marks no field", async () => {
     const { el } = await signInWithPassword({
       login: vi.fn().mockRejectedValue({ code: "password.invalid" }),
     });
@@ -2870,7 +2923,7 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
     );
   });
 
-  it("on the code step, says the login failed beside the action, marks no field, and empties the code with the cursor in it", async () => {
+  it("on the code step, says the login failed above the action, marks no field, and empties the code with the cursor in it", async () => {
     const login = vi
       .fn()
       .mockRejectedValueOnce({ code: "totp.required" })

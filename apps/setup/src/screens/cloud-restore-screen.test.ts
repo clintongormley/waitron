@@ -27,7 +27,7 @@ const tick = async (el: SetupCloudRestoreScreen, selector: string, checked = tru
   box.dispatchEvent(new Event("change"));
   await el.updateComplete;
 };
-/** The message element `wt-form-actions` shows beside Restore, or null when there is none. */
+/** The message element `wt-form-actions` shows above Restore, or null when there is none. */
 async function bottomElement(el: SetupCloudRestoreScreen): Promise<HTMLElement | null> {
   const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
   await actions.updateComplete;
@@ -340,7 +340,7 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
 });
 
 describe("Cloud restore screen listing what is still unanswered", () => {
-  it("marks the acknowledgement beside the field and in one message beside Restore", async () => {
+  it("marks the acknowledgement beside the field and in one message above Restore", async () => {
     const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
       view: approvedView(),
     });
@@ -410,7 +410,7 @@ describe("Cloud restore screen listing what is still unanswered", () => {
     expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("shows the server's refusal beside Restore, leaves Restore working, and drops it on the next press", async () => {
+  it("shows the server's refusal above Restore, leaves Restore working, and drops it on the next press", async () => {
     const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
       view: approvedView(),
       errorMessage: "Cloud recovery is unavailable. Try again.",

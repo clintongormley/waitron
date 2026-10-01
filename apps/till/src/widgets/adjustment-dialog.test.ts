@@ -78,7 +78,7 @@ const field = (el: TillAdjustmentDialog, name: string) =>
 const fieldsetError = (el: TillAdjustmentDialog, which: string) =>
   root(el).querySelector(`[data-error-for="${which}"]`)?.textContent?.trim() ?? "";
 
-/** Every message the form shows: under each field, and beside the action. */
+/** Every message the form shows: under each field, and above the action. */
 const shownMessages = (el: TillAdjustmentDialog) => [
   ...[...root(el).querySelectorAll<HTMLElement & { error: string }>("wt-input")].map(
     (input) => input.error,
@@ -177,7 +177,7 @@ describe("till-adjustment-dialog: the form", () => {
     );
   });
 
-  it("tells staff, beside the action, to discount the whole of a weighed line rather than part", async () => {
+  it("tells staff, above the action, to discount the whole of a weighed line rather than part", async () => {
     const ham: AdjustTarget = {
       lineId: "line-4",
       name: "Ham",
@@ -192,7 +192,7 @@ describe("till-adjustment-dialog: the form", () => {
       const el = await mount({ kind, target: ham });
       expect(hint(el), kind).toBe(codeMessage("adjustment.weighed_partial"));
       expect(root(el).querySelector("[data-quantity]"), kind).toBeNull();
-      // Beside the action: the last thing before the row holding it.
+      // Above the action: the last thing before the row holding it.
       expect(root(el).querySelector("[data-weighed-hint]")!.nextElementSibling!.tagName).toBe(
         "WT-FORM-ACTIONS",
       );
@@ -242,7 +242,7 @@ describe("till-adjustment-dialog: the form", () => {
     );
   });
 
-  it("marks the reason and the value required, and explains an empty submission beside each field and beside the action", async () => {
+  it("marks the reason and the value required, and explains an empty submission beside each field and above the action", async () => {
     const el = await mount({ kind: "discount" });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     expect(root(el).querySelector("[data-reason-required]")).not.toBeNull();
@@ -614,7 +614,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(actions(el).error).toBe("");
   });
 
-  it("puts a refusal that names no shown field beside the action, and the action stays enabled", async () => {
+  it("puts a refusal that names no shown field above the action, and the action stays enabled", async () => {
     const el = await mount({ kind: "comp", refusal: "bill.line_paid" });
     expect(actions(el).error).toBe(codeMessage("bill.line_paid"));
     expect(continueButton(el).disabled).toBe(false);
@@ -641,7 +641,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(shownMessages(el).join(" ")).toContain(codeMessage(code));
   });
 
-  it("shows a refusal on the confirm step beside the action", async () => {
+  it("shows a refusal on the confirm step above the action", async () => {
     const el = await mount({ kind: "comp" });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await chooseReason(el, "Complaint");

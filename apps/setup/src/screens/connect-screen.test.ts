@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -24,7 +24,7 @@ async function type(el: SetupConnectScreen, field: string, value: string): Promi
   await el.updateComplete;
 }
 
-/** The one message beside Connect, as `wt-form-actions` shows it. */
+/** The form's one message about a failed Connect, as `wt-form-actions` shows it. */
 async function bottomOf(el: SetupConnectScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
@@ -160,7 +160,7 @@ describe("setup-connect-screen", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("shows a routed-back server error beside Connect as one alert, leaving Connect working", async () => {
+  it("shows a routed-back server error above Connect as one alert, leaving Connect working", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       errorMessage: "Couldn't reach the primary server.",
     });
@@ -171,6 +171,34 @@ describe("setup-connect-screen", () => {
     expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
     expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(false);
   });
+
+  it.each([1280, 390])(
+    "puts a routed-back server error on its own line at the form's left edge, between the last field and the buttons (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+          errorMessage: "Couldn't reach the primary server.",
+        });
+        const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+        await actions.updateComplete;
+        const message = actions.shadowRoot!.querySelector("[data-error]")!;
+        const lastField = q(el, "[data-test=totp]")!.getBoundingClientRect();
+        const box = message.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(lastField.bottom);
+        for (const button of ["back", "connect"]) {
+          expect(box.bottom).toBeLessThanOrEqual(
+            q(el, `[data-test=${button}]`)!.getBoundingClientRect().top,
+          );
+        }
+        expect(box.left).toBeCloseTo(lastField.left, 0);
+        expect(box.right).toBeCloseTo(lastField.right, 0);
+        expect(getComputedStyle(message).textAlign).toBe("start");
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("shows a request refusal of one field under that field and focuses it, leaving Connect working", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {

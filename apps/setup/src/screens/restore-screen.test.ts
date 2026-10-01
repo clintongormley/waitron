@@ -32,7 +32,7 @@ async function fill(
   await el.updateComplete;
 }
 
-/** The one message `wt-form-actions` shows beside Restore; "" when there is none. */
+/** The one message `wt-form-actions` shows above Restore; "" when there is none. */
 async function bottomOf(el: SetupRestoreScreen): Promise<string> {
   const actions = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "wt-form-actions")!;
   await actions.updateComplete;
@@ -243,7 +243,7 @@ describe("SetupRestoreScreen", () => {
     ]);
   });
 
-  describe("messages beside Restore (owner's forms rule, 2026-09-28)", () => {
+  describe("messages above Restore (design-system.md, Forms)", () => {
     it("says nothing and leaves Restore working before the first press", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       expect(await bottomOf(el)).toBe("");
@@ -252,7 +252,7 @@ describe("SetupRestoreScreen", () => {
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
     });
 
-    it("marks each missing decision, says one sentence beside Restore, focuses the first, and holds Restore", async () => {
+    it("marks each missing decision, says one sentence above Restore, focuses the first, and holds Restore", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
@@ -293,7 +293,7 @@ describe("SetupRestoreScreen", () => {
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
     });
 
-    it("shows the server's refusal beside Restore, leaves Restore working, and drops it on the next press", async () => {
+    it("shows the server's refusal above Restore, leaves Restore working, and drops it on the next press", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         errorMessage: "The backup could not be staged. Check the connection and try again.",
       });

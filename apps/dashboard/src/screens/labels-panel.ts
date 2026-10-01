@@ -212,9 +212,11 @@ export class LabelsPanel extends LitElement {
   override render() {
     const deleting = this.deleting;
     const nameError = this.#nameError();
-    const bottom = [this.saveError, nameError ? t("form.fix_fields") : ""]
-      .filter(Boolean)
-      .join(" ");
+    // `saveError` is shared by both dialogs, so each shows it only while open: a message a shut
+    // dialog's footer row holds is the one the dialog scrolls to as it opens.
+    const bottom = this.editing
+      ? [this.saveError, nameError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")
+      : "";
     return html`<div class="tab-actions">
         <wt-button data-test="add-label" variant="primary" @click=${() => this.#edit(null)}
           >${t("labels.add")}</wt-button
@@ -304,8 +306,7 @@ export class LabelsPanel extends LitElement {
         }}
       >
         ${deleting ? html`<p data-test="delete-count">${this.#deleteCount(deleting)}</p>` : nothing}
-        ${this.saveError ? html`<p class="error" role="alert">${this.saveError}</p>` : nothing}
-        <wt-form-actions slot="footer"
+        <wt-form-actions slot="footer" .error=${deleting ? this.saveError : ""}
           ><wt-button
             slot="cancel"
             variant="secondary"

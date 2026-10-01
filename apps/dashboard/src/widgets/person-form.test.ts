@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
@@ -25,8 +26,7 @@ const displayName = (el: PersonForm): string =>
 
 async function bottomOf(el: PersonForm): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const confirmOf = (el: PersonForm): HTMLElement =>
@@ -199,7 +199,7 @@ describe("person-form", () => {
     expect(event.detail.telephone).toBe("+44 20 7946 0958");
   });
 
-  it("explains every missing required field under it, with one message beside a disabled Create", async () => {
+  it("explains every missing required field under it, with one message at the bottom of the form and Create disabled", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await el.updateComplete;

@@ -66,7 +66,7 @@ describe("till-seat-dialog", () => {
   });
 
   it.each(["0", "2.5", "-1", "tres", "1000", "3e1"])(
-    "refuses %s beside the field and once beside Seat, with no summary, keeping what was typed",
+    "refuses %s beside the field and once above Seat, with no summary, keeping what was typed",
     async (value) => {
       const el = await mountDialog();
       const seen = captureConfirm(el);

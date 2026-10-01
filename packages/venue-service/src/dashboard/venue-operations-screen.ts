@@ -1080,7 +1080,7 @@ export class VenueOperationsScreen extends LitElement {
     }
   }
   /** A load failure, and with no editor open, a refusal of something saved at once. An open editor
-   * says its own refusals beside its buttons. */
+   * says its own refusals at the end of its body. */
   #pageAlert() {
     const messages = [
       ...(this.loadError ? [this.loadError] : []),

@@ -21,6 +21,7 @@ import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
@@ -285,9 +286,12 @@ describe("catalogue-screen", () => {
     await flush(el);
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
     expect(dialog.getAttribute("open")).not.toBeNull();
-    expect(dialog.querySelector("[role=alert]")?.textContent).toContain(
-      codeMessage("server.internal"),
-    );
+    const actions = dialog.querySelector("wt-form-actions")!;
+    const message = await formMessageOf(actions);
+    expect(message?.textContent).toBe(codeMessage("server.internal"));
+    expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(dialog.textContent).not.toContain(codeMessage("server.internal"));
   });
 
   it("creates the complete aggregate once, closes, then refreshes the list", async () => {
@@ -562,11 +566,10 @@ describe("catalogue-screen", () => {
     await flush(el);
     await form.updateComplete;
   }
-  /** The one message a form shows beside its primary action, or "" when it shows none. */
+  /** A form's one message about a failed submission, or "" when it shows none. */
   async function bottomOf(form: Element): Promise<string> {
     const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-    await actions.updateComplete;
-    return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+    return (await formMessageOf(actions))?.textContent?.trim() ?? "";
   }
   const errorBeside = (form: Element, selector: string): string =>
     form.shadowRoot!.querySelector<HTMLElement & { error: string }>(selector)!.error;
@@ -708,7 +711,7 @@ describe("catalogue-screen", () => {
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
 
-  it("still says a nested unit or category refusal that names no field of the form, beside its Save", async () => {
+  it("still says a nested unit or category refusal that names no field of the form, in its bottom message", async () => {
     const api = stubApi({
       createUnit: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
       createCategory: vi

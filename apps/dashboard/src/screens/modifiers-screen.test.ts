@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type {
   CatalogueSummary,
@@ -220,12 +220,11 @@ function confirmDelete(el: ModifiersScreen) {
   )!;
 }
 
-/** The message a list form shows beside its Save. */
+/** The message a list form shows about a failed Save. */
 async function bottomOf(form: OptionListForm | ExtraListForm) {
   await form.updateComplete;
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 // ---------------------------------------------------------------------------
@@ -1214,7 +1213,14 @@ it("keeps a refused delete in the dialog with its reason, then closes and reload
   await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
   expect(client.deleteExtraList).not.toHaveBeenCalled();
   confirmDelete(el).click();
-  await vi.waitFor(() => expect(dialog.textContent).toContain(codeMessage("extras.not_found")));
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions))?.textContent).toBe(codeMessage("extras.not_found")),
+  );
+  const message = await formMessageOf(actions);
+  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(dialog.textContent).not.toContain(codeMessage("extras.not_found"));
   expect(dialog.open).toBe(true);
   confirmDelete(el).click();
   await vi.waitFor(() => expect(dialog.open).toBe(false));

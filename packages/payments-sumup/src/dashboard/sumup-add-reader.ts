@@ -48,7 +48,7 @@ export class SumUpAddReader extends LitElement {
   @state() private name = "";
   @state() private code = "";
   @state() private attempted = false;
-  /** A refusal of the pair request, which names no field; shown beside Pair until the next press. */
+  /** A refusal of the pair request, which names no field; shown above Pair until the next press. */
   @state() private refusal = "";
   @state() private phase: Phase = "form";
   @state() private remaining = PAIRING_LIFETIME_MS / 1000;

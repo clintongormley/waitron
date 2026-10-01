@@ -4070,7 +4070,7 @@ export class TillApp extends LitElement {
   }
 
   /** A refusal goes where it can be acted on: a PIN's in the PIN prompt, one naming a field under
-   * that field, back on the form, and any other beside the dialog's action. */
+   * that field, back on the form, and any other above the dialog's action. */
   async #onAdjustRefused(
     error: unknown,
     stage: "preview" | "approvers" | "apply" | "approved",
@@ -4724,7 +4724,7 @@ export class TillApp extends LitElement {
     const { excess } = (event as CustomEvent<{ excess: string }>).detail;
     const open = await this.#openBillPaying("contribution", this.#payLinesOnScreen());
     const now = open === null ? null : this.#billPayingNow(open.id);
-    // Only on payments just read: a failed read says so beside the dialog's action instead.
+    // Only on payments just read: a failed read says so above the dialog's action instead.
     if (now?.balance == null || now.refusal !== null || this.billRefunding !== null) return;
     const balance = now.balance;
     const offered = balance.payments.filter((payment) => refundOffered(payment, balance.status));
@@ -4809,7 +4809,7 @@ export class TillApp extends LitElement {
   }
 
   /** The bill's balance read again into the dialog `id` and the screen, and returned. A failed read
-   * says so beside the dialog's action unless it already shows a refusal. */
+   * says so above the dialog's action unless it already shows a refusal. */
   async #rereadBillPaying(id: number, billId: string): Promise<BillBalance | undefined> {
     try {
       const balance = await this.api.getBillBalance(billId);
@@ -4927,7 +4927,7 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * A refusal shows beside the dialog's action, or under the field it names, and the bill is read
+   * A refusal shows above the dialog's action, or under the field it names, and the bill is read
    * again, unless it was a preview refused for a field typed into the dialog.
    * `bill.allocation_changed` reopens the confirmation with the amounts the server now gives, and
    * sends nothing; a payment that got no answer stays on its confirmation, to be taken again under
@@ -5138,7 +5138,7 @@ export class TillApp extends LitElement {
 
   /**
    * A refusal of the approver's PIN shows in the PIN prompt; one naming a field goes under it, and
-   * any other beside the refund's action. The bill is read again after every refusal. A refusal
+   * any other above the refund's action. The bill is read again after every refusal. A refusal
    * after the operator has logged out changes nothing.
    */
   async #onRefundRefused(open: BillRefunding, error: unknown): Promise<void> {

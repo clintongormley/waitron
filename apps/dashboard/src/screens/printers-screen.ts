@@ -67,7 +67,7 @@ interface PrinterDraft {
   characterTable: number;
 }
 
-/** A dialog's one message beside its action: each non-empty part, in order. */
+/** A form's one message about a failed submission: each non-empty part, in order. */
 const bottomMessage = (...parts: (string | null)[]): string =>
   parts.filter((part): part is string => part !== null && part !== "").join(" ");
 
@@ -337,6 +337,9 @@ export class PrintersScreen extends LitElement {
         width: auto;
         margin-inline-start: auto;
       }
+      .field-row > wt-form-actions.with-message {
+        flex-basis: 100%;
+      }
       fieldset {
         margin: 0;
         padding: var(--wt-space-3);
@@ -576,7 +579,7 @@ export class PrintersScreen extends LitElement {
   @state() private probeAttempted = false;
   /** Address fields the server refused, each shown until the owner changes it. */
   @state() private probeRefused: Partial<Record<"host" | "port", string>> = {};
-  /** A refused address check that names no field, shown beside Check address. */
+  /** A refused address check that names no field, shown above Check address. */
   @state() private probeErrorKey: string | null = null;
   @state() private probeStatus:
     "idle" | "pending" | "found" | "missing" | "registered" | "page_printer" = "idle";
@@ -3036,6 +3039,10 @@ export class PrintersScreen extends LitElement {
     const probeChecked = this.probeAttempted ? this.#probeValidate() : {};
     const probeErrors = { ...this.probeRefused, ...probeChecked };
     const probeInvalid = Object.keys(probeChecked).length > 0;
+    const probeMessage = bottomMessage(
+      refusal(this.probeErrorKey),
+      Object.keys(probeErrors).length > 0 ? t("form.fix_fields") : null,
+    );
     return html`<wt-modal
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
@@ -3103,7 +3110,8 @@ export class PrintersScreen extends LitElement {
           ></wt-input>
           <wt-form-actions
             data-test="probe-actions"
-            .error=${bottomMessage(refusal(this.probeErrorKey), Object.keys(probeErrors).length > 0 ? t("form.fix_fields") : null)}
+            class=${probeMessage ? "with-message" : ""}
+            .error=${probeMessage}
           >
             <wt-button
               variant="primary"
@@ -3175,7 +3183,7 @@ export class PrintersScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    // Each of these dialogs shows the refusal beside its own action, and the failed read itself.
+    // Each of these dialogs shows the refusal and the failed read itself.
     const dialogOpen =
       this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter;
     return html`${

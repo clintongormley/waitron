@@ -199,7 +199,7 @@ export class OptionListForm extends LitElement {
 
   /** A path naming the list as a whole, an option's id or an option's availability (`wt-switch`
    * draws no error text) is shown under the options table with the rest of the list-level
-   * refusals. `_form` names no field, and is shown beside Save alone. */
+   * refusals. `_form` names no field, and is shown above Save alone. */
   #formKey(field: string): string {
     if (field === "_form") return field;
     const label = /^labels\.(\d+)(?:\.(.+))?$/.exec(field);

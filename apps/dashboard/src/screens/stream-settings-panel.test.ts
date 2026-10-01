@@ -160,7 +160,7 @@ describe("stream-settings-panel: the bucket form", () => {
     ]);
   });
 
-  it("explains every missing field beside it and once beside Save, focuses the first, and sends nothing", async () => {
+  it("explains every missing field beside it and once above Save, focuses the first, and sends nothing", async () => {
     const api = stubApi();
     const { el } = await mount(api);
     await press(el, "save");

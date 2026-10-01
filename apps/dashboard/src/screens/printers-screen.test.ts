@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
@@ -330,10 +330,14 @@ function typeField(el: PrintersScreen, sel: string, value: string): void {
 }
 
 async function bottomOf(el: PrintersScreen, actions: string): Promise<string> {
-  const row = q(el, actions) as HTMLElement & { updateComplete: Promise<unknown> };
-  await row.updateComplete;
-  return row.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const row = q(el, actions) as HTMLElementTagNameMap["wt-form-actions"];
+  return (await formMessageOf(row))?.textContent?.trim() ?? "";
 }
+/** The address check's one message, on its own line between its fields and Check address. */
+const probeMessage = (el: PrintersScreen): string =>
+  q(el, "[data-test=probe-actions]")!
+    .shadowRoot!.querySelector("[data-error]")
+    ?.textContent?.trim() ?? "";
 /** A dialog's own action row, in its footer; the address check keeps a second row in the body. */
 const footerOf = (modal: string): string => `[data-test=${modal}] > wt-form-actions[slot=footer]`;
 /** A refusal paragraph at the top of a dialog. */
@@ -1600,7 +1604,7 @@ describe("printers-screen", () => {
     expect((q(el, "[data-test=probe-port]") as unknown as { error: string }).error).toBe(
       t("printers.port_invalid"),
     );
-    expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
+    expect(probeMessage(el)).toBe(t("form.fix_fields"));
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
   });
 
@@ -1673,7 +1677,7 @@ describe("printers-screen", () => {
     expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe(
       t("printers.probe_host_invalid"),
     );
-    expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
+    expect(probeMessage(el)).toBe(t("form.fix_fields"));
     let reject!: (error: unknown) => void;
     probe.mockImplementationOnce(
       () =>
@@ -4452,7 +4456,7 @@ describe("printers-screen discovery and add edges", () => {
       ),
     );
     expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe("");
-    expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
+    expect(probeMessage(el)).toBe(t("form.fix_fields"));
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
     expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
     expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
@@ -4930,7 +4934,7 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
   });
 });
 
-describe("printers-screen forms say what is wrong beside the field and the action", () => {
+describe("printers-screen forms say what is wrong beside the field and in the bottom message", () => {
   async function mounted(overrides: Partial<DashboardApi> = {}) {
     const api = stubApi(overrides);
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -5132,7 +5136,7 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     typeField(el, "[data-test=probe-port]", "70000");
     await flush(el);
     expect(errorOf(el, "[data-test=probe-port]")).toBe("");
-    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(probeMessage(el)).toBe("");
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
   });
 
@@ -5152,7 +5156,7 @@ describe("printers-screen forms say what is wrong beside the field and the actio
 
     typeField(el, "[data-test=probe-port]", "9100");
     await flush(el);
-    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(probeMessage(el)).toBe("");
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
 
     typeField(el, "[data-test=probe-host]", " ");
@@ -5183,7 +5187,7 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     typeField(el, "[data-test=probe-host]", "10.0.0.50");
     await flush(el);
     expect(errorOf(el, "[data-test=probe-host]")).toBe("");
-    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(probeMessage(el)).toBe("");
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
   });
 
@@ -5195,7 +5199,7 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
     expect(errorOf(el, "[data-test=probe-host]")).toBe("");
-    expect(await bottomOf(el, probeActions)).toBe(codeMessage("printer.probe_busy"));
+    expect(probeMessage(el)).toBe(codeMessage("printer.probe_busy"));
     expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
     expect(topAlertOf(el, "new-printer-modal")).toBeNull();
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
@@ -5204,29 +5208,39 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     expect(probe).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the address check's refusal and button at the right when they wrap under the fields", async () => {
-    const before = currentLocale();
-    setLocale("es-ES");
-    await page.viewport(1280, 900);
-    try {
-      const { el } = await mounted({
-        probePrinterAddress: vi.fn().mockRejectedValue({ code: "printer.probe_busy" }),
-      });
-      await openDiscovery(el);
-      (q(el, "[data-test=probe-panel]") as HTMLDetailsElement).open = true;
-      typeField(el, "[data-test=probe-host]", "10.0.0.50");
-      q(el, "[data-test=probe-printer]")!.click();
-      await flush(el);
-      expect(await bottomOf(el, probeActions)).toBe(codeMessage("printer.probe_busy"));
-      const host = q(el, "[data-test=probe-host]")!.getBoundingClientRect();
-      const actions = q(el, probeActions)!.getBoundingClientRect();
-      const row = q(el, probeActions)!.parentElement!.getBoundingClientRect();
-      expect(actions.top).toBeGreaterThanOrEqual(host.bottom);
-      expect(actions.right).toBeCloseTo(row.right, 0);
-    } finally {
-      setLocale(before);
-    }
-  });
+  it.each([1280, 390])(
+    "puts the address check's refusal on its own line at the panel's left edge, between the fields and Check address (%ipx)",
+    async (width) => {
+      const before = currentLocale();
+      setLocale("es-ES");
+      await page.viewport(width, 900);
+      try {
+        const { el } = await mounted({
+          probePrinterAddress: vi.fn().mockRejectedValue({ code: "printer.probe_busy" }),
+        });
+        await openDiscovery(el);
+        (q(el, "[data-test=probe-panel]") as HTMLDetailsElement).open = true;
+        typeField(el, "[data-test=probe-host]", "10.0.0.50");
+        q(el, "[data-test=probe-printer]")!.click();
+        await flush(el);
+        expect(probeMessage(el)).toBe(codeMessage("printer.probe_busy"));
+        const message = q(el, probeActions)!.shadowRoot!.querySelector("[data-error]")!;
+        const row = q(el, probeActions)!.parentElement!.getBoundingClientRect();
+        const port = q(el, "[data-test=probe-port]")!.getBoundingClientRect();
+        const button = q(el, "[data-test=probe-printer]")!.getBoundingClientRect();
+        const box = message.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(port.bottom);
+        expect(box.bottom).toBeLessThanOrEqual(button.top);
+        expect(box.left).toBeCloseTo(row.left, 0);
+        expect(box.right).toBeCloseTo(row.right, 0);
+        expect(getComputedStyle(message).textAlign).toBe("start");
+        expect(button.right).toBeCloseTo(row.right, 0);
+      } finally {
+        setLocale(before);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("starts the address check again when Add printer is reopened", async () => {
     const { el } = await mounted();
@@ -5239,7 +5253,7 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     typeField(el, "[data-test=probe-host]", " ");
     await flush(el);
     expect(errorOf(el, "[data-test=probe-host]")).toBe("");
-    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(probeMessage(el)).toBe("");
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
   });
 });
@@ -5352,7 +5366,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel("show-all-bluetooth"))).toBeNull();
   });
 
-  it("asks for the PIN, checks it beside the field and the action, then pairs through the named agent", async () => {
+  it("asks for the PIN, checks it beside the field and in the bottom message, then pairs through the named agent", async () => {
     const { el, api } = await mountPairing([barPrinter]);
     await openDiscovery(el);
     await openPair(el);
@@ -5399,7 +5413,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
-  it("shows a refusal naming the PIN under the field and one naming no field beside the action, never disabling Pair", async () => {
+  it("shows a refusal naming the PIN under the field and one naming no field above the action, never disabling Pair", async () => {
     const pair = vi
       .fn()
       .mockRejectedValueOnce({ code: "management.request_invalid", params: { field: "pin" } })

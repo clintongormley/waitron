@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { LabelsPanel } from "./labels-panel.js";
 import type { DashboardApi, LabelSummary } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -73,8 +73,7 @@ function saveButton(el: LabelsPanel): HTMLElement {
 }
 async function bottomOf(el: LabelsPanel): Promise<string> {
   const actions = modal(el, "label-form").querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 async function openAdd(el: LabelsPanel): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-label"]')!.click();
@@ -131,7 +130,7 @@ it("creates a label from the Add label form, then refreshes the list", async () 
   await vi.waitFor(() => expect(api.listLabels.mock.calls.length).toBe(loads + 1));
 });
 
-it("explains a blank name beside the field and beside a disabled Save, and sends nothing", async () => {
+it("explains a blank name beside the field and in the bottom message, disables Save, and sends nothing", async () => {
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-label"]')!.click();
   await el.updateComplete;
@@ -183,7 +182,7 @@ it("drops a refusal beside the name when the form is submitted again", async () 
   creating.resolve({ id: "l-new", name: "Alcoholic" });
 });
 
-it("says why a rename of a label that no longer exists was refused, beside a Save that still works", async () => {
+it("says why a rename of a label that no longer exists was refused, in the bottom message, leaving Save working", async () => {
   const { el, api } = await mount();
   api.renameLabel.mockRejectedValueOnce({ code: "label.not_found" });
   await rowAction(el, "l-alc", "rename-label");
@@ -283,15 +282,74 @@ it("explains a refused delete and keeps the confirmation open", async () => {
   await rowAction(el, "l-alc", "delete-label");
   const dialog = modal(el, "label-delete");
   dialog.querySelector<HTMLElement>('wt-button[variant="danger"]')!.click();
-  await vi.waitFor(() =>
-    expect(dialog.querySelector('p[role="alert"]')?.textContent).toBe(
-      codeMessage("label.not_found"),
-    ),
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions))?.textContent).toBe(codeMessage("label.not_found")),
   );
+  const message = await formMessageOf(actions);
+  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(dialog.textContent).not.toContain(codeMessage("label.not_found"));
   expect(dialog.open).toBe(true);
   dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
   await el.updateComplete;
   expect(dialog.open).toBe(false);
+});
+
+/** The text of every element a dialog scrolls into view while `act` runs and settles. */
+async function scrolledTo(el: LabelsPanel, act: () => Promise<void>): Promise<string[]> {
+  const seen: string[] = [];
+  const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (
+    this: Element,
+  ) {
+    seen.push(this.textContent?.trim() ?? "");
+  });
+  try {
+    await act();
+    await el.updateComplete;
+    await modal(el, "label-delete").updateComplete;
+    await modal(el, "label-form").updateComplete;
+  } finally {
+    spy.mockRestore();
+  }
+  return seen;
+}
+
+it("keeps a refused rename out of the delete dialog, shut or opened", async () => {
+  const { el, api } = await mount();
+  api.renameLabel.mockRejectedValueOnce({ code: "label.not_found" });
+  await rowAction(el, "l-alc", "rename-label");
+  save(el);
+  await vi.waitFor(async () => expect(await bottomOf(el)).toBe(codeMessage("label.not_found")));
+  const deleteActions = modal(el, "label-delete").querySelector("wt-form-actions")!;
+  expect(await formMessageOf(deleteActions)).toBeNull();
+
+  modal(el, "label-form").querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await el.updateComplete;
+  const seen = await scrolledTo(el, () => rowAction(el, "l-happy", "delete-label"));
+  expect(modal(el, "label-delete").open).toBe(true);
+  expect(seen).not.toContain(codeMessage("label.not_found"));
+  expect(await formMessageOf(deleteActions)).toBeNull();
+});
+
+it("keeps a refused delete out of the label form, shut or opened", async () => {
+  const { el, api } = await mount();
+  api.deleteLabel.mockRejectedValueOnce({ code: "label.not_found" });
+  await rowAction(el, "l-alc", "delete-label");
+  const dialog = modal(el, "label-delete");
+  dialog.querySelector<HTMLElement>('wt-button[variant="danger"]')!.click();
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions))?.textContent).toBe(codeMessage("label.not_found")),
+  );
+  expect(await bottomOf(el)).toBe("");
+
+  dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await el.updateComplete;
+  const seen = await scrolledTo(el, () => rowAction(el, "l-happy", "rename-label"));
+  expect(modal(el, "label-form").open).toBe(true);
+  expect(seen).not.toContain(codeMessage("label.not_found"));
+  expect(await bottomOf(el)).toBe("");
 });
 
 it("deletes once and stays open against a close while deleting", async () => {

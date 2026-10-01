@@ -10,6 +10,7 @@ import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -226,8 +227,7 @@ async function click(el: MenuPricesTable, testId: string): Promise<void> {
 
 async function bottomOf(el: MenuPricesTable): Promise<string> {
   const actions = modal(el).querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return text(actions.shadowRoot!.querySelector("[data-error]"));
+  return text(await formMessageOf(actions));
 }
 
 const saveOf = (el: MenuPricesTable): HTMLElement =>
@@ -729,7 +729,7 @@ it("refuses a variant's malformed price beside that variant's field", async () =
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 
-it("shows a refusal naming the menu price beside it, with the generic sentence beside a working Save", async () => {
+it("shows a refusal naming the menu price beside it, with the generic sentence in the bottom message and Save working", async () => {
   const el = await mount({ editing: "mi-lemonade" });
   el.refusal = { field: "grossPrice", message: "Refused here" };
   await el.updateComplete;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { VenueServiceApi } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
@@ -232,7 +232,7 @@ describe.each(["light", "dark"] as const)(
 );
 
 describe.each(["light", "dark"] as const)("department editor accessibility (%s)", (theme) => {
-  test("after a failed press: the marked fields and the message beside Save", async () => {
+  test("after a failed press: the marked fields and the message above Save", async () => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
@@ -265,8 +265,7 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-    await actions.updateComplete;
-    expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    expect(await formMessageOf(actions)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-field-error="department-name"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });

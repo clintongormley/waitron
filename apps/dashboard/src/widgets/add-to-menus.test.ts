@@ -3,6 +3,7 @@ import type { CatalogueSummary, LibrarySection, MenuStructure } from "../api/cli
 import { t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 
@@ -84,8 +85,7 @@ const button = (el: AddToMenus, test: string) =>
 
 async function bottomOf(el: AddToMenus): Promise<string> {
   const actions = root(el).querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 async function tick(el: AddToMenus, box: HTMLInputElement): Promise<void> {
@@ -179,7 +179,7 @@ describe("dashboard-add-to-menus", () => {
     expect(event.bubbles && event.composed).toBe(true);
   });
 
-  it("explains, beside the places and beside Add, that nothing was chosen", async () => {
+  it("explains, beside the places and above Add, that nothing was chosen", async () => {
     const el = await mount();
     const submit = vi.fn();
     el.addEventListener("wt-submit", submit);

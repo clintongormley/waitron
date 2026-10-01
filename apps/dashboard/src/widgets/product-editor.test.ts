@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   ProductEditor,
   productEditorField,
@@ -94,8 +95,7 @@ function saveButton(el: ProductEditor): HTMLElementTagNameMap["wt-button"] {
 }
 async function bottomOf(el: ProductEditor): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 function errorOf(el: ProductEditor, name: string): string {
   return el.shadowRoot!.querySelector<HTMLElement & { error: string }>(`[name="${name}"]`)!.error;
@@ -1702,7 +1702,7 @@ it("marks the variant row a reported problem belongs to", async () => {
   save(el);
   await el.updateComplete;
   expect(submit).not.toHaveBeenCalled();
-  // The message beside Save alone cannot say WHICH variant is wrong, and a variant has no field in
+  // The message above Save alone cannot say WHICH variant is wrong, and a variant has no field in
   // this form.
   expect(variantTable(el)!.errors).toEqual({ 1: t("editor.price_invalid") });
 });

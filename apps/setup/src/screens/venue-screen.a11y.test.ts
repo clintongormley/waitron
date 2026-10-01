@@ -5,7 +5,7 @@ import type { SetupVenueScreen } from "./venue-screen.js";
 
 afterEach(cleanupWidgets);
 
-/** The message beside Next, so each invalid-state case proves axe saw it. */
+/** The message above Next, so each invalid-state case proves axe saw it. */
 async function bottomOf(el: SetupVenueScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
     updateComplete: Promise<unknown>;
@@ -20,7 +20,7 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the message beside Next and invalid fields shown", async () => {
+  it("has no violations with the message above Next and invalid fields shown", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {}, theme);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
     await el.updateComplete;
@@ -28,7 +28,7 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a routed-back server error shown beside Next", async () => {
+  it("has no violations with a routed-back server error shown above Next", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>(
       "setup-venue-screen",
       { errorMessage: "The country must match the fiscal territory." },

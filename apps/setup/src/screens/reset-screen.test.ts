@@ -33,7 +33,7 @@ async function fillValid(
   }
 }
 
-/** The one message beside the reset button, as `wt-form-actions` shows it. */
+/** The one message above the reset button, as `wt-form-actions` shows it. */
 async function bottomOf(el: SetupResetScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
@@ -179,7 +179,7 @@ describe("setup-reset-screen", () => {
     expect(events).toEqual([]);
   });
 
-  it("marks no field and names the refused login beside the reset button when the login was refused", async () => {
+  it("marks no field and names the refused login above the reset button when the login was refused", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       credentialsRejected: true,
     });
@@ -192,7 +192,7 @@ describe("setup-reset-screen", () => {
   });
 
   // Owner rule (A153, 2026-09-30): a refused login marks no field; only a missing or malformed value is marked.
-  it("marks no field on a refused login, says so once beside the reset button and focuses the password", async () => {
+  it("marks no field on a refused login, says so once above the reset button and focuses the password", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     await fillValid(el);
     el.credentialsRejected = true;
@@ -212,7 +212,7 @@ describe("setup-reset-screen", () => {
     expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
   });
 
-  it("shows a routed-back message as one alert beside the reset button, leaving it working", async () => {
+  it("shows a routed-back message as one alert above the reset button, leaving it working", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       errorMessage: "Too many attempts. Wait 30 seconds, then try again.",
     });

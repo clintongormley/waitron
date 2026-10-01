@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -197,8 +197,8 @@ it("keeps the confirmation open and explains a rejected delete, then closes on s
   )!;
   await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
   deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  await vi.waitFor(() => expect(modal.querySelector('p[role="alert"]')).not.toBeNull());
-  expect(modal.querySelector('p[role="alert"]')!.textContent!.trim()).not.toBe("");
+  await vi.waitFor(async () => expect(await saveMessage(modal)).not.toBeNull());
+  expect(await saveMessage(modal)).not.toBe("");
   expect(modal.open).toBe(true);
   // Retrying the same delete succeeds, and the dialog closes itself.
   deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -683,7 +683,7 @@ it.each([
   ["category.image_not_found", "image", "dashboard-image-upload"],
   ["category.color_invalid", "color", "input[type=color]"],
 ])(
-  "explains %s beside the rejected field, and says to correct it beside a Save that still works",
+  "explains %s beside the rejected field, and says to correct it in the bottom message, leaving Save working",
   async (code, field, selector) => {
     const { el, api } = await mount();
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
@@ -714,10 +714,7 @@ it.each([
       expect(form.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
     }
     const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-    await actions.updateComplete;
-    expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
-      t("form.fix_fields"),
-    );
+    expect((await formMessageOf(actions))!.textContent!.trim()).toBe(t("form.fix_fields"));
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
         .disabled,
@@ -1503,11 +1500,10 @@ async function openMainCategory(el: CategoriesScreen, remove: boolean) {
   await mainCategoryCombobox(el).updateComplete;
   return dialog;
 }
-/** The main-category dialog's one message, drawn beside Save inside its action row. */
-async function besideSave(dialog: Element): Promise<string | null> {
+/** A dialog's one message about a failed action, from the action row in its footer. */
+async function saveMessage(dialog: Element): Promise<string | null> {
   const actions = dialog.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? null;
+  return (await formMessageOf(actions))?.textContent?.trim() ?? null;
 }
 function mainCategoryCombobox(el: CategoriesScreen) {
   return el.shadowRoot!.querySelector<
@@ -1630,7 +1626,7 @@ it("puts a missing-translation refusal beside the name field for the language it
 
 // `categoryInput` in apps/server/src/catalogue-api.ts refuses a malformed parent as
 // `management.request_invalid` with `field: "parentId"`.
-it("puts a refused parent beside the parent field, and says to correct it beside the actions", async () => {
+it("puts a refused parent beside the parent field, and says to correct it above the actions", async () => {
   setLocale("en-GB");
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
@@ -1648,10 +1644,7 @@ it("puts a refused parent beside the parent field, and says to correct it beside
   };
   await vi.waitFor(() => expect(besideParent()).toBe("Check the form and try again"));
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
-    t("form.fix_fields"),
-  );
+  expect((await formMessageOf(actions))!.textContent!.trim()).toBe(t("form.fix_fields"));
   expect(form.open).toBe(true);
 });
 
@@ -1819,10 +1812,8 @@ it("explains a refused add and keeps the add list and its picks open", async () 
   add.click();
   await confirmMove(el);
   const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
-  await vi.waitFor(() =>
-    expect(products.querySelector('p[role="alert"]')?.textContent).toBe(
-      codeMessage("product.not_found"),
-    ),
+  await vi.waitFor(async () =>
+    expect(await saveMessage(products)).toBe(codeMessage("product.not_found")),
   );
   expect(
     el.shadowRoot!.querySelector('wt-data-table[data-test="category-add-products"]'),
@@ -1876,7 +1867,7 @@ it("explains a refused main-category save and keeps its dialog open", async () =
   const dialog = await openMainCategory(el, true);
   dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
   await vi.waitFor(async () =>
-    expect(await besideSave(dialog)).toBe(codeMessage("category.not_found")),
+    expect(await saveMessage(dialog)).toBe(codeMessage("category.not_found")),
   );
   expect(alertTexts(dialog)).toEqual([]);
   expect(dialog.open).toBe(true);
@@ -1999,13 +1990,13 @@ it.each(["Cancel", "a close"])(
     await openProducts(el, "food");
     const dialog = await openMainCategory(el, true);
     dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
-    await vi.waitFor(async () => expect(await besideSave(dialog)).not.toBeNull());
+    await vi.waitFor(async () => expect(await saveMessage(dialog)).not.toBeNull());
     if (way === "Cancel") dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
     else dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(dialog.open).toBe(false);
     const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
-    expect(products.querySelector('p[role="alert"]')).toBeNull();
+    expect(await saveMessage(products)).toBeNull();
   },
 );
 
@@ -2227,7 +2218,7 @@ it.each([
     await vi.waitFor(() => expect(picker.error).toBe(codeMessage(refusal.code)));
     await el.updateComplete;
     expect(alertTexts(dialog)).toEqual([]);
-    expect(await besideSave(dialog)).toBe(t("form.fix_fields"));
+    expect(await saveMessage(dialog)).toBe(t("form.fix_fields"));
     await vi.waitFor(() => expect(holdsFocus(picker)).toBe(true));
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
@@ -2237,7 +2228,7 @@ it.each([
     await el.updateComplete;
     expect(picker.error).toBe("");
     expect(alertTexts(dialog)).toEqual([]);
-    expect(await besideSave(dialog)).toBeNull();
+    expect(await saveMessage(dialog)).toBeNull();
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
   },
@@ -2263,7 +2254,8 @@ it.each([
     remove.click();
     await vi.waitFor(() => expect(picker(name).error).toBe(codeMessage(code)));
     await el.updateComplete;
-    expect(alertTexts(dialog)).toEqual([t("form.fix_fields")]);
+    expect(alertTexts(dialog)).toEqual([]);
+    expect(await saveMessage(dialog)).toBe(t("form.fix_fields"));
     await vi.waitFor(() => expect(holdsFocus(picker(name))).toBe(true));
     await remove.updateComplete;
     expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
@@ -2273,12 +2265,13 @@ it.each([
     await el.updateComplete;
     expect(picker(name).error).toBe("");
     expect(alertTexts(dialog)).toEqual([]);
+    expect(await saveMessage(dialog)).toBeNull();
     await remove.updateComplete;
     expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
   },
 );
 
-it("keeps a delete refusal that names no picker in the dialog's alert", async () => {
+it("keeps a delete refusal that names no picker in the dialog's bottom message", async () => {
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue(everything);
   api.deleteCategory.mockRejectedValueOnce({
@@ -2287,7 +2280,10 @@ it("keeps a delete refusal that names no picker in the dialog's alert", async ()
   });
   const { dialog, picker, remove } = await openFoodDelete(el);
   remove.click();
-  await vi.waitFor(() => expect(alertTexts(dialog)).toEqual([codeMessage("category.not_found")]));
+  await vi.waitFor(async () =>
+    expect(await saveMessage(dialog)).toBe(codeMessage("category.not_found")),
+  );
+  expect(alertTexts(dialog)).toEqual([]);
   expect(picker("products-to").error).toBe("");
   expect(picker("children-to").error).toBe("");
 });
