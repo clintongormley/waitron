@@ -9,12 +9,19 @@ its own, and takes the product's.
 
 ## Choose your content languages
 
-A new venue starts with its content languages already chosen. A venue in Spain starts with Spanish
-as the default and Catalan and English alongside; a venue anywhere else starts with one language,
-worked out from where it is. To add another, open **Settings**, then **Content languages**, which
-lists your languages with the default first. Select **Add language**, choose the language and select
-**Add**. Its translation fields are then available throughout your content editors. To change the
-default, select **Set as default** on that language's row.
+A new venue starts with its content languages already chosen. A venue in Spain starts with Spanish,
+Catalan and English: in Catalonia Catalan is the default, elsewhere Spanish, and a venue in Galicia
+also gets Galician. A venue anywhere else starts with one language, worked out from where it is. To
+add another, open **Settings**, then **Content languages**, which lists your languages with the
+default first. Select **Add language**, choose the language and select **Add**; the list shows your
+country's official languages first, under **Official languages**, while any of them is not yet
+added. The added language's translation fields are then available throughout your content
+editors. To change the default, select **Set as default** on that language's row.
+
+Some regions have rules about the languages a menu uses. A language your venue's region requires is
+marked **Required** and has no **Remove**, and if it is ever missing, your next save on this page
+adds it back. Where the region also asks for foreign languages, the page shows a notice while you
+have fewer than it asks for.
 
 For example, with Spanish as the default and English alongside, a product whose customer-facing name
 reads **Pan de verano** in Spanish can leave its English one empty while you prepare the translation.
@@ -37,7 +44,7 @@ some names and none in the new default language does. Edit a reusable section's 
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. The default language's row has no
-**Remove**: choose another default first.
+**Remove**: choose another default first. A required language's row has none either.
 
 Your receipt-language settings remain independent. Adding English content does not add an English
 receipt, and changing the content default does not rewrite issued receipts. Kitchen displays,

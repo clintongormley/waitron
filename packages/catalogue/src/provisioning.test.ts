@@ -67,10 +67,10 @@ async function storedUnits() {
 describe("catalogue provisioning", () => {
   it.each([
     // Spain starts from the same three languages whatever the province; the province adds only
-    // what its law requires, and a Catalan venue starts with Catalan as its default. The four
-    // Spanish rows vary both inputs the seed could plausibly read — province AND receipt locale —
-    // and the receipt column must never change the result, so do not level it. See the comment in
-    // provisioning.ts.
+    // the languages Waitron keeps enabled for its region, and a Catalan venue starts with Catalan
+    // as its default. The four Spanish rows vary both inputs the seed could plausibly read —
+    // province AND receipt locale — and the receipt column must never change the result, so do not
+    // level it. See docs/backlog.md → "Product languages are hard-coded at setup".
     ["ES", "Madrid", "en-GB", "es", ["es", "ca", "en"]],
     ["ES", "Barcelona", "es-ES", "ca", ["ca", "es", "en"]],
     ["ES", "A Coruña", "en-GB", "es", ["es", "ca", "en", "gl"]],

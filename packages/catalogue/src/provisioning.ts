@@ -54,8 +54,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
       const area = location.rows[0]?.province;
-      // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: nothing in setup asks
-      // which languages a venue wants. docs/backlog.md → "Product languages are hard-coded at setup".
+      // docs/backlog.md → "Product languages are hard-coded at setup".
       const starting =
         country === "ES"
           ? ["es", "ca", "en"]

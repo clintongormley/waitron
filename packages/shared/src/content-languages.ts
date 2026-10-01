@@ -8,7 +8,7 @@ export interface ContentLanguages {
 
 /** What the venue's region requires of its content languages, as language codes. */
 export interface ContentLanguageRules {
-  /** Languages a save may never leave out. */
+  /** The content-languages route refuses a save that leaves one out. */
   readonly required: readonly string[];
   /** The country's official languages, offered first when adding a language. */
   readonly official: readonly string[];

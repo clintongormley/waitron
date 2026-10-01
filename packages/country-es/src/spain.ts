@@ -160,6 +160,8 @@ const PROVINCES = [
 ] as const;
 
 const CATALAN = new Set(["03", "07", "08", "12", "17", "25", "43", "46"]);
+const CATALONIA_PROVINCES = new Set(["08", "17", "25", "43"]);
+const VALENCIAN_PROVINCES = new Set(["03", "12", "46"]);
 const GALICIAN = new Set(["15", "27", "32", "36"]);
 const BASQUE = new Set(["01", "20", "48"]);
 
@@ -176,15 +178,17 @@ type ContentLanguageLaw = Pick<
 >;
 
 // Catalonia: Llei 1/1998 art. 32.3 puts "documents offering services" at least in Catalan, which
-// the Agència Catalana del Consum reads as covering the menu. Spanish is required too: the Constitutional Court (STC 88/2017) upheld the Catalan rule
-// only on the reading that customers can also get Spanish.
+// the Agència Catalana del Consum reads as covering the menu. STC 88/2017 upheld the Consumer Code's
+// language rule (art. 128-1.2) only on the reading that customers can also get the documents in
+// Spanish; Waitron keeps Spanish enabled for that.
 const CATALONIA: ContentLanguageLaw = {
   requiredContentLocales: ["ca-ES", "es-ES"],
   defaultContentLocale: "ca-ES",
 };
 
 // Decree 36/2023 arts. 9.9 and 12.4: both official languages and at least one foreign language,
-// preferably English; art. 1.2.g exempts takeaway-only and delivery-only places.
+// preferably English. Art. 1.2.g exempts takeaway-only and delivery-only places; Waitron does
+// not distinguish them and keeps both languages enabled everywhere in the region.
 const VALENCIAN_COMMUNITY: ContentLanguageLaw = {
   requiredContentLocales: ["ca-ES", "es-ES"],
   foreignLanguageNotice: {
@@ -196,7 +200,9 @@ const VALENCIAN_COMMUNITY: ContentLanguageLaw = {
   },
 };
 
-// Decree 108/2006 art. 27.2, and the menu rule as amended by Decree 8/2007.
+// Decree 108/2006 art. 27.2, and the menu rule as amended by Decree 8/2007. Arts. 1-2 limit the
+// decree to restaurants and cafeterias; Waitron does not distinguish venue types and keeps both
+// languages enabled everywhere in the region.
 const GALICIA: ContentLanguageLaw = {
   requiredContentLocales: ["gl-ES", "es-ES"],
   foreignLanguageNotice: {
@@ -209,9 +215,9 @@ const GALICIA: ContentLanguageLaw = {
 };
 
 function contentLanguageLawFor(code: string): ContentLanguageLaw {
-  if (["08", "17", "25", "43"].includes(code)) return CATALONIA;
-  if (["03", "12", "46"].includes(code)) return VALENCIAN_COMMUNITY;
-  if (["15", "27", "32", "36"].includes(code)) return GALICIA;
+  if (CATALONIA_PROVINCES.has(code)) return CATALONIA;
+  if (VALENCIAN_PROVINCES.has(code)) return VALENCIAN_COMMUNITY;
+  if (GALICIAN.has(code)) return GALICIA;
   return {};
 }
 

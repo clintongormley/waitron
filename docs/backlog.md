@@ -7692,12 +7692,14 @@ ongoing overhaul listed at the top of Track A.
   chose, which probably means setup asking; do it when there is a second region or country to be wrong
   about. The hard-code is in `packages/catalogue/src/provisioning.ts` and names this entry. Receipt
   languages are a separate setting and already follow the province.
-  _(2026-10-01, C112: Spain's country pack now names, per region, the content languages the
-  region's law requires — Catalan and Spanish in Catalonia and the Valencian Community, Galician and
-  Spanish in Galicia ([regional-language-rules.md](compliance/regional-language-rules.md)). Setup
-  adds any required language the starting list lacks, a new venue in Catalonia starts with Catalan as
-  its default content language, the Content languages page offers no Remove on a required language,
-  and the server refuses a save that leaves one out (`content.language_required`). Still open: the
+  _(2026-10-01, C112: Spain's country pack now names, per region, the content languages Waitron
+  keeps enabled for the region — Catalan and Spanish in Catalonia and the Valencian Community,
+  Galician and Spanish in Galicia ([regional-language-rules.md](compliance/regional-language-rules.md)).
+  Setup adds any required language the starting list lacks, a new venue in Catalonia starts with
+  Catalan as its default content language, the Content languages page offers no Remove on a required
+  language, and the server refuses a save that leaves one out (`content.language_required`). Every
+  save on the Content languages page adds back any required language missing from the list, which is
+  the only repair path for an older list that lacks one. Still open: the
   Spain-wide starting list `["es", "ca", "en"]` is unchanged, so a venue in Galicia also gets
   Catalan; and two writers skip the check — the Prepare-to-Live configuration copy
   (`packages/catalogue/src/configuration-transfer.ts`), which copies the saved row as it is, and the

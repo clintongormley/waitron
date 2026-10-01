@@ -389,7 +389,7 @@ are from `main` at `b02c0e381` and will drift; the plan's tasks re-find each by 
 | `location-picker.ts` | location | cb |
 | `product-editor.ts` | station and course (one helper); description per language; VAT class; unit | cb; ta; cb; cb |
 | `dietary-origin-picker.ts` | dietary origin | cb |
-| `add-content-language.ts` | content language (every language `Intl` knows) | cb |
+| `add-content-language.ts` | content language (every language `Intl` knows; 2026-10-01, C112: the dialog now puts the country's official languages first in an `<optgroup>`, so a combobox here sets each option's `group`) | cb |
 | `section-add-products.ts` | category filter | cb |
 | `autofill-username.ts` | hidden password-manager username | stays — allow-listed |
 

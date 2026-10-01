@@ -21,10 +21,10 @@ export interface AdministrativeArea {
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly postalPrefixes: readonly string[];
-  /** Not the content languages the area's law requires: those are `requiredContentLocales`. */
+  /** Not the content languages a venue here must keep: those are `requiredContentLocales`. */
   readonly defaultLocale?: string;
   readonly timeZone?: string;
-  /** Locales the area's law requires on the menu. */
+  /** Locales Waitron keeps enabled for a venue in this area, following its language rules. */
   readonly requiredContentLocales?: readonly string[];
   /** A new venue's default content language in this area. */
   readonly defaultContentLocale?: string;

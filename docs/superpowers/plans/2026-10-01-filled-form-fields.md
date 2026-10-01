@@ -746,6 +746,8 @@ and `apps/dashboard/src/dashboard-app.ts`, with their `*.test.ts`.
     and unit become comboboxes keeping their "Same as …" first options (design-system.md → fallback
     fields). Lane E's PF2b may be changing this file — check first (Global Constraints).
   - `add-content-language.ts`: hundreds of languages — `search="auto"` gives it a search box.
+    (2026-10-01, C112: the dialog now puts the country's official languages first in an
+    `<optgroup>`, so the combobox sets each option's `group`.)
 - [ ] **Step 2:** `pnpm --filter @waitron/dashboard test:coverage`; LOOK; backlog; commit;
   `finish-branch`.
 
