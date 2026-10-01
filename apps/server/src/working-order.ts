@@ -4923,7 +4923,7 @@ async function sentUnpaidCounterOrder(
 }
 
 /** An order with no frozen mode takes the venue's order flow. */
-function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
+export function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
   return PAY_AFTER_SENDING.has(mode ?? cfg.orderFlow);
 }
 

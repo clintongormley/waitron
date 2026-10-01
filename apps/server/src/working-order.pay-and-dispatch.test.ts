@@ -448,9 +448,9 @@ async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
 }
 
 /** The kitchen state of the ticket item fired for this SINGLE-line order, or null when none was
- *  fired. Placing (Modes I/T, inside `placeOrder`) and paying a pay-first order (Mode P,
- *  `firePrepayOrder`) fire one `ticket_items` row per dish line (KDS-1). The callers here fire
- *  SINGLE-line orders, so at most one row exists. */
+ *  fired. Placing (`placeOrder`) and paying an order `fireDishesAtPayment` sends fire one
+ *  `ticket_items` row per dish line. The callers here fire SINGLE-line orders, so at most one row
+ *  exists. */
 async function ticketStateOf(id: string): Promise<string | null> {
   const { rows } = await suite.db.execute<{ state: string }>(sql`
     select state from ticket_items where working_order_id = ${id}
@@ -2184,6 +2184,142 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
     // fired before B) — the reads do not separate by node.
     expect(expoA.map((o) => o.orderId)).toEqual([idA, idB]);
     expect(expoB.map((o) => o.orderId)).toEqual([idA, idB]);
+  });
+});
+
+/** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
+async function kitchenPrinter(cfg: TillConfig): Promise<string> {
+  const station = await defaultStationId(cfg);
+  return withTransaction(suite.db, async (tx) => {
+    const { id } = await createPrinter(
+      tx,
+      { locationId: cfg.locationId },
+      {
+        name: "P-Cocina",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      },
+    );
+    await attachPrinterToStation(tx, { stationId: station, printerId: id });
+    return id;
+  });
+}
+
+/** The print jobs enqueued on `printerId` that print no sale: its kitchen tickets. */
+async function kitchenJobCount(printerId: string): Promise<number> {
+  const { rows } = await suite.db.execute<{ count: string }>(sql`
+    select cast(count(*) as text) as count from print_jobs
+    where printer_id = ${printerId} and sale_id is null
+  `);
+  return Number(rows[0]!.count);
+}
+
+/** Whether each of the order's lines is stamped sent, in line order. */
+async function linesSent(orderId: string): Promise<boolean[]> {
+  const rows = await suite.db
+    .select({ sentAt: workingOrderLines.sentAt })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, orderId))
+    .orderBy(asc(workingOrderLines.lineNo));
+  return rows.map((row) => row.sentAt !== null);
+}
+
+describe("paying a counter order never sent, in a zone that sends before payment", () => {
+  it("ticket_then_pay: a cash walk-up's dish reaches the station queue and prints its kitchen ticket in the payment", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
+    const station = await defaultStationId(cfg);
+    const printerId = await kitchenPrinter(cfg);
+    const id = randomUUID();
+
+    await payWorkingOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await ticketStateOf(id)).toBe("queued");
+    expect(
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
+    ).toEqual([id]);
+    expect(await kitchenJobCount(printerId)).toBe(1);
+    expect(await linesSent(id)).toEqual([true]);
+  });
+
+  it("invoice_first: a cash walk-up files a settled sale and sends its dish in the payment", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const printerId = await kitchenPrinter(cfg);
+    const id = randomUUID();
+
+    const ticket = await payWorkingOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    expect(ticket.tender).toEqual({ method: "cash", change: "0.00" });
+    expect(await outstanding()).toEqual([]);
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await ticketStateOf(id)).toBe("queued");
+    expect(await kitchenJobCount(printerId)).toBe(1);
+  });
+
+  it("ticket_then_pay: a parked order paid sends each of its dishes", async () => {
+    const { cfg, cafe, agua, zoneId } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: agua.menuItemId, quantity: "1" },
+      ],
+    });
+    expect(await ticketItemIdsFor(id)).toEqual([]);
+
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "3.50" },
+    });
+
+    expect(await ticketItemIdsFor(id)).toHaveLength(2);
+    expect(await linesSent(id)).toEqual([true, true]);
+  });
+
+  it("ticket_then_pay: the same pay sent again sends nothing more and files no second sale", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
+    const printerId = await kitchenPrinter(cfg);
+    const id = randomUUID();
+    const req = {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      tender: { method: "cash" as const, amount: "5.00" },
+    };
+
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR);
+    const items = await ticketItemIdsFor(id);
+    expect(items).toHaveLength(1);
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req, OPERATOR);
+
+    expect(await ticketItemIdsFor(id)).toEqual(items);
+    expect(await kitchenJobCount(printerId)).toBe(1);
+    expect(await saleCount(id)).toBe(1);
   });
 });
 

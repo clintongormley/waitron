@@ -1036,6 +1036,39 @@ describe("the dishes of an open bill moved between service modes", () => {
     expect(tickets[0]!.firedAt).not.toBeNull();
   });
 
+  it("sends nothing when it pays a party's bill that keeps its send-before-payment counter zone at a table with no zone", async () => {
+    const ticketZone = await inTx(v, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: "Barra ticket sin zona" })
+        .returning({ id: floorZones.id });
+      // Tarta alone and no routes written, so the suite's other routes stand.
+      return offerProducts(tx, v.cfg, {
+        zone: { zoneId: zone!.id },
+        serviceMode: "ticket_then_pay",
+        productIds: [v.productId("Tarta")],
+        routes: "none",
+      });
+    });
+    const orderId = randomUUID();
+    await parkOrder({ db: v.db }, v.cfg, {
+      id: orderId,
+      zoneId: ticketZone.zoneId,
+      lines: [{ menuItemId: ticketZone.offerFor(v.productId("Tarta")), quantity: "1" }],
+      operatorId: OPERATOR,
+    });
+    const bare = await inTx(v, (tx) => createTable(tx, v.cfg, { label: "Mesa ticket sin zona" }));
+
+    await move(orderId, { tableId: bare.id });
+    expect(await zoneOf(v, orderId)).toBe(ticketZone.zoneId);
+    expect((await billRow(v, orderId)).partyId).not.toBeNull();
+    expect(await ticketsOf(orderId)).toEqual([]);
+    await cashContribution(v, orderId, "15.00");
+
+    expect((await billRow(v, orderId)).status).toBe("settled");
+    expect(await ticketsOf(orderId)).toEqual([]);
+  });
+
   it("does not send a table bill's sent dish again when it is paid at a pay-first counter", async () => {
     const ana = await seat(v, await v.table("Mesa envío 4"));
     await order(v, ana.tabId, "Burger");

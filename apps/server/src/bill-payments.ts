@@ -59,7 +59,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueBillPaymentDrawer, enqueueSaleReceipt } from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
 import {
-  firePrepayOrder,
+  fireDishesAtPayment,
   readBillTenderLines,
   readSettledTicket,
   readTenderBlock,
@@ -714,7 +714,7 @@ async function issueWhenFullyPaid(
     }
   }
 
-  const notSent = await firePrepayOrder(tx, cfg, workingOrderId);
+  const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId);
   const settledAt = received
     .map((row) => row.receivedAt!)
     .reduce((latest, at) => (at > latest ? at : latest));

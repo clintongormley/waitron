@@ -11,6 +11,7 @@ import type { ServiceMode } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import { listStationQueue, markCollected, parkOrder, placeOrder } from "./working-order.js";
 import { inTx, provisionBillVenue, registroCount, send, tabWith } from "./testing/bill-venue.js";
+import { takeBillPayment } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -406,6 +407,88 @@ describe("paying a pay-first counter order", () => {
     expect((await orderRow(id)).collectedAt).toBeNull();
     expect(await waitingRow(id)).toMatchObject({ status: "settled", canHandOver: true });
     expect(await stationQueuesListing(id)).toEqual({ listing: 1, stations: 1 });
+  });
+});
+
+describe("paying a counter order never sent, in a mode that sends before payment", () => {
+  async function payInFull(id: string, submissionId: string, amount: string) {
+    return takeBillPayment(
+      deps(),
+      venue.cfg,
+      id,
+      {
+        submissionId,
+        kind: "contribution",
+        amount,
+        method: "cash",
+        tendered: amount,
+        applied: amount,
+        tip: "0.00",
+      },
+      venue.operatorId,
+    );
+  }
+
+  it.each(["ticket_then_pay", "invoice_first"] as const)(
+    "%s: an order paid off by a bill payment sends its dish, and the same payment sent again sends nothing more",
+    async (mode) => {
+      const id = await parked(mode, "Tarta");
+      const submissionId = randomUUID();
+
+      await payInFull(id, submissionId, "18.00");
+
+      expect((await orderRow(id)).status).toBe("settled");
+      expect(saleCount(id)).toBe(1);
+      expect(ticketItemCount(id)).toBe(1);
+
+      await payInFull(id, submissionId, "18.00");
+
+      expect(saleCount(id)).toBe(1);
+      expect(ticketItemCount(id)).toBe(1);
+    },
+  );
+
+  it("can hand over a paid ticket_then_pay walk-up once its dish has been sent", async () => {
+    const id = randomUUID();
+    await payWorkingOrder(
+      deps(),
+      venue.cfg,
+      {
+        id,
+        zoneId: zones.ticket_then_pay,
+        lines: [
+          { menuItemId: venue.offerFor("Tarta"), quantity: "1" },
+          { menuItemId: venue.offerFor("Caña"), quantity: "1" },
+        ],
+        tender: { method: "cash", amount: "50.00" },
+      },
+      venue.operatorId,
+    );
+
+    await markCollected({ db: venue.db }, venue.cfg, id);
+
+    expect((await orderRow(id)).collectedAt).not.toBeNull();
+  });
+
+  it("still refuses to hand over a paid walk-up whose only dish goes to no station (ticket.not_fired)", async () => {
+    const id = randomUUID();
+    await payWorkingOrder(
+      deps(),
+      venue.cfg,
+      {
+        id,
+        zoneId: zones.ticket_then_pay,
+        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        tender: { method: "cash", amount: "50.00" },
+      },
+      venue.operatorId,
+    );
+    expect(ticketItemCount(id)).toBe(0);
+
+    await expect(markCollected({ db: venue.db }, venue.cfg, id)).rejects.toMatchObject({
+      code: "ticket.not_fired",
+      params: { workingOrderId: id },
+    });
   });
 });
 

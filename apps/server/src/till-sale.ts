@@ -42,6 +42,7 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import {
   createOpenOrder,
   fireLines,
+  paysAfterSending,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
   readStoredOrder,
@@ -427,8 +428,8 @@ export type IntegratedPayDeps = TillSaleDeps & {
  *     price.
  *  5. `open` (RETRIEVED) → file the STORED locked lines (`priceStoredOrderForIssuance`), never a
  *     re-price of `req.lines`.
- *  Steps 4 and 5, in a pay-first context, give the kitchen the dishes it has not been given, a
- *  later course's dish held for its course, in the same transaction (`firePrepayOrder`); a dish no
+ *  Steps 4 and 5 give the kitchen the dishes it has not been given, a later course's dish held for
+ *  its course, in the same transaction, for the orders `fireDishesAtPayment` names; a dish no
  *  station can take is not sent and is named in a `route.dish_not_sent` alert instead, or logged
  *  under that code if the alert is refused.
  *  6. A unique violation is replayed in a FRESH transaction, filing nothing. Step 1 already
@@ -488,7 +489,7 @@ export async function payWorkingOrder(
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
-      const notSent = await firePrepayOrder(tx, cfg, req.id);
+      const notSent = await fireDishesAtPayment(tx, cfg, req.id);
 
       const ticket = await fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
       if (notSent !== null) {
@@ -1117,7 +1118,7 @@ async function finalizeCapture(
 
       // After `recordSale`, so a concurrent loser, refused there, never reaches the fire. A placed
       // order was fired when it was placed and must not be fired again.
-      const notSent = wasPlaced ? null : await firePrepayOrder(tx, cfg, req.id);
+      const notSent = wasPlaced ? null : await fireDishesAtPayment(tx, cfg, req.id);
 
       await tx
         .update(workingOrders)
@@ -1251,9 +1252,9 @@ async function finalizeRecovery(
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
-    // A placed order was fired when it was placed; an open pay-first one's unsent dishes go now,
-    // except a dish no station can take (`firePrepayOrder`).
-    const notSent = locked?.status === "open" ? await firePrepayOrder(tx, cfg, req.id) : null;
+    // A placed order was fired when it was placed; an open one's unsent dishes go now, for the
+    // orders `fireDishesAtPayment` names, except a dish no station can take.
+    const notSent = locked?.status === "open" ? await fireDishesAtPayment(tx, cfg, req.id) : null;
 
     // Settled at the ORIGINAL capture instant.
     await tx
@@ -1298,19 +1299,25 @@ async function finalizeRecovery(
 }
 
 /**
- * Fire an open order's unsent dishes at payment when its service context uses the prepay flow. A
- * bill moved here from a table has dishes already sent, which are not sent again. A dish no
- * station can take is not sent and does not refuse the payment; it is returned, for the caller to
- * raise `raiseDishesNotSent` once the sale exists.
+ * Fire an open order's unsent dishes at payment when its service mode is prepay, or when it is a
+ * counter order (no party) in a mode that sends before payment; a party's bill in such a mode is
+ * left alone. A bill moved here from a table has dishes already sent, which are not sent again. A
+ * dish no station can take is not sent and does not refuse the payment; it is returned, for the
+ * caller to raise `raiseDishesNotSent` once the sale exists.
  */
-export async function firePrepayOrder(
+export async function fireDishesAtPayment(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
 ): Promise<DishesNotSent | null> {
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
   if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
-    return null;
+    if (!paysAfterSending(serviceContext?.serviceMode, cfg)) return null;
+    const [order] = await tx
+      .select({ partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, workingOrderId));
+    if (order!.partyId !== null) return null;
   }
   const unrouted = await fireLines(
     tx,
