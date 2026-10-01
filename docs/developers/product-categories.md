@@ -273,7 +273,7 @@ The folder migration does not convert old JSON names or preserve the removed fie
 opened without that reset can display a name as JSON text. Do not add a data backfill for this
 preproduction change.
 
-The folder move/delete tests in `packages/catalogue/src/catalogue-items.test.ts` check mixed
+The folder move/delete tests in `packages/catalogue/src/catalogue-items.db.test.ts` check mixed
 selections, cycles, overlapping subtrees and rollback. `scripts/migration-upgrade.test.ts` checks
 the migration sequence, and the schema and trigger guards check the resulting constraints. These
 are separate checks: a successful fresh migration does not substitute for exercising an upgrade.
