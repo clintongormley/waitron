@@ -136,7 +136,8 @@ test.each([
 );
 
 /** One of every shared form field, in the grid a form lays its fields out in, plus a native select
- * styled by `selectStyles` in a shadow root of its own, as a screen holds one. */
+ * field styled by `selectStyles` in a shadow root of its own, written as screens write one: a block
+ * label holding the label text, the select, a hint and an error. */
 const FIELDS = `<div style="display: grid">
   <wt-input label="Name"></wt-input>
   <wt-combobox label="Product"></wt-combobox>
@@ -148,19 +149,45 @@ const FIELDS = `<div style="display: grid">
 
 type TableRow = { id: string; name: string };
 
-/** The fields above, and the native select inside its own shadow root. */
+const SELECT_FIELD = `<style>
+    .field { display: block; }
+  </style>
+  <label class="field"
+    >Precision<span class="required">*</span>
+    <select name="precision"><option>0</option></select>
+    <p class="field-help">How many decimal places a quantity in this unit may carry.</p>
+    <p class="field-error">Choose a supported precision for this unit before saving.</p>
+  </label>`;
+
+/** The fields above, and the native select field's label, select, hint and error inside its own
+ * shadow root. */
 async function fieldsIn(root: ParentNode): Promise<HTMLElement[]> {
   const holder = root.querySelector<HTMLElement>("[data-select]")!;
   const shadow = holder.attachShadow({ mode: "open" });
   shadow.adoptedStyleSheets = [selectStyles.styleSheet!];
-  shadow.innerHTML = '<select name="unit"><option>Kilogram</option></select>';
+  shadow.innerHTML = SELECT_FIELD;
   const fields = [
     ...root.querySelectorAll<HTMLElement>(
       "wt-input, wt-combobox, wt-price-input, wt-number-stepper, wt-switch",
     ),
   ];
   for (const field of fields) await (field as WtModal).updateComplete;
-  return [...fields, shadow.querySelector("select")!];
+  return [
+    ...fields,
+    ...shadow.querySelectorAll<HTMLElement>("label, select, .field-help, .field-error"),
+  ];
+}
+
+/** The bottom of the native select field's label text, and the top of its select. */
+function selectBelowText(modal: WtModal): { textBottom: number; selectTop: number } {
+  const shadow = modal.querySelector<HTMLElement>("[data-select]")!.shadowRoot!;
+  const label = shadow.querySelector("label")!;
+  const range = document.createRange();
+  range.selectNodeContents(label.firstChild!);
+  return {
+    textBottom: range.getBoundingClientRect().bottom,
+    selectTop: shadow.querySelector("select")!.getBoundingClientRect().top,
+  };
 }
 
 /** A modal holding every form field, a wide block, a table and a footer row carrying a message. */
@@ -196,6 +223,13 @@ test("holds every form field and the form's message to the standard form width o
   }
   const message = modal.shadowRoot!.querySelector<HTMLElement>(".body > [data-error]")!;
   expect(message.getBoundingClientRect().width).toBeCloseTo(form, 0);
+});
+
+test("keeps a native select on its own line below its label text on a wide window", async () => {
+  await page.viewport(1280, 900);
+  const { modal } = await openForm();
+  const { textBottom, selectTop } = selectBelowText(modal);
+  expect(selectTop).toBeGreaterThanOrEqual(textBottom);
 });
 
 test("leaves wide content, and the footer's actions, the modal's full width on a wide window", async () => {
