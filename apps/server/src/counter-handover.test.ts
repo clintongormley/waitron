@@ -463,6 +463,7 @@ describe("GET /api/orders/counter-waiting", () => {
     collectedAt: string | null;
     total: string;
     canHandOver: boolean;
+    serviceMode: string | null;
   }
 
   async function waiting(): Promise<WaitingRow[]> {
@@ -508,21 +509,40 @@ describe("GET /api/orders/counter-waiting", () => {
       collectedAt: null,
       total: "18.00",
       canHandOver: true,
+      serviceMode: "ticket_then_pay",
     });
     expect(row(handedOver)).toMatchObject({
       status: "placed",
       collectedAt: (await orderRow(handedOver)).collectedAt,
       canHandOver: false,
+      serviceMode: "invoice_first",
     });
     expect(row(handedOver)!.collectedAt).not.toBeNull();
-    expect(row(sentPrepay)).toMatchObject({ status: "placed", canHandOver: false });
+    expect(row(sentPrepay)).toMatchObject({
+      status: "placed",
+      canHandOver: false,
+      serviceMode: "prepay",
+    });
     expect(row(sentNothingToCook)).toMatchObject({ status: "placed", canHandOver: false });
     expect(row(paid)).toMatchObject({
       status: "settled",
       settledAt: (await orderRow(paid)).settledAt,
       collectedAt: null,
       canHandOver: true,
+      serviceMode: null,
     });
+  });
+
+  it("totals a placed order whose invoice was issued at placing as that invoice net of its credit notes, which is what collecting it charges", async () => {
+    const credited = await placed("invoice_first", "Tarta");
+    await creditWholeInvoice(credited);
+    const uncredited = await placed("invoice_first", "Tarta");
+
+    const rows = await waiting();
+
+    expect(rows.find((r) => r.id === credited)!.total).toBe("0.00");
+    expect(rows.find((r) => r.id === uncredited)!.total).toBe("18.00");
+    expect((await collectCash(credited)).tender).toEqual({ method: "unpaid" });
   });
 
   it("leaves out a handed-over paid order, an open order, a table bill, an abandoned order and a paid order with nothing fired", async () => {

@@ -120,7 +120,13 @@ import type {
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type { FloorAnnotator, PreparationRoute, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
+import type {
+  FloorAnnotator,
+  PreparationRoute,
+  ServiceMode,
+  ZoneMenuOffer,
+  ZoneOffers,
+} from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -168,6 +174,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
 import type { TillSaleResult } from "./till-sale.js";
+import { readIssuedSales } from "./sale-due.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
@@ -4726,28 +4733,28 @@ export async function markCollected(
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
-  return withTransaction(deps.db, (tx) => handOver(tx, cfg, id));
+  return withTransaction(deps.db, (tx) => handOverOrder(tx, cfg, id));
 }
 
 /**
- * {@link markCollected} at most once per `submissionId` on this order: a resent request answers as
- * the first did, and the same id sent for another command on this bill is `submission.id_reused`.
+ * {@link markCollected} in the caller's transaction. With a `submissionId` it runs at most once per
+ * id on this order: a resent request answers as the first did, and the same id sent for another
+ * command on this bill is `submission.id_reused`.
  */
-export async function markCollectedOnce(
-  deps: WorkingOrderDeps,
+export function handOverOrder(
+  tx: Transaction,
   cfg: TillConfig,
   id: string,
-  submissionId: string,
+  submissionId?: string,
 ): Promise<void> {
-  return withTransaction(deps.db, (tx) =>
-    runServiceCommand(
-      tx,
-      { kind: "bill", workingOrderId: id },
-      submissionId,
-      "order.collect",
-      { workingOrderId: id },
-      () => handOver(tx, cfg, id),
-    ),
+  if (submissionId === undefined) return handOver(tx, cfg, id);
+  return runServiceCommand(
+    tx,
+    { kind: "bill", workingOrderId: id },
+    submissionId,
+    "order.collect",
+    { workingOrderId: id },
+    () => handOver(tx, cfg, id),
   );
 }
 
@@ -4816,10 +4823,13 @@ export interface CounterWaitingOrder {
   settledAt: string | null;
   /** When it was handed over; set on a placed order handed over before payment. */
   collectedAt: string | null;
-  /** The sum of its lines, as the open-order list shows it. */
+  /** What collecting a placed order charges: the invoice placing issued, net of its credit notes,
+   * else the sum of its lines. A settled order's is the sum of its lines. */
   total: string;
   /** {@link markCollected} would accept it now. */
   canHandOver: boolean;
+  /** A placed order's frozen service mode; null on a settled one. */
+  serviceMode: ServiceMode | null;
 }
 
 /**
@@ -4865,17 +4875,16 @@ export async function listCounterWaiting(
       )
       .groupBy(workingOrders.id)
       .orderBy(workingOrders.openedAt, workingOrders.orderNumber);
-    const modes = await VENUE_SERVICE.findOrderModes(
-      tx,
-      cfg,
-      rows.filter((row) => row.status === "placed").map((row) => row.id),
-    );
+    const placedIds = rows.filter((row) => row.status === "placed").map((row) => row.id);
+    const modes = await VENUE_SERVICE.findOrderModes(tx, cfg, placedIds);
+    const issued = await readIssuedSales(tx, placedIds);
     const waiting: CounterWaitingOrder[] = [];
     for (const row of rows) {
+      const placed = row.status === "placed";
       const eligible =
         Boolean(row.fired) &&
         row.collectedAt === null &&
-        (row.status === "settled" || paysAfterSending(modes.get(row.id), cfg));
+        (!placed || paysAfterSending(modes.get(row.id), cfg));
       waiting.push({
         id: row.id,
         orderNumber: row.orderNumber,
@@ -4884,8 +4893,9 @@ export async function listCounterWaiting(
         openedAt: row.openedAt,
         settledAt: row.settledAt,
         collectedAt: row.collectedAt,
-        total: rawCentsToDecimal(row.total),
+        total: issued.get(row.id)?.amountDue ?? rawCentsToDecimal(row.total),
         canHandOver: eligible,
+        serviceMode: placed ? (modes.get(row.id) ?? cfg.orderFlow) : null,
       });
     }
     return waiting;
@@ -5066,7 +5076,8 @@ export interface StationQueueGroup {
   orderNumber: number;
   label: string | null;
   queuedAt: string;
-  /** The till reads COLLECTABLE off this alone: only a `settled` order awaits the counter handover. */
+  /** The station queue offers Collect on a `settled` order alone; a placed counter order is handed
+   * over from the counter's waiting list. */
   status: WorkingOrderStatus;
   /** Absent for a bill of no party. */
   party?: QueueParty;

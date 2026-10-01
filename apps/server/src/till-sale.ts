@@ -13,7 +13,6 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
-  rawCentsToDecimal,
   saleId as brandSaleId,
   subtractDecimal,
   workingOrderId as brandWorkingOrderId,
@@ -58,6 +57,7 @@ import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
+import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
@@ -636,8 +636,9 @@ function keepHandover(paidAt: string): SQL {
  * as one unit. It does NOT read or guard the order status: the caller resolved it, and one write
  * transaction runs on the venue file at a time, so nothing has moved the row in between.
  *
- * `markCollected` stamps the order-level `collected_at` handover marker in the same settle UPDATE, so
- * a counter collect leaves its station queue. NON-FISCAL.
+ * `markCollected` stamps the order-level `collected_at` handover marker in the same settle UPDATE,
+ * keeping an earlier handover's time (`keepHandover`), so a counter collect leaves its station
+ * queue. NON-FISCAL.
  */
 async function fileImmediateSale(
   tx: Transaction,
@@ -731,34 +732,15 @@ async function fileImmediateSale(
 }
 
 /**
- * The already-issued sale for a working order, if any. An order placed under
- * `invoice_first` carries its sale from placing; one placed under any other mode files at pay. The
- * presence of the row, not the order's service mode, is the discriminator.
- *
- * `amountDue` is `total + corrections`, the same `due` `settleSale` re-derives, so a card charged
- * `amountDue + tip` settles the sale exactly. `${sales}.id` (not `${sales.id}`) renders the column
- * table-qualified so the `sales c` subquery cannot capture a bare `"id"`.
+ * The already-issued sale for a working order, if any ({@link readIssuedSales}). An order placed
+ * under `invoice_first` carries its sale from placing; one placed under any other mode files at pay.
+ * The presence of the row, not the order's service mode, is the discriminator.
  */
 async function readOutstandingSaleForOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<{ saleId: SaleId; amountDue: Decimal } | undefined> {
-  const [row] = await tx
-    .select({
-      id: sales.id,
-      total: sales.total,
-      // Cast to text for `rawCentsToDecimal`, which refuses a number.
-      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
-    })
-    .from(sales)
-    .where(eq(sales.workingOrderId, workingOrderId));
-  if (row === undefined) {
-    return undefined;
-  }
-  return {
-    saleId: brandSaleId(row.id),
-    amountDue: addDecimal(centsToDecimal(row.total), rawCentsToDecimal(row.corrections)),
-  };
+  return (await readIssuedSales(tx, [workingOrderId])).get(workingOrderId);
 }
 
 /**
@@ -894,7 +876,8 @@ async function payIntegrated(
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
     const gross = await issuancePass(tx, cfg, req.id, order);
-    // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.
+    // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at` unless
+    // an earlier handover set it.
     const wasPlaced = locked?.status === "placed";
     // An open order's lines could still change under the reader, so it is marked in flight (plan
     // D22). A placed order's priced columns are already frozen, and
@@ -1292,7 +1275,7 @@ async function finalizeRecovery(
     const notSent = locked?.status === "open" ? await firePrepayOrder(tx, cfg, req.id) : null;
 
     // Settled at the ORIGINAL capture instant. A recovered `placed` order was a counter collect, so
-    // it is stamped collected too.
+    // it is stamped collected too, unless an earlier handover set it.
     await tx
       .update(workingOrders)
       .set({

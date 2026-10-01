@@ -73,8 +73,7 @@ import {
   listHeldOrders,
   listStationQueue,
   listTablesWithState,
-  markCollected,
-  markCollectedOnce,
+  handOverOrder,
   markCourseAway,
   markGroupServed,
   markServed,
@@ -1409,11 +1408,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      if (body.submissionId !== undefined) {
-        await markCollectedOnce({ db: deps.db }, deps.cfg, id, submissionIdOf(body));
-      } else {
-        await markCollected({ db: deps.db }, deps.cfg, id);
-      }
+      const submissionId = body.submissionId === undefined ? undefined : submissionIdOf(body);
+      await withTransaction(deps.db, (tx) => handOverOrder(tx, deps.cfg, id, submissionId));
       return c.body(null, 200);
     }),
   );
