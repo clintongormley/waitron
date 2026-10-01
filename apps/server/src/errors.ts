@@ -332,8 +332,8 @@ declare module "@waitron/shared" {
     "unpaid_departure.nothing_outstanding": { partyId: string };
     /**
      * Record unpaid departure found a bill it would invoice — open, or presented with no invoice
-     * yet — holding a dish the kitchen was never told to make: never sent, or in a group or kitchen
-     * item still held. The guests were never served it; staff cancel it first.
+     * yet — holding a dish the kitchen is not making: never sent, held in its group or by its
+     * kitchen item, or recalled from the kitchen. Staff cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**

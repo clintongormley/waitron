@@ -60,10 +60,10 @@ export interface RecordedDeparture {
  * away) gets no row, though it is still invoiced, as above, beside a bill that gets one.
  *
  * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill would get a row,
- * `unpaid_departure.unfired_dishes` for a bill to be invoiced holding a dish the kitchen was never
- * told to make (never sent, or held), and `unpaid_departure.bill_holds_payment` for an open bill
- * holding a payment, one given back in full included. A retry after the party has closed is
- * `party.not_open`, as it is for Finish.
+ * `unpaid_departure.unfired_dishes` for a bill to be invoiced holding a dish the kitchen is not
+ * making ({@link ordersWithUnfiredDish}: never sent, held, or recalled), and
+ * `unpaid_departure.bill_holds_payment` for an open bill holding a payment, one given back in full
+ * included. A retry after the party has closed is `party.not_open`, as it is for Finish.
  */
 export async function recordUnpaidDeparture(
   tx: Transaction,
@@ -88,7 +88,6 @@ export async function recordUnpaidDeparture(
   }
   const owingIds = owing.map((bill) => bill.workingOrderId);
   const invoiced = await readIssuedSales(tx, owingIds);
-  // Every bill invoiced here, open or presented without an invoice: never invoice an unfired dish.
   const toInvoice = owing.filter((bill) => !invoiced.has(bill.workingOrderId));
   const unfired = await ordersWithUnfiredDish(
     tx,

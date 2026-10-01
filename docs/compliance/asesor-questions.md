@@ -9,9 +9,9 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-On **2026-10-01** (lane B item B17): the owner decided **Q28** without the asesor — option (b)
-below its question — and leaving without paying is now built on that decision. Q28 stays open for
-the asesor to confirm. The standalone copy's section 1.8 (Q28) has not been updated for this.
+On **2026-10-01** (lane B item B17): the owner decided **Q28** without the asesor — the full
+simplified invoice is issued when the table leaves, and a later payment is recorded against it —
+and leaving without paying is now built on that decision. Q28 stays open for the asesor to confirm. The standalone copy's section 1.8 (Q28) has not been updated for this.
 
 Later on **2026-09-30** (C90, owner decision that day): Q29's notes and parts (a), (c) and (e) now
 describe the new receipt. It prints each dish at its full price with each comp or discount on a line
@@ -762,7 +762,7 @@ this is the case where nothing is accepted and the debt stands.
 The software can either issue the simplified invoice anyway, for the full amount, and record it as
 unpaid; or issue nothing and keep the debt only in its own records until it is collected. We
 assume the first is the safe reading, and we will not build unpaid departure until this is
-answered.
+answered. *(2026-10-01: built on the owner's decision without the asesor — see below.)*
 
 > **(a)** Cuando un cliente abandona el restaurante sin pagar lo consumido, ¿debe el establecimiento
 > expedir igualmente la factura simplificada por el importe total de lo servido, aunque no se haya
@@ -772,7 +772,7 @@ answered.
 > factura? Si no se cobra nunca, ¿el único cauce para recuperar el IVA es la modificación de la base
 > imponible por créditos incobrables (artículo 80.Cuatro de la Ley del IVA)?
 
-**Owner decided without the asesor, 2026-10-01: (b).** When a table leaves without paying, the
+**Owner decided without the asesor, 2026-10-01: yes to (a), and to the first half of (b).** When a table leaves without paying, the
 simplified invoice is issued for the full amount at that moment and filed like any other sale, and
 a later payment is recorded against that invoice. Nothing is held back from the fiscal chain until
 the money is collected. Recovering the VAT on a debt never collected (art. 80.Cuatro) is the
@@ -1715,9 +1715,9 @@ This records a question; no enquiry has been sent.
 
 - **Send first, 2026-09-30: Q27, Q28 and Q29** (the backlog's "send now"). They are about table
   service, which is being built now. A table that leaves without paying (service plan Task 17) is
-  built on the owner's decision without the asesor (2026-10-01, option (b); see Q28). Q29 and most of Q27
-  describe features that are already built, so an answer against them may mean changing shipped
-  behaviour. **Q31** should be answered before the correction screen is designed.
+  built on the owner's decision without the asesor (2026-10-01: issue the full simplified invoice
+  when the table leaves; see Q28). Q29 and most of Q27 describe features that are already built,
+  so an answer against them may mean changing shipped behaviour. **Q31** should be answered before the correction screen is designed.
 - **Nothing here blocks the build any more.** As of 2026-07-27 this document is a list of things
   worth confirming, not things worth waiting for. If an asesor engagement slips, build anyway.
   *(2026-09-30: one exception above. Task 17 waits on Q28 by the owner's choice. 2026-10-01: no

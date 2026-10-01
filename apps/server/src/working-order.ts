@@ -4702,8 +4702,6 @@ export async function issueUnpaidInvoice(
   saleTillId: TillId,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
-  // The fiscal record's `till_id` is the DEVICE till, while the `order_placed` amendment records
-  // the box's CONFIGURED register. The chain is keyed by the node, not the device.
   const { saleId, fiscal } = await recordSale(tx, backend, {
     tillId: saleTillId,
     nodeId: cfg.nodeId,

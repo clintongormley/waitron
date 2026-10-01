@@ -383,7 +383,8 @@ names it so the owner can overturn it at review.
   inventory (spec §10's later part), seat assignment, staff-to-table assignment, changing the
   floor layout during service, source-coded screen plugins (spec §11), a Bizum tender (no connected
   provider offers it), and printing the invoice first (D3, Q27). Unpaid departure IS in scope as
-  Task 17, which waits for asesor Q28.
+  Task 17, which waits for asesor Q28. *(2026-10-01: built on the owner's decision without the
+  asesor — see Q28 in `docs/compliance/asesor-questions.md`.)*
 - **D14. Kitchen ticket grouping.** `service_settings.kitchen_ticket_grouping` takes `combined`
   (Burger ×3, the default) or `separate` (three entries). It is independent of billing and draft
   grouping.
@@ -2032,7 +2033,8 @@ code and by the database (read in both places on `main` at `72e7e65fb`).
 ## Task 17: Record unpaid departure — slug `unpaid-departure`
 
 Spec §8; asesor Q28. **Does not start until Q28 is answered or the owner decides without it.** The
-default below is Q28's option (a).
+default below is Q28's option (a). *(2026-10-01: built on the owner's decision without the
+asesor — see Q28 in `docs/compliance/asesor-questions.md`.)*
 
 - [ ] **Step 1: Write the failing tests:**
   - With a €30.00 bill outstanding, "Record unpaid departure" needs a permission (a new module or

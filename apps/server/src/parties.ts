@@ -496,9 +496,8 @@ export async function finishTable(
 }
 
 /**
- * Close a party that owes nothing more: its empty open bills `emptyBillIds` are abandoned, its
- * drafts discarded, and it leaves its tables ({@link leaveForClearing}). Finish table and an unpaid
- * departure both end here.
+ * Close a party: its empty open bills `emptyBillIds` are abandoned, its drafts discarded, and it
+ * leaves its tables ({@link leaveForClearing}). Finish table and an unpaid departure both end here.
  */
 export async function closeParty(
   tx: Transaction,

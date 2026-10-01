@@ -5031,8 +5031,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       so the basket is believed to show their sum. Reported by B16's review fixer from reading; no
       test shows it.
   - **Task 17, a table that leaves without paying, is built as lane B item B17** (2026-10-01,
-    waiting for the owner's review; asesor Q28 decided by the owner without the asesor, option
-    (b)). When Finish table is refused because a bill still owes, the till offers **Record unpaid
+    waiting for the owner's review; asesor Q28 decided by the owner without the asesor: the full
+    simplified invoice is issued when the table leaves). When Finish table is refused because a bill still owes, the till offers **Record unpaid
     departure** beside Take payment. It needs the new core permission `sale.unpaid_departure`
     (supervisor and up, or a supervisor's PIN) and a reason. Each owing bill with no invoice yet is
     invoiced now for its full amount and filed; a bill already invoiced keeps its invoice. One row
