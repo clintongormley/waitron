@@ -1340,6 +1340,18 @@ screen using `wt-tabs` with an Add or Create button in a tab (candidates from a 
 Venue, Menus, Printers, the profile screen's passkeys), move each, and record the rule in
 `docs/developers/design-system.md` next to "Put Create in a menu beside the table heading".
 
+**Search fields are pill-shaped; they should only round their corners (A175, owner 2026-10-01:
+"all the search fields have too much rounding they just need the corners rounded, not a
+semicircle") — OPEN.** Three search boxes use `border-radius: var(--wt-radius-full)` (9999px, a
+half-circle at each end): every table's search (`.table-search`,
+`packages/ui/src/components/wt-data-table.ts`), the sidebar's "Search pages" (`.nav-search`,
+`apps/dashboard/src/dashboard-app.ts`) and the search box inside the searchable dropdown
+(`.search`, `packages/ui/src/components/wt-combobox.ts`). The other search boxes found by
+`grep -rln 'type="search"'` (the Products screen's folder search and the till's menu search, both
+`wt-input`, and the Staff screen's own input) already have ordinary corners. **Wanted:** the three
+take `var(--wt-radius-md)` (8px), the radius every other text field uses, so the focus ring
+follows it too. Small; no guard checks a field's radius.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
