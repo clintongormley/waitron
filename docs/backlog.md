@@ -221,7 +221,8 @@ been started to another station (a slip at the old station whenever it was sent 
 re-routing a held dish whose station closed before it was released, which, with no replacement,
 goes to its old station with an alert ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md),
 starts once 3c-2 has landed); 3d, watchers. **Next action:** 3a is lane D's PF3 and 3b its PF4; the
-three 3c plans await the owner's approval; the 3d plan is written next.
+three 3c plans are approved (owner, 2026-10-01) and queued — 3c-1 as lane E's PF5, 3c-2 and 3c-3 as
+lane D's PF6 and PF7, each landing on its own when green; the 3d plan is written next.
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside
