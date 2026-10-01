@@ -1573,6 +1573,14 @@ and ask the owner nine points (spec §12), among them six pull requests rather t
 three kinds of test edit the move needs. The mockups are drawn at 14px in the system font, which
 is A179. The work lands in six pull requests, A178a to A178f, in order.
 
+**For A178b–e: main's #1004 (prep stations) changed the hand-drawn field list the spec counted.**
+`packages/venue-service/src/dashboard/venue-operations-screen.ts` gained a native `<select>`, the
+per-till "starts in" zone (`part="till-zone-select"`), which the spec's file list does not include;
+the station field the spec lists for `apps/dashboard/src/widgets/product-editor.ts` is gone; and the
+new `packages/venue-service/src/dashboard/prep-stations-screen.ts` shows field errors as a separate
+`<p class="error">` beside the field rather than through its `error` property, so it should move
+onto `error`.
+
 **A178a — DONE: A178a (this branch, feat/filled-fields-primitives).** The shared field primitives
 draw the filled field: five colour tokens, whose contrast
 `packages/ui-core/src/tokens/colors.test.ts` holds, and five size tokens; one shared stylesheet, `fieldStyles`
@@ -1588,7 +1596,9 @@ the look** (the approved edit kind; every behavioural assertion kept): in
 `packages/ui-core/src/components/wt-input.test.ts`, the label-size case (now mounted with a value,
 since a resting label is 16px), the help-placement case (beside the field box, not the label), the
 end-action case (reads `.field`), the invalid case (bottom line and label, not the border) and the
-disabled case (paler fill and dashed line, not opacity); in `wt-input.a11y.test.ts`, the
+disabled case (paler fill and dashed line, not opacity), and the no-attributes case, which now
+checks `.field-label` instead of `.label-row` (the filled field removed that class, so the old check
+could no longer fail); in `wt-input.a11y.test.ts`, the
 "placeholder" and "input with a hint" contrast checks read the fill from `.field`; in
 `packages/ui/src/components/wt-number-stepper.test.ts`, the disabled, token-painting, invalid and
 button-placement cases (the buttons now sit outside the box), and the "empty" contrast check in its
@@ -11921,7 +11931,9 @@ notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs
 copied to `/app/web/`) and the print-agent bundle (`apps/print-agent`'s `build`, the same
 `bundle-node.mjs`, copied to `/app/print-agent.js` in `deploy/Dockerfile`'s `print-agent` stage)
 carry npm packages whose `LICENSE` files are left behind by bundling. The app image's
-`/app/third-party/` holds notices for libvips and Litestream only, and the print-agent image's
+`/app/third-party/` holds notices for libvips, Litestream, the Iosevka font printed text is drawn
+from, the Moby template the print agent's AppArmor profile is copied from, and the Material Symbols
+icons the web apps carry, and the print-agent image's
 `/app/third-party/` holds only `python3-minimal/`: the Debian copyright files of python3-minimal
 and the packages its install added, and a `PACKAGES.txt` listing them (since A140; bluez's are not
 copied). Measured 2026-09-24 in the

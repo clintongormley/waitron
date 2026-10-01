@@ -433,7 +433,12 @@ the list and let focus move on, and focus leaving both the list and the trigger 
 on the label of a closed dropdown opens the list; a press on the label while the list is open
 closes it and leaves focus on the trigger. Opened by a click, the list makes no row active (the
 first arrow press goes to the first row, or with ArrowUp the last) but scrolls the chosen row into
-view. The "No results" text sits outside the list box; the
+view. While the list is open, the arrows, Home and End on the trigger move the active row and put
+focus back on the search box or list; when the options change, the active row follows its option by
+value (the add row stays active while it is still offered), else the chosen row, else the first,
+while a list opened by a click with no row active keeps none; and a `search="auto"` list whose new
+options cross the threshold stays open and puts focus on whichever control now takes the keys. The
+"No results" text sits outside the list box; the
 reason is in the code (`wt-combobox.ts`, the comment above it).
 
 Set a `wt-data-table` column’s `activatesRow: false` when it has an action separate from `rowClick`.
@@ -1456,8 +1461,9 @@ test("paints from the primary token", async () => {
 - `chooseOption(el, value)` — picks `value` on a single-choice `wt-combobox` (it sets `value`,
   never `values`, so it cannot drive a `multiple` one): sets `value`, sends the `wt-change` a
   click on a row sends, with `detail: { value }` (bubbling and composed), and awaits the render.
-  Unlike a click, it neither closes the list nor moves focus to the trigger. It is for a screen test that used to set a native select's value; an app's test imports
-  it as `@waitron/ui/src/test-helpers.js`. Its case is in `packages/ui/src/test-helpers.test.ts`.
+  Unlike a click, it neither closes the list nor moves focus to the trigger. It is for a screen test
+  that picks an option without driving the list; an app's test imports it as
+  `@waitron/ui/src/test-helpers.js`. Its case is in `packages/ui/src/test-helpers.test.ts`.
 
 ### Accessibility testing (axe)
 

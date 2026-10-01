@@ -487,7 +487,7 @@ export class WtCombobox extends LitElement {
     return -1;
   }
 
-  /** The row a keyboard opening starts on: the chosen one, else the first. */
+  /** The chosen row, else the first. */
   private get chosenIndex(): number {
     const chosen = this.indexOfChosen(this.filteredOptions);
     return chosen >= 0 ? chosen : this.firstRowIndex;
