@@ -965,6 +965,12 @@ DROP TRIGGER IF EXISTS products_media_image_fk_parent_rename;
   "asserts only that each step does not throw, so a rebuild that silently drops a trigger ON the
   rebuilt table passes it") — both become untrue for `products` once Step 4's assertion exists;
   narrow each to say the final step checks the triggers on `products` and nothing else.
+  _(2026-10-01: A164 rewrote both texts, so the line numbers here are stale, and the test now
+  carries two rows per table through every step. A migration that cannot carry those rows fails
+  it unless named in the test's `RESETS`; whether this task's `0052`–`0054` can is not known. A new
+  schema the filler cannot satisfy fails with `could not write row N of <table>`, whose fix, unless the
+  new schema itself refuses every row, is usually a `CANDIDATES` or `ONE_ROW` entry, never a
+  `RESETS` one.)_
 
 - [ ] **Step 1: Write the failing test** — in `packages/db/src/schema/catalogue.test.ts`, with the
   file's own `columnsOf` helper (`:36-38`):
@@ -987,7 +993,9 @@ it("products and categories carry no station of their own", async () => {
   `scripts/migration-upgrade.test.ts` (or a sibling case in the same file) an assertion that after
   the final step `select name from sqlite_master where type='trigger' and name like 'products_%'`
   holds all nine names above (the test closes the store after each step, `:119-138`, so open it
-  once more for this read). Control: delete ONE `CREATE TRIGGER` from `0054` (copy the file to
+  once more for this read _(2026-10-01: line numbers stale since A164; the store is closed in
+  `step`, and `carryRows` reopens the file raw after it but closes it again, so the final-step read
+  still needs its own open after the walk)_). Control: delete ONE `CREATE TRIGGER` from `0054` (copy the file to
   `/tmp` first), run, and check the failure names exactly that trigger; restore the file from the
   copy.
 - [ ] **Step 5: Commit** — "Products and folders lose their own station field; the tables are rebuilt and every venue must be reset (core 0052–0054, media re-creates its product triggers)".

@@ -987,13 +987,71 @@ already records: core `0003_variant_inherited_nullable` rebuilds `products` whil
 media's `0001_image_references` reads it in its body, and SQLite refuses the rename that ends the
 rebuild (`error in trigger products_media_image_fk_parent_delete: no such table: main.products`).
 The guard applies everything up to `0003` together for that reason; a future rebuild of a table
-another set's trigger BODY reads fails it. It seeds no rows, so a migration that fails only on data
-passes it.
+another set's trigger BODY reads fails it. Until A164 (2026-10-01) it seeded no rows, so a
+migration that failed only on data passed it; the next section says what it carries now.
+
+### The upgrade test carries rows through every step
+
+Since A164 (2026-10-01) `scripts/migration-upgrade.test.ts` tops every table up to two rows after
+each step, reading that step's own schema: `pragma_table_info`, `pragma_foreign_key_list`, the
+unique indexes, and the `CHECK (…)` bodies parsed out of the `CREATE TABLE` text. It writes them
+on its own `node:sqlite` connection after the store has closed, with `foreign_keys` and
+`recursive_triggers` on, so the file's foreign keys, CHECKs and triggers all apply. A column's
+values come from its default, the literals a CHECK compares it with, a short generic list per
+declared type, and `CANDIDATES` for the few columns a CHECK or trigger needs a particular shape
+for; a search with conflict-directed backjumping picks a combination every CHECK and foreign key
+accepts. A nullable column outside every unique index is null wherever its constraints allow, so a
+rebuild that makes it required meets a null. The second row repeats the first wherever its constraints allow and differs in the
+primary key and in every unique index over plain columns. Before the next step the row counts are recorded,
+and a table that still exists afterwards holding fewer rows fails the step. A singleton
+(`CHECK (id = 1)`) and the tables `ONE_ROW` names hold one row; at the end, every table but
+drizzle's `__drizzle_migrations_*` bookkeeping must hold at least one.
+
+What it was shown to catch, measured 2026-10-01 (Node v26.7.0, its SQLite 3.53.4) by planting a
+migration at the end of the catalogue set and running
+`pnpm exec vitest run scripts/migration-upgrade.test.ts`: each plant passed the guard as it stood
+before A164 and failed it after.
+
+- `ALTER TABLE labels ADD planted integer NOT NULL` — `Cannot add a NOT NULL column with default
+  value NULL`. The same statement on an EMPTY table was accepted (measured in a bare `node:sqlite`
+  script), which is why the old guard passed it.
+- A drizzle-shaped rebuild of `labels` (create, copy, drop, rename), whose child `product_labels`
+  cascades — `Step catalogue/0099_plant lost rows the step before wrote: product_labels: 2 rows
+  before, 0 after`. With the row-count comparison deleted (and `RESETS`' `core/0012` entry, which
+  depends on it, removed) the same plant passed: the comparison is what catches it.
+- `CREATE UNIQUE INDEX planted_uq ON labels (created_at)` — `UNIQUE constraint failed:
+  labels.created_at`.
+
+**On 2026-10-01, seven shipped steps could not carry these rows**, found by running the walk with each failure
+logged and the database rebuilt empty at that step: catalogue `0003_menu_price_nullable` and
+`0008_menu_details` (the `menu_items` rebuild's `DROP TABLE` refused with `FOREIGN KEY constraint
+failed`), core `0044_drop_table_bill_pointer` (the same for `dining_tables`), core
+`0008_node_keyed_rows`, identity `0003_session_token_hash_required` and core `0026_line_vat_class`
+(a rebuild making a column required, refused with `NOT NULL constraint failed` on a copied row
+whose value is null), and core `0012_printer_calibration`, which rebuilds `drawer_opens` without
+copying its rows (`drawer_opens: 2 rows before, 0 after`). The steps `RESETS` lists are these: at
+each the guard checks the failure is still the listed one, then migrates an empty database to that
+point and carries on. A reset that expects a row loss must lose exactly the listed tables, so a
+second table losing rows at the same step fails the guard; at a step refused by a constraint,
+nothing else the step does to the rows is seen. Removing the row-count comparison made the `core/0012` entry fail with
+`is listed in RESETS … but it carried the rows`, so a listed step that stops failing is reported. The
+null-column refusals are about these synthetic rows; whether a real box held such a null was not
+checked.
+
+A new schema the filler cannot satisfy fails with `could not write row N of <table>` (or `could
+not write <table>`, when a foreign key names a table the step lacks). First check that the new
+schema accepts any row at all; if it does, the fix is usually a `CANDIDATES` entry for the column
+or a `ONE_ROW` entry with its reason. It is never a `RESETS` entry, which is for a step that refuses
+or loses rows it was given. An entry the walk never reaches fails the guard too; a `CANDIDATES` or
+`ONE_ROW` entry the walk reaches but no longer needs passes.
+
+Runtime, three runs each on the same machine (`CI` unset, agent variables unset), Vitest's `tests`
+figure: 8.05, 8.09 and 8.07 seconds before; 9.93, 9.96 and 9.95 after.
 
 ### The upgrade test names the phase it stalled in
 
-`scripts/migration-upgrade.test.ts` times each migration step in four phases — migrate, open,
-change feed, close — through `scripts/step-watch.mjs` (`watch.phase`), and runs the whole walk under
+`scripts/migration-upgrade.test.ts` times each migration step in five phases — migrate, open,
+change feed, close, rows — through `scripts/step-watch.mjs` (`watch.phase`), and runs the whole walk under
 `reportStallAfter`. At `STALL_DEADLINE_MS` (`TEST_BOUND_MS - 10_000`: 110 seconds, under the test's
 own 120) it fails with the phase still running, the process's active resources
 (`process.getActiveResourcesInfo()`) and every finished phase's duration. The deadline does not stop
