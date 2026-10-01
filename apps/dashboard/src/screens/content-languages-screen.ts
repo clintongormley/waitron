@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
+import {
+  capitaliseFirst,
+  resolveContentText,
+  type ContentLanguageRules,
+  type ContentLanguages,
+} from "@waitron/shared";
 import { baseStyles, formMessage, formMessageStyles, setContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -136,8 +141,14 @@ export class ContentLanguagesScreen extends LitElement {
     }
   }
 
-  async #write(config: ContentLanguages): Promise<void> {
+  async #write(requested: ContentLanguages): Promise<void> {
     const reads = this.#reads;
+    // The server refuses a list lacking any required language, so a list missing two could never be
+    // repaired one addition at a time.
+    const missing = (this.rules?.required ?? []).filter(
+      (code) => !requested.languages.includes(code),
+    );
+    const config = { ...requested, languages: [...requested.languages, ...missing] };
     await this.api.updateContentLanguages(config);
     this.saveError = "";
     if (this.#reads === reads) {
@@ -171,9 +182,9 @@ export class ContentLanguagesScreen extends LitElement {
     if (!notice) return nothing;
     const foreign = config.languages.filter((code) => !rules.official.includes(code)).length;
     if (foreign >= notice.minimumForeign) return nothing;
-    const text = notice.text[currentLocale().split("-")[0]!] ?? notice.text["en"];
+    const text = resolveContentText(notice.text, currentLocale(), "en");
     return text
-      ? html`<p class="warning" data-test="foreign-language-notice">${text}</p>`
+      ? html`<p class="warning" role="note" data-test="foreign-language-notice">${text}</p>`
       : nothing;
   }
 

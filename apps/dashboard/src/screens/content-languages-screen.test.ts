@@ -164,7 +164,7 @@ describe("required content languages", () => {
     expect(dialog(el).official).toEqual(OFFICIAL);
   });
 
-  it("shows a save refused for leaving out a required language once, in the card", async () => {
+  it("shows a save refused for leaving out a required language once, in the card, when the server requires a language the screen's rules do not", async () => {
     const client = api({
       getContentLanguages: vi
         .fn()
@@ -180,6 +180,45 @@ describe("required content languages", () => {
     );
     expect(el.shadowRoot!.querySelectorAll("[data-error]")).toHaveLength(1);
     expect(shown(el)).toEqual(["Español", "Catalán"]);
+  });
+
+  it("adds every missing required language to an added one, so a list lacking two can be repaired", async () => {
+    const client = rulesApi(BARCELONA, { defaultLanguage: "en", languages: ["en"] });
+    const el = await mount(client);
+    q(el, "[data-test=add-language]")!.click();
+    await flush(el);
+    const add = dialog(el);
+    const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
+    select.value = "ca";
+    select.dispatchEvent(new Event("change"));
+    await add.updateComplete;
+    add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
+    const saved = { defaultLanguage: "en", languages: ["en", "ca", "es"] };
+    await vi.waitFor(() => expect(shown(el)).toEqual(["Inglés", "Catalán", "Español"]));
+    expect(client.updateContentLanguages).toHaveBeenCalledWith(saved);
+    expect(currentContentLanguages()).toEqual(saved);
+  });
+
+  it("adds every missing required language to a removal and to a new default", async () => {
+    const client = rulesApi(BARCELONA, { defaultLanguage: "en", languages: ["en", "fr", "es"] });
+    const el = await mount(client);
+    q(el, "[data-test=remove-fr]")!.click();
+    await vi.waitFor(() =>
+      expect(client.updateContentLanguages).toHaveBeenCalledWith({
+        defaultLanguage: "en",
+        languages: ["en", "es", "ca"],
+      }),
+    );
+
+    const other = rulesApi(BARCELONA, { defaultLanguage: "en", languages: ["en", "fr"] });
+    const second = await mount(other);
+    q(second, "[data-test=set-default-fr]")!.click();
+    await vi.waitFor(() =>
+      expect(other.updateContentLanguages).toHaveBeenCalledWith({
+        defaultLanguage: "fr",
+        languages: ["fr", "en", "ca", "es"],
+      }),
+    );
   });
 
   it("shows a loading status until the rules arrive", async () => {
