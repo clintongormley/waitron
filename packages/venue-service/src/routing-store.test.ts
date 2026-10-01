@@ -40,6 +40,7 @@ import {
 } from "./routing-store.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment } from "./operations.js";
+import { routeExceptions } from "./schema/routing.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -124,6 +125,27 @@ async function fixture(tx: Transaction) {
 const scoped = (fn: (tx: Transaction) => Promise<void>) => withTransaction(db, fn);
 
 describe("route explanation", () => {
+  it("omits variants whose parent product is inactive from maker descriptions", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.update(products).set({ active: false }).where(eq(products.id, f.mojito));
+      const makers = await describeMakers(tx, f.cfg);
+      expect(makers.has(f.mojito)).toBe(false);
+      expect(makers.has(f.variant)).toBe(false);
+      expect(makers.get(f.bread)).toEqual({
+        route: { kind: "station", stationId: f.bar },
+        variesByZone: false,
+      });
+    }));
+
+  it("rejects an unknown product", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await expect(explainRoute(tx, f.cfg, randomUUID(), null)).rejects.toMatchObject({
+        code: "route.subject_not_found",
+        params: { subject: "product" },
+      });
+    }));
   it("describes active variants and zone-sensitive rules without a service zone", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -599,6 +621,48 @@ describe("resolveMakers", () => {
     }));
 });
 describe("assigning an unfiled product from Prep stations", () => {
+  it("rejects products that are absent, filed, or variants", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const { assignUnfiledProduct } = await import("./routing-store.js");
+      for (const productId of [randomUUID(), f.mojito, f.variant])
+        await expect(assignUnfiledProduct(tx, f.cfg, productId, noPrep)).rejects.toMatchObject({
+          code: "route.subject_not_found",
+          params: { subject: "product" },
+        });
+      expect((await routingModel(tx, f.cfg)).exceptions).toEqual([]);
+    }));
+
+  it("collapses repeated product assignments to one effective rule", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.insert(routeExceptions).values([
+        {
+          locationId: f.cfg.locationId,
+          position: 2,
+          zoneId: null,
+          categoryId: null,
+          productId: f.bread,
+          stationId: f.bar,
+          noPreparation: false,
+        },
+        {
+          locationId: f.cfg.locationId,
+          position: 3,
+          zoneId: null,
+          categoryId: null,
+          productId: f.bread,
+          stationId: null,
+          noPreparation: true,
+        },
+      ]);
+      const { assignUnfiledProduct } = await import("./routing-store.js");
+      await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
+      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([
+        { productId: f.bread, target: { kind: "station", stationId: f.terraceBar } },
+      ]);
+    }));
+
   it("makes repeated assignments effective before an earlier broad exception without duplicating the product rule", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -640,6 +704,161 @@ describe("assigning an unfiled product from Prep stations", () => {
 });
 
 describe("routing previews", () => {
+  it("previews an appended exception over a saved broader rule without saving it", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await createException(tx, f.cfg, {
+        zoneId: null,
+        categoryId: f.food,
+        productId: null,
+        target: noPrep,
+      });
+      const before = await routingModel(tx, f.cfg);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "exception",
+        id: null,
+        input: {
+          zoneId: f.terrace,
+          categoryId: f.cocktails,
+          productId: null,
+          target: noPrep,
+        },
+      });
+      expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
+        expect.objectContaining({
+          zoneId: f.terrace,
+          from: { kind: "station", stationId: f.bar },
+          to: noPrep,
+        }),
+      ]);
+      expect(await routingModel(tx, f.cfg)).toEqual(before);
+    }));
+
+  it("previews a revised assignment ahead of broader exceptions without saving it", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const { assignUnfiledProduct } = await import("./routing-store.js");
+      await assignUnfiledProduct(tx, f.cfg, f.bread, noPrep);
+      const before = await routingModel(tx, f.cfg);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "assignment",
+        productId: f.bread,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(moves.filter((move) => move.productId === f.bread)).toEqual([
+        expect.objectContaining({
+          zoneId: f.terrace,
+          from: noPrep,
+          to: { kind: "station", stationId: f.terraceBar },
+        }),
+      ]);
+      expect(await routingModel(tx, f.cfg)).toEqual(before);
+    }));
+
+  it("previews replacing duplicate product assignments as one rule", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.insert(routeExceptions).values([
+        {
+          locationId: f.cfg.locationId,
+          position: 2,
+          zoneId: null,
+          categoryId: null,
+          productId: f.bread,
+          stationId: f.bar,
+          noPreparation: false,
+        },
+        {
+          locationId: f.cfg.locationId,
+          position: 3,
+          zoneId: null,
+          categoryId: null,
+          productId: f.bread,
+          stationId: null,
+          noPreparation: true,
+        },
+      ]);
+      const before = await routingModel(tx, f.cfg);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "assignment",
+        productId: f.bread,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(moves.filter((move) => move.productId === f.bread)).toEqual([
+        expect.objectContaining({
+          from: { kind: "station", stationId: f.bar },
+          to: { kind: "station", stationId: f.terraceBar },
+        }),
+      ]);
+      expect(await routingModel(tx, f.cfg)).toEqual(before);
+    }));
+
+  it("shows the fallback after removing a claim without removing the stored claim", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, noPrep);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "claim",
+        categoryId: f.drinks,
+        target: null,
+      });
+      expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
+        expect.objectContaining({
+          zoneId: f.terrace,
+          from: noPrep,
+          to: { kind: "station", stationId: f.bar },
+        }),
+      ]);
+      expect((await routingModel(tx, f.cfg)).claims).toMatchObject([
+        { categoryId: f.drinks, target: noPrep },
+      ]);
+    }));
+
+  it("shows the fallback after deleting an exception and rejects unknown exception ids", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const id = await createException(tx, f.cfg, {
+        zoneId: f.terrace,
+        categoryId: f.cocktails,
+        productId: null,
+        target: noPrep,
+      });
+      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
+      expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
+        expect.objectContaining({
+          zoneId: f.terrace,
+          from: noPrep,
+          to: { kind: "station", stationId: f.bar },
+        }),
+      ]);
+      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([{ id }]);
+      for (const change of [
+        { kind: "exception_delete", id: randomUUID() } as const,
+        { kind: "exception", id: randomUUID(), input: f.input } as const,
+      ])
+        await expect(previewRoutingChange(tx, f.cfg, change)).rejects.toMatchObject({
+          code: "route.not_found",
+        });
+    }));
+
+  it("rejects invalid preview orders and missing unfiled products without writing", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const id = await createException(tx, f.cfg, f.input);
+      for (const ids of [[], [id, id], [randomUUID()]])
+        await expect(
+          previewRoutingChange(tx, f.cfg, { kind: "exception_order", ids }),
+        ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "ids" } });
+      for (const productId of [randomUUID(), f.mojito, f.variant])
+        await expect(
+          previewRoutingChange(tx, f.cfg, { kind: "assignment", productId, target: noPrep }),
+        ).rejects.toMatchObject({
+          code: "route.subject_not_found",
+          params: { subject: "product" },
+        });
+      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([{ id }]);
+    }));
+
   it("shows a claim move in every active zone without writing it", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
