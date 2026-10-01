@@ -5840,7 +5840,7 @@ ongoing overhaul listed at the top of Track A.
   field.
 
 - **The bill discount limit's explanation sits in the text above the field, not cut off inside it
-  (C119, owner 2026-10-01) — DONE (2026-10-01).** The owner, on C104's note that only "Discoun…" /
+  (C119, owner 2026-10-01) — DONE (2026-10-01, #967).** The owner, on C104's note that only "Discoun…" /
   "Los des…" of it showed: "Move discount text". On the adjustments reasons screen, the "Limit on a
   bill's discounts" section now explains the limit in a paragraph under its heading, in the same
   muted style as the page's own introduction, with the wording unchanged in English and Spanish; the
