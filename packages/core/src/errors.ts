@@ -64,9 +64,12 @@ declare module "@waitron/shared" {
      * exchanged by two F3s. A duplicate id within one call's list is refused earlier, as a plain
      * Error. */
     "sale.already_substituted": { saleId: string };
-    /** Thrown by `recordSale` when a caller-supplied `vatBreakdown`'s bases and taxes, summed and
-     * compared by value, do not equal `total`. The breakdown is handed to the fiscal backend as
-     * given, and a chained record that disagrees with its own total cannot be repaired. */
+    /** A VAT breakdown's bases and taxes, summed and compared by value, do not equal the total; a
+     * chained record that disagrees with its own total cannot be repaired. Thrown before anything
+     * is written: by `recordSale` for a supplied breakdown, compared as given and at the cent; and
+     * by `recordSale`, `recordSubstitution` and `recordCorrection` for a breakdown derived from
+     * the lines, compared at the cent and only when a line total is past the cent. From an
+     * at-the-cent comparison, both params are the at-the-cent values. */
     "sale.total_mismatch": { declaredTotal: string; breakdownTotal: string };
     /** Never thrown: the write paths build it from a failed `FiscalBackend.checkIntegrity` and
      * record it as an incident. One code whatever issues the regime reported. */

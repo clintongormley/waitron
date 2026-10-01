@@ -145,10 +145,10 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       });
     });
 
-    // The backend received the pricing's own `total` and breakdown VERBATIM — recordSale filed the
-    // supplied difference-method breakdown rather than re-deriving one from `lines`. (If recordSale
-    // ignored the supplied breakdown and derived its own, the captured tax would be 0.73, not 0.72,
-    // and this `toEqual` would fail.)
+    // The backend received the pricing's own `total` and breakdown unchanged (the pricing's figures
+    // are already at the cent) — recordSale filed the supplied difference-method breakdown rather
+    // than re-deriving one from `lines`. (If recordSale ignored the supplied breakdown and derived
+    // its own, the captured tax would be 0.73, not 0.72, and this `toEqual` would fail.)
     expect(backend.lastSale).toBeDefined();
     expect(backend.lastSale!.total).toBe(priced!.total);
     expect(backend.lastSale!.vatBreakdown).toEqual(priced!.vatBreakdown);

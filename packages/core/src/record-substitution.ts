@@ -14,12 +14,12 @@ import {
   tills,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, decimal, stringToCents } from "@waitron/shared";
+import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
-import { buildVatBreakdown } from "./record-sale.js";
+import { deriveVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordSubstitutionInput {
@@ -88,6 +88,10 @@ export async function recordSubstitution(
       "recordSubstitution: substitutedSaleIds must not contain duplicate ids — a ticket may be substituted at most once per F3",
     );
   }
+
+  // Derived before anything is written; refused when a line total is past the cent and the
+  // breakdown no longer sums to the total (`deriveVatBreakdown`).
+  const vatBreakdown = deriveVatBreakdown(input.total, input.lines);
 
   // The first missing id in input order is the one reported.
   const found = await tx
@@ -176,8 +180,8 @@ export async function recordSubstitution(
 
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
-  // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value.
-  const vatBreakdown = buildVatBreakdown(input.lines);
+  // Stored and filed at the cent, so the row and the fiscal record cannot hold different amounts.
+  const totalCents = stringToCents(input.total);
 
   const [inserted] = await tx
     .insert(sales)
@@ -189,7 +193,7 @@ export async function recordSubstitution(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      total: stringToCents(input.total),
+      total: totalCents,
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,
@@ -262,7 +266,7 @@ export async function recordSubstitution(
       issuedAt: now.instant,
       offsetMinutes: now.offsetMinutes,
       descriptionOfOperation: location.operationDescription,
-      total: decimal(input.total),
+      total: centsToDecimal(totalCents),
       vatBreakdown,
       counterparty: input.counterparty,
     },

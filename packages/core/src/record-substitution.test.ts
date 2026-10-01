@@ -2,8 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { Transaction } from "@waitron/db";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   captureError,
@@ -403,6 +404,105 @@ describe("recordSubstitution — the F3 sale", () => {
     const substitution = records[1];
     expect(substitution?.saleId).toBe(f3Id);
     expect(substitution?.total).toBe("14.41");
+  });
+});
+
+describe("recordSubstitution — the amounts filed are the cent amounts the rows store", () => {
+  /** Keeps the VAT breakdown each substitution hands the backend. */
+  class FilesBreakdownsBackend extends FakeFiscalBackend {
+    readonly filed: SaleForFiscalRecord["vatBreakdown"][] = [];
+
+    override recordSubstitution(
+      tx: Transaction,
+      sale: SaleForFiscalRecord,
+      substitution: { substitutedSaleIds: SaleId[] },
+    ) {
+      this.filed.push(sale.vatBreakdown);
+      return super.recordSubstitution(tx, sale, substitution);
+    }
+  }
+
+  it("files the total and the breakdown at the cent amounts the rows store, not as typed", async () => {
+    const backend = new FilesBreakdownsBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+
+    // 0.055 is stored as 0.06 and the 0.045 line as 0.05, whose 10% is 0.005, rounded 0.01.
+    const { saleId: f3Id } = await substitute(backend, [ticket], {
+      total: "0.055",
+      lines: [
+        {
+          lineNo: 1,
+          name: "x",
+          descriptions: { en: "x" },
+          quantity: "1",
+          unitPrice: "0.045",
+          vatRate: "10.00",
+          lineTotal: "0.045",
+        },
+      ],
+    });
+
+    const breakdown = [{ rate: "10.00", base: "0.05", tax: "0.01" }];
+    expect((await backend.recordsFor(nodeId))[1]?.total).toBe("0.06");
+    expect(backend.filed).toEqual([breakdown]);
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
+    expect(row?.total).toBe(6);
+    expect(row?.vatBreakdown).toEqual(breakdown);
+  });
+
+  /** One line per entry of `lineTotals`, all at `vatRate`. */
+  function linesOf(lineTotals: string[], vatRate: string): RecordSubstitutionInput["lines"] {
+    return lineTotals.map((lineTotal, index) => ({
+      lineNo: index + 1,
+      name: "x",
+      descriptions: { en: "x" },
+      quantity: "1",
+      unitPrice: lineTotal,
+      vatRate,
+      lineTotal,
+    }));
+  }
+
+  it("refuses a breakdown that no longer sums to the total once each line is rounded to the cent, writing nothing", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+
+    // Each 0.005 is stored as 0.01: the lines hold 0.02 against a total of 0.01. Caught inside the
+    // transaction, so the transaction commits whatever was written before the refusal.
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordSubstitution(
+          tx,
+          backend,
+          substitutionInput([ticket], {
+            total: "0.01",
+            lines: linesOf(["0.005", "0.005"], "0.00"),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "sale.total_mismatch",
+        params: { declaredTotal: "0.01", breakdownTotal: "0.02" },
+      });
+    });
+
+    expect(await countRows("sales")).toBe(1); // the ticket alone
+    expect(await countRows("sale_substitutions")).toBe(0);
+    expect((await backend.recordsFor(nodeId)).map((r) => r.kind)).toEqual(["sale"]);
+    const [series] = await suite.db
+      .select({ n: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, seriesId));
+    expect(series?.n).toBe(2); // the ticket's number only
+  });
+
+  it("still files a two-decimal substitution whose breakdown does not sum to its total", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+
+    // 1.00 at 21% derives 1.00 + 0.21, against a total of 1.00. No amount is past the cent.
+    await substitute(backend, [ticket], { total: "1.00", lines: linesOf(["1.00"], "21.00") });
+
+    expect((await backend.recordsFor(nodeId))[1]?.total).toBe("1.00");
   });
 });
 

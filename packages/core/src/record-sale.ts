@@ -14,6 +14,7 @@ import type { Transaction } from "@waitron/db";
 import {
   AppError,
   addDecimal,
+  centsToDecimal,
   compareDecimal,
   decimal,
   percentOf,
@@ -64,8 +65,9 @@ export interface RecordSaleInput {
   total: string;
   lines: RecordSaleLine[];
   /** A caller-supplied VAT breakdown (e.g. `@waitron/catalogue`'s gross-inclusive figures), handed
-   * to the fiscal backend as given and refused with `sale.total_mismatch` unless it sums to
-   * `total`. Derived from `lines` by `buildVatBreakdown` when absent. */
+   * to the fiscal backend at the cent, and refused with `sale.total_mismatch` unless it sums to
+   * `total` both as given and at the cent. Derived from `lines` by `deriveVatBreakdown` when
+   * absent. */
   vatBreakdown?: VatBreakdownLine[];
   clock: TrustedClock;
   /**
@@ -86,15 +88,28 @@ export function formatInvoiceNumber(code: string, number: number): string {
   return `${code}/${number}`;
 }
 
+/** An amount at the cent, as a money column stores it: "1.005" is "1.01". */
+function atCents(amount: string): Decimal {
+  return centsToDecimal(stringToCents(amount));
+}
+
+/** Refuses with `sale.total_mismatch` a breakdown whose bases and taxes do not sum to `total`. */
+function assertSumsTo(breakdown: readonly VatBreakdownLine[], total: Decimal): void {
+  const breakdownTotal = sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
+  if (compareDecimal(breakdownTotal, total) !== 0) {
+    throw new AppError("sale.total_mismatch", { declaredTotal: total, breakdownTotal });
+  }
+}
+
 /**
  * Groups `lines` by `vatRate` and derives each group's tax from its summed base: VAT is reported
- * per rate, not per line.
+ * per rate, not per line. Each base is the `lineTotal` at the cent, as `saleLineRows` stores it.
  */
-export function buildVatBreakdown(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
+function buildVatBreakdown(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
   const bases = new Map<Decimal, Decimal>();
   for (const line of lines) {
     const rate = decimal(line.vatRate);
-    const base = decimal(line.lineTotal);
+    const base = atCents(line.lineTotal);
     const existing = bases.get(rate);
     bases.set(rate, existing === undefined ? base : addDecimal(existing, base));
   }
@@ -106,6 +121,25 @@ export function buildVatBreakdown(lines: readonly RecordSaleLine[]): VatBreakdow
 }
 
 /**
+ * The breakdown derived from `lines`, refused with `sale.total_mismatch` when a line total is past
+ * the cent and the breakdown does not sum to `total` at the cent: rounding each line on its own can
+ * move the sum, and a chained record that disagrees with its own total cannot be repaired. With
+ * every line total at the cent, rounding moves no base and the breakdown is not checked, whatever
+ * the total: its sum is at the cent, so a total past the cent never equalled it as typed either.
+ */
+export function deriveVatBreakdown(
+  total: string,
+  lines: readonly RecordSaleLine[],
+): VatBreakdownLine[] {
+  const breakdown = buildVatBreakdown(lines);
+  const linePastTheCent = lines.some(
+    (line) => compareDecimal(decimal(line.lineTotal), atCents(line.lineTotal)) !== 0,
+  );
+  if (linePastTheCent) assertSumsTo(breakdown, atCents(total));
+  return breakdown;
+}
+
+/**
  * Takes a transaction rather than a database: the sale rows and the fiscal write must commit or
  * roll back together, and the caller commits.
  */
@@ -114,14 +148,26 @@ export async function recordSale(
   backend: FiscalBackend,
   input: RecordSaleInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Checked before anything is written: a supplied breakdown is handed to the fiscal backend as
-  // given, and one that disagrees with the total would chain a record that cannot be repaired. This
-  // is a caller-precondition failure, not a fiscal condition.
-  if (input.vatBreakdown !== undefined) {
-    const breakdownTotal = sumDecimals(input.vatBreakdown.flatMap((g) => [g.base, g.tax]));
-    if (compareDecimal(breakdownTotal, decimal(input.total)) !== 0) {
-      throw new AppError("sale.total_mismatch", { declaredTotal: input.total, breakdownTotal });
-    }
+  // Stored and filed at the cent, so the row and the fiscal record cannot hold different amounts.
+  const totalCents = stringToCents(input.total);
+  const total = centsToDecimal(totalCents);
+
+  // Checked before anything is written: a breakdown that disagrees with the total would chain a
+  // record that cannot be repaired. A supplied one is checked as given and again at the cent,
+  // where rounding each amount on its own can move the sum; a derived one only when a line total is
+  // past the cent (`deriveVatBreakdown`).
+  // This is a caller-precondition failure, not a fiscal condition.
+  let vatBreakdown: VatBreakdownLine[];
+  if (input.vatBreakdown === undefined) {
+    vatBreakdown = deriveVatBreakdown(input.total, input.lines);
+  } else {
+    vatBreakdown = input.vatBreakdown.map((g) => ({
+      rate: g.rate,
+      base: atCents(g.base),
+      tax: atCents(g.tax),
+    }));
+    assertSumsTo(input.vatBreakdown, decimal(input.total));
+    assertSumsTo(vatBreakdown, total);
   }
 
   // Verification must run against exactly the state this transaction is about to extend; one
@@ -196,11 +242,8 @@ export async function recordSale(
     pending.push({ error: now.warning, severity: "warning" });
   }
 
-  // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value.
-  const vatBreakdown = input.vatBreakdown ?? buildVatBreakdown(input.lines);
-
-  // `total` is stored in whole cents. `vat_breakdown` stores, unconverted, the breakdown handed to
-  // `backend.recordSale` below.
+  // `vat_breakdown` stores the same breakdown handed to `backend.recordSale` below, as decimal
+  // strings, not cent counts.
   const [inserted] = await tx
     .insert(sales)
     .values({
@@ -212,7 +255,7 @@ export async function recordSale(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      total: stringToCents(input.total),
+      total: totalCents,
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,
@@ -276,7 +319,7 @@ export async function recordSale(
     issuedAt: now.instant,
     offsetMinutes: now.offsetMinutes,
     descriptionOfOperation: location.operationDescription,
-    total: decimal(input.total),
+    total,
     vatBreakdown,
     // A simplified invoice: no recipient.
     counterparty: null,

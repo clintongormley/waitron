@@ -125,7 +125,8 @@ function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
   return divideDecimal(multiplyDecimal(gross, HUNDRED), addDecimal(HUNDRED, rate), MONEY_SCALE);
 }
 
-/** Restates `@waitron/core`'s `buildVatBreakdown`, which is not on core's public barrel. */
+/** Restates `@waitron/core`'s breakdown derivation without its rounding to the cent: the line
+ *  totals here come from `baseFromGross` above, already at the money scale. */
 function breakdownOf(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
   const bases = new Map<Decimal, Decimal>();
   for (const line of lines) {
