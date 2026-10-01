@@ -80,6 +80,32 @@ const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "invoice_first", "ticket_then_pay"]);
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
+function requireHours(
+  body: Record<string, unknown>,
+): { weekday: number; opensAt: string; closesAt: string }[] {
+  if (!Array.isArray(body.hours))
+    throw new AppError("management.request_invalid", { field: "hours" });
+  return body.hours.map((value, index) => {
+    if (typeof value !== "object" || value === null)
+      throw new AppError("management.request_invalid", { field: `hours.${index}` });
+    const interval = value as Record<string, unknown>;
+    const { weekday, opensAt, closesAt } = interval;
+    if (
+      typeof weekday !== "number" ||
+      !Number.isInteger(weekday) ||
+      weekday < 0 ||
+      weekday > 6 ||
+      typeof opensAt !== "string" ||
+      !CLOCK_TIME.test(opensAt) ||
+      typeof closesAt !== "string" ||
+      !CLOCK_TIME.test(closesAt) ||
+      opensAt === closesAt
+    )
+      throw new AppError("management.request_invalid", { field: `hours.${index}` });
+    return { weekday, opensAt, closesAt };
+  });
+}
+
 function requireMode(value: unknown, field: string): ServiceMode {
   if (typeof value !== "string" || !MODES.has(value as ServiceMode)) {
     throw new AppError("management.request_invalid", { field });
@@ -310,27 +336,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        if (!Array.isArray(body.hours))
-          throw new AppError("management.request_invalid", { field: "hours" });
-        const hours = body.hours.map((value, index) => {
-          if (typeof value !== "object" || value === null)
-            throw new AppError("management.request_invalid", { field: `hours.${index}` });
-          const interval = value as Record<string, unknown>;
-          const { weekday, opensAt, closesAt } = interval;
-          if (
-            typeof weekday !== "number" ||
-            !Number.isInteger(weekday) ||
-            weekday < 0 ||
-            weekday > 6 ||
-            typeof opensAt !== "string" ||
-            !CLOCK_TIME.test(opensAt) ||
-            typeof closesAt !== "string" ||
-            !CLOCK_TIME.test(closesAt) ||
-            opensAt === closesAt
-          )
-            throw new AppError("management.request_invalid", { field: `hours.${index}` });
-          return { weekday, opensAt, closesAt };
-        });
+        const hours = requireHours(body);
         await gated(sessionId, (tx) => replaceStationHours(tx, ctx.cfg, stationId, hours));
         return c.body(null, 204);
       }),
@@ -474,32 +480,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        if (!Array.isArray(body.hours)) {
-          throw new AppError("management.request_invalid", { field: "hours" });
-        }
-        const hours = body.hours.map((value, index) => {
-          if (typeof value !== "object" || value === null) {
-            throw new AppError("management.request_invalid", { field: `hours.${index}` });
-          }
-          const interval = value as Record<string, unknown>;
-          const weekday = interval.weekday;
-          const opensAt = interval.opensAt;
-          const closesAt = interval.closesAt;
-          if (
-            typeof weekday !== "number" ||
-            !Number.isInteger(weekday) ||
-            weekday < 0 ||
-            weekday > 6 ||
-            typeof opensAt !== "string" ||
-            !CLOCK_TIME.test(opensAt) ||
-            typeof closesAt !== "string" ||
-            !CLOCK_TIME.test(closesAt) ||
-            opensAt === closesAt
-          ) {
-            throw new AppError("management.request_invalid", { field: `hours.${index}` });
-          }
-          return { weekday, opensAt, closesAt };
-        });
+        const hours = requireHours(body);
         await gated(sessionId, (tx) => replaceDepartmentHours(tx, ctx.cfg, departmentId, hours));
         return c.body(null, 204);
       }),
