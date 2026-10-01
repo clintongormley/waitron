@@ -20,8 +20,8 @@ const lemonade = {
   id: "p-lemonade",
   name: "Lemonade",
   variants: [
-    { id: "v-small", name: "Small", unitPrice: null, active: true },
-    { id: "v-large", name: "Large", unitPrice: "3.40", active: true },
+    { id: "v-small", name: "Small", unitPrice: null, offered: true },
+    { id: "v-large", name: "Large", unitPrice: "3.40", offered: true },
   ],
 } as unknown as Product;
 
@@ -35,7 +35,7 @@ const rows: MenuPriceRow[] = [
     productPrice: "12.00",
     override: null,
     effectivePrice: "12.00",
-    active: false,
+    offered: false,
     variants: [],
   },
   {
@@ -47,7 +47,7 @@ const rows: MenuPriceRow[] = [
     productPrice: "3.00",
     override: "2.50",
     effectivePrice: "2.50",
-    active: true,
+    offered: true,
     variants: [
       { variantId: "v-small", price: null, offered: true },
       { variantId: "v-large", price: "3.75", offered: false },

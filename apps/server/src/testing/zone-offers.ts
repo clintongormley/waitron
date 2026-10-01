@@ -170,7 +170,7 @@ async function placeOnTopLevel(
   if (productIds.length === 0) return new Map();
   await addProducts(tx, await requireMenuRoot(tx, menuId), productIds);
   const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, productIds));
-  await tx.update(menuItems).set({ grossPrice: null, active: true }).where(ofMenu);
+  await tx.update(menuItems).set({ grossPrice: null, offered: null }).where(ofMenu);
   const rows = await tx
     .select({ id: menuItems.id, productId: menuItems.productId })
     .from(menuItems)

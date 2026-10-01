@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { readCategory, setMainReportingCategory } from "./categories.js";
@@ -292,7 +292,7 @@ const MENU_ITEM_COLUMNS = {
   menuId: menuItems.menuId,
   productId: menuItems.productId,
   grossPrice: menuItems.grossPrice,
-  active: menuItems.active,
+  offered: menuItems.offered,
 };
 
 /**
@@ -333,7 +333,7 @@ export async function updateMenuItem(
   tx: Transaction,
   menuId: string,
   menuItemId: string,
-  patch: { grossPrice?: string | null; active?: boolean },
+  patch: { grossPrice?: string | null; offered?: boolean | null },
 ): Promise<void> {
   if ((await reachableMenuItem(tx, menuItemId, menuId)) === undefined)
     throw new AppError("menu_item.not_found", { menuId, menuItemId });
@@ -343,11 +343,11 @@ export async function updateMenuItem(
 async function writeMenuItemSettings(
   tx: Transaction,
   menuItemId: string,
-  patch: { grossPrice?: string | null; active?: boolean },
+  patch: { grossPrice?: string | null; offered?: boolean | null },
 ): Promise<void> {
-  const { grossPrice, active } = patch;
+  const { grossPrice, offered } = patch;
   const values = {
-    ...(active === undefined ? {} : { active }),
+    ...(offered === undefined ? {} : { offered }),
     ...(grossPrice === undefined
       ? {}
       : { grossPrice: grossPrice === null ? null : stringToCents(grossPrice) }),
@@ -424,7 +424,7 @@ function offerLineValues(row: OfferLineRow) {
 /**
  * The Active offers on the given menus: the products each menu's structure reaches, menus by name
  * and each in its structure's order (`reachableProducts`), Unavailable (sold-out) ones included. A
- * product switched off on the menu (`menu_items.active`) is left out. Only a top-level product is
+ * product switched off on the menu (`menu_items.offered`) is left out. Only a top-level product is
  * an offer; each Active variant of it is nested under its offer, an Unavailable one listed as
  * unavailable.
  */
@@ -486,7 +486,7 @@ async function offerRowsOn(
           grossPrice: menuItems.grossPrice,
           productPrice: products.unitPrice,
           categoryId: products.categoryId,
-          active: menuItems.active,
+          offered: menuItems.offered,
           menuName: catalogues.name,
           name: products.name,
           customerName: products.customerName,
@@ -505,7 +505,9 @@ async function offerRowsOn(
           and(
             inArray(menuItems.menuId, menuIds),
             inArray(menuItems.productId, batch),
-            options.includeSwitchedOff === true ? undefined : eq(menuItems.active, true),
+            options.includeSwitchedOff === true
+              ? undefined
+              : or(isNull(menuItems.offered), eq(menuItems.offered, true)),
             eq(catalogues.active, true),
             isTopLevelProduct,
             eq(products.active, true),
@@ -573,7 +575,7 @@ async function offersOn(
       productId: row.productId,
       grossPrice: override,
       unitPrice,
-      active: row.active,
+      offered: row.offered,
       menuName: row.menuName,
       placements: placementsOf(row),
       name: row.name,
@@ -616,7 +618,7 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
       productPrice,
       override,
       effectivePrice: unitPrice,
-      active: row.active,
+      offered: row.offered,
       variants: variantsByItem.get(row.id) ?? [],
     };
   });
@@ -682,6 +684,7 @@ async function readOfferVariants(
       }),
       menuPrice: priceOrNull(row.menuPrice),
       offered,
+      ownOffered: row.offered,
       available: row.available && offered,
       ...offerLineValues(row),
     });

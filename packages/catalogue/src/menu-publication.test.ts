@@ -1127,7 +1127,7 @@ describe("previewMenu", () => {
     await publish(f.lunch);
     await publish(f.dinner);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { active: false });
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { offered: false });
       await updateProduct(tx, f.lager, { active: false });
     });
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([

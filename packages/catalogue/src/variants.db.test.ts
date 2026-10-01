@@ -493,6 +493,29 @@ describe("addProductToMenu", () => {
 });
 
 describe("a variant's per-menu settings", () => {
+  it.each([null, false, true])(
+    "preserves an omitted switch on a price-only write from %s and clears explicit null",
+    async (offered) => {
+      const f = await fixture();
+      const [v] = await app((tx) => setProductVariants(tx, f.parentId, [wine("Wine", null)], "en"));
+      await app((tx) =>
+        setMenuVariants(tx, f.offerId, [{ variantId: v!.id, price: "6.00", offered }]),
+      );
+      expect(
+        await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: v!.id, price: "7.00" }])),
+      ).toEqual([{ variantId: v!.id, price: "7.00", offered }]);
+      expect(
+        await app((tx) =>
+          setMenuVariants(tx, f.offerId, [{ variantId: v!.id, price: "7.00", offered: null }]),
+        ),
+      ).toEqual([{ variantId: v!.id, price: "7.00", offered: null }]);
+      expect(await app((tx) => setMenuVariants(tx, f.offerId, []))).toEqual([
+        { variantId: v!.id, price: null, offered: null },
+      ]);
+      expect(await suite.db.select().from(menuItemVariantOverrides)).toEqual([]);
+    },
+  );
+
   it("lists every Active variant of the offer's product with the default settings", async () => {
     // Wine 250 is saved and then removed, so it is Inactive and must not be listed.
     const f = await fixture();
@@ -506,8 +529,8 @@ describe("a variant's per-menu settings", () => {
     );
     await app((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
     expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([
-      { variantId: w125!.id, price: null, offered: true },
-      { variantId: w175!.id, price: null, offered: true },
+      { variantId: w125!.id, price: null, offered: null },
+      { variantId: w175!.id, price: null, offered: null },
     ]);
   });
 
@@ -540,12 +563,12 @@ describe("a variant's per-menu settings", () => {
 
     const priced = await app((tx) =>
       setMenuVariants(tx, f.offerId, [
-        { variantId: w125!.id, price: null, offered: true },
+        { variantId: w125!.id, price: null, offered: null },
         { variantId: w175!.id, price: "6.00", offered: true },
       ]),
     );
     expect(priced).toEqual([
-      { variantId: w125!.id, price: null, offered: true },
+      { variantId: w125!.id, price: null, offered: null },
       { variantId: w175!.id, price: "6.00", offered: true },
     ]);
     expect(await stored()).toEqual([{ variantId: w175!.id, price: 600, offered: true }]);
@@ -556,9 +579,13 @@ describe("a variant's per-menu settings", () => {
     expect(await stored()).toEqual([{ variantId: w175!.id, price: null, offered: false }]);
 
     await app((tx) =>
-      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null, offered: true }]),
+      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null, offered: null }]),
     );
     expect(await stored()).toEqual([]);
+    await app((tx) =>
+      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null, offered: true }]),
+    );
+    expect(await stored()).toEqual([{ variantId: w175!.id, price: null, offered: true }]);
   });
 
   it("treats an override of 0.00 as a price", async () => {
@@ -629,7 +656,7 @@ describe("a variant's per-menu settings", () => {
     );
     await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
     await app((tx) =>
-      setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: null, offered: true }]),
+      setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: null, offered: null }]),
     );
     expect(
       await suite.db

@@ -269,7 +269,7 @@ function frozenOffer(
     menuId: "menu-lunch",
     productId: member.productId,
     grossPrice: null,
-    active: true,
+    offered: null,
     unitPrice: "3.00",
     menuName,
     name,

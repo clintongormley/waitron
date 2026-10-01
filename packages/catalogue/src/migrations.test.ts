@@ -215,7 +215,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
       unit_seed_states_singleton_ck: `"unit_seed_states"."id" = 1`,
       menu_item_variant_overrides_price_ck: `"menu_item_variant_overrides"."price" >= 0`,
-      menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null or "menu_item_variant_overrides"."offered" = 0`,
+      menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null or "menu_item_variant_overrides"."offered" is not null`,
       extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
       extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
@@ -576,7 +576,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const c = await catalogue();
     const row = { menuItemId: c.menuItemId, productId: c.productId, variantId: c.soupBowlId };
     for (const [values, check] of [
-      [{ price: null, offered: true }, "menu_item_variant_overrides_overrides_ck"],
+      [{ price: null, offered: null }, "menu_item_variant_overrides_overrides_ck"],
       [{ price: -1, offered: true }, "menu_item_variant_overrides_price_ck"],
     ] as const) {
       const error = await captureError(() =>
@@ -589,7 +589,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     await db.insert(menuItemVariantOverrides).values({ ...row, price: null, offered: false });
     await db
       .update(menuItemVariantOverrides)
-      .set({ price: 0, offered: true })
+      .set({ price: 0, offered: null })
       .where(sql`${menuItemVariantOverrides.variantId} = ${c.soupBowlId}`);
   });
 
@@ -630,4 +630,12 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       "extra_list_items_product_fk",
     );
   });
+});
+
+it("stores nullable offered and removes the retired item active column", async () => {
+  const columns = (
+    await db.execute<{ name: string; notnull: number }>(sql`pragma table_info('menu_items')`)
+  ).rows;
+  expect(columns.find((column) => column.name === "offered")).toMatchObject({ notnull: 0 });
+  expect(columns.map((column) => column.name)).not.toContain("active");
 });

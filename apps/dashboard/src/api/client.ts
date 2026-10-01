@@ -53,8 +53,12 @@ export type {
   SectionMember,
   SectionUsages,
 };
-import type { MenuPriceRow, MenuVariant } from "@waitron/catalogue/src/menu-types.js";
-export type { MenuPriceRow, MenuVariant };
+import type {
+  MenuPriceRow,
+  MenuVariant,
+  MenuVariantWrite,
+} from "@waitron/catalogue/src/menu-types.js";
+export type { MenuPriceRow, MenuVariant, MenuVariantWrite };
 import type {
   DocumentMember,
   FrozenOffer,
@@ -1624,7 +1628,7 @@ export class DashboardApi {
   updateMenuItem(
     menuId: string,
     menuItemId: string,
-    input: { grossPrice?: string | null; active?: boolean },
+    input: { grossPrice?: string | null; offered?: boolean | null },
   ): Promise<void> {
     return this.#request<void>(
       `/management-api/catalogues/${menuId}/items/${menuItemId}`,
@@ -1636,7 +1640,7 @@ export class DashboardApi {
   setMenuVariants(
     menuId: string,
     menuItemId: string,
-    variants: MenuVariant[],
+    variants: MenuVariantWrite[],
   ): Promise<MenuVariant[]> {
     return this.#request<MenuVariant[]>(
       `/management-api/catalogues/${menuId}/items/${menuItemId}/variants`,

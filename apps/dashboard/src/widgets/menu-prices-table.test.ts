@@ -3,7 +3,7 @@ import type {
   CategorySummary,
   LibrarySection,
   MenuPriceRow,
-  MenuVariant,
+  MenuVariantWrite,
   Product,
 } from "../api/client.js";
 import { formatMoney } from "@waitron/shared";
@@ -49,7 +49,7 @@ function variant(id: string, name: string, unitPrice: string | null) {
     image: null,
     unitPrice,
     available: true,
-    active: true,
+    offered: true,
     effective: {
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
@@ -75,7 +75,7 @@ const burger: MenuPriceRow = {
   productPrice: "12.00",
   override: null,
   effectivePrice: "12.00",
-  active: true,
+  offered: true,
   variants: [],
 };
 const lemonade: MenuPriceRow = {
@@ -87,7 +87,7 @@ const lemonade: MenuPriceRow = {
   productPrice: "3.00",
   override: "2.50",
   effectivePrice: "2.50",
-  active: true,
+  offered: true,
   variants: [
     { variantId: "v-small", price: null, offered: true },
     { variantId: "v-large", price: "3.75", offered: false },
@@ -102,7 +102,7 @@ const lager: MenuPriceRow = {
   productPrice: "2.00",
   override: null,
   effectivePrice: "2.00",
-  active: false,
+  offered: false,
   variants: [],
 };
 
@@ -569,11 +569,11 @@ it("edits the menu price, with the product price as the empty field's placeholde
   expect(heard).toHaveBeenCalledExactlyOnceWith({
     menuItemId: "mi-lemonade",
     name: "Lemonade",
-    item: { grossPrice: "2.80", active: false },
+    item: { grossPrice: "2.80", offered: false },
     variants: [
-      { variantId: "v-small", price: "1.90", offered: true },
+      { variantId: "v-small", price: "1.90" },
       { variantId: "v-large", price: null, offered: true },
-    ] satisfies MenuVariant[],
+    ] satisfies MenuVariantWrite[],
   });
 });
 
@@ -598,7 +598,7 @@ it("shows the product price as an empty menu price's placeholder and in its hint
   expect(heard).toHaveBeenCalledExactlyOnceWith({
     menuItemId: "mi-burger",
     name: "Burger",
-    item: { grossPrice: null, active: false },
+    item: { grossPrice: null, offered: false },
     variants: null,
   });
 });
@@ -638,7 +638,7 @@ it("compares with the settings the window opened with, so a change read in meanw
     {
       ...lemonade,
       override: "2.60",
-      active: false,
+      offered: false,
       variants: [
         { variantId: "v-small", price: "1.00", offered: false },
         { variantId: "v-large", price: "3.75", offered: false },
@@ -665,7 +665,7 @@ it("asks for the menu item alone when only the price changed on a product with v
   expect(heard).toHaveBeenCalledExactlyOnceWith({
     menuItemId: "mi-lemonade",
     name: "Lemonade",
-    item: { grossPrice: "2.60", active: true },
+    item: { grossPrice: "2.60" },
     variants: null,
   });
 });
@@ -682,8 +682,8 @@ it.each([
   const save = heard.mock.calls[0]![0];
   expect(save.item).toBeNull();
   expect(save.variants).toEqual([
-    { variantId: "v-small", price: typeof value === "string" ? value : null, offered: true },
-    { variantId: "v-large", price: "3.75", offered: value === true },
+    { variantId: "v-small", price: typeof value === "string" ? value : null },
+    { variantId: "v-large", price: "3.75", ...(value === true ? { offered: true } : {}) },
   ]);
 });
 
@@ -695,7 +695,7 @@ it("'Use product price' empties the menu price, so saving clears it", async () =
   expect(modal(el).querySelector('[data-test="use-product-price"]')).toBeNull();
   const heard = saves(el);
   await click(el, "offer-save");
-  expect(heard.mock.calls[0]![0].item).toEqual({ grossPrice: null, active: true });
+  expect(heard.mock.calls[0]![0].item).toEqual({ grossPrice: null });
 });
 
 it.each(["-1", "2.555", "abc", "007"])(
@@ -977,7 +977,7 @@ describe("variants", () => {
     productPrice: "10.00",
     override: "13.00",
     effectivePrice: "13.00",
-    active: true,
+    offered: true,
     variants: [
       { variantId: "v-glass", price: "7.00", offered: true },
       { variantId: "v-bottle", price: null, offered: true },
@@ -994,7 +994,7 @@ describe("variants", () => {
     productPrice: "4.00",
     override: null,
     effectivePrice: "4.00",
-    active: true,
+    offered: true,
     variants: [
       { variantId: "v-juice-small", price: "3.50", offered: true },
       { variantId: "v-juice-large", price: null, offered: true },
@@ -1010,7 +1010,7 @@ describe("variants", () => {
     productPrice: "2.00",
     override: null,
     effectivePrice: "2.00",
-    active: true,
+    offered: true,
     variants: [{ variantId: "v-pot", price: "2.40", offered: false }],
   };
   /** No menu price anywhere. */
@@ -1023,7 +1023,7 @@ describe("variants", () => {
     productPrice: "4.00",
     override: null,
     effectivePrice: "4.00",
-    active: true,
+    offered: true,
     variants: [
       { variantId: "v-pint", price: null, offered: true },
       { variantId: "v-half", price: null, offered: true },
@@ -1563,5 +1563,27 @@ describe("variants", () => {
         "mi-tea",
       ]);
     });
+  });
+});
+
+it("price-only saves leave unset product and variant switches untouched", async () => {
+  const row = {
+    ...lemonade,
+    offered: null,
+    variants: lemonade.variants.map((v) => ({ ...v, offered: null })),
+  };
+  const el = await mount({ editing: row.menuItemId, rows: [row] });
+  await type(el, "grossPrice", "2.60");
+  await type(el, "variants.0.price", "1.20");
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    menuItemId: row.menuItemId,
+    name: row.name,
+    item: { grossPrice: "2.60" },
+    variants: [
+      { variantId: "v-small", price: "1.20" },
+      { variantId: "v-large", price: "3.75" },
+    ],
   });
 });

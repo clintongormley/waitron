@@ -92,7 +92,7 @@ export interface ZoneMenuOffer {
   readonly grossPrice: string | null;
   /** The price this offer charges, resolved along the catalogue's menu price chain. */
   readonly unitPrice: string;
-  readonly active: boolean;
+  readonly offered: boolean | null;
   readonly menuName: string;
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
    * level. */
@@ -260,6 +260,7 @@ export interface ZoneMenuOfferVariant {
   readonly unitPrice: string;
   readonly menuPrice: string | null;
   readonly offered: boolean;
+  readonly ownOffered: boolean | null;
   readonly available: boolean;
   readonly unit: ZoneMenuOffer["unit"];
   readonly pricingUnit: string;

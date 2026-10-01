@@ -184,7 +184,7 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
       productId: product.productId ?? product.id,
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
-      active: true,
+      offered: true,
       available: true,
       image: null,
       description: null,

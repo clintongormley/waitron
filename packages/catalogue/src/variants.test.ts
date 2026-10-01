@@ -182,8 +182,8 @@ describe("product variants", () => {
       setProductVariants(tx, productId, [variant("Small", "2.00"), variant("Large", "3.00")], "en"),
     );
     expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([
-      { variantId: variants[0]!.id, price: null, offered: true },
-      { variantId: variants[1]!.id, price: null, offered: true },
+      { variantId: variants[0]!.id, price: null, offered: null },
+      { variantId: variants[1]!.id, price: null, offered: null },
     ]);
     await run((tx) =>
       setMenuVariants(tx, offerId, [{ variantId: variants[0]!.id, price: "4.00", offered: true }]),
@@ -199,7 +199,7 @@ describe("product variants", () => {
     const overrides = await run((tx) => listMenuVariants(tx, offerId));
     expect(overrides).toEqual([
       { variantId: variants[0]!.id, price: "4.00", offered: true },
-      { variantId: variants[1]!.id, price: null, offered: true },
+      { variantId: variants[1]!.id, price: null, offered: null },
     ]);
     expect((await run((tx) => listProducts(tx)))[0]!.variants).toEqual([
       expect.objectContaining({ id: variants[0]!.id, name: "Small", unitPrice: "2.50" }),
@@ -296,7 +296,7 @@ describe("product variants", () => {
       params: { variantId: foreign!.id },
     });
     expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([
-      { variantId: own!.id, price: null, offered: true },
+      { variantId: own!.id, price: null, offered: null },
     ]);
   });
 });

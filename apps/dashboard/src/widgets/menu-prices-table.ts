@@ -12,6 +12,7 @@ import type {
   LibrarySection,
   MenuPriceRow,
   MenuVariant,
+  MenuVariantWrite,
   Product,
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -31,8 +32,8 @@ export interface OfferSave {
   menuItemId: string;
   /** The product's staff name, for a refusal reported away from the window. */
   name: string;
-  item: { grossPrice: string | null; active: boolean } | null;
-  variants: MenuVariant[] | null;
+  item: { grossPrice?: string | null; offered?: boolean | null } | null;
+  variants: MenuVariantWrite[] | null;
 }
 
 interface Draft {
@@ -265,7 +266,7 @@ export class MenuPricesTable extends LitElement {
         const own = this.#variants.get(variant.variantId)?.unitPrice ?? null;
         return {
           line: { item, variant },
-          offered: variant.offered,
+          offered: variant.offered !== false,
           catalogue: own ?? item.productPrice,
           // The server's chain, `resolveOfferPrice`.
           charged: variant.price ?? own ?? item.effectivePrice,
@@ -329,11 +330,11 @@ export class MenuPricesTable extends LitElement {
     this.attempted = false;
     this.draft = {
       grossPrice: row.override ?? "",
-      active: row.active,
+      active: row.offered !== false,
       variants: row.variants.map(({ variantId, price, offered }) => ({
         variantId,
         price: price ?? "",
-        offered,
+        offered: offered !== false,
       })),
     };
   }
@@ -498,11 +499,16 @@ export class MenuPricesTable extends LitElement {
         key: "active",
         label: t("menu_prices.on_menu"),
         choosable: "shown",
-        sortValue: ({ item, variant }) => ((variant ? variant.offered : item.active) ? 0 : 1),
+        sortValue: ({ item, variant }) =>
+          (variant ? variant.offered !== false : item.offered !== false) ? 0 : 1,
         cell: ({ item, variant }) => {
           if (variant)
-            return variant.offered ? t("menu_prices.offered") : muted(t("menu_prices.not_offered"));
-          return item.active ? t("menu_prices.sold_here") : muted(t("menu_prices.switched_off"));
+            return variant.offered !== false
+              ? t("menu_prices.offered")
+              : muted(t("menu_prices.not_offered"));
+          return item.offered !== false
+            ? t("menu_prices.sold_here")
+            : muted(t("menu_prices.switched_off"));
         },
       },
     ];
@@ -561,24 +567,27 @@ export class MenuPricesTable extends LitElement {
       return;
     }
     const grossPrice = blankToNull(draft.grossPrice);
-    const variants = draft.variants.map(({ variantId, price, offered }) => ({
+    const row = this.#opened!;
+    const variants = draft.variants.map(({ variantId, price, offered }, at) => ({
       variantId,
       price: blankToNull(price),
-      offered,
+      ...(offered === (row.variants[at]!.offered !== false) ? {} : { offered }),
     }));
-    const row = this.#opened!;
     // The draft's variants were built from the opened row's, one for one and in its order.
     const variantsChanged = variants.some(({ price, offered }, at) => {
       const was = row.variants[at]!;
-      return was.offered !== offered || !samePrice(price, was.price);
+      return offered !== undefined || !samePrice(price, was.price);
     });
     this.#emit("wt-offer-save", {
       menuItemId: this.editing!,
       name: row.name,
       item:
-        samePrice(grossPrice, row.override) && draft.active === row.active
+        samePrice(grossPrice, row.override) && draft.active === (row.offered !== false)
           ? null
-          : { grossPrice, active: draft.active },
+          : {
+              grossPrice,
+              ...(draft.active === (row.offered !== false) ? {} : { offered: draft.active }),
+            },
       variants: variantsChanged ? variants : null,
     } satisfies OfferSave);
   }

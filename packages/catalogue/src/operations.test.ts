@@ -125,12 +125,12 @@ describe("catalogue operations", () => {
 
       await updateMenuItem(tx, downstairs.id, eleven.id, { grossPrice: "12.50" });
       expect((await listMenuOffers(tx, [downstairs.id]))[0]!.grossPrice).toBe("12.50");
-      await updateMenuItem(tx, downstairs.id, eleven.id, { active: false });
+      await updateMenuItem(tx, downstairs.id, eleven.id, { offered: false });
       await expect(listMenuOffers(tx, [downstairs.id])).resolves.toEqual([]);
       // Switched back on, on the same row.
-      await updateMenuItem(tx, downstairs.id, eleven.id, { active: true, grossPrice: "13.00" });
+      await updateMenuItem(tx, downstairs.id, eleven.id, { offered: true, grossPrice: "13.00" });
       const [restored] = await listMenuOffers(tx, [downstairs.id]);
-      expect(restored).toMatchObject({ id: eleven.id, active: true, grossPrice: "13.00" });
+      expect(restored).toMatchObject({ id: eleven.id, offered: true, grossPrice: "13.00" });
       await expect(
         updateMenuItem(tx, downstairs.id, crypto.randomUUID(), { grossPrice: "8.00" }),
       ).rejects.toMatchObject({ code: "menu_item.not_found" });
@@ -1662,11 +1662,11 @@ describe("menu offers nest a product's variants", () => {
         grossPrice: null,
       });
     });
-    expect(created).toMatchObject({ grossPrice: null, active: true });
-    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { active: false }));
-    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { active: true, grossPrice: null }));
+    expect(created).toMatchObject({ grossPrice: null, offered: null });
+    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { offered: false }));
+    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { offered: true, grossPrice: null }));
     const restored = (await offers()).find((offer) => offer.id === f.offerId);
-    expect(restored).toMatchObject({ id: f.offerId, active: true, grossPrice: null });
+    expect(restored).toMatchObject({ id: f.offerId, offered: true, grossPrice: null });
     expect((await offers()).find((offer) => offer.id === f.offerId)).toMatchObject({
       grossPrice: null,
       unitPrice: "4.00",
@@ -1688,6 +1688,12 @@ describe("menu offers nest a product's variants", () => {
     await run((tx) =>
       setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
     );
+    expect(
+      (await offers())[0]!.variants.map(({ offered, ownOffered }) => ({ offered, ownOffered })),
+    ).toEqual([
+      { offered: true, ownOffered: null },
+      { offered: true, ownOffered: null },
+    ]);
     expect(await nested()).toEqual([
       { name: "Wine 125", unitPrice: "4.50", menuPrice: null, offered: true, available: true },
       { name: "Wine 175", unitPrice: "5.50", menuPrice: null, offered: true, available: true },

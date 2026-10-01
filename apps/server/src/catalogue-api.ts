@@ -75,7 +75,7 @@ import {
   updateProduct,
   listMenuVariants,
   setMenuVariants,
-  type MenuVariant,
+  type MenuVariantWrite,
   readProductEditor,
   saveProductEditor,
   productWithId,
@@ -292,7 +292,7 @@ function refuseNegativePrice(value: string, field: string): void {
 }
 
 /** A menu's settings for the offer's variants: a `price` of null follows the variant's own. */
-function parseMenuVariants(value: unknown): MenuVariant[] {
+function parseMenuVariants(value: unknown): MenuVariantWrite[] {
   if (!Array.isArray(value)) {
     throw new AppError("management.request_invalid", { field: "variants" });
   }
@@ -301,14 +301,14 @@ function parseMenuVariants(value: unknown): MenuVariant[] {
       !isPlainObject(entry) ||
       typeof entry.variantId !== "string" ||
       (entry.price !== null && typeof entry.price !== "string") ||
-      typeof entry.offered !== "boolean"
+      (entry.offered !== undefined && entry.offered !== null && typeof entry.offered !== "boolean")
     ) {
       throw new AppError("management.request_invalid", { field: `variants.${index}` });
     }
     return {
       variantId: requireUuidParam(entry.variantId, "ProductVariantId"),
       price: entry.price,
-      offered: entry.offered,
+      ...(entry.offered === undefined ? {} : { offered: entry.offered }),
     };
   });
 }
@@ -949,15 +949,22 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         }
         refuseNegativePrice(body.grossPrice, "grossPrice");
       }
-      if (body.active !== undefined && typeof body.active !== "boolean") {
+      if (Object.hasOwn(body, "active")) {
         throw new AppError("management.request_invalid", { field: "active" });
+      }
+      if (
+        body.offered !== undefined &&
+        body.offered !== null &&
+        typeof body.offered !== "boolean"
+      ) {
+        throw new AppError("management.request_invalid", { field: "offered" });
       }
       await gated(sessionId, (tx) =>
         updateMenuItem(tx, menuId, menuItemId, {
           ...(body.grossPrice === undefined
             ? {}
             : { grossPrice: body.grossPrice as string | null }),
-          ...(body.active === undefined ? {} : { active: body.active as boolean }),
+          ...(body.offered === undefined ? {} : { offered: body.offered as boolean | null }),
         }),
       );
       return c.body(null, 204);

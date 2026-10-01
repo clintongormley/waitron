@@ -1550,7 +1550,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     // the switch is the menu's, so a till sees it once published.
     const switchTo = (active: boolean) =>
       withTransaction(suite.db, async (tx) => {
-        await updateMenuItem(tx, aguaProduct.catalogueId, aguaOfferId, { active });
+        await updateMenuItem(tx, aguaProduct.catalogueId, aguaOfferId, { offered: active });
         await publishWorkingMenu(tx, aguaProduct.catalogueId);
       });
 

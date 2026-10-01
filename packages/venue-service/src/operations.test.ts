@@ -2440,7 +2440,7 @@ describe("each served menu's structure and home layouts", () => {
       const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,
       )!.id;
-      await updateMenuItem(tx, venue.dinner, colaOffer, { active: false });
+      await updateMenuItem(tx, venue.dinner, colaOffer, { offered: false });
       await publish(tx, venue.dinner);
       const served = await listZoneOffers(tx, venue.cfg, venue.diningZone);
       expect(served.offers.map((offer) => offer.id)).not.toContain(colaOffer);

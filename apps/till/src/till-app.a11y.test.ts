@@ -64,7 +64,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
           productId: products[0]!.id,
           grossPrice: products[0]!.unitPrice,
           unitPrice: products[0]!.unitPrice,
-          active: true,
+          offered: true,
           available: true,
           menuName: defaultMenu.name,
           placements: [[]],

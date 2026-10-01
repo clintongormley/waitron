@@ -77,7 +77,7 @@ export const menuItems = table(
     menuId: id("menu_id").notNull(),
     productId: id("product_id").notNull(),
     grossPrice: money("gross_price"),
-    active: flag("active").notNull().default(true),
+    offered: flag("offered"),
   },
   (t) => [
     // The target of menu_item_variant_overrides_offer_fk: an override names the offer's product.

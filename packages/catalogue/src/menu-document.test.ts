@@ -203,7 +203,7 @@ describe("buildMenuDocument", () => {
   it("omits a product the menu switches off, and one that is deleted", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { active: false });
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { offered: false });
       await updateProduct(tx, f.lager, { active: false });
     });
     const document = await build(f.lunch);

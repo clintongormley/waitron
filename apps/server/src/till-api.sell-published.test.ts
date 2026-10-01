@@ -361,7 +361,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
 
     // v4 takes Lemonade off Lunch.
     await withTransaction(suite.db, (tx) =>
-      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { active: false }),
+      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { offered: false }),
     );
     const v4 = await publish(v.menuId);
     const removed = await pay(v, [lemonadeLine(v, v4)]);

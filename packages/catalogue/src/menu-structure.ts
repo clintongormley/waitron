@@ -161,11 +161,11 @@ export async function syncMenuOffers(
         .where(inArray(menuItemVariantOverrides.menuItemId, batch));
       await tx
         .update(menuItems)
-        .set({ grossPrice: null, active: true })
+        .set({ grossPrice: null, offered: null })
         .where(
           and(
             inArray(menuItems.id, batch),
-            or(isNotNull(menuItems.grossPrice), eq(menuItems.active, false)),
+            or(isNotNull(menuItems.grossPrice), isNotNull(menuItems.offered)),
           ),
         );
     }

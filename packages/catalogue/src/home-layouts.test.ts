@@ -253,7 +253,7 @@ describe("home tiles", () => {
       .select({ id: menuItems.id })
       .from(menuItems)
       .where(and(eq(menuItems.menuId, f.lunch), eq(menuItems.productId, f.soup)));
-    await app((tx) => updateMenuItem(tx, f.lunch, offer!.id, { active: false }));
+    await app((tx) => updateMenuItem(tx, f.lunch, offer!.id, { offered: false }));
     const tile = await app((tx) => addShortcut(tx, home, product(f.soup)));
     expect(tile.ref).toEqual(product(f.soup));
     const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));

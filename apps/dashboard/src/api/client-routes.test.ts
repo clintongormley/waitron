@@ -572,13 +572,13 @@ describe("DashboardApi routes", () => {
 
     await expect(api.getMenuPrices("c1")).resolves.toEqual([row]);
     await expect(
-      api.updateMenuItem("c1", "mi1", { grossPrice: null, active: false }),
+      api.updateMenuItem("c1", "mi1", { grossPrice: null, offered: false }),
     ).resolves.toBeUndefined();
     await expect(api.setMenuVariants("c1", "mi1", variants)).resolves.toEqual(variants);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/catalogues/c1/prices", "GET", undefined],
-      ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null, active: false }],
+      ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null, offered: false }],
       ["/management-api/catalogues/c1/items/mi1/variants", "PUT", { variants }],
     ]);
   });

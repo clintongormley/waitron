@@ -212,7 +212,7 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "12.00",
       override: null,
       effectivePrice: "12.00",
-      active: true,
+      offered: true,
       variants: [],
     },
     {
@@ -224,7 +224,7 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "3.00",
       override: "2.50",
       effectivePrice: "2.50",
-      active: true,
+      offered: true,
       variants: [
         { variantId: "v-small", price: null, offered: true },
         { variantId: "v-large", price: "3.75", offered: false },
@@ -239,7 +239,7 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "2.00",
       override: null,
       effectivePrice: "2.00",
-      active: true,
+      offered: true,
       variants: [],
     },
   ];
@@ -2357,15 +2357,15 @@ it("saves a product's settings on the menu with one PATCH and one PUT of its var
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", { grossPrice: "2.80", active: true }],
+    ["menu-lunch", "mi-lemonade", { grossPrice: "2.80" }],
   ]);
   expect(client.setMenuVariants.mock.calls).toEqual([
     [
       "menu-lunch",
       "mi-lemonade",
       [
-        { variantId: "v-small", price: "1.90", offered: true },
-        { variantId: "v-large", price: "3.75", offered: false },
+        { variantId: "v-small", price: "1.90" },
+        { variantId: "v-large", price: "3.75" },
       ],
     ],
   ]);
@@ -2381,7 +2381,7 @@ it("sends no variants for a product without them", async () => {
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-burger", { grossPrice: "11.00", active: true }],
+    ["menu-lunch", "mi-burger", { grossPrice: "11.00" }],
   ]);
   expect(client.setMenuVariants).not.toHaveBeenCalled();
 });
@@ -2394,7 +2394,7 @@ it("sends the PATCH and no PUT when only the price of a product with variants ch
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", { grossPrice: "2.60", active: true }],
+    ["menu-lunch", "mi-lemonade", { grossPrice: "2.60" }],
   ]);
   expect(writeCalls(client)).toEqual(["updateMenuItem"]);
 });
@@ -2413,8 +2413,8 @@ it("sends the PUT and no PATCH when only a variant changed", async () => {
       "menu-lunch",
       "mi-lemonade",
       [
-        { variantId: "v-small", price: "1.90", offered: true },
-        { variantId: "v-large", price: "3.75", offered: false },
+        { variantId: "v-small", price: "1.90" },
+        { variantId: "v-large", price: "3.75" },
       ],
     ],
   ]);
@@ -2440,7 +2440,7 @@ it("'Use product price' sends grossPrice: null", async () => {
   await inOffer(el, "use-product-price");
   await inOffer(el, "offer-save");
   await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
-  expect(client.updateMenuItem.mock.calls[0]![2]).toEqual({ grossPrice: null, active: true });
+  expect(client.updateMenuItem.mock.calls[0]![2]).toEqual({ grossPrice: null });
 });
 
 it("keeps the settings open and says why when the server refuses the price, sending no variants", async () => {
@@ -2492,7 +2492,7 @@ it("sends one save while one is out, and holds the window open until it is answe
       detail: {
         menuItemId: "mi-burger",
         name: "Burger",
-        item: { grossPrice: "11.00", active: true },
+        item: { grossPrice: "11.00" },
         variants: null,
       },
       bubbles: true,
