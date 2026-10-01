@@ -28,7 +28,7 @@ export interface DataTableColumn<Row> {
   /** On the table's last column, keeps it at the box's trailing edge while the other columns scroll
    * sideways under it. */
   pinned?: "end";
-  /** Keep the whole cell above a row's stretched activator, including blank space beside its action. */
+  /** Keep the whole cell outside row activation, including blank space beside its action. */
   activatesRow?: false;
 }
 
@@ -1033,7 +1033,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           data-pinned=${column.pinned ?? nothing}
                           data-row-activate=${column.activatesRow === false ? "false" : nothing}
                           @click=${
-                            column.pinned && this.rowClick !== undefined
+                            column.pinned &&
+                            column.activatesRow !== false &&
+                            this.rowClick !== undefined
                               ? (event: Event) => this.#openFromPinnedCell(event, row)
                               : nothing
                           }

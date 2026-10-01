@@ -703,6 +703,25 @@ it("opens an options editor from its row while Used by opens only the products p
   expect(optionForm(el).open).toBe(false);
 });
 
+it("keeps an unused options list's Used by cell outside row activation", async () => {
+  const el = await mount(
+    api({
+      listOptionLists: vi.fn().mockResolvedValue([{ ...optionList, usage: { products: 0 } }]),
+    }),
+  );
+  await selectTab(el, "options");
+  const options = table(el, "option-lists");
+  await options.updateComplete;
+  const usedBy = options.shadowRoot.querySelector<HTMLElement>(
+    'tbody tr[data-row-key="o1"] td:nth-child(3)',
+  )!;
+  expect(usedBy.textContent?.trim()).toBe(t("modifiers.not_used"));
+  const box = usedBy.getBoundingClientRect();
+  expect(options.shadowRoot.elementFromPoint(box.x + 2, box.y + 2)).toBe(usedBy);
+  await userEvent.click(usedBy, { position: { x: 2, y: 2 } });
+  expect(optionForm(el).open).toBe(false);
+});
+
 it("marks Delete as dangerous in an options row menu", async () => {
   const el = await mount();
   await selectTab(el, "options");
