@@ -606,7 +606,7 @@ export class ModifiersScreen extends LitElement {
               ]}
               @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
                 this.tab = event.detail.value === "options" ? "options" : "extras";
-                this.#url.write({ dashboard: "modifiers", view: this.tab });
+                this.#url.write({ dashboard: "modifiers", view: this.tab, list: null });
               }}
             >
               <div slot="actions">${this.#renderAdd(this.tab)}</div>

@@ -398,6 +398,19 @@ describe("a path naming one list", () => {
     expect(location.pathname).toBe("/manage/modifiers/view/options");
     expect(history.length).toBe(before);
   });
+
+  it("drops the list from the path when the tab changes, still as a history entry", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/extras");
+    history.pushState(null, "", "/manage/modifiers/view/options/list/o1");
+    const el = await mount();
+    await vi.waitFor(() => expect(optionForm(el).open).toBe(true));
+    await selectTab(el, "extras");
+    expect(location.pathname).toBe("/manage/modifiers/view/extras");
+    history.back();
+    await vi.waitFor(() =>
+      expect(location.pathname).toBe("/manage/modifiers/view/options/list/o1"),
+    );
+  });
 });
 
 it("lists each kind in its own table", async () => {
