@@ -984,6 +984,9 @@ it("keeps the current list's Add actions beside the Structure tab", async () => 
   const tabs = q(el, 'wt-tabs[data-test="menu-tabs"]')!;
   for (const action of ["new-section", "include-menu", "open-add-products"]) {
     expect(tabs.querySelector(`[slot="actions"] [data-test="${action}"]`)).not.toBeNull();
+    expect(tabs.querySelector<HTMLElement>(`[data-test="${action}"]`)!.checkVisibility()).toBe(
+      true,
+    );
     expect(tabs.querySelector(`[slot="structure"] [data-test="${action}"]`)).toBeNull();
   }
 });

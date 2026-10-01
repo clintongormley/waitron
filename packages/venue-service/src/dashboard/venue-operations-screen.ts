@@ -462,6 +462,7 @@ export class VenueOperationsScreen extends LitElement {
           ? this.#tabAction({
               key: `new-assignment-${zone.id}`,
               label: t("venue.make_available"),
+              disabled: !model.zones.some((row) => row.id === zone.id),
               run: () => this.#open({ kind: "assignment", zoneId: zone.id }),
             })
           : nothing

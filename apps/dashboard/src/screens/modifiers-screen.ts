@@ -532,7 +532,6 @@ export class ModifiersScreen extends LitElement {
         : nothing
     }`;
   }
-  /** Each kind's table has its own `viewKey`, so a sort chosen on one tab is not restored on the other. */
   #renderAdd(kind: Kind) {
     const row = kind === "extras" ? "extra" : "option";
     return html`<wt-button
@@ -543,6 +542,7 @@ export class ModifiersScreen extends LitElement {
       >${t(`${kind}.add`)}</wt-button
     >`;
   }
+  /** Each kind's table has its own `viewKey`, so a sort chosen on one tab is not restored on the other. */
   #renderTab(kind: Kind) {
     const row = kind === "extras" ? "extra" : "option";
     return html`<wt-data-table

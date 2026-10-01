@@ -35,7 +35,7 @@ export class WtTabs extends LitElement {
       }
       .tab-actions {
         flex: 0 0 auto;
-        max-width: 60%;
+        max-width: 50%;
         min-width: 0;
         overflow-x: auto;
         padding-inline: var(--wt-space-1);

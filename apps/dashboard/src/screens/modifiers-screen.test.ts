@@ -249,10 +249,16 @@ it("puts only the active tab's Add action beside the tablist", async () => {
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   expect(tabs.querySelector('[slot="actions"] [data-test="add-extra-list"]')).not.toBeNull();
+  expect(tabs.querySelector<HTMLElement>('[data-test="add-extra-list"]')!.checkVisibility()).toBe(
+    true,
+  );
   expect(tabs.querySelector('[slot="actions"] [data-test="add-option-list"]')).toBeNull();
   expect(tabs.querySelector('[slot="extras"] [data-test="add-extra-list"]')).toBeNull();
   await selectTab(el, "options");
   expect(tabs.querySelector('[slot="actions"] [data-test="add-option-list"]')).not.toBeNull();
+  expect(tabs.querySelector<HTMLElement>('[data-test="add-option-list"]')!.checkVisibility()).toBe(
+    true,
+  );
   expect(tabs.querySelector('[slot="actions"] [data-test="add-extra-list"]')).toBeNull();
   expect(tabs.querySelector('[slot="options"] [data-test="add-option-list"]')).toBeNull();
 });

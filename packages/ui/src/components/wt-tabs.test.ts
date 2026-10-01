@@ -259,7 +259,7 @@ test("bounds several actions within their own scrolling area at phone width", as
   const hostRect = el.getBoundingClientRect();
   const actionRect = actions.getBoundingClientRect();
   expect(actionRect.right).toBeLessThanOrEqual(hostRect.right + 1);
-  expect(tablist.clientWidth).toBeGreaterThanOrEqual(44);
+  expect(tablist.clientWidth).toBeGreaterThanOrEqual(195);
   expect(actions.scrollWidth).toBeGreaterThan(actions.clientWidth);
 });
 

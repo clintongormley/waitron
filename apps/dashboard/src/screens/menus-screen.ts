@@ -310,11 +310,6 @@ export class MenusScreen extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
       }
-      .list-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
       wt-data-table::part(name) {
         overflow-wrap: anywhere;
         text-align: start;
@@ -1810,7 +1805,7 @@ export class MenusScreen extends LitElement {
   }
 
   #renderListActions() {
-    return html`<div slot="actions" class="list-actions">
+    return html`<div slot="actions">
       <wt-button
         data-test="new-section"
         variant="secondary"
