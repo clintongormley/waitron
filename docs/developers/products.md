@@ -438,8 +438,8 @@ validation error opens itself and cannot be collapsed until the error is fixed �
 [the design system](design-system.md).
 
 The main category is chosen in the editor itself, through the single-choice picker in
-`apps/dashboard/src/widgets/classification-fields.ts`. The Categories screen uses the same picker
-when it moves a product. A variant shows its parent's main category as "Same as …". See
+`apps/dashboard/src/widgets/classification-fields.ts`.
+A variant shows its parent's main category as "Same as …". See
 [Product categories](product-categories.md).
 
 ## One save, one transaction
