@@ -19,25 +19,18 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-notice.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
-import {
-  characterCalibration,
-  characterFinderOptions,
-  characterSetOptions,
-} from "@waitron/printing/src/test-page-samples.js";
-import { prepareText } from "@waitron/printing/src/charset.js";
-import type { SupportedLocale } from "@waitron/shared";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
 import type {
   BluetoothCommandStatus,
   DashboardApi,
@@ -45,7 +38,6 @@ import type {
   JoinRequestRow,
   PairingModeState,
   PrintAgentRow,
-  PrintCharacterSet,
   PrintJobRow,
   PrintJobPreview,
   PrintPaperWidth,
@@ -64,7 +56,6 @@ interface PrinterDraft {
   transport: PrintTransport;
   localKey?: string;
   pollId?: string;
-  characterTable: number;
 }
 
 /** A form's one message about a failed submission: each non-empty part, in order. */
@@ -133,7 +124,7 @@ const commandKey = (agentId: string, address: string): string =>
   `${agentId}:${address.toUpperCase()}`;
 
 /** The printer editor's checks that have a field of their own; the rest name only the bottom message. */
-const PRINTER_FIELDS: readonly string[] = ["name", "host", "port", "characterTable"];
+const PRINTER_FIELDS: readonly string[] = ["name", "host", "port"];
 
 interface EditablePrinter {
   id: string;
@@ -145,8 +136,6 @@ interface EditablePrinter {
   pollId: string;
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
-  characterSet: PrintCharacterSet;
-  characterTable: number;
   hasCashDrawer: boolean;
   /** The settings as saved, so a save sends only the ones that changed. */
   saved: {
@@ -156,8 +145,6 @@ interface EditablePrinter {
     active: boolean;
     paperWidth: PrintPaperWidth;
     resolution: PrintResolution;
-    characterSet: PrintCharacterSet;
-    characterTable: number;
     hasCashDrawer: boolean;
   };
   active: boolean;
@@ -287,11 +274,6 @@ export class PrintersScreen extends LitElement {
         align-items: flex-end;
         max-width: var(--wt-field-max-width);
       }
-      .finder-examples {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-6);
-      }
       .status-heading {
         display: flex;
         flex-wrap: wrap;
@@ -334,6 +316,9 @@ export class PrintersScreen extends LitElement {
       .field-row > [name$="port"],
       .field-row > wt-button {
         flex: 0 1 calc(var(--wt-space-6) * 4);
+      }
+      .ruler-row > wt-button {
+        flex: none;
       }
       .field-row > wt-form-actions {
         flex: 0 1 auto;
@@ -511,12 +496,7 @@ export class PrintersScreen extends LitElement {
   @state() private drawerOutcome = "";
   @state() private printingTest = false;
   @state() private printingSample = false;
-  @state() private printingTableTest = false;
-  @state() private tableBlockStart = 0;
-  @state() private widthLine = "";
-  @state() private finderLocales: Partial<Record<number, SupportedLocale>> = {};
-  @state() private finderChosenCode = "";
-  #tableTestEpoch = 0;
+  @state() private rulerNumber = "";
   #testEpoch = 0;
   #calibrationEpoch = 0;
   #calibrationShownEpoch = 0;
@@ -1156,8 +1136,6 @@ export class PrintersScreen extends LitElement {
               ticketScope: "station",
               paperWidth: "80mm",
               resolution: "180dpi",
-              characterSet: "wpc1252",
-              characterTable: 16,
               hasCashDrawer: false,
               pendingJobs: 0,
               lastPrintAt: null,
@@ -1463,8 +1441,6 @@ export class PrintersScreen extends LitElement {
     }
     if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
-    if (row.characterSet !== row.saved.characterSet) patch.characterSet = row.characterSet;
-    if (row.characterTable !== row.saved.characterTable) patch.characterTable = row.characterTable;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
     await this.#submit(async () => {
       // Cleared before the request, so leaving the screen while it is in flight does not switch
@@ -1515,8 +1491,6 @@ export class PrintersScreen extends LitElement {
       const { jobId } = await this.api.sampleReceipt(p.id, {
         paperWidth: p.paperWidth,
         resolution: p.resolution,
-        characterSet: p.characterSet,
-        characterTable: p.characterTable,
       });
       if (epoch === this.#testEpoch) {
         this.#showCalibrationJob(calibration, jobId);
@@ -1529,33 +1503,6 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  async #testCharacterTables(p: EditablePrinter): Promise<void> {
-    if (this.printingTableTest) return;
-    this.printingTableTest = true;
-    this.errorKey = null;
-    const blockStart = this.tableBlockStart;
-    const epoch = this.#tableTestEpoch;
-    const calibration = ++this.#calibrationEpoch;
-    try {
-      const { jobId, calibrationLocale } = await this.api.testCharacterTables(p.id, blockStart);
-      if (epoch === this.#tableTestEpoch) {
-        this.#showCalibrationJob(calibration, jobId);
-        if (
-          this.finderLocales[blockStart] !== undefined &&
-          this.finderLocales[blockStart] !== calibrationLocale &&
-          this.tableBlockStart === blockStart
-        )
-          this.finderChosenCode = "";
-        this.finderLocales = { ...this.finderLocales, [blockStart]: calibrationLocale };
-        await this.#load();
-      }
-    } catch (error) {
-      if (epoch === this.#tableTestEpoch) this.errorKey = codeOf(error);
-    } finally {
-      if (epoch === this.#tableTestEpoch) this.printingTableTest = false;
-    }
-  }
-
   #showCalibrationJob(calibration: number, jobId: string): void {
     if (calibration <= this.#calibrationShownEpoch) return;
     this.#calibrationShownEpoch = calibration;
@@ -1564,9 +1511,7 @@ export class PrintersScreen extends LitElement {
 
   #closeTest(): void {
     this.#testEpoch++;
-    this.#tableTestEpoch++;
     this.printingTest = false;
-    this.printingTableTest = false;
     this.printingSample = false;
     this.testingDrawer = false;
     this.testError = null;
@@ -1936,11 +1881,7 @@ export class PrintersScreen extends LitElement {
     this.drawerOutcome = "";
     this.formAttempted = false;
     this.errorKey = null;
-    this.tableBlockStart = 0;
-    this.widthLine = "";
-    this.finderLocales = {};
-    this.finderChosenCode = "";
-    this.#tableTestEpoch++;
+    this.rulerNumber = "";
     this.editingPrinter = {
       id: p.id,
       name: p.name,
@@ -1952,8 +1893,6 @@ export class PrintersScreen extends LitElement {
       pollId: p.pollId ?? "",
       paperWidth: p.paperWidth,
       resolution: p.resolution,
-      characterSet: p.characterSet,
-      characterTable: p.characterTable,
       hasCashDrawer: p.hasCashDrawer,
       saved: {
         name: p.name,
@@ -1962,8 +1901,6 @@ export class PrintersScreen extends LitElement {
         active: p.active,
         paperWidth: p.paperWidth,
         resolution: p.resolution,
-        characterSet: p.characterSet,
-        characterTable: p.characterTable,
         hasCashDrawer: p.hasCashDrawer,
       },
     };
@@ -2091,8 +2028,6 @@ export class PrintersScreen extends LitElement {
             ><dl class="status-fields">
               ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
               ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
-              ${field(t("printers.character_set"), characterSetOptions(currentLocale()).find(({ value }) => value === p.characterSet)?.label)}
-              ${field(t("printers.character_table"), p.characterTable)}
               ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
               ${field(t("printers.cash_register"), registers.join(", ") || t("printers.no"), "printer-registers")}
             </dl></wt-card
@@ -2395,8 +2330,6 @@ export class PrintersScreen extends LitElement {
       errors.localKey = t("printers.device_required");
     if (row.transport === "cloud_poll" && !row.pollId?.trim())
       errors.pollId = t("printers.poll_required");
-    if (!Number.isInteger(row.characterTable) || row.characterTable < 0 || row.characterTable > 255)
-      errors.characterTable = t("printers.character_table_invalid");
     return errors;
   }
 
@@ -2411,21 +2344,8 @@ export class PrintersScreen extends LitElement {
   #renderEditPrinter(): TemplateResult | typeof nothing {
     const p = this.editingPrinter;
     if (!p) return nothing;
-    const finderLocale = this.finderLocales[this.tableBlockStart] ?? currentLocale();
-    const finder = characterFinderOptions(finderLocale, this.tableBlockStart);
-    const calibration = characterCalibration(finderLocale);
-    const selectedCode =
-      this.finderChosenCode === "plain"
-        ? p.characterSet === "plain" && p.characterTable === 0
-          ? "plain"
-          : ""
-        : (finder.find(
-            ({ code, characterSet, characterTable }) =>
-              code === this.finderChosenCode &&
-              p.characterSet === characterSet &&
-              p.characterTable === characterTable,
-          )?.code ?? "");
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
+    const settingDots = textGrid(p.paperWidth, p.resolution).widthDots;
     const fieldInvalid = PRINTER_FIELDS.some((key) => errors[key] !== undefined);
     const bottom = bottomMessage(
       refusal(this.errorKey),
@@ -2460,7 +2380,7 @@ export class PrintersScreen extends LitElement {
           void this.#deactivatePrinter(p.id);
         }
       }}
-      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 4 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
+      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
       <div class="form-fields">
         ${this.#renderRefreshError()}
@@ -2505,37 +2425,47 @@ export class PrintersScreen extends LitElement {
             : nothing
         }
         <div
-          data-test="calibration-step-2"
+          data-test="calibration-step-1"
           class="form-fields"
-          ?hidden=${this.calibrationStep !== 2}
+          ?hidden=${this.calibrationStep !== 1}
         >
           <h2 class="title">${t("printers.calibration_layout")}</h2>
           <p class="hint">${t("printers.resolution_hint")}</p>
-          <wt-button
-            variant="primary"
-            data-test=${`print-test-page-${p.id}`}
-            ?loading=${this.printingTest}
-            @click=${() => void this.#testPrint(p.id)}
-            >${t("printers.test_page")}</wt-button
-          >
-          <label class="setting-field">
-            ${t("printers.test_line_fits")}
-            <select
-              name="printer-width-line"
-              @change=${(e: Event) => {
-                this.widthLine = (e.target as HTMLSelectElement).value;
-                if (this.widthLine)
-                  this.#editPrinter(p.id, {
-                    paperWidth: ["A", "B"].includes(this.widthLine) ? "58mm" : "80mm",
-                  });
-              }}
+          <div class="field-row ruler-row">
+            <wt-button
+              variant="primary"
+              data-test=${`print-ruler-${p.id}`}
+              ?loading=${this.printingTest}
+              @click=${() => void this.#testPrint(p.id)}
+              >${t("printers.ruler_print")}</wt-button
             >
-              <option value="" .selected=${this.widthLine === ""}>
-                ${t("printers.test_answer_choose")}
-              </option>
-              ${["A", "B", "C", "D"].map((line) => html`<option value=${line} .selected=${this.widthLine === line}>${line}</option>`)}
-            </select>
-          </label>
+            <label class="setting-field">
+              ${t("printers.ruler_last_number")}
+              <select
+                name="printer-ruler-number"
+                @change=${(e: Event) => {
+                  this.rulerNumber = (e.target as HTMLSelectElement).value;
+                  const setting = SETTING_WIDTHS.find(
+                    ({ widthDots }) => String(widthDots) === this.rulerNumber,
+                  );
+                  if (setting) this.#editPrinter(p.id, { paperWidth: setting.paperWidth });
+                }}
+              >
+                <option value="" .selected=${this.rulerNumber === ""}>
+                  ${t("printers.test_answer_choose")}
+                </option>
+                ${SETTING_WIDTHS.map(
+                  ({ widthDots }) =>
+                    html`<option
+                      value=${widthDots}
+                      .selected=${this.rulerNumber === String(widthDots)}
+                    >
+                      ${widthDots}
+                    </option>`,
+                )}
+              </select>
+            </label>
+          </div>
           <div class="field-row">
             <label class="setting-field"
               >${t("printers.paper_width")}
@@ -2543,7 +2473,7 @@ export class PrintersScreen extends LitElement {
                 name="printer-paper-width"
                 .value=${p.paperWidth}
                 @change=${(e: Event) => {
-                  this.widthLine = "";
+                  this.rulerNumber = "";
                   this.#editPrinter(p.id, {
                     paperWidth: (e.target as HTMLSelectElement).value as PrintPaperWidth,
                   });
@@ -2568,127 +2498,20 @@ export class PrintersScreen extends LitElement {
               </select>
             </label>
           </div>
+          ${
+            this.rulerNumber !== "" && Number(this.rulerNumber) !== settingDots
+              ? html`<p role="status" data-test="ruler-disagrees">
+                  ${t("printers.ruler_disagrees")
+                    .replace("{ruler}", this.rulerNumber)
+                    .replace("{setting}", String(settingDots))}
+                </p>`
+              : nothing
+          }
         </div>
         <div
-          data-test="calibration-step-1"
+          data-test="calibration-step-2"
           class="form-fields"
-          ?hidden=${this.calibrationStep !== 1}
-        >
-          <h2 class="title">${t("printers.calibration_characters")}</h2>
-          <p class="hint">${t("printers.character_table_hint")}</p>
-          <div class="field-row">
-            <label class="setting-field"
-              >${t("printers.table_block")}
-              <select
-                name="printer-table-block"
-                @change=${(e: Event) => {
-                  this.tableBlockStart = Number((e.target as HTMLSelectElement).value);
-                }}
-              >
-                ${Array.from({ length: 16 }, (_, index) => index * 16).map(
-                  (start) =>
-                    html`<option value=${start} .selected=${start === this.tableBlockStart}>
-                      ${start}–${start + 15}
-                    </option>`,
-                )}
-              </select>
-            </label>
-            <wt-button
-              variant="primary"
-              data-test=${`print-character-tables-${p.id}`}
-              ?loading=${this.printingTableTest}
-              @click=${() => void this.#testCharacterTables(p)}
-              >${t("printers.character_table_test")}</wt-button
-            >
-          </div>
-          <div class="finder-examples">
-            ${calibration.finderEncodings.map(
-              ({ label, characterSet }) =>
-                html`<div class="hint" data-test=${`finder-expected-${label}`}>
-                  <strong>${label}:</strong>
-                  ${calibration.finderSampleLines.map(
-                    (line) => html`<div>${prepareText(line, characterSet)}</div>`,
-                  )}
-                </div>`,
-            )}
-          </div>
-          <label class="setting-field"
-            >${t("printers.matching_code")}
-            <select
-              name="printer-matching-code"
-              @change=${(e: Event) => {
-                const code = (e.target as HTMLSelectElement).value;
-                this.finderChosenCode = code;
-                if (code === "plain")
-                  this.#editPrinter(p.id, { characterSet: "plain", characterTable: 0 });
-                else {
-                  const match = finder.find((candidate) => candidate.code === code);
-                  if (match)
-                    this.#editPrinter(p.id, {
-                      characterSet: match.characterSet,
-                      characterTable: match.characterTable,
-                    });
-                }
-              }}
-            >
-              <option value="" .selected=${selectedCode === ""}>
-                ${t("printers.matching_code_choose")}
-              </option>
-              ${finder.map(
-                ({ code }) =>
-                  html`<option value=${code} .selected=${selectedCode === code}>${code}</option>`,
-              )}
-              <option value="plain" .selected=${selectedCode === "plain"}>
-                ${t("printers.matching_code_plain")}
-              </option>
-            </select>
-          </label>
-          <wt-disclosure
-            data-test="advanced-character-settings"
-            heading=${t("printers.advanced_character_settings")}
-            summary=${`${characterSetOptions(currentLocale()).find(({ value }) => value === p.characterSet)?.label ?? p.characterSet} · ${p.characterTable}`}
-            .hasError=${!!errors.characterTable}
-          >
-            <div class="field-row">
-              <label class="setting-field"
-                >${t("printers.character_set")}
-                <select
-                  name="printer-character-set"
-                  @change=${(e: Event) =>
-                    this.#editPrinter(p.id, {
-                      characterSet: (e.target as HTMLSelectElement).value as PrintCharacterSet,
-                    })}
-                >
-                  ${characterSetOptions(currentLocale()).map(
-                    ({ value, label }) =>
-                      html`<option value=${value} .selected=${p.characterSet === value}>
-                        ${label}
-                      </option>`,
-                  )}
-                </select>
-              </label>
-              <wt-input
-                name="printer-character-table"
-                type="number"
-                label=${t("printers.character_table")}
-                .value=${Number.isNaN(p.characterTable) ? "" : String(p.characterTable)}
-                .invalid=${!!errors.characterTable}
-                .error=${errors.characterTable ?? ""}
-                @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                  e.stopPropagation();
-                  this.#editPrinter(p.id, {
-                    characterTable:
-                      e.detail.value.trim() === "" ? Number.NaN : Number(e.detail.value),
-                  });
-                }}
-              ></wt-input>
-            </div>
-          </wt-disclosure>
-        </div>
-        <div
-          data-test="calibration-step-3"
-          class="form-fields"
-          ?hidden=${this.calibrationStep !== 3}
+          ?hidden=${this.calibrationStep !== 2}
         >
           <h2 class="title">${t("printers.calibration_receipt")}</h2>
           <p>${t("printers.sample_hint")}</p>
@@ -2701,9 +2524,9 @@ export class PrintersScreen extends LitElement {
           >
         </div>
         <div
-          data-test="calibration-step-4"
+          data-test="calibration-step-3"
           class="form-fields"
-          ?hidden=${this.calibrationStep !== 4}
+          ?hidden=${this.calibrationStep !== 3}
         >
           <h2 class="title">${t("printers.calibration_drawer")}</h2>
           <wt-switch
@@ -2774,7 +2597,7 @@ export class PrintersScreen extends LitElement {
           }
         </div>
         ${
-          this.calibrationStep > 0 && this.calibrationStep < 4
+          this.calibrationStep > 0 && this.calibrationStep < 3
             ? html`<wt-button
                 variant="primary"
                 data-test="calibration-next"

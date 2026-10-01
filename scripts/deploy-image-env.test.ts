@@ -592,10 +592,10 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     expect(section).toContain("`licenses/Apache-2.0.txt`");
   });
 
-  it("names no version in the notice but libvips's and Litestream's", () => {
+  it("names no version in the notice but libvips's, Litestream's and the font's", () => {
     const { packageVersion, libvips } = libvipsRelease();
     expect(new Set(NOTICES.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(
-      new Set([libvips, packageVersion, pinned]),
+      new Set([libvips, packageVersion, pinned, fontRelease()]),
     );
   });
 
@@ -628,6 +628,58 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     expect(IMAGE_SMOKE).toContain('reported=$(docker exec "$app" litestream version)');
     expect(IMAGE_SMOKE).toContain('[ "$reported" = "$pinned" ]');
     expect(IMAGE_SMOKE).toContain("test -s /app/third-party/licenses/Apache-2.0.txt");
+  });
+});
+
+const GLYPHS_SOURCE = read("packages/printing/src/glyphs.ts");
+
+/** The Iosevka release the glyph table's generated header says its bitmaps were drawn from. */
+function fontRelease(): string {
+  const release = GLYPHS_SOURCE.match(
+    /derived from Iosevka Term Bold, release (\d+\.\d+\.\d+)\./,
+  )?.[1];
+  if (release === undefined) throw new Error("glyphs.ts names no Iosevka release");
+  return release;
+}
+
+/**
+ * The server draws printed text from a table of glyph bitmaps derived from Iosevka Term Bold, under
+ * the SIL Open Font License 1.1, so the image carries that licence. Reads TEXT: it ties the
+ * licence's copyright line, the release and the font file's sha256 to the ones the generated
+ * table's header names, and proves image-smoke looks for the file — not that the licence is the one
+ * at the release tag, nor that the table was really generated from that font.
+ */
+describe("the box image carries the licence of the font printed text is drawn in", () => {
+  const LICENCE = "deploy/third-party/iosevka/LICENSE.md";
+
+  it("ships the SIL Open Font License with the copyright line the glyph table carries", () => {
+    const licence = read(LICENCE);
+    expect(licence).toContain("SIL Open Font License v1.1");
+    expect(licence).toContain(
+      "This Font Software is licensed under the SIL Open Font License, Version 1.1.",
+    );
+    expect(licence).toContain("DISCLAIMER");
+    const copyright = GLYPHS_SOURCE.match(/^\/\/ (Copyright \(c\) .+)$/m)?.[1];
+    expect(copyright).toMatch(/Renzhi Li/);
+    expect(licence).toContain(copyright);
+    expect(GLYPHS_SOURCE).toContain("/app/third-party/iosevka/LICENSE.md");
+  });
+
+  it("records where the font came from, with the sha256 the glyph table names", () => {
+    const provenance = read("deploy/third-party/iosevka/README.md");
+    const sha256 = GLYPHS_SOURCE.match(/\(sha256 ([0-9a-f]{64})\)/)?.[1];
+    expect(sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(provenance).toContain(sha256);
+    expect(provenance).toContain(`v${fontRelease()}/PkgTTF-IosevkaTerm-${fontRelease()}.zip`);
+    expect(provenance).toContain("packages/printing/scripts/build-glyph-table.mjs");
+  });
+
+  it("describes it in the notice, and image-smoke looks for it in the built image", () => {
+    const section = noticeSection("Iosevka");
+    expect(section).toContain(`Iosevka Term Bold, release ${fontRelease()}`);
+    expect(section).toContain("`iosevka/LICENSE.md`");
+    expect(section).toMatch(/SIL Open Font License,\s+Version 1\.1/);
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/iosevka/LICENSE.md");
   });
 });
 

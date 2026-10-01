@@ -25,3 +25,7 @@ packages/verifactu/schemas/
 # the schemas above: a primary source must never be reformatted. The GENERATED
 # src/dr303-layout.ts is NOT here — it is prettier-checked like all src.
 packages/reporting/reference/
+
+# The Iosevka font's licence, committed verbatim from the font's repository at its release tag
+# (deploy/third-party/iosevka/README.md). Same rule: a licence text is never reformatted.
+deploy/third-party/iosevka/LICENSE.md

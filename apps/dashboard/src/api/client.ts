@@ -1,5 +1,4 @@
-import type { ContentLanguages, SupportedLocale } from "@waitron/shared";
-import type { CharacterSet } from "@waitron/printing/src/charset.js";
+import type { ContentLanguages } from "@waitron/shared";
 
 /**
  * Most types below are hand-kept copies of the server's JSON shapes, so nothing compares them with
@@ -683,7 +682,6 @@ export type PrintTicketScope = "station" | "order";
 
 export type PrintPaperWidth = "58mm" | "80mm";
 export type PrintResolution = "180dpi" | "203dpi";
-export type PrintCharacterSet = CharacterSet;
 
 export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
 
@@ -712,8 +710,6 @@ export interface Printer {
   ticketScope: PrintTicketScope;
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
-  characterSet: PrintCharacterSet;
-  characterTable: number;
   hasCashDrawer: boolean;
   active: boolean;
 }
@@ -727,8 +723,6 @@ export interface PrinterInput {
   pollId?: string;
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
-  characterSet?: PrintCharacterSet;
-  characterTable?: number;
   hasCashDrawer?: boolean;
 }
 
@@ -781,8 +775,6 @@ export interface PrinterPatch {
   ticketScope?: PrintTicketScope;
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
-  characterSet?: PrintCharacterSet;
-  characterTable?: number;
   hasCashDrawer?: boolean;
   active?: boolean;
 }
@@ -796,13 +788,16 @@ export type PrintPreviewBlock =
       width: number;
       height: number;
       data: string;
+      /** What a band drawn from a line of text reads as; absent for any other image. */
+      text?: string;
       qrData?: string;
       align?: "center" | "right";
     };
 
 export interface PrintJobPreview {
+  /** The dots across the job's line, which the paper stands for. */
+  widthDots: number;
   columns: number;
-  dpi: number;
   text: string;
   blocks: PrintPreviewBlock[];
   qrData: string[];
@@ -2393,25 +2388,12 @@ export class DashboardApi {
     settings: {
       paperWidth: PrintPaperWidth;
       resolution: PrintResolution;
-      characterSet: PrintCharacterSet;
-      characterTable: number;
     },
   ): Promise<{ jobId: string }> {
     return this.#request<{ jobId: string }>(
       `/management-api/printers/${printerId}/sample-receipt`,
       "POST",
       settings,
-    );
-  }
-
-  testCharacterTables(
-    printerId: string,
-    startTable: number,
-  ): Promise<{ jobId: string; calibrationLocale: SupportedLocale }> {
-    return this.#request<{ jobId: string; calibrationLocale: SupportedLocale }>(
-      `/management-api/printers/${printerId}/character-table-test`,
-      "POST",
-      { startTable },
     );
   }
 

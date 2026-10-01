@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { decodeBytes, type CharacterSet } from "@waitron/printing";
+import { gridForWidth, readRasterText } from "@waitron/printing";
 
 export type PrintPreviewBlock =
   | { kind: "text"; text: string; align?: "center" | "right" }
@@ -10,14 +10,20 @@ export type PrintPreviewBlock =
       width: number;
       height: number;
       data: string;
+      /** What a drawn line of text reads as; absent for an image that is not one, a QR code say. */
+      text?: string;
       qrData?: string;
       align?: "center" | "right";
     };
 
 export interface PrintJobPreview {
-  /** The printer's column count and resolution, for the dashboard to size the paper and images. */
+  /**
+   * The dots across the job's line, which the dashboard's paper stands for: the width its first drawn
+   * line of text was drawn at, every line of a job sharing it; the printer's setting now when the
+   * job draws none. `columns` is that width's grid.
+   */
+  widthDots: number;
   columns: number;
-  dpi: number;
   text: string;
   blocks: PrintPreviewBlock[];
   qrData: string[];
@@ -26,30 +32,31 @@ export interface PrintJobPreview {
   unsupported: boolean;
 }
 
-const MAX_INPUT_BYTES = 262_144;
-const MAX_OUTPUT_CHARACTERS = 65_536;
+/**
+ * A line is an image of 8 + W/8 × 28 bytes, 2,024 at 576 dots, so 4 MiB holds about 2,000 lines: a
+ * deep category report prints about 1,000.
+ */
+const MAX_INPUT_BYTES = 4_194_304;
+const MAX_IMAGE_BYTES = 4_194_304;
+/** About 3,000 lines of 42 columns and a newline each (43 characters a line). */
+const MAX_OUTPUT_CHARACTERS = 131_072;
 
 /**
  * Decode the commands emitted by printing's EscBuilder. Unknown commands stop the preview:
  * skipping an unknown header could expose its binary body as invented receipt text.
  * Preserve printable command order within the input, text, bitmap, feed and block caps.
  * Only model-2 QR and normal raster commands are rendered; drawer pulses have no paper representation.
+ * The job's text is read back from the images its lines were drawn as; bytes sent as text are read as
+ * ASCII, and a character-table command stops the preview, since no job selects one.
  */
 export function previewPrintJob(
   payload: Uint8Array,
-  printer: {
-    columns: number;
-    dpi: number;
-    characterSet?: CharacterSet;
-    characterTable?: number;
-  } = {
-    columns: 42,
-    dpi: 180,
-  },
+  printer: { widthDots: number } = { widthDots: 512 },
 ): PrintJobPreview {
+  let lineWidth: number | undefined;
   const result: PrintJobPreview = {
-    columns: printer.columns,
-    dpi: printer.dpi,
+    widthDots: 0,
+    columns: 0,
     text: "",
     blocks: [],
     qrData: [],
@@ -66,9 +73,6 @@ export function previewPrintJob(
   let imageBytes = 0;
   let feedLines = 0;
   let align: "center" | "right" | undefined;
-  // The printer profile supplies the starting encoding and its model-specific table mapping. Known
-  // diagnostic tables may switch away from it; `ESC @` restores the profile's starting encoding.
-  let charset: CharacterSet = printer.characterSet ?? "plain";
   const appendBlock = (block: PrintPreviewBlock): boolean => {
     if (result.blocks.length >= 2048) {
       result.truncated = true;
@@ -88,10 +92,20 @@ export function previewPrintJob(
       height < 1 ||
       width > 2048 ||
       height > 2048 ||
-      imageBytes + bytes.length > 262_144
+      imageBytes + bytes.length > MAX_IMAGE_BYTES
     ) {
       result.omittedGraphics = true;
       return true;
+    }
+    const text = qrData === undefined ? readRasterText(width, height, bytes) : undefined;
+    if (text !== undefined) {
+      if (outputLength + text.length + 1 > MAX_OUTPUT_CHARACTERS) {
+        result.truncated = true;
+        return false;
+      }
+      result.text += `${text}\n`;
+      outputLength += text.length + 1;
+      lineWidth ??= width;
     }
     imageBytes += bytes.length;
     return appendBlock({
@@ -100,6 +114,7 @@ export function previewPrintJob(
       height,
       data: Buffer.from(bytes).toString("base64"),
       ...(align === undefined ? {} : { align }),
+      ...(text === undefined ? {} : { text }),
       ...(qrData === undefined ? {} : { qrData }),
     });
   };
@@ -146,17 +161,12 @@ export function previewPrintJob(
   };
   while (offset < limit) {
     const byte = payload[offset];
-    if (
-      byte === 0x0a ||
-      (byte >= 0x20 && byte <= 0x7e) ||
-      byte >= 0xa0 ||
-      (byte >= 0x80 && charset !== "plain")
-    ) {
+    if (byte === 0x0a || (byte >= 0x20 && byte <= 0x7e)) {
       if (outputLength === MAX_OUTPUT_CHARACTERS) {
         result.truncated = true;
         break;
       }
-      const character = decodeBytes([byte], charset);
+      const character = String.fromCharCode(byte);
       const last = result.blocks.at(-1);
       if (last?.kind === "text" && last.align === align) last.text += character;
       else if (
@@ -172,7 +182,6 @@ export function previewPrintJob(
     const command = payload[offset + 1];
     if (byte === 0x1b && command === 0x40) {
       align = undefined;
-      charset = printer.characterSet ?? "plain";
       storedQr = "";
       qrSize = 3;
       qrLevel = "L";
@@ -187,24 +196,6 @@ export function previewPrintJob(
         break;
       }
       align = value === 1 ? "center" : value === 2 ? "right" : undefined;
-      offset += 3;
-      continue;
-    }
-    if (byte === 0x1c && command === 0x2e) {
-      offset += 2;
-      continue;
-    }
-    if (byte === 0x1b && command === 0x74) {
-      if (!available(3)) break;
-      const table = payload[offset + 2];
-      if (table === printer.characterTable && printer.characterSet !== undefined) {
-        charset = printer.characterSet;
-      } else if (table === 6 || table === 16) charset = "wpc1252";
-      else if (table === 19) charset = "pc858";
-      else {
-        result.unsupported = true;
-        break;
-      }
       offset += 3;
       continue;
     }
@@ -293,5 +284,7 @@ export function previewPrintJob(
     break;
   }
   if (payload.length > MAX_INPUT_BYTES) result.truncated = true;
+  result.widthDots = lineWidth ?? printer.widthDots;
+  result.columns = gridForWidth(result.widthDots).columns;
   return result;
 }

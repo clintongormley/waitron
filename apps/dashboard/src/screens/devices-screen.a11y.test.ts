@@ -115,8 +115,6 @@ const printers: Printer[] = [
     ticketScope: "station",
     paperWidth: "80mm",
     resolution: "180dpi",
-    characterSet: "wpc1252",
-    characterTable: 16,
     hasCashDrawer: false,
     active: true,
   },

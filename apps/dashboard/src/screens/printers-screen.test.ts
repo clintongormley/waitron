@@ -68,8 +68,6 @@ const printers: Printer[] = [
     ticketScope: "station",
     paperWidth: "80mm",
     resolution: "180dpi",
-    characterSet: "wpc1252",
-    characterTable: 16,
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
@@ -87,8 +85,6 @@ const printers: Printer[] = [
     ticketScope: "station",
     paperWidth: "80mm",
     resolution: "180dpi",
-    characterSet: "wpc1252",
-    characterTable: 16,
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
@@ -106,8 +102,6 @@ const printers: Printer[] = [
     ticketScope: "station",
     paperWidth: "80mm",
     resolution: "180dpi",
-    characterSet: "wpc1252",
-    characterTable: 16,
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
@@ -224,8 +218,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     resendPrintJob: vi.fn().mockResolvedValue({ jobId: "resent" }),
     updateAgent: vi.fn().mockResolvedValue(undefined),
     getPrintJobPreview: vi.fn().mockResolvedValue({
+      widthDots: 512,
       columns: 42,
-      dpi: 180,
       text: "Receipt",
       qrData: [],
       blocks: [{ kind: "text", text: "Receipt" }],
@@ -249,7 +243,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
     sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
-    testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
@@ -366,96 +359,181 @@ async function chooseOption(el: PrintersScreen, name: string, value: string): Pr
 }
 
 describe("guided printer calibration", () => {
-  it("offers matching codes before printing and saves a selected code", async () => {
-    const api = stubApi();
+  async function openCalibration(api: DashboardApi, id = "p1"): Promise<PrintersScreen> {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el);
+    await openPrinter(el, id);
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    expect(q(el, 'option[value="11-W"]')?.textContent?.trim()).toBe("11-W");
-    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
-    expect(q(el, '[data-test="finder-expected-8"]')).not.toBeNull();
-    await chooseOption(el, "printer-matching-code", "11-W");
-    for (let step = 1; step < 4; step++) {
-      q(el, "[data-test=calibration-next]")!.click();
-      await flush(el);
+    return el;
+  }
+
+  it("opens on the width step and has three steps, the last one saving", async () => {
+    const before = currentLocale();
+    try {
+      for (const locale of ["en", "es-ES"] as const) {
+        setLocale(locale);
+        const el = await openCalibration(stubApi());
+        const progress = () => text(el, "[data-test=edit-printer-modal] p[role=status]");
+        expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
+        expect(text(el, "[data-test=print-ruler-p1]")).toBe(t("printers.ruler_print"));
+        expect(q(el, 'select[name="printer-ruler-number"]')?.checkVisibility()).toBe(true);
+        expect(progress()).toBe(locale === "en" ? "Step 1 of 3" : "Paso 1 de 3");
+        q(el, "[data-test=calibration-next]")!.click();
+        await flush(el);
+        expect(q(el, "[data-test=calibration-step-2]")?.checkVisibility()).toBe(true);
+        expect(q(el, "[data-test=print-sample-receipt-p1]")?.checkVisibility()).toBe(true);
+        expect(text(el, "[data-test=calibration-step-2]")).not.toMatch(/euro/i);
+        q(el, "[data-test=calibration-next]")!.click();
+        await flush(el);
+        expect(q(el, "[data-test=calibration-step-3]")?.checkVisibility()).toBe(true);
+        expect(progress()).toBe(locale === "en" ? "Step 3 of 3" : "Paso 3 de 3");
+        expect(q(el, "[data-test=calibration-next]")).toBeNull();
+        expect(q(el, "[data-test=save-printer-p1]")).not.toBeNull();
+        expect(q(el, "[data-test=calibration-step-4]")).toBeNull();
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
     }
-    expect(q(el, "[data-test=calibration-step-4]")?.checkVisibility()).toBe(true);
-    expect(q(el, "[data-test=calibration-step-3]")?.checkVisibility()).toBe(false);
+  });
+
+  it("keeps the printer's saved paper width and resolution when calibration is run again", async () => {
+    const api = stubApi({
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue([{ ...printers[0]!, paperWidth: "58mm", resolution: "203dpi" }]),
+    });
+    const el = await openCalibration(api);
+    expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
+    expect((q(el, 'select[name="printer-resolution"]') as HTMLSelectElement).value).toBe("203dpi");
+    expect((q(el, 'select[name="printer-ruler-number"]') as HTMLSelectElement).value).toBe("");
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=print-sample-receipt-p1]")!.click();
+    await flush(el);
+    expect(api.sampleReceipt).toHaveBeenCalledExactlyOnceWith("p1", {
+      paperWidth: "58mm",
+      resolution: "203dpi",
+    });
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { characterTable: 11 });
-    expect(api.testCharacterTables).not.toHaveBeenCalled();
+    expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
   it.each([
-    ["A", "203dpi", "58mm"],
-    ["D", "180dpi", "80mm"],
+    ["360", "180dpi", "58mm"],
+    ["384", "203dpi", "58mm"],
+    ["512", "180dpi", "80mm"],
+    ["576", "203dpi", "80mm"],
   ])(
-    "derives layout settings from the width and QR answers (%s)",
-    async (line, resolution, paperWidth) => {
+    "derives layout settings from the ruler and QR answers (%s)",
+    async (rulerNumber, resolution, paperWidth) => {
       const api = stubApi();
-      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-      await flush(el);
-      await openPrinter(el);
-      q(el, "[data-test=calibrate-printer]")!.click();
-      await flush(el);
-      q(el, "[data-test=calibration-next]")!.click();
-      await flush(el);
-      expect(q(el, 'select[name="printer-width-line"]')).not.toBeNull();
-      await chooseOption(el, "printer-width-line", line!);
+      const el = await openCalibration(api);
+      await chooseOption(el, "printer-ruler-number", rulerNumber!);
       await chooseOption(el, "printer-resolution", resolution!);
+      expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe(
+        paperWidth,
+      );
+      expect(q(el, "[data-test=ruler-disagrees]")).toBeNull();
       q(el, "[data-test=calibration-next]")!.click();
       await flush(el);
       q(el, "[data-test=print-sample-receipt-p1]")!.click();
       await flush(el);
-      expect(api.sampleReceipt).toHaveBeenCalledWith("p1", {
-        paperWidth,
-        resolution,
-        characterSet: "wpc1252",
-        characterTable: 16,
-      });
+      expect(api.sampleReceipt).toHaveBeenCalledExactlyOnceWith("p1", { paperWidth, resolution });
     },
   );
 
-  it("keeps the character step's fields, and the button beside one, within the standard form width on a wide window", async () => {
+  it("says when the ruler's number and the chosen paper width and resolution disagree, without stopping the save", async () => {
+    const api = stubApi();
+    const el = await openCalibration(api);
+    expect(q(el, "[data-test=ruler-disagrees]")).toBeNull();
+    // Saved 80 mm at 180 dpi draws 512 dots.
+    await chooseOption(el, "printer-ruler-number", "576");
+    const line = q(el, "[data-test=ruler-disagrees]")!;
+    expect(line.getAttribute("role")).toBe("status");
+    expect(line.textContent!.trim()).toBe(
+      t("printers.ruler_disagrees").replace("{ruler}", "576").replace("{setting}", "512"),
+    );
+    await chooseOption(el, "printer-resolution", "203dpi");
+    expect(q(el, "[data-test=ruler-disagrees]")).toBeNull();
+    await chooseOption(el, "printer-ruler-number", "512");
+    expect(text(el, "[data-test=ruler-disagrees]")).toBe(
+      t("printers.ruler_disagrees").replace("{ruler}", "512").replace("{setting}", "576"),
+    );
+    expect(isDisabled(el, "[data-test=calibration-next]")).toBe(false);
+    for (let step = 1; step < 3; step++) {
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+    }
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { resolution: "203dpi" });
+  });
+
+  it("leaves the paper width alone when the ruler's answer is set back to Choose", async () => {
+    const el = await openCalibration(stubApi());
+    await chooseOption(el, "printer-ruler-number", "360");
+    await chooseOption(el, "printer-ruler-number", "");
+    expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
+    expect(q(el, "[data-test=ruler-disagrees]")).toBeNull();
+  });
+
+  it("does not continue or save when Enter is pressed on a wizard step that has no text field", async () => {
+    const api = stubApi();
+    const el = await openCalibration(api);
+    q(el, 'select[name="printer-ruler-number"]')!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+  });
+
+  it("has no character set or printer table setting in the printer's dialog", async () => {
+    const el = await openCalibration(stubApi());
+    for (const name of [
+      "printer-character-set",
+      "printer-character-table",
+      "printer-table-block",
+      "printer-matching-code",
+      "printer-width-line",
+    ])
+      expect(q(el, `[name="${name}"]`)).toBeNull();
+    expect(q(el, "[data-test=advanced-character-settings]")).toBeNull();
+    expect(q(el, "[data-test=print-character-tables-p1]")).toBeNull();
+  });
+
+  it("keeps the width step's rows, and the button beside the ruler's answer, within the standard form width on a wide window", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1280, 800);
     try {
-      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-        api: stubApi(),
-      });
-      await flush(el);
-      await openPrinter(el);
-      q(el, "[data-test=calibrate-printer]")!.click();
-      await flush(el);
+      const el = await openCalibration(stubApi());
       const probe = document.createElement("div");
       probe.style.width = "var(--wt-form-max-width)";
       el.shadowRoot!.appendChild(probe);
       const form = probe.getBoundingClientRect().width;
-      const block = q(el, 'select[name="printer-table-block"]')!.getBoundingClientRect();
-      const button = q(el, "[data-test=print-character-tables-p1]")!.getBoundingClientRect();
-      const matching = q(el, 'select[name="printer-matching-code"]')!.getBoundingClientRect();
+      const button = q(el, "[data-test=print-ruler-p1]")!.getBoundingClientRect();
+      const answer = q(el, 'select[name="printer-ruler-number"]')!.getBoundingClientRect();
+      const paper = q(el, 'select[name="printer-paper-width"]')!.getBoundingClientRect();
+      const resolution = q(el, 'select[name="printer-resolution"]')!.getBoundingClientRect();
       const wide = q(el, '[data-test="calibration-step-1"]')!.getBoundingClientRect();
       expect(wide.width).toBeGreaterThan(form);
-      expect(block.width).toBeLessThan(form);
-      expect(button.right - block.left).toBeLessThanOrEqual(form);
-      expect(matching.width).toBeCloseTo(form, 0);
+      expect(answer.width).toBeLessThan(form);
+      expect(Math.abs(answer.bottom - button.bottom)).toBeLessThan(2);
+      expect(answer.right - button.left).toBeLessThanOrEqual(form);
+      expect(resolution.right - paper.left).toBeLessThanOrEqual(form);
     } finally {
       await page.viewport(width, height);
     }
   });
 
-  async function openStepFour(api: DashboardApi): Promise<PrintersScreen> {
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el);
-    q(el, "[data-test=calibrate-printer]")!.click();
-    await flush(el);
-    q(el, "[data-test=calibration-next]")!.click();
-    await flush(el);
+  async function openStepThree(api: DashboardApi): Promise<PrintersScreen> {
+    const el = await openCalibration(api);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
@@ -463,15 +541,15 @@ describe("guided printer calibration", () => {
     return el;
   }
 
-  it("clears the width answer when paper width is changed directly", async () => {
-    const el = await openStepFour(stubApi());
-    for (let step = 4; step > 2; step--) {
+  it("clears the ruler answer when paper width is changed directly", async () => {
+    const el = await openStepThree(stubApi());
+    for (let step = 3; step > 1; step--) {
       q(el, "[data-test=calibration-back]")!.click();
       await flush(el);
     }
-    await chooseOption(el, "printer-width-line", "A");
-    const answer = q(el, '[name="printer-width-line"]') as HTMLSelectElement;
-    expect(answer.value).toBe("A");
+    await chooseOption(el, "printer-ruler-number", "360");
+    const answer = q(el, '[name="printer-ruler-number"]') as HTMLSelectElement;
+    expect(answer.value).toBe("360");
     expect((q(el, '[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
     await chooseOption(el, "printer-paper-width", "80mm");
     expect(answer.value).toBe("");
@@ -488,7 +566,7 @@ describe("guided printer calibration", () => {
           }),
       ),
     });
-    const el = await openStepFour(api);
+    const el = await openStepThree(api);
     expect(q(el, "[data-test=test-printer-drawer]")).toBeNull();
     toggleSwitch(el, '[name="printer-cash-drawer"]', true);
     await flush(el);
@@ -509,12 +587,12 @@ describe("guided printer calibration", () => {
     await flush(el);
     q(el, '[name="printer-drawer-result"][value="closed"]')!.click();
     await flush(el);
-    expect(q(el, '[data-test="calibration-step-4"]')!.textContent).toContain(
+    expect(q(el, '[data-test="calibration-step-3"]')!.textContent).toContain(
       t("printers.drawer_check"),
     );
     q(el, '[name="printer-drawer-result"][value="opened"]')!.click();
     await flush(el);
-    expect(q(el, '[data-test="calibration-step-4"]')!.textContent).not.toContain(
+    expect(q(el, '[data-test="calibration-step-3"]')!.textContent).not.toContain(
       t("printers.drawer_check"),
     );
     q(el, "[data-test=calibration-back]")!.click();
@@ -534,7 +612,7 @@ describe("guided printer calibration", () => {
       listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }]),
       testPrinterDrawer: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
     });
-    const el = await openStepFour(api);
+    const el = await openStepThree(api);
     expect(q(el, '[name="printer-cash-drawer"]')!.shadowRoot!.querySelector("input")!.checked).toBe(
       true,
     );
@@ -567,7 +645,7 @@ describe("guided printer calibration", () => {
           }),
         ),
       });
-      const el = await openStepFour(api);
+      const el = await openStepThree(api);
       q(el, "[data-test=test-printer-drawer]")!.click();
       await flush(el);
       q(el, "[data-test=cancel-edit-printer]")!.click();
@@ -584,7 +662,7 @@ describe("guided printer calibration", () => {
 
   it("does not write unchanged calibration settings", async () => {
     const api = stubApi();
-    const el = await openStepFour(api);
+    const el = await openStepThree(api);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -602,8 +680,6 @@ describe("guided printer calibration", () => {
     toggleSwitch(el, "[data-test=printer-active-p1]", false);
     await flush(el);
     q(el, "[data-test=calibrate-printer]")!.click();
-    await flush(el);
-    q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
@@ -648,7 +724,7 @@ describe("guided printer calibration", () => {
     expect(q(el, '[data-test="agents-table"]')!.shadowRoot!.textContent).toContain("Kitchen box");
   });
 
-  it("opens calibration after adding, retains printed blocks, and saves the tested draft", async () => {
+  it("opens calibration after adding, and saves the tested draft", async () => {
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -659,30 +735,19 @@ describe("guided printer calibration", () => {
       expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
     );
     expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
-    q(el, "[data-test=print-character-tables-p9]")!.click();
+    q(el, "[data-test=print-ruler-p9]")!.click();
     await flush(el);
-    await chooseOption(el, "printer-table-block", "16");
-    q(el, "[data-test=print-character-tables-p9]")!.click();
-    await flush(el);
-    await chooseOption(el, "printer-table-block", "0");
-    expect(q(el, 'option[value="06-8"]')).not.toBeNull();
-    expect(api.testCharacterTables).toHaveBeenCalledTimes(2);
-    await chooseOption(el, "printer-matching-code", "06-8");
-    q(el, "[data-test=calibration-next]")!.click();
-    await flush(el);
-    expect(q(el, "[data-test=calibration-step-2]")?.checkVisibility()).toBe(true);
+    expect(api.testPrint).toHaveBeenCalledExactlyOnceWith("p9");
     await chooseOption(el, "printer-paper-width", "58mm");
     await chooseOption(el, "printer-resolution", "203dpi");
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=calibration-step-3]")?.checkVisibility()).toBe(true);
+    expect(q(el, "[data-test=calibration-step-2]")?.checkVisibility()).toBe(true);
     q(el, "[data-test=print-sample-receipt-p9]")!.click();
     await flush(el);
     expect(api.sampleReceipt).toHaveBeenCalledWith("p9", {
       paperWidth: "58mm",
       resolution: "203dpi",
-      characterSet: "pc858",
-      characterTable: 6,
     });
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
@@ -694,8 +759,6 @@ describe("guided printer calibration", () => {
     expect(api.updatePrinter).toHaveBeenCalledWith("p9", {
       paperWidth: "58mm",
       resolution: "203dpi",
-      characterSet: "pc858",
-      characterTable: 6,
       hasCashDrawer: true,
     });
   });
@@ -2469,8 +2532,6 @@ describe("printers-screen", () => {
       ticketScope: "station",
       paperWidth: "80mm",
       resolution: "180dpi",
-      characterSet: "wpc1252",
-      characterTable: 16,
       hasCashDrawer: false,
       pendingJobs: 0,
       lastPrintAt: null,
@@ -2511,8 +2572,6 @@ describe("printers-screen", () => {
       ticketScope: "station",
       paperWidth: "80mm",
       resolution: "180dpi",
-      characterSet: "wpc1252",
-      characterTable: 16,
       hasCashDrawer: false,
       pendingJobs: 0,
       lastPrintAt: null,
@@ -2621,7 +2680,7 @@ describe("printers-screen", () => {
     await flush(el);
 
     await openPrinter(el);
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     expect(api.testPrint).toHaveBeenCalledWith("p1");
     expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
@@ -2633,7 +2692,7 @@ describe("printers-screen", () => {
     await flush(el);
 
     await openPrinter(el);
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     expect((el as unknown as { testError: string | null }).testError).toBe("printer.not_found");
   });
@@ -2937,7 +2996,7 @@ it("guards repeated Add presses while pending, allows Test Print, and permits re
   await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
   expect(createPrinter).toHaveBeenCalledOnce();
   await openPrinter(el);
-  q(el, "[data-test=print-test-page-p1]")!.click();
+  q(el, "[data-test=print-ruler-p1]")!.click();
   await flush(el);
   expect(api.testPrint).toHaveBeenCalledExactlyOnceWith("p1");
   await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
@@ -3686,109 +3745,7 @@ it("does not show a previous pairing deadline after reopening before the next op
 });
 
 describe("printer layout settings", () => {
-  it("prints the finder even when an unfinished manual table field prevents saving", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el, "p1");
-    typeField(el, 'wt-input[name="printer-character-table"]', "");
-    await flush(el);
-    expect(
-      (q(el, 'wt-input[name="printer-character-table"]') as import("@waitron/ui").WtInput).value,
-    ).toBe("");
-    q(el, '[data-test="print-character-tables-p1"]')!.click();
-    await flush(el);
-    expect(api.testCharacterTables).toHaveBeenCalledWith("p1", 0);
-    q(el, '[data-test="save-printer-p1"]')!.click();
-    await flush(el);
-    expect(api.updatePrinter).not.toHaveBeenCalled();
-  });
-
-  it("keeps an operator-chosen code when reprinting the same range", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el, "p1");
-    q(el, '[data-test="print-character-tables-p1"]')!.click();
-    await flush(el);
-    await chooseOption(el, "printer-matching-code", "06-8");
-    q(el, '[data-test="print-character-tables-p1"]')!.click();
-    await flush(el);
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("06-8");
-    expect(api.testCharacterTables).toHaveBeenCalledTimes(2);
-    await chooseOption(el, "printer-table-block", "16");
-    await chooseOption(el, "printer-table-block", "0");
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("06-8");
-  });
-
-  it("sets both saved text fields when switching from a matching code to plain letters", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el, "p1");
-    q(el, '[data-test="print-character-tables-p1"]')!.click();
-    await flush(el);
-    await chooseOption(el, "printer-matching-code", "06-8");
-    await chooseOption(el, "printer-matching-code", "plain");
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe(
-      "plain",
-    );
-    q(el, '[data-test="save-printer-p1"]')!.click();
-    await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledWith(
-      "p1",
-      expect.objectContaining({ characterSet: "plain", characterTable: 0 }),
-    );
-  });
-
-  it("starts the finder at table zero and one printed code sets both text settings", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el, "p1");
-    const block = q(el, 'select[name="printer-table-block"]') as HTMLSelectElement;
-    expect(block.value).toBe("0");
-    expect(block.options[0]!.textContent).toContain("0–15");
-    expect(
-      q(el, 'wt-disclosure[data-test="advanced-character-settings"]')!.hasAttribute("open"),
-    ).toBe(false);
-    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
-    q(el, '[data-test="print-character-tables-p1"]')!.click();
-    await flush(el);
-    expect(api.testCharacterTables).toHaveBeenLastCalledWith("p1", 0);
-    expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("áéíóú ÁÉÍÓÚ ñÑ üÜ");
-    expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("¿¡ € £ çÇ “ ” ‘ ’");
-    await chooseOption(el, "printer-table-block", "16");
-    expect(q(el, 'select[name="printer-matching-code"] option[value="06-8"]')).toBeNull();
-    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
-    q(el, '[data-test="print-character-tables-p1"]')!.click();
-    await flush(el);
-    expect(api.testCharacterTables).toHaveBeenLastCalledWith("p1", 16);
-    expect(q(el, 'select[name="printer-matching-code"] option[value="16-8"]')).not.toBeNull();
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
-    await chooseOption(el, "printer-table-block", "0");
-    q(el, '[data-test="print-character-tables-p1"]')!.click();
-    await flush(el);
-    await chooseOption(el, "printer-matching-code", "06-8");
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("06-8");
-    expect((q(el, 'select[name="printer-character-set"]') as HTMLSelectElement).value).toBe(
-      "pc858",
-    );
-    expect(
-      (q(el, 'wt-input[name="printer-character-table"]') as import("@waitron/ui").WtInput).value,
-    ).toBe("6");
-    q(el, '[data-test="save-printer-p1"]')!.click();
-    await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledWith(
-      "p1",
-      expect.objectContaining({
-        characterSet: "pc858",
-        characterTable: 6,
-      }),
-    );
-  });
-
-  it("saves a changed paper width, resolution and character set with the connection fields", async () => {
+  it("saves a changed paper width and resolution with the connection fields", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -3796,8 +3753,6 @@ describe("printer layout settings", () => {
     expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("80mm");
     await chooseOption(el, "printer-paper-width", "58mm");
     await chooseOption(el, "printer-resolution", "203dpi");
-    await chooseOption(el, "printer-character-set", "pc858");
-    typeField(el, 'wt-input[name="printer-character-table"]', "19");
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
@@ -3807,29 +3762,7 @@ describe("printer layout settings", () => {
       active: true,
       paperWidth: "58mm",
       resolution: "203dpi",
-      characterSet: "pc858",
-      characterTable: 19,
     });
-  });
-
-  it("refuses an empty printer table instead of silently saving table zero", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el, "p1");
-    typeField(el, 'wt-input[name="printer-character-table"]', "");
-    q(el, "[data-test=save-printer-p1]")!.click();
-    await flush(el);
-    expect(api.updatePrinter).not.toHaveBeenCalled();
-    const field = q(
-      el,
-      'wt-input[name="printer-character-table"]',
-    ) as import("@waitron/ui").WtInput;
-    expect(field.invalid).toBe(true);
-    expect(field.error).toBe(t("printers.character_table_invalid"));
-    expect(
-      q(el, 'wt-disclosure[data-test="advanced-character-settings"]')!.hasAttribute("open"),
-    ).toBe(true);
   });
 
   it("uses explicit width and resolution, and prints a sample from the calibration draft", async () => {
@@ -3840,12 +3773,9 @@ describe("printer layout settings", () => {
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
     expect(q(el, "[data-test=calibration-step-1]")!.checkVisibility()).toBe(true);
-    await chooseOption(el, "printer-matching-code", "plain");
-    q(el, "[data-test=calibration-next]")!.click();
-    await flush(el);
     await chooseOption(el, "printer-paper-width", "58mm");
     await chooseOption(el, "printer-resolution", "203dpi");
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     expect(api.testPrint).toHaveBeenCalledExactlyOnceWith("p1");
     expect(q(el, '[name="printer-test-line-fits"]')).toBeNull();
@@ -3856,8 +3786,6 @@ describe("printer layout settings", () => {
     expect(api.sampleReceipt).toHaveBeenCalledWith("p1", {
       paperWidth: "58mm",
       resolution: "203dpi",
-      characterSet: "plain",
-      characterTable: 0,
     });
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
@@ -3866,8 +3794,6 @@ describe("printer layout settings", () => {
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
       paperWidth: "58mm",
       resolution: "203dpi",
-      characterSet: "plain",
-      characterTable: 0,
     });
   });
 });
@@ -3939,12 +3865,12 @@ describe("printer setup refinements", () => {
     await openPrinter(el);
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "plain");
+    await chooseOption(el, "printer-paper-width", "58mm");
     q(el, "[data-test=cancel-edit-printer]")!.click();
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();
     await openPrinter(el);
-    expect((q(el, '[name="printer-character-set"]') as HTMLSelectElement).value).toBe("wpc1252");
+    expect((q(el, '[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("80mm");
   });
 });
 
@@ -3964,14 +3890,14 @@ it("keeps a reopened calibration independent of a pending earlier print", async 
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   await openPrinter(el);
-  q(el, '[data-test="print-test-page-p1"]')!.click();
+  q(el, '[data-test="print-ruler-p1"]')!.click();
   await flush(el);
-  q(el, '[data-test="print-test-page-p1"]')!.click();
+  q(el, '[data-test="print-ruler-p1"]')!.click();
   expect(api.testPrint).toHaveBeenCalledOnce();
   q(el, '[data-test="cancel-edit-printer"]')!.click();
   await flush(el);
   await openPrinter(el);
-  q(el, '[data-test="print-test-page-p1"]')!.click();
+  q(el, '[data-test="print-ruler-p1"]')!.click();
   await flush(el);
   expect(api.testPrint).toHaveBeenCalledTimes(2);
   rejectOld({ code: "printer.not_found" });
@@ -4775,65 +4701,7 @@ describe("printers-screen printer editor edges", () => {
     expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
   });
 
-  it("prints one character-table page when the button is pressed twice", async () => {
-    let release!: () => void;
-    const { el, api } = await mountEditing("p1", {
-      testCharacterTables: vi.fn().mockReturnValueOnce(
-        new Promise((resolve) => {
-          release = () => resolve({ jobId: "j11", calibrationLocale: "es-ES" });
-        }),
-      ),
-    });
-    const tables = q(el, "[data-test=print-character-tables-p1]")!;
-
-    tables.click();
-    tables.click();
-    release();
-
-    await vi.waitFor(() => expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull());
-    expect(api.testCharacterTables).toHaveBeenCalledOnce();
-  });
-
-  it("shows a localized alert in the editor when the character-table page is rejected", async () => {
-    const { el } = await mountEditing("p1", {
-      testCharacterTables: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
-    });
-
-    q(el, "[data-test=print-character-tables-p1]")!.click();
-
-    await vi.waitFor(async () =>
-      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
-        codeMessage("printer.not_found"),
-      ),
-    );
-    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
-    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
-  });
-
-  it("does not adopt a character-table page's result after the table range changed", async () => {
-    let release!: () => void;
-    const { el, api } = await mountEditing("p1", {
-      testCharacterTables: vi.fn().mockReturnValueOnce(
-        new Promise((resolve) => {
-          release = () => resolve({ jobId: "j11", calibrationLocale: "es-ES" });
-        }),
-      ),
-    });
-    q(el, "[data-test=print-character-tables-p1]")!.click();
-    await el.updateComplete;
-    await chooseOption(el, "printer-table-block", "16");
-
-    release();
-
-    await vi.waitFor(() => expect(api.listRecentJobs).toHaveBeenCalledTimes(2));
-    await flush(el);
-    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
-    expect(q(el, 'select[name="printer-matching-code"] option[value="16-8"]')).not.toBeNull();
-    expect(q(el, 'select[name="printer-matching-code"] option[value="00-8"]')).toBeNull();
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
-  });
-
-  it("does not adopt a test page's result after its dialog was cancelled", async () => {
+  it("does not adopt a width ruler's result after its dialog was cancelled", async () => {
     let release!: () => void;
     const { el, api } = await mountEditing("p1", {
       testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
@@ -4843,7 +4711,7 @@ describe("printers-screen printer editor edges", () => {
         }),
       ),
     });
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     q(el, "[data-test=cancel-edit-printer]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
@@ -4854,54 +4722,18 @@ describe("printers-screen printer editor edges", () => {
     expect(api.listRecentJobs).toHaveBeenCalledOnce();
   });
 
-  it("saves only the changed character settings, leaving width and resolution alone", async () => {
+  it("saves only the paper width the ruler's answer changed, leaving resolution alone", async () => {
     const { el, api } = await mountEditing("p1");
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "plain");
-    q(el, "[data-test=calibration-next]")!.click();
-    await flush(el);
+    await chooseOption(el, "printer-ruler-number", "360");
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
-        characterSet: "plain",
-        characterTable: 0,
-      }),
-    );
-  });
-  it("clears the matching-code choice once the character set no longer matches plain letters", async () => {
-    const { el } = await mountEditing("p1");
-    await chooseOption(el, "printer-matching-code", "plain");
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe(
-      "plain",
-    );
-
-    await chooseOption(el, "printer-character-set", "pc858");
-
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
-  });
-
-  it("leaves the character settings alone when the matching code is set back to Choose", async () => {
-    const { el, api } = await mountEditing("p1");
-    q(el, "[data-test=print-character-tables-p1]")!.click();
-    await vi.waitFor(() => expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull());
-    await chooseOption(el, "printer-matching-code", "06-8");
-
-    await chooseOption(el, "printer-matching-code", "");
-
-    expect((q(el, 'select[name="printer-character-set"]') as HTMLSelectElement).value).toBe(
-      "pc858",
-    );
-    q(el, "[data-test=save-printer-p1]")!.click();
-    await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledWith(
-        "p1",
-        expect.objectContaining({ characterSet: "pc858", characterTable: 6 }),
-      ),
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { paperWidth: "58mm" }),
     );
   });
 });
@@ -6018,7 +5850,7 @@ describe("printers-screen Bluetooth pairing", () => {
 
     it("leaves the printer switched on once its calibration is saved", async () => {
       const { el, api } = await addAgain();
-      for (let step = 1; step < 4; step++) {
+      for (let step = 1; step < 3; step++) {
         q(el, sel("calibration-next"))!.click();
         await flush(el);
       }
@@ -6031,10 +5863,8 @@ describe("printers-screen Bluetooth pairing", () => {
     });
 
     async function saveChangedWidth(el: PrintersScreen): Promise<void> {
-      q(el, sel("calibration-next"))!.click();
-      await flush(el);
       await chooseOption(el, "printer-paper-width", "80mm");
-      for (let step = 2; step < 4; step++) {
+      for (let step = 1; step < 3; step++) {
         q(el, sel("calibration-next"))!.click();
         await flush(el);
       }
@@ -7487,6 +7317,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
 
   it("shows a calibration print that failed, with the reason in the dashboard's own words", async () => {
     const { el } = await mountWith({
+      testPrint: vi.fn().mockResolvedValue({ jobId: "j11" }),
       listRecentJobs: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([ended]),
     });
     await openPrinter(el, "p5");
@@ -7494,7 +7325,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     await flush(el);
     expect(q(el, "[data-test=calibration-job-failed]")).toBeNull();
 
-    q(el, "[data-test=print-character-tables-p5]")!.click();
+    q(el, "[data-test=print-ruler-p5]")!.click();
     await flush(el);
 
     expect(text(el, "[data-test=calibration-job-failed]")).toBe(
@@ -7509,7 +7340,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
       listRecentJobs: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([offline]),
     });
     await openPrinter(el, "p1");
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
 
     expect(text(el, "[data-test=calibration-job-failed]")).toBe("No se ha impreso: offline");
@@ -7556,9 +7387,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     await openPrinter(el, "p1");
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    q(el, "[data-test=calibration-next]")!.click();
-    await flush(el);
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
@@ -7593,12 +7422,10 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     await openPrinter(el, "p1");
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    q(el, "[data-test=calibration-next]")!.click();
-    await flush(el);
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     expect(text(el, "[data-test=calibration-job-failed]")).toBe("No se ha impreso: OLD");
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
@@ -7622,7 +7449,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
         ]),
     });
     await openPrinter(el, "p1");
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
 
     expect(text(el, "[data-test=calibration-job-failed]")).toBe(`No se ha impreso: ${reason}`);
@@ -7638,7 +7465,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     await openPrinter(el, "p5");
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    for (let step = 1; step < 4; step++) {
+    for (let step = 1; step < 3; step++) {
       q(el, "[data-test=calibration-next]")!.click();
       await flush(el);
     }

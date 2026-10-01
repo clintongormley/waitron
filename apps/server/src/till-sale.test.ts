@@ -420,8 +420,6 @@ describe("recordTillSale", () => {
         printer: {
           paperWidth: "80mm",
           resolution: "203dpi",
-          characterSet: "pc858",
-          characterTable: 19,
         },
       }),
     ).join("\n");

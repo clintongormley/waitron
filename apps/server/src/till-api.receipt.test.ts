@@ -47,7 +47,13 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
-import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
+import {
+  commandNames,
+  decodeTicket,
+  opensDrawer,
+  printedCommands,
+  printedLines,
+} from "./testing/decode-ticket.js";
 
 // The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
 // back and paper enqueued for it.
@@ -419,7 +425,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(decodeTicket(payload)).toContain("DUPLICADO");
     expect(decodeTicket(payload)).toContain("VERI*FACTU"); // the legal legend proves it is the receipt
     expect(decodeTicket(payload)).toContain("Deli Recibos SL"); // issuer venue name (art. 7.1.d)
-    expect(bytesInclude(payload, DRAWER_KICK)).toBe(false); // reprint = paper only, no kick
+    expect(opensDrawer(payload)).toBe(false); // reprint = paper only, no kick
   });
 
   it("reprints again on a second request, still filing nothing (each reprint is paper only)", async () => {
@@ -1046,12 +1052,17 @@ describe("original receipt and payment slip actions", () => {
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
     const original = jobs
-      .map((j) => Buffer.from(j.payload).toString("latin1"))
-      .find((p) => !p.includes("DUPLICADO"))!;
-    const duplicate = jobs
-      .map((j) => Buffer.from(j.payload).toString("latin1"))
-      .find((p) => p.includes("DUPLICADO"))!;
-    expect(duplicate.replace("DUPLICADO".padEnd(42) + "\n", "")).toBe(original);
+      .map((j) => new Uint8Array(j.payload))
+      .find((p) => !decodeTicket(p).includes("DUPLICADO"))!;
+    const duplicate = printedCommands(
+      jobs
+        .map((j) => new Uint8Array(j.payload))
+        .find((p) => decodeTicket(p).includes("DUPLICADO"))!,
+    );
+    expect(duplicate.filter((c) => c.text === "DUPLICADO")).toHaveLength(1);
+    expect(
+      Buffer.concat(duplicate.filter((c) => c.text !== "DUPLICADO").map((c) => c.bytes)),
+    ).toEqual(Buffer.from(original));
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
   });
@@ -1098,9 +1109,7 @@ describe("payment slip persisted capture facts", () => {
       if (withCard) expect(text).toContain("VISA **** 5838");
       else expect(text).not.toContain("Tarjeta");
       expect(text).not.toContain("VERI*FACTU");
-      expect(
-        bytesInclude(new Uint8Array(jobs[0]!.payload), Uint8Array.from([0x1d, 0x28, 0x6b])),
-      ).toBe(false);
+      expect(commandNames(new Uint8Array(jobs[0]!.payload))).not.toContain("GS ( k");
       expect(await registroCount(cfg)).toBe(1);
       expect(await saleCount(cfg)).toBe(1);
     },
@@ -1118,13 +1127,13 @@ describe("payment slip persisted capture facts", () => {
     ).toBe(200);
     expect(await printJobsFor(cfg)).toEqual([]);
   });
-  it("lays the payment slip out for the till printer's paper width and character set", async () => {
+  it("lays the payment slip out for the till printer's paper width and resolution", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await withTransaction(suite.db, async (tx) => {
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
-        characterSet: "plain",
+        resolution: "203dpi",
       });
     });
     await configureReceipt(cfg, { mode: "never", printerId });
@@ -1142,11 +1151,17 @@ describe("payment slip persisted capture facts", () => {
     expect(res.status).toBe(200);
     const [job] = await printJobsFor(cfg);
     const payload = new Uint8Array(job!.payload);
-    // Reset and single-byte mode, then "J": plain text still selects no character table.
-    expect([...payload.subarray(0, 5)]).toEqual([0x1b, 0x40, 0x1c, 0x2e, 0x4a]);
+    const commands = printedCommands(payload);
+    expect(commands.slice(0, 2).map((command) => command.name)).toEqual(["ESC @", "GS v 0"]);
+    for (const name of ["ESC t", "FS ."]) {
+      expect(commands.map((command) => command.name)).not.toContain(name);
+    }
+    for (const { name, widthDots } of commands) {
+      if (name === "GS v 0") expect(widthDots).toBe(384);
+    }
     const lines = printedLines(payload);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
-    expect(lines.join("\n")).toContain("EUR");
+    expect(lines.join("\n")).toContain("€");
   });
 });
 

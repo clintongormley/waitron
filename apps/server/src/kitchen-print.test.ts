@@ -50,7 +50,7 @@ import {
   orderTableLabel,
   reprintOrderTickets,
 } from "./kitchen-print.js";
-import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
+import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -155,6 +155,15 @@ async function printJobsFor(
       payload: printJobs.payload,
     })
     .from(printJobs);
+}
+
+/** The dot widths of a payload's drawn lines of text. */
+function lineWidths(payload: Uint8Array): Set<number> {
+  return new Set(
+    printedCommands(payload)
+      .filter((command) => command.text !== undefined)
+      .map((command) => command.widthDots!),
+  );
 }
 
 /** A basket line for a product at quantity 1. */
@@ -598,7 +607,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(selectCalls).toBe(1);
   });
 
-  it("builds one kitchen ticket per distinct paper width and character set among the printers", async () => {
+  it("builds one kitchen ticket per distinct paper width and resolution among the printers", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const ids = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -606,13 +615,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const wideTwin = await makePrinter(tx, cfg, "Cocina 80 B", "station");
       const narrow = await makePrinter(tx, cfg, "Cocina 58", "station");
       await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
-      const pass = await makePrinter(tx, cfg, "Pase 1252", "order");
-      const passPc858 = await makePrinter(tx, cfg, "Pase 858", "order");
-      await updatePrinter(tx, printCfg(cfg), passPc858, {
-        characterSet: "pc858",
-        characterTable: 19,
-      });
-      for (const printerId of [wide, wideTwin, narrow, pass, passPc858]) {
+      const pass = await makePrinter(tx, cfg, "Pase 180", "order");
+      const pass203 = await makePrinter(tx, cfg, "Pase 203", "order");
+      await updatePrinter(tx, printCfg(cfg), pass203, { resolution: "203dpi" });
+      for (const printerId of [wide, wideTwin, narrow, pass, pass203]) {
         await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       }
       const steak = await makeProduct(
@@ -625,7 +631,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         },
       );
       await fireNewOrder(tx, cfg, [line(steak)]);
-      return { wide, wideTwin, narrow, pass, passPc858, jobs: await printJobsFor(tx) };
+      return { wide, wideTwin, narrow, pass, pass203, jobs: await printJobsFor(tx) };
     });
     const payloadOf = (printerId: string): Buffer => {
       const own = ids.jobs.filter((job) => job.printerId === printerId);
@@ -646,8 +652,34 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(wideLines.map((l) => l.trimStart()).join(" ")).toContain(
       "Chuletón de buey madurado a la brasa",
     );
-    expect(payloadOf(ids.passPc858).equals(payloadOf(ids.pass))).toBe(false);
-    expect([...payloadOf(ids.passPc858).subarray(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
+    expect(payloadOf(ids.pass203).equals(payloadOf(ids.pass))).toBe(false);
+    expect(lineWidths(payloadOf(ids.pass))).toEqual(new Set([512]));
+    expect(lineWidths(payloadOf(ids.pass203))).toEqual(new Set([576]));
+  });
+
+  it("draws the next ticket at the paper width and resolution the printer was changed to", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const widths = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina", "station");
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Steak", { stationId: cocina.id });
+      const seen = new Set<string>();
+      const nextTicketWidths = async (): Promise<number[]> => {
+        await fireNewOrder(tx, cfg, [line(steak)]);
+        const fresh = (await printJobsFor(tx)).filter((job) => !seen.has(job.id));
+        for (const job of fresh) seen.add(job.id);
+        expect(fresh).toHaveLength(1);
+        return [...lineWidths(fresh[0]!.payload)];
+      };
+      const before = await nextTicketWidths();
+      await updatePrinter(tx, printCfg(cfg), printerId, { paperWidth: "58mm" });
+      const narrowed = await nextTicketWidths();
+      await updatePrinter(tx, printCfg(cfg), printerId, { resolution: "203dpi" });
+      const finer = await nextTicketWidths();
+      return [before, narrowed, finer];
+    });
+    expect(widths).toEqual([[512], [360], [384]]);
   });
 
   it("builds a correction slip once per distinct layout among the line's printers", async () => {

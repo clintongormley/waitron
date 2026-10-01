@@ -6,10 +6,9 @@ import { and, eq } from "drizzle-orm";
 import { drawerOpens, locations, printers, readTenant, tills } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
-import type { PrintConfig } from "@waitron/printing";
+import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { getReceipt } from "@waitron/layouts";
 import { formatReceipt } from "./receipt-ticket.js";
-import type { ReceiptPrinterSettings } from "./receipt-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -21,7 +20,7 @@ function printConfig(cfg: TillConfig): PrintConfig {
 }
 
 /** The till's active receipt printer and the settings its receipts are laid out for. */
-export interface ReceiptPrinter extends ReceiptPrinterSettings {
+export interface ReceiptPrinter extends EscSetting {
   id: string;
   hasCashDrawer: boolean;
 }
@@ -41,8 +40,6 @@ export async function resolveReceiptPrinter(
       hasCashDrawer: printers.hasCashDrawer,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
-      characterSet: printers.characterSet,
-      characterTable: printers.characterTable,
     })
     .from(tills)
     .innerJoin(printers, and(eq(printers.id, tills.receiptPrinterId), eq(printers.active, true)))
@@ -56,7 +53,7 @@ async function buildReceiptBytes(
   cfg: TillConfig,
   ticket: TillSaleResult,
   duplicate: boolean,
-  printer: ReceiptPrinterSettings,
+  printer: EscSetting,
 ): Promise<Uint8Array | undefined> {
   const taxpayer = await readTenant(tx);
   /* v8 ignore start */

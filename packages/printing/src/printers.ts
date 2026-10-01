@@ -5,12 +5,11 @@ import { AppError } from "@waitron/shared";
 import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
-import type { CharacterSet } from "./charset.js";
 import type { PaperWidth, Resolution } from "./layout.js";
 
 /**
  * Maps a refused printer write to a domain code, or rethrows. The CHECK branch names its constraint
- * because `printers` has other CHECKs (e.g. `printers_character_table_ck`) that are not a missing
+ * because `printers` has other CHECKs (e.g. `printers_paper_width_ck`) that are not a missing
  * transport field. The unique branch needs no name: the only other unique key is the `id` primary key,
  * which neither write here supplies.
  */
@@ -41,8 +40,6 @@ export interface CreatePrinterInput {
   pollId?: string;
   paperWidth?: PaperWidth;
   resolution?: Resolution;
-  characterSet?: CharacterSet;
-  characterTable?: number;
   hasCashDrawer?: boolean;
 }
 
@@ -83,8 +80,6 @@ export async function createPrinter(
         pollId: input.pollId,
         paperWidth: input.paperWidth,
         resolution: input.resolution,
-        characterSet: input.characterSet,
-        characterTable: input.characterTable,
         hasCashDrawer: input.hasCashDrawer,
       })
       .returning({ id: printers.id });
@@ -105,8 +100,6 @@ export interface UpdatePrinterInput {
   ticketScope?: "station" | "order";
   paperWidth?: PaperWidth;
   resolution?: Resolution;
-  characterSet?: CharacterSet;
-  characterTable?: number;
   hasCashDrawer?: boolean;
   active?: boolean;
 }
@@ -122,8 +115,6 @@ export interface PrinterRow {
   ticketScope: "station" | "order";
   paperWidth: PaperWidth;
   resolution: Resolution;
-  characterSet: CharacterSet;
-  characterTable: number;
   hasCashDrawer: boolean;
   active: boolean;
 }
@@ -194,8 +185,6 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       ticketScope: printers.ticketScope,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
-      characterSet: printers.characterSet,
-      characterTable: printers.characterTable,
       hasCashDrawer: printers.hasCashDrawer,
       active: printers.active,
     })

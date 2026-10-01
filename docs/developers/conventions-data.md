@@ -155,9 +155,12 @@ golang.org/toolchain archive per platform, from proxy.golang.org; `deploy/third-
 has the steps to regenerate it.
 
 What the guards leave open. The third-party blocks in `scripts/deploy-image-env.test.ts` read
-text and cover libvips, Litestream and the print agent's python3-minimal only; for Litestream they
-compare `NOTICES.txt`'s `Litestream version:` line with the pin, never the module list with the
-binary. The npm packages bundled into the server, the web apps and the print-agent have no notice
+text and cover libvips, Litestream, the print agent's python3-minimal and the Iosevka font only;
+for Litestream they compare `NOTICES.txt`'s `Litestream version:` line with the pin, never the
+module list with the binary; for the font they check that `deploy/third-party/iosevka/LICENSE.md`
+carries the copyright line `packages/printing/src/glyphs.ts`'s header names and that the
+provenance file names the header's font sha256, never that the table was drawn from that font
+(added 2026-10-01, C107). The npm packages bundled into the server, the web apps and the print-agent have no notice
 file; the print-agent image (`deploy/Dockerfile`'s `print-agent` stage) ships the Debian copyright
 files of python3-minimal and the packages its install added under `/app/third-party/python3-minimal/`,
 and none for bluez (`docs/backlog.md`).

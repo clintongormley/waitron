@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { cellsFrom, expectedBand } from "../test/expected-band.js";
+import { escPosCommands } from "./testing/escpos-commands.js";
 import { FEED_BEFORE_CUT, esc } from "./escpos.js";
+import { GLYPHS } from "./glyphs.js";
 
 // These pin the exact bytes, not that a physical printer accepts them.
 describe("esc() ESC/POS builder", () => {
-  it("selects line justification without changing the text", () => {
-    expect([...esc().align("center").line("A").align("right").align("left").bytes()]).toEqual([
-      0x1b, 0x61, 1, 65, 10, 0x1b, 0x61, 2, 0x1b, 0x61, 0,
+  it("selects line justification with ESC a n", () => {
+    expect([...esc().align("center").align("right").align("left").bytes()]).toEqual([
+      0x1b, 0x61, 1, 0x1b, 0x61, 2, 0x1b, 0x61, 0,
     ]);
   });
   it("sets a left-anchored print area in dots", () => {
@@ -22,21 +25,6 @@ describe("esc() ESC/POS builder", () => {
   });
   it("init emits ESC @ (0x1B 0x40)", () => {
     expect([...esc().init().bytes()]).toEqual([0x1b, 0x40]);
-  });
-
-  it("text emits the Latin-1 bytes of the string, one byte per character", () => {
-    expect([...esc().text("AB").bytes()]).toEqual([0x41, 0x42]);
-    // A non-ASCII Latin-1 character maps to its single 0x80-0xFF byte (é = U+00E9 → 0xE9); the
-    // builder is byte-oriented and does not UTF-8-encode (a printer's code page is a consumer concern).
-    expect([...esc().text("é").bytes()]).toEqual([0xe9]);
-  });
-
-  it("line appends a trailing LF (0x0A) after the text", () => {
-    expect([...esc().line("A").bytes()]).toEqual([0x41, 0x0a]);
-  });
-
-  it("line() with no argument emits a bare LF", () => {
-    expect([...esc().line().bytes()]).toEqual([0x0a]);
   });
 
   it("feed emits ESC d n (feed n lines), defaulting to 1", () => {
@@ -58,18 +46,10 @@ describe("esc() ESC/POS builder", () => {
   });
 
   it("chains commands in call order into one contiguous byte stream", () => {
-    const bytes = [...esc().init().line("Table 4").feed(2).cut().kick().bytes()];
+    const bytes = [...esc().init().feed(2).cut().kick().bytes()];
     expect(bytes).toEqual([
       0x1b,
       0x40, // init
-      0x54,
-      0x61,
-      0x62,
-      0x6c,
-      0x65,
-      0x20,
-      0x34,
-      0x0a, // "Table 4" + LF
       0x1b,
       0x64,
       0x02, // feed 2
@@ -85,10 +65,10 @@ describe("esc() ESC/POS builder", () => {
   });
 
   it("bytes() returns a fresh Uint8Array each call, so mutating the copy never disturbs the builder", () => {
-    const builder = esc().text("A");
+    const builder = esc().init();
     const first = builder.bytes();
     first[0] = 0x00; // mutate the returned copy
-    expect([...builder.bytes()]).toEqual([0x41]); // the builder's own state is untouched
+    expect([...builder.bytes()]).toEqual([0x1b, 0x40]); // the builder's own state is untouched
     expect(builder.bytes()).toBeInstanceOf(Uint8Array);
   });
 
@@ -358,48 +338,131 @@ describe("esc() ESC/POS builder", () => {
     expect(() => esc().qrRaster([[true]], { moduleSize: -1 })).toThrow(RangeError);
     expect(() => esc().qrRaster([[true]], { moduleSize: 1.5 })).toThrow(RangeError);
   });
-
-  describe("charset-aware builder", () => {
-    it("selects a printer-specific table independently from the text encoding", () => {
-      expect([...esc("wpc1252", 6).init().line("€").bytes()]).toEqual([
-        0x1b, 0x40, 0x1b, 0x74, 6, 0x1c, 0x2e, 0x80, 0x0a,
-      ]);
-    });
-    it("emits ESC t 19 and encodes the euro as 0xD5 for pc858", () => {
-      expect([...esc("pc858").init().line("€").bytes()]).toEqual([
-        0x1b, 0x40, 0x1b, 0x74, 19, 0x1c, 0x2e, 0xd5, 0x0a,
-      ]);
-    });
-    it("sends no ESC t for plain and transliterates the euro to EUR", () => {
-      expect([...esc("plain").init().line("€").bytes()]).toEqual([
-        0x1b, 0x40, 0x1c, 0x2e, 0x45, 0x55, 0x52, 0x0a,
-      ]);
-    });
-    it("switches character set mid-payload", () => {
-      expect([...esc("plain").init().charset("pc858", 5).text("é").bytes()]).toEqual([
-        0x1b, 0x40, 0x1c, 0x2e, 0x1b, 0x74, 5, 0x82,
-      ]);
-    });
-    it("selects no table when switching to plain mid-payload, even with a table given", () => {
-      expect([...esc("pc858").init().charset("plain").text("€").bytes()]).toEqual([
-        0x1b, 0x40, 0x1b, 0x74, 19, 0x1c, 0x2e, 0x45, 0x55, 0x52,
-      ]);
-      expect([...esc("pc858").init().charset("plain", 5).text("é").bytes()]).toEqual([
-        0x1b, 0x40, 0x1b, 0x74, 19, 0x1c, 0x2e, 0x65,
-      ]);
-    });
-    it("keeps Latin-1 and selects no table when no charset is given", () => {
-      expect([...esc().init().text("é€").bytes()]).toEqual([0x1b, 0x40, 0xe9, 0xac]);
-    });
-  });
 });
 
-it.each(["wpc1252", "pc858", "plain"] as const)(
-  "initializes %s in single-byte mode before emitting text",
-  (cs) => {
-    const bytes = [...esc(cs).init().text("Café").bytes()];
-    const mode = bytes.findIndex((b, i) => b === 0x1c && bytes[i + 1] === 0x2e);
-    expect(mode).toBeGreaterThan(1);
-    expect(bytes.slice(mode + 2, mode + 5)).toEqual([0x43, 0x61, 0x66]);
-  },
-);
+/** `GS v 0` with normal density, then width in bytes and height in dots, low byte first. */
+const header = (widthBytes: number, heightDots: number) => [
+  0x1d,
+  0x76,
+  0x30,
+  0x00,
+  widthBytes & 0xff,
+  widthBytes >> 8,
+  heightDots & 0xff,
+  heightDots >> 8,
+];
+
+const NETUM_58 = { paperWidth: "58mm", resolution: "203dpi" } as const;
+const TM_T88_58 = { paperWidth: "58mm", resolution: "180dpi" } as const;
+const TM_T88_80 = { paperWidth: "80mm", resolution: "180dpi" } as const;
+
+describe("text drawn as images", () => {
+  it("draws a line as one 28-dot band the width of the setting, its text on the setting's grid", () => {
+    // 58 mm at 203 dpi: 384 dots, 48 bytes a row; 30 columns centred from dot 12.
+    expect([...esc(NETUM_58).line("Café 5 €").bytes()]).toEqual([
+      ...header(48, 28),
+      ...expectedBand(384, cellsFrom("Café 5 €", 12)),
+    ]);
+    // 80 mm at 180 dpi: 512 dots, 64 bytes a row; 42 columns centred from dot 4.
+    expect([...esc(TM_T88_80).line("Café 5 €").bytes()]).toEqual([
+      ...header(64, 28),
+      ...expectedBand(512, cellsFrom("Café 5 €", 4)),
+    ]);
+  });
+
+  it("draws an empty line as a blank band of the same size", () => {
+    expect([...esc(TM_T88_58).line().bytes()]).toEqual([
+      ...header(45, 28),
+      ...new Array(45 * 28).fill(0),
+    ]);
+  });
+
+  it("still sends ESC a, and places the text in whole cells by the alignment", () => {
+    expect([
+      ...esc(TM_T88_58).align("center").line("Hola").align("right").line("Hola").bytes(),
+    ]).toEqual([
+      0x1b,
+      0x61,
+      1,
+      ...header(45, 28),
+      ...expectedBand(360, cellsFrom("Hola", 13 * 12)),
+      0x1b,
+      0x61,
+      2,
+      ...header(45, 28),
+      ...expectedBand(360, cellsFrom("Hola", 26 * 12)),
+    ]);
+  });
+
+  it("refuses to draw text without a paper width and resolution to draw it to", () => {
+    expect(() => esc().line("A")).toThrow(/paper width/);
+  });
+
+  it("draws any picture as a GS v 0 image, rows packed most significant bit first", () => {
+    // A 10-dot-wide, 2-dot-tall picture: a diagonal plus the last column.
+    expect([
+      ...esc()
+        .raster(10, 2, (x, y) => x === y || x === 9)
+        .bytes(),
+    ]).toEqual([
+      ...header(2, 2),
+      0x80,
+      0x40, // row 0: dots 0 and 9
+      0x40,
+      0x40, // row 1: dots 1 and 9
+    ]);
+  });
+
+  it("draws text left-aligned again after ESC @, which resets the printer's alignment too", () => {
+    expect([...esc(TM_T88_58).align("center").init().line("Hola").bytes()]).toEqual([
+      0x1b,
+      0x61,
+      1,
+      0x1b,
+      0x40,
+      ...header(45, 28),
+      ...expectedBand(360, cellsFrom("Hola", 0)),
+    ]);
+  });
+
+  it("refuses a picture too big for the 16-bit size fields, before sending any of it", () => {
+    const tall = esc().init();
+    expect(() => tall.raster(8, 0x10000, () => false)).toThrow(RangeError);
+    expect([...tall.bytes()]).toEqual([0x1b, 0x40]);
+    const wide = esc();
+    expect(() => wide.raster(8 * 0x10000, 1, () => false)).toThrow(RangeError);
+    expect([...wide.bytes()]).toEqual([]);
+    expect(
+      esc()
+        .raster(8, 0xffff, () => false)
+        .bytes().length,
+    ).toBe(8 + 0xffff);
+  });
+
+  it("refuses a picture with no dots or a fractional size", () => {
+    expect(() => esc().raster(0, 1, () => true)).toThrow(RangeError);
+    expect(() => esc().raster(1, 0, () => true)).toThrow(RangeError);
+    expect(() => esc().raster(1.5, 1, () => true)).toThrow(RangeError);
+  });
+
+  it("sends a whole job with no text-mode command and no text bytes", () => {
+    const every = GLYPHS.map(([codePoint]) => String.fromCodePoint(codePoint)).join("");
+    const b = esc(TM_T88_80).init().printArea(512).align("center");
+    for (let i = 0; i < every.length; i += 42) b.line(every.slice(i, i + 42));
+    b.line()
+      .qrRaster([[true]])
+      .feedAndCut()
+      .kick();
+    const names = new Set(escPosCommands(b.bytes()).map(({ name }) => name));
+    expect([...names].sort()).toEqual([
+      "ESC @",
+      "ESC a",
+      "ESC d",
+      "ESC p",
+      "GS L",
+      "GS V",
+      "GS W",
+      "GS v 0",
+    ]);
+  });
+});

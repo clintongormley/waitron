@@ -3,17 +3,11 @@
  * opaque. The sequences follow the Epson ESC/POS reference; a physical printer is checked by hand.
  */
 
-import {
-  DEFAULT_CHARACTER_TABLE,
-  encodeText,
-  selectCharacterTable,
-  type CharacterSet,
-} from "./charset.js";
+import { textGrid, type PaperWidth, type Resolution, type TextGrid } from "./layout.js";
+import { TEXT_BAND_HEIGHT, drawTextBand, type Alignment } from "./raster-text.js";
 
 const ESC = 0x1b;
 const GS = 0x1d;
-/** Prints the buffered line and advances one line. */
-const LF = 0x0a;
 
 /**
  * Blank lines fed before the cut. The cutter sits above the print head: three lines left the Epson
@@ -22,8 +16,8 @@ const LF = 0x0a;
  */
 export const FEED_BEFORE_CUT = 5;
 
-/** A builder created without a character set, and `qr()`'s stored data, encode as Latin-1. */
-const TEXT_ENCODING = "latin1";
+/** `qr()` stores its data as Latin-1; it is data for the printer's QR engine, not printed text. */
+const QR_DATA_ENCODING = "latin1";
 
 /**
  * QR error-correction level → the `GS ( k` Function 169 parameter byte. Source:
@@ -38,71 +32,116 @@ const QR_EC_LEVEL: Readonly<Record<"L" | "M" | "Q" | "H", number>> = {
 
 const QR_DEFAULT_MODULE_SIZE = 6;
 
+/** The printer setting a job's text is drawn to. */
+export interface EscSetting {
+  paperWidth: PaperWidth;
+  resolution: Resolution;
+}
+
+/**
+ * Text is never sent as text: each line is drawn to a `GS v 0` image {@link TEXT_BAND_HEIGHT} dots
+ * tall and as wide as the setting's dot width, so no printer character table is involved.
+ */
 export class EscBuilder {
   private readonly parts: number[] = [];
+  private alignment: Alignment = "left";
+  /** Undefined for a builder made without a setting, which can send anything but text. */
+  readonly grid: TextGrid | undefined;
 
-  constructor(
-    private current?: CharacterSet,
-    private currentTable: number | undefined = current === undefined
-      ? undefined
-      : DEFAULT_CHARACTER_TABLE[current],
-  ) {}
+  constructor(setting?: EscSetting) {
+    this.grid =
+      setting === undefined ? undefined : textGrid(setting.paperWidth, setting.resolution);
+  }
 
-  /** `ESC @` resets; `FS .` cancels Kanji mode so text stays single-byte. */
+  private push(...bytes: number[]): void {
+    for (const b of bytes) this.parts.push(b);
+  }
+
+  /** `ESC @`, which also returns the printer's alignment to left, so text lines follow suit. */
   init(): this {
-    this.parts.push(ESC, 0x40);
-    if (this.current !== undefined) {
-      if (this.current !== "plain" && this.currentTable !== undefined)
-        this.parts.push(...selectCharacterTable(this.currentTable));
-      this.parts.push(0x1c, 0x2e);
+    this.push(ESC, 0x40);
+    this.alignment = "left";
+    return this;
+  }
+
+  /** Draws `s` as one band on the setting's grid; no text draws a blank band. */
+  line(s = ""): this {
+    if (this.grid === undefined) {
+      throw new Error(
+        "esc() was made without a paper width and resolution, so it cannot draw text",
+      );
     }
+    this.pushRaster(
+      Math.ceil(this.grid.widthDots / 8),
+      TEXT_BAND_HEIGHT,
+      drawTextBand(s, this.grid, this.alignment),
+    );
     return this;
   }
 
-  charset(cs: CharacterSet, table: number | undefined = DEFAULT_CHARACTER_TABLE[cs]): this {
-    this.current = cs;
-    this.currentTable = table;
-    if (cs !== "plain" && table !== undefined) this.parts.push(...selectCharacterTable(table));
+  /**
+   * `ESC a n`, which positions images (a QR code) on the printer; text lines are drawn full width, so
+   * for them the alignment picks the grid cells their text starts in.
+   */
+  align(alignment: Alignment): this {
+    this.push(ESC, 0x61, { left: 0, center: 1, right: 2 }[alignment]);
+    this.alignment = alignment;
     return this;
   }
 
-  text(s: string): this {
-    if (this.current === undefined) {
-      for (const b of Buffer.from(s, TEXT_ENCODING)) this.parts.push(b);
-    } else {
-      for (const b of encodeText(s, this.current)) this.parts.push(b);
+  /** A 1-bit picture `widthDots` × `heightDots`, `dot(x, y)` true where it prints. */
+  raster(widthDots: number, heightDots: number, dot: (x: number, y: number) => boolean): this {
+    for (const [name, value] of [
+      ["widthDots", widthDots],
+      ["heightDots", heightDots],
+    ] as const) {
+      if (!Number.isInteger(value) || value < 1) {
+        throw new RangeError(`raster ${name} must be an integer >= 1, got ${value}`);
+      }
     }
+    this.pushRaster(Math.ceil(widthDots / 8), heightDots, packRows(widthDots, heightDots, dot));
     return this;
   }
 
-  line(s?: string): this {
-    if (s !== undefined) this.text(s);
-    this.parts.push(LF);
-    return this;
-  }
-
-  /** `ESC a n`, effective at the beginning of a line. */
-  align(alignment: "left" | "center" | "right"): this {
-    this.parts.push(ESC, 0x61, { left: 0, center: 1, right: 2 }[alignment]);
-    return this;
+  /**
+   * `GS v 0 m xL xH yL yH d1…dk`: x is bytes per row, y is dots high, rows are packed MSB-first with a
+   * set bit printing, and a row's last byte is zero-padded.
+   */
+  private pushRaster(widthBytes: number, heightDots: number, data: Uint8Array): void {
+    if (widthBytes > 0xffff || heightDots > 0xffff) {
+      throw new RangeError(
+        `GS v 0's 16-bit size fields hold at most ${0xffff} bytes across and ${0xffff} dots down, got ${widthBytes} × ${heightDots}`,
+      );
+    }
+    this.parts.push(
+      GS,
+      0x76,
+      0x30,
+      0x00,
+      widthBytes & 0xff,
+      (widthBytes >> 8) & 0xff,
+      heightDots & 0xff,
+      (heightDots >> 8) & 0xff,
+    );
+    for (const b of data) this.parts.push(b);
   }
 
   /** `GS L nL nH` followed by `GS W nL nH`, in dots. */
   printArea(widthDots: number): this {
-    this.parts.push(GS, 0x4c, 0x00, 0x00);
-    this.parts.push(GS, 0x57, widthDots & 0xff, (widthDots >> 8) & 0xff);
+    this.push(GS, 0x4c, 0x00, 0x00);
+    this.push(GS, 0x57, widthDots & 0xff, (widthDots >> 8) & 0xff);
     return this;
   }
 
   /** `ESC d n`. */
   feed(n = 1): this {
-    this.parts.push(ESC, 0x64, n & 0xff);
+    this.push(ESC, 0x64, n & 0xff);
     return this;
   }
 
   /** Full cut, `GS V 0`, wherever the paper is: a ticket ends with {@link feedAndCut} instead. */
   cut(): this {
-    this.parts.push(GS, 0x56, 0x00);
+    this.push(GS, 0x56, 0x00);
     return this;
   }
 
@@ -112,14 +151,14 @@ export class EscBuilder {
 
   /** Pulse the cash drawer: `ESC p 0 25 250` — connector pin 2, 50ms on, 500ms off (units of 2ms). */
   kick(): this {
-    this.parts.push(ESC, 0x70, 0x00, 0x19, 0xfa);
+    this.push(ESC, 0x70, 0x00, 0x19, 0xfa);
     return this;
   }
 
   /**
    * Native QR through the printer's own `GS ( k` engine (cn = 0x31 selects QR). The five functions
    * must be sent in this order: model, module size, EC level, store data, print. `text` is always
-   * stored as Latin-1, whatever the builder's character set. The receipt's fiscal QR does not use
+   * stored as Latin-1. The receipt's fiscal QR does not use
    * this: it is a `qrRaster` image sized by `chooseQrDots`.
    */
   qr(text: string, opts: { ecLevel?: "L" | "M" | "Q" | "H"; moduleSize?: number } = {}): this {
@@ -131,7 +170,7 @@ export class EscBuilder {
       );
     }
     // Function 180's length counts cn, fn and m as well as the data, in a 16-bit pL/pH field.
-    const data = Buffer.from(text, TEXT_ENCODING);
+    const data = Buffer.from(text, QR_DATA_ENCODING);
     const storeLen = data.length + 3;
     if (storeLen > 0xffff) {
       throw new RangeError(
@@ -154,8 +193,7 @@ export class EscBuilder {
 
   /**
    * Packs an already-computed square module matrix (`true` = dark) into a `GS v 0` raster image; the
-   * caller does the QR encoding. `GS v 0 m xL xH yL yH d1…dk`: x is bytes per row, y is dots high,
-   * rows are packed MSB-first with a set bit printing, and a row's last byte is zero-padded.
+   * caller does the QR encoding.
    */
   qrRaster(modules: boolean[][], opts: { moduleSize?: number } = {}): this {
     const { moduleSize = QR_DEFAULT_MODULE_SIZE } = opts;
@@ -169,30 +207,15 @@ export class EscBuilder {
       );
     }
     const pixelSide = side * moduleSize;
-    const widthBytes = Math.ceil(pixelSide / 8);
-    this.parts.push(
-      GS,
-      0x76,
-      0x30,
-      0x00,
-      widthBytes & 0xff,
-      (widthBytes >> 8) & 0xff,
-      pixelSide & 0xff,
-      (pixelSide >> 8) & 0xff,
+    this.pushRaster(
+      Math.ceil(pixelSide / 8),
+      pixelSide,
+      packRows(
+        pixelSide,
+        pixelSide,
+        (x, y) => modules[Math.floor(y / moduleSize)]![Math.floor(x / moduleSize)]!,
+      ),
     );
-    for (let my = 0; my < side; my++) {
-      const row = modules[my];
-      for (let sy = 0; sy < moduleSize; sy++) {
-        for (let bx = 0; bx < widthBytes; bx++) {
-          let byte = 0;
-          for (let bit = 0; bit < 8; bit++) {
-            const mx = Math.floor((bx * 8 + bit) / moduleSize);
-            if (mx < side && row[mx]) byte |= 0x80 >> bit;
-          }
-          this.parts.push(byte);
-        }
-      }
-    }
     return this;
   }
 
@@ -201,6 +224,25 @@ export class EscBuilder {
   }
 }
 
-export function esc(charset?: CharacterSet, characterTable?: number): EscBuilder {
-  return new EscBuilder(charset, characterTable);
+/** Rows of `dot`, MSB first, each padded with zero bits to a whole byte. */
+function packRows(
+  widthDots: number,
+  heightDots: number,
+  dot: (x: number, y: number) => boolean,
+): Uint8Array {
+  const stride = Math.ceil(widthDots / 8);
+  const data = new Uint8Array(stride * heightDots);
+  for (let y = 0; y < heightDots; y++) {
+    for (let x = 0; x < widthDots; x++) {
+      if (dot(x, y)) data[y * stride + (x >> 3)]! |= 0x80 >> (x & 7);
+    }
+  }
+  return data;
+}
+
+/** Without a setting the builder sends everything but text: a drawer pulse needs no paper width. */
+export function esc(setting: EscSetting): EscBuilder & { readonly grid: TextGrid };
+export function esc(): EscBuilder;
+export function esc(setting?: EscSetting): EscBuilder {
+  return new EscBuilder(setting);
 }

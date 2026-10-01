@@ -1,16 +1,27 @@
-import { FEED_BEFORE_CUT, columnsFor, esc, withQuietZone } from "@waitron/printing";
+import {
+  FEED_BEFORE_CUT,
+  columnsFor,
+  esc,
+  textGrid,
+  withQuietZone,
+  type EscSetting,
+} from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 import { formatReceipt } from "./receipt-ticket.js";
-import type { ReceiptIssuer, ReceiptPrinterSettings, ReceiptTrim } from "./receipt-ticket.js";
+import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
 import { qrModules } from "./qr-matrix.js";
-import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
+import {
+  bytesInclude,
+  decodeTicket,
+  printedCommands,
+  printedLines,
+} from "./testing/decode-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-// `formatReceipt` is pure, so these are unit tests. `printedLines` decodes each byte through the
-// character-set table the job selects (the layout tests); `decodeTicket` decodes byte-exact Latin-1
-// (the byte-level assertions).
+// `formatReceipt` is pure, so these are unit tests. `printedLines` and `decodeTicket` read the text
+// back from the images each line is drawn as; `printedCommands` lists the commands themselves.
 //
 // The printed paper is a factura simplificada, a legal document: the completeness test pins that it
 // carries every mandated art. 7.1 / arts. 20-21 element, never fewer than the on-screen receipt.
@@ -19,22 +30,20 @@ import type { TillSaleResult } from "./till-sale.js";
 const CUT_BYTES = [0x1d, 0x56, 0x00];
 /** ESC d n — the shared feed before every cut (`FEED_BEFORE_CUT`), so the tear-off clears the head. */
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
-/** GS ( k — the lead bytes of the native two-dimensional-symbol (QR) command family (`escpos.ts`). */
-const QR_LEAD_BYTES = Uint8Array.from([0x1d, 0x28, 0x6b]);
-/** GS v 0 with m = 0 — the lead bytes of a raster image (`escpos.ts` `qrRaster`). */
-const RASTER_LEAD_BYTES = Uint8Array.from([0x1d, 0x76, 0x30, 0x00]);
 
-const PRINTER_80: ReceiptPrinterSettings = {
+/** The receipt's commands from the first image that is not a drawn line of text: its QR code. */
+function fromQr(bytes: Uint8Array): ReturnType<typeof printedCommands> {
+  const commands = printedCommands(bytes);
+  return commands.slice(commands.findIndex((c) => c.name === "GS v 0" && c.text === undefined));
+}
+
+const PRINTER_80: EscSetting = {
   paperWidth: "80mm",
   resolution: "180dpi",
-  characterSet: "wpc1252",
-  characterTable: 16,
 };
-const PRINTER_58: ReceiptPrinterSettings = {
+const PRINTER_58: EscSetting = {
   paperWidth: "58mm",
   resolution: "180dpi",
-  characterSet: "pc858",
-  characterTable: 19,
 };
 
 /**
@@ -82,16 +91,10 @@ it("puts the QR legend immediately after the raster and a blank line before the 
     invoiceLocale: "es-ES",
     printer: PRINTER_80,
   });
-  const at = bytes.findIndex((_, i) =>
-    RASTER_LEAD_BYTES.every((value, j) => bytes[i + j] === value),
-  );
-  expect(at).toBeGreaterThan(0);
-  const stride = bytes[at + 4]! + 256 * bytes[at + 5]!;
-  const height = bytes[at + 6]! + 256 * bytes[at + 7]!;
-  const afterImage = at + 8 + stride * height;
-  expect(Buffer.from(bytes.slice(afterImage, afterImage + 12)).toString("ascii")).toBe(
-    "VERI*FACTU\n\n",
-  );
+  const [qr, legend, blank] = fromQr(bytes);
+  expect(qr?.name).toBe("GS v 0");
+  expect(legend?.text?.trimStart()).toBe("VERI*FACTU");
+  expect(blank?.text).toBe("");
 });
 
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
@@ -102,9 +105,9 @@ function lineName(line: TillSaleResult["lines"][number]): string {
 describe("formatReceipt — the faithful, legally-complete customer receipt", () => {
   it.each([
     [PRINTER_58, 0x68, 0x01],
-    [PRINTER_80, 0xf8, 0x01],
+    [PRINTER_80, 0x00, 0x02],
   ] as const)(
-    "anchors a $paperWidth print area to the left before centring the receipt",
+    "anchors a $paperWidth print area to the left, as wide as the image each line is drawn to",
     (printer, widthLowByte, widthHighByte) => {
       const bytes = formatReceipt({
         result: FILED_SALE,
@@ -113,7 +116,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         invoiceLocale: "es-ES",
         printer,
       });
-      expect([...bytes.slice(7, 18)]).toEqual([
+      expect([...bytes.slice(0, 10)]).toEqual([
+        0x1b,
+        0x40,
         0x1d,
         0x4c,
         0x00,
@@ -122,14 +127,36 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         0x57,
         widthLowByte,
         widthHighByte,
-        0x1b,
-        0x61,
-        1,
       ]);
+      const widthDots = widthLowByte + 256 * widthHighByte;
+      const lines = printedCommands(bytes).filter((command) => command.text !== undefined);
+      expect(lines.length).toBeGreaterThan(0);
+      for (const line of lines) expect(line.widthDots).toBe(widthDots);
+    },
+  );
+  it.each([
+    PRINTER_80,
+    PRINTER_58,
+    { paperWidth: "80mm", resolution: "203dpi" } as const,
+    { paperWidth: "58mm", resolution: "203dpi" } as const,
+  ])(
+    "selects no character table, sends no text and pulses no drawer ($paperWidth, $resolution)",
+    (printer) => {
+      const names = printedCommands(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      ).map((command) => command.name);
+      for (const name of ["ESC t", "FS .", "ESC p", "DLE DC4", "text", "LF"])
+        expect(names).not.toContain(name);
     },
   );
   it.each([PRINTER_80, PRINTER_58])(
-    "centres the fixed-width body and the unpadded QR legend on $paperWidth",
+    "centres the QR legend on $paperWidth and starts the body at the grid's first column",
     (printer) => {
       const bytes = formatReceipt({
         result: FILED_SALE,
@@ -138,14 +165,14 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         invoiceLocale: "es-ES",
         printer,
       });
-      expect([...bytes.slice(15, 18)]).toEqual([0x1b, 0x61, 1]);
       const lines = printedLines(bytes).filter(Boolean);
-      const width = printer.paperWidth === "80mm" ? 42 : 30;
-      expect(lines).toContain("VERI*FACTU");
-      for (const line of lines.filter((line) => line !== "VERI*FACTU"))
-        expect(line.length).toBe(width);
-      expect(lines).toContain(ISSUER.venueName.padEnd(width));
-      expect(lines.at(-1)).toBe(TRIM.footerMessage!.padEnd(width));
+      const { columns } = textGrid(printer.paperWidth, printer.resolution);
+      const legend = `${" ".repeat(Math.floor((columns - 10) / 2))}VERI*FACTU`;
+      expect(lines).toContain(legend);
+      for (const line of lines.filter((line) => line !== legend))
+        expect(line.length).toBeLessThanOrEqual(columns);
+      expect(lines).toContain(ISSUER.venueName);
+      expect(lines.at(-1)).toBe(TRIM.footerMessage!);
     },
   );
   it.each([PRINTER_80, PRINTER_58])(
@@ -190,7 +217,6 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
       expect(s).toContain("VERI*FACTU");
 
-      // Digits only: the € glyph and the amount/€ separator vary by character set and ICU build.
       expect(s).toContain("12,10"); // line 1 gross
       expect(s).toContain("8,80"); // line 2 gross
       expect(s).toContain("10,00"); // base 21%
@@ -300,8 +326,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       printer: PRINTER_80,
     });
     // No QR image or native QR command is emitted (mirrors `qrSvg("") === ""` on the screen)...
-    expect(bytesInclude(bytes, RASTER_LEAD_BYTES)).toBe(false);
-    expect(bytesInclude(bytes, QR_LEAD_BYTES)).toBe(false);
+    const commands = printedCommands(bytes);
+    expect(commands.filter((c) => c.name === "GS v 0" && c.text === undefined)).toEqual([]);
+    expect(commands.map((c) => c.name)).not.toContain("GS ( k");
     // ...but the legend is unconditional in Veri*Factu mode (art. 20.1.b).
     expect(decodeTicket(bytes)).toContain("VERI*FACTU");
   });
@@ -502,10 +529,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect([...bytes.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
   });
 
-  it("normalises the amount/€ separator to an ASCII space (0x20), not NBSP/NNBSP", () => {
-    // `Intl.NumberFormat("es-ES")` separates amount and € with a no-break space (U+00A0 or U+202F),
-    // and this printer's wpc1252 table can encode U+00A0, so `prepareText` keeps it; `formatMoney`
-    // must rewrite it.
+  it("prints a blank between the amount and the € sign", () => {
+    // A no-break space is drawn exactly like a space, so the read-back cannot tell them apart and
+    // this case passes with `formatMoney`'s rewrite deleted; `receipt-money.test.ts` is what fails.
     const s = decodeTicket(
       formatReceipt({
         result: FILED_SALE,
@@ -515,10 +541,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         printer: PRINTER_80,
       }),
     );
-    // No non-break space survives to the decoded text (neither U+00A0 nor U+202F): the byte-exact
-    // decode reads byte 0xA0 back as U+00A0, so a separator left in place by `formatMoney` is caught.
     expect(s).not.toMatch(/[\u00a0\u202f]/u);
-    // The character right after the TOTAL amount is a plain ASCII space (0x20), never `/` or U+00A0.
     const idx = s.indexOf("20,90");
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(s[idx + "20,90".length]).toBe(" ");
@@ -711,11 +734,11 @@ it("adds only the duplicate marker and preserves the order grouping and QR bytes
   const duplicate = formatReceipt({ ...input, duplicate: true });
   expect(decodeTicket(original)).toContain("Mesa 6 · Pedido 41");
   expect(decodeTicket(original)).not.toContain("DUPLICADO");
-  expect(
-    Buffer.from(duplicate)
-      .toString("latin1")
-      .replace("DUPLICADO".padEnd(42) + "\n", ""),
-  ).toBe(Buffer.from(original).toString("latin1"));
+  const commands = printedCommands(duplicate);
+  expect(commands.filter((c) => c.text === "DUPLICADO")).toHaveLength(1);
+  expect(Buffer.concat(commands.filter((c) => c.text !== "DUPLICADO").map((c) => c.bytes))).toEqual(
+    Buffer.from(original),
+  );
   expect(decodeTicket(duplicate)).toContain("DUPLICADO");
 });
 
@@ -782,8 +805,8 @@ it("prints each options answer under its dish in the invoice locale, indented by
   const dish = lines.findIndex((line) => line.includes("Menú del día"));
   expect(dish).toBeGreaterThanOrEqual(0);
   expect(lines.slice(dish + 1, dish + 3)).toEqual([
-    "  Tamano cliente: Grande cliente".padEnd(42),
-    "  Coccion personal: Poco hecha personal".padEnd(42),
+    "  Tamano cliente: Grande cliente",
+    "  Coccion personal: Poco hecha personal",
   ]);
 });
 
@@ -843,14 +866,9 @@ describe("formatReceipt — printer layout", () => {
   it.each([
     PRINTER_80,
     PRINTER_58,
-    { paperWidth: "58mm", resolution: "203dpi", characterSet: "plain", characterTable: 0 } as const,
-    {
-      paperWidth: "80mm",
-      resolution: "203dpi",
-      characterSet: "pc858",
-      characterTable: 19,
-    } as const,
-  ])("keeps every printed line within the column count ($paperWidth, $characterSet)", (printer) => {
+    { paperWidth: "58mm", resolution: "203dpi" } as const,
+    { paperWidth: "80mm", resolution: "203dpi" } as const,
+  ])("keeps every printed line within the column count ($paperWidth, $resolution)", (printer) => {
     const lines = printedLines(
       formatReceipt({
         result: LONG_SALE,
@@ -877,12 +895,12 @@ describe("formatReceipt — printer layout", () => {
         printer: PRINTER_58,
       }),
     );
-    const first = lines.indexOf("1  Tostada con tomate y jamón".padEnd(30));
+    const first = lines.indexOf("1  Tostada con tomate y jamón");
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 4)).toEqual([
-      "1  Tostada con tomate y jamón".padEnd(30),
-      "   ibérico de bellota  12,50 €".padEnd(30),
-      "  Aceite de oliva virgen extra".padEnd(30),
+      "1  Tostada con tomate y jamón",
+      "   ibérico de bellota  12,50 €",
+      "  Aceite de oliva virgen extra",
       `  de la casa${" ".repeat(12)}0,50 €`,
     ]);
   });
@@ -923,12 +941,12 @@ describe("formatReceipt — printer layout", () => {
         printer: PRINTER_58,
       }),
     );
-    const first = lines.indexOf("  Nota: sin cebolla y con".padEnd(30));
+    const first = lines.indexOf("  Nota: sin cebolla y con");
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 3)).toEqual([
-      "  Nota: sin cebolla y con".padEnd(30),
-      "  mucho tomate natural bien".padEnd(30),
-      "  picado".padEnd(30),
+      "  Nota: sin cebolla y con",
+      "  mucho tomate natural bien",
+      "  picado",
     ]);
   });
 
@@ -959,11 +977,11 @@ describe("formatReceipt — printer layout", () => {
       }),
     );
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
-    const first = lines.indexOf("Ref. AUTORIZACION 123456".padEnd(30));
+    const first = lines.indexOf("Ref. AUTORIZACION 123456");
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 2)).toEqual([
-      "Ref. AUTORIZACION 123456".padEnd(30),
-      "TERMINAL 0042 LOTE 17".padEnd(30),
+      "Ref. AUTORIZACION 123456",
+      "TERMINAL 0042 LOTE 17",
     ]);
   });
 
@@ -1005,23 +1023,18 @@ describe("formatReceipt — printer layout", () => {
     for (const l of cont) expect(l.trimStart().length, l).toBeGreaterThan(2);
   });
 
-  it("measures the euro sign after conversion: EUR takes three columns in plain letters", () => {
+  it("measures the euro sign as the one column it is drawn in", () => {
     const lines = printedLines(
       formatReceipt({
         result: FILED_SALE,
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
-        printer: {
-          paperWidth: "58mm",
-          resolution: "180dpi",
-          characterSet: "plain",
-          characterTable: 0,
-        },
+        printer: PRINTER_58,
       }),
     );
-    expect(lines).toContain(`TOTAL${" ".repeat(16)}20,90 EUR`);
-    expect(lines).toContain(`Base 21%${" ".repeat(13)}10,00 EUR`);
+    expect(lines).toContain(`TOTAL${" ".repeat(18)}20,90 €`);
+    expect(lines).toContain(`Base 21%${" ".repeat(15)}10,00 €`);
   });
 
   it.each([
@@ -1036,14 +1049,12 @@ describe("formatReceipt — printer layout", () => {
           issuer: ISSUER,
           receipt: {},
           invoiceLocale: "es-ES",
-          printer: { paperWidth, resolution, characterSet: "wpc1252", characterTable: 16 },
+          printer: { paperWidth, resolution },
         });
-        expect(bytesInclude(bytes, QR_LEAD_BYTES)).toBe(false);
-        const at = bytes.findIndex((_, i) => RASTER_LEAD_BYTES.every((v, j) => bytes[i + j] === v));
-        expect(at).toBeGreaterThan(0);
-        // GS v 0 m xL xH yL yH: x is bytes per row, y is the height in dots.
-        expect(bytes[at + 4]! + 256 * bytes[at + 5]!).toBe(widthBytes);
-        expect(bytes[at + 6]! + 256 * bytes[at + 7]!).toBe(heightDots);
+        expect(printedCommands(bytes).map((c) => c.name)).not.toContain("GS ( k");
+        const qr = fromQr(bytes)[0]!;
+        expect(qr.widthDots).toBe(widthBytes * 8);
+        expect(qr.heightDots).toBe(heightDots);
         const squares = qrModules(FILED_SALE.qr).length;
         expect(squares).toBe(41);
         expect(heightDots).toBe((squares + 8) * dots);
@@ -1361,23 +1372,19 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(goods.reduce((sum, cents) => sum + cents, 0)).toBe(printedCents(total.trimEnd()));
   });
 
-  it.each([
-    ["wpc1252", 16, "Invitación"],
-    ["pc858", 19, "Invitación"],
-    ["plain", 0, "Invitacion"],
-  ] as const)(
-    "prints the comp's label in %s (table %i) as %s",
-    (characterSet, characterTable, label) => {
+  it.each([PRINTER_80, { paperWidth: "80mm", resolution: "203dpi" } as const])(
+    "prints the comp's label as Invitación ($resolution)",
+    (printer) => {
       const lines = printedLines(
         formatReceipt({
           result: ADJUSTED,
           issuer: ISSUER,
           receipt: {},
           invoiceLocale: "es-ES",
-          printer: { paperWidth: "80mm", resolution: "180dpi", characterSet, characterTable },
+          printer,
         }),
       );
-      expect(lines.filter((line) => line.startsWith(`  ${label} `))).toHaveLength(2);
+      expect(lines.filter((line) => line.startsWith("  Invitación "))).toHaveLength(2);
     },
   );
 
@@ -1404,10 +1411,10 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         printer: PRINTER_58,
       }),
     );
-    const first = lines.indexOf("1  Tostada con tomate y jamón".padEnd(30));
+    const first = lines.indexOf("1  Tostada con tomate y jamón");
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 3)).toEqual([
-      "1  Tostada con tomate y jamón".padEnd(30),
+      "1  Tostada con tomate y jamón",
       `   ibérico de bellota${" ".repeat(2)}12,50 €`,
       `  Invitación${" ".repeat(10)}-12,50 €`,
     ]);
@@ -1416,9 +1423,9 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
   it.each([
     PRINTER_80,
     PRINTER_58,
-    { paperWidth: "58mm", resolution: "203dpi", characterSet: "plain", characterTable: 0 } as const,
-    { paperWidth: "80mm", resolution: "203dpi", characterSet: "plain", characterTable: 0 } as const,
-  ])("keeps every line of changed prices within $paperWidth ($characterSet)", (printer) => {
+    { paperWidth: "58mm", resolution: "203dpi" } as const,
+    { paperWidth: "80mm", resolution: "203dpi" } as const,
+  ])("keeps every line of changed prices within $paperWidth ($resolution)", (printer) => {
     const lines = printedLines(
       formatReceipt({
         result: {
@@ -1444,9 +1451,8 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     );
     const columns = columnsFor(printer.paperWidth);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
-    const euro = printer.characterSet === "plain" ? "EUR" : "€";
-    expect(lines.filter((line) => line.endsWith(`1234,56 ${euro}`))).toHaveLength(1);
-    expect(lines.filter((line) => line.endsWith(`-123,45 ${euro}`))).toHaveLength(1);
-    expect(lines.filter((line) => line.endsWith(`-1000,00 ${euro}`))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith("1234,56 €"))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith("-123,45 €"))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith("-1000,00 €"))).toHaveLength(1);
   });
 });

@@ -12,7 +12,6 @@ import {
   drawerOpens,
   locations,
   printAgents,
-  printCharacterSet,
   printJobs,
   printPaperWidth,
   printResolution,
@@ -29,10 +28,8 @@ import {
   claimPrintJobs,
   canResendPrintJob,
   resendPrintJob,
-  columnsFor,
   createPrinter,
   deactivatePrinter,
-  dpiValue,
   endUnpairedPrinterJobs,
   enqueuePrintJob,
   failUnprintableBluetoothJobs,
@@ -41,6 +38,7 @@ import {
   reportPrintJob,
   updatePrinter,
   esc,
+  textGrid,
   type CreatePrinterInput,
   type UpdatePrinterInput,
 } from "@waitron/printing";
@@ -71,7 +69,6 @@ import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
-import { formatCharacterTableTest } from "./character-table-test.js";
 import { resolveSessionLocale } from "./session-locale.js";
 
 export interface PrintApiDeps {
@@ -169,14 +166,6 @@ function nullableOptionalInt(v: unknown, field: string): number | null | undefin
   if (v === undefined) return undefined;
   if (v === null) return null;
   if (typeof v !== "number" || !Number.isInteger(v)) {
-    throw new AppError("management.request_invalid", { field });
-  }
-  return v;
-}
-
-function optionalByte(v: unknown, field: string): number | undefined {
-  if (v === undefined) return undefined;
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 0xff) {
     throw new AppError("management.request_invalid", { field });
   }
   return v;
@@ -847,15 +836,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (body.resolution !== undefined) {
         input.resolution = requireEnum(body.resolution, "resolution", printResolution.enumValues);
       }
-      if (body.characterSet !== undefined) {
-        input.characterSet = requireEnum(
-          body.characterSet,
-          "characterSet",
-          printCharacterSet.enumValues,
-        );
-      }
-      const characterTable = optionalByte(body.characterTable, "characterTable");
-      if (characterTable !== undefined) input.characterTable = characterTable;
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) input.hasCashDrawer = hasCashDrawer;
       const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
@@ -935,15 +915,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (body.resolution !== undefined) {
         patch.resolution = requireEnum(body.resolution, "resolution", printResolution.enumValues);
       }
-      if (body.characterSet !== undefined) {
-        patch.characterSet = requireEnum(
-          body.characterSet,
-          "characterSet",
-          printCharacterSet.enumValues,
-        );
-      }
-      const characterTable = optionalByte(body.characterTable, "characterTable");
-      if (characterTable !== undefined) patch.characterTable = characterTable;
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) patch.hasCashDrawer = hasCashDrawer;
       const active = optionalBool(body.active, "active");
@@ -1022,49 +993,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const characterTable = optionalByte(body.characterTable, "characterTable");
-      if (characterTable === undefined) {
-        throw new AppError("management.request_invalid", { field: "characterTable" });
-      }
       const payload = formatSampleReceipt({
         paperWidth: requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues),
         resolution: requireEnum(body.resolution, "resolution", printResolution.enumValues),
-        characterSet: requireEnum(body.characterSet, "characterSet", printCharacterSet.enumValues),
-        characterTable,
       });
       const result = await gated(sessionId, (tx) => enqueuePrintJob(tx, deps.cfg, id, payload));
-      return c.json(result, 202);
-    }),
-  );
-
-  app.post("/management-api/printers/:id/character-table-test", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      const body = await readJsonBody<Record<string, unknown>>(c);
-      const startTable = optionalByte(body.startTable, "startTable");
-      if (startTable === undefined) {
-        throw new AppError("management.request_invalid", { field: "startTable" });
-      }
-      const result = await gated(sessionId, async (tx) => {
-        const locale = await resolveSessionLocale(
-          tx,
-          sessionId,
-          c.req.header("Accept-Language"),
-          deps.venueLocale,
-        );
-        const queued = await enqueuePrintJob(
-          tx,
-          deps.cfg,
-          id,
-          formatCharacterTableTest({
-            startTable,
-            locale,
-            calibrationLocale: deps.venueLocale,
-          }),
-        );
-        return { ...queued, calibrationLocale: deps.venueLocale };
-      });
       return c.json(result, 202);
     }),
   );
@@ -1138,21 +1071,16 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             payload: printJobs.payload,
             paperWidth: printers.paperWidth,
             resolution: printers.resolution,
-            characterSet: printers.characterSet,
-            characterTable: printers.characterTable,
           })
           .from(printJobs)
           .innerJoin(printers, eq(printers.id, printJobs.printerId))
           .where(eq(printJobs.id, id)),
       );
       if (job === undefined) throw new AppError("print_job.not_found", { id });
-      // The printer's CURRENT settings: a job built for 42 columns previews as it would print now.
+      // The printer's setting now sizes only a job that draws no line of text.
       return c.json(
         previewPrintJob(job.payload, {
-          columns: columnsFor(job.paperWidth),
-          dpi: dpiValue(job.resolution),
-          characterSet: job.characterSet,
-          characterTable: job.characterTable,
+          widthDots: textGrid(job.paperWidth, job.resolution).widthDots,
         }),
       );
     }),

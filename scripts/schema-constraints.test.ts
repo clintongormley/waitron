@@ -453,7 +453,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "preparation_routes_subject_ck",
   "preparation_routes_target_ck",
   "print_jobs_kind_ck",
-  "printers_character_table_ck",
   "printers_transport_fields_ck",
   "product_modifiers_one_reference_ck",
   "products_pricing_unit_ck",

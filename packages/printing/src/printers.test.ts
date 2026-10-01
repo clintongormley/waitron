@@ -13,6 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
+import type { PaperWidth } from "./layout.js";
 import type { PrintConfig, PrintTransport } from "./printers.js";
 import "./errors.js";
 
@@ -269,12 +270,12 @@ describe("updatePrinter", () => {
 
   it("a CHECK that is NOT the transport-fields one is not dressed up as printer.invalid_config", async () => {
     // Only `printers_transport_fields_ck` means "this transport is short of a field it needs". A
-    // character table outside 0..255 trips `printers_character_table_ck`, a different complaint, so
+    // paper width the schema does not list trips `printers_paper_width_ck`, a different complaint, so
     // translating it to `printer.invalid_config` would send an operator to the wrong field.
     const cfg = await setup();
     const id = await seedPrinter(cfg);
     const err = await errorOf(() =>
-      asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { characterTable: 300 })),
+      asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { paperWidth: "100mm" as PaperWidth })),
     );
     expect(err).toBeDefined();
     expect((err as { code?: string }).code).not.toBe("printer.invalid_config");
@@ -377,7 +378,7 @@ describe("isRefusal (@waitron/db result-code cause-walk, as printers.ts uses it)
 });
 
 describe("printer layout settings", () => {
-  it("defaults to 80mm, 180dpi, wpc1252 table 16, and stores, updates and lists each setting", async () => {
+  it("defaults to 80mm and 180dpi, and stores, updates and lists each setting", async () => {
     const cfg = await setup();
     const defaulted = await seedPrinter(cfg, "Defaults");
     const { id } = await asTx(cfg, (tx) =>
@@ -386,25 +387,17 @@ describe("printer layout settings", () => {
         transport: "network_tcp",
         host: "10.0.0.10",
         paperWidth: "58mm",
-        characterSet: "pc858",
-        characterTable: 19,
       }),
     );
-    await asTx(cfg, (tx) =>
-      updatePrinter(tx, cfg, id, { resolution: "203dpi", characterTable: 6 }),
-    );
+    await asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { resolution: "203dpi" }));
     const rows = await asTx(cfg, (tx) => listPrinters(tx, cfg));
     expect(rows.find((r) => r.id === defaulted)).toMatchObject({
       paperWidth: "80mm",
       resolution: "180dpi",
-      characterSet: "wpc1252",
-      characterTable: 16,
     });
     expect(rows.find((r) => r.id === id)).toMatchObject({
       paperWidth: "58mm",
       resolution: "203dpi",
-      characterSet: "pc858",
-      characterTable: 6,
     });
   });
 });

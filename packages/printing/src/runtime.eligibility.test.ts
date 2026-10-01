@@ -10,6 +10,8 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
 
+const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
+
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {
@@ -41,7 +43,7 @@ describe("claim eligibility — derived from venue + visible keys", () => {
         transport: "network_tcp",
         host: "10.0.0.5",
       });
-      await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
+      await enqueuePrintJob(tx, cfg, p.id, esc(SETTING).line("x").bytes());
       const claimed = await claimPrintJobs(tx, otherAgentId, {
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -73,7 +75,7 @@ describe("claim eligibility — derived from venue + visible keys", () => {
         transport: "network_tcp",
         host: "10.0.0.5",
       });
-      await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
+      await enqueuePrintJob(tx, cfg, p.id, esc(SETTING).line("x").bytes());
       const claimed = await claimPrintJobs(tx, agentId, {
         locationId: otherLocationId,
         visibleKeys: [],
@@ -87,7 +89,7 @@ describe("claim eligibility — derived from venue + visible keys", () => {
     const agentId = await seedAgent(cfg, "Kitchen");
     await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, cfg, { name: "USB", transport: "usb", localKey: "SN-9" });
-      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
+      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc(SETTING).line("x").bytes());
       // An agent that does NOT see SN-9 must claim it 0 times AND leave it `queued` for another box
       // that CAN see the device.
       expect(
@@ -116,7 +118,7 @@ describe("claim eligibility — derived from venue + visible keys", () => {
         transport: "bluetooth",
         localKey: "AA:BB:CC",
       });
-      await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
+      await enqueuePrintJob(tx, cfg, p.id, esc(SETTING).line("x").bytes());
       expect(
         await claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
       ).toHaveLength(0);
@@ -139,7 +141,7 @@ describe("claim eligibility — derived from venue + visible keys", () => {
         transport: "network_tcp",
         host: "10.0.0.5",
       });
-      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
+      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc(SETTING).line("x").bytes());
       await claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] });
       expect(
         (

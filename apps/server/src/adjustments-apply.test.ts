@@ -467,8 +467,6 @@ describe("the receipt (ruling R13)", () => {
         printer: {
           paperWidth: "80mm",
           resolution: "180dpi",
-          characterSet: "wpc1252",
-          characterTable: 16,
         },
       }),
     );

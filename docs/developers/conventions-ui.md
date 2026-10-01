@@ -344,11 +344,15 @@ from discovery, blocking re-add. The table now defaults to Active with Disabled/
 
 ## Native centring starts inside the configured paper width
 
-Set the ESC/POS left margin to zero and the print area to the configured safe width before selecting
-native centre alignment. The owner's 17:40:44 photograph on 2026-09-26 showed the body and QR shifted
-right and clipped on a 58mm roll; that payload carried no print-area commands. Whether the printer's
-own width setting also contributed was not tested. `apps/server/src/receipt-ticket.test.ts` pins the
-360-dot and 504-dot print areas before the centre command;
+Set the ESC/POS left margin to zero and the print area to the width the job's pictures are drawn to
+before selecting native centre alignment. The owner's 17:40:44 photograph on 2026-09-26 showed the
+body and QR shifted right and clipped on a 58mm roll; that payload carried no print-area commands.
+Whether the printer's own width setting also contributed was not tested. Since 2026-10-01 (C107)
+text lines are drawn into full-width pictures with their centring already in them, so the receipt's
+one native centre command is the one sent before its QR picture and legend
+(`apps/server/src/receipt-ticket.ts`).
+`apps/server/src/receipt-ticket.test.ts` pins the print area at the start of the job, 360 dots in its
+58mm case and 512 in its 80mm one, and that every line's picture is that wide;
 `apps/server/src/print-job-preview.test.ts` pins only that the dashboard preview consumes both
 commands rather than stopping at them. The preview does not model their width, and a corrected
 physical reprint is still owed.
@@ -449,22 +453,38 @@ that page. Built in #310 and extended in #695; `apps/server/src/recovery-surface
 
 ## Printed documents take the printer's own layout settings
 
-A printed document never hard-codes a paper width, a QR size or a text encoding: it reads them from
-the printer it is printing to (`paperWidth`, `resolution`, `characterSet` on `printers`). Text is
-passed through `prepareText` before it is measured, and through `wrapText`/`labelAmountLines` before
-it is printed, so a string is never counted in one character set and printed in another. The fiscal
-QR is a raster image, its dot size chosen per receipt by `chooseQrDots` for the largest fitting size
-at most 40mm, reaching 30mm where the grid and paper allow it, including its blank border when checking the paper width —
-never the printer's own built-in QR command, which cannot be sized this way. A test reads a payload's
-printed text with `printedLines` (`apps/server/src/testing/decode-ticket.ts`), which fails the test
-on an unsupported byte instead of silently stopping partway and hiding the rest of the ticket. Built
-in #367; the QR size rule and the calibration wizard in #689.
+A printed document never hard-codes a paper width or a QR size: it reads them from the printer it is
+printing to (`paperWidth` and `resolution` on `printers`). Nothing is sent to a printer as text.
+Every line is drawn on the server as a 1-bit picture 28 dots tall and sent with `GS v 0`, one picture
+per line (`EscBuilder`, `packages/printing/src/escpos.ts`). Each letter is a 12-dot-wide picture from
+a table derived from the font Iosevka Term Bold (`packages/printing/src/glyphs.ts`, made by
+`packages/printing/scripts/build-glyph-table.mjs`; the licence ships from `deploy/third-party/iosevka/`),
+so what prints does not depend on the character tables a printer holds. Outside the calibration
+ruler page, a line's picture is as wide as the printer's dots across for its paper width and
+resolution, 360, 384, 512 or 576 (`textGrid`, `packages/printing/src/layout.ts`, which says where
+each number comes from; 576 is unmeasured), and its text sits on a grid of 30 columns on 58mm paper
+and 42 on 80mm whatever the resolution, centred in the picture. Text is passed through `prepareText`
+before it is measured, which turns a character the table cannot draw into a fixed replacement, the
+same character without its accents, or `?`, and through `wrapText`/`labelAmountLines` before it is
+printed, so one character is one column. Receipts and category sales pages also set the printer's
+print area to the picture's width (`printArea`, `GS L` and `GS W`). The calibration ruler page
+(`apps/server/src/test-page.ts`) is the exception to both: whatever the printer, it sets a print
+area of 576 dots and draws its captions 360 dots wide. Whether a job made of pictures still needs a
+print area has not been measured. The fiscal QR is a raster image too, its dot size chosen per
+receipt by `chooseQrDots` for the largest fitting size at most 40mm, reaching 30mm where the grid
+and paper allow it, including its blank border when checking the paper width — never the printer's
+own built-in QR command, which cannot be sized this way. The feed, the cut and the drawer pulse are
+printer commands, not pictures.
 
-The character-table finder initialises the printer (`ESC @`, then `FS .`) before every candidate
-line, not once per page (`formatCharacterTableTest`, `apps/server/src/character-table-test.ts`).
-On the owner's NETUM NT-806 on 2026-09-26, table 6 printed its sample correctly until table 2 had
-been selected; selecting table 6 again then kept printing table-2 glyphs, and initialising first
-restored it (#689).
+The print preview shows the job's own pictures, and the text it reports is read back from them
+(`apps/server/src/print-job-preview.ts`, through `readRasterText` in
+`packages/printing/src/raster-text.ts`, which matches each 12-dot cell against the glyph table). A
+test reads a payload's printed text the same way, with `printedLines`
+(`apps/server/src/testing/decode-ticket.ts`), which fails the test when the preview stops at an
+unsupported command or is cut short instead of hiding the rest of the ticket. Characters drawn
+identically read back as one of them — a no-break space reads as a space — so a test cannot tell
+those apart through the read-back. Built in #367; the QR size rule and the calibration wizard in
+#689; text drawn as pictures, and the wizard's character step removed, in C107 (2026-10-01).
 
 ## Resolve live content and receipt snapshots separately
 

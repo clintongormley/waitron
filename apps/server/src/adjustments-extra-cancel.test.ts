@@ -16,13 +16,12 @@ import type { Transaction } from "@waitron/db";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { DRAWER_KICK } from "./receipt-print.js";
 import { placeGroups } from "./order-groups.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./tables.js";
 import type { TillConfig } from "./till-config.js";
 import { listStationQueue, updateHeldOrder } from "./working-order.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import {
   inTx,
   lineIdOf,
@@ -452,8 +451,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
       const enqueued = (await jobs()).slice(before);
       expect(enqueued.map((job) => job.kind)).toEqual(["document"]);
-      const kick = Buffer.from(DRAWER_KICK);
-      expect(enqueued.some((job) => Buffer.from(job.payload).includes(kick))).toBe(false);
+      expect(enqueued.some((job) => opensDrawer(new Uint8Array(job.payload)))).toBe(false);
       expect((await inTx(venue, (tx) => tx.select().from(drawerOpens))).length).toBe(
         drawerOpensBefore,
       );

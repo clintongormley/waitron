@@ -1,6 +1,6 @@
 /**
- * Text passed to the wrapping helpers must already be prepared for the printer's character set
- * (`prepareText`), so one character is one printed column.
+ * Text passed to the wrapping helpers must already be through `prepareText`, so one character is one
+ * printed column.
  */
 export type PaperWidth = "58mm" | "80mm";
 export type Resolution = "180dpi" | "203dpi";
@@ -14,9 +14,58 @@ export function columnsFor(width: PaperWidth): number {
   return COLUMNS[width];
 }
 
-/** The printable width images must stay within: 360 dots on 58mm, 504 on 80mm. */
+/** The width the receipt's QR code must fit (see {@link chooseQrDots}): 360 dots on 58mm, 504 on 80mm. */
 export function safeWidthDots(width: PaperWidth): number {
   return COLUMNS[width] * DOTS_PER_COLUMN;
+}
+
+/**
+ * The dots across one line of each setting, which every text image is drawn to, narrowest first:
+ * - 58mm/180dpi 360 and 80mm/180dpi 512: the Epson TM-T88III's specification.
+ * - 58mm/203dpi 384: a 384-dot-wide image printed correctly on the owner's NETUM Bluetooth printer
+ *   (queue item C106); not a measured printable width.
+ * - 80mm/203dpi 576: unmeasured, the common value for 80 mm paper at 203 dpi. C106's photograph of a
+ *   512-dot image printed hard left on the owner's 80 mm network NETUM is consistent with it.
+ */
+export const SETTING_WIDTHS: readonly {
+  paperWidth: PaperWidth;
+  resolution: Resolution;
+  widthDots: number;
+}[] = [
+  { paperWidth: "58mm", resolution: "180dpi", widthDots: 360 },
+  { paperWidth: "58mm", resolution: "203dpi", widthDots: 384 },
+  { paperWidth: "80mm", resolution: "180dpi", widthDots: 512 },
+  { paperWidth: "80mm", resolution: "203dpi", widthDots: 576 },
+];
+
+/** Where text sits in an image: `columns` cells of {@link DOTS_PER_COLUMN} dots from `offsetDots`. */
+export interface TextGrid {
+  widthDots: number;
+  columns: number;
+  offsetDots: number;
+}
+
+function centred(widthDots: number, columns: number): TextGrid {
+  return {
+    widthDots,
+    columns,
+    offsetDots: Math.floor((widthDots - columns * DOTS_PER_COLUMN) / 2),
+  };
+}
+
+/** The column count is the paper width's whatever the resolution, so no layout depends on it. */
+export function textGrid(width: PaperWidth, resolution: Resolution): TextGrid {
+  const setting = SETTING_WIDTHS.find(
+    (each) => each.paperWidth === width && each.resolution === resolution,
+  )!;
+  return centred(setting.widthDots, COLUMNS[width]);
+}
+
+/** The grid of the setting drawing `widthDots`; for any other width, every whole cell that fits. */
+export function gridForWidth(widthDots: number): TextGrid {
+  const setting = SETTING_WIDTHS.find((each) => each.widthDots === widthDots);
+  if (setting !== undefined) return centred(widthDots, COLUMNS[setting.paperWidth]);
+  return centred(widthDots, Math.floor(widthDots / DOTS_PER_COLUMN));
 }
 
 export function dpiValue(resolution: Resolution): 180 | 203 {
@@ -92,8 +141,8 @@ const QR_MAX_MM = 40;
 export const QR_QUIET_ZONE = 4;
 
 /**
- * Dots per QR square for a code `squares` wide (without its border) on a `dpi` printer whose images
- * must fit `safeWidthDots`. Uses the largest whole-dot scale up to 40 mm, including the blank border
+ * Dots per QR square for a code `squares` wide (without its border) on a `dpi` printer, the code
+ * fitting `safeWidthDots`. Uses the largest whole-dot scale up to 40 mm, including the blank border
  * when checking the paper width. Falls back to 1 when nothing fits rather than blocking a sale.
  */
 export function chooseQrDots(squares: number, dpi: number, safeWidthDots: number): number {

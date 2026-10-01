@@ -74,8 +74,7 @@ import {
   releaseStalePaymentAttempts,
 } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
-import { DRAWER_KICK } from "./receipt-print.js";
-import { bytesInclude } from "./testing/decode-ticket.js";
+import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
@@ -671,8 +670,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const afterFirst = await printJobPayloads(cfg, printerId);
     expect(afterFirst).toHaveLength(1);
     const payload = new Uint8Array(afterFirst[0]!);
-    expect(Buffer.from(payload).toString("latin1")).toContain("VERI*FACTU");
-    expect(bytesInclude(payload, DRAWER_KICK)).toBe(false);
+    expect(decodeTicket(payload)).toContain("VERI*FACTU");
+    expect(opensDrawer(payload)).toBe(false);
     expect(await drawerOpenCount(cfg)).toBe(0);
     expect(await registroCount(id)).toBe(1);
 

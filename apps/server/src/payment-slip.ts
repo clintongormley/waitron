@@ -1,12 +1,4 @@
-import {
-  columnsFor,
-  esc,
-  labelAmountLines,
-  prepareText,
-  wrapText,
-  type CharacterSet,
-  type PaperWidth,
-} from "@waitron/printing";
+import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import type { CardDetails } from "@waitron/payments";
 import { formatMoney } from "./receipt-money.js";
 
@@ -21,8 +13,8 @@ export interface PaymentSlipInput {
   charged: string;
   card: CardDetails | null;
   invoiceLocale: string;
-  /** The receipt printer's layout settings. A slip carries no QR, so resolution does not apply. */
-  printer: { paperWidth: PaperWidth; characterSet: CharacterSet; characterTable: number };
+  /** The receipt printer's settings, which set the image width and the column count. */
+  printer: EscSetting;
 }
 
 const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
@@ -32,14 +24,15 @@ const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
 };
 
 export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
-  const columns = columnsFor(input.printer.paperWidth);
-  const p = (s: string): string => prepareText(s, input.printer.characterSet);
-  const b = esc(input.printer.characterSet, input.printer.characterTable).init();
+  const b = esc(input.printer).init();
+  const { columns } = b.grid;
   const text = (s: string): void => {
-    for (const line of wrapText(p(s), columns)) b.line(line);
+    for (const line of wrapText(prepareText(s), columns)) b.line(line);
   };
   const row = (label: string, value: string): void => {
-    for (const line of labelAmountLines(p(label), p(value), columns)) b.line(line);
+    for (const line of labelAmountLines(prepareText(label), prepareText(value), columns)) {
+      b.line(line);
+    }
   };
   text("JUSTIFICANTE DE PAGO");
   text("Este documento no es una factura");

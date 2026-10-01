@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { FEED_BEFORE_CUT } from "@waitron/printing";
+import { FEED_BEFORE_CUT, columnsFor, type EscSetting } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
-import type { KitchenLayout, KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
-import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
+import type { KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
+import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 
-// Decodes the payload as Latin-1 to assert the readable content; the final three bytes are always the
-// full cut, GS V 0 (0x1D 0x56 0x00).
+// Reads the printed text back from the images each line is drawn as; the final three bytes are always
+// the full cut, GS V 0 (0x1D 0x56 0x00).
 const CUT_BYTES = [0x1d, 0x56, 0x00];
 /** ESC d n — the shared feed before every cut, so the tear-off clears the print head. */
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
-const KITCHEN_80: KitchenLayout = { columns: 42, charset: "wpc1252", characterTable: 16 };
-const KITCHEN_58: KitchenLayout = { columns: 30, charset: "pc858", characterTable: 19 };
+const KITCHEN_80: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
+const KITCHEN_58: EscSetting = { paperWidth: "58mm", resolution: "180dpi" };
 
 describe("formatKitchenTicket", () => {
   describe("station scope", () => {
@@ -359,10 +359,11 @@ describe("kitchen paper layout", () => {
   };
 
   it.each([KITCHEN_80, KITCHEN_58])(
-    "keeps every line within $columns columns, indented under its text",
+    "keeps every line within the $paperWidth column count, indented under its text",
     (layout) => {
       const lines = printedLines(formatKitchenTicket(ticket, layout));
-      for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(layout.columns);
+      const columns = columnsFor(layout.paperWidth);
+      for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
       expect(lines).toContain("  + Grande");
     },
   );
@@ -384,22 +385,27 @@ describe("kitchen paper layout", () => {
     ]);
   });
 
-  it("encodes with the layout's character set", () => {
-    const bytes = [
-      ...formatKitchenTicket({ ...ticket, items: [{ qty: 1, name: "Café" }] }, KITCHEN_58),
-    ];
-    expect(bytes.slice(0, 5)).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
-    expect(bytes).toContain(0x82); // é in code page 858
-    expect(bytes).not.toContain(0xe9);
-
-    const tableSix = [
-      ...formatKitchenTicket(
-        { ...ticket, items: [{ qty: 1, name: "Café" }] },
-        { ...KITCHEN_80, characterTable: 6 },
-      ),
-    ];
-    expect(tableSix.slice(0, 5)).toEqual([0x1b, 0x40, 0x1b, 0x74, 6]);
-  });
+  it.each([
+    [KITCHEN_58, 360],
+    [{ paperWidth: "58mm", resolution: "203dpi" } as const, 384],
+    [KITCHEN_80, 512],
+    [{ paperWidth: "80mm", resolution: "203dpi" } as const, 576],
+  ] as const)(
+    "draws every line as an image as wide as $paperWidth at the layout's resolution, selecting no character table",
+    (layout, widthDots) => {
+      const commands = printedCommands(
+        formatKitchenTicket({ ...ticket, items: [{ qty: 1, name: "Café" }] }, layout),
+      );
+      const names = commands.map((command) => command.name);
+      expect(names.slice(0, 2)).toEqual(["ESC @", "GS v 0"]);
+      expect(names).not.toContain("ESC t");
+      expect(names).not.toContain("FS .");
+      expect(names).not.toContain("text");
+      const lines = commands.filter((command) => command.text !== undefined);
+      for (const line of lines) expect(line.widthDots).toBe(widthDots);
+      expect(lines.map((line) => line.text)).toContain("1 x Café");
+    },
+  );
 
   it("wraps a correction slip to the layout too", () => {
     const lines = printedLines(
@@ -916,7 +922,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
     expect(lines).toContain("  CANCEL: Cornichons");
   });
 
-  it("wraps the extra to take off under its text on narrow paper, in the layout's character set", () => {
+  it("wraps the extra to take off under its text on narrow paper", () => {
     const bytes = formatCorrectionSlip(
       {
         ...slip,
@@ -931,7 +937,5 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
     const lines = printedLines(bytes);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
     expect(lines.slice(-3)).toEqual(["  QUITAR: Jalapeños en vinagre", "          con eneldo", ""]);
-    expect([...bytes]).toContain(0xa4); // ñ in code page 858
-    expect([...bytes]).not.toContain(0xf1);
   });
 });

@@ -100,7 +100,6 @@ export { devices } from "./schema/devices.js";
 export { joinRequestKind, joinRequests } from "./schema/join-requests.js";
 export { printAgents } from "./schema/print-agents.js";
 export {
-  printCharacterSet,
   printPaperWidth,
   printResolution,
   printTicketScope,

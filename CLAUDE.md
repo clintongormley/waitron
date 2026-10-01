@@ -463,8 +463,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A change adding third-party code or a binary to the image carries its licence notices, shipped
   in `/app/third-party/`** (owner, 2026-09-24). Cost: Litestream shipped without its Go modules'
   notices. Guard: the third-party blocks in `scripts/deploy-image-env.test.ts`, weaker than their
-  name — they read text, cover libvips, Litestream and the print agent's python3-minimal only, and for
-  Litestream compare the version line, not the module list. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+  name — they read text, cover libvips, Litestream, the print agent's python3-minimal and the
+  Iosevka font the glyph table is drawn from only, for Litestream compare the version line, not the
+  module list, and for the font tie the licence to the table's header, not the table to the font. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
   its `errors.ts`.
 - **Never build SQL by string concatenation — except where the engine takes no bound value**: an
