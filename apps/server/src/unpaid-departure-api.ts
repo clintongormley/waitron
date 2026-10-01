@@ -67,9 +67,7 @@ export function mountUnpaidDepartureApi(
     run(c, log, async () => {
       await requireSession(deps, c);
       return c.json(
-        await withTransaction(deps.db, (tx) =>
-          listActivePersonsWithPermission(tx, "sale.void"),
-        ),
+        await withTransaction(deps.db, (tx) => listActivePersonsWithPermission(tx, "sale.void")),
       );
     }),
   );
