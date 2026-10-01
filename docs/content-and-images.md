@@ -31,8 +31,19 @@ remain visible where the translation is still missing.
 
 Required fields need text in the default language. Other translations can wait. To change the
 default to English, first complete the required English translations and image names.
-If the change is refused, check your products, modifiers, sections and image metadata for
-missing translations. Sections are edited in **Products and menus**, **Sections**.
+If the change is refused, look under **Missing translations**, further down the same page: the
+names marked **Partly translated** under English hold it up, and each has an **Open** link to the
+screen where it is edited. Image names are checked too but are not listed there, so check them in
+the **Image library**. Something you have deleted or switched off can also hold the change up
+without appearing in the list.
+
+**Missing translations** lists, for each of your content languages, the customer-facing names that
+have no text in it. A language your region requires comes first, opens by itself when something is
+missing, and has a note saying how many names still need translating into it. A name filled in for
+some languages but not this one is marked **Partly translated**. Something with no customer-facing
+name at all is listed under your other languages as **No customer-facing name**, because there its
+staff name is shown instead; an extras list is the exception, because its own name never reaches a
+receipt. Deleted products and switched-off lists and menus are not listed.
 
 A product's and a variant's customer-facing name is the exception, because it is optional: leave it
 empty in every language and Waitron falls back to the staff name, so it never blocks the change. Fill
