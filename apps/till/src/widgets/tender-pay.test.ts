@@ -107,7 +107,7 @@ describe("till-tender-pay", () => {
     expect(el.shadowRoot!.textContent).toContain(t("tender.cash"));
   });
 
-  it("enables Pay once a line is rung up, reacting to store changes", async () => {
+  it("enables Cash once a line is rung up, reacting to store changes", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     store.addProduct(cafe, "2");
@@ -115,7 +115,7 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("opens the cash screen showing the total when Pay is tapped", async () => {
+  it("opens the cash screen showing the total when Cash is tapped", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
@@ -249,9 +249,9 @@ describe("till-tender-pay", () => {
     expect(query(el, "till-numeric-pad")).toBeNull();
   });
 
-  it("disables Pay while busy (a sale is in flight), even with a rung-up basket", async () => {
+  it("disables Cash while busy (a sale is in flight), even with a rung-up basket", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // Pay would otherwise be enabled
+    store.addProduct(cafe, "2"); // Cash would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
   });
@@ -293,7 +293,7 @@ describe("till-tender-pay", () => {
     await type(el, "5"); // a tender is part-entered
     click(el, ".cancel");
     await el.updateComplete;
-    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Pay button
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Cash button
     expect(query(el, "till-numeric-pad")).toBeNull();
     expect(spy).not.toHaveBeenCalled(); // Cancel never settles the sale
     expect(store.lines).toHaveLength(1); // basket untouched
@@ -411,7 +411,7 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     expect(query(el, ".label-input")).not.toBeNull();
     expect(query(el, ".park")).not.toBeNull();
-    expect(query(el, ".pay")).toBeNull(); // the idle Pay button is replaced by the prompt view
+    expect(query(el, ".pay")).toBeNull(); // the idle Cash button is replaced by the prompt view
   });
 
   it("emits park-order with the entered label", async () => {
@@ -462,7 +462,7 @@ describe("till-tender-pay", () => {
     await typeLabel(el, "Mesa 4"); // a label is part-entered
     click(el, ".cancel");
     await el.updateComplete;
-    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Pay button
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Cash button
     expect(query(el, ".label-input")).toBeNull();
     expect(spy).not.toHaveBeenCalled(); // Cancel parks nothing
     expect(store.lines).toHaveLength(1); // basket untouched
@@ -582,7 +582,7 @@ describe("till-tender-pay", () => {
     expect(el.shadowRoot!.textContent).toContain(t("tender.cash"));
   });
 
-  it("Modes I/T at the order stage show Pay + Card beside Place + Hold", async () => {
+  it("Modes I/T at the order stage show Cash + Card beside Place + Hold", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -715,7 +715,7 @@ describe("till-tender-pay", () => {
     expect(el.shadowRoot!.textContent).toContain(t("tender.card"));
   });
 
-  it("Mode T at the collect stage also shows Collect + Card", async () => {
+  it("Mode T at the collect stage also shows Cash + Card", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -809,7 +809,7 @@ describe("till-tender-pay", () => {
     el.addEventListener("confirm-payment", confirmSpy);
     el.addEventListener("collect-order", (e) => collectSpy((e as CustomEvent).detail));
     expect(el.shadowRoot!.textContent).toContain(t("tender.cash")); // the idle button's own label
-    click(el, ".pay"); // opens the same cash screen Pay opens
+    click(el, ".pay");
     await el.updateComplete;
     await type(el, "5");
     click(el, ".confirm");

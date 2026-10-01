@@ -2588,10 +2588,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   });
 });
 
-// Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer, so a card taken on a
-// machine Waitron does not talk to opens the drawer, but only at the till whose own receipt printer
-// has it attached — the same condition a cash payment uses. A handheld, or a till whose receipt
-// printer has no drawer, opens nothing.
+// Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer.
 describe("a hand-keyed card payment opens the drawer of the till that took it, for the slip", () => {
   /** A receipt printer for `tillId`, with or without a drawer, printing receipts automatically. */
   async function receiptPrinterFor(

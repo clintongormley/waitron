@@ -1219,8 +1219,8 @@ async function finalizeCapture(
         tender: tenderBlock,
         qr: fiscal.verificationUrl ?? "",
       };
-      // Card: a receipt and no drawer. A throw here would roll back a sale whose card P2 already
-      // charged.
+      // A card on a connected machine: a receipt and no drawer. A throw here would roll back a sale
+      // whose card P2 already charged.
       await enqueueSaleReceipt(tx, cfg, ticket, saleId);
       return ticket;
     });
@@ -1357,7 +1357,8 @@ async function finalizeRecovery(
       tender: tenderBlock,
       qr: fiscal.verificationUrl ?? "",
     };
-    // Card: a receipt and no drawer. The replay above returns before this, so nothing prints twice.
+    // A card on a connected machine: a receipt and no drawer. The replay above returns before this,
+    // so nothing prints twice.
     await enqueueSaleReceipt(tx, cfg, ticket, saleId);
     return { outcome: "captured", ticket };
   });

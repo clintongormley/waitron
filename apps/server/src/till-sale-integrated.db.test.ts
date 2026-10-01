@@ -651,8 +651,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("auto-prints the customer receipt on an integrated card sale (no kick, no drawer), and a REPLAY does not double-print", async () => {
-    // A card receipt carries no drawer kick and records no `drawer_opens` row; a replay prints
-    // nothing more.
+    // An integrated card's receipt carries no drawer kick and records no `drawer_opens` row; a
+    // replay prints nothing more.
     const { cfg, cafe } = await setupVenue();
     const printerId = await makeReceiptPrinter(cfg);
     const app = suite.db;
