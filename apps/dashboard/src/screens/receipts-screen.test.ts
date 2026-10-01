@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -82,9 +83,9 @@ function edit(el: ReceiptsScreen, name: string, value: string): void {
 }
 
 function typeFooter(el: ReceiptsScreen, value: string): void {
-  const footer = q<HTMLTextAreaElement>(el, "textarea[name=footerMessage]")!;
-  footer.value = value;
-  footer.dispatchEvent(new Event("input", { bubbles: true }));
+  q(el, "wt-textarea[name=footerMessage]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
 }
 
 async function mount(api: DashboardApi = stubApi()) {
@@ -101,14 +102,38 @@ describe("the Receipts page's fields", () => {
     const { el } = await mount();
     const header = q<WtInput>(el, "wt-input[name=headerSubtitle]")!;
     const description = q<WtInput>(el, "wt-input[name=operationDescription]")!;
-    const footer = q<HTMLTextAreaElement>(el, "textarea[name=footerMessage]")!;
+    const footer = q<HTMLElement & { hint: string; label: string }>(
+      el,
+      "wt-textarea[name=footerMessage]",
+    )!;
     expect(header.label).toBe(t("receipt.header_subtitle"));
     expect(header.hint).toBe(t("receipts.header_subtitle_hint"));
-    expect(footer.placeholder).toBe(t("receipts.footer_message_hint"));
-    expect(footer.labels![0]!.textContent).toContain(t("receipt.footer_message"));
+    expect(footer.hint).toBe(t("receipts.footer_message_hint"));
+    expect(footer.label).toContain(t("receipt.footer_message"));
     expect(description.label).toBe(t("location_settings.description"));
     expect(description.hint).toBe(t("receipts.operation_description_hint"));
     expect(description.required).toBe(true);
+  });
+
+  it("writes the footer in the shared multi-line field, labelled, whose typing reaches the preview", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    const footer = q(el, "wt-textarea[name=footerMessage]") as HTMLElement & {
+      label: string;
+      hint: string;
+      rows: number;
+    };
+    expect(footer.label).toBe(t("receipt.footer_message"));
+    expect(footer.hint).toBe(t("receipts.footer_message_hint"));
+    expect(footer.rows).toBe(3);
+    footer.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Hasta pronto" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(paperLines(el).at(-1)).toBe("Hasta pronto"));
   });
 
   it("puts the venue-wide texts and this location's description in separate sections, the second titled with the location's name, with no location picker", async () => {
@@ -207,11 +232,11 @@ describe("the Receipts page's live preview", () => {
     expect(mark("headerSubtitle").hasAttribute("data-active")).toBe(true);
     expect(getComputedStyle(mark("headerSubtitle")).outlineStyle).toBe("solid");
     expect(mark("footerMessage").hasAttribute("data-active")).toBe(false);
-    q<HTMLTextAreaElement>(el, "textarea[name=footerMessage]")!.focus();
+    q(el, "wt-textarea[name=footerMessage]")!.focus();
     await el.updateComplete;
     expect(mark("headerSubtitle").hasAttribute("data-active")).toBe(false);
     expect(mark("footerMessage").hasAttribute("data-active")).toBe(true);
-    q<HTMLTextAreaElement>(el, "textarea[name=footerMessage]")!.blur();
+    q(el, "wt-textarea[name=footerMessage]")!.blur();
     await el.updateComplete;
     expect(mark("footerMessage").hasAttribute("data-active")).toBe(false);
   });
@@ -367,12 +392,13 @@ describe("the Receipts page's one Save", () => {
           expect(header.shadowRoot!.activeElement).toBe(header.shadowRoot!.querySelector("input")),
         );
       } else {
-        const footer = q<HTMLTextAreaElement>(el, "textarea[name=footerMessage]")!;
-        expect(footer.getAttribute("aria-invalid")).toBe("true");
-        const descriptions = footer
+        const footer = q(el, "wt-textarea[name=footerMessage]")!;
+        const control = footer.shadowRoot!.querySelector("textarea")!;
+        expect(control.getAttribute("aria-invalid")).toBe("true");
+        const descriptions = control
           .getAttribute("aria-describedby")!
           .split(" ")
-          .map((id) => el.shadowRoot!.getElementById(id)!.textContent);
+          .map((id) => footer.shadowRoot!.getElementById(id)!.textContent);
         expect(descriptions).toEqual([t("receipts.footer_message_hint"), expected]);
         await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(footer));
       }
@@ -614,7 +640,9 @@ describe("the Receipts page's refreshes from elsewhere", () => {
       edit(el, "headerSubtitle", "Mío");
       savedElsewhere({ footerMessage: "Suyo" });
       await vi.waitFor(() =>
-        expect(q<HTMLTextAreaElement>(el, "textarea[name=footerMessage]")!.value).toBe("Suyo"),
+        expect(
+          q<HTMLElement & { value: string }>(el, "wt-textarea[name=footerMessage]")!.value,
+        ).toBe("Suyo"),
       );
       expect(previewCalls(api)).toEqual([{}]);
       await vi.waitFor(() =>
@@ -656,33 +684,50 @@ describe("the Receipts page's paper width", () => {
     return { el, api, background, savedElsewhere };
   }
 
-  const widthSelect = (el: ReceiptsScreen) => q<HTMLSelectElement>(el, "select[name=paperWidth]");
+  const widthSelect = (el: ReceiptsScreen) =>
+    q<HTMLElement & { value: string; label: string; options: { value: string; label: string }[] }>(
+      el,
+      "wt-combobox[name=paperWidth]",
+    );
 
   function choose(el: ReceiptsScreen, width: Width): void {
-    const select = widthSelect(el)!;
-    select.value = width;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    void chooseOption(widthSelect(el)!, width);
   }
 
   it("offers the location's widths in a labelled dropdown between the Preview heading and the paper, with the drawn width chosen", async () => {
     const { el } = await mountTwoWidths();
     const select = widthSelect(el)!;
     expect(select).not.toBeNull();
-    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
-      [
-        ["58mm", t("printers.paper_width_58")],
-        ["80mm", t("printers.paper_width_80")],
-      ],
-    );
+    expect(select.options.map((option) => [option.value, option.label])).toEqual([
+      ["58mm", t("printers.paper_width_58")],
+      ["80mm", t("printers.paper_width_80")],
+    ]);
     expect(select.value).toBe("80mm");
-    expect([...select.selectedOptions].map((option) => option.value)).toEqual(["80mm"]);
-    expect(select.labels![0]!.textContent).toContain(t("printers.paper_width"));
+    expect([select.value]).toEqual(["80mm"]);
+    expect(select.label).toContain(t("printers.paper_width"));
     const heading = q(el, ".preview h2")!;
     expect(heading.textContent).toBe(t("receipts.preview"));
     expect(heading.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(
       select.compareDocumentPosition(paper(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("picks the paper width from the shared dropdown", async () => {
+    const { el, api } = await mountTwoWidths();
+    const width = q(el, "wt-combobox[name=paperWidth]") as HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      label: string;
+    };
+    expect(width.label).toBe(t("printers.paper_width"));
+    expect(width.options).toEqual([
+      { value: "58mm", label: t("printers.paper_width_58") },
+      { value: "80mm", label: t("printers.paper_width_80") },
+    ]);
+    expect(width.value).toBe("80mm");
+    await chooseOption(width, "58mm");
+    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, "58mm"]]);
   });
 
   it("redraws the preview at a chosen width at once, through the active client, saving nothing", async () => {
@@ -730,7 +775,7 @@ describe("the Receipts page's paper width", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).not.toBeNull());
     const select = widthSelect(el)!;
     expect(select.value).toBe("58mm");
-    expect([...select.selectedOptions].map((option) => option.value)).toEqual(["58mm"]);
+    expect([select.value]).toEqual(["58mm"]);
     expect(
       select.compareDocumentPosition(q(el, "[data-test=preview-error]")!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -752,7 +797,7 @@ describe("the Receipts page's paper width", () => {
     expect(paper(el)!.style.width).toBe("30ch");
     const select = widthSelect(el)!;
     expect(select.value).toBe("80mm");
-    expect([...select.selectedOptions].map((option) => option.value)).toEqual(["80mm"]);
+    expect([select.value]).toEqual(["80mm"]);
   });
 
   it.each([

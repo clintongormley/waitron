@@ -1,14 +1,10 @@
 import { DraftRows, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  baseStyles,
-  focusFirstInvalid,
-  selectStyles,
-  submitOnEnter,
-  visuallyHiddenStyles,
-} from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
@@ -32,14 +28,12 @@ const TRIM_FIELDS: readonly TrimField[] = ["headerSubtitle", "footerMessage"];
 
 /**
  * The venue-wide receipt trim and this location's invoice operation description, saved by one Save,
- * beside a live preview the server draws as the receipt will print. The footer is a native
- * `<textarea>` because `wt-input` has no multiline form.
+ * beside a live preview the server draws as the receipt will print.
  */
 @customElement("dashboard-receipts-screen")
 export class ReceiptsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     paperStyles,
     css`
       :host {
@@ -74,43 +68,6 @@ export class ReceiptsScreen extends LitElement {
         text-transform: uppercase;
         color: var(--wt-color-text-muted);
       }
-      .field-label {
-        display: block;
-        margin-bottom: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        resize: vertical;
-      }
-      textarea::placeholder {
-        color: var(--wt-color-text-muted);
-      }
-      textarea[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-      }
-      textarea:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      .hint {
-        ${visuallyHiddenStyles}
-      }
-      .field-error {
-        display: block;
-        margin-top: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-danger);
-      }
       wt-form-actions {
         margin-top: var(--wt-space-4);
       }
@@ -123,7 +80,6 @@ export class ReceiptsScreen extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
       .paper-width {
-        display: block;
         margin-bottom: var(--wt-space-3);
       }
       .paper-viewport {
@@ -433,29 +389,22 @@ export class ReceiptsScreen extends LitElement {
 
   #renderFooter(): TemplateResult {
     const error = this.trimRefusals.footerMessage ?? "";
-    return html`<div>
-      <label>
-        <span class="field-label">${t("receipt.footer_message")}</span>
-        <textarea
-          name="footerMessage"
-          data-test="footer-message"
-          rows="3"
-          placeholder=${t("receipts.footer_message_hint")}
-          aria-invalid=${error !== "" ? "true" : "false"}
-          aria-describedby=${error !== "" ? "footer-message-hint footer-message-error" : "footer-message-hint"}
-          .value=${this.footerMessage}
-          ?disabled=${this.saving}
-          @input=${(event: Event) => {
-            event.stopPropagation();
-            this.#changeTrim("footerMessage", (event.target as HTMLTextAreaElement).value);
-          }}
-          @focus=${() => this.#focusTrim("footerMessage")}
-          @blur=${() => this.#blurTrim()}
-        ></textarea>
-      </label>
-      <span id="footer-message-hint" class="hint">${t("receipts.footer_message_hint")}</span>
-      ${error !== "" ? html`<span id="footer-message-error" class="field-error">${error}</span>` : nothing}
-    </div>`;
+    return html`<wt-textarea
+      name="footerMessage"
+      data-test="footer-message"
+      rows="3"
+      label=${t("receipt.footer_message")}
+      hint=${t("receipts.footer_message_hint")}
+      .value=${this.footerMessage}
+      error=${error}
+      ?disabled=${this.saving}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.#changeTrim("footerMessage", event.detail.value);
+      }}
+      @focusin=${() => this.#focusTrim("footerMessage")}
+      @focusout=${() => this.#blurTrim()}
+    ></wt-textarea>`;
   }
 
   #renderForm(): TemplateResult {
@@ -537,21 +486,19 @@ export class ReceiptsScreen extends LitElement {
 
   #renderWidth(preview: ReceiptPreview): TemplateResult {
     const chosen = this.chosenWidth ?? preview.paperWidth;
-    return html`<label class="paper-width"
-      ><span class="field-label">${t("printers.paper_width")}</span>
-      <select
-        name="paperWidth"
-        @change=${(event: Event) =>
-          this.#chooseWidth((event.target as HTMLSelectElement).value as PrintPaperWidth)}
-      >
-        ${preview.paperWidths.map(
-          (width) =>
-            html`<option value=${width} .selected=${width === chosen}>
-              ${t(width === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80")}
-            </option>`,
-        )}
-      </select></label
-    >`;
+    return html`<wt-combobox
+      class="paper-width"
+      name="paperWidth"
+      search="auto"
+      label=${t("printers.paper_width")}
+      .options=${preview.paperWidths.map((width) => ({
+        value: width,
+        label: t(width === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"),
+      }))}
+      .value=${chosen}
+      @wt-change=${(event: CustomEvent<{ value: string }>) =>
+        this.#chooseWidth(event.detail.value as PrintPaperWidth)}
+    ></wt-combobox>`;
   }
 
   #renderPreview(): TemplateResult {
