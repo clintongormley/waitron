@@ -432,6 +432,69 @@ describe("Cloud restore screen listing what is still unanswered", () => {
   });
 });
 
+describe("Cloud restore screen showing the server's refusal of a detail", () => {
+  const CHECK_OLD_BOX = "Check your answer about the old server.";
+  const CHECK_POINT = "Check the approved snapshot.";
+
+  it("drops the old-server refusal once the owner changes the tick box", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: CHECK_OLD_BOX,
+      invalidField: "oldBoxGone",
+    });
+    expect(q(el, "#old-box-gone-error")!.textContent).toBe(CHECK_OLD_BOX);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    await tick(el, "[data-test=old-box-gone]");
+    expect(q(el, "#old-box-gone-error")).toBeNull();
+    expect(q(el, "[data-test=old-box-gone]")!.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("shows a second old-server refusal after the owner dropped the first", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: CHECK_OLD_BOX,
+      invalidField: "oldBoxGone",
+    });
+    await tick(el, "[data-test=old-box-gone]");
+    expect(q(el, "#old-box-gone-error")).toBeNull();
+    el.errorMessage = undefined;
+    el.invalidField = undefined;
+    await el.updateComplete;
+    el.errorMessage = CHECK_OLD_BOX;
+    el.invalidField = "oldBoxGone";
+    await el.updateComplete;
+    expect(q(el, "#old-box-gone-error")!.textContent).toBe(CHECK_OLD_BOX);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+  });
+
+  it("shows the old-server refusal above Restore while the server has not asked the question", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      errorMessage: CHECK_OLD_BOX,
+      invalidField: "oldBoxGone",
+    });
+    expect(q(el, "[data-test=old-box-gone]")).toBeNull();
+    expect(await bottomOf(el)).toBe(CHECK_OLD_BOX);
+  });
+
+  it("shows the snapshot refusal above Restore, marking no field, and drops it when approval is checked again", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      errorMessage: CHECK_POINT,
+    });
+    expect(await bottomOf(el)).toBe(CHECK_POINT);
+    expect(fieldMessages(el)).toEqual([]);
+    expect(q(el, "[aria-invalid=true]")).toBeNull();
+    expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=check]")!.click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe("");
+  });
+});
+
 describe("Cloud restore screen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
 

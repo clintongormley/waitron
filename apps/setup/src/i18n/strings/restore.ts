@@ -81,6 +81,8 @@ export const restoreEn = {
   "cloud_restore.acknowledge_missing":
     "Confirm that the old server and surviving peers are stopped, and that you accept losing changes after this snapshot.",
   "cloud_restore.fix_fields": "Correct the highlighted fields to continue.",
+  "cloud_restore.check.point": "Check the approved snapshot.",
+  "cloud_restore.check.old_box": "Check your answer about the old server.",
   "cloud_restore.restore": "Restore this snapshot",
   "cloud_restore.back": "Back to backup file",
 
@@ -213,6 +215,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "cloud_restore.acknowledge_missing":
     "Confirma que el servidor anterior y los demás servidores que queden están detenidos, y que aceptas perder los cambios posteriores a esta instantánea.",
   "cloud_restore.fix_fields": "Corrige los campos marcados para continuar.",
+  "cloud_restore.check.point": "Revisa la instantánea aprobada.",
+  "cloud_restore.check.old_box": "Revisa tu respuesta sobre el servidor anterior.",
   "cloud_restore.restore": "Restaurar esta instantánea",
   "cloud_restore.back": "Volver al archivo de copia de seguridad",
 

@@ -10,6 +10,9 @@ import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 
+/** The one field the screen shows that a refusal of the Cloud restore can name. */
+export type CloudField = "oldBoxGone";
+
 @customElement("setup-cloud-restore-screen")
 export class SetupCloudRestoreScreen extends LitElement {
   static override styles = [
@@ -33,6 +36,8 @@ export class SetupCloudRestoreScreen extends LitElement {
   ];
   @property({ attribute: false }) view?: CloudRecoveryView;
   @property() errorMessage?: string;
+  /** The field `errorMessage` is about. */
+  @property() invalidField?: CloudField;
   @property({ type: Boolean }) busy = false;
   /** Set by the shell from `restore.stream_source_live`: when the old server last wrote to its bucket. */
   @property() liveSince?: string;
@@ -43,6 +48,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   @state() private attempted = false;
   /** The owner pressed an action after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
+  @state() private fieldRefusalDismissed = false;
   #approvalBinding?: string;
 
   constructor() {
@@ -58,14 +64,42 @@ export class SetupCloudRestoreScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage")) this.refusalDismissed = false;
+    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     const binding = this.#currentApprovalBinding();
     if (binding !== this.#approvalBinding) {
       this.acknowledged = false;
       this.oldBoxGone = false;
       this.attempted = false;
       this.refusalDismissed = false;
+      this.fieldRefusalDismissed = false;
       this.#approvalBinding = binding;
     }
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+      void focusFirstInvalid(this.shadowRoot!);
+    }
+  }
+
+  /** The field showing the server's refusal, if any. */
+  #refusalUnder(): CloudField | undefined {
+    return this.errorMessage === undefined ||
+      this.refusalDismissed ||
+      this.fieldRefusalDismissed ||
+      !this.#shows(this.invalidField)
+      ? undefined
+      : this.invalidField;
+  }
+
+  /** Whether `field` is on the screen. */
+  #shows(field: CloudField | undefined): boolean {
+    return (
+      field !== undefined &&
+      this.view?.state === "approved" &&
+      Boolean(this.view.point) &&
+      this.#askingOldBox
+    );
   }
 
   get #askingOldBox(): boolean {
@@ -115,9 +149,15 @@ export class SetupCloudRestoreScreen extends LitElement {
     const approved = this.view?.state === "approved" && this.view.point;
     const acknowledgeInvalid = this.attempted && !this.acknowledged;
     const fieldsInvalid = Boolean(approved) && this.attempted && this.#incomplete;
+    const refused = this.#refusalUnder();
     const bottom = [
-      ...(this.errorMessage && !this.refusalDismissed ? [this.errorMessage] : []),
-      ...(fieldsInvalid ? [t("cloud_restore.fix_fields")] : []),
+      ...(this.errorMessage &&
+      !this.refusalDismissed &&
+      !this.fieldRefusalDismissed &&
+      !this.#shows(this.invalidField)
+        ? [this.errorMessage]
+        : []),
+      ...(fieldsInvalid || refused !== undefined ? [t("cloud_restore.fix_fields")] : []),
     ].join(" ");
     return html`
       <h1>${t("cloud_restore.heading")}</h1>
@@ -190,8 +230,11 @@ export class SetupCloudRestoreScreen extends LitElement {
                           liveUnknown: this.liveUnknown,
                           checked: this.oldBoxGone,
                           invalid: this.attempted && this.#oldBoxUnanswered,
+                          refusal: refused === "oldBoxGone" ? this.errorMessage : undefined,
                           onChange: (checked) => {
                             this.oldBoxGone = checked;
+                            if (this.invalidField === "oldBoxGone")
+                              this.fieldRefusalDismissed = true;
                           },
                         })}
                       `
