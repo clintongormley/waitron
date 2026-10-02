@@ -7,7 +7,6 @@ type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
-  screenshot(): Promise<Uint8Array>;
   context(): {
     newCDPSession(page: PlaywrightPage): Promise<{
       send(method: string, params?: object): Promise<unknown>;
@@ -38,7 +37,8 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
   await page.emulateMedia({ colorScheme });
 };
 
-const forceAutofill: BrowserCommand<[hostId: string]> = async (context, hostId) => {
+// Forces Chromium's pseudo-class paint; it does not fill or save a credential.
+const forceAutofillPseudoState: BrowserCommand<[hostId: string]> = async (context, hostId) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("DOM.enable");
@@ -66,11 +66,6 @@ const forceAutofill: BrowserCommand<[hostId: string]> = async (context, hostId) 
   });
 };
 
-const screenshotBase64: BrowserCommand<[]> = async (context) => {
-  const { page } = context as unknown as { page: PlaywrightPage };
-  return Buffer.from(await page.screenshot()).toString("base64");
-};
-
 export default defineConfig({
   test: {
     globals: true,
@@ -86,8 +81,7 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
-        forceAutofill,
-        screenshotBase64,
+        forceAutofillPseudoState,
         ...parkPointerCommands,
       },
     },

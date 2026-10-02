@@ -1,5 +1,5 @@
 import { LitElement } from "lit";
-import { commands } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { expect, test, afterEach } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-input.js";
@@ -16,11 +16,7 @@ function parts(el: HTMLElement) {
 }
 
 async function screenshotPixel(x: number, y: number): Promise<string> {
-  const png = await (
-    commands as typeof commands & {
-      screenshotBase64: () => Promise<string>;
-    }
-  ).screenshotBase64();
+  const png = await page.screenshot({ save: false });
   const image = await createImageBitmap(
     new Blob([Uint8Array.from(atob(png), (char) => char.charCodeAt(0))], { type: "image/png" }),
   );
@@ -29,9 +25,8 @@ async function screenshotPixel(x: number, y: number): Promise<string> {
   canvas.height = image.height;
   const context = canvas.getContext("2d")!;
   context.drawImage(image, 0, 0);
-  const scale = Number(
-    window.parent.document.getElementById("vitest-tester")?.getAttribute("data-scale") ?? 1,
-  );
+  const scale = Number(window.frameElement?.parentElement?.getAttribute("data-scale"));
+  if (!Number.isFinite(scale) || scale <= 0) throw new Error("Missing Vitest frame scale");
   const [r, g, b] = context.getImageData(Math.floor(x * scale), Math.floor(y * scale), 1, 1).data;
   image.close();
   return `rgb(${r}, ${g}, ${b})`;
@@ -44,14 +39,18 @@ test.each(["light", "dark"])(
       '<wt-input label="Email" name="email" autocomplete="username"></wt-input>',
     );
     host.setAttribute("data-theme", theme);
+    host.style.setProperty("--wt-color-field-value", "rgb(31, 117, 186)");
     el.id = "autofill-probe";
     const { field, input } = parts(el);
     input.value = "owner@example.test";
+    const plain = await mount('<wt-input label="Email" value="owner@example.test"></wt-input>');
+    host.setAttribute("data-theme", theme);
+    const plainField = parts(plain).field;
     await (
       commands as typeof commands & {
-        forceAutofill: (hostId: string) => Promise<void>;
+        forceAutofillPseudoState: (hostId: string) => Promise<void>;
       }
-    ).forceAutofill(el.id);
+    ).forceAutofillPseudoState(el.id);
     expect(input.matches(":autofill")).toBe(true);
     const probe = document.createElement("span");
     probe.style.color = getComputedStyle(field).getPropertyValue("--wt-color-field-value").trim();
@@ -60,21 +59,34 @@ test.each(["light", "dark"])(
 
     const rect = field.getBoundingClientRect();
     const x = rect.left + 4;
+    const plainRect = plainField.getBoundingClientRect();
+    const line = await screenshotPixel(x, rect.bottom - 1);
+    const plainLine = await screenshotPixel(plainRect.left + 4, plainRect.bottom - 1);
+    expect(line).toBe(plainLine);
     expect(await screenshotPixel(x, rect.top + rect.height / 2)).toBe(
       getComputedStyle(field).backgroundColor,
-    );
-    const lineColor = getComputedStyle(field).getPropertyValue("--wt-color-field-line").trim();
-    probe.style.color = lineColor;
-    const line = await screenshotPixel(x, rect.bottom - 1);
-    const rgb = (color: string) => color.match(/\d+/g)!.map(Number);
-    const distance = (a: string, b: string) =>
-      rgb(a).reduce((sum, channel, i) => sum + Math.abs(channel - rgb(b)[i]!), 0);
-    expect(distance(line, getComputedStyle(probe).color)).toBeLessThan(
-      distance(line, getComputedStyle(field).backgroundColor),
     );
     probe.remove();
   },
 );
+
+test("an autofilled field disabled afterwards keeps its muted value", async () => {
+  const el = await mount('<wt-input label="Email" name="email" disabled></wt-input>');
+  el.id = "disabled-autofill-probe";
+  const { field, input } = parts(el);
+  input.value = "owner@example.test";
+  await (
+    commands as typeof commands & {
+      forceAutofillPseudoState: (hostId: string) => Promise<void>;
+    }
+  ).forceAutofillPseudoState(el.id);
+  expect(input.matches(":autofill")).toBe(true);
+  const probe = document.createElement("span");
+  probe.style.color = getComputedStyle(field).getPropertyValue("--wt-color-text-muted").trim();
+  document.body.appendChild(probe);
+  expect(getComputedStyle(input).webkitTextFillColor).toBe(getComputedStyle(probe).color);
+  probe.remove();
+});
 
 async function settle(el: HTMLElement): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));

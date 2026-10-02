@@ -898,8 +898,9 @@ bottom line, unlike every other field. **Decided (owner, 2026-10-02):** an autof
 like a typed one — the field fill and the bottom line — in every field primitive and both themes.
 The label already floats for an autofilled field (`:has(:autofill)` in
 `packages/ui-core/src/field-styles.ts` and `wt-price-input`); the colour and line were not looked
-into. A Chromium browser test forces its autofill state, checks the visible fill and bottom line in
-both themes, and reproduces the browser's pale blue fill before the CSS fix. An isolated Chromium
+into. A Chromium browser test forces the autofill pseudo-class, checks the visible fill, bottom line
+and value colour in both themes, and reproduces the browser's light-theme pale blue and dark-theme
+translucent slate fill before the CSS fix. An isolated Chromium
 profile accepted a saved test password through `navigator.credentials.store`, but did not autofill
 it after a reload or restart under automation; that saved-password visual check remains unverified.
 

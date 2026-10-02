@@ -938,8 +938,10 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
   the browser fills with its own format text. Otherwise it floats, at `--wt-font-size-sm` at the
   top left, with the value or hint under it. A value set from code rather than typed floats it
   too. The resting rule also leaves out a box whose control the browser marks `:autofill`;
-  `packages/ui-core/src/field-styles.test.ts` checks that the rule is there and parses, and
-  nothing makes a browser autofill a field. Resting or floated, the label is
+  `packages/ui-core/src/field-styles.test.ts` checks that the rule is there and parses.
+  `packages/ui-core/src/components/wt-input.test.ts` forces Chromium's autofill pseudo-class and
+  compares the field's painted fill and bottom line with a plain field in both themes; it does not
+  exercise the browser's saved-password flow. Resting or floated, the label is
   `--wt-color-text-muted`. A label longer than the box is cut with an ellipsis on one line; the
   ellipsis is on the label's text, `.field-label-text`, so a required field's `*` after it is
   never the part cut.

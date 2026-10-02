@@ -116,6 +116,9 @@ export const fieldStyles = css`
     color: var(--wt-color-text-muted);
     cursor: not-allowed;
   }
+  .field[data-disabled] .field-control:autofill {
+    -webkit-text-fill-color: var(--wt-color-text-muted);
+  }
   .field[data-compact] {
     min-height: var(--wt-tap-min);
   }
