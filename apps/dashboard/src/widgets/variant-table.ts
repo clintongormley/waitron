@@ -15,8 +15,6 @@ interface VariantRow {
   variant: ProductEditorVariant;
 }
 
-type StatusFilter = "active" | "inactive" | "all";
-
 const ADD_UNIT = "__add__";
 /** The dropdown's value for Each, which a product stores as no unit: the shared dropdown draws an
  * empty value as the grey prompt for nothing chosen. Translated back to `null` before it leaves. */
@@ -27,7 +25,7 @@ export const EACH_CHOICE = "__each__";
  * not an administrative collection to sort and search.
  *
  * The host owns the variants. Every row action leaves as an event carrying the row's INDEX, which
- * is the same index in the array the host handed over — rows the status filter hides included.
+ * is the same index in the array the host handed over — hidden Inactive rows included.
  *
  * The name shown is the STAFF name. The customer-facing name belongs to a receipt or a menu.
  */
@@ -165,12 +163,6 @@ export class VariantTable extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
-      /* A filter over the rows below, not a field of the product: narrower than the form's fields
-         so it does not read as one more of them. */
-      .filter {
-        max-width: calc(var(--wt-space-6) * 7);
-        margin-bottom: var(--wt-space-2);
-      }
       .muted {
         color: var(--wt-color-text-muted);
       }
@@ -209,10 +201,12 @@ export class VariantTable extends LitElement {
   /** A problem with one row, keyed by that row's index in `variants`. The host validates; this
    * only shows what it reports, beside the row it belongs to. */
   @property({ attribute: false }) errors: Record<number, string> = {};
+  /** Whether Inactive variants are on screen. The host owns it, but the table sets it itself, and
+   * says so with `wt-show-inactive`, when a row that must be seen would otherwise be hidden. */
+  @property({ type: Boolean }) showInactive = false;
   /** Every row in list order, hidden ones included. A reorder rewrites this before the host
    * confirms it. */
   @state() private rows: VariantRow[] = [];
-  @state() private status: StatusFilter = "active";
   #nextKey = 0;
   /** The row whose Remove or Restore was just chosen. The host hands that variant back as a new
    * object, which re-keys the row and destroys the control holding focus, so focus is put back once
@@ -242,7 +236,7 @@ export class VariantTable extends LitElement {
   }
 
   #shows(variant: ProductEditorVariant): boolean {
-    return this.status === "all" || variant.active === (this.status === "active");
+    return this.showInactive || variant.active;
   }
 
   #visible(): VariantRow[] {
@@ -252,14 +246,16 @@ export class VariantTable extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     const added = changed.has("variants") ? this.#rekey() : [];
     if (!changed.has("variants") && !changed.has("errors")) return;
-    // A reported problem, or a variant just added, must never sit on a row the filter hides: the
-    // person would be told something is wrong, or that they added a row, and see nothing.
+    // A reported problem, or a variant just added, must never sit on a hidden row: the person would
+    // be told something is wrong, or that they added a row, and see nothing.
     const hidden = this.rows.some(
       (row, index) =>
         !this.#shows(row.variant) &&
         (this.errors[index] !== undefined || (added.includes(row) && row.variant.id === undefined)),
     );
-    if (hidden) this.status = "all";
+    if (!hidden) return;
+    this.showInactive = true;
+    this.#emit("wt-show-inactive", { show: true });
   }
 
   override updated(changed: PropertyValues<this>): void {
@@ -267,12 +263,11 @@ export class VariantTable extends LitElement {
     const index = this.#refocus;
     this.#refocus = null;
     // The same row while it is still on screen; otherwise the next row on screen (a variant never
-    // saved leaves the list, so the one after it now holds its index), then the last one, then the
-    // filter, which is all that is left once no row is shown.
+    // saved leaves the list, so the one after it now holds its index), then the last one. With no
+    // row left on screen the next control is outside the table, so the host places focus.
     const shown = this.rows.flatMap((row, i) => (this.#shows(row.variant) ? [i] : []));
     const target = shown.find((i) => i >= index) ?? shown.at(-1);
     if (target !== undefined) void this.focusRow(target);
-    else this.shadowRoot?.querySelector<HTMLElement>('[name="variant-status"]')?.focus();
   }
 
   /** Re-reads the host's variants into rows, returning the rows it had not seen before. */
@@ -425,25 +420,7 @@ export class VariantTable extends LitElement {
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => this.#shows(row.variant));
     const noUnit = this.unitOptions.find((option) => option.value === null)?.label ?? "";
-    return html`<wt-combobox
-        class="filter"
-        name="variant-status"
-        label=${t("editor.variants_show")}
-        search="auto"
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${[
-          { value: "active", label: t("product.active_badge") },
-          { value: "inactive", label: t("product.inactive_badge") },
-          { value: "all", label: t("product.filter_status_all") },
-        ]}
-        .value=${this.status}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.status = event.detail.value as StatusFilter;
-        }}
-      ></wt-combobox>
-      <div class="wrap">
+    return html`<div class="wrap">
         <table>
           <caption class="visually-hidden">
             ${t("editor.variants")}
@@ -507,7 +484,7 @@ export class VariantTable extends LitElement {
       ${
         visible.length
           ? nothing
-          : html`<p class="notice" data-test="no-variants">${t("editor.no_variants_status")}</p>`
+          : html`<p class="notice" data-test="no-variants">${t("editor.variants_all_inactive")}</p>`
       }
       ${
         this.openBlocked && visible.some(({ row }) => row.variant.id !== undefined)

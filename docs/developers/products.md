@@ -400,19 +400,24 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
 
 - **Add variant** opens the Add window for one variant, and saving that window adds one row.
   Cancelling it adds nothing.
-- The price field stays on screen with variants. While at least one variant is Active its label
-  reads "Base price per" and the unit (`editor.base_price_unit`), or "Base price" alone
-  (`editor.base_price`) for a product with no unit, and a variant with no price of its own shows
-  the base price as its hint, in its window and in its table row.
+- The Pricing section holds the price field and then VAT. While at least one variant is Active the
+  price's label reads "Base price per" and the unit (`editor.base_price_unit`), or "Base price"
+  alone (`editor.base_price`) for a product with no unit, a variant with no price of its own shows
+  the base price as its hint, in its window and in its table row, and the Pricing section is a fold
+  whose closed line names the base price and the VAT (`pricingSummary`). The fold opens on a VAT,
+  unit or price error (`SECTION_FIELDS`) and starts open on a product never saved. The table, Add
+  variant and the inactive link are a separate Variants section under it, always open.
 - Each row's menu offers **Open**, **Edit** and **Remove** (or **Restore**). **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
   save first, while the product form has unsaved changes, because opening the page replaces the form.
 - A click on a variant's row, or Enter on it, opens its edit window, as the menu's **Edit** does. The
   drag handle, the Available switch and the row menu keep their own clicks.
 - **Remove** marks a saved variant Inactive in the draft, and **Restore** marks it Active again; one
-  that was never saved is simply dropped from the draft. The table's "Show variants" dropdown filters
-  rows by status and starts on Active; it switches to showing every row when a reported problem or a
-  newly added unsaved variant would otherwise be hidden (`dashboard-variant-table`,
+  that was never saved is simply dropped from the draft. The table hides Inactive
+  rows until the editor's "Show N inactive" link, beside Add variant and drawn only while some
+  variant is Inactive, shows them; the link then reads "Hide inactive". The table shows them itself,
+  and tells the editor with `wt-show-inactive`, when a reported problem or a newly added unsaved
+  variant would otherwise be hidden (`dashboard-variant-table`,
   `apps/dashboard/src/widgets/variant-table.ts`).
 
 A variant also has its own product page: the product editor's routes read and save a variant's id.
@@ -454,22 +459,21 @@ photo that exists was accepted.
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a summary of what is inside it, so nothing filled in is invisible while
-collapsed. Top to bottom: Name, Category, Available, Standalone ordering (absent on a
-variant's page), ▸ Kitchen, ▸ Descriptors,
-▸ Nutritional info, Price (and the variants table, if there are variants), Modifiers, then Cancel and
-Save. An Inactive product's editor also opens with a line saying so, and offers Restore beside
-Save. Opened on a variant, the same form is the variant's own page: it has no Standalone ordering, Modifiers or
-Variants section, and each field the variant may leave blank to take the parent's value shows that value as
-its hint.
+collapsed. Top to bottom: Name, Category, Available, Standalone ordering (absent on a variant's
+page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active),
+Variants, Modifiers, then Cancel and Save. An Inactive product's editor also opens with a line
+saying so, and offers Restore beside Save. Opened on a variant, the same form is the variant's own
+page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
+leave blank to take the parent's value shows that value as its hint.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
 naming the list's plain STAFF name and which kind it is.
 
-Sections always start collapsed; open and closed state is not remembered. A section holding a
-validation error opens itself and cannot be collapsed until the error is fixed — that is
-`wt-disclosure`'s `has-error`, described in
-[the design system](design-system.md).
+Sections start collapsed, and open and closed state is not remembered. Pricing is the exception: it
+does not fold at all while no variant is Active, and its fold starts open on a product never saved.
+A section holding a validation error opens itself and cannot be collapsed until the error is fixed —
+that is `wt-disclosure`'s `has-error`, described in [the design system](design-system.md).
 
 The main category is chosen in the editor itself, through the single-choice picker in
 `apps/dashboard/src/widgets/classification-fields.ts`.

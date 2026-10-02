@@ -368,7 +368,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
-| `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
+| `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `summaryFields` (`{ label, value }[]`; when it holds any, the closed line is these instead of `summary`: each value after its bold label and a colon, joined with a middot), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
@@ -1047,20 +1047,22 @@ A form that shows everything an entity can carry becomes one long stack of cards
 somebody actually changes most days get lost in it. Fold the optional detail away instead: keep the
 frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is the pattern's first home —
-Name, Category, Available, Standalone ordering, Price and Modifiers stay on screen; Kitchen, Descriptors and
-Nutritional info fold.
+Name, Category, Available, Standalone ordering, Variants and Modifiers stay on screen; Kitchen,
+Descriptors and Nutritional info fold; Pricing stays on screen until the product has an Active
+variant, and then folds too, with the base price and VAT on its closed line as named values
+(`summaryFields`).
 
 Three rules make the fold safe rather than merely tidy.
 
-**Every collapsed section carries a summary of what is inside it**, passed as `summary`, so
-nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
-empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Drinks` (kitchen name
-and course). An empty summary means an empty section, which is a useful signal in itself. A names
-section (the Options and Extras editors' "Customer-facing names") puts each language's
-customer-facing name after its upper-case code — `ES ¿Cómo la quiere hecha? · EN How would you like
-it cooked?` — leaving blank names out, so a section with every name blank shows no line. It is
-built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`). Those two editors keep the
-kitchen name out of the section, as a field of its own directly under Name.
+**Every collapsed section carries a summary of what is inside it**, passed as `summary`, or as named
+values in `summaryFields`, so nothing a person has filled in becomes invisible. Build it from the
+values themselves, skipping the empty ones, joined with a middot: the Kitchen section reads `Café
+c/leche · Drinks` (kitchen name and course). An empty summary means an empty section, which is a
+useful signal in itself. A names section (the Options and Extras editors' "Customer-facing names")
+puts each language's customer-facing name after its upper-case code — `ES ¿Cómo la quiere hecha? ·
+EN How would you like it cooked?` — leaving blank names out, so a section with every name blank
+shows no line. It is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`). Those two
+editors keep the kitchen name out of the section, as a field of its own directly under Name.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
 stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the
@@ -1068,9 +1070,10 @@ header click does nothing and the chevron stops presenting itself as a live cont
 an invalid submission can point at a field nobody can see. Clearing `has-error` does not re-collapse
 the section — the person is left looking at the field they just corrected.
 
-**Sections always start collapsed, and open/closed state is not remembered.** A remembered fold is a
-second piece of per-person state to get wrong, and it makes two people describing the same screen
-disagree about what is on it.
+**Sections start collapsed, and open/closed state is not remembered.** A remembered fold is a second
+piece of per-person state to get wrong, and it makes two people describing the same screen disagree
+about what is on it. In the product editor, the Pricing fold starts open on a product never saved,
+whose price and VAT are still being set (owner, 2026-10-02, A219).
 
 A disclosure draws no border and no lines in either state; spacing above and below sets the section
 apart (owner, 2026-10-01, A169). The heading and chevron stay exactly where they are when it opens,
@@ -1780,9 +1783,8 @@ list's Status filter starts on Active, so an Inactive product is hidden until th
 while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. A
 variant's Remove makes it Inactive and its Restore makes it Active, on the products list and in the
 product editor's variants section; an Inactive variant is hidden behind the list's same Status
-filter, and in the editor behind the variants section's own "Show variants" filter, which also
-starts on Active. Other screens' words for "switched off, kept for the record" are still being
-settled in `docs/backlog.md`.
+filter, and in the editor until the "Show N inactive" link beside Add variant shows it. Other
+screens' words for "switched off, kept for the record" are still being settled in `docs/backlog.md`.
 
 ### Navigation and language controls
 
