@@ -1116,7 +1116,7 @@ describe("till-app", () => {
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
     // A handheld is NOT a KDS display — the kind branch never prefetches the station queue.
     expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
-    // After login the waiter lands on the FLOOR (the face-set's post-lock face), never the counter.
+    // After login the waiter lands on the FLOOR, this phone layout's first tab; it has no Counter tab.
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
     await flush(el);
     expect(counter(el)).toBeNull();
@@ -1128,15 +1128,12 @@ describe("till-app", () => {
     expect(f).not.toBeNull();
     expect(f!.tables).toEqual([freeTable]);
     expect(f!.zones).toEqual([floorZone]);
-    // Counter concerns a handheld's floor landing never shows are skipped on this path.
+    // This phone layout has no Counter tab and no held-orders or prep-queue card, so no counter list loads.
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
   });
 
-  // Handheld face-set containment (§6a): a `back-to-counter` — whether from the floor's Back
-  // affordance or bubbled from any child — must NOT land the handheld on the counter POS (from
-  // which `station`/`expo`/`schedule` are reachable). The floor's Back affordance is suppressed in
-  // handheld mode (`canExitToCounter`).
-  describe("handheld face-set containment (§6a)", () => {
+  // A `back-to-counter` on a phone layout with no Counter tab leaves the handheld on the floor.
+  describe("a handheld on a phone layout with no Counter tab", () => {
     /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
     async function toHandheldFloor(): Promise<TillApp> {
       const { el } = await mountApp({
@@ -1157,8 +1154,7 @@ describe("till-app", () => {
     it("suppresses the floor's back-to-counter affordance in handheld mode (canExitToCounter=false)", async () => {
       const el = await toHandheldFloor();
       expect(floor(el)).not.toBeNull();
-      // UI honesty: the handheld floor is the top of the phone shell, so its Back-to-counter control is
-      // gone (a handheld has no counter to return to).
+      // A floor card inside the shell shows no Back-to-counter control.
       expect(floor(el)!.canExitToCounter).toBe(false);
       expect(floor(el)!.shadowRoot!.querySelector(".back")).toBeNull();
     });
@@ -1168,7 +1164,7 @@ describe("till-app", () => {
       expect(floor(el)!.canOpenStation).toBe(false);
     });
 
-    it("does NOT leave the face-set when back-to-counter fires from the floor (stays on floor)", async () => {
+    it("stays on the floor when back-to-counter fires from the floor", async () => {
       const el = await toHandheldFloor();
       emit(floor(el)!, "back-to-counter");
       await flush(el);
@@ -1176,18 +1172,251 @@ describe("till-app", () => {
       expect(counter(el)).toBeNull();
     });
 
-    it("does NOT leave the face-set when back-to-counter bubbles from the table-order screen", async () => {
+    it("lands on the floor, not a counter, when back-to-counter bubbles from the table-order screen", async () => {
       const el = await toHandheldFloor();
       emit(floor(el)!, "open-table", { tableId: openTable.id, seated: openTable.hasOpenTab });
       await flush(el);
       expect(tableOrder(el)).not.toBeNull();
       // A stray back-to-counter bubbling up from the table-order subtree must not reach the counter POS.
       // On the shell it sets the active tab to `counter`, but the phone canvas authors NO counter tab, so
-      // the shell falls back to its first tab (`floor`, a face-set member) — never the counter.
+      // the shell falls back to its first tab (`floor`) — never the counter.
       emit(tableOrder(el)!, "back-to-counter");
       await flush(el);
       expect(counter(el)).toBeNull();
       expect(floor(el)).not.toBeNull();
+    });
+  });
+
+  describe("a handheld whose device profile gives it the counter", () => {
+    const floorTab = phoneCanvasDef.tabs[0]!;
+    const orderTab = phoneCanvasDef.tabs[1]!;
+    const saleCards: CanvasDef["tabs"][number]["cards"] = [
+      { type: "product-grid", colSpan: 12, rowSpan: 4, config: {} },
+      { type: "basket", colSpan: 12, rowSpan: 2, config: {} },
+      { type: "total", colSpan: 12, rowSpan: 1, config: {} },
+      { type: "tender-pay", colSpan: 12, rowSpan: 2, config: {} },
+    ];
+    const withCounterTab: CanvasDef = {
+      formFactor: "phone-portrait",
+      tabs: [floorTab, { key: "counter", title: "Counter", columns: 12, cards: saleCards }],
+    };
+    const withFloorCard = (type: "held-orders" | "prep-queue"): CanvasDef => ({
+      formFactor: "phone-portrait",
+      tabs: [
+        { ...floorTab, cards: [...floorTab.cards, { type, colSpan: 12, rowSpan: 2, config: {} }] },
+        orderTab,
+      ],
+    });
+    /** Sale cards on a tab not keyed `counter`, which the card grid renders without the counter screen. */
+    const withSaleTab: CanvasDef = {
+      formFactor: "phone-portrait",
+      tabs: [floorTab, { key: "sale", title: "Sale", columns: 12, cards: saleCards }],
+    };
+    const readers = [
+      { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
+    ];
+
+    async function toHandheld(
+      canvas: CanvasDef,
+      tillOverrides: Record<string, unknown> = {},
+      overrides: Record<string, unknown> = {},
+    ): Promise<TillApp> {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas, ...tillOverrides }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        ...overrides,
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      return el;
+    }
+
+    it("loads the counter's lists at login when its canvas has a counter tab, and shows its held orders there", async () => {
+      const el = await toHandheld(
+        withCounterTab,
+        {},
+        { listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]) },
+      );
+      expect(currentApi.listWorkingOrders).toHaveBeenCalled();
+      expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+      expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+      selectTab(el, "counter");
+      await flush(el);
+      expect(counter(el)!.heldOrders).toEqual([heldSummary]);
+    });
+
+    it.each(["held-orders", "prep-queue"] as const)(
+      "loads the counter's lists at login when its canvas has a %s card, and the card shows them",
+      async (type) => {
+        // Not prepay, which never reads the station queue, so the prep-queue card has rows to show.
+        const el = await toHandheld(
+          withFloorCard(type),
+          { orderFlow: "invoice_first" },
+          {
+            listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+            getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
+          },
+        );
+        expect(currentApi.listWorkingOrders).toHaveBeenCalled();
+        expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
+        expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+        expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+        const grid = activeTabGrid(el)!.shadowRoot!;
+        if (type === "prep-queue") {
+          expect(grid.querySelector<TillStationQueue>("till-station-queue")!.groups).toEqual([
+            stationGroup,
+          ]);
+        } else {
+          expect(
+            grid.querySelector<HTMLElement & { orders: unknown }>("till-held-orders")!.orders,
+          ).toEqual([heldSummary]);
+        }
+      },
+    );
+
+    it("still loads the counter's lists at login on a till whose canvas shows none of them", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      });
+      await toCounter(el);
+      expect(currentApi.listWorkingOrders).toHaveBeenCalled();
+      expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+      expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+    });
+
+    const payCard = (el: TillApp, tab: string): TillTenderPay =>
+      tab === "counter"
+        ? tenderPay(el)
+        : activeTabGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+
+    const withReader = ["print-receipt", "integrated-card-payment"];
+    it.each([
+      {
+        tab: "counter",
+        canvas: withCounterTab,
+        capabilities: withReader,
+        offered: "stripe_terminal",
+      },
+      { tab: "counter", canvas: withCounterTab, capabilities: ["print-receipt"], offered: "none" },
+      { tab: "sale", canvas: withSaleTab, capabilities: withReader, offered: "stripe_terminal" },
+      { tab: "sale", canvas: withSaleTab, capabilities: ["print-receipt"], offered: "none" },
+    ])(
+      "on its $tab tab, gives the pay card the reader $offered when its profile's capabilities are $capabilities",
+      async ({ tab, canvas, capabilities, offered }) => {
+        const el = await toHandheld(canvas, {
+          capabilities,
+          cardProvider: "stripe_terminal",
+          activeReaders: readers,
+          defaultReaderId: readers[0]!.id,
+        });
+        selectTab(el, tab);
+        await flush(el);
+        expect(payCard(el, tab).cardProvider).toBe(offered);
+      },
+    );
+
+    describe("a list that cannot be read at login", () => {
+      let rejections: unknown[];
+      const onRejection = (event: PromiseRejectionEvent): void => {
+        rejections.push(event.reason);
+        event.preventDefault();
+      };
+      beforeEach(() => {
+        rejections = [];
+        window.addEventListener("unhandledrejection", onRejection);
+      });
+      afterEach(() => window.removeEventListener("unhandledrejection", onRejection));
+
+      /** Logs in on `device` with the counter's lists in view, reading the station queue (not prepay). */
+      async function logIn(
+        device: "till" | "handheld",
+        card: "held-orders" | "prep-queue",
+        overrides: Record<string, unknown>,
+      ): Promise<TillApp> {
+        if (device === "handheld")
+          return toHandheld(withFloorCard(card), { orderFlow: "invoice_first" }, overrides);
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+          ...overrides,
+        });
+        await toCounter(el);
+        return el;
+      }
+      const notice = (el: TillApp, list: "held" | "station" | "waiting") =>
+        el.shadowRoot!.querySelector<HTMLElement>(`[data-refresh-notice="${list}"]`)!;
+
+      it.each(["till", "handheld"] as const)(
+        "on a %s, a failed read of the held orders still loads the other lists and the roster, and says which failed",
+        async (device) => {
+          const el = await logIn(device, "held-orders", {
+            listWorkingOrders: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+          });
+          await flush(el);
+
+          expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
+          expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+          expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+          expect(currentApi.listStaff).toHaveBeenCalled();
+          expect(notice(el, "held").hasAttribute("data-active")).toBe(true);
+          expect(notice(el, "held").querySelector(".refresh-message")!.textContent!.trim()).toBe(
+            t("refresh.held"),
+          );
+          expect(rejections).toEqual([]);
+        },
+      );
+
+      it.each(["till", "handheld"] as const)(
+        "on a %s, a failed read of the kitchen queue still loads the waiting orders and the roster, and says which failed",
+        async (device) => {
+          const el = await logIn(device, "prep-queue", {
+            getStationQueue: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+          });
+          await flush(el);
+
+          expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+          expect(currentApi.listStaff).toHaveBeenCalled();
+          expect(notice(el, "waiting").hasAttribute("data-active")).toBe(false);
+          expect(notice(el, "station").hasAttribute("data-active")).toBe(true);
+          expect(notice(el, "station").querySelector(".refresh-message")!.textContent!.trim()).toBe(
+            t("refresh.station"),
+          );
+          expect(rejections).toEqual([]);
+        },
+      );
+    });
+  });
+
+  describe("a back-to-counter that arrives on the lock screen", () => {
+    it("leaves a logged-out till on the lock screen", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      emit(c, "logout");
+      await flush(el);
+      emit(lock(el)!, "back-to-counter");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(shell(el)).toBeNull();
+    });
+
+    it("leaves a logged-out handheld on the lock screen", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(shell(el)!, "logout");
+      await flush(el);
+      emit(lock(el)!, "back-to-counter");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(shell(el)).toBeNull();
     });
   });
 
@@ -4058,9 +4287,8 @@ describe("till-app", () => {
       });
 
       it("a handheld reaches the table-order screen and can settle — canSettle true", async () => {
-        // A handheld may settle at `POST /api/sales` for cash OR a manual card tender (the server
-        // firewall permits both, fencing only the INTEGRATED reader, `/api/pay`), so the pay section
-        // SHOWS with both tenders. Opening a table SWITCHES to the phone canvas's order tab, mounting the
+        // A handheld may settle at `POST /api/sales` for cash OR a manual card tender, so the pay
+        // section SHOWS with both tenders. Opening a table SWITCHES to the phone canvas's order tab, mounting the
         // table-order screen as that tab's card.
         const phoneCanvas: CanvasDef = {
           formFactor: "phone-portrait",
@@ -6395,7 +6623,7 @@ describe("till-app", () => {
     };
 
     it("renders the tab shell for a handheld with a full header and no affordances", async () => {
-      // A handheld stays on `lock` until the waiter PIN-logs-in (its face-set post-lock face is `floor`);
+      // A handheld stays on `lock` until the waiter PIN-logs-in (then lands on this layout's first tab, `floor`);
       // the shell activates only on that authenticated surface, so boot THEN login before asserting.
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
@@ -6600,7 +6828,7 @@ describe("till-app", () => {
     });
 
     it("lands a handheld on its home (floor) tab after a new sale, refreshing the stale floor — not a phantom counter tab", async () => {
-      // A handheld authors NO `counter` tab, so #onNewSale must land it on its HOME tab (the canvas's
+      // This phone layout has NO `counter` tab, so #onNewSale must land it on its HOME tab (the canvas's
       // first tab, `floor`), never a phantom `"counter"`. It reaches #onNewSale after settling a TAB
       // (pay-tab → ticket → New sale); the just-closed table is then stale in the floor read-model, so the
       // return must re-read occupancy — a re-tap must resume nothing.
@@ -6633,7 +6861,7 @@ describe("till-app", () => {
       occupied = true; // the tab has been settled server-side; the floor read-model would now reflect it
       emit(shell(el)!, "new-sale"); // the ticket view's "New sale" after settling the tab
       await flush(el);
-      // Lands on the device's HOME tab (floor), NOT a phantom `"counter"` a handheld never authors.
+      // Lands on the device's HOME tab (floor), NOT a phantom `"counter"` this layout lacks.
       expect(shell(el)!.activeTabKey).toBe("floor");
       // AND re-read occupancy (a fresh getTablesState), so the just-closed table is no longer stale.
       expect(getTablesState.mock.calls.length).toBeGreaterThan(before);

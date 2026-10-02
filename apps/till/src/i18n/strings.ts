@@ -614,11 +614,14 @@ export const en = {
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
   "station.advance_error": "Could not update the ticket, try again",
-  // Shown after a write that SUCCEEDED, when only the list refresh behind it failed.
+  // Shown when a list's refresh failed: the plain key when no write came before it, an `_after_*`
+  // key after a write that SUCCEEDED, when only the list refresh behind it failed.
+  "refresh.held": "The list of held orders could not refresh.",
   "refresh.held_after_park": "The order was held, but the list of held orders could not refresh.",
   "refresh.held_after_sale":
     "The sale was recorded, but the list of held orders could not refresh.",
   "refresh.held_after_move": "The bill was moved, but the list of held orders could not refresh.",
+  "refresh.station": "The kitchen queue could not refresh.",
   "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
   "refresh.station_after_hand_over":
     "The order was handed over, but the kitchen queue could not refresh.",
@@ -1433,12 +1436,14 @@ export const es: Record<StringKey, string> = {
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
+  "refresh.held": "La lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_park":
     "El pedido se aparcó, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_sale":
     "La venta se registró, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_move":
     "La cuenta se movió, pero la lista de pedidos aparcados no se pudo actualizar.",
+  "refresh.station": "La cola de cocina no se pudo actualizar.",
   "refresh.station_after_place":
     "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
   "refresh.station_after_hand_over":
