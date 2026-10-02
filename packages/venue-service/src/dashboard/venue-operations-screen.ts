@@ -64,6 +64,9 @@ export class VenueOperationsScreen extends LitElement {
       section {
         margin-block: var(--wt-space-3);
       }
+      wt-data-table::part(till-zone) {
+        font-size: var(--wt-font-size-sm);
+      }
       .toolbar {
         display: flex;
         align-items: center;
@@ -697,6 +700,7 @@ export class VenueOperationsScreen extends LitElement {
             cell: (device) => {
               const stored = model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId;
               return html`<wt-combobox
+                part="till-zone"
                 name=${`till-${device.id}-starts-in`}
                 label=${`${device.label}: ${t("venue.starts_in")}`}
                 hide-label
