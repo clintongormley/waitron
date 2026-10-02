@@ -20,7 +20,6 @@ const row: OrderRowDto = {
   creditNotes: [],
   status: "paid",
   credited: null,
-  invoiceNotCredited: false,
   total: "30.00",
   stillOwed: null,
   staff: [],
