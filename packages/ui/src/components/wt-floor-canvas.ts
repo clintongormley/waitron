@@ -206,11 +206,12 @@ export class WtFloorCanvas extends LitElement {
 
   #drag: DragState | null = null;
 
-  /** The zone typed into the box and not yet sent, and the table it was typed for. */
-  #zoneDraft: { tableId: string; value: string } | null = null;
-
-  /** The box's text when it took focus or last sent, which a send must differ from. */
-  #zoneCommitted = "";
+  /**
+   * The zone box's state for the table it shows: `sent`, the text a send must differ from (the
+   * table's zone when it was selected, the box's text when it took focus, or the last send), and
+   * `typed`, the text typed since and not yet sent. Replaced whenever another table is selected.
+   */
+  #zone: { tableId: string; sent: string; typed: string | null } | null = null;
 
   /**
    * Memoised per `this.tables` reference, so a drag writing `draft` on every pointermove does not make
@@ -228,12 +229,22 @@ export class WtFloorCanvas extends LitElement {
     this.#endDrag();
   }
 
+  get #selected(): FloorTable | null {
+    return this.editable && this.selectedId != null
+      ? (this.tables.find((t) => t.id === this.selectedId) ?? null)
+      : null;
+  }
+
+  override willUpdate(): void {
+    const selected = this.#selected;
+    if (selected?.id === this.#zone?.tableId) return;
+    this.#zone =
+      selected === null ? null : { tableId: selected.id, sent: selected.zoneId ?? "", typed: null };
+  }
+
   override render(): TemplateResult {
     const copy = this.#copy;
-    const selected =
-      this.editable && this.selectedId != null
-        ? (this.tables.find((t) => t.id === this.selectedId) ?? null)
-        : null;
+    const selected = this.#selected;
     return html`
       <div class="canvas" role="group" aria-label=${copy.floor}>
         ${this.tables.map((t) => this.#renderTable(t, copy))}
@@ -324,13 +335,13 @@ export class WtFloorCanvas extends LitElement {
           .value=${t.zoneId ?? ""}
           @wt-change=${(e: CustomEvent<{ value: string }>) => {
             e.stopPropagation();
-            this.#zoneDraft = { tableId: t.id, value: e.detail.value };
+            this.#zone!.typed = e.detail.value;
           }}
           @keydown=${(e: KeyboardEvent) => {
             if (e.key === "Enter") this.#commitZone(t);
           }}
           @focusin=${(e: FocusEvent) => {
-            this.#zoneCommitted = (e.currentTarget as WtInput).value;
+            this.#zone!.sent = (e.currentTarget as WtInput).value;
           }}
           @focusout=${() => this.#commitZone(t)}
         ></wt-input>
@@ -460,16 +471,17 @@ export class WtFloorCanvas extends LitElement {
     });
   }
 
-  /** Sends the typed zone once, on Enter or on leaving the box, as the native input's `change` did,
-   * because the parent saves every placement change it hears. */
+  /** Sends the typed zone once, on Enter or on leaving the box, because the parent saves every
+   * placement change it hears. */
   #commitZone(t: FloorTable): void {
-    const draft = this.#zoneDraft;
-    // Typed for a table that is no longer the one shown, so it is not this table's zone.
-    if (draft?.tableId !== t.id) return;
-    this.#zoneDraft = null;
-    if (draft.value === this.#zoneCommitted) return;
-    this.#zoneCommitted = draft.value;
-    const trimmed = draft.value.trim();
+    // Null when the box leaves with its inspector: Chromium sends `focusout` as it is removed.
+    const zone = this.#zone;
+    if (zone === null || zone.typed === null) return;
+    const typed = zone.typed;
+    zone.typed = null;
+    if (typed === zone.sent) return;
+    zone.sent = typed;
+    const trimmed = typed.trim();
     this.#emitPlacement({ ...this.#placementOf(t), zoneId: trimmed === "" ? null : trimmed });
   }
 

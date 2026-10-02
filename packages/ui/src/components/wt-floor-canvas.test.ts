@@ -308,6 +308,60 @@ test("a zone typed for one table is not given to the next table the box shows", 
   expect(placements).toEqual([]);
 });
 
+test("when the selection moves while the zone box keeps focus, the new table's own zone is what a send must differ from", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: "terrace" }), oneTable("t2", { zoneId: "bar" })],
+    { editable: true },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  el.selectedId = "t2";
+  await el.updateComplete;
+  expect(zoneControl(el).value).toBe("bar");
+  await userEvent.keyboard("{Backspace}{Backspace}{Backspace}terrace");
+  expect(zoneControl(el).value).toBe("terrace");
+  await userEvent.keyboard("{Enter}");
+  expect(placements.map((p) => [p.tableId, p.zoneId])).toEqual([["t2", "terrace"]]);
+});
+
+test("a zone typed for a table and left behind is not sent when that table is selected again", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: "terrace" }), oneTable("t2", { zoneId: "bar" })],
+    { editable: true },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("{Backspace}".repeat(7) + "patio");
+  expect(zoneControl(el).value).toBe("patio");
+  el.selectedId = "t2";
+  await el.updateComplete;
+  el.selectedId = "t1";
+  await el.updateComplete;
+  expect(zoneControl(el).value).toBe("terrace");
+  await userEvent.keyboard("{Enter}");
+  expect(placements).toEqual([]);
+});
+
+test("a zone typed for a table that leaves the plan while the box has focus is not sent", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: "terrace" }), oneTable("t2", { zoneId: "bar" })],
+    { editable: true },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("patio");
+  el.tables = [oneTable("t2", { zoneId: "bar" })];
+  await el.updateComplete;
+  expect(zoneField(el)).toBeNull();
+  expect(placements).toEqual([]);
+});
+
 test("deactivating clears the table's placement", async () => {
   const el = await mountCanvas([oneTable("t1")], { editable: true });
   tokenEl(el, "t1").click();
