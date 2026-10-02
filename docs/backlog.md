@@ -2530,8 +2530,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       reader" (`card_reader.not_set_up`). At login each counter list shows its own failure with a
       retry notice, so one list that fails no longer stops the others loading (they are still read
       one after another, so a read that hangs still delays the rest); this changed for tills too.
-      Left as they were: a handheld gets no Station, Expo or Schedule button (an existing test pins
-      it), and never opens the drawer.
+      Left as it was: a handheld never opens the drawer. (Its Station, Pass and Schedule buttons
+      now follow its profile — C130 below.)
     - **Done (C128, #1031) — who may take a payment.** Every till or handheld payment route now also needs
       `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
     - **Done (C131, #1032) — the counter's pay card goes back to its choices after a reader payment.**
@@ -2541,6 +2541,20 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       attempt, and the spinner comes down once no card attempt is still running (`cardAttemptsOver`,
       `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
       request settled.
+    - **Done (C130) — a device shows the screens its profile assigns, and the person's permissions
+      decide the rest.** A device profile has three switches, "Kitchen station screen", "Pass
+      screen" and "Schedule screen" (`show-station`, `show-expo`, `show-schedule` in
+      `CAPABILITY_FLAGS`, `packages/layouts/src/canvas.ts`), on for the built-in till profile and off
+      for the handheld one; the till offers each header button only when its profile has the switch
+      and its layout has no tab of that name, on any device. The lists loaded at sign-in and the
+      first screen come from the layout on every device. The till's sign-in answer carries the
+      person's permission list instead of one yes/no, and the till locks only the cards whose
+      permission the person lacks (today the table-plan editor); the server still checks every
+      permission itself. The till's unused routes to add, rename and remove a table
+      (`POST`/`PATCH`/`DELETE /api/tables`), which checked no permission, are gone. Left open:
+      a till profile saved before C130, and one newly created on the Device profiles screen, has
+      the three switches off until a manager turns them on; a till with no device reads no
+      capabilities, so it shows none of the three buttons.
     - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
       The page gives the till the screen less its padding (`apps/till/index.html`), and the error
       banner and the other notices above the tabs take their height from the tab shell, so the
