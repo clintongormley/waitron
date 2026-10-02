@@ -1128,7 +1128,8 @@ describe("moveDishesToStation", () => {
     const oldGrillNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill)))
       .length;
     const s1 = { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill };
-    const movedAt = new Date("2026-10-02T18:45:00.000Z");
+    // This shared venue keeps earlier notices, so this notice must sort after fixed and live clock cases.
+    const movedAt = new Date(Math.max(Date.now(), Date.parse("2026-10-02T18:45:00.000Z")) + 1000);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(movedAt);
     let first: Awaited<ReturnType<typeof moveDishesToStation>>;
