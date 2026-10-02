@@ -746,9 +746,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   [conventions-data.md](docs/developers/conventions-data.md).
 - **Editing a shipped migration file — even only its comments — makes every venue it already
   migrated refuse to start** with `provisioning.database_ahead`: drizzle stores a hash of the whole
-  file, and the boot path's ahead check reads a hash the image does not ship as a newer image's.
-  Such an edit ships only with a venue reset, said in the PR's first line. Cost: #1036 restored two
-  edited files byte for byte. See [conventions-data.md](docs/developers/conventions-data.md).
+  file, and the ahead check on the boot path and the bucket rebuild reads a hash the image does not
+  ship as a newer image's. Such an edit ships only with a venue reset, said in the PR's first line.
+  Nothing guards it. Cost: #1036 restored two edited files byte for byte. See
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:
   `scripts/journal-monotonic.test.ts`, weaker than its name today — most sets are a single baseline

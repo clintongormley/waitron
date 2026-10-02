@@ -4311,8 +4311,6 @@ approved.
     file's comment to what testing-guide itself measured (the per-test timer does not fire during
     a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
     matches.
-    `packages/media/drizzle/0001_image_references.sql` (about lines 22-24) says `workspace-cycles`
-    refuses an "import"; that guard reads `package.json` files (a shipped migration, likely left).
     Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
     top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
     decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
@@ -4482,8 +4480,6 @@ approved.
     `ATTACH`; #568's probe (Node v26.7.0) found one naming a file that does not exist IS refused
     there (errcode 14, no file created), while an existing file and `:memory:` attach — narrow that
     sentence in a pull request, since a root `CLAUDE.md` change takes the normal flow.
-    `packages/db/drizzle/0001_behavioural_triggers.sql` still points at `packages/store/src/index.ts`
-    by line number, which the prune moved; it is a migration file, so it was left.
   - `packages/payments-stripe`, found by #570 and not changed (each a code or config change, not a
     comment): the two `provider.test.ts` cases named "throws payment.not_found" assert only
     `rejects.toThrow()`, not the code (CLAUDE.md §4); `tenant-scoping.test.ts` is named for tenant
@@ -4535,9 +4531,7 @@ approved.
     `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number
     23001; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
     says the error construction typechecks "ONLY because" of one import — #588's review measured the
-    same claim false for printing and layouts. The shipped
-    `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts` tells 787 from 1811; it
-    reads only 1811 (`device-profile-store.ts` reads both). Both layouts database suites create a
+    same claim false for printing and layouts. Both layouts database suites create a
     manager session in `beforeAll`, while `useVenueDb` empties every data table after each test by
     default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's first test can
     use that session; they pass today because only the first does.
@@ -4756,8 +4750,9 @@ was fixed only for the last 28 documents. Find the rest with
 into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
 so check which document each one names before cutting it. Two were left on purpose:
 `packages/db/drizzle/0004_variant_one_level.sql` ("spec §1.2, §15.7"), because a shipped migration
-is not edited, and `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could
-not be traced to a deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
+is not edited without a venue reset (`CLAUDE.md` §3), and
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
+deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
 each to the pull request that built the work, or drop the tag. A test title is not a comment, so
 changing one does not pass `scripts/comments-only.mjs` as a comments-only change.
 

@@ -1,5 +1,7 @@
--- `products.image` and `category_details.image` name a `media_images.filename`, held as triggers
--- because neither can be a declared foreign key (below).
+-- These triggers were written for `products.image` and `category_details.image`, which name a
+-- `media_images.filename`, because neither could be a declared foreign key (below). The column
+-- `category_details.image` was later dropped (catalogue `0014`), and its four triggers before it
+-- (catalogue `0013`; on a fresh database, media `0004`).
 --
 -- Guard: `packages/media/src/image-references.test.ts`.
 --
@@ -9,11 +11,11 @@
 -- generated snapshots, so it never sees these either way.
 --
 -- WHY NOT DECLARED IN TYPESCRIPT, where regeneration would carry them. A drizzle foreign key names
--- the parent COLUMN object, so the declaration has to sit in the CHILD table's definition —
+-- the parent COLUMN object, so the declaration had to sit in the CHILD table's definition —
 -- `packages/db/src/schema/catalogue.ts` and `packages/catalogue/src/schema/categories.ts`. Both
 -- packages sit BELOW `@waitron/media`, which depends on `@waitron/catalogue` and `@waitron/db`, so
--- importing `media_images` there closes a workspace dependency loop that
--- `scripts/workspace-cycles.test.ts` refuses.
+-- either depending on media would close a loop between the packages' manifests that
+-- `scripts/workspace-cycles.test.ts` refuses (it reads `package.json`, not imports).
 --
 -- WHY NOT A REAL KEY ADDED BY REBUILDING THE TABLE. SQLite has no `ALTER TABLE … ADD CONSTRAINT`;
 -- the documented way to add one is to build a new table, copy, drop and rename, and that procedure
@@ -39,8 +41,8 @@
 -- FOUR TRIGGERS PER KEY, because SQLite has no `BEFORE INSERT OR UPDATE` and no foreign key
 -- machinery to borrow: the two that guard a written filename (insert, update of `image`), and the
 -- two that guard the parent (`ON DELETE RESTRICT`, and the `ON UPDATE NO ACTION` a declared key
--- has by default — a stored filename is the hash of the bytes, and the rule is kept so that nothing
--- silently gains the ability to rename one).
+-- has by default — a stored filename is the hash of the bytes, and the rule is kept so that an image
+-- a row still names cannot be renamed).
 -- `is not` is SQLite's null-safe inequality: `1 is not 2` and `1 is not null` are 1, `null is not
 -- null` is 0 (measured 2026-10-02 on `node:sqlite`, Node v26.7.0, SQLite 3.53.4).
 
