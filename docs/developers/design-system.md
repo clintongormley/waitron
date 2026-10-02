@@ -895,12 +895,13 @@ inside the field only while it contains an action.
 
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
-it stays on the bottom left (the sign-in code step is an exception; see the login section). A
-secondary action that belongs beside the primary action goes in the `secondary` slot. The row's
-message runs from the form's left edge only when the row is the form's full width. Where the row
-shares a line with something else, show the message with `formMessage` directly before that line,
-as the sign-in steps do, or let the row take the full width (in a `wt-modal`, the form width) while
-it has a message, as the Add printer dialog's address check does.
+it stays on the bottom left. A secondary action that belongs beside the primary action goes in the
+`secondary` slot. The row's message runs from the form's left edge only when the row is the form's
+full width. Where the row shares a line with something else, show the message with `formMessage`
+directly before that line, or let the row take the full width (in a `wt-modal`, the form width)
+while it has a message, as the Add printer dialog's address check does. The sign-in method screens
+put their primary action outside `wt-form-actions`, as a full-width button with the form's message
+on its own line directly above it (shown with `formMessage`); see the login section.
 
 ```ts
 html`
@@ -1254,15 +1255,22 @@ semantic username input for password managers; the read-only field is named `cho
 that hidden input stays the only field named `email`. Ordinary login has no separate Cancel or
 Forget button.
 
-On password, passkey, Google and code screens, a step's other ways in are ONE persistent bulleted list of links, directly
-after the step's field or hint, and after its refusal when one shows. On the password screen **I've forgotten my password** is its first
-item, then the other ways to log in. The step's buttons sit on the row of the list's first item, at
-the right; where that row is too narrow for both, they wrap below the list, still at the right. On
-a form at its full width only the first link has to fit beside the buttons, and a longer later link
-breaks inside the list; on a narrower form the row is sized by the widest link. On the code screen
-Back therefore sits beside Log in at the right, an exception to the Forms rule that puts Back
-bottom left. A refusal's message sits on its own line above the list and the buttons, from the
-form's left edge.
+Every step sits in a card drawn like the setup wizard's: a 1px `--wt-color-border` border,
+`--wt-radius-lg` corners and the `--wt-color-surface-raised` background, with the Waitron lockup
+first, above any notice and the heading. The card's logo is decorative (`aria-hidden`), because the
+banner above the card already names Waitron. On the email, password, passkey and Google screens the
+step's own way in is ONE full-width primary `wt-button`, with the form's one message on its own line
+directly above it. When there is any other way in, an **or** line follows, then each other way in
+as a full-width outlined (`secondary`) button with a leading icon hidden from assistive technology:
+a key for **Use your password**, a person with a key for **Log in with passkey**, and Google's "G"
+for **Continue with Google** (`apps/dashboard/src/assets/google-g.svg`, so Google's colours stay out
+of the screen's styles). The email screen offers **Continue with Google** when the venue has Google
+set up, because starting a Google sign-in takes no email; whether it shows depends on the venue's
+settings alone, so every visitor sees the same choices there. **I've forgotten my password** is a
+small link at the right directly under the password field, on the password screen only. On the code
+screen the switch between an authenticator code and a recovery code is the same kind of link under
+the code field, and Back and Log in are an ordinary `wt-form-actions` row, Back bottom left. Both
+small links keep a `--wt-tap-min` tap area.
 Recovery opens **Check your email** with the address, delivery
 guidance and a one-minute resend countdown. Use the same public acknowledgement for every address:
 pending accounts receive a setup link and active accounts receive a reset link. Invitation emails
