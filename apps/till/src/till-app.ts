@@ -841,6 +841,24 @@ export class TillApp extends LitElement {
     css`
       :host {
         display: block;
+        height: 100%;
+      }
+
+      /* A notice above the shell takes its height from the shell, never adds it to the page. */
+      .app {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      till-tab-shell {
+        min-height: 0;
+      }
+
+      till-lock-screen,
+      till-enrol-screen {
+        flex: 1 0 auto;
+        min-height: 0;
       }
 
       .error {
