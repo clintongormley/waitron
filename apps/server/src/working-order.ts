@@ -3174,8 +3174,9 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
  * the part split, and refused the same when an extra is not a whole count a dish. With
- * `refuseHeld`, a line whose ticket item is unfired is refused `tab.split_held_line` unless its group
- * is held: firing a group fires its lines on whichever bills they are on. Returns each
+ * `refuseHeld`, a line whose own or split-off extra's ticket item is unfired is refused
+ * `tab.split_held_line` unless its group is held: firing a group fires its lines on whichever bills
+ * they are on. Returns each
  * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
  * by the row it came from, a dish before its extras.
  */
@@ -3264,15 +3265,16 @@ export async function carveOffLines(
     if (line.parentLineId != null) {
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
+    const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
     if (
       opts.refuseHeld &&
-      line.ticketItemId !== null &&
-      line.ticketFiredAt === null &&
-      line.groupState !== "held"
+      line.groupState !== "held" &&
+      [line, ...childLineNos.map((lineNo) => byLineNo.get(lineNo)!)].some(
+        (row) => row.ticketItemId !== null && row.ticketFiredAt === null,
+      )
     ) {
       throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
-    const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
     if (t.quantity === undefined) {
       wholeLineNos.push(t.lineNo, ...childLineNos);
       continue;
@@ -3412,7 +3414,20 @@ export async function carveOffLines(
       const splitLineId = await splitRow(line, remaining, decimal(quantity), null);
       // Numbered straight after their dish: a receipt reads a dish's extras from the rows after it.
       for (const child of children) {
-        await splitRow(child.row, child.remaining, child.moved, splitLineId);
+        const splitChildId = await splitRow(child.row, child.remaining, child.moved, splitLineId);
+        if (child.row.ticketItemId !== null) {
+          const splitTicketId = await splitTicketItem(
+            tx,
+            child.row.ticketItemId,
+            child.row.quantity,
+            toTabId,
+            splitChildId,
+            child.moved,
+          );
+          splitFrom.set(splitTicketId, child.row.ticketItemId);
+          await copyKitchenJobLines(tx, child.row.id, splitChildId);
+          movedLineIds.push(child.row.id);
+        }
       }
       if (line.ticketItemId !== null) {
         const splitTicketId = await splitTicketItem(
