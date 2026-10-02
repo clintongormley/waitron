@@ -1302,3 +1302,79 @@ describe("cancelling a placed order with no invoice", () => {
     expect(paymentsOf(id)).toEqual([{ state: "captured", saleId: sale.id }]);
   });
 });
+
+describe("a party's bills name the invoice and its credit notes (GET /api/parties/:id/bills)", () => {
+  async function billOf(partyId: string, billId: string) {
+    const listed = await send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/bills`);
+    expect(listed.status).toBe(200);
+    return (listed.json as unknown as Record<string, unknown>[]).find(
+      (bill) => bill.workingOrderId === billId,
+    )!;
+  }
+
+  async function numberOf(sale: { seriesId: string; invoiceNumber: number }) {
+    const [series] = await inTx(venue, (tx) =>
+      tx
+        .select({ code: invoiceSeries.code })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, sale.seriesId)),
+    );
+    return `${series!.code}/${sale.invoiceNumber}`;
+  }
+
+  /** A party's main bill, placed with its invoice issued by the party leaving without paying. */
+  async function invoicedPartyBill() {
+    const party = await seatedWith(venue, "Caña");
+    const departed = await send(
+      venue.app,
+      supervisorCookie,
+      "POST",
+      `/api/parties/${party.partyId}/unpaid-departure`,
+      { expectedPartyRevision: party.revision, reason: "Se marcharon sin pagar" },
+    );
+    expect(departed.status).toBe(200);
+    return party;
+  }
+
+  it("names the invoice of a placed bill whose invoice was issued, with no credit notes", async () => {
+    const party = await invoicedPartyBill();
+    const original = await invoiceOf(party.tabId);
+
+    const bill = await billOf(party.partyId, party.tabId);
+
+    expect(bill).toMatchObject({ status: "placed", receiptAvailable: true });
+    expect(bill.invoiceNumber).toBe(await numberOf(original));
+    expect(bill.creditNotes).toEqual([]);
+  });
+
+  it("names the credit note a cancel filed against the invoice", async () => {
+    const party = await invoicedPartyBill();
+    const original = await invoiceOf(party.tabId);
+    expect((await cancel(party.tabId)).status).toBe(200);
+    const credits = await creditsOf(original.id);
+    expect(credits).toHaveLength(1);
+
+    const bill = await billOf(party.partyId, party.tabId);
+
+    expect(bill.status).toBe("abandoned");
+    expect(bill.invoiceNumber).toBe(await numberOf(original));
+    expect(bill.creditNotes).toEqual([await numberOf(credits[0]!)]);
+  });
+
+  it("names neither on a placed bill with no invoice", async () => {
+    const party = await seatedWith(venue, "Caña");
+    const place = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/place`,
+    );
+    expect(place.status).toBe(200);
+
+    const bill = await billOf(party.partyId, party.tabId);
+
+    expect(bill).toMatchObject({ status: "placed", receiptAvailable: false });
+    expect(bill).not.toHaveProperty("invoiceNumber");
+    expect(bill).not.toHaveProperty("creditNotes");
+  });
+});
