@@ -24,6 +24,7 @@ import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
   ProductCatalogue,
+  Station,
   TabLine,
   TableState,
   TillApi,
@@ -576,6 +577,88 @@ it("moves a table dish with one submission id and reloads its current orders", a
   );
   expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
   expect(readCurrentOrders.mock.calls.length).toBeGreaterThan(readsBefore);
+});
+
+describe("opening a table station move while its station list is pending", () => {
+  const listed: Station[] = [
+    { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
+    { id: "kitchen", name: "Kitchen", displayOrder: 1, isDefault: true, active: true, open: true },
+  ];
+  const move = { workingOrderId: "wo-7", lineId: "line-1", name: "Café", stationId: "bar" };
+
+  it("does not reopen the dialog or repopulate stations after logout", async () => {
+    const listStations = vi.fn().mockResolvedValue(listed);
+    const { el } = await mountApp({ ...seatedFloor(), listStations });
+    const screen = await toTableOrder(el);
+    let answer!: (stations: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () => new Promise<Station[]>((resolve) => (answer = resolve)),
+    );
+    emit(screen, "move-station", move);
+    await flush(el);
+    emit(shell(el), "logout");
+    await flush(el);
+    answer(listed);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+    expect((el as unknown as { stations: Station[] }).stations).toEqual([]);
+  });
+
+  it("does not open the old dish's dialog after switching tables", async () => {
+    const otherTable: TableState = {
+      ...openTable,
+      id: "t3",
+      label: "3",
+      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+    };
+    const listStations = vi.fn().mockResolvedValue(listed);
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+      listStations,
+    });
+    const screen = await toTableOrder(el);
+    let answer!: (stations: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () => new Promise<Station[]>((resolve) => (answer = resolve)),
+    );
+    emit(screen, "move-station", move);
+    await flush(el);
+    emit(screen, "back-to-floor");
+    await flush(el);
+    await openFromFloor(el, otherTable);
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    answer(listed);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+  });
+
+  it("loads stations once for two rapid presses on the same dish", async () => {
+    const listStations = vi.fn().mockResolvedValue(listed);
+    const moveDishStation = vi.fn().mockResolvedValue({
+      revision: 1,
+      stationId: "kitchen",
+      moved: [{ workingOrderLineId: "line-1", fromStationId: "bar" }],
+    });
+    const { el } = await mountApp({ ...seatedFloor(), listStations, moveDishStation });
+    const screen = await toTableOrder(el);
+    const reads = listStations.mock.calls.length;
+    let answer!: (stations: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () => new Promise<Station[]>((resolve) => (answer = resolve)),
+    );
+    emit(screen, "move-station", move);
+    emit(screen, "move-station", move);
+    await flush(el);
+    expect(listStations.mock.calls.length).toBe(reads + 1);
+    answer(listed);
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("till-station-choice-dialog")).toHaveLength(1);
+    emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+      stationId: "kitchen",
+    });
+    await flush(el);
+    expect(moveDishStation).toHaveBeenCalledOnce();
+  });
 });
 
 it("clears a saved draft station missing from the station list", async () => {

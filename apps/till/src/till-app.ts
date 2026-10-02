@@ -1396,6 +1396,7 @@ export class TillApp extends LitElement {
   @state() private stations: Station[] = [];
   #stationsRead = 0;
   #stationsLoaded = false;
+  #moveStationOpening: object | null = null;
   @state() private movingStation: {
     workingOrderId: string;
     lineId: string;
@@ -3567,6 +3568,8 @@ export class TillApp extends LitElement {
     ).detail;
     const offerRequest = ++this.#tableOfferRequest;
     this.#orderVisit++;
+    this.#moveStationOpening = null;
+    this.movingStation = null;
     this.#clearErrorKeepingLateChange();
     this.cancelOffer = null;
     this.#tableOpensPending++;
@@ -4624,7 +4627,7 @@ export class TillApp extends LitElement {
   }
 
   async #onMoveStation(event: Event): Promise<void> {
-    if (this.movingStation !== null) return;
+    if (this.movingStation !== null || this.#moveStationOpening !== null) return;
     const detail = (
       event as CustomEvent<{
         workingOrderId: string;
@@ -4633,8 +4636,24 @@ export class TillApp extends LitElement {
         stationId: string | null;
       }>
     ).detail;
-    await this.#loadStations();
-    this.movingStation = { ...detail, refusal: null, busy: false };
+    const opening = {};
+    this.#moveStationOpening = opening;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const orderId = this.activeTabId;
+    try {
+      await this.#loadStations();
+      if (
+        this.#moveStationOpening !== opening ||
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        orderId !== this.activeTabId
+      )
+        return;
+      this.movingStation = { ...detail, refusal: null, busy: false };
+    } finally {
+      if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
+    }
   }
 
   async #onStationChosen(event: Event): Promise<void> {
@@ -6556,6 +6575,9 @@ export class TillApp extends LitElement {
     this.#floorLoaded = false;
     this.errorKey = undefined;
     this.movingStation = null;
+    this.#moveStationOpening = null;
+    this.#stationsRead++;
+    this.stations = [];
     this.#stationsLoaded = false;
     this.#abandonListRefreshes();
     this.#setScreen("lock");
