@@ -20,12 +20,17 @@ A variant is itself a `products` row whose `parent_id` names its parent, so it c
 three in the same three columns.
 
 Two rules govern how those six fields become one displayed string, and both of them live in
-`packages/catalogue/src/product-presentation.ts`. Nothing else re-implements either one, with one
-exception named under _What a sold line freezes_ below.
+`packages/catalogue/src/product-presentation.ts`, apart from the per-language step named below.
+Nothing else re-implements either one, with one exception named under _What a sold line freezes_
+below.
 
 **Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
-name falls back to Name. They do not fall back to each other, and a product with a customer-facing
-name but no kitchen name still prints its staff Name to the kitchen.
+name falls back to Name. A customer-facing name blank in one language but not in the default
+language takes the default language's text in the text frozen for the receipt
+(`toInvoiceLineDescriptions`, below), not Name; that per-language step is `resolveContentText`
+(`packages/shared/src/content-languages.ts`), not `product-presentation.ts`. They do not fall back
+to each other, and a product with a customer-facing name but no kitchen name still prints its staff
+Name to the kitchen.
 
 **A variant is named in full and shown under its own names alone.** "Wine by the glass" has the
 variants "Wine 125" and "Wine 175", and a line sold as Wine 125 reads `Wine 125` on the till, the

@@ -749,11 +749,15 @@ unchanged.
 Built in all five editors as the three bullets below ask, each hint following the field it copies
 as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`). Products and
 variants already fell back requested language → default language → Name (`resolveContentText`,
-`packages/shared/src/content-languages.ts`, through `toInvoiceLineDescriptions`), so their readers
-and the translation gap report are unchanged. An options list's and an option's names did not
-(an extras list's own name reaches no receipt): with default Spanish and an option named
-`{ es: "Grande", ca: "Gran" }`, `customerOptionSnapshotLabels` printed "Gran" for an English
-receipt, because it skipped the default and took the first stored language alphabetically. It now
+`packages/shared/src/content-languages.ts`, through `toInvoiceLineDescriptions`), so the text frozen
+for their receipt and the translation gap report are unchanged; one variant reader,
+`joinCustomerPresentationText` (`packages/catalogue/src/product-presentation.ts`), does not follow
+that order (whether any surface shows the difference is not known; the OPEN entry
+"`joinCustomerPresentationText` passes the requested language where the default belongs", under
+A9). An options list's and an option's names did not (an extras list's own name reaches no
+receipt): with default Spanish and an option named
+`{ es: "Grande", ca: "Gran" }`, a direct call to `customerOptionSnapshotLabels` for English returned
+"Gran", because it skipped the default and took the first stored language alphabetically. It now
 tries the default language, read from the frozen staff name's key, before any other (cases in
 `packages/catalogue/src/option-snapshot-labels.test.ts`); the receipt and the till's settled ticket
 both read through it.
@@ -772,15 +776,16 @@ lists, options and extras lists:
   name (and Name, if that is blank too). **This does NOT match what happens today**, where a
   blank name in any language falls back straight to Name, never to the main language's name
   (`customerPresentationText`, `packages/catalogue/src/product-presentation.ts`; for options,
-  `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`). A hint
-  must not show text the customer will never see, so this part needs the fallback itself to
-  change to blank → main language's customer-facing name → Name, for every surface that
+  `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`).
+  _(Wrong when written: see the C122 correction below; A172 has since changed the options
+  reader.)_ A hint must not show text the customer will never see, so this part needs the fallback
+  itself to change to blank → main language's customer-facing name → Name, for every surface that
   reads these names (receipt, till, menus), plus `docs/developers/products.md`. The translation
   gap report (`listContentTranslationGaps`, `packages/catalogue/src/content-languages.ts`) counts
   "Spanish filled, English blank" as a gap today because English would show the staff name;
   whether it is still a gap once English falls back to the Spanish name is a decision to make
-  with the owner before building. "Main language" here means the venue's default content
-  language.
+  with the owner before building (A172 left the report unchanged; see above). "Main language"
+  here means the venue's default content language.
   _(Correction 2026-10-01, C122: measured, the receipt already falls back to the main language's
   customer-facing name, so "a blank name in any language falls back straight to Name" and "English
   would show the staff name" above are wrong for it. Default
@@ -793,7 +798,7 @@ lists, options and extras lists:
   prints a blank goods line", under A9). The till's buttons and basket show Name in every case.
   Receipts: the C122 entry under A9.)_
 
-Today the options list, option and extras list editors (`option-list-form.ts`,
+Before A172, the options list, option and extras list editors (`option-list-form.ts`,
 `option-label-form.ts`, `extra-list-form.ts`) already hint Name in the kitchen name AND in every
 language's customer-facing name; the product editor (`product-editor.ts`) and the variant form
 (`variant-form.ts`) hint neither. So the first two bullets are new work only in those two, and the
@@ -1401,16 +1406,16 @@ name as the default value, at least when I add a variant and fill in the interna
 time"_. A blank kitchen name or customer name falls back to the staff name
 (`kitchenPresentationName` and `customerPresentationText`,
 `packages/catalogue/src/product-presentation.ts`), but no field says so: the product editor's
-header comment states "The names are never hinted", and the variant window
-(`apps/dashboard/src/widgets/variant-form.ts`) sets no hint on them either. **Wanted:** while a
-kitchen or customer name is blank, its field shows what will be used instead, as a placeholder
-that follows the staff name as it is typed — on a product, on a variant's page and in the variant
-window. The placeholder must say what `product-presentation.ts` would print, not a second rule: a
-variant falls back to its OWN name, never its parent's kitchen or customer name; and the customer
-name falls back only in the venue's default language, so decide with the owner what the other
-languages' fields show (blank, or the default-language name the reader falls back to). Read, not
-reproduced: "the first time" may mean the hint is missing only on a new variant; check an
-existing one too.
+header comment stated "The names are never hinted", and the variant window
+(`apps/dashboard/src/widgets/variant-form.ts`) set no hint on them either (both fixed by A172).
+**Wanted:** while a kitchen or customer name is blank, its field shows what will be used instead,
+as a placeholder that follows the staff name as it is typed — on a product, on a variant's page and
+in the variant window. The placeholder must say what `product-presentation.ts` would print, not a
+second rule: a variant falls back to its OWN name, never its parent's kitchen or customer name; and
+the customer name falls back only in the venue's default language (wrong: see the C122 correction
+in A172's entry above), so decide with the owner what the other languages' fields show (blank, or
+the default-language name the reader falls back to). Read, not reproduced: "the first time" may
+mean the hint is missing only on a new variant; check an existing one too.
 A172 has since built the name hints — the kitchen and customer-facing names, in all five editors,
 on a new variant and an existing one — so what is left of A220 is the description hints and their
 checks.
@@ -3781,6 +3786,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   language alphabetically rather than the default. The receipt fills the variant's text per
   receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
   surface shows the difference is unknown; reproduce before fixing.
+- **The menu section form's customer-name hints skip the default language — OPEN (found
+  2026-10-02 during A172, not measured).** Every language's customer-name field in
+  `apps/dashboard/src/widgets/section-details-form.ts` hints the section's internal name, while the
+  till's section reader (`descriptionFor` in `apps/till/src/widgets/dish-format.ts`, called from
+  `apps/till/src/widgets/menu-browser.ts`, through `resolveEnabledContentText`) falls back to the
+  default language's name before the internal name, so in another language the hint can show text
+  the till will not. The same form is the menu's Create and Rename form (`#renderMenuForm`,
+  `apps/dashboard/src/screens/menus-screen.ts`), so a menu's own customer-facing names are hinted
+  the same way. A172 covered only the product, variant, options list, option and extras list
+  editors. Likely fix, not done, covering both: pass the form's default language to
+  `optionalTextFields`, as those editors do.
 - **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
   C122; I believe this predates the branch).** `listContentTranslationGaps`
   (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
