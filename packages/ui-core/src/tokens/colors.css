@@ -24,6 +24,8 @@
   --wt-color-field-label-focus: #1a5fd0;
   --wt-color-field-fill-disabled: #f7f7f8;
   --wt-color-field-value: #000000;
+  --wt-color-stepper-button: #e8f0ff;
+  --wt-color-stepper-button-hover: #dce8ff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -50,6 +52,8 @@
     --wt-color-field-label-focus: #5c98ff;
     --wt-color-field-fill-disabled: #1f2229;
     --wt-color-field-value: #ffffff;
+    --wt-color-stepper-button: #172946;
+    --wt-color-stepper-button-hover: #233757;
   }
 }
 
@@ -76,6 +80,8 @@
   --wt-color-field-label-focus: #1a5fd0;
   --wt-color-field-fill-disabled: #f7f7f8;
   --wt-color-field-value: #000000;
+  --wt-color-stepper-button: #e8f0ff;
+  --wt-color-stepper-button-hover: #dce8ff;
 }
 
 :where([data-wt-theme-root][data-theme="dark"]) {
@@ -101,4 +107,6 @@
   --wt-color-field-label-focus: #5c98ff;
   --wt-color-field-fill-disabled: #1f2229;
   --wt-color-field-value: #ffffff;
+  --wt-color-stepper-button: #172946;
+  --wt-color-stepper-button-hover: #233757;
 }

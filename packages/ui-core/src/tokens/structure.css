@@ -72,12 +72,11 @@
      quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
-  /* The narrowest a wt-number-stepper's box gets (a longer label widens it): wide enough for four
-     digits, and never below --wt-tap-min, because the box is what the stepper hands focus to. */
-  --wt-stepper-field-width: 64px;
+  /* The box includes a four-digit value area and two tap-width buttons. */
+  --wt-stepper-field-width: 152px;
   /* A stepper box whose blank value reads as a word ("No limit", "Sin límite" at
      --wt-font-size-md), with its 8px padding on each side. */
-  --wt-stepper-field-width-wide: 96px;
+  --wt-stepper-field-width-wide: 184px;
 
   /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
      --wt-font-size-md, with its 12px padding on each side. A sign drawn by `locale` widens the box

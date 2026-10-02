@@ -1129,7 +1129,7 @@ members editor (`member-list-editor.ts`) has the same choose-then-Add pattern; a
 should change too.
 
 **The number field's − and + move inside the field, as pale blue buttons (A202, owner 2026-10-02)
-— OPEN.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-
+— DONE.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-
 fields are very bulky and become difficult to read"_. Their first idea, up and down arrows stacked
 inside the field, made each arrow 28px tall, below `--wt-tap-min`; from mockups (today, A, B, C,
 D1, D2, E1–E3) the owner chose **E3**. **Decided:** in `wt-number-stepper`

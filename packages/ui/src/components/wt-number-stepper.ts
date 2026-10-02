@@ -1,12 +1,12 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles, disabledStyles } from "../base-styles.js";
+import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
 /**
- * A whole-number field between a − and a + button. `value` is text, and typing emits exactly what
+ * A whole-number field with − and + buttons. `value` is text, and typing emits exactly what
  * was typed — never a clamped number — so the form's own validation sees a typed 0, a blank or a
  * non-number. The buttons draw the `minus` and `plus` icons, which the consuming app registers.
  */
@@ -23,51 +23,49 @@ export class WtNumberStepper extends LitElement {
         max-width: var(--wt-field-max-width);
       }
 
-      /* The box's column runs from the width token up to what its label needs, so a long label
-         widens the box and a row too narrow for it narrows the box again, cutting the label. */
       .control {
         display: grid;
-        grid-template-columns: auto minmax(var(--wt-stepper-field-width), max-content) auto;
-        justify-content: start;
-        align-items: center;
-        gap: var(--wt-space-1);
+        grid-template-columns: minmax(var(--wt-stepper-field-width), max-content);
       }
 
-      /* The only item aligned by baseline, so the element's baseline is the number's — a row
-         aligned by baseline lines the text up — while the buttons centre on the box. */
       .field {
         align-self: baseline;
         display: grid;
+        grid-template-columns: minmax(var(--wt-tap-min), 1fr) repeat(2, var(--wt-tap-min));
+        align-items: stretch;
       }
 
-      /* An invisible copy of the label, at the size the resting label inherits (larger than the
-         floated label), is what widens the box: the label itself is positioned over the box and
-         takes no room. Ordered after the number so the number stays the box's baseline. Hidden,
-         not only clipped: Chromium puts generated text clipped to nothing in the accessibility
-         tree all the same. */
+      /* The hidden label copy reserves its full resting width while the visible label floats. */
       .field::before {
         content: attr(data-label-text);
         order: 1;
+        grid-column: 1 / -1;
+        grid-row: 1;
         height: 0;
         overflow: hidden;
         visibility: hidden;
-        padding-inline: var(--wt-space-2);
+        padding-inline-start: var(--wt-space-2);
+        padding-inline-end: calc(2 * var(--wt-tap-min) + var(--wt-space-2));
       }
 
       .field[data-label-required]::before {
         content: attr(data-label-text) "*";
-        padding-inline-end: calc(var(--wt-space-2) + var(--wt-space-1));
+        padding-inline-end: calc(2 * var(--wt-tap-min) + var(--wt-space-2) + var(--wt-space-1));
       }
 
       .field-label {
-        inset-inline: var(--wt-space-2);
+        inset-inline-start: var(--wt-space-2);
+        inset-inline-end: calc(2 * var(--wt-tap-min) + var(--wt-space-2));
       }
 
       .field-control {
-        width: var(--wt-stepper-field-width);
+        grid-column: 1;
+        grid-row: 1;
+        width: 0;
         min-width: 100%;
+        box-sizing: border-box;
         padding-inline: var(--wt-space-2);
-        text-align: center;
+        text-align: start;
       }
 
       button {
@@ -75,18 +73,38 @@ export class WtNumberStepper extends LitElement {
         align-items: center;
         justify-content: center;
         width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        height: 100%;
         padding: 0;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
+        border: 0;
+        border-inline-start: 1px solid var(--wt-color-surface);
+        background: var(--wt-color-stepper-button);
+        color: var(--wt-color-primary);
         font: inherit;
         cursor: pointer;
       }
 
+      button[data-step="-1"] {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      button[data-step="1"] {
+        grid-column: 3;
+        grid-row: 1;
+        border-start-end-radius: var(--wt-radius-md);
+      }
+
+      button:not(:disabled):hover {
+        background: var(--wt-color-stepper-button-hover);
+      }
+
+      button:disabled wt-icon {
+        opacity: var(--wt-opacity-disabled);
+      }
+
       button:disabled {
-        ${disabledStyles}
+        cursor: not-allowed;
       }
     `,
   ];
@@ -112,11 +130,6 @@ export class WtNumberStepper extends LitElement {
   private readonly generatedInputId = uniqueId("wt-number-stepper");
   private readonly errorId = uniqueId("wt-number-stepper-error");
   private readonly hintId = uniqueId("wt-number-stepper-hint");
-
-  /** With delegation alone the host would focus the - button, the first control in the tree. */
-  override focus(options?: FocusOptions): void {
-    this.shadowRoot?.querySelector("input")?.focus(options);
-  }
 
   private current(): number | null {
     const n = Number(this.value);
@@ -156,15 +169,6 @@ export class WtNumberStepper extends LitElement {
     const invalid = this.invalid || hasError;
     return html`
       <div class="control">
-        <button
-          type="button"
-          data-step="-1"
-          aria-label=${this.decreaseLabel(this.label)}
-          ?disabled=${this.disabled || atMin}
-          @click=${(event: Event) => this.step(-1, event)}
-        >
-          <wt-icon name="minus"></wt-icon>
-        </button>
         <div
           class="field"
           part="field"
@@ -194,16 +198,25 @@ export class WtNumberStepper extends LitElement {
             aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
             @input=${this.onInput}
           />
+          <button
+            type="button"
+            data-step="-1"
+            aria-label=${this.decreaseLabel(this.label)}
+            ?disabled=${this.disabled || atMin}
+            @click=${(event: Event) => this.step(-1, event)}
+          >
+            <wt-icon name="minus"></wt-icon>
+          </button>
+          <button
+            type="button"
+            data-step="1"
+            aria-label=${this.increaseLabel(this.label)}
+            ?disabled=${this.disabled || atMax}
+            @click=${(event: Event) => this.step(1, event)}
+          >
+            <wt-icon name="plus"></wt-icon>
+          </button>
         </div>
-        <button
-          type="button"
-          data-step="1"
-          aria-label=${this.increaseLabel(this.label)}
-          ?disabled=${this.disabled || atMax}
-          @click=${(event: Event) => this.step(1, event)}
-        >
-          <wt-icon name="plus"></wt-icon>
-        </button>
       </div>
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}

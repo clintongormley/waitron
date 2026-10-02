@@ -1,5 +1,8 @@
 # Form fields in the "filled" style (A178) Implementation Plan
 
+**2026-10-02 update:** A202 changed the number stepper's button placement and colours. Its earlier
+placement here is historical; the current contract is in `docs/developers/design-system.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every form field in the dashboard, setup and the till is drawn the owner-approved "filled"
