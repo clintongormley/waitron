@@ -817,6 +817,58 @@ resting label is drawn at the value's size, and the two cannot drift apart again
 16px, or override the token, change with it — the owner asked for the change; name them in the PR.
 The phone-zoom question above is about a field's TEXT, not its label, so this does not touch it.
 
+**The setup wizard's review page is grouped, explained and readable (A185, owner 2026-10-02) —
+OPEN.** The owner, on a screenshot of "Review and provision": _"This layout looks really messy"_.
+Today `apps/setup/src/screens/review-screen.ts` is one flat list of sixteen label/value rows, shows
+the receipt language as a code (`ca-ES`), says demo twice (a Mode row and a paragraph), and keeps
+the old `.actions` button row, so Provision sits beside Back rather than at the trailing edge as
+Next does on the earlier steps (`wt-form-actions`). **Decided (owner, 2026-10-02, choosing layout A
+of three mockups):**
+
+- the rows sit in boxed groups named as the steps that collect them — Business (legal name, tax
+  ID, country), Location (name, address, receipt language, when the day ends), Invoicing (till,
+  series, corrections series, invoice description, and the AEAT certificate outside demo), Your
+  account (name, email; the display name only when it differs from the name) — each box with an
+  Edit link back to the step that collects it;
+- the mode is a badge at the top (Demo, Prepare or Live) with demo's one-line explanation beside
+  it, replacing the Mode row and the demo paragraph;
+- a language shows by its name ("Català"), never its code; "Rectificative series" reads
+  "Corrections series" (Spanish wording to match);
+- help: each box has a `wt-help-tooltip` saying in general what the group is, and each row that
+  needs explaining has its own saying what that value does (e.g. the series: "Every invoice number
+  starts with this: FS-000001, FS-000002…"). The owner: the tooltips float over the text and close
+  when focus moves, and use the existing primitive, not a dark box. `wt-help-tooltip` is a popover,
+  so it floats and closes on an outside click or Escape; whether it closes when focus TABS away was
+  not checked — check, and add it to the primitive if not;
+- Back and Provision move into `wt-form-actions`.
+
+**The setup wizard's provisioning page is a page of its own with a spinner (A186, owner
+2026-10-02) — OPEN.** Today `apps/setup/src/screens/provisioning-screen.ts` shows a status line and
+a disabled primary button reading "Provisioning…". **Decided (owner, 2026-10-02, option P1):** a
+centred spinner, the heading "Setting up <legal name>", the mode badge (Demo, Prepare or Live, as
+the done page shows it), and "Keep this page open"; no button. Provisioning is one request that
+reports no progress (`provision` in `apps/setup/src/api/client.ts`), so the page shows no steps.
+The failed state is unchanged.
+
+**The language chooser moves to the top bar, in every app (A187, owner 2026-10-02) — OPEN.** The
+owner: _"instead of having the language chooser at the bottom, let's move it to the header on all
+pages (not just in the setup)"_. This reverses the footer chosen on 2026-09-30 (C93, #933; the
+till's B18, #1007). **Decided (owner, 2026-10-02):** the chooser sits at the trailing end of the
+top bar — the setup wizard's card header beside the logo, the dashboard's banner before the alerts
+bell and account menu (signed out too), the till's bar before the person's name — and on a
+screen with no top bar, at the top right on its own. Which screens those are was not checked:
+every screen that places `wt-language-footer` today (the till's lock, enrolment and counter
+screens and the dashboard's sign-in screen among them) needs one or the other. It shows the full language name on wide screens and the short
+code ("EN") at phone width (the owner: "the short name on handhelds", read as phone-width screens);
+the open list names every language in full. `wt-language-footer` goes, and every page that places
+it (`grep -rln wt-language-footer apps packages`) moves to the new chooser.
+
+**In a demo, the dashboard's top bar links to the email inbox (A188, owner 2026-10-02) — OPEN.**
+The setup wizard's done page already links to the demo's email inbox; the dashboard does not, so a
+demo user cannot find the emails the dashboard sends. **Wanted:** an "Email inbox" link in the
+dashboard banner, beside the language chooser (A187), shown only in a demo, to the same address the
+done page uses.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
