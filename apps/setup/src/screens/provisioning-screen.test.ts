@@ -24,6 +24,7 @@ describe("setup-provisioning-screen", () => {
     });
     expect(q(el, "h1")?.textContent?.trim()).toBe("Setting up The Olive Table SL");
     expect(q(el, "[data-test=mode-indicator]")?.textContent?.trim()).toBe(label);
+    expect(getComputedStyle(q(el, ".in-flight")!).paddingTop).toBe("32px");
     expect(q(el, "wt-spinner")?.getBoundingClientRect().width).toBe(32);
     expect(q(el, "wt-spinner")?.getBoundingClientRect().height).toBe(32);
     expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe("Keep this page open.");

@@ -26,7 +26,7 @@ export class SetupProvisioningScreen extends LitElement {
         display: grid;
         justify-items: center;
         gap: var(--wt-space-4);
-        padding: var(--wt-space-8) var(--wt-space-4);
+        padding: var(--wt-space-6) var(--wt-space-4);
         text-align: center;
       }
       .in-flight h1,
@@ -126,7 +126,7 @@ export class SetupProvisioningScreen extends LitElement {
             </p>`
           : nothing
       }
-      <wt-spinner size="lg" label=${t("provisioning.busy")}></wt-spinner>
+      <wt-spinner label=${t("provisioning.busy")}></wt-spinner>
       <p class="status" data-test="status">${t("provisioning.keep_open")}</p>
     </div>`;
   }
