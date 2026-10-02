@@ -12,6 +12,7 @@ import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
 import {
   registerCatalogue,
+  tableNoMatches,
   type CardProviderPanel,
   type DashboardRequest,
   t as tRaw,
@@ -1471,13 +1472,14 @@ export class PaymentsScreen extends LitElement {
         >
       </div>
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         aria-label=${t("payments.readers_heading")}
         viewKey="waitron.payments.readers.table"
         columnsLabel=${t("table.columns")}
         .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
         .columns=${this.#readerColumns()}
         .rowKey=${(reader: ReaderRow) => reader.id}
-        .emptyMessage=${t("payments.readers_empty")}
+        .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
       ></wt-data-table>
       ${this.#renderDiscovery()} ${this.#renderEditor()} ${this.#renderResolveDialog()}
       ${this.#renderBillDialog()}

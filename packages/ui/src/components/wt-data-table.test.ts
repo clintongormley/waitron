@@ -1043,7 +1043,7 @@ test("noMatchesMessage shows when a search excludes every row", async () => {
   input.value = "zzz";
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector(".message")!.textContent).toContain("Nothing matches");
+  expect(el.shadowRoot!.querySelector(".message")!.textContent).toBe("Nothing matches");
   // The toolbar must survive the no-match branch, or the search box vanishes the moment a term
   // clears every row and the person cannot edit or clear it.
   expect(el.shadowRoot!.querySelector(".table-toolbar")).not.toBeNull();
@@ -1071,7 +1071,7 @@ test("labels the search box 'Search' when the consumer names none", async () => 
   expect(input.placeholder).toBe("Search");
 });
 
-test("says 'No matches' when a search clears the table and the consumer named no message", async () => {
+test("says 'Nothing matches your search or filters.' when a search clears the table and the consumer named no message", async () => {
   const el = await table({
     searchable: true,
     columns: [
@@ -1082,7 +1082,9 @@ test("says 'No matches' when a search clears the table and the consumer named no
   input.value = "zzz";
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector(".message")!.textContent).toContain("No matches");
+  expect(el.shadowRoot!.querySelector(".message")!.textContent).toContain(
+    "Nothing matches your search or filters.",
+  );
 });
 
 test("a search term matches with its surrounding spaces trimmed and its case ignored", async () => {
@@ -1243,6 +1245,23 @@ test("a filter dropdown's own change stays inside the table", async () => {
     "off",
   );
   expect(escaped).not.toHaveBeenCalled();
+});
+
+test("noMatchesMessage shows when a filter, with nothing searched, hides every row", async () => {
+  const el = await tableS({
+    columns: withStatus,
+    rows: [rowsS[1]!],
+    noMatchesMessage: "Hidden by a filter",
+  });
+  expect(el.shadowRoot!.querySelector(".table-search")).toBeNull();
+  await chooseOption(
+    el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!,
+    "active",
+  );
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual([]);
+  expect(el.shadowRoot!.querySelector(".message")!.textContent).toBe("Hidden by a filter");
+  expect(el.shadowRoot!.querySelector(".table-toolbar")).not.toBeNull();
 });
 
 test("filter dropdowns render and narrow rows without a search box", async () => {
@@ -3021,7 +3040,7 @@ test("when nothing matches, the same box holds the sentence and no empty-action 
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
   const box = el.shadowRoot!.querySelector(".empty")!;
-  expect(box.querySelector('[role="status"]')!.textContent).toContain("Nothing matches");
+  expect(box.querySelector('[role="status"]')!.textContent).toBe("Nothing matches");
   expect(getComputedStyle(box).borderTopColor).toBe("rgb(1, 2, 3)");
   const button = el.querySelector<HTMLElement>("[data-test=add]")!;
   expect(button.assignedSlot).toBeNull();

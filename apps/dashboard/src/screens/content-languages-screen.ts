@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   capitaliseFirst,
   resolveContentText,
@@ -536,13 +537,13 @@ export class ContentLanguagesScreen extends LitElement {
                   ${t("content_gaps.complete").replace("{language}", names.of(language)!)}
                 </p>`
               : html`<wt-data-table
+                  noMatchesMessage=${tableNoMatches()}
                   filterSearchPlaceholder=${t("categories.combobox_search")}
                   filterNoResultsLabel=${t("categories.combobox_no_results")}
                   data-test=${`gaps-table-${language}`}
                   aria-label=${t("content_gaps.table").replace("{language}", names.of(language)!)}
                   searchable
                   searchLabel=${t("content_gaps.search")}
-                  noMatchesMessage=${t("content_gaps.no_matches")}
                   columnsLabel=${t("table.columns")}
                   viewKey=${`waitron.content-languages.gaps.${language}`}
                   sortKey="name"

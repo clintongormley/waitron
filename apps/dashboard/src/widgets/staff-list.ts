@@ -1,5 +1,6 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -13,6 +14,8 @@ export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];
 
   @property({ attribute: false }) currentPersonId: string | null = null;
+  /** What the table says with no rows; the screen filters before the table, so it names its own. */
+  @property() emptyMessage?: string;
 
   #edit(event: Event, personId: string): void {
     event.stopPropagation();
@@ -122,13 +125,14 @@ export class StaffList extends LitElement {
   override render() {
     return html`
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         aria-label=${t("staff.title")}
         viewKey="waitron.staff.table"
         columnsLabel=${t("table.columns")}
         .rows=${this.people}
         .columns=${this.#columns()}
         .rowKey=${(person: PersonSummary) => person.personId}
-        .emptyMessage=${t("staff.empty")}
+        .emptyMessage=${this.emptyMessage ?? t("staff.empty")}
         ><slot name="empty-action" slot="empty-action"></slot
       ></wt-data-table>
     `;

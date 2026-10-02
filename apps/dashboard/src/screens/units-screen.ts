@@ -4,6 +4,7 @@ import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.j
 import { LitElement, css, html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -439,12 +440,12 @@ export class UnitsScreen extends LitElement {
           : nothing
       }
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         aria-label=${t("units.title")}
         searchable
         searchLabel=${t("units.search")}
-        noMatchesMessage=${t("units.no_matches")}
         viewKey="waitron.units.table"
         columnsLabel=${t("table.columns")}
         sortKey="name"
@@ -533,6 +534,8 @@ export class UnitsScreen extends LitElement {
                   </div>
                 </div>
                 <wt-data-table
+                  noMatchesMessage=${tableNoMatches()}
+                  emptyMessage=${tableNoMatches()}
                   aria-label=${t("units.in_use_title")}
                   .rows=${inUseRows}
                   .columns=${this.#productColumns()}

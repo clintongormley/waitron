@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -385,6 +386,7 @@ export class StaffScreen extends LitElement {
       </div>
       <dashboard-staff-list
         .people=${this.#filteredPeople()}
+        .emptyMessage=${this.people.length === 0 ? t("staff.empty") : tableNoMatches()}
         .currentPersonId=${this.currentPersonId}
         @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}

@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
@@ -165,6 +166,8 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) emptyAction?: () => TemplateResult;
+  /** What the table says with no rows; a caller that filters before the table names its own. */
+  @property() emptyMessage?: string;
 
   #listNames: ReadonlyMap<string, string> = new Map();
   #dragged: string[] = [];
@@ -704,6 +707,7 @@ export class ProductList extends LitElement {
   override render() {
     const rows = this.#rows();
     return html`<wt-data-table
+      noMatchesMessage=${tableNoMatches()}
       filterSearchPlaceholder=${t("categories.combobox_search")}
       filterNoResultsLabel=${t("categories.combobox_no_results")}
       aria-label=${t("catalogue.title")}
@@ -722,7 +726,7 @@ export class ProductList extends LitElement {
       .columns=${this.#columns()}
       .rowKey=${(row: ListRow) => row.key}
       .rowParent=${(row: ListRow) => row.parentKey}
-      .emptyMessage=${t("catalogue.no_products")}
+      .emptyMessage=${this.emptyMessage ?? t("catalogue.no_products")}
       >${rows.length === 0 && this.emptyAction ? this.emptyAction() : nothing}</wt-data-table
     >`;
   }

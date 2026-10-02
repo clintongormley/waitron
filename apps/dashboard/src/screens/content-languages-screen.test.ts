@@ -1,4 +1,4 @@
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -778,6 +778,20 @@ describe("missing translations", () => {
     expect(table(el, "ca")!.shadowRoot!.querySelector("tbody")!.textContent).toContain(
       t("content_gaps.partial"),
     );
+  });
+
+  it("says the dashboard's one no-matches sentence when a search hides every missing name", async () => {
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
+    );
+    const found = table(el, "ca")!;
+    await found.updateComplete;
+    const box = found.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    box.value = "zzz-nothing";
+    box.dispatchEvent(new Event("input"));
+    await found.updateComplete;
+    expect(found.shadowRoot!.querySelector("tbody")).toBeNull();
+    expect(found.shadowRoot!.querySelector(".empty .message")!.textContent).toBe(tableNoMatches());
   });
 
   it("orders the required languages first, then the default, then the rest, and says a language with nothing missing is complete", async () => {

@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { UrlStateController, baseStyles, type DataTableColumn } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
@@ -342,6 +343,7 @@ export class OrdersScreen extends LitElement {
         ></wt-input>
       </div>
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         aria-label=${t("orders.title")}
         viewKey="waitron.orders.table"
         columnsLabel=${t("table.columns")}
@@ -354,7 +356,7 @@ export class OrdersScreen extends LitElement {
         .rowClickLabel=${() => t("orders.view")}
         .loading=${this.page === undefined && this.refusal === null}
         .loadingMessage=${t("orders.loading")}
-        .emptyMessage=${t("orders.empty")}
+        .emptyMessage=${tableNoMatches()}
         .errorMessage=${this.refusal?.field === null ? this.refusal.message : this.refusal ? t("form.fix_fields") : ""}
       ></wt-data-table>
       ${

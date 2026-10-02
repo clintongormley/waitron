@@ -1,5 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import {
   focusFirstInvalid,
@@ -1764,6 +1765,7 @@ export class PrintersScreen extends LitElement {
     ];
     return html`<section>
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="agents-table"
@@ -2164,6 +2166,7 @@ export class PrintersScreen extends LitElement {
     ];
     return html`<section>
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="printers-table"
@@ -2307,6 +2310,7 @@ export class PrintersScreen extends LitElement {
     return html`<section>
       <p class="hint">${t("printers.jobs_limit")}</p>
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         data-test="jobs-table"
         viewKey="printers:jobs"
         columnsLabel=${t("table.columns")}
@@ -3063,6 +3067,7 @@ export class PrintersScreen extends LitElement {
         }
       </div>
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         data-test="discovered-table"
         aria-label=${t("printers.discovered_title")}
         .columns=${columns}

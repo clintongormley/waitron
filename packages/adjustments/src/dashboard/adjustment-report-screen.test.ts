@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LiveData, setLocale } from "@waitron/dashboard-kit";
+import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { AdjustmentsApi } from "./client.js";
 import { ADJUSTMENTS_STRINGS } from "./strings.js";
@@ -336,6 +336,13 @@ describe("the adjustment report", () => {
     expect(rows(part(el, "people")!).map((each) => each.key)).toEqual(["guests"]);
     expect(text(part(el, "no-reasons"))).toBe("No reason was used on these days.");
     expect(part(el, "by-reason")).toBeNull();
+  });
+
+  it("gives the people table the dashboard's one no-matches sentence in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    const table = part(el, "people") as HTMLElement & { noMatchesMessage: string };
+    expect(table.noMatchesMessage).toBe(tableNoMatches("es"));
   });
 
   it("writes rates with the language's decimal mark and percent sign", async () => {

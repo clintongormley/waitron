@@ -6,6 +6,7 @@ import {
   codeOf,
   currentLocale,
   formatIsoMinute,
+  tableNoMatches,
 } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
@@ -759,6 +760,7 @@ export class AdjustmentReportScreen extends LitElement {
           row.of === "guests"
             ? t("adjustment_report.open_guests")
             : tf("adjustment_report.open_person", { name: row.name })}
+        .noMatchesMessage=${tableNoMatches()}
       ></wt-data-table>
     </section>`;
   }
@@ -845,6 +847,7 @@ export class AdjustmentReportScreen extends LitElement {
         .loading=${this.entries === undefined}
         .loadingMessage=${t("adjustment_report.loading")}
         .emptyMessage=${t("adjustment_report.none")}
+        .noMatchesMessage=${tableNoMatches()}
         .errorMessage=${this.entriesError ?? ""}
       ></wt-data-table>
       ${

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi, OrderRowDto, OrdersPageDto } from "../api/client.js";
@@ -294,6 +294,22 @@ describe("dashboard Orders", () => {
     expect(table.shadowRoot!.textContent).toContain("Se fueron sin pagar");
     expect(table.shadowRoot!.textContent).toContain("Pendiente");
   });
+
+  it.each(["en-GB", "es-ES"])(
+    "says the dashboard's one no-matches sentence when the search and filters find no bill (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const empty = { ...PAGE, rows: [], next: null };
+      const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue(empty) });
+      const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api });
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await vi.waitFor(() =>
+        expect(table.shadowRoot!.querySelector(".empty .message")?.textContent).toBe(
+          tableNoMatches(locale),
+        ),
+      );
+    },
+  );
 
   it("waits for a pause before searching a table name", async () => {
     const { el, api } = await loaded();

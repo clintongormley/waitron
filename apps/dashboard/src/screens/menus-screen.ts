@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import {
@@ -1693,6 +1694,7 @@ export class MenusScreen extends LitElement {
               <div class="list">
                 <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeProbe)}></span>
                 <wt-data-table
+                  noMatchesMessage=${tableNoMatches()}
                   data-test="menus"
                   class=${this.narrow ? "narrow" : ""}
                   aria-label=${t("menus.title")}
