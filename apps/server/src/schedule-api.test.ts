@@ -442,7 +442,7 @@ describe("mountScheduleApi — absences", () => {
     });
   });
 
-  it("400s an INVERTED date range (absence.invalid), never a 23514 500", async () => {
+  it("400s an INVERTED date range (absence.invalid), not the range check's 500", async () => {
     // The CROSS-field case the impossible-day test above does not reach: startsOn (10 May) and endsOn
     // (1 May) are each a real calendar day, so requirePeriod passes BOTH in isolation — only the PAIR
     // is malformed. createAbsence's ordering guard turns this into a structured 400 `absence.invalid`

@@ -460,7 +460,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("de-dups two orphan (sale_id NULL) raises via NULLS NOT DISTINCT", async () => {
+  it("de-dups two orphan (sale_id NULL) raises: the second records nothing and one row remains", async () => {
     const { tillId } = await seedTillForIncidents();
     const raise = () =>
       withTransaction(suite.db, async (tx) => {

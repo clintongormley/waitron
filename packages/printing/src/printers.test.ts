@@ -241,7 +241,7 @@ describe("updatePrinter", () => {
     ).toBe("printer.not_found");
   });
 
-  it("a transport change that leaves a required field absent (CHECK 23514) → printer.invalid_config", async () => {
+  it("a transport change that leaves a required field absent → printer.invalid_config", async () => {
     // network_tcp → usb needs local_key; the row has host but no local_key, so the transport-fields
     // CHECK fails on the update. `localKey` is NOT in the patch (undefined), exercising the
     // unique-violation-branch skip.
@@ -252,7 +252,7 @@ describe("updatePrinter", () => {
     ).toBe("printer.invalid_config");
   });
 
-  it("a re-key to an already-registered local_key (UNIQUE 23505) → printer.already_registered", async () => {
+  it("a re-key to an already-registered local_key → printer.already_registered", async () => {
     const cfg = await setup();
     await asTx(cfg, (tx) =>
       createPrinter(tx, cfg, { name: "Existing", transport: "usb", localKey: "SN-TAKEN" }),

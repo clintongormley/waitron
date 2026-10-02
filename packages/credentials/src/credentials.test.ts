@@ -12,8 +12,8 @@ const RING = loadKeyRing({
 });
 
 const STRIPE = {
-  secretKey: "sk_test_rls",
-  webhookSecret: "whsec_rls",
+  secretKey: "sk_test_vault",
+  webhookSecret: "whsec_vault",
   successUrl: "https://example.test/ok",
   cancelUrl: "https://example.test/no",
 };

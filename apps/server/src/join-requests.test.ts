@@ -702,7 +702,7 @@ describe("acceptDeviceJoinRequest", () => {
     });
   });
 
-  it("two concurrent accepts of ONE request: exactly one wins, the loser gets join_request.not_found — never a raw devices_pkey 23505", async () => {
+  it("two concurrent accepts of ONE request: exactly one wins, the loser gets join_request.not_found, and one devices row is written", async () => {
     const venue = await setupVenue(suite.db);
     // A `kds` profile bound to an EXISTING station, so resolveDeviceBinding writes nothing and the
     // one write both racers contend for is the `devices` INSERT that reuses the request's id.
