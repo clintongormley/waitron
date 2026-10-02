@@ -4696,7 +4696,7 @@ approved.
   Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites, which name
   no engine.
 
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and by C127's second pull request, which renamed the `pg` handles to `suite`, dropped five `.sqlite.` infixes and retitled the `bytea` test).**
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and by C127's second pull request (#1039), which renamed the `pg` handles to `suite`, dropped five `.sqlite.` infixes and retitled the `bytea` test).**
   Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
   because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`,
   lane E's PF8, not started) runs it by that name; rename it once PF8 has landed. The `pg` handle
