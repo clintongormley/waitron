@@ -38,16 +38,15 @@ export class WtNumberStepper extends LitElement {
       .field {
         align-self: baseline;
         display: grid;
-        grid-template-columns: minmax(0, 1fr);
       }
 
       /* An invisible copy of the label, at its larger resting size, is what widens the box: the
          label itself is positioned over the box and takes no room. Ordered after the number so the
-         number stays the box's baseline. */
+         number stays the box's baseline. Hidden, not only clipped: Chromium puts generated text
+         clipped to nothing in the accessibility tree all the same. */
       .field::before {
         content: attr(data-label-text);
         order: 1;
-        grid-area: 1 / 1;
         height: 0;
         overflow: hidden;
         visibility: hidden;
@@ -65,7 +64,6 @@ export class WtNumberStepper extends LitElement {
       }
 
       .field-control {
-        grid-area: 1 / 1;
         width: var(--wt-stepper-field-width);
         min-width: 100%;
         padding-inline: var(--wt-space-2);

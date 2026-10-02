@@ -617,6 +617,12 @@ test("the widened box shows the whole label resting large as well as floated sma
   );
 });
 
+test("the label's sizing copy is hidden from screen readers, which would otherwise read the label twice", async () => {
+  const el = await mount(`<wt-number-stepper label="${LONG_LABEL}" value="3"></wt-number-stepper>`);
+  expect(getComputedStyle(box(el), "::before").content).toBe(`"${LONG_LABEL}"`);
+  expect(getComputedStyle(box(el), "::before").visibility).toBe("hidden");
+});
+
 test("a required stepper's widened box shows the whole label and its star", async () => {
   const el = await mountInWideRow(
     `<wt-number-stepper label="${LONG_LABEL}" required></wt-number-stepper>`,
