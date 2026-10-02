@@ -1575,6 +1575,11 @@ export interface PartyBill {
   receiptAvailable: boolean;
   /** The language the bill's sale was filed in; absent while no sale is filed. */
   receiptLanguage?: string;
+  /** The issued invoice's number ("A/1"); absent while no sale is filed. */
+  invoiceNumber?: string;
+  /** The numbers of the credit notes correcting the invoice, oldest first; absent while no sale is
+   * filed. */
+  creditNotes?: string[];
 }
 
 /**
@@ -2292,10 +2297,28 @@ export class TillApi {
 
   /**
    * Cancel a PLACED order → `POST /api/working-orders/:id/cancel`. What it writes and refuses is
-   * `cancelPlacedOrder`'s (`apps/server/src/working-order.ts`).
+   * `cancelPlacedOrder`'s (`apps/server/src/working-order.ts`). An invoiced bill's cancel credits
+   * the invoice in full; an operator without that permission is refused
+   * `authorization.not_permitted` and the caller re-sends with the PIN of someone
+   * {@link listCancelCreditAuthorizers} lists.
    */
-  async cancelOrder(id: string, reason: string): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${id}/cancel`, "POST", { reason });
+  async cancelOrder(
+    id: string,
+    reason: string,
+    override?: { personId: string; pin: string },
+    options: ReadOptions = {},
+  ): Promise<void> {
+    await this.#request<void>(
+      `/api/working-orders/${id}/cancel`,
+      "POST",
+      { reason, ...(override ? { override } : {}) },
+      options.signal,
+    );
+  }
+
+  /** Who may approve cancelling and crediting an invoiced bill → `GET /api/cancel-credit-authorizers`. */
+  listCancelCreditAuthorizers(): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>("/api/cancel-credit-authorizers", "GET");
   }
 
   // --- Live floor. ---

@@ -259,6 +259,39 @@ describe("till-table-order-screen: paying a bill by its state", () => {
   });
 });
 
+describe("till-table-order-screen: Cancel and credit", () => {
+  const invoiced: PartyBill = {
+    ...check,
+    workingOrderId: "wo-invoiced",
+    status: "placed",
+    receiptAvailable: true,
+    invoiceNumber: "A/12",
+    creditNotes: [],
+  };
+
+  it("offers to cancel and credit a bill whose invoice was issued and nothing is paid", async () => {
+    const el = await mountScreen({ bills: [paidTab, invoiced] });
+    const asked = capture(el, "cancel-credit-bill");
+
+    const action = bill(el, "wo-invoiced")!.querySelector<HTMLElement>("[data-cancel-credit]")!;
+    expect(action.textContent!.trim()).toBe(t("cancel_credit.action"));
+    action.click();
+
+    expect(asked).toEqual([{ workingOrderId: "wo-invoiced" }]);
+  });
+
+  it.each<[string, PartyBill]>([
+    ["an open bill", { ...invoiced, status: "open" }],
+    ["a paid bill", { ...invoiced, status: "settled", outstanding: "0.00" }],
+    ["a presented bill with no invoice yet", { ...invoiced, receiptAvailable: false }],
+    ["a presented bill holding a payment", { ...invoiced, hasPayments: true }],
+  ])("offers no cancel on %s", async (_, shown) => {
+    const el = await mountScreen({ bills: [paidTab, shown] });
+
+    expect(bill(el, "wo-invoiced")!.querySelector("[data-cancel-credit]")).toBeNull();
+  });
+});
+
 describe("till-table-order-screen: the bill request", () => {
   /** The floor's row for the party's table, as the app passes it down. */
   const floorRow = (requested: boolean): TableState => ({

@@ -19,6 +19,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillUnpaidDepartureDialog } from "./widgets/unpaid-departure-dialog.js";
+import type { TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import { WorkingOrderStore } from "./state/working-order.js";
@@ -6411,5 +6412,412 @@ describe("till-app: recording an unpaid departure", () => {
     expect(dialog(el)).toBeNull();
     expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
     expect(tableOrder(el)!.finishRefused).toBe(true);
+  });
+});
+
+describe("till-app: cancelling and crediting an invoiced bill", () => {
+  const invoiced: PartyBill = {
+    ...checkBill,
+    status: "placed",
+    receiptAvailable: true,
+    receiptLanguage: "es",
+    invoiceNumber: "A/12",
+    creditNotes: [],
+  };
+  const cancelled: PartyBill = {
+    ...invoiced,
+    status: "abandoned",
+    outstanding: "0.00",
+    creditNotes: ["R/3"],
+  };
+  const dialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillCancelCreditDialog>("till-cancel-credit-dialog");
+  const approval = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>(
+      "till-supervisor-override-dialog[data-cancel-credit-approval]",
+    );
+  const bottom = (el: TillApp) =>
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+      .error;
+  const doneText = (el: TillApp) =>
+    dialog(el)!
+      .shadowRoot!.querySelector("[data-cancel-credit-done]")
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim() ?? null;
+  const offered = (el: TillApp) =>
+    tableOrder(el)!.shadowRoot!.querySelector('[data-bill="wo-check"] [data-cancel-credit]');
+
+  /** The server's side of the party's bills: `cancelOrder` cancels the bill unless it rejects. */
+  function billServer(cancel: (id: string) => Promise<void> = async () => {}) {
+    let bills: PartyBill[] = [tabBill, invoiced];
+    let readsFail = false;
+    return {
+      getPartyBills: vi.fn(async () => {
+        if (readsFail) throw new TypeError("Failed to fetch");
+        return bills;
+      }),
+      cancelOrder: vi.fn(async (id: string) => {
+        await cancel(id);
+        bills = [tabBill, cancelled];
+      }),
+      cancelBehindTheScenes: () => {
+        bills = [tabBill, cancelled];
+      },
+      failReads: () => {
+        readsFail = true;
+      },
+    };
+  }
+
+  /** The table is opened and the invoiced bill's Cancel and credit is pressed. */
+  async function openCancel(overrides: Record<string, unknown> = {}) {
+    const mounted = await mountApp({
+      listCancelCreditAuthorizers: vi
+        .fn()
+        .mockResolvedValue([{ personId: "sup-1", displayName: "Luis" }]),
+      ...billServer(),
+      ...overrides,
+    });
+    await openMesa(mounted.el);
+    await pressCancelCredit(mounted.el);
+    return mounted;
+  }
+
+  /** The open table's drawer shows its bills, and the invoiced bill's Cancel and credit is pressed. */
+  async function pressCancelCredit(el: TillApp): Promise<void> {
+    const screen = tableOrder(el)!.shadowRoot!;
+    if (screen.querySelector("[data-drawer]") === null) {
+      screen.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await flush(el);
+    }
+    screen.querySelector<HTMLElement>('[data-bill="wo-check"] [data-cancel-credit]')!.click();
+    await flush(el);
+  }
+
+  async function typeReason(el: TillApp, reason: string): Promise<void> {
+    const input = dialog(el)!
+      .shadowRoot!.querySelector('wt-input[name="reason"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = reason;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+  }
+
+  async function confirmCancel(el: TillApp): Promise<void> {
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-confirm]")!.click();
+    await flush(el, 6);
+  }
+
+  it("opens over the table naming the bill's invoice and amount, and sends nothing yet", async () => {
+    const { el } = await openCancel();
+
+    expect(dialog(el)!.invoiceNumber).toBe("A/12");
+    expect(dialog(el)!.amount).toBe("30.00");
+    expect(api.cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it("with the permission, sends the reason alone and names the credit note the bills now carry", async () => {
+    const { el } = await openCancel();
+
+    await typeReason(el, "  Charged to the wrong table ");
+    await confirmCancel(el);
+
+    expect(api.cancelOrder).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.cancelOrder).mock.calls[0]).toEqual([
+      "wo-check",
+      "Charged to the wrong table",
+      undefined,
+      { signal: expect.any(AbortSignal) },
+    ]);
+    expect(doneText(el)).toBe(t("cancel_credit.done").replace("{number}", "R/3"));
+    expect(offered(el)).toBeNull();
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
+  it("without the permission, asks someone who may issue credit notes for their PIN and sends it with the same reason", async () => {
+    let refuse = true;
+    const server = billServer(async () => {
+      if (refuse) {
+        refuse = false;
+        throw { code: "authorization.not_permitted", status: 403 };
+      }
+    });
+    const { el } = await openCancel({ ...server, openDrawer: vi.fn() });
+
+    await typeReason(el, "Wrong table");
+    await confirmCancel(el);
+
+    expect(api.listCancelCreditAuthorizers).toHaveBeenCalledOnce();
+    expect(approval(el)!.authorizers).toEqual([{ personId: "sup-1", displayName: "Luis" }]);
+    emit(approval(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+    await flush(el, 6);
+
+    expect(server.cancelOrder).toHaveBeenCalledTimes(2);
+    expect(server.cancelOrder.mock.calls[1]).toEqual([
+      "wo-check",
+      "Wrong table",
+      { personId: "sup-1", pin: "4321" },
+      { signal: expect.any(AbortSignal) },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(doneText(el)).toBe(t("cancel_credit.done").replace("{number}", "R/3"));
+    expect(api.openDrawer).not.toHaveBeenCalled();
+  });
+
+  it("shows a wrong PIN in the PIN prompt, and sends nothing more", async () => {
+    let sends = 0;
+    const server = billServer(async () => {
+      sends++;
+      throw sends === 1
+        ? { code: "authorization.not_permitted", status: 403 }
+        : { code: "pin.invalid", status: 401 };
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+    await confirmCancel(el);
+
+    emit(approval(el)!, "override-confirm", { personId: "sup-1", pin: "0000" });
+    await flush(el, 6);
+
+    expect(server.cancelOrder).toHaveBeenCalledTimes(2);
+    expect(approval(el)!.error).toBe("pin.invalid");
+    expect(doneText(el)).toBeNull();
+  });
+
+  it("Cancel on the PIN prompt closes it, leaves the dialog open and sends nothing more", async () => {
+    const server = billServer(async () => {
+      throw { code: "authorization.not_permitted", status: 403 };
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+    await confirmCancel(el);
+
+    emit(approval(el)!, "override-cancel");
+    await flush(el);
+
+    expect(approval(el)).toBeNull();
+    expect(dialog(el)).not.toBeNull();
+    expect(server.cancelOrder).toHaveBeenCalledOnce();
+  });
+
+  it("says who can approve it could not be read, and opens no PIN prompt", async () => {
+    const { el } = await openCancel({
+      ...billServer(async () => {
+        throw { code: "authorization.not_permitted", status: 403 };
+      }),
+      listCancelCreditAuthorizers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(approval(el)).toBeNull();
+    expect(bottom(el)).toBe(t("cancel_credit.approvers_failed"));
+  });
+
+  it.each([
+    ["bill.payments_received", "cancel_credit.refused_payments"],
+    ["order.payment_in_flight", "cancel_credit.refused_payment_in_flight"],
+    ["series.no_rectificative_for_node", null],
+    ["device.unauthorized", null],
+    ["device.till_required", null],
+    ["sale.correction_exceeds_total", null],
+    ["sale.correction_not_whole", null],
+    ["working_order.not_placed", null],
+  ] as const)(
+    "keeps the dialog open with %s's sentence, and reads the bills again",
+    async (code, key) => {
+      const server = billServer(async () => {
+        throw { code, status: 409 };
+      });
+      const { el } = await openCancel(server);
+      const billReads = server.getPartyBills.mock.calls.length;
+      await typeReason(el, "Wrong table");
+
+      await confirmCancel(el);
+
+      expect(server.cancelOrder).toHaveBeenCalledOnce();
+      expect(bottom(el)).toBe(key === null ? codeMessage(code) : t(key));
+      expect(doneText(el)).toBeNull();
+      expect(server.getPartyBills).toHaveBeenCalledTimes(billReads + 1);
+    },
+  );
+
+  it("when the cancel got no answer and the bills read again show it cancelled, says so without sending it again", async () => {
+    const server = billServer();
+    server.cancelOrder.mockImplementationOnce(async () => {
+      server.cancelBehindTheScenes();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(server.cancelOrder).toHaveBeenCalledOnce();
+    expect(doneText(el)).toBe(t("cancel_credit.done").replace("{number}", "R/3"));
+  });
+
+  it("when the cancel got no answer and the bill still waits for payment, says it may have been made, without sending it again", async () => {
+    const server = billServer();
+    server.cancelOrder.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(server.cancelOrder).toHaveBeenCalledOnce();
+    expect(bottom(el)).toBe(t("cancel_credit.unconfirmed"));
+    expect(doneText(el)).toBeNull();
+  });
+
+  it("a second press refused as no longer waiting, once the first cancel that got no answer has landed, names the credit note", async () => {
+    const server = billServer();
+    server.cancelOrder.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    server.cancelOrder.mockImplementationOnce(async () => {
+      throw { code: "working_order.not_placed", status: 409 };
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+    await confirmCancel(el);
+    expect(bottom(el)).toBe(t("cancel_credit.unconfirmed"));
+
+    server.cancelBehindTheScenes();
+    await confirmCancel(el);
+
+    expect(server.cancelOrder).toHaveBeenCalledTimes(2);
+    expect(doneText(el)).toBe(t("cancel_credit.done").replace("{number}", "R/3"));
+  });
+
+  it("a cancel refused as no longer waiting shows that refusal when the bills cannot be read again", async () => {
+    const server = billServer(async () => {
+      server.cancelBehindTheScenes();
+      server.failReads();
+      throw { code: "working_order.not_placed", status: 409 };
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(bottom(el)).toBe(codeMessage("working_order.not_placed"));
+    expect(doneText(el)).toBeNull();
+  });
+
+  it("when the bills cannot be read after the cancel, still says the bill is cancelled and offers no cancel again", async () => {
+    const server = billServer();
+    server.cancelOrder.mockImplementationOnce(async () => server.failReads());
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    expect(offered(el)).toBeNull();
+  });
+
+  it("an earlier operator's cancel answering after a sign-out leaves the next operator's PIN prompt open", async () => {
+    let sends = 0;
+    let answerFirst: () => void = () => undefined;
+    const server = billServer(async () => {
+      sends++;
+      if (sends === 1) await new Promise<void>((resolve) => (answerFirst = resolve));
+      else throw { code: "authorization.not_permitted", status: 403 };
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+    await confirmCancel(el);
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", canConfigureTill: false });
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    await pressCancelCredit(el);
+    await typeReason(el, "Charged to the wrong table");
+    await confirmCancel(el);
+    expect(approval(el)).not.toBeNull();
+
+    answerFirst();
+    await flush(el, 6);
+
+    expect(server.cancelOrder).toHaveBeenCalledTimes(2);
+    expect(approval(el)).not.toBeNull();
+    expect(dialog(el)!.done).toBeNull();
+  });
+
+  describe("a cancel that gets no answer at all", () => {
+    afterEach(() => vi.useRealTimers());
+
+    /** A cancel that never answers, and rejects as `fetch` does once its signal aborts, after
+     * `meanwhile` runs. */
+    function unanswered(meanwhile: () => void = () => undefined) {
+      return vi.fn(
+        (_id: string, _reason: string, _override?: unknown, options?: { signal?: AbortSignal }) =>
+          new Promise<void>((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () => {
+              meanwhile();
+              reject(new DOMException("aborted", "AbortError"));
+            }),
+          ),
+      );
+    }
+
+    it("is given up at the time limit, the bills are read again, and the operator may try again while the bill still waits", async () => {
+      const server = billServer();
+      const cancelOrder = unanswered();
+      const { el } = await openCancel({ ...server, cancelOrder });
+      await typeReason(el, "Wrong table");
+      const billReads = server.getPartyBills.mock.calls.length;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      await confirmCancel(el);
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(150_000);
+      await flush(el, 6);
+
+      expect(cancelOrder).toHaveBeenCalledOnce();
+      expect(cancelOrder.mock.calls[0]![3]).toEqual({ signal: expect.any(AbortSignal) });
+      expect(server.getPartyBills).toHaveBeenCalledTimes(billReads + 1);
+      expect(dialog(el)!.busy).toBe(false);
+      expect(bottom(el)).toBe(t("cancel_credit.unconfirmed"));
+      expect(
+        dialog(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          "[data-cancel-credit-confirm]",
+        )!.disabled,
+      ).toBe(false);
+    });
+
+    it("is given up at the time limit, and a bill the bills read again show cancelled is shown cancelled", async () => {
+      const server = billServer();
+      const cancelOrder = unanswered(() => server.cancelBehindTheScenes());
+      const { el } = await openCancel({ ...server, cancelOrder });
+      await typeReason(el, "Wrong table");
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      await confirmCancel(el);
+
+      await vi.advanceTimersByTimeAsync(150_000);
+      await flush(el, 6);
+
+      expect(cancelOrder).toHaveBeenCalledOnce();
+      expect(doneText(el)).toBe(t("cancel_credit.done").replace("{number}", "R/3"));
+    });
+  });
+
+  it("Cancel closes the dialog and sends nothing", async () => {
+    const { el } = await openCancel();
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(api.cancelOrder).not.toHaveBeenCalled();
   });
 });

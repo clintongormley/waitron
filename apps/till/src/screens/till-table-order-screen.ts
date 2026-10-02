@@ -3170,6 +3170,19 @@ export class TillTableOrderScreen extends LitElement {
               </wt-button>`
             : nothing
         }
+        ${
+          bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments
+            ? html`<wt-button
+                size="sm"
+                variant="secondary"
+                data-cancel-credit
+                @click=${() =>
+                  this.#dispatch("cancel-credit-bill", { workingOrderId: bill.workingOrderId })}
+              >
+                ${t("cancel_credit.action")}
+              </wt-button>`
+            : nothing
+        }
       </span>
     </li>`;
   }
