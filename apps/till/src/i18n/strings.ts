@@ -22,6 +22,8 @@ export const en = {
   "action.cancel": "Cancel",
   "form.name_required": "Enter a name",
   "form.fix_fields": "Correct the highlighted fields to continue.",
+  "form.combobox_search": "Search",
+  "form.combobox_no_results": "No results",
   "action.hold": "Hold",
   "action.authorize": "Authorize",
   // Tenders
@@ -885,6 +887,8 @@ export const es: Record<StringKey, string> = {
   "action.cancel": "Cancelar",
   "form.name_required": "Introduce un nombre",
   "form.fix_fields": "Corrige los campos marcados para continuar.",
+  "form.combobox_search": "Buscar",
+  "form.combobox_no_results": "Sin resultados",
   "action.hold": "Aparcar",
   "action.authorize": "Autorizar",
   "tender.cash": "Efectivo",

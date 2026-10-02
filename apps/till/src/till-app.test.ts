@@ -1,5 +1,6 @@
 import { page } from "vitest/browser";
-import { applyTokens, currentContentLanguages } from "@waitron/ui";
+import { type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
@@ -940,9 +941,8 @@ describe("till-app", () => {
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "1");
     await c.updateComplete;
-    const select = c.shadowRoot!.querySelector<HTMLSelectElement>("#service-zone")!;
-    select.value = "zone-deli";
-    select.dispatchEvent(new Event("change"));
+    const select = c.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
+    await chooseOption(select, "zone-deli");
     await flush(el);
 
     expect(select.value).toBe("zone-counter");

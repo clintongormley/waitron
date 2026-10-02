@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { TillProduct } from "../api/client.js";
+import type { ServiceZoneSummary, TillProduct } from "../api/client.js";
 
 const products: TillProduct[] = [
   {
@@ -35,6 +35,28 @@ describe.each(["light", "dark"] as const)("till-counter-screen a11y (%s theme)",
     const { host } = await mountWidget<TillCounterScreen>(
       "till-counter-screen",
       { store: new WorkingOrderStore(), products, operatorName: "Ana" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the service-area dropdown showing", async () => {
+    const serviceZones: ServiceZoneSummary[] = ["Upstairs bar", "Deli counter"].map((name, i) => ({
+      id: `zone-${i}`,
+      name,
+      departmentId: "bar",
+      departmentName: "Bar",
+      serviceMode: "prepay",
+    }));
+    const { host } = await mountWidget<TillCounterScreen>(
+      "till-counter-screen",
+      {
+        store: new WorkingOrderStore(),
+        products,
+        operatorName: "Ana",
+        serviceZones,
+        selectedServiceZoneId: "zone-1",
+      },
       theme,
     );
     await expectNoA11yViolations(host);
