@@ -1479,7 +1479,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, and A178c (the dashboard widgets) in its pull request; A178d–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, and A178c (the dashboard widgets) as #1015; A178d–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1637,7 +1637,7 @@ backup screen's two retention steppers cut their labels to "Keep…" and "Dele�
 blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is on
 `main` before this change (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
 
-**A178c — DONE.** Every field spec §9.2 lists for `apps/dashboard/src/widgets/` is drawn by a
+**A178c — DONE (#1015).** Every field spec §9.2 lists for `apps/dashboard/src/widgets/` is drawn by a
 primitive: the native selects are `wt-combobox` (`search="auto"`) and the product editor's
 per-language description is `wt-textarea`; `autofill-username.ts`'s hidden input stays. Also moved,
 though the spec's list predates it: `menu-prices-table.ts`'s select. The member list's option groups
