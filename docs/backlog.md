@@ -1327,8 +1327,8 @@ Available switch's round knob does not flip it — the run-it reviewer reported 
 before the branch, so it is in the shared `wt-switch`, not the row; not measured further.
 
 **The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE.** The owner:
-_"I don't like "per Each", it should either be "Each" or "per Unit""_. Settled on this reading
-(owner, 2026-10-02): "Each" with no unit, "per <unit>" with one. Built: with no unit the price
+_"I don't like "per Each", it should either be "Each" or "per Unit""_. **Decided (owner,
+2026-10-02):** "Each" with no unit, "per <unit>" with one. Built: with no unit the price
 field's button says "Each" ("Unidad") and its label "Price" ("Precio"), or "Base price" ("Precio
 base", the new `editor.base_price`) while a variant is Active; with a unit, "per kg" and "Price
 per kg" or "Base price per kg" as before. The same holds on a variant's own page; the variant
