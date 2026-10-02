@@ -37,7 +37,8 @@ export async function readOrderInvoice(
  * Credit the whole of an issued invoice with a corrective invoice in the node's live rectificative
  * series, filed on `saleTillId`, its lines the invoice's with their signs reversed and its VAT
  * breakdown the invoice's own negated (`wholeInvoice`), then settle the invoice owing nothing.
- * `recordCorrection` checks `sale.rectify` against `authz`.
+ * `recordCorrection` checks `sale.rectify` against `authz` and counts nothing, so an override in
+ * `authz` must already have been checked under a wrong-PIN limit.
  */
 export async function creditWholeInvoice(
   tx: Transaction,

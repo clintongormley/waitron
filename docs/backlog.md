@@ -2510,7 +2510,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     an R5 corrective invoice, by differences, for the whole invoice in the same transaction, settles
     the original at nothing owed and abandons the order; an order with no invoice is abandoned with
     nothing filed.
-    It needs `sale.rectify` from the signed-in person, or from a manager who enters their PIN
+    It needs `sale.rectify` from the signed-in person, or from someone holding it who enters their PIN
     (B33, below), and an enrolled device, whose till the credit
     note is filed on, and refuses a bill holding a payment or with one in flight. Any placed order,
     invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
@@ -2520,24 +2520,32 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
     landing second, removes them and updates those cases (owner-approved), and checks an
     abandoned bill before Paid in `BILL_STATUS`, since the cancel settles the invoice. Open:
-    - **Done (B33, this branch, `feat/service-cancel-credit-pin`; needs owner review): a manager's
-      PIN lets someone without `sale.rectify` cancel and credit an invoiced order.** The cancel's
+    - **Done (B33, this branch, `feat/service-cancel-credit-pin`; needs owner review): the PIN of
+      someone holding `sale.rectify` (a supervisor, manager or admin) lets someone without it cancel and
+      credit an invoiced order.** The cancel's
       body may carry `override: { personId, pin }`, checked as an unpaid departure, a bill refund
       and opening the drawer check theirs: a wrong PIN is `pin.invalid` and is counted, per till
-      and per manager, in the count those routes share (`overridePinAttempts`,
+      and per person, in the count those routes share (`overridePinAttempts`,
       `apps/server/src/till-api.ts`), so wrong tries on any of them add up to one lock-out (the
-      case shows four wrong tries on the cancel locking out the drawer too); a manager without the permission is
-      `authorization.not_permitted`. The credit note's `sales.authorized_by` names the manager, and
+      case shows four wrong tries on the cancel locking out the drawer too); the PIN of someone
+      without the permission (staff, in the case) is
+      `authorization.not_permitted`. The credit note's `sales.authorized_by` names the person whose
+      PIN was entered, or the operator when the operator holds `sale.rectify` (the override is then
+      not checked), and
       the cancel's amendment names the person who cancelled. `recordCorrection` checks the
       permission again and counts nothing, so the cancel checks the PIN first, with counting, and
-      then hands the same override on; the PIN is therefore checked twice on success. An order
-      with no invoice needs no permission and its override is not checked. Cases:
+      then hands the same override on; the PIN is therefore checked twice on success. On an order
+      with no invoice the override's PIN is neither checked nor counted, though a malformed
+      override is still refused. Cases:
       `apps/server/src/cancel-invoiced-order.test.ts`, "cancelling an invoiced order on a
-      manager's PIN". No till screen sends the PIN yet: that is B32's.
+      supervisor's PIN". No till screen sends the PIN yet: that is B32's.
     - **No till screen offers the cancel yet.** A "Cancel and credit" action on an invoiced, unpaid
       bill, shown only to someone allowed to correct a sale (since B33, also to anyone else, asking for
-      a manager's PIN), is queued as lane B's B32 (owner,
-      2026-10-02 ~12:05).
+      the PIN of someone who holds it), is queued as lane B's B32 (owner,
+      2026-10-02 ~12:05). Unlike the drawer, refund and unpaid-departure overrides
+      (`GET /api/drawer/authorizers`, `GET /api/refund-authorizers`,
+      `GET /api/unpaid-departure-authorizers`), the cancel has no route listing who may approve it,
+      so B32 needs one, listing the holders of `sale.rectify`.
     - **A credit note's lines do not record which invoice line each one reverses** — no column
       holds that link, so a credit note cannot be traced back line by line. Storing it on every
       corrective line `recordCorrection` writes is queued as lane C's C132 (owner, 2026-10-02).

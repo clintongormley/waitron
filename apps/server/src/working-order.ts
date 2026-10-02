@@ -4958,9 +4958,10 @@ export async function markOrderPlaced(
  * is unresolved or captured and not yet filed. `saleTillId` is called only for such an order. Any
  * placed order is refused while an integrated card collection of it runs in this process.
  *
- * The credit needs `sale.rectify` from the operator or from `override`, whose PIN is checked under
- * `override.attempts` before the credit, so a wrong one counts as it does on the other till
- * overrides. `recordCorrection`'s own check, which counts nothing, then passes the same override.
+ * The credit needs `sale.rectify` from the operator or from `override`. Only when the operator lacks
+ * it is the override's PIN checked, under `override.attempts` before the credit, so a wrong one
+ * counts as it does on the other till overrides. `recordCorrection`'s own check, which counts
+ * nothing, then passes the same override.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,

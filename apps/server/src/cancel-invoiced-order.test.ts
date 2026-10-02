@@ -421,7 +421,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     );
   });
 
-  it("refuses an operator without sale.rectify, writing nothing and using no invoice number", async () => {
+  it("refuses an operator without sale.rectify and no override, writing nothing and using no invoice number", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
 
     const answer = cancel(id, venue.cookie);
@@ -485,6 +485,29 @@ describe("cancelling a placed order whose invoice was issued", () => {
       await expectRefusedUnwritten(id, cancel(id), {
         status: 409,
         code: "series.no_rectificative_for_node",
+      });
+    } finally {
+      await inTx(venue, (tx) =>
+        insertNodeSeriesTx(tx, venue.cfg.nodeId, [
+          { code: `R${randomUUID().slice(0, 4)}`, purpose: "rectificative" },
+        ]),
+      );
+    }
+  });
+
+  it("refuses an operator without sale.rectify before looking for a rectificative series, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const retired = await activeRectificative();
+    await inTx(venue, (tx) =>
+      tx
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date() })
+        .where(eq(invoiceSeries.id, retired!.id)),
+    );
+    try {
+      await expectRefusedUnwritten(id, cancel(id, venue.cookie), {
+        status: 403,
+        code: "authorization.not_permitted",
       });
     } finally {
       await inTx(venue, (tx) =>
@@ -777,7 +800,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 });
 
-describe("cancelling an invoiced order on a manager's PIN", () => {
+describe("cancelling an invoiced order on a supervisor's PIN", () => {
   type Override = { personId: unknown; pin: unknown } | string;
 
   function cancelWith(override: Override, cookie = venue.cookie, app = venue.app) {
@@ -806,7 +829,7 @@ describe("cancelling an invoiced order on a manager's PIN", () => {
     return { app, clockAt };
   }
 
-  it("credits the invoice for an operator without sale.rectify, naming the manager as authorising", async () => {
+  it("credits the invoice for an operator without sale.rectify, naming the supervisor as authorising", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
 
@@ -828,7 +851,7 @@ describe("cancelling an invoiced order on a manager's PIN", () => {
     ]);
   });
 
-  it("refuses a wrong manager PIN as pin.invalid, writing nothing", async () => {
+  it("refuses a wrong supervisor PIN as pin.invalid, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
 
     await expectRefusedUnwritten(id, cancelWith({ personId: supervisorId, pin: "0000" })(id), {
@@ -872,7 +895,10 @@ describe("cancelling an invoiced order on a manager's PIN", () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
 
-    const answer = await cancelWith({ personId: supervisorId, pin: "0000" }, supervisorCookie)(id);
+    const answer = await cancelWith(
+      { personId: venue.operatorId, pin: "5555" },
+      supervisorCookie,
+    )(id);
 
     expect(answer.status).toBe(200);
     expect(await creditsOf(original.id)).toEqual([
@@ -911,6 +937,77 @@ describe("cancelling an invoiced order on a manager's PIN", () => {
     expect(await creditsOf(original.id)).toEqual([
       expect.objectContaining({ authorizedBy: supervisorId }),
     ]);
+  });
+
+  function noInvoiceZone(name: string) {
+    return inTx(venue, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: venue.cfg.locationId, name })
+        .returning({ id: floorZones.id });
+      return offerProducts(tx, venue.cfg, {
+        zone: { zoneId: zone!.id },
+        serviceMode: "ticket_then_pay",
+      });
+    });
+  }
+
+  it("never checks an override sent with an order that has no invoice, so a wrong PIN there does not count", async () => {
+    const ticketFirst = await noInvoiceZone("Barra sin factura");
+    const { app } = throttledApp();
+    const wrong = cancelWith({ personId: supervisorId, pin: "0000" }, venue.cookie, app);
+
+    for (let i = 0; i < 5; i += 1) {
+      const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+      expect((await wrong(id)).status).toBe(200);
+      expect(await statusOf(venue, id)).toBe("abandoned");
+    }
+    const invoiced = await placed([{ name: "Caña", quantity: "1" }]);
+    const right = cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN }, venue.cookie, app);
+    expect((await right(invoiced)).status).toBe(200);
+  });
+
+  it("refuses an override that is not an object even on an order with no invoice, writing nothing", async () => {
+    const ticketFirst = await noInvoiceZone("Barra sin factura, mal formada");
+    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+    const before = fiscalSnapshot();
+
+    const answer = await cancelWith(SUPERVISOR_PIN)(id);
+
+    expect({ status: answer.status, code: answer.json.code }).toEqual({
+      status: 400,
+      code: "management.request_invalid",
+    });
+    expect(fiscalSnapshot()).toEqual(before);
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(await amendmentsOf(id)).toEqual([
+      { kind: "order_placed", actorId: venue.operatorId, reason: null },
+    ]);
+  });
+
+  it("an override sent by someone who holds sale.rectify is never checked, so it neither counts nor clears", async () => {
+    const { app } = throttledApp();
+    const byStaff = (pin: string) => cancelWith({ personId: supervisorId, pin }, venue.cookie, app);
+    const bySupervisor = (pin: string) =>
+      cancelWith({ personId: supervisorId, pin }, supervisorCookie, app);
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+
+    for (let i = 0; i < 3; i += 1) {
+      expect((await byStaff("0000")(id)).status).toBe(401);
+    }
+    expect(
+      (await bySupervisor("0000")(await placed([{ name: "Caña", quantity: "1" }]))).status,
+    ).toBe(200);
+    expect(
+      (await bySupervisor(SUPERVISOR_PIN)(await placed([{ name: "Caña", quantity: "1" }]))).status,
+    ).toBe(200);
+    // Had the supervisor's wrong PIN counted, this would already be 429; had their right PIN
+    // cleared the count, the right PIN after it would be accepted.
+    expect((await byStaff("0000")(id)).status).toBe(401);
+    await expectRefusedUnwritten(id, byStaff(SUPERVISOR_PIN)(id), {
+      status: 429,
+      code: "pin.throttled",
+    });
   });
 });
 

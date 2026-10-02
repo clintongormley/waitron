@@ -138,8 +138,8 @@ till, we can specify whether it should control the till or not. So even if the p
 between tills, any till that says it should control it, does."_ (B29). A handheld places, collects
 and cancels like a till; the operator's permissions decide. Placing, and cancelling an order with
 no invoice, check no permission, only a signed-in operator; cancelling an order whose invoice was
-issued needs `sale.rectify` (C126), which staff do not hold, from the operator or from a manager
-who enters their PIN, as an unpaid departure, a bill refund and opening the drawer accept (B33);
+issued needs `sale.rectify` (C126), which staff do not hold, from the operator or from someone
+holding it who enters their PIN, as an unpaid departure, a bill refund and opening the drawer accept (B33);
 collecting, like every route that takes
 a payment, needs `sale.take_payment` (C128), which every role holds. Guard:
 `apps/server/src/take-payment-permission.test.ts`, weaker than its name — it covers only the four
@@ -288,7 +288,7 @@ answers are reachable only after a credential was proved and stay: `totp.require
 dashboard's code step, after a right password), `google.second_factor_required` (after a valid
 Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote and
 `GET /management-api/membership` when the password and code are right but the person lacks the
-permission, and from the drawer and refund overrides (`authorize`,
+permission, and from the drawer, refund, unpaid-departure and cancel overrides (`authorize`,
 `packages/identity/src/authorize.ts`) and the manual-refund confirmer when the PIN is right but the
 person lacks the permission). The adjustment approver answers `adjustment.approval_required` for a
 right PIN whose role is too low (`apps/server/src/adjustments-apply.ts`). Guards: the one-answer cases in `packages/identity/src/manager-login.test.ts` and
@@ -299,8 +299,10 @@ right PIN whose role is too low (`apps/server/src/adjustments-apply.ts`). Guards
 `GET /management-api/membership` (whose suite, `management-api.membership.test.ts`, tries a wrong
 password and a wrong code, not every cause), the adjustment approver
 (`apps/server/src/adjustments-apply.ts`), the refund override and the manual-refund confirmer
-(`apps/server/src/bill-refunds.ts`) rest on identity's cases alone, and a new sign-in route is seen
-by none of them. Built in C95, #930.
+(`apps/server/src/bill-refunds.ts`) rest on identity's cases alone; the unpaid-departure override
+(`apps/server/src/unpaid-departure.ts`) and the cancel override (`apps/server/src/working-order.ts`)
+have suites that try a wrong PIN (and, for the cancel, a malformed override), not an unknown,
+suspended or pending person; and a new sign-in route is seen by none of them. Built in C95, #930.
 
 **UI primitives in `packages/ui`**
 
