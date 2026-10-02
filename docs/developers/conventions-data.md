@@ -1330,15 +1330,25 @@ unchanged-column lists),
 `working_order_lines_require_open_parent_update` with an exception for a line's first sent stamp),
 `packages/db/drizzle/0056_placed_order_handover.sql` (re-creates
 `working_orders_enforce_transition` with an exception for a sent, unpaid order's handover stamp),
+`packages/db/drizzle/0059_drop_product_triggers_before_rebuild.sql` and
+`packages/db/drizzle/0061_recreate_product_triggers.sql` (the triggers on `products` around
+`0060`'s rebuild),
+`packages/db/drizzle/0064_line_locale_triggers_text_only.sql` (re-creates the two locale update
+triggers on `working_order_lines` to fire only when an update changes the name map each checks or
+moves the line),
 `packages/media/drizzle/0001_image_references.sql`,
-`packages/media/drizzle/0002_section_image_references.sql` and
-`packages/media/drizzle/0003_published_image_references.sql`) each carry their own
+`packages/media/drizzle/0002_section_image_references.sql`,
+`packages/media/drizzle/0003_published_image_references.sql` and
+`packages/media/drizzle/0007_recreate_product_image_triggers.sql`) each carry their own
 `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-26 (2026-09-27 for
 `0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql`,
 `0033_line_served_exception.sql` and `0038_main_bill_release.sql`, 2026-09-29 for
 `0042_placed_bill_moves.sql`, `0043_drop_triggers_before_rebuild.sql` and
 `0045_recreate_triggers_after_rebuild.sql`, 2026-09-30 for `0050_line_list_price_frozen.sql`, and
-2026-10-01 for `0053_line_sent_after_close.sql` and `0056_placed_order_handover.sql`)
+2026-10-01 for `0053_line_sent_after_close.sql` and `0056_placed_order_handover.sql`, and
+2026-10-02 for core `0059_drop_product_triggers_before_rebuild.sql`,
+`0061_recreate_product_triggers.sql` and `0064_line_locale_triggers_text_only.sql` and media
+`0007_recreate_product_image_triggers.sql`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript

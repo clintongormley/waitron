@@ -58,6 +58,8 @@ import {
  * `packages/db/drizzle/0050_line_list_price_frozen.sql`, with `list_unit_price_gross` in its
  * unchanged-column lists, and by `packages/db/drizzle/0053_line_sent_after_close.sql`, which lets a
  * presented or paid bill's line take a first `sent_at`.
+ * `packages/db/drizzle/0064_line_locale_triggers_text_only.sql` re-creates the two locale update
+ * triggers to fire only when an update changes the name map each one checks or moves the line.
  * Some triggers ACT rather than refuse.
  * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
  * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`, and again after the

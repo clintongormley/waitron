@@ -1753,14 +1753,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       - Cancel on the menu-change question holds until the next publish, re-read or Send, not
         the next poll.
   - **Task 9 (#814, served by quantity, release reminders, Current orders).** Left open:
-    - Once a venue's invoice languages change, marking a line served on a paid bill is refused: the
-      two locale triggers on order lines (`working_order_lines_check_locales_update` and
-      `working_order_lines_check_variant_locales_update`, core migration `0027`) check a line's
-      descriptions on every update. The Receipts page now changes a location's language, and refuses
-      while an order could still write a line; that refusal can block indefinitely, so the trigger
-      change is still wanted (C113's entry under A8). **Next action:** limit both triggers to
-      updates of `descriptions` (and `variant_descriptions`) and `working_order_id` — queued as lane
-      C's C124.
     - A line outside any group that needs no kitchen, held, and first released after its bill was
       paid could not be marked served (`group.line_held`), because `stampSent` wrote `sent_at`
       only on an open bill. Since B21 (#969, core `0053`) `stampSent` writes on any bill but an
@@ -2875,16 +2867,18 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Server: `GET`
   and `PUT /management-api/receipt-language` (`apps/server/src/location-settings-api.ts`).
   - **Open, for the owner:**
-    - **A change is refused while any order at the location can still write a line, and one such
-      order can block it indefinitely** (`receipt.language_orders_open`). The database refuses a
-      write to an order line whose language keys no longer match the location. Measured by the
-      till's own routes (`apps/server/src/location-settings-api.orders-open.test.ts`): open and
-      placed orders block; so does a paid bill whose party, or the party it was merged into, is
-      still seated, even when every dish is served, because a serve can be taken back; and so does
-      a paid order with a dish no station took. A paid counter sale whose lines were all sent, a
-      bill whose party has left and an abandoned bill do not. The real fix is a change to the
-      order-line trigger, which is a migration: queued 2026-10-02 as lane C's C124 (narrow both
-      triggers, then narrow this refusal to the orders that can still trigger them).
+    - **A change is refused while an open order at the location holds a line**
+      (`receipt.language_orders_open`; narrowed by lane C's C124, 2026-10-02, with core
+      `0064_line_locale_triggers_text_only`). The order-line language triggers now check a line's
+      names only when an update changes them or moves the line, so the till can still split such a
+      line, which copies its old-language names into a new line, or move it to another bill, and the
+      database refuses both once the language differs. Measured by the till's own routes
+      (`apps/server/src/location-settings-api.orders-open.test.ts`): placed orders, paid bills whose
+      party is still seated, a paid order with a dish no station took, and an open bill with no line
+      no longer block, and each can still be served, unserved, sent or collected after the change.
+      If a language is changed underneath an open bill by another road (the configuration import
+      writes `invoice_locales` directly), the bill's next split answers an unmapped 500
+      `server.internal`; that case is pinned in the same test file.
     - After a change, a paid counter sale with one dish a station took and one it did not is not
       blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
       did before the change, and leaves the order's lines unchanged. No till screen calls that
