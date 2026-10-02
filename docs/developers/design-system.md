@@ -1008,8 +1008,15 @@ variant's VAT, unit or photo from its parent product, an extra's price from its 
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
 required. A translated field inherited as ONE value across its languages (a variant's description)
-shows its placeholder hints only while every language is blank; once any language has text, the
-record's own value applies and its blank languages show no placeholder hint.
+shows the parent's text as its placeholder hints only while every language is blank; once any
+language has text, the record's own value applies and its blank languages show no placeholder hint
+(whether they should show the variant's own default-language text instead is open: A220 in
+`docs/backlog.md`). A blank description in a language other than the venue's default shows the
+default language's description as its placeholder — a product's own, as it is typed, or, on a
+variant still blank in every language, the parent's where the parent has none in that language
+(`defaultLanguageHint`, `apps/dashboard/src/widgets/form-fields.ts`). That hint is the owner's
+decision (A220); no reader fills a missing language with it, and nothing outside the product editor
+shows a product description today (the reader check in A220, `docs/backlog.md`).
 
 - **Text and price fields** (`wt-input`, `wt-price-input`, `wt-textarea`): the fallback value is the
   field's `placeholder`. All three primitives paint it `--wt-color-text-muted`, because Chromium's

@@ -1424,34 +1424,47 @@ and a new product's draft starts on General. A VAT, unit or price error opens th
 (`SECTION_FIELDS`).
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
-— OPEN.** The owner: _"the Kitchen name, and customer facing names aren't showing the internal
-name as the default value, at least when I add a variant and fill in the internal name the first
-time"_. A blank kitchen name or customer name falls back to the staff name
-(`kitchenPresentationName` and `customerPresentationText`,
-`packages/catalogue/src/product-presentation.ts`), but no field says so: the product editor's
-header comment stated "The names are never hinted", and the variant window
-(`apps/dashboard/src/widgets/variant-form.ts`) set no hint on them either (both fixed by A172).
-**Wanted:** while a kitchen or customer name is blank, its field shows what will be used instead,
-as a placeholder that follows the staff name as it is typed — on a product, on a variant's page and
-in the variant window. The placeholder must say what `product-presentation.ts` would print, not a
-second rule: a variant falls back to its OWN name, never its parent's kitchen or customer name; and
-the customer name falls back only in the venue's default language (wrong: see the C122 correction
-in A172's entry above), so decide with the owner what the other languages' fields show (blank, or
-the default-language name the reader falls back to). Read, not reproduced: "the first time" may
-mean the hint is missing only on a new variant; check an existing one too.
-A172 has since built the name hints — the kitchen and customer-facing names, in all five editors,
-on a new variant and an existing one — so what is left of A220 is the description hints and their
-checks.
+— OPEN (one owner decision left).** The owner: _"the Kitchen name, and customer facing names
+aren't showing the internal name as the default value, at least when I add a variant and fill in
+the internal name the first time"_. A172 built the name hints (kitchen and customer-facing names, in
+all five editors, on a new variant and an existing one). This item added the description hints: in
+the product editor, a blank description in a language other than the venue's default shows the
+default-language description as its grey hint, following it as it is typed; on a variant's page
+still blank in every language, a language the parent left blank shows the parent's default-language
+description (`defaultLanguageHint`, `apps/dashboard/src/widgets/form-fields.ts`). The variant window
+(`variant-form.ts`) has no description fields.
+**What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test
+built a product described only in Spanish (the default), a variant with its own Spanish description
+and a variant with none, then read them through `listProducts`'s effective read, the product
+editor's read, the published menu (`buildMenuDocument`) and the live offers the till receives
+(`applyLiveFields`). Nothing fills a missing language anywhere: (a) the product carries `{ es: … }`
+only; (b) the described variant's effective description is its own `{ es: … }`, not the parent's;
+(c) the bare variant's effective description is the parent's map. The published menu and the till's
+offers carry only the dish's own description and NO variant description at all, and nothing outside
+the product editor shows a product description today — no till screen, receipt, ticket or menu.
+This command printed nothing:
+`grep -rn "\.description\b\|description:" apps/till/src apps/server/src --include='*.ts' | grep -v '\.test\.ts'`
+(a control over `apps/dashboard/src` printed 30 lines). The wider `grep -rln description` hits in
+those folders, read one by one, include no product description (they are names of lines, options,
+sections, products and units, a location's operation description, and comments); under
+`packages/*/src` the first command's only product-description hits are in `packages/catalogue` and
+the column's declaration in `packages/db`. So the hint and the reader disagree in one way: the hint
+shows the default-language description in another language, while every reader carries nothing
+there — there is no printed menu text to match yet.
+Precedence on a variant with both: its own description wins, as (b) showed, and wins as one value
+across every language (the coalesce of the whole column in `effectiveProductColumns.description`,
+`packages/catalogue/src/variant-fallback.ts`, read, not run with a parent in a second language).
 **Decided (owner, 2026-10-02):** a customer-name field in another language shows the
 default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
 (the owner's account of the menu; check it against the reader before relying on it). The kitchen
-name shows its hint too: the staff name (owner, 2026-10-02), which is what
-`kitchenPresentationName` prints. **And descriptions:** a description field
-in a secondary language shows the default-language description as its hint (owner). Today the
-description fields hint only on a variant's page, with the PARENT's text
-(`descriptionHints`, `renderDescriptors`); decide which hint wins on a variant whose parent has a
-description and whose own default-language one is filled in, and check what the menu shows for a
-missing description before claiming the hint matches it.
+name shows its hint too: the staff name, which is what `kitchenPresentationName` prints. A
+description field in a secondary language shows the default-language description as its hint.
+**Next action:** owner to decide — on a variant's page whose own description has text, should a
+blank language show the variant's own default-language description as its hint? The owner's rule
+says yes; the existing test "hints a variant's description in every language only while every
+language is blank" (`apps/dashboard/src/widgets/product-editor.test.ts`) pins no hint there —
+with the change made, its second check (placeholders after typing the English description) read
+`["", "Served in a glass"]` instead of `["", ""]`. Left as the test says until the owner decides.
 
 **Variants in the Products list look like part of their product (A221, owner 2026-10-02) — OPEN,
 designed.** The owner, on a screenshot of an opened "Cured pork loin" with its variant "More
@@ -5092,15 +5105,29 @@ approved.
   Playwright's "Frame was detached" during a whole-workspace run, and then passed on its own with no
   code change. The original log and screenshot were kept; the cause is unexplained, so retain them
   again on the next sighting rather than re-running to green.
-- **A sixth, seen once (2026-09-20) on #469, a branch that touches no browser package at all.**
+- **A sixth, seen in CI 2026-09-20 on #469, a branch that touches no browser package at all, and
+  reproduced locally 2026-10-02.**
   `test-dashboard` failed `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and
   cancels on Escape from a focused field", at `expect(cancel).toHaveBeenCalledTimes(1)`; the Enter half
-  of the same test passed. It did not reproduce locally. The cause is NOT established — two
-  hypotheses were traced through the code but neither was run (the likelier is a re-render provoked
-  by the submit taking focus off the field between the back-to-back `{Enter}` and `{Escape}`).
-  **Next action:** on the next sighting keep the job log and the screenshot, and fix it at the root
-  — the first hypothesis is cheap to close by awaiting the component's `updateComplete` between the
-  two key presses and checking focus is still in the field.
+  of the same test passed. It did not reproduce locally at the time. The cause is NOT established —
+  two hypotheses were traced through the code but neither was run (the likelier is a re-render
+  provoked by the submit taking focus off the field between the back-to-back `{Enter}` and
+  `{Escape}`).
+  **Reproduced locally 2026-10-02 (A220 branch), with a likely cause.** Running that file beside
+  `product-editor.test.ts` and two of the dashboard's a11y suites (the run's command was not
+  recorded), it failed 2 times in 14 (and 0 in 8 on main's code, too few runs to tell the two
+  apart). A throwaway probe pressed Escape in a fresh variant window 40 times beside
+  `product-editor.test.ts`, run twice: each time 38 `wt-cancel`s had arrived when
+  `userEvent.keyboard("{Escape}")` resolved, 2 arrived only after a 50 ms wait, and none failed to
+  arrive. The probe did not press Enter first, so it did not reproduce the failing test's sequence.
+  `wt-dialog` sends `wt-close` from the dialog's `close` event, which the browser delivers later,
+  and the test checks the spy straight after the key press (read, not run:
+  `packages/ui/src/components/wt-dialog.ts`, re-sent as `wt-cancel` by
+  `apps/dashboard/src/widgets/variant-form.ts`).
+  **Next action:** on a sighting keep the job log and the screenshot. The two candidate fixes are
+  awaiting the component's `updateComplete` between the two key presses (the older focus
+  hypothesis, untested) and waiting for the call with `expect.poll` (the timing finding above); both
+  change the test, so either waits for an owner-approved change.
 - **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
   pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
   with no colour evidence, so nothing here explains it — treat it as still unexplained. And
