@@ -3950,6 +3950,7 @@ interface EditableLine {
     firedAt: string | null;
     state: TicketState;
     stationId: string;
+    stationChosenAt: string | null;
     courseId: string | null;
     madeHere: boolean;
     /** Thousandths. */
@@ -4160,6 +4161,7 @@ async function readEditableOrder(
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
+      stationChosenAt: ticketItems.stationChosenAt,
       ticketCourseId: ticketItems.courseId,
       madeHere: ticketItems.madeHere,
       firedQuantity,
@@ -4197,6 +4199,7 @@ async function readEditableOrder(
             firedAt: row.firedAt,
             state: row.state!,
             stationId: row.stationId!,
+            stationChosenAt: row.stationChosenAt,
             courseId: row.ticketCourseId,
             madeHere: row.madeHere!,
             firedQuantity: row.firedQuantity,
@@ -4469,16 +4472,14 @@ async function applyLineEdits(
               .map(({ child, perDish }) => ({ productId: child.productId!, quantity: perDish })),
           }))
         : (intent.extras.set as ExtraSelection[]);
+    const inheritMakeAt =
+      intent.makeAt === undefined ||
+      (intent.makeAt === null && parent.ticket?.stationChosenAt != null);
     const asOffered = (quantity: string): RequestedLine => ({
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
       quantity,
-      makeAt:
-        intent.makeAt == null && parent.ticket !== null
-          ? parent.makeAtStationId
-          : intent.makeAt === undefined
-            ? parent.makeAtStationId
-            : intent.makeAt,
+      makeAt: inheritMakeAt ? parent.makeAtStationId : intent.makeAt,
       ...(intent.note === null ? {} : { note: intent.note }),
       frozenOptions: optionSnapshots,
       extras: picks,
@@ -4495,15 +4496,13 @@ async function applyLineEdits(
               kitchen: kitchenStateOf(parent),
               joins: parent,
               origin: parent,
-              inheritMakeAt:
-                intent.makeAt === undefined || (intent.makeAt === null && parent.ticket !== null),
+              inheritMakeAt,
             }
           : {
               kind: "line",
               kitchen: "fire",
               origin: parent,
-              inheritMakeAt:
-                intent.makeAt === undefined || (intent.makeAt === null && parent.ticket !== null),
+              inheritMakeAt,
             },
       );
     }
