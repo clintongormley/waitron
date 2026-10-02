@@ -82,6 +82,7 @@ export function onDishesOrTheirExtras(tx: Transaction, lineIds: readonly string[
   if (lineIds.length === 0) return sql`false`;
   return or(
     inArray(ticketItems.workingOrderLineId, lineIds),
+    // Keep the child lookup independent of any outer working_order_lines join.
     inArray(
       ticketItems.workingOrderLineId,
       tx

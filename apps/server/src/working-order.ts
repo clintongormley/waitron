@@ -1875,6 +1875,21 @@ export async function sendLines(
   lineNos: number[],
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
+  const namedLines =
+    lineNos.length === 0
+      ? []
+      : await tx
+          .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, tabId),
+              inArray(workingOrderLines.lineNo, lineNos),
+            ),
+          );
+  if (namedLines.some((line) => line.parentLineId !== null)) {
+    throw new AppError("management.request_invalid", { field: "lineNo" });
+  }
   const heldGroupLines = await tx
     .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
     .from(workingOrderLines)
@@ -1889,20 +1904,7 @@ export async function sendLines(
   const heldGroupLineIds = heldGroupLines.map((line) => line.id);
   const heldGroupLineIdSet = new Set(heldGroupLineIds);
   // An empty list fires every HELD line of the tab outside a held group.
-  const namedLineIds =
-    lineNos.length === 0
-      ? []
-      : (
-          await tx
-            .select({ id: workingOrderLines.id })
-            .from(workingOrderLines)
-            .where(
-              and(
-                eq(workingOrderLines.workingOrderId, tabId),
-                inArray(workingOrderLines.lineNo, lineNos),
-              ),
-            )
-        ).map((line) => line.id);
+  const namedLineIds = namedLines.map((line) => line.id);
   // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
   const firedNow = nowIso();
   const routing = routingOnce(tx, cfg, new Date(firedNow));
@@ -1984,12 +1986,19 @@ export async function recallLines(
     return;
   }
   const lines = await tx
-    .select({ lineNo: workingOrderLines.lineNo, id: workingOrderLines.id })
+    .select({
+      lineNo: workingOrderLines.lineNo,
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+    })
     .from(workingOrderLines)
     .where(
       and(eq(workingOrderLines.workingOrderId, tabId), inArray(workingOrderLines.lineNo, lineNos)),
     );
   const foundLineNos = new Set(lines.map((r) => r.lineNo));
+  if (lines.some((line) => line.parentLineId !== null)) {
+    throw new AppError("management.request_invalid", { field: "lineNo" });
+  }
   for (const lineNo of lineNos) {
     if (!foundLineNos.has(lineNo)) {
       throw new AppError("tab.line_not_found", { tabId, lineNo });
@@ -2505,11 +2514,14 @@ export async function setLineCourse(
     await requireLiveCourse(tx, cfg, courseId);
   }
   const [line] = await tx
-    .select({ id: workingOrderLines.id })
+    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
     .from(workingOrderLines)
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
   if (line === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
+  }
+  if (line.parentLineId !== null) {
+    throw new AppError("management.request_invalid", { field: "lineNo" });
   }
   const [item] = await tx
     .select({ firedAt: ticketItems.firedAt })
@@ -4812,8 +4824,12 @@ async function applyLineEdits(
     addedToExisting.flatMap(({ parent }) => (parent.groupId === null ? [] : [parent.groupId])),
   );
   const givenExtras: HeldChange[] = insertedExtras.flatMap((item) => {
-    const parent = addedToExisting.find(({ parent }) =>
-      inserted.some((row) => row.id === item.workingOrderLineId && row.parentLineId === parent.id),
+    const parent = addedToExisting.find(
+      ({ parent }) =>
+        parent.children.some((child) => child.id === item.workingOrderLineId) ||
+        inserted.some(
+          (row) => row.id === item.workingOrderLineId && row.parentLineId === parent.id,
+        ),
     )?.parent;
     const group =
       parent?.groupId === null || parent === undefined

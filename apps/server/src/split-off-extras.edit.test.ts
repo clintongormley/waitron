@@ -11,11 +11,18 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setStationToday, writePrintHeldWork } from "@waitron/venue-service";
+import { setClaim, setStationToday, writePrintHeldWork } from "@waitron/venue-service";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { addTabRound, recallLines, updateHeldOrder, updateOrderLine } from "./working-order.js";
+import {
+  addTabRound,
+  recallLines,
+  sendLines,
+  setLineCourse,
+  updateHeldOrder,
+  updateOrderLine,
+} from "./working-order.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
@@ -192,6 +199,73 @@ describe("editing split-off extras", () => {
       expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("HOLD CHANGED");
     });
   });
+
+  it("prints HOLD CHANGED when a prior inline extra gains its first station record on an edit", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setClaim(tx, venue.cfg, venue.folders.sides, { kind: "no_preparation" });
+      await writePrintHeldWork(tx, true);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
+      });
+      expect(await slips(tx, venue.printers.fryer)).toHaveLength(0);
+      await setClaim(tx, venue.cfg, venue.folders.sides, {
+        kind: "station",
+        stationId: venue.stations.fryer,
+      });
+      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1, 1).extras });
+      const chipsLine = (await state(tx, venue.party.tabId)).lines.find(
+        (row) => row.productId === venue.products.chips,
+      )!;
+      expect((await state(tx, venue.party.tabId)).items).toContainEqual(
+        expect.objectContaining({
+          lineId: chipsLine.id,
+          stationId: venue.stations.fryer,
+          firedAt: null,
+        }),
+      );
+      expect(
+        (await slips(tx, venue.printers.fryer)).find((slip) => slip.includes("CHIPS")),
+      ).toContain("HOLD CHANGED");
+    });
+  });
+
+  it.each(["send", "recall", "course"] as const)(
+    "refuses %s on an extra line number without changing the order",
+    async (action) => {
+      const venue = await setupSplitExtrasVenue();
+      await withTransaction(db, async (tx) => {
+        if (action === "recall") {
+          await addTabRound(tx, venue.cfg, venue.party.tabId, [line(venue, "burger", "1", 1)]);
+        } else {
+          await placeGroups(tx, venue.cfg, venue.party.partyId, {
+            operatorId: OPERATOR,
+            groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
+          });
+        }
+        const extraNo = (await state(tx, venue.party.tabId)).lines.find(
+          (row) => row.productId === venue.products.chips,
+        )!.lineNo;
+        const before = await state(tx, venue.party.tabId);
+        const beforeRevision = await revision(tx, venue.party.tabId);
+        const beforeSlips = await slips(tx, venue.printers.fryer);
+        const request =
+          action === "send"
+            ? sendLines(tx, venue.cfg, venue.party.tabId, [extraNo])
+            : action === "recall"
+              ? recallLines(tx, venue.cfg, venue.party.tabId, [extraNo])
+              : setLineCourse(tx, venue.cfg, venue.party.tabId, extraNo, null);
+        await expect(request).rejects.toMatchObject({
+          code: "management.request_invalid",
+          params: { field: "lineNo" },
+        });
+        expect(await state(tx, venue.party.tabId)).toEqual(before);
+        expect(await revision(tx, venue.party.tabId)).toBe(beforeRevision);
+        expect(await slips(tx, venue.printers.fryer)).toEqual(beforeSlips);
+      });
+    },
+  );
 
   it("raises held burger and chips records proportionally with corrections at both stations", async () => {
     const venue = await setupSplitExtrasVenue();
