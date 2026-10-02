@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
 import {
   kitchenStations,
@@ -16,7 +17,7 @@ import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
 
-/** A fired dish line nobody has finished serving, with its station's name and waiting bands. */
+/** A fired line with a record nobody has finished serving, with its station and waiting bands. */
 interface KitchenLine {
   billId: string;
   stationId: string;
@@ -36,6 +37,7 @@ async function readKitchenLines(
   billIds: readonly string[],
 ): Promise<KitchenLine[]> {
   if (billIds.length === 0) return [];
+  const dish = alias(workingOrderLines, "signal_dish");
   const rows = await tx
     .select({
       billId: workingOrderLines.workingOrderId,
@@ -47,27 +49,43 @@ async function readKitchenLines(
       quantity: workingOrderLines.quantity,
       servedQuantity: workingOrderLines.servedQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
+      dishQuantity: dish.quantity,
+      dishServedQuantity: dish.servedQuantity,
+      dishUnitPrecision: dish.unitPrecision,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .leftJoin(dish, eq(dish.id, workingOrderLines.parentLineId))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .where(
       and(
         inArray(workingOrderLines.workingOrderId, [...billIds]),
         isNull(workingOrderLines.servedAt),
-        isNull(workingOrderLines.parentLineId),
         isNotNull(ticketItems.firedAt),
         eq(ticketItems.madeHere, false),
       ),
     );
-  return rows.map(({ quantity, servedQuantity, unitPrecision, ...line }) => ({
-    ...line,
-    // A weighed dish is one plate however much it weighs; a counted one is its units left to serve.
-    units: unitPrecision ? 1 : (quantity - servedQuantity) / 1000,
-  }));
+  return rows.map(
+    ({
+      quantity,
+      servedQuantity,
+      unitPrecision,
+      dishQuantity,
+      dishServedQuantity,
+      dishUnitPrecision,
+      ...line
+    }) => ({
+      ...line,
+      // A weighed dish is one plate however much it weighs; a counted one is its units left to serve.
+      units:
+        (dishUnitPrecision ?? unitPrecision)
+          ? 1
+          : ((dishQuantity ?? quantity) - (dishServedQuantity ?? servedQuantity)) / 1000,
+    }),
+  );
 }
 
 /** `ready` per station and the worst `long_wait` band over the lines, in that order. */

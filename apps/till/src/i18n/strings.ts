@@ -148,6 +148,9 @@ export const en = {
   "station.group_held": "Held, not released",
   "station.elsewhere": "Also on this order (not for this station)",
   "station.elsewhere_held": "On hold",
+  "station.crossref_with": "with {name} from {station}",
+  "station.crossref_for": "for {name} at {station}",
+  "station.crossref_for_no_prep": "for {name}, no preparation",
   "station.print_problem": "Printing problem",
   "station.printer_down":
     "Printer {name} has printed nothing since something sent to it at {time} got stuck. Tickets are still shown here; tell a manager.",
@@ -1027,6 +1030,9 @@ export const es: Record<StringKey, string> = {
   "station.group_held": "En espera, sin marchar",
   "station.elsewhere": "También en este pedido (no para esta estación)",
   "station.elsewhere_held": "En espera",
+  "station.crossref_with": "con {name} de {station}",
+  "station.crossref_for": "para {name} en {station}",
+  "station.crossref_for_no_prep": "para {name}, sin preparación",
   "station.print_problem": "Problema de impresión",
   "station.printer_down":
     "La impresora {name} no ha impreso nada desde que se atascó algo que se le envió a las {time}. Las comandas siguen apareciendo aquí; avisa a un encargado.",

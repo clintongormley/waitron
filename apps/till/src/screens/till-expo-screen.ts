@@ -1,3 +1,4 @@
+import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -235,6 +236,13 @@ export class TillExpoScreen extends LitElement {
       /* The dish's selected options, indented beneath it — matching the
          kitchen-print ticket's own "+ name" sub-text style (apps/server/src/kitchen-ticket.ts). */
       .item-modifiers {
+        display: flex;
+        flex-direction: column;
+        padding-left: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .item-crossrefs {
         display: flex;
         flex-direction: column;
         padding-left: var(--wt-space-3);
@@ -665,7 +673,7 @@ export class TillExpoScreen extends LitElement {
             : nothing
         }
       </span>
-      ${this.#customisation(item)}${this.#modifiers(item)}${this.#allergens(item)}${dietBadges(
+      ${this.#customisation(item)}${this.#modifiers(item)}${queueCrossRefs(item, "item")}${this.#allergens(item)}${dietBadges(
         item.asServedDiet,
         `item-diet-${item.id}`,
       )}

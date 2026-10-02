@@ -284,6 +284,35 @@ export type MakerOutcome =
   | { readonly kind: "no_replacement"; readonly stationId: string }
   | { readonly kind: "no_station" };
 
+/** Where an extra pick is made, given where its dish is going. */
+export type ExtraMakerOutcome =
+  | { readonly kind: "made"; readonly stationId: string }
+  | {
+      readonly kind: "follows_dish";
+      /** no_rule: no exception or claim covers it; no_preparation: it needs no preparation;
+       *  no_replacement: its station and every fallback are closed; same_station: made with its dish. */
+      readonly why: "no_rule" | "no_preparation" | "no_replacement" | "same_station";
+    };
+
+/** Rules and venue moment loaded once at `at`. Both questions use that snapshot and the
+ *  transaction it was opened on. Use the resolver only inside that transaction. */
+export interface MakerResolver {
+  readonly at: Date;
+  /** Answers for an order in `zoneId` (null: no service zone). An unknown zone throws
+   *  `service_zone.not_found` before an unknown product throws `route.subject_not_found`.
+   *  Keys preserve the first caller spelling of each product id. */
+  makers(
+    zoneId: string | null,
+    productIds: readonly string[],
+  ): Promise<ReadonlyMap<string, MakerOutcome>>;
+  /** Answers by pick key. `dishStationId` is the dish's final station, null for no preparation.
+   *  Unknown zones and products are refused as in `makers`. An empty list reads nothing. */
+  extraMakers(
+    zoneId: string | null,
+    extras: readonly { key: string; productId: string; dishStationId: string | null }[],
+  ): Promise<ReadonlyMap<string, ExtraMakerOutcome>>;
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
   listServiceZones(
@@ -305,6 +334,16 @@ export interface VenueServiceContribution {
     productIds: readonly string[],
     at: Date,
   ): Promise<ReadonlyMap<string, MakerOutcome>>;
+  /** Loads one venue moment and one rules snapshot; each question reads only its products' facts. */
+  routingAt(tx: Transaction, cfg: { locationId: LocationId }, at: Date): Promise<MakerResolver>;
+  /** Opens a routing snapshot and answers its extra question. */
+  resolveExtraMakers(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string | null,
+    extras: readonly { key: string; productId: string; dishStationId: string | null }[],
+    at: Date,
+  ): Promise<ReadonlyMap<string, ExtraMakerOutcome>>;
   /** Every station's state at one instant, including stations switched off. */
   stationStates(
     tx: Transaction,

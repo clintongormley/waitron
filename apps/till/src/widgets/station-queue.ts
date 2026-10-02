@@ -1,3 +1,4 @@
+import { queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -249,6 +250,13 @@ export class TillStationQueue extends LitElement {
         display: flex;
         flex-direction: column;
         gap: 0;
+        padding-left: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .line-crossrefs {
+        display: flex;
+        flex-direction: column;
         padding-left: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -1008,13 +1016,14 @@ export class TillStationQueue extends LitElement {
     </span>`;
     const customisation = this.#customisation(item);
     const modifiers = this.#modifiers(item);
+    const crossRefs = queueCrossRefs(item, "line");
     const allergens = this.#allergens(item);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
     if (held || NEXT[item.state] === undefined) {
       const stateModifier = held ? "held" : "terminal";
       return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
-        >${main}${customisation}${modifiers}${allergens}${diet}</span
+        >${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
       >`;
     }
     return html`<button
@@ -1023,7 +1032,7 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${main}${customisation}${modifiers}${allergens}${diet}
+      ${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}
     </button>`;
   }
 

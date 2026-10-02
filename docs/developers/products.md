@@ -162,9 +162,9 @@ Where each one surfaces:
 | --- | --- | --- |
 | Receipt line — the goods identification, art. 7.1.e | the variant's frozen customer map on a variant line, else the product's | `apps/server/src/receipt-lines.ts` |
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
-| Kitchen ticket | the four frozen staff and kitchen names, plus each frozen answer's kitchen names falling back to its staff names | `apps/server/src/kitchen-print.ts` |
+| Kitchen ticket | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra's `+` line reads its frozen staff name; cross-references read kitchen names; options answers read kitchen names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
 | Also on this order (not for this station), on a station's own ticket and in its kitchen screen's order card | the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
-| Kitchen display and the expediter's pass | the same four names, through the same resolver | `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
+| Kitchen display and the expediter's pass | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra reads its frozen customer `descriptions`; cross-references read kitchen names | `readQueueSubItems`, `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name with ` x<n>` | `readMadeHereItems`, `apps/server/src/made-here.ts`, shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
@@ -177,12 +177,14 @@ Where each one surfaces:
 
 Two of those rows are worth reading twice.
 
-A cook sees the same name whether the order arrives on paper or on a screen: the ticket, the station
-queue and the pass all resolve through `kitchenPresentationName`. Every line is added from a zone's
-menu offer, which carries the product's and the variant's kitchen names as the menu's published
-version holds them (`priceOrderLines`, `apps/server/src/working-order.ts`), so a short kitchen name
-typed after publishing reaches all three surfaces on lines added once the menu is published again,
-and one left blank shows the staff name — the variant's, on a variant line. A
+A cook sees the same dish name and options answers whether the order arrives on paper or on a
+screen: the ticket, the station queue and the pass resolve those through their kitchen wording.
+The extras rows above record how a following extra differs between paper and screen. Each dish is
+added from a zone's menu offer, which carries the product's and the variant's kitchen names as the
+menu's published version holds them (`priceOrderLines`, `apps/server/src/working-order.ts`), so a
+short dish kitchen name typed after publishing reaches all three surfaces on lines added once the
+menu is published again. A blank kitchen name shows the staff name, including the variant's staff
+name on a variant line. A
 venue with no service zone sells nothing: sent lines with no zone, the till's three line-carrying
 routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the venue's
 counter-default zone, and refuse `service_zone.default_missing` when it has none

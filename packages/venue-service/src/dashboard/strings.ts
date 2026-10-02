@@ -138,6 +138,20 @@ const en = {
   "prep.test_clock_unreadable":
     "The venue's time zone or day cutover cannot be read, so opening hours are not applied.",
   "prep.test_title": "Where is this made?",
+  "prep.test_extras_chosen": "Extras chosen",
+  "prep.test_choose_extra": "Choose an extra",
+  "prep.test_remove_extra": "Remove {name}",
+  "prep.test_extras_wait": "Extras: decided once the dish has a station to go to",
+  "prep.test_extra_made": "{name}: made at {station}, because {reason}",
+  "prep.test_extra_claim": "{station} claims {folder}",
+  "prep.test_extra_exception": "of the exception '{rule}'",
+  "prep.test_extra_no_rule": "{name}: follows the dish — no exception or claim covers it",
+  "prep.test_extra_no_preparation":
+    "{name}: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket",
+  "prep.test_extra_no_replacement":
+    "{name}: follows the dish — {station} is closed and nothing can replace it",
+  "prep.test_extra_same_station":
+    "{name}: follows the dish — it is made at {dishStation}, where the dish is",
   "prep.test_product": "Product",
   "prep.test_choose_product": "Choose a product",
   "prep.test_no_zone": "No service zone",
@@ -395,6 +409,20 @@ const es: Record<keyof typeof en, string> = {
   "prep.test_clock_unreadable":
     "No se puede leer la zona horaria o el cambio de día del local, por lo que no se aplica el horario de apertura.",
   "prep.test_title": "¿Dónde se prepara esto?",
+  "prep.test_extras_chosen": "Extras elegidos",
+  "prep.test_choose_extra": "Elige un extra",
+  "prep.test_remove_extra": "Quitar {name}",
+  "prep.test_extras_wait": "Extras: se deciden cuando el plato tenga una estación de destino",
+  "prep.test_extra_made": "{name}: se prepara en {station}, porque {reason}",
+  "prep.test_extra_claim": "{station} tiene asignada la carpeta {folder}",
+  "prep.test_extra_exception": "lo indica la excepción «{rule}»",
+  "prep.test_extra_no_rule": "{name}: sigue al plato — ninguna excepción ni asignación lo cubre",
+  "prep.test_extra_no_preparation":
+    "{name}: sigue al plato — lo que lo cubre no necesita preparación, así que queda en el pedido del plato",
+  "prep.test_extra_no_replacement":
+    "{name}: sigue al plato — {station} está cerrada y nada puede sustituirla",
+  "prep.test_extra_same_station":
+    "{name}: sigue al plato — se prepara en {dishStation}, donde se prepara el plato",
   "prep.test_product": "Producto",
   "prep.test_choose_product": "Elige un producto",
   "prep.test_no_zone": "Sin zona de servicio",

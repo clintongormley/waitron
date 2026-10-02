@@ -386,12 +386,16 @@ what, then the delivery area, then the station.
 
 - **Extras are products** (`extra_list_items.product_id`, `packages/catalogue/src/schema/extras.ts:40`),
   so they have folders.
-- **An extra follows its dish** unless its own folder is claimed by a station. Fries in Extras ›
+- **An extra follows its dish** unless its rule sends it to a different station. Fries in Extras ›
   Sides, claimed by the Fryer, split off to the fryer. Extra cheese in unclaimed Extras › Toppings
-  stays on the grill ticket with the burger. An extra never falls through to the venue default on
-  its own.
+  stays on the grill ticket with the burger. The venue default alone does not split an extra off.
 - **A split-off extra stays linked to its dish** (§5.10).
 - **Plain options** ("rare / medium / well done") are not products. They always follow the dish.
+
+_2026-10-01 (slice 3c-2): the full rule runs for an extra; matching nothing, or the default,
+means it follows its dish; "No preparation" keeps it on the dish's ticket; a closed station with
+no replacement leaves it with its dish, silently; it splits off only to a station other than its
+dish's. [Plan](../plans/2026-10-01-split-off-extras-slice-3c2.md)._
 
 ### 5.9 Watchers
 
@@ -414,6 +418,9 @@ action appears on the expediter's watcher screen.
 
 - **A dish and its split-off extras always mention each other,** on screen and on paper. For
   example, "Burger — with chips from Extras station", and "Chips — for the burger at Grill".
+  _2026-10-01 (slice 3c-2): the dish's cross-reference says it is with the extra at its station;
+  the extra's says it is for the dish at the dish's station. Paper prints each reference on a
+  `> ` line. [Plan](../plans/2026-10-01-split-off-extras-slice-3c2.md)._
 - **"Show the rest of the order"** is a setting per station, off by default. It adds the rest of the
   order under a clearly marked heading, "Also on this order (not for this station)", with each
   line's station:

@@ -6,6 +6,7 @@ import type {
   StationStatus,
   WeeklyInterval,
 } from "./routing.js";
+import type { ExtraMakerOutcome } from "@waitron/module";
 
 export interface StationTimes {
   stationId: string;
@@ -23,6 +24,15 @@ export interface RouteExplanation {
   noReplacement: boolean;
   clockReadable: boolean;
   stations: { id: string; name: string; active: boolean }[];
+  extras: ExtraExplanation[];
+  extrasWaitOnDish: boolean;
+}
+
+export interface ExtraExplanation {
+  productId: string;
+  outcome: ExtraMakerOutcome;
+  decidedBy: RoutingDecision | null;
+  fallbacks: FallbackStep[];
 }
 
 export interface ExceptionInput {

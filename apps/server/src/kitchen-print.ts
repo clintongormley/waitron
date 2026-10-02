@@ -32,7 +32,12 @@ import type { Decimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { enqueuePrintJob } from "@waitron/printing";
 import type { EscSetting, PaperWidth, PrintConfig, Resolution } from "@waitron/printing";
-import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
+import {
+  arrangeTicketItems,
+  crossRefText,
+  formatCorrectionSlip,
+  formatKitchenTicket,
+} from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
 import { readRestOfOrder } from "./rest-of-order.js";
@@ -74,10 +79,7 @@ function ticketName(text: Record<string, string>, locale: string): string {
   return Object.values(text)[0]!;
 }
 
-/**
- * An extras child as its dish's kitchen paper prints it: its frozen staff name — the picked
- * product's own — with ` x<n>` when the dish carries more than one of it each.
- */
+/** Add ` x<n>` to the supplied extra name when the dish carries more than one of it each. */
 export function extraLabel(name: string, quantity: Decimal, dishQuantity: Decimal): string {
   const perDish = perDishOptionQuantity(quantity, dishQuantity);
   return perDish > 1 ? `${name} x${perDish}` : name;
@@ -135,7 +137,7 @@ function groupByLayout<T extends EscSetting>(printers: readonly T[]): T[][] {
  * Each line's printed item, keyed by line id and carrying its `line_no` and the position of the
  * party's group it is in (null in none). The fire and correction paths share it, so a slip lays out
  * a line's item the way its ticket did, from the line as it stands when the slip prints. `lineIds`
- * are parent dish lines; a child modifier line prints as sub-text of its parent.
+ * include parent dish lines and separately prepared extra lines.
  */
 async function buildTicketItems(
   tx: Transaction,
@@ -144,9 +146,13 @@ async function buildTicketItems(
 ): Promise<Map<string, { lineNo: number; group: number | null; item: KitchenTicketItem }>> {
   // The customer-facing `descriptions` is deliberately not read: the cook's name falls back to the
   // staff name (`kitchenPresentationName`), as on the station screen.
+  const parentLine = alias(workingOrderLines, "ticket_parent_line");
+  const parentRecord = alias(ticketItems, "ticket_parent_record");
+  const parentStation = alias(kitchenStations, "ticket_parent_station");
   const storedLineRows = await tx
     .select({
       id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
       name: workingOrderLines.name,
@@ -157,9 +163,17 @@ async function buildTicketItems(
       variantKitchenName: workingOrderLines.variantKitchenName,
       note: workingOrderLines.note,
       group: orderGroups.position,
+      parentName: parentLine.name,
+      parentKitchenName: parentLine.kitchenName,
+      parentVariantName: parentLine.variantName,
+      parentVariantKitchenName: parentLine.variantKitchenName,
+      parentStationName: parentStation.name,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .leftJoin(parentLine, eq(parentLine.id, workingOrderLines.parentLineId))
+    .leftJoin(parentRecord, eq(parentRecord.workingOrderLineId, parentLine.id))
+    .leftJoin(parentStation, eq(parentStation.id, parentRecord.stationId))
     .where(inArray(workingOrderLines.id, lineIds));
   const lineRows = storedLineRows.map((row) => ({
     ...row,
@@ -169,14 +183,24 @@ async function buildTicketItems(
   const eachByIdentity = await VENUE_SERVICE.readLinesSoldInEach(tx, lineIds);
 
   // Ordered by `line_no` so the picks print in the order they were offered.
+  const childRecord = alias(ticketItems, "ticket_child_record");
+  const childStation = alias(kitchenStations, "ticket_child_station");
   const storedChildRows = await tx
     .select({
+      id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
       name: workingOrderLines.name,
+      kitchenName: workingOrderLines.kitchenName,
+      variantName: workingOrderLines.variantName,
+      variantKitchenName: workingOrderLines.variantKitchenName,
+      recordId: childRecord.id,
+      stationName: childStation.name,
     })
     .from(workingOrderLines)
+    .leftJoin(childRecord, eq(childRecord.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(childStation, eq(childStation.id, childRecord.stationId))
     .where(inArray(workingOrderLines.parentLineId, lineIds))
     .orderBy(workingOrderLines.lineNo);
   const childRows = storedChildRows.map((row) => ({
@@ -184,10 +208,26 @@ async function buildTicketItems(
     quantity: thousandthsToDecimal(row.quantity),
   }));
   // The per-dish pick count is recovered from the stored combined child quantity. Every child's
-  // parent is in `lineById`.
+  // parent is in `lineById` because children are read by parent id.
   const modifiersByParent = new Map<string, string[]>();
+  const crossRefsByParent = new Map<string, string[]>();
   for (const child of childRows) {
     const parent = lineById.get(child.parentLineId!)!;
+    if (child.recordId !== null) {
+      const refs = crossRefsByParent.get(child.parentLineId!) ?? [];
+      refs.push(
+        crossRefText(
+          {
+            kind: "with",
+            name: extraLabel(kitchenPresentationName(child), child.quantity, parent.quantity),
+            stationName: child.stationName!,
+          },
+          cfg.locale,
+        ),
+      );
+      crossRefsByParent.set(child.parentLineId!, refs);
+      continue;
+    }
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
     names.push(extraLabel(child.name, child.quantity, parent.quantity));
     modifiersByParent.set(child.parentLineId!, names);
@@ -215,6 +255,25 @@ async function buildTicketItems(
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),
         ],
+        ...(row.parentLineId === null
+          ? { crossRefs: crossRefsByParent.get(row.id) ?? [] }
+          : {
+              crossRefs: [
+                crossRefText(
+                  {
+                    kind: "for",
+                    name: kitchenPresentationName({
+                      name: row.parentName!,
+                      kitchenName: row.parentKitchenName,
+                      variantName: row.parentVariantName,
+                      variantKitchenName: row.parentVariantKitchenName,
+                    }),
+                    stationName: row.parentStationName,
+                  },
+                  cfg.locale,
+                ),
+              ],
+            }),
       },
     });
   }

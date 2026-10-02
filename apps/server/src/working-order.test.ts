@@ -3054,19 +3054,14 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         returning id`);
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
-      const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolveMakers");
+      const routingAt = vi.spyOn(VENUE_SERVICE, "routingAt");
       try {
         await addTabRound(tx, cfg, tabId, [
           { menuItemId: premiumCafeOfferId, quantity: "1" },
           { menuItemId: premiumCafeOfferId, quantity: "1" },
           { menuItemId: aguaOffer.id, quantity: "1" },
         ]);
-        expect(resolveRoutes).toHaveBeenCalledTimes(1);
-        expect(resolveRoutes.mock.calls[0]!.slice(2)).toEqual([
-          zoneId,
-          [cafeId, aguaId],
-          expect.any(Date),
-        ]);
+        expect(routingAt).toHaveBeenCalledTimes(1);
         const items = await ticketItemsFor(tx, tabId);
         expect(items).toHaveLength(3);
         const stationsOf = (productId: string) =>
@@ -3074,7 +3069,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         expect(stationsOf(cafeId)).toEqual([bar.id, bar.id]);
         expect(stationsOf(aguaId)).toEqual([kitchen.id]);
       } finally {
-        resolveRoutes.mockRestore();
+        routingAt.mockRestore();
       }
     });
   });
@@ -3869,11 +3864,10 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("attaches a parent's picked extras as sub-items on listStationQueue and listExpoQueue", async () => {
+  it("attaches unclaimed extras as sub-items on listStationQueue and listExpoQueue", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      // Café with TWO picked extras — each a child line, never its own ticket item.
       const grande = await addExtra(tx, catalogueId, cafeId, "Grande");
       const avena = await addExtra(tx, catalogueId, cafeId, "Leche avena");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -5203,7 +5197,6 @@ describe("addTabRound hold-on-send (A3)", () => {
         { productId: plain, quantity: "1", hold: true },
       ]);
 
-      // A child modifier line never gets a ticket item, so the only items are the two PARENT dishes.
       const items = await courseItemsFor(tx, tabId);
       expect(items).toHaveLength(2);
       expect(byLine(items, modified).firedAt).not.toBeNull(); // the modified dish (+ child) fires

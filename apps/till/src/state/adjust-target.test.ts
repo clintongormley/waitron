@@ -50,4 +50,22 @@ describe("lineAdjustTarget", () => {
     expect(lineAdjustTarget(olives, [held, olives], "Olives")).not.toHaveProperty("kitchenTold");
     expect(lineAdjustTarget(fired, [fired, olives], "Pizza")).not.toHaveProperty("kitchenTold");
   });
+
+  it("marks a fired split-off extra of a no-preparation dish as told", () => {
+    const dish = line({ sentAt: sent.sentAt });
+    const chips = { ...olives, ...sent, state: "queued" as const };
+    expect(lineAdjustTarget(chips, [dish, chips], "Chips").kitchenTold).toBe(true);
+  });
+
+  it("marks a started split-off extra as started", () => {
+    const dish = line({ ...sent, state: "queued" });
+    const chips = { ...olives, ...sent, state: "preparing" as const };
+    expect(lineAdjustTarget(chips, [dish, chips], "Chips").started).toBe(true);
+  });
+
+  it("marks a dish as started when only its split-off extra has started", () => {
+    const dish = line({ ...sent, state: "queued" });
+    const chips = { ...olives, ...sent, state: "preparing" as const };
+    expect(lineAdjustTarget(dish, [dish, chips], "Pizza").started).toBe(true);
+  });
 });

@@ -11,6 +11,7 @@ import { AppError, normaliseUuid } from "@waitron/shared";
 import { resolveZoneContext, type VenueScope } from "./operations.js";
 import {
   chooseMaker,
+  chooseExtraMaker,
   closedSendsTo,
   folderAncestors,
   stationStatus,
@@ -31,7 +32,7 @@ import type {
 } from "./routing-types.js";
 import { routeExceptions, stationClaims } from "./schema/routing.js";
 import "./errors.js";
-import type { MakerOutcome } from "@waitron/module";
+import type { ExtraMakerOutcome, MakerOutcome, MakerResolver } from "@waitron/module";
 export type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
 
 /** Shared write validation also serves callers that need to check a proposed exception. */
@@ -363,6 +364,7 @@ export async function explainRoute(
   productId: string,
   zoneId: string | null,
   when: ExplainWhen,
+  extraProductIds: readonly string[] = [],
 ): Promise<RouteExplanation> {
   const uuid = storedUuid(productId);
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
@@ -390,11 +392,47 @@ export async function explainRoute(
     zoneId,
     moment,
   );
+  const extrasWaitOnDish = choice.route === null;
+  const extras: RouteExplanation["extras"] = [];
+  for (const id of extraProductIds) {
+    const extraId = storedUuid(id);
+    const [extra] = await tx
+      .select({
+        id: products.id,
+        routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+        categoryId: effectiveProductColumns.categoryId,
+      })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .where(eq(products.id, extraId));
+    if (extra === undefined)
+      throw new AppError("route.subject_not_found", { subject: "product", id });
+    if (extrasWaitOnDish) continue;
+    const result = chooseExtraMaker(
+      rules,
+      {
+        productId: extraId,
+        routedProductId: storedUuid(extra.routedId),
+        categoryId: extra.categoryId,
+      },
+      zoneId,
+      moment,
+      choice.route.kind === "station" ? choice.route.stationId : null,
+    );
+    extras.push({
+      productId: id,
+      outcome: result.outcome,
+      decidedBy: result.decidedBy,
+      fallbacks: [...result.fallbacks],
+    });
+  }
   return {
     ...choice,
     clockReadable: moment !== null,
     fallbacks: [...choice.fallbacks],
     stations: stations.map(({ id, name, active }) => ({ id, name, active })),
+    extras,
+    extrasWaitOnDish,
   };
 }
 
@@ -536,6 +574,85 @@ function storedUuid(id: string): string {
   return normaliseUuid(id, "ProductId");
 }
 
+export async function routingAt(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<MakerResolver> {
+  const moment = await venueMoment(tx, cfg, at);
+  const rules = await loadRoutingRules(tx, cfg, moment?.businessDay ?? null);
+  const productFacts = async (productIds: readonly string[]) => {
+    const spellingByUuid = new Map<string, string>();
+    for (const id of productIds) {
+      const uuid = storedUuid(id);
+      if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
+    }
+    const rows = await tx
+      .select({
+        id: products.id,
+        routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+        categoryId: effectiveProductColumns.categoryId,
+      })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .where(inArray(products.id, [...spellingByUuid.keys()]));
+    const byId = new Map(rows.map((row) => [storedUuid(row.id), row]));
+    const facts = new Map<
+      string,
+      { productId: string; routedProductId: string; categoryId: string | null }
+    >();
+    for (const [uuid, id] of spellingByUuid) {
+      const product = byId.get(uuid);
+      if (product === undefined)
+        throw new AppError("route.subject_not_found", { subject: "product", id });
+      facts.set(uuid, {
+        productId: uuid,
+        routedProductId: storedUuid(product.routedId),
+        categoryId: product.categoryId,
+      });
+    }
+    return { spellingByUuid, facts };
+  };
+  return {
+    at,
+    async makers(zoneId, productIds) {
+      const outcomes = new Map<string, MakerOutcome>();
+      if (productIds.length === 0) return outcomes;
+      if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
+      const { spellingByUuid, facts } = await productFacts(productIds);
+      for (const [uuid, id] of spellingByUuid) {
+        const choice = chooseMaker(rules, facts.get(uuid)!, zoneId, moment);
+        outcomes.set(
+          id,
+          choice.route !== null
+            ? { kind: "made", route: choice.route }
+            : choice.noReplacement
+              ? { kind: "no_replacement", stationId: choice.fallbacks[0]!.stationId }
+              : { kind: "no_station" },
+        );
+      }
+      return outcomes;
+    },
+    async extraMakers(zoneId, extras) {
+      const outcomes = new Map<string, ExtraMakerOutcome>();
+      if (extras.length === 0) return outcomes;
+      if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
+      const { facts } = await productFacts(extras.map((extra) => extra.productId));
+      for (const extra of extras) {
+        const choice = chooseExtraMaker(
+          rules,
+          facts.get(storedUuid(extra.productId))!,
+          zoneId,
+          moment,
+          extra.dishStationId,
+        );
+        outcomes.set(extra.key, choice.outcome);
+      }
+      return outcomes;
+    },
+  };
+}
+
 export async function resolveMakers(
   tx: Transaction,
   cfg: VenueScope,
@@ -543,51 +660,19 @@ export async function resolveMakers(
   productIds: readonly string[],
   at: Date,
 ): Promise<ReadonlyMap<string, MakerOutcome>> {
-  const spellingByUuid = new Map<string, string>();
-  for (const id of productIds) {
-    const uuid = storedUuid(id);
-    if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
-  }
-  const ids = [...spellingByUuid.keys()];
-  const outcomes = new Map<string, MakerOutcome>();
-  if (ids.length === 0) return outcomes;
-  if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  const moment = await venueMoment(tx, cfg, at);
-  const rules = await loadRoutingRules(tx, cfg, moment?.businessDay ?? null);
-  const productRows = await tx
-    .select({
-      id: products.id,
-      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-      categoryId: effectiveProductColumns.categoryId,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(inArray(products.id, ids));
-  const byId = new Map(productRows.map((row) => [storedUuid(row.id), row]));
-  for (const [uuid, id] of spellingByUuid) {
-    const product = byId.get(uuid);
-    if (product === undefined)
-      throw new AppError("route.subject_not_found", { subject: "product", id });
-    const choice = chooseMaker(
-      rules,
-      {
-        productId: uuid,
-        routedProductId: storedUuid(product.routedId),
-        categoryId: product.categoryId,
-      },
-      zoneId,
-      moment,
-    );
-    outcomes.set(
-      id,
-      choice.route !== null
-        ? { kind: "made", route: choice.route }
-        : choice.noReplacement
-          ? { kind: "no_replacement", stationId: choice.fallbacks[0]!.stationId }
-          : { kind: "no_station" },
-    );
-  }
-  return outcomes;
+  if (productIds.length === 0) return new Map();
+  return (await routingAt(tx, cfg, at)).makers(zoneId, productIds);
+}
+
+export async function resolveExtraMakers(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string | null,
+  extras: readonly { key: string; productId: string; dishStationId: string | null }[],
+  at: Date,
+): Promise<ReadonlyMap<string, ExtraMakerOutcome>> {
+  if (extras.length === 0) return new Map();
+  return (await routingAt(tx, cfg, at)).extraMakers(zoneId, extras);
 }
 
 export async function stationStates(

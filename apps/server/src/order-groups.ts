@@ -35,11 +35,14 @@ import {
   insertTabRound,
   isReleased,
   priceTabRound,
+  routingOnce,
+  type RoutingOnce,
   refusePaymentInFlight,
   splitLinesWithinOrder,
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
+import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -183,6 +186,7 @@ export async function placeGroups(
     return { ...row, groupId, creditedTo: operatorId };
   });
   const inserted = await insertTabRound(tx, cfg, round, rows);
+  const routing = routingOnce(tx, cfg, new Date());
   for (const [i, group] of input.groups.entries()) {
     const groupId = groupIds[i]!;
     const fire = group.release === "fire";
@@ -193,6 +197,7 @@ export async function placeGroups(
       inserted
         .filter((row) => row.groupId === groupId)
         .map((row) => ({ ...row, hold: !fire, release: fire })),
+      { routing },
     );
     if (input.joinGroupId !== undefined) {
       await correctJoin(
@@ -259,7 +264,15 @@ export async function fireGroup(
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireHeldGroup(tx, partyId, groupId);
-      await releaseGroup(tx, cfg, partyId, groupId, args.operatorId, {});
+      await releaseGroup(
+        tx,
+        cfg,
+        partyId,
+        groupId,
+        args.operatorId,
+        {},
+        routingOnce(tx, cfg, new Date()),
+      );
       return { revision };
     },
     cfg.madeHereSink,
@@ -267,7 +280,7 @@ export async function fireGroup(
 }
 
 /**
- * The pass's Ready for a group: every fired kitchen item of its dishes, on every bill of the party,
+ * The pass's Ready for a group: every fired kitchen item of its lines, on every bill of the party,
  * goes straight to `ready`. A held group's items are unfired, so it changes none, yet the command is
  * recorded and the party's revision moves on.
  */
@@ -285,7 +298,7 @@ export async function bumpGroupReady(
       .set(advanceSet("ready"))
       .where(
         and(
-          inArray(ticketItems.workingOrderLineId, dishLinesOf(tx, groupId)),
+          inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
           ne(ticketItems.state, "ready"),
           isNotNull(ticketItems.firedAt),
         ),
@@ -308,7 +321,7 @@ export async function markGroupAway(
       .set({ awayAt: nowIso() })
       .where(
         and(
-          inArray(ticketItems.workingOrderLineId, dishLinesOf(tx, groupId)),
+          inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
           eq(ticketItems.state, "ready"),
           isNull(ticketItems.awayAt),
         ),
@@ -339,12 +352,11 @@ async function passStep(
   );
 }
 
-/** The ids of a group's dish lines, as a subquery: an extras line never has a kitchen item. */
-function dishLinesOf(tx: Transaction, groupId: string) {
+function groupLinesOf(tx: Transaction, groupId: string) {
   return tx
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
-    .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)));
+    .where(eq(workingOrderLines.groupId, groupId));
 }
 
 /**
@@ -359,6 +371,7 @@ export async function fireHeldGroupsOfCourse(
   orderId: string,
   courseId: string,
   operatorId: string,
+  routing?: RoutingOnce,
 ): Promise<void> {
   const party = await partyRevisionOfOrder(tx, orderId);
   if (party === null) return;
@@ -384,10 +397,18 @@ export async function fireHeldGroupsOfCourse(
   if (groups.length === 0) return;
   await checkAndBumpParty(tx, partyId, party.revision, "open");
   for (const group of groups) {
-    await releaseGroup(tx, cfg, partyId, group.id, operatorId, {
-      courseId,
-      workingOrderId: orderId,
-    });
+    await releaseGroup(
+      tx,
+      cfg,
+      partyId,
+      group.id,
+      operatorId,
+      {
+        courseId,
+        workingOrderId: orderId,
+      },
+      routing,
+    );
   }
 }
 
@@ -426,6 +447,7 @@ async function releaseGroup(
   groupId: string,
   operatorId: string,
   detail: Record<string, unknown>,
+  routing = routingOnce(tx, cfg, new Date()),
 ): Promise<void> {
   const lines = await tx
     .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
@@ -444,11 +466,11 @@ async function releaseGroup(
   // The marker, not the setting: a group whose HOLD ticket was queued is fired by a FIRE slip.
   const mark = group!.holdPrintedAt === null ? undefined : "FIRE";
   for (const [orderId, lineIds] of byOrder) {
-    await fireOrderLines(tx, cfg, orderId, lineIds, mark);
+    await fireOrderLines(tx, cfg, orderId, lineIds, mark, routing);
   }
   await tx
     .update(orderGroups)
-    .set({ state: "fired", firedAt: nowIso(), firedBy: operatorId, remindAt: null })
+    .set({ state: "fired", firedAt: routing.at.toISOString(), firedBy: operatorId, remindAt: null })
     .where(eq(orderGroups.id, groupId));
   await recordGroupEvent(tx, { partyId, groupId, kind: "fired", actorId: operatorId, detail });
 }
@@ -686,17 +708,28 @@ export async function moveLinesToGroup(
       const given: HeldChange[] = [];
       for (const { lineId, quantity } of moves) {
         const line = lineById.get(lineId)!;
-        const stationId = heldItems.get(lineId);
-        if (stationId === undefined || line.groupId === targetId) continue;
+        const items = heldItems.get(lineId);
+        if (items === undefined || line.groupId === targetId) continue;
         const split = splitIds.get(lineId);
-        // Read after the split, which refused a malformed part.
-        const moved = split === undefined ? line.quantity : stringToThousandths(quantity);
-        const change = { workingOrderId: line.workingOrderId, stationId, quantity: moved };
-        const from = printed.get(line.groupId!);
-        if (from !== undefined) taken.push({ ...change, workingOrderLineId: lineId, group: from });
-        const to = printed.get(targetId);
-        if (to !== undefined) {
-          given.push({ ...change, workingOrderLineId: split ?? lineId, group: to });
+        for (const item of items) {
+          // A partial move has no split-off extras; a whole move uses each record's own line.
+          const moved = split === undefined ? item.lineQuantity : stringToThousandths(quantity);
+          const change = {
+            workingOrderId: line.workingOrderId,
+            stationId: item.stationId,
+            quantity: moved,
+          };
+          const from = printed.get(line.groupId!);
+          if (from !== undefined)
+            taken.push({ ...change, workingOrderLineId: item.workingOrderLineId, group: from });
+          const to = printed.get(targetId);
+          if (to !== undefined) {
+            given.push({
+              ...change,
+              workingOrderLineId: split ?? item.workingOrderLineId,
+              group: to,
+            });
+          }
         }
       }
       await correctHoldTickets(tx, cfg, taken, { kind: "HOLD CHANGED", direction: "removed" });
@@ -1115,6 +1148,14 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       asc(workingOrderLines.lineNo),
     );
   const extras = new Map<string, CurrentOrderExtra[]>();
+  const heldExtras = new Set(
+    lines
+      .filter(
+        (line) =>
+          line.parentLineId !== null && line.ticketItemId !== null && line.ticketFiredAt === null,
+      )
+      .map((line) => line.parentLineId),
+  );
   for (const line of lines) {
     if (line.parentLineId === null) continue;
     extras.set(line.parentLineId, [
@@ -1150,7 +1191,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       unitPrecision: line.unitPrecision,
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
-      released: isReleased(line),
+      released: isReleased(line) && !heldExtras.has(line.id),
       kitchen:
         line.ticketState === null
           ? null
@@ -1268,19 +1309,18 @@ export async function correctHoldTickets(
   }
 }
 
-/** The station of each of these dish lines that has a held kitchen item. */
+/** All held kitchen records of each named dish and its split-off extras. */
 async function heldItemsOf(
   tx: Transaction,
   lineIds: readonly string[],
-): Promise<Map<string, string>> {
-  const rows = await tx
-    .select({
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-    })
-    .from(ticketItems)
-    .where(and(inArray(ticketItems.workingOrderLineId, [...lineIds]), isNull(ticketItems.firedAt)));
-  return new Map(rows.map((row) => [row.workingOrderLineId, row.stationId]));
+): ReturnType<typeof dishKitchenItems> {
+  const items = await dishKitchenItems(tx, lineIds);
+  return new Map(
+    [...items].map(([lineId, records]) => [
+      lineId,
+      records.filter((record) => record.firedAt === null),
+    ]),
+  );
 }
 
 /** `+N` on the HOLD ticket of the group these dish lines just joined, where one was queued. */
@@ -1301,7 +1341,7 @@ export async function correctJoin(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(inArray(ticketItems.workingOrderLineId, [...lineIds]))
+    .where(onDishesOrTheirExtras(tx, lineIds))
     .orderBy(asc(workingOrderLines.lineNo));
   await correctHoldTickets(
     tx,

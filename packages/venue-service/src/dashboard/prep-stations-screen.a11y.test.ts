@@ -303,9 +303,13 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         host.style.boxSizing = "border-box";
         const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
         el.api = {
-          load: vi
-            .fn()
-            .mockResolvedValue({ ...empty, testProducts: [{ id: "mojito", name: "Mojito" }] }),
+          load: vi.fn().mockResolvedValue({
+            ...empty,
+            testProducts: [
+              { id: "mojito", name: "Mojito" },
+              { id: "chips", name: "Chips" },
+            ],
+          }),
           explain: vi.fn().mockResolvedValue({
             route: { kind: "station", stationId: "downstairs" },
             decidedBy: { kind: "exception", exceptionId: "rule" },
@@ -315,6 +319,15 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
             stations: [
               { id: "upstairs", name: "Upstairs bar", active: true },
               { id: "downstairs", name: "Downstairs bar", active: true },
+            ],
+            extrasWaitOnDish: false,
+            extras: [
+              {
+                productId: "chips",
+                outcome: { kind: "made", stationId: "upstairs" },
+                decidedBy: { kind: "claim", categoryId: "sides" },
+                fallbacks: [],
+              },
             ],
           }),
         } as unknown as PrepStationsApi;
@@ -327,6 +340,13 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
           .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "mojito" } }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
+        await expectNoA11yViolations(host);
+        root
+          .querySelector('[data-test="test-extra"]')!
+          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "chips" } }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        expect(root.querySelector('[data-test="remove-extra-chips"]')).not.toBeNull();
         await expectNoA11yViolations(host);
         const when = root.querySelector('[data-test="test-when"]')!;
         when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "at" } }));

@@ -4,47 +4,40 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
-  locations,
   nowIso,
   orderGroups,
   parties,
   partyTables,
   printJobs,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   EACH_UNIT,
-  assignCatalogueToLocation,
-  createCatalogue,
-  createExtraList,
   createProduct,
   readContentLanguages,
   units,
   updateUnit,
-  writeProductModifiers,
 } from "@waitron/catalogue";
-import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  thousandthsToDecimal,
-  tillId as brandTillId,
-} from "@waitron/shared";
+import { thousandthsToDecimal } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
-import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
+import {
+  listStationNotices,
+  writeKitchenTicketGrouping,
+  writePrintHeldWork,
+  setStationFallback,
+  setStationToday,
+} from "@waitron/venue-service";
+import { placeGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,
@@ -53,7 +46,6 @@ import {
   reprintOrderTickets,
 } from "./kitchen-print.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
-import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
   billRow,
@@ -67,6 +59,14 @@ import {
   tableAt,
 } from "./testing/party-venue.js";
 import "./errors.js";
+import {
+  setupVenue,
+  fireNewOrder,
+  createOfferedOrder,
+  addExtras,
+  useSplitExtrasDb,
+  setupSplitExtrasVenue,
+} from "./testing/split-extras-venue.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
@@ -84,53 +84,11 @@ const suite = useVenueDb({
 let db: Database;
 beforeAll(() => {
   db = suite.db;
+  useSplitExtrasDb(db);
 });
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-interface Venue {
-  cfg: TillConfig;
-  catalogueId: string;
-}
-
-/** A fresh location, till, node and assigned catalogue, returning the till's config. */
-async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
-  await seedLegacySellingUnits(db);
-  // Inserted through the table definitions, not as raw SQL: the ids and `created_at` come from
-  // `$defaultFn` generators, which a raw insert never reaches.
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
-  const catalogueId = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    await assignCatalogueToLocation(tx, locationId, cat.id);
-    return cat.id;
-  });
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
-    nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
-    locationId: brandLocationId(locationId),
-    locale: LOCALE,
-    invoiceLocales: [LOCALE],
-    tipsEnabled: false,
-    orderFlow: "prepay",
-  };
-  return { cfg, catalogueId };
-}
 
 /** The location scope the printing verbs run under. */
 function printCfg(cfg: TillConfig): PrintConfig {
@@ -357,54 +315,6 @@ async function makePrinter(
   return id;
 }
 
-type ProductLine = {
-  productId: string;
-  quantity: string;
-  extras?: ExtraSelection[];
-  options?: OptionSelection[];
-  note?: string;
-};
-
-/** Open a working order in the counter zone, selling each line through the zone's offer for its
- *  product. Call once the suite's products, stations and extras are final: the offers' routes mirror
- *  the active claim or default station each product would have taken. */
-async function createOfferedOrder(
-  tx: Transaction,
-  cfg: TillConfig,
-  id: string,
-  lines: ProductLine[],
-): ReturnType<typeof createOpenOrder> {
-  const offers = await offerProducts(tx, cfg);
-  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
-    zoneId: offers.zoneId,
-  });
-}
-
-/** Open a working order carrying `lines` and fire it, returning the order id. Passes every persisted
- *  line, children included, to `fireLines`, so the parent-only filter under test is `fireLines`' own. */
-async function fireNewOrder(
-  tx: Transaction,
-  cfg: TillConfig,
-  lines: ProductLine[],
-): Promise<string> {
-  const id = randomUUID();
-  await createOfferedOrder(tx, cfg, id, lines);
-  const fired = await tx
-    .select({
-      id: workingOrderLines.id,
-      productId: workingOrderLines.productId,
-      courseId: workingOrderLines.courseId,
-      parentLineId: workingOrderLines.parentLineId,
-      note: workingOrderLines.note,
-      quantity: workingOrderLines.quantity,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, id))
-    .orderBy(workingOrderLines.lineNo);
-  await fireLines(tx, cfg, id, fired);
-  return id;
-}
-
 /**
  * Open an order with NO service context holding one dish line and one child line per pick, then FIRE
  * it, so the dish's zone-less product exception selects its station. The lines are written straight to the table
@@ -453,55 +363,6 @@ async function fireContextlessDish(
     .orderBy(workingOrderLines.lineNo);
   await fireLines(tx, cfg, id, fired);
   return id;
-}
-
-/** Offer one optional, uncapped extras list on `dishId`, returning the list id and the offered
- *  products' ids in order. None of these products is routed to a station: a child line never resolves
- *  one. */
-async function addExtras(
-  tx: Transaction,
-  cfg: TillConfig,
-  catalogueId: string,
-  dishId: string,
-  items: { name: string; customerName?: string; kitchenName?: string; maxQuantity?: number }[],
-): Promise<{ listId: string; productIds: string[] }> {
-  const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
-  const productIds: string[] = [];
-  for (const item of items) {
-    const { id } = await createProduct(tx, {
-      catalogueId,
-      categoryId: null,
-      name: item.name,
-      ...(item.customerName === undefined
-        ? {}
-        : { customerName: { [defaultLanguage]: item.customerName } }),
-      ...(item.kitchenName === undefined ? {} : { kitchenName: item.kitchenName }),
-      pricingUnit: "each",
-      unitPrice: "0.50",
-      vatClass: "reduced",
-    });
-    productIds.push(id);
-  }
-  const list = await createExtraList(
-    tx,
-    {
-      name: "Extras",
-      customerName: null,
-      kitchenName: null,
-      minPicks: 0,
-      maxPicks: null,
-      active: true,
-      items: productIds.map((productId, index) => ({
-        productId,
-        maxQuantity: items[index]!.maxQuantity ?? 1,
-        preselected: false,
-        price: null,
-      })),
-    },
-    cfg.locale,
-  );
-  await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
-  return { listId: list.id, productIds };
 }
 
 /** Every outbound TCP open goes through `Socket.prototype.connect`. */
@@ -1186,19 +1047,210 @@ describe("a dish sold by the piece prints no unit", () => {
   );
 });
 
-describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, child sub-text)", () => {
-  it("fires a dish with two extras as ONE ticket_item (the parent), never one per child", async () => {
+describe("dish extras on kitchen tickets", () => {
+  it("prints split chips once on Fryer paper and cross-references both station and PASE paper", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const { cfg, products, lists, printers } = venue;
+    const jobs = await asApp(cfg, async (tx) => {
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [
+            {
+              listId: lists.burger,
+              picks: [
+                { productId: products.chips, quantity: 1 },
+                { productId: products.cheese, quantity: 1 },
+              ],
+            },
+          ],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+    const paper = (printerId: string) =>
+      decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
+    expect(jobs.map((job) => job.printerId)).toEqual(
+      expect.arrayContaining([printers.grill, printers.fryer, printers.pass]),
+    );
+    expect(paper(printers.grill)).toContain("1.000 x BURG");
+    expect(paper(printers.grill)).toContain("+ Cheese");
+    expect(paper(printers.grill)).toContain("> con CHIPS de Fryer");
+    expect(paper(printers.grill)).not.toContain("+ Chips");
+    expect(paper(printers.fryer)).toContain("1.000 x CHIPS");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.fryer)!.payload).filter((line) =>
+        line.includes("x CHIPS"),
+      ),
+    ).toHaveLength(1);
+    expect(paper(printers.fryer)).toContain("> para BURG en Grill");
+    expect(paper(printers.pass)).toContain("> con CHIPS de Fryer");
+    expect(paper(printers.pass)).toContain("> para BURG en Grill");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.pass)!.payload).filter((line) =>
+        line.includes("x CHIPS"),
+      ),
+    ).toHaveLength(1);
+    for (const job of jobs) {
+      expect(decodeTicket(job.payload)).not.toContain("Patatas fritas");
+      expect(decodeTicket(job.payload)).not.toContain("Hamburguesa clásica");
+    }
+  });
+
+  it("keeps an unclaimed cheese as a modifier without a Fryer job", async () => {
+    const { cfg, products, lists, printers } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [{ listId: lists.burger, picks: [{ productId: products.cheese, quantity: 1 }] }],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+    expect(jobs.some((job) => job.printerId === printers.fryer)).toBe(false);
+    const paper = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
+    expect(paper).toContain("+ Cheese");
+    expect(paper).not.toContain("  > ");
+  });
+
+  it("names no preparation for a water's split chips", async () => {
+    const { cfg, products, lists, printers } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.water,
+          quantity: "1",
+          extras: [{ listId: lists.water, picks: [{ productId: products.chips, quantity: 1 }] }],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+    expect(jobs.some((job) => job.printerId === printers.grill)).toBe(false);
+    expect(decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload)).toContain(
+      "> para AGUA, sin preparación",
+    );
+  });
+
+  it("keeps the Fryer and Kitchen references on separate burger lines in a reprint", async () => {
+    const { cfg, products, lists, printers, stations, tables, party } =
+      await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const pick = {
+        menuItemId: tables.offerFor(products.burger),
+        quantity: "1",
+        extras: [{ listId: lists.burger, picks: [{ productId: products.chips, quantity: 1 }] }],
+      };
+      const orderId = party.tabId;
+      await addTabRound(tx, cfg, orderId, [pick]);
+      await setStationFallback(tx, cfg, stations.fryer, stations.kitchen);
+      await setStationToday(tx, cfg, stations.fryer, "closed", new Date());
+      await addTabRound(tx, cfg, orderId, [pick]);
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await reprintOrderTickets(tx, cfg, orderId);
+      return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+    });
+    const grill = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
+    expect(grill).toContain("> con CHIPS de Fryer");
+    expect(grill).toContain("> con CHIPS de Kitchen");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.grill)!.payload).filter((line) =>
+        line.includes("x BURG"),
+      ),
+    ).toHaveLength(2);
+    expect(grill).not.toContain("2.000 x BURG");
+  });
+
+  it("keeps both references on the burger and chips VOID slips", async () => {
+    const { cfg, products, lists, printers } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const orderId = await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [{ listId: lists.burger, picks: [{ productId: products.chips, quantity: 1 }] }],
+        },
+      ]);
+      const records = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        records.map((record) => ({ ...record, quantity: 1000, wasStarted: false })),
+        "VOID",
+      );
+      return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+    });
+    expect(decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload)).toContain(
+      "> con CHIPS de Fryer",
+    );
+    expect(decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload)).toContain(
+      "> para BURG en Grill",
+    );
+  });
+
+  it("prints held chips once at Fryer and only as a reference at Grill", async () => {
+    const { cfg, products, lists, printers, party, tables } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      await writePrintHeldWork(tx, true);
+      await placeGroups(tx, cfg, party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              {
+                menuItemId: tables.offerFor(products.burger),
+                quantity: "1",
+                extras: [
+                  { listId: lists.burger, picks: [{ productId: products.chips, quantity: 1 }] },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      return printJobsFor(tx);
+    });
+    const grill = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
+    const fryer = decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload);
+    expect(grill).toContain("*** HOLD ***");
+    expect(grill).toContain("> con CHIPS de Fryer");
+    expect(grill).not.toContain("+ Chips");
+    expect(fryer).toContain("*** HOLD ***");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.fryer)!.payload).filter((line) =>
+        line.includes("x CHIPS"),
+      ),
+    ).toHaveLength(1);
+    expect(fryer).toContain("> para BURG en Grill");
+  });
+
+  it("keeps two unclaimed extras on their dish's one kitchen record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
-      // With a default station present, a child would otherwise route to it.
+      // Neither extra has a claim, so both follow their dish instead of the default.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
-        { name: "Nata" },
-        { name: "Leche avena" },
-      ]);
+      const { listId, productIds } = await addExtras(
+        tx,
+        cfg,
+        catalogueId,
+        cortado,
+        [{ name: "Nata" }, { name: "Leche avena" }],
+        { staffNameOnly: true },
+      );
 
       const orderId = await fireNewOrder(tx, cfg, [
         {
@@ -1259,7 +1311,6 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(ticket).toContain("Cortado");
     expect(ticket).toContain("+ Nata");
     expect(ticket).toContain("+ Leche avena");
-    // A cook reads the staff name, never the diner's wording.
     expect(ticket).not.toContain("Nata montada");
     expect(ticket).not.toContain("Bebida de avena");
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Nata"));
@@ -1295,10 +1346,17 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
-        { name: "Nata", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
-        { name: "Leche avena" }, // single pick (cap 1)
-      ]);
+      const { listId, productIds } = await addExtras(
+        tx,
+        cfg,
+        catalogueId,
+        cortado,
+        [
+          { name: "Nata", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
+          { name: "Leche avena" }, // single pick (cap 1)
+        ],
+        { staffNameOnly: true },
+      );
       const [nata, avena] = productIds;
 
       await fireNewOrder(tx, cfg, [
@@ -1329,14 +1387,14 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(ticket).not.toMatch(/\+ Nata(?! x)/u);
   });
 
-  it("never station-resolves a child line: a dish-with-extras fires with NO default station", async () => {
-    // The child's product routes nowhere and there is no default station, so a child resolved on its
-    // own would fail with `station.no_default`.
+  it("lets an unclaimed extra follow its dish when no default station is on", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { stationId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
-      const { productIds } = await addExtras(tx, cfg, catalogueId, cafe, [{ name: "Nata" }]);
+      const { productIds } = await addExtras(tx, cfg, catalogueId, cafe, [{ name: "Nata" }], {
+        staffNameOnly: true,
+      });
 
       const orderId = await fireContextlessDish(tx, cfg, cafe, [productIds[0]!]);
       const ticketItemRows = await tx

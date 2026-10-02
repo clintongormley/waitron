@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   chooseMaker,
+  chooseExtraMaker,
   closedSendsTo,
   followFallbacks,
   folderAncestors,
@@ -726,5 +727,108 @@ describe("fallbacks", () => {
     expect(closedSendsTo(rules, "downstairs", at(FRI, "20:00"))).toBeNull();
     expect(closedSendsTo(rules, "a", at(FRI, "20:00"))).toBeNull();
     expect(closedSendsTo(rules, "kitchen", at(FRI, "20:00"))).toBe("kitchen");
+  });
+});
+
+const extrasRules: RoutingRules = {
+  ...base,
+  parentOf: new Map([
+    ...parentOf,
+    ["extras", null],
+    ["sides", "extras"],
+    ["toppings", "extras"],
+    ["sauces", "extras"],
+  ]),
+  activeStationIds: new Set([...base.activeStationIds, "grill", "fryer", "terraceKitchen"]),
+  claims: new Map<string, RouteTarget>([
+    ["sides", station("fryer")],
+    ["sauces", { kind: "no_preparation" }],
+  ]),
+};
+const chips = { productId: "chips", routedProductId: "chips", categoryId: "sides" };
+const cheese = { productId: "cheese", routedProductId: "cheese", categoryId: "toppings" };
+const sauce = { productId: "sauce", routedProductId: "sauce", categoryId: "sauces" };
+
+describe("chooseExtraMaker", () => {
+  it("splits an extra off when its folder's claim names another station", () => {
+    expect(chooseExtraMaker(extrasRules, chips, null, null, "grill")).toEqual({
+      outcome: { kind: "made", stationId: "fryer" },
+      decidedBy: { kind: "claim", categoryId: "sides" },
+      fallbacks: [],
+    });
+  });
+  it("keeps an unclaimed extra with its dish with or without an active default", () => {
+    expect(chooseExtraMaker(extrasRules, cheese, null, null, "grill").outcome).toEqual({
+      kind: "follows_dish",
+      why: "no_rule",
+    });
+    expect(
+      chooseExtraMaker({ ...extrasRules, defaultStationId: null }, cheese, null, null, "grill")
+        .outcome,
+    ).toEqual({ kind: "follows_dish", why: "no_rule" });
+  });
+  it("keeps a no-preparation extra with its dish", () => {
+    expect(chooseExtraMaker(extrasRules, sauce, null, null, "grill").outcome).toEqual({
+      kind: "follows_dish",
+      why: "no_preparation",
+    });
+  });
+  it("keeps an extra with its dish when both are made at one station", () => {
+    expect(chooseExtraMaker(extrasRules, chips, null, null, "fryer").outcome).toEqual({
+      kind: "follows_dish",
+      why: "same_station",
+    });
+  });
+  it("lets an exception decide for an extra as for a dish", () => {
+    const rules = {
+      ...extrasRules,
+      exceptions: [
+        {
+          id: "t",
+          position: 1,
+          zoneId: "terrace",
+          categoryId: null,
+          productId: null,
+          target: station("terraceKitchen"),
+        },
+      ],
+    };
+    expect(chooseExtraMaker(rules, chips, "terrace", null, "terraceKitchen")).toEqual({
+      outcome: { kind: "follows_dish", why: "same_station" },
+      decidedBy: { kind: "exception", exceptionId: "t" },
+      fallbacks: [],
+    });
+  });
+  it("walks the extra's fallbacks before comparing its station with its dish's", () => {
+    const rules = {
+      ...extrasRules,
+      timing: new Map([["fryer", { fallbackId: "kitchen", hours: [], today: "closed" as const }]]),
+    };
+    expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "grill")).toEqual({
+      outcome: { kind: "made", stationId: "kitchen" },
+      decidedBy: { kind: "claim", categoryId: "sides" },
+      fallbacks: [{ stationId: "fryer", why: "closed_by_hand" }],
+    });
+    expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "kitchen").outcome).toEqual({
+      kind: "follows_dish",
+      why: "same_station",
+    });
+  });
+  it("keeps an extra with its dish when none of its stations is open", () => {
+    const rules = {
+      ...extrasRules,
+      timing: new Map([["fryer", { fallbackId: null, hours: [], today: "closed" as const }]]),
+    };
+    expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "grill")).toEqual({
+      outcome: { kind: "follows_dish", why: "no_replacement" },
+      decidedBy: { kind: "claim", categoryId: "sides" },
+      fallbacks: [{ stationId: "fryer", why: "closed_by_hand" }],
+    });
+  });
+  it("splits a claimed extra off a dish that needs no preparation", () => {
+    expect(chooseExtraMaker(extrasRules, chips, null, null, null).outcome).toEqual({
+      kind: "made",
+      stationId: "fryer",
+    });
   });
 });

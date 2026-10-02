@@ -1919,7 +1919,7 @@ describe("till-table-order-screen", () => {
     const readyLine: TabLine = { ...pendingLine, lineNo: 1, state: "ready" };
     // A CHILD EXTRAS line, in the shape the tab wire really sends one: it carries the PICKED product
     // and names its parent dish by line number, which is the ONLY field telling the two
-    // apart. It has no ticket item of its own, so firedAt AND state are both null — the shape whose
+    // apart. This following extra has no ticket item, so firedAt AND state are both null — the shape whose
     // null firedAt would wrongly fall into the HELD/Send branch, and whose held shape would paint an
     // editable course picker, if the child guard were absent. A fixture with `productId: null` would
     // pass against a screen that still read a null product as "child", so it carries one on purpose.
@@ -1955,6 +1955,25 @@ describe("till-table-order-screen", () => {
       // …and no course control at all (neither the editable held picker nor the fired static span).
       expect(el.shadowRoot!.querySelector('[data-line-course="2"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')).toBeNull();
+    });
+
+    it("offers Cancel for a queued split-off extra when its no-preparation dish cannot be cancelled", async () => {
+      const dish: TabLine = {
+        ...pendingLine,
+        sentAt: pendingLine.sentAt,
+        firedAt: null,
+        state: null,
+      };
+      const chips: TabLine = {
+        ...childLine,
+        sentAt: pendingLine.sentAt,
+        firedAt: pendingLine.firedAt,
+        state: "queued",
+      };
+      const { el } = await mount({ lines: [dish, chips], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).not.toBeNull();
     });
 
     it("paints a child extras row as belonging to its dish, never as a dish of its own", async () => {

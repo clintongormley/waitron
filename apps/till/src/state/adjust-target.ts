@@ -77,8 +77,8 @@ export function listedGross(line: TabLine): Decimal {
 /** A dish with its extras (`lines` holds the order's rows, the dish's children among them), or an
  * extra on its own. Part of a dish can be adjusted when it is several whole units, taking each
  * unit's share of its extras; an extra is adjusted whole only, as the server allows. An extra of a
- * fired dish is marked `kitchenTold`; one of a held dish whose HOLD ticket was queued is not, as
- * the till cannot see that the ticket was queued, though the server tells the kitchen then too. */
+ * fired dish or with its own fired record is marked `kitchenTold`; one of a held dish whose HOLD
+ * ticket was queued is not, as the till cannot see that the ticket was queued. */
 export function lineAdjustTarget(
   line: TabLine,
   lines: readonly TabLine[],
@@ -98,9 +98,9 @@ export function lineAdjustTarget(
       !isExtra && moreThanOneWholeUnit(line)
         ? divideDecimal(total, decimal(line.quantity), MONEY_SCALE)
         : null,
-    started: isStarted(line),
+    started: isStarted(line) || extras.some(isStarted),
     ...((line.unitPrecision ?? 0) > 0 ? { weighed: true } : {}),
     ...(isExtra ? { extra: true } : {}),
-    ...(dish !== undefined && dish.firedAt !== null ? { kitchenTold: true } : {}),
+    ...(isExtra && (line.firedAt !== null || dish?.firedAt != null) ? { kitchenTold: true } : {}),
   };
 }

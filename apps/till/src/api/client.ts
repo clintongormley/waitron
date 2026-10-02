@@ -1140,7 +1140,7 @@ export interface Station {
 
 /**
  * One selected option on a queue item: the child modifier line's SNAPSHOTTED `descriptions`, which the
- * display localises client-side. A modifier is never its own ticket item; it rides beneath its parent.
+ * display localises client-side. A modifier without its own ticket item rides beneath its parent.
  */
 export interface QueueModifier {
   descriptions: Record<string, string>;
@@ -1150,6 +1150,16 @@ export interface QueueModifier {
   /** The extra's OWN positive dietary suitability, shown beside the dish's own. Absent/empty when it
    *  declares none. */
   suitableFor?: string[] | null;
+}
+
+/** A line on another station's ticket that this item goes with. */
+export interface QueueCrossRef {
+  kind: "with" | "for";
+  name: string;
+  perDish?: number;
+  stationName: string | null;
+  addAllergens?: QueueModifier["addAllergens"];
+  suitableFor?: QueueModifier["suitableFor"];
 }
 
 /**
@@ -1195,6 +1205,7 @@ export interface StationQueueItem {
   soldInEach?: boolean;
   /** The dish's selected options, in selection order; absent reads as none. */
   modifiers?: QueueModifier[];
+  crossRefs?: QueueCrossRef[];
   /** The dish's OWN allergen profile; absent renders nothing. */
   asServed?: AsServedAllergens;
   /** The dish's OWN diet profile, the diet twin of {@link asServed}; absent renders nothing. */
@@ -1395,6 +1406,7 @@ export interface ExpoItem {
   note?: string | null;
   /** The dish's selected options, in selection order; absent reads as none. */
   modifiers?: QueueModifier[];
+  crossRefs?: QueueCrossRef[];
   /** The dish's OWN allergen profile; absent renders nothing. */
   asServed?: AsServedAllergens;
   /** The dish's OWN diet profile; absent renders nothing. */
@@ -1754,10 +1766,11 @@ export interface TabLine {
   /** When the line was first released: fired, or for a no-preparation line, when it would have
    * fired; null if it never was. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
-  /** When the line's kitchen ticket item FIRED, or null while its course is still HELD. */
+  /** When the line's kitchen ticket item FIRED, or null while its course is still HELD or it has no
+   * ticket item. A following extra has none; a split-off extra has its own. */
   firedAt: string | null;
-  /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A child modifier
-   * line never has one; a parent line can lack one too, so null is not impossible for a parent. A
+  /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A following extra
+   * has none; a split-off extra has its own. A parent line can lack one too. A
    * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
