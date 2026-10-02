@@ -6,6 +6,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
+  createCategory,
   createExtraList,
   createProduct,
   readContentLanguages,
@@ -19,6 +20,13 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
+import { createStation } from "../kitchen.js";
+import { createPrinter, updatePrinter } from "@waitron/printing";
+import { attachPrinterToStation } from "../station-printers.js";
+import { setClaim } from "@waitron/venue-service";
+import { createTable } from "../tables.js";
+import { seatTable } from "../parties.js";
+import { OPERATOR } from "./party-venue.js";
 import { createOpenOrder, fireLines } from "../working-order.js";
 import { offerProducts } from "./zone-offers.js";
 import { seedLegacySellingUnits } from "./seed-units.js";
@@ -70,6 +78,140 @@ export async function setupVenue(): Promise<Venue> {
     orderFlow: "prepay",
   };
   return { cfg, catalogueId };
+}
+
+/** A reusable table and counter venue for the split-extra send, release and edit suites. */
+export async function setupSplitExtrasVenue() {
+  const { cfg, catalogueId } = await setupVenue();
+  const built = await withTransaction(db, async (tx) => {
+    const stations = {
+      grill: (await createStation(tx, cfg, { name: "Grill" })).id,
+      fryer: (await createStation(tx, cfg, { name: "Fryer" })).id,
+      kitchen: (await createStation(tx, cfg, { name: "Kitchen", isDefault: true })).id,
+      bar: (await createStation(tx, cfg, { name: "Bar" })).id,
+    };
+    const printers = {} as Record<"grill" | "fryer" | "kitchen" | "bar" | "pass", string>;
+    for (const station of ["grill", "fryer", "kitchen", "bar"] as const) {
+      const printer = await createPrinter(
+        tx,
+        { locationId: cfg.locationId },
+        {
+          name: `${station} printer`,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        },
+      );
+      printers[station] = printer.id;
+      await attachPrinterToStation(tx, { stationId: stations[station], printerId: printer.id });
+    }
+    const pass = await createPrinter(
+      tx,
+      { locationId: cfg.locationId },
+      {
+        name: "PASE",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      },
+    );
+    printers.pass = pass.id;
+    await updatePrinter(tx, { locationId: cfg.locationId }, pass.id, { ticketScope: "order" });
+    await attachPrinterToStation(tx, { stationId: stations.grill, printerId: pass.id });
+
+    const food = await createCategory(tx, { name: "Food" });
+    const burgers = await createCategory(tx, { name: "Burgers", parentId: food.id });
+    const extras = await createCategory(tx, { name: "Extras" });
+    const sides = await createCategory(tx, { name: "Sides", parentId: extras.id });
+    const toppings = await createCategory(tx, { name: "Toppings", parentId: extras.id });
+    const sauces = await createCategory(tx, { name: "Sauces", parentId: extras.id });
+    const drinks = await createCategory(tx, { name: "Drinks" });
+    const bottled = await createCategory(tx, { name: "Bottled", parentId: drinks.id });
+    const folders = {
+      food: food.id,
+      burgers: burgers.id,
+      extras: extras.id,
+      sides: sides.id,
+      toppings: toppings.id,
+      sauces: sauces.id,
+      drinks: drinks.id,
+      bottled: bottled.id,
+    };
+    await setClaim(tx, cfg, burgers.id, { kind: "station", stationId: stations.grill });
+    await setClaim(tx, cfg, sides.id, { kind: "station", stationId: stations.fryer });
+    await setClaim(tx, cfg, sauces.id, { kind: "no_preparation" });
+    await setClaim(tx, cfg, bottled.id, { kind: "no_preparation" });
+
+    const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
+    const product = async (
+      name: string,
+      customer: string,
+      kitchen: string,
+      categoryId: string,
+      allergens?: { gluten: { presence: "contains"; source: string } },
+    ) =>
+      (
+        await createProduct(tx, {
+          catalogueId,
+          categoryId,
+          name,
+          customerName: { [defaultLanguage]: customer },
+          kitchenName: kitchen,
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+          ...(allergens === undefined ? {} : { allergens }),
+        })
+      ).id;
+    const products = {
+      burger: await product("Burger", "Hamburguesa clásica", "BURG", burgers.id),
+      chips: await product("Chips", "Patatas fritas", "CHIPS", sides.id, {
+        gluten: { presence: "contains", source: "wheat" },
+      }),
+      cheese: await product("Cheese", "Queso extra", "QUESO", toppings.id),
+      sauce: await product("Sauce", "Salsa brava", "SALSA", sauces.id),
+      water: await product("Water", "Agua mineral", "AGUA", bottled.id),
+      onionRings: await product("Onion rings", "Aros de cebolla", "AROS", sides.id),
+    };
+    const listItems = [products.chips, products.onionRings, products.cheese, products.sauce].map(
+      (productId) => ({ productId, maxQuantity: 2, preselected: false, price: null }),
+    );
+    const burgerList = await createExtraList(
+      tx,
+      {
+        name: "Burger extras",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: null,
+        active: true,
+        items: listItems,
+      },
+      cfg.locale,
+    );
+    const waterList = await createExtraList(
+      tx,
+      {
+        name: "Water extras",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: null,
+        active: true,
+        items: listItems,
+      },
+      cfg.locale,
+    );
+    await writeProductModifiers(tx, products.burger, [{ kind: "extras", id: burgerList.id }]);
+    await writeProductModifiers(tx, products.water, [{ kind: "extras", id: waterList.id }]);
+    const lists = { burger: burgerList.id, water: waterList.id };
+    const tables = await offerProducts(tx, cfg, { zone: "tables" });
+    const counter = await offerProducts(tx, cfg, { zone: "counter" });
+    const tableId = (await createTable(tx, cfg, { label: "Split extras", zoneId: tables.zoneId }))
+      .id;
+    const seated = await seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR });
+    const party = { tableId, zoneId: tables.zoneId, partyId: seated.partyId, tabId: seated.tabId };
+    return { stations, printers, folders, products, lists, tables, counter, party };
+  });
+  return { cfg, catalogueId, ...built };
 }
 
 export type ProductLine = {
