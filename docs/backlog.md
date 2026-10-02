@@ -5174,7 +5174,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       register should only be opened by the device it is assigned to"_; and 2026-10-02: _"When we
       add a printer with a drawer to a till, we can specify whether it should control the till or
       not. So even if the printer is shared between tills, any till that says it should control it,
-      does."_; lane B item B29). The server no longer
+      does."_; lane B item B29, landed as #1011). The server no longer
       refuses a handheld for being one when it places, collects or cancels an order. A collect, and
       the invoice a place may file, go on record under the register the device joined with, as its
       cash and hand-keyed card sales already did; the `order_placed` record and a cancel's amendment
@@ -5208,6 +5208,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         (`apps/dashboard/src/screens/printing-rules-screen.ts`); even `#setPrintMode` and
         `#setDrawerPolicy`, which already update their own state in place, reload everything
         afterwards.
+      - Follow-up, same review: a test title in `apps/server/src/made-here.routes.test.ts` (near
+        line 1417) still names `deviceSaleCfgOf`, a helper #1011 removed (the bill routes now build
+        their configuration through `deviceSaleCfg` in `bill-payments-api.ts`, over `deviceTillCfg`).
+        Left because the branch changed no existing test it did not need to; rename the title.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
