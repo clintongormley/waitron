@@ -216,8 +216,8 @@ Track C.
 (design approved 2026-09-30).** The
 [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
 1, 2, 3a, 3b and 3c-1 have landed (above). Slice 3c-2, extras made at their own station with the
-dish's and the extra's tickets naming each other, is built on lane D as PF6
-([plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md); PR link pending). Slice 3b
+dish's and the extra's tickets naming each other, is PF6
+([plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md), [#1046](https://github.com/clintongormley/waitron/pull/1046)). Slice 3b
 ([#1024](https://github.com/clintongormley/waitron/pull/1024)) adds station opening hours, by-hand
 open and close, fallbacks, the till's dead-end question before sending or payment, and down-printer
 and dark-screen alerts; a station with no replacement asks the waiter where to make its dishes or
