@@ -72,15 +72,15 @@ declare module "@waitron/shared" {
       correctsLineId: string;
     };
     /** Thrown by `recordCorrection` for a whole-invoice credit (`wholeInvoice`) whose lines do not
-     * reverse the invoice `saleId` line for line. `rule` says which: credit line `lineNo` names no
-     * invoice line (`names_no_line`), names invoice line `correctsLineId` that an earlier credit
+     * reverse the invoice `saleId` line for line. `reason` says which: credit line `lineNo` names
+     * no invoice line (`names_no_line`), names invoice line `correctsLineId` that an earlier credit
      * line already named (`names_line_twice`), or is not that line exactly reversed — same product,
      * minus its quantity, minus its line total (`not_exact_reversal`); or no credit line names
      * invoice line `correctsLineId` (`leaves_line_unnamed`, `lineNo` null). Refused before a
      * number is allocated. */
     "sale.correction_line_not_reversed": {
       saleId: string;
-      rule: "names_no_line" | "names_line_twice" | "not_exact_reversal" | "leaves_line_unnamed";
+      reason: "names_no_line" | "names_line_twice" | "not_exact_reversal" | "leaves_line_unnamed";
       lineNo: number | null;
       correctsLineId: string | null;
     };

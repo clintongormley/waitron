@@ -784,6 +784,55 @@ describe("cancelling a placed order whose invoice was issued", () => {
     });
   });
 
+  // The cancel reverses every stored invoice line exactly, so these two reach the line checks with
+  // a value stored as bytes: it reads back as a new byte array each time, so the cancel's copy and
+  // the one `recordCorrection` reads are not the same value.
+  it("answers 409 when a stored invoice line's product reads back unlike itself, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    await inTx(venue, (tx) =>
+      tx.insert(saleLines).values({
+        saleId: original.id,
+        lineNo: 99,
+        name: "Añadida",
+        descriptions: { [venue.cfg.locale]: "Añadida" },
+        quantity: 1000,
+        unitPrice: 0,
+        vatRate: 2100,
+        lineTotal: 0,
+        productId: sql`x'01'`,
+      }),
+    );
+
+    await expectRefusedUnwritten(id, cancel(id), {
+      status: 409,
+      code: "sale.correction_line_not_reversed",
+    });
+  });
+
+  it("answers 409 when a stored invoice line's id reads back unlike itself, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    await inTx(venue, (tx) =>
+      tx.insert(saleLines).values({
+        id: sql`x'02'`,
+        saleId: original.id,
+        lineNo: 99,
+        name: "Añadida",
+        descriptions: { [venue.cfg.locale]: "Añadida" },
+        quantity: 1000,
+        unitPrice: 0,
+        vatRate: 2100,
+        lineTotal: 0,
+      }),
+    );
+
+    await expectRefusedUnwritten(id, cancel(id), {
+      status: 409,
+      code: "sale.correction_line_not_on_invoice",
+    });
+  });
+
   it("files one credit when two cancels of the order arrive together, refusing the second", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);

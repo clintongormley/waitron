@@ -1309,7 +1309,7 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
 
   /** Refused inside a transaction that then commits, so a number allocated or a row written
    * before the refusal would stay. */
-  async function expectRefusedUnwritten(
+  async function expectNotReversedUnwritten(
     backend: FakeFiscalBackend,
     originalId: SaleId,
     lines: RecordCorrectionInput["lines"],
@@ -1353,8 +1353,8 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
       line.lineNo === 3 ? { ...line, correctsLineId: null } : line,
     );
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "names_no_line",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "names_no_line",
       lineNo: 3,
       correctsLineId: null,
     });
@@ -1363,13 +1363,13 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
   it("refuses two lines naming the same invoice line", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { originalId, idOf } = await sellWithExtra(backend);
-    // The reviewers' repro: the Water line names Coffee's line as well.
+    // The Water line names Coffee's line as well.
     const lines = reversal(idOf).map((line) =>
       line.lineNo === 3 ? { ...line, correctsLineId: idOf(1) } : line,
     );
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "names_line_twice",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "names_line_twice",
       lineNo: 3,
       correctsLineId: idOf(1),
     });
@@ -1382,8 +1382,8 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
     const lines = reversal(idOf);
     lines.push({ ...lines[1]!, lineNo: 4 });
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "names_line_twice",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "names_line_twice",
       lineNo: 4,
       correctsLineId: idOf(2),
     });
@@ -1400,8 +1400,8 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
           : line,
     );
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "not_exact_reversal",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "not_exact_reversal",
       lineNo: 1,
       correctsLineId: idOf(3),
     });
@@ -1413,8 +1413,8 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
     // The free extra's line is left out; every rate still sums to the invoice's.
     const lines = reversal(idOf).filter((line) => line.lineNo !== 2);
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "leaves_line_unnamed",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "leaves_line_unnamed",
       lineNo: null,
       correctsLineId: idOf(2),
     });
@@ -1429,8 +1429,8 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
     const { originalId, idOf } = await sellWithExtra(backend);
     const lines = reversal(idOf).map((line) => (line.lineNo === 1 ? { ...line, ...change } : line));
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "not_exact_reversal",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "not_exact_reversal",
       lineNo: 1,
       correctsLineId: idOf(1),
     });
@@ -1448,8 +1448,8 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
           : line,
     );
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "not_exact_reversal",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "not_exact_reversal",
       lineNo: 1,
       correctsLineId: idOf(1),
     });
@@ -1463,8 +1463,8 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
     const { originalId, idOf } = await sellWithExtra(backend);
     const lines = reversal(idOf).map((line) => (line.lineNo === 3 ? { ...line, productId } : line));
 
-    await expectRefusedUnwritten(backend, originalId, lines, {
-      rule: "not_exact_reversal",
+    await expectNotReversedUnwritten(backend, originalId, lines, {
+      reason: "not_exact_reversal",
       lineNo: 3,
       correctsLineId: idOf(3),
     });

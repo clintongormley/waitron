@@ -2859,7 +2859,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       extras picks included (`reversedLines`, `apps/server/src/cancel-credit.ts`).
       `recordCorrection` refuses a line naming a line that is not on the invoice it corrects with
       `sale.correction_line_not_on_invoice`, before a number is allocated. **Decided by the owner
-      at C132's review, and built: a credit of the whole invoice must reverse it line for line.**
+      at C132's review (2026-10-02 ~23:10), and built: a credit of the whole invoice must reverse
+      it line for line.**
       Each of its lines names a different invoice line and is that line with the same product,
       minus its quantity and minus its line total; every invoice line is named. Anything else is
       refused with `sale.correction_line_not_reversed`, before a number is allocated. A partial

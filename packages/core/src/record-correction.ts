@@ -362,10 +362,11 @@ function assertReversesLineForLine(
   invoice: ReadonlyMap<string, { quantity: number; lineTotal: number; productId: string | null }>,
 ): void {
   const refuse = (
-    rule: "names_no_line" | "names_line_twice" | "not_exact_reversal" | "leaves_line_unnamed",
+    reason: "names_no_line" | "names_line_twice" | "not_exact_reversal" | "leaves_line_unnamed",
     lineNo: number | null,
     correctsLineId: string | null,
-  ) => new AppError("sale.correction_line_not_reversed", { saleId, rule, lineNo, correctsLineId });
+  ) =>
+    new AppError("sale.correction_line_not_reversed", { saleId, reason, lineNo, correctsLineId });
   const named = new Set<string>();
   for (const line of credit) {
     if (line.correctsLineId === null) {
