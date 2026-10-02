@@ -224,7 +224,7 @@ describe("device-profiles-screen editor form", () => {
     );
   });
 
-  it("draws a Schedule screen switch whose save sends show-schedule", async () => {
+  it("draws a My schedule button switch whose save sends show-schedule", async () => {
     const api = stubApi();
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();

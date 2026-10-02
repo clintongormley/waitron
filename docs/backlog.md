@@ -2542,8 +2542,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
       request settled.
     - **Done (C130) — a device shows the screens its profile assigns, and the person's permissions
-      decide the rest.** A device profile has three switches, "Kitchen station screen", "Pass
-      screen" and "Schedule screen" (`show-station`, `show-expo`, `show-schedule` in
+      decide the rest.** A device profile has three switches, "Kitchen button", "Pass button"
+      and "My schedule button" (`show-station`, `show-expo`, `show-schedule` in
       `CAPABILITY_FLAGS`, `packages/layouts/src/canvas.ts`), on for the built-in till profile and off
       for the handheld one; the till offers each header button only when its profile has the switch
       and its layout has no tab of that name, on any device. The lists loaded at sign-in and the
@@ -2554,7 +2554,16 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       (`POST`/`PATCH`/`DELETE /api/tables`), which checked no permission, are gone. Left open:
       a till profile saved before C130, and one newly created on the Device profiles screen, has
       the three switches off until a manager turns them on; a till with no device reads no
-      capabilities, so it shows none of the three buttons.
+      capabilities, so it shows none of the three buttons. Seen in a visual check on 2026-10-02:
+      at 390 wide a handheld's till header runs past the right edge (the page measured 736 wide;
+      Kitchen, Allergens, the operator's name and Log out sat off-screen) — believed to predate
+      C130 from reading main's code, not measured on main — and turning the switches on adds
+      buttons to it; on the handheld, the station screen's back button says "Back to counter"
+      though a handheld lands on the floor plan; and clicking the knob (`span.thumb`) of a
+      `wt-switch` that is on does not turn it off (clicking the label or its left edge, or Space,
+      does), seen on the Device profiles screen, on the existing "Integrated card payment" switch
+      too — the same knob already left open under A215 (clicking a variant's row); `packages/ui`
+      is untouched by C130.
     - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
       The page gives the till the screen less its padding (`apps/till/index.html`), and the error
       banner and the other notices above the tabs take their height from the tab shell, so the

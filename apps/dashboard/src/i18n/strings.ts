@@ -1565,9 +1565,9 @@ export const en = {
   "device_profiles.capability.open-cash-drawer": "Open cash drawer",
   "device_profiles.capability.act-as-kds": "Act as kitchen display",
   "device_profiles.capability.print-receipt": "Print receipts and payment slips",
-  "device_profiles.capability.show-station": "Kitchen station screen",
-  "device_profiles.capability.show-expo": "Pass screen",
-  "device_profiles.capability.show-schedule": "Schedule screen",
+  "device_profiles.capability.show-station": "Kitchen button",
+  "device_profiles.capability.show-expo": "Pass button",
+  "device_profiles.capability.show-schedule": "My schedule button",
   // The `till` form factor is the cash register, the owner's chosen word.
   "device_profiles.form_factor": "Form factor",
   "device_profiles.form_factor.till": "Cash register",
