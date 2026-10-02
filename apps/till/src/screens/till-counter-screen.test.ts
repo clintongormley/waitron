@@ -120,6 +120,10 @@ describe("till-counter-screen", () => {
     const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
     expect(select.value).toBe("upstairs");
     expect(select.label).toContain(t("service_zone.label"));
+    await select.updateComplete;
+    const shownLabel = select.shadowRoot!.querySelector<HTMLElement>(".field-label-text");
+    expect(shownLabel?.textContent).toContain(t("service_zone.label"));
+    expect(shownLabel!.checkVisibility()).toBe(true);
 
     await chooseOption(select, "downstairs");
     el.shadowRoot!.querySelector<HTMLElement>(".service-zone-refresh")!.click();

@@ -607,6 +607,42 @@ describe("till-table-order-screen", () => {
     }
   });
 
+  it("keeps a draft line's course box within its line when the chosen course has a long name", async () => {
+    await page.viewport(1024, 768);
+    try {
+      const long = {
+        id: "long",
+        name: "Platos para compartir al centro de la mesa".padEnd(60, "x"),
+        displayOrder: 2,
+      };
+      const { el } = await mount({ courses: [...courses, long] });
+      await resized(el);
+      grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+      await el.updateComplete;
+      await chooseOption(
+        el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-round-course="0"]')!,
+        "long",
+      );
+      await el.updateComplete;
+      const picker = el.shadowRoot!.querySelector<WtCombobox>(
+        'wt-combobox[data-round-course="0"]',
+      )!;
+      await picker.updateComplete;
+      expect(picker.value).toBe("long");
+      const box = picker
+        .shadowRoot!.querySelector<HTMLElement>("[part=field]")!
+        .getBoundingClientRect();
+      const line = picker.closest("till-basket")!.getBoundingClientRect();
+      const pane = el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(line.left);
+      expect(box.right).toBeLessThanOrEqual(line.right);
+      expect(box.left).toBeGreaterThanOrEqual(pane.left);
+      expect(box.right).toBeLessThanOrEqual(pane.right);
+    } finally {
+      await page.viewport(414, 896);
+    }
+  });
+
   it("hides the course picker when the venue has no courses to pick", async () => {
     const { el } = await mount({ courses: [] });
     await ringAndPickers(el);
@@ -722,12 +758,10 @@ describe("till-table-order-screen", () => {
   it("picking the default placeholder clears the override back to the product default (omitted)", async () => {
     const { el } = await mount({ courses });
     const [picker] = await ringAndPickers(el);
-    picker!.value = "entrantes";
-    picker!.dispatchEvent(new Event("change"));
+    await chooseOption(picker!, "entrantes");
     await el.updateComplete;
     // Back to the "use default" placeholder ⇒ no override sent.
-    picker!.value = "";
-    picker!.dispatchEvent(new Event("change"));
+    await chooseOption(picker!, "");
     await el.updateComplete;
     const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
@@ -1762,7 +1796,7 @@ describe("till-table-order-screen", () => {
   });
 
   it("renders an editable course picker for a NOT-yet-fired tab line, bound to its current course", async () => {
-    // heldLine: firedAt null, current course Postres ⇒ an editable select bound to it.
+    // heldLine: firedAt null, current course Postres ⇒ an editable dropdown bound to it.
     const { el } = await mount({ lines: [heldLine], courses });
     await openDrawer(el);
     const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]');

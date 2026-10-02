@@ -426,7 +426,7 @@ export class TillScheduleScreen extends LitElement {
       <h2>${t("schedule.absence_title")}</h2>
       <div class="form">
         ${this.#dropdown(
-          "absence-kind",
+          "abs-kind",
           t("schedule.absence_kind"),
           ABSENCE_KINDS.map((kind) => ({ value: kind, label: t(`schedule.kind.${kind}`) })),
           this.absKind,

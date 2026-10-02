@@ -195,7 +195,7 @@ describe("till-schedule-screen", () => {
       root(el).querySelector<WtCombobox>(`wt-combobox[name="${name}"]`);
     const shift = dropdown("cover-shift");
     const colleague = dropdown("cover-colleague");
-    const kind = dropdown("absence-kind");
+    const kind = dropdown("abs-kind");
     for (const box of [shift, colleague, kind]) {
       expect(box).not.toBeNull();
       expect(box!.getAttribute("search")).toBe("auto");
@@ -240,7 +240,7 @@ describe("till-schedule-screen", () => {
 
   it("draws each dropdown wide enough for its whole label, before anything is chosen", async () => {
     const { el } = await mount(stubApi());
-    for (const name of ["cover-shift", "cover-colleague", "absence-kind"]) {
+    for (const name of ["cover-shift", "cover-colleague", "abs-kind"]) {
       const box = root(el).querySelector<WtCombobox>(`wt-combobox[name="${name}"]`)!;
       await box.updateComplete;
       const label = box.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
@@ -260,7 +260,7 @@ describe("till-schedule-screen", () => {
   it("Request time off submits the kind, dates and note", async () => {
     const api = stubApi();
     const { el } = await mount(api);
-    await setSelect(el, 'wt-combobox[name="absence-kind"]', "leave");
+    await setSelect(el, 'wt-combobox[name="abs-kind"]', "leave");
     setInput(el, "wt-input.abs-from", "2026-07-01");
     setInput(el, "wt-input.abs-to", "2026-07-05");
     setInput(el, "wt-input.abs-note", "Boda");

@@ -903,6 +903,14 @@ export class TillTableOrderScreen extends LitElement {
         justify-content: flex-end;
         gap: var(--wt-space-2);
         padding-bottom: var(--wt-space-2);
+        min-width: 0;
+        max-width: 100%;
+      }
+
+      /* Cut to the line, so a long chosen course ends in the dropdown's own ellipsis. */
+      .draft-line-tools > wt-combobox {
+        min-width: 0;
+        max-width: 100%;
       }
 
       .flag-choice {
