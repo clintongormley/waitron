@@ -177,9 +177,10 @@ Each row shows exactly one status, decided in this order:
    bill is still `placed`. A debt cancelled at the till afterwards reads Cancelled (rule 6), since
    the cancel route accepts any `placed` bill. _(2026-10-02, C126: no longer any. Such a bill has
    an issued invoice once its table has left, and the cancel now refuses an invoiced bill in
-   several cases, listed at `cancelPlacedOrder` (`apps/server/src/working-order.ts`) and
-   `creditWholeInvoice` (`apps/server/src/cancel-credit.ts`); otherwise it credits the invoice in
-   full, so the row reads Cancelled with Credited in full.)_ A
+   several cases, listed at `cancelPlacedOrder` (`apps/server/src/working-order.ts`) and, for the
+   whole-invoice credit, at `recordCorrection`'s `wholeInvoice` input
+   (`packages/core/src/record-correction.ts`); otherwise it credits the invoice in full, so the row
+   reads Cancelled with Credited in full.)_ A
    debt whose credit notes bring it to nothing keeps this status, with the "Credited in full" mark
    and nothing in Still owed; the till's lookup (section 5) leaves it out, as today's till list
    does (`listUnpaidDepartures`, `apps/server/src/unpaid-departure.ts`, around `:265`).
@@ -529,7 +530,8 @@ Owner, 2026-10-02 (~07:50, relayed by the supervising watcher):
 6. **Cancelled bills:** listed only when sent or holding lines, as recommended (section 4.1).
 7. **A sent bill cancelled after its invoice was issued:** Cancelled with an "Invoice not credited"
    mark on this screen; the till's cancel is queued separately as C126 (section 4.2).
-   _(2026-10-02, C126: built — the cancel credits the issued invoice in full; see section 4.2.)_
+   _(2026-10-02, C126: built — the cancel credits the issued invoice in full; see section 4.2; the
+   mark is dropped (owner, 2026-10-02 ~12:05, §4.2).)_
 
 The owner confirmed the append-only `receipt_reprints` table on 2026-10-02 ~09:50. The same
 answer allows a voided invoice's copy and limits staff to today's finished bills, as described

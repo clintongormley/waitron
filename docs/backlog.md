@@ -362,11 +362,13 @@ the 2026-09-30 folders design; what remains:
   (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5),
   but no route calls it: its only callers under `apps/` are three scripts in
   `apps/server/scripts/` (`daily-close-demo.ts`, `modelo-303-demo.ts`, `settle-invoice-first.ts`)
-  and tests. **The owner's points for when this is designed (2026-09-29):** (1) the amount staff
-  enter is what the customer gets back, VAT included — a €2.00 correction at 10% is €1.82 base plus
-  €0.18 VAT; (2) whether a correction should instead cancel the original and issue a new invoice
-  (`TipoRectificativa` "S", where today's path files by differences, "I", in
-  `packages/fiscal-verifactu/src/backend.ts`) — asked as asesor Q31 (2026-09-30), not decided.
+  and tests. _(2026-10-02, C126: the whole-order cancel route now calls it, for a credit of the
+  whole invoice only; no route issues a correction for part of one.)_ **The owner's points for
+  when this is designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
+  VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
+  should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
+  today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
+  asesor Q31 (2026-09-30), not decided.
 - **The till's menu reads (Task 7, #719).** Every `/api/menu-state` poll waits its turn in the
   write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
   inside `withTransaction`; reading outside a transaction would skip the queue but give
@@ -2278,7 +2280,11 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     It needs `sale.rectify` from the signed-in person and an enrolled device, whose till the credit
     note is filed on, and refuses a bill holding a payment or with one in flight. Any placed order,
     invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
-    at the reader in this process. No till screen calls the route. Open:
+    at the reader in this process. No till screen calls the route. The owner dropped the dashboard
+    Orders screen's "Invoice not credited" mark (2026-10-02 ~12:05): such a bill is to show as Cancelled
+    with its credit note. Whichever of C126 and B27a (`feat/orders-list-routes`) lands second
+    removes the mark and updates B27a's cases in `apps/server/src/orders-list.test.ts`
+    (owner-approved). Open:
     - **Whether the cancel should accept a manager-PIN override is a question for the owner, not
       a decision.** As built it takes none, so a waiter cancelling an invoiced order is refused 403
       with no way round it, while the sibling till actions accept one: an unpaid departure
@@ -2288,8 +2294,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
       Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
       0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.
-    - **An invoice that already has a credit note cannot be cancelled**
-      (`sale.correction_exceeds_total`, measured); no route issues a credit note other than this one.
+    - **An invoice that already has a correction cannot be cancelled.** One that lowered it leaves
+      less than the whole credit takes back, so the cancel is refused
+      `sale.correction_exceeds_total`; one that raised it is refused `sale.correction_not_whole`,
+      because a whole credit must be the invoice's first correction. Both are cases in
+      `apps/server/src/cancel-invoiced-order.test.ts`. No route issues a credit note other than this
+      one.
     - **The credit note is not printed** for the customer (asesor Q32 (b)).
     - **A placed order with no invoice is not checked against stored card payments.** Its cancel
       sees a card running at the reader in this process, but not a stored payment its provider has
@@ -6220,7 +6230,8 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
 | Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17) | **send now** — Q28 to confirm the owner's 2026-10-01 decision |
-| Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it | needs advisor before the correction screen is designed |
+| Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit)_ | needs advisor before the correction screen is designed |
+| Q32 (how a cancelled order's already-issued simplified invoice is undone) | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126) | built on the owner's 2026-10-02 decision; needs advisor to confirm |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;

@@ -15,7 +15,8 @@ and leaving without paying is now built on that decision. Q28 stays open for the
 
 On **2026-10-02** (lane C item C126, built in lane B): **Q32 added** — the owner decided, without
 the asesor, that cancelling an order whose ticket was already issued credits it in full with an R5
-corrective invoice; Q32 asks whether that, or an annulment, is right.
+corrective invoice; Q32 asks whether that, or an annulment, is right. The standalone copy has no
+section for Q32 and has not been updated for this.
 
 Later on **2026-09-30** (C90, owner decision that day): Q29's notes and parts (a), (c) and (e) now
 describe the new receipt. It prints each dish at its full price with each comp or discount on a line

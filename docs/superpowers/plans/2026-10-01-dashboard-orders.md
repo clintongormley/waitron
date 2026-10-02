@@ -35,8 +35,11 @@
 > _(2026-10-02, C126: built in lane B — the cancel now credits an issued invoice in full and needs
 > `sale.rectify`, so row 7's three cancel cases in Task 1 Step 2 no longer yield what they expect as
 > written; the pointer at that step says what each yields. Owner, 2026-10-02 ~12:05: the Invoice
-> not credited mark is dropped; whichever of C126 and B27a lands second updates B27a's cases in
-> `apps/server/src/orders-list.test.ts` and removes the mark from its code.)_
+> not credited mark is dropped. B27a builds no such mark: no `invoiceNotCredited` field on a row,
+> no `orders.invoice_not_credited` key, and no mark text in the Status column — such a bill reads
+> Cancelled with its credit note. Whichever of C126 and B27a lands second updates B27a's cases in
+> `apps/server/src/orders-list.test.ts` to match (owner-approved). The mark's text below is kept
+> as written, with a pointer back here.)_
 >
 > The owner confirmed the append-only reprint record and amended the scope, voided-copy and
 > permission choices on 2026-10-02 ~09:50. The code and tests in B27a carry those decisions.
@@ -133,7 +136,8 @@ the reply that delivered the plan.
    Step 2 cannot be produced through the till: report it rather than inserting rows by hand.
    _(2026-10-02, C126 built the other option: the cancel credits the whole invoice and needs
    `sale.rectify`, which staff do not hold, so a cancel case run with a staff session is refused
-   and one run with a supervisor's yields Cancelled with Credited in full.)_
+   and one run with a supervisor's yields Cancelled with Credited in full.)_ _(The mark, and
+   "keep the mark" above, were dropped by the owner 2026-10-02 ~12:05; see the banner.)_
 9. **A bare number in the search also finds the bill with that order number**
    (`working_orders.order_number`, spec §4.3), on the dashboard and in the till's Find a bill. Order
    numbers repeat over time, so a bare-number search can return several bills.
@@ -610,12 +614,12 @@ export async function billlessSale(venue: OrderVenue): Promise<string> {
   `venue.cookie`, the staff operator Ana's till session, which is now refused for an invoiced bill:
   403, `authorization.not_permitted`, because the credit needs `sale.rectify`. Run with a
   supervisor's till session instead, "reads a sent bill cancelled at the till…" and "reads a debt
-  cancelled at the till afterwards…" credit the invoice in full, so `invoiceNotCredited` is false,
-  not true. "drops the Invoice not credited mark…" credits the invoice first and then cancels; the
-  cancel's credit in full would take the invoice below zero, so it is refused with
+  cancelled at the till afterwards…" credit the invoice in full and read Cancelled with Credited in
+  full; the `invoiceNotCredited` field they assert no longer exists (dropped by the owner 2026-10-02
+  ~12:05, see the banner). "drops the Invoice not credited mark…" credits the invoice first and then
+  cancels; the cancel's credit in full would take the invoice below zero, so it is refused with
   `sale.correction_exceeds_total`. The cancel route no longer leaves an issued invoice uncredited;
-  whether any other path can abandon an invoiced bill was not traced, so whether the Invoice not
-  credited mark is still needed is for lane E or the owner to decide.)_
+  whether any other path can abandon an invoiced bill was not traced.)_
 
 ```ts
 import { randomUUID } from "node:crypto";
@@ -1702,6 +1706,10 @@ export async function reprintOrderReceipt(
   at this spec: "Task 1, the Orders routes and the dashboard reprint, is on
   `feat/orders-list-routes`"), then:
 
+  _(The commit message's sentence on the Invoice not credited mark, and the `invoiceNotCredited`
+  field in this task's Interfaces and `listOrders`, were dropped by the owner 2026-10-02
+  ~12:05, see the banner.)_
+
 ```bash
 git add apps/server/src/orders-list.ts apps/server/src/orders-api.ts apps/server/src/orders-reprint.ts \
   apps/server/src/testing/order-venue.ts apps/server/src/orders-list.test.ts apps/server/src/orders-list.reads.test.ts \
@@ -2250,6 +2258,8 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
   (`formatMoney(row.total, currentLocale())`), `owed` (`choosable: "shown"`; blank when `stillOwed`
   is null; `part="owed"`), `staff` (`choosable: "shown"`; names joined, a null name as
 `orders.staff_unknown`), and:
+  _(The Status column's "Invoice not credited" text was dropped by the owner 2026-10-02 ~12:05,
+  see the banner.)_
 
 ```ts
       {
@@ -2418,6 +2428,9 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
 | `orders.reprint.print`               | Print a copy                              | Imprimir una copia                            |
 | `orders.reprint.sent`                | Copy sent to {printer}                    | Copia enviada a {printer}                     |
 | `nav.my_schedule`                    | My schedule                               | Mi horario                                    |
+
+  _(The `orders.invoice_not_credited` row was dropped by the owner 2026-10-02 ~12:05, see the
+  banner.)_
 
   Interpolate with `t(key).replace("{name}", …)`, as `apps/dashboard/src/screens/alerts-screen.ts:212`
   does. In `apps/dashboard/src/i18n/codes.ts` add `"working_order.not_found": { en: "That bill was not found", es: "No se encontró esa cuenta" }`
@@ -2875,7 +2888,8 @@ so there is never a till with no way to see a debt."
 ## Self-review notes
 
 - **Spec coverage.** §4.1 rows (Task 1 `rowsSql`, decisions 2 and 3); §4.2 statuses and Credited mark
-  (Task 1 `BILL_STATUS`, decision 1; the Invoice not credited mark, decision 8, with C126 named);
+  (Task 1 `BILL_STATUS`, decision 1; the Invoice not credited mark, decision 8, with C126 named —
+  the mark was dropped by the owner 2026-10-02 ~12:05, see the banner);
   §4.3 filters and search (Task 1 `filterClauses`; Unpaid keeps the dates, Task 2 `withStatus`;
   Location is hidden and not built, §8); §4.4 columns (Task 2 `#columns`); §4.5 detail (Task 1
   `readOrderDetail`, Task 2 dialog; adjustments per decision 5) and reprint (Task 1 Steps 9–11,
