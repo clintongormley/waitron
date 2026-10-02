@@ -994,17 +994,32 @@ folder's row opens the folder, as its name does today — ask if folder rows wer
 they are. LOOK at 1280 and 390, light and dark.
 
 **The dashboard recovers by itself when the server comes back after a restart (A206, owner
-2026-10-02) — OPEN, not reproduced.** The owner: _"when i restart waitron the dashboard says
-"couldn't connect to waitron", but then it doesn't keep trying. i had to refresh the page"_. The
-message is `connection.failed`, raised by the shared request helper when a request gets no answer
-at all (`packages/dashboard-kit/src/request.ts`). The live connection already retries on its own,
-backing off up to 30 seconds (`packages/dashboard-kit/src/live-connection.ts`); read, not run: what
-looks to stay stuck is the request that loaded the screen, which nothing tries again. **Wanted:**
-while the server cannot be reached the dashboard keeps trying, and once it answers again the message
-goes away and the open screen reloads its data, with no page refresh. An unsaved edit in an open
-form is kept. **First** reproduce it: the dashboard open on a few screens (a table screen, a form,
-the Backups screen), restart the server, and note which ones stay stuck, and whether the live
-connection's return reaches them.
+2026-10-02) — DONE.** Reproduced with the server serving the built dashboard itself, as the box does
+(the dev stack's page server answers `502` instead, so it never shows `connection.failed`): of 34
+screens open across a restart, 20 kept "This browser could not connect…" or "could not be loaded"
+after their data had come back. The live connection already re-reads every watched query when its
+stream returns; what was missing was telling the screen. `QueryController`
+(`packages/dashboard-kit/src/query-controller.ts`) now takes an optional fourth argument, called once
+every read of that controller that failed has applied a value again, and each of those screens
+clears the message its failed read put up — unless something else has replaced it. Screens whose
+first load stopped before starting its later reads (Products, Printers, Modifiers, Content
+languages, Approvals, Sales' business day) start them on recovery. Measured afterwards: all 34
+screens recover from a 20 s and a 90 s outage, and 32 of 34 opened during the outage; an unsaved
+form edit is kept. Not covered — below, "Screens that load outside the shared queries never retry".
+
+**Screens that load outside the shared queries never retry (A224, from A206's review,
+2026-10-02) — OPEN.** A206 fixed every read made through the shared query layer. A screen opened
+while the server is down and loading through a one-off request stays on its message until the page
+is refreshed: Payments (`listPaymentProviders`/`listReaders` in `#load`), Cloud services, and
+Profile's language list (`getLocales`). Also from that review: no read has a time limit, so a request
+that never answers keeps its read loading for ever; and on a screen that stores its message as a code
+(most of them), a save that failed with `connection.failed` during the outage loses its message when
+the reads recover — Units compares the error itself and keeps it. Roster and Planned vs actual show
+their "no locations" prompt instead of the error when the locations read fails.
+
+**The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
+2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
+the dark banner; the running figure stays visible. Seen at 1280 wide on every screen.
 
 **The Products screen as a category tree (A208, owner 2026-10-02) — OPEN, spec and plan
 approved, queued in lane A.** The owner, on two screenshots: _"this layout is messy, needs tidying"_,
