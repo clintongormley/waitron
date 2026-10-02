@@ -57,6 +57,10 @@ export class WtDisclosure extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      .summary-label {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       /* Points down when collapsed; rotates to point up when open, matching the direction the body
          reveals in. */
       .chevron {
@@ -74,6 +78,9 @@ export class WtDisclosure extends LitElement {
 
   @property() heading = "";
   @property() summary = "";
+  /** The closed line as named values, each after its bold name; used instead of `summary` when it
+   * holds any. */
+  @property({ attribute: false }) summaryFields: readonly { label: string; value: string }[] = [];
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
@@ -94,6 +101,17 @@ export class WtDisclosure extends LitElement {
     );
   }
 
+  private renderSummary() {
+    if (this.summaryFields.length)
+      return html`<span class="summary"
+        >${this.summaryFields.map(
+          ({ label, value }, index) =>
+            html`${index ? " · " : nothing}<span class="summary-label">${label}:</span> ${value}`,
+        )}</span
+      >`;
+    return this.summary ? html`<span class="summary">${this.summary}</span>` : nothing;
+  }
+
   override render() {
     return html`
       <div class="section">
@@ -105,11 +123,7 @@ export class WtDisclosure extends LitElement {
           @click=${this.onToggle}
         >
           <span class="heading">${this.heading}</span>
-          ${
-            this.summary && !this.open
-              ? html`<span class="summary">${this.summary}</span>`
-              : nothing
-          }
+          ${this.open ? nothing : this.renderSummary()}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
         <div id=${this.bodyId} class="body" ?hidden=${!this.open}>

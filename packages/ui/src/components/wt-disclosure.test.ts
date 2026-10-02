@@ -211,3 +211,39 @@ test("the header click stays inside the disclosure, so a listener above it sees 
   expect(toggles).toBe(1);
   expect(clicks).toBe(0);
 });
+
+test("summary fields put each value after its bold name, joined with a middot, while closed", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Pricing"><p>body</p></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  el.summaryFields = [
+    { label: "Base price", value: "€38.00 per kg" },
+    { label: "VAT", value: "Reduced (10%)" },
+  ];
+  await el.updateComplete;
+  host.style.setProperty("--wt-font-weight-bold", "800");
+  const summary = el.shadowRoot!.querySelector(".summary")!;
+  expect(summary.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "Base price: €38.00 per kg · VAT: Reduced (10%)",
+  );
+  const names = [...summary.querySelectorAll(".summary-label")];
+  expect(names.map((name) => name.textContent)).toEqual(["Base price:", "VAT:"]);
+  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual(["800", "800"]);
+  // The values stay in the summary's own weight; only the names are bold.
+  expect(getComputedStyle(summary).fontWeight).not.toBe("800");
+  el.open = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
+});
+
+test("summary fields win over a summary string given beside them", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Pricing" summary="plain"><p>body</p></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  el.summaryFields = [{ label: "VAT", value: "Reduced (10%)" }];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".summary")!.textContent!.trim()).toBe("VAT: Reduced (10%)");
+  el.summaryFields = [];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".summary")!.textContent!.trim()).toBe("plain");
+});
