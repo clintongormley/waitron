@@ -122,7 +122,13 @@ import type {
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type { FloorAnnotator, ServiceMode, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
+import type {
+  FloorAnnotator,
+  MakerResolver,
+  ServiceMode,
+  ZoneMenuOffer,
+  ZoneOffers,
+} from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import type { FloorTableShape } from "./tables.js";
@@ -1164,6 +1170,109 @@ type FireableLine = {
   [K in keyof typeof fireableLineColumns]: GetColumnData<(typeof fireableLineColumns)[K]>;
 };
 
+export type RoutingOnce = (() => Promise<MakerResolver>) & { readonly at: Date };
+
+export function routingOnce(tx: Transaction, cfg: TillConfig, at: Date): RoutingOnce {
+  let opened: Promise<MakerResolver> | undefined;
+  return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, cfg, at)), { at });
+}
+
+interface DishKitchenPlace {
+  dishLineId: string;
+  stationId: string | null;
+  courseId: string | null;
+  firedAt: string | null;
+}
+
+/** Insert records only for extra lines whose own station differs from their dish's destination. */
+export async function insertSplitExtras(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  zoneId: string | null,
+  dishes: readonly DishKitchenPlace[],
+  routing: RoutingOnce,
+): Promise<
+  { workingOrderLineId: string; stationId: string; firedAt: string | null; quantity: number }[]
+> {
+  if (dishes.length === 0) return [];
+  const byDish = new Map(dishes.map((dish) => [dish.dishLineId, dish]));
+  const extras = await tx
+    .select({
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+      quantity: workingOrderLines.quantity,
+      ticketId: ticketItems.id,
+    })
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      inArray(
+        workingOrderLines.parentLineId,
+        dishes.map((dish) => dish.dishLineId),
+      ),
+    );
+  const fresh = extras.filter((extra) => extra.ticketId === null && extra.productId !== null);
+  if (fresh.length === 0) return [];
+  const decisions = await (
+    await routing()
+  ).extraMakers(
+    zoneId,
+    fresh.map((extra) => ({
+      key: extra.id,
+      productId: extra.productId!,
+      dishStationId: byDish.get(extra.parentLineId!)!.stationId,
+    })),
+  );
+  const madeHere = await readMadeHereStations(tx, cfg.sendingDeviceId);
+  const values = fresh.flatMap((extra) => {
+    const decision = decisions.get(extra.id);
+    if (decision?.kind !== "made") return [];
+    const dish = byDish.get(extra.parentLineId!)!;
+    const here = madeHere.has(decision.stationId);
+    const firedAt = here ? routing.at.toISOString() : dish.firedAt;
+    return [
+      {
+        nodeId: cfg.nodeId,
+        workingOrderId: orderId,
+        workingOrderLineId: extra.id,
+        stationId: decision.stationId,
+        courseId: dish.courseId,
+        note: null,
+        quantity: extra.quantity,
+        firedAt,
+        madeHere: here,
+        state: here ? ("ready" as const) : ("queued" as const),
+        readyAt: here ? firedAt : null,
+      },
+    ];
+  });
+  if (values.length === 0) return [];
+  try {
+    const inserted = await tx.insert(ticketItems).values(values).returning({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      firedAt: ticketItems.firedAt,
+      quantity: ticketItems.quantity,
+      madeHere: ticketItems.madeHere,
+    });
+    for (const row of inserted) if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
+    return inserted
+      .filter((row) => !row.madeHere)
+      .map((row) => ({
+        workingOrderLineId: row.workingOrderLineId,
+        stationId: row.stationId,
+        firedAt: row.firedAt,
+        quantity: row.quantity!,
+      }));
+  } catch (error) {
+    if (isUniqueViolation(error))
+      throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+    throw error;
+  }
+}
+
 /**
  * The order's dish lines the kitchen has not been given, in line order: never stamped sent and
  * holding no ticket item. A held or recalled dish that goes to a station holds one; a
@@ -1188,7 +1297,9 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
 /**
  * Every order routes by exceptions, folder claims and the active default station. Station and
  * course are snapshotted at fire time: later rule edits never move work already sent. A made-here
- * item is recorded and never printed.
+ * item is recorded and never printed. Extras are decided after their dish against the same routing
+ * snapshot. An extra made elsewhere copies the dish's course and hold, unless made here: then it is
+ * ready and fired at the send, even when its dish is held.
  * An unroutable outcome refuses the send, unless payment uses `unroutable: "skip"` to leave
  * the dish unfired and unstamped and return it for the paid-order alert.
  */
@@ -1196,7 +1307,7 @@ export async function fireLines(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
-  // A CHILD modifier line is part of its parent dish and gets no ticket item of its own.
+  // The dish decides first; an extra may get a separate record after its destination is known.
   // `quantity` is the line's stored thousandths, which the kitchen is asked to make.
   // `hold: true` inserts the line unfired whatever its course unless it is made here, and
   // `release: true` fires it whatever its course; neither is stored.
@@ -1205,10 +1316,11 @@ export async function fireLines(
     unroutable?: "skip";
     keepStations?: ReadonlyMap<string, string>;
     keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
+    routing?: RoutingOnce;
   } = {},
 ): Promise<FireableLine[]> {
-  // One clock reading for the whole round, including routing and the fire stamp.
-  const now = new Date();
+  const routing = options.routing ?? routingOnce(tx, cfg, new Date());
+  const now = routing.at;
   const firedAt = now.toISOString();
   const parentLines = lines.filter((line) => line.parentLineId === null);
   if (parentLines.length === 0) {
@@ -1247,13 +1359,7 @@ export async function fireLines(
     ),
   ];
 
-  const makers = await VENUE_SERVICE.resolveMakers(
-    tx,
-    cfg,
-    serviceContext?.zoneId ?? null,
-    productIds,
-    now,
-  );
+  const makers = await (await routing()).makers(serviceContext?.zoneId ?? null, productIds);
   const keepStates = options.keepStations?.size
     ? await VENUE_SERVICE.stationStates(tx, cfg, now)
     : null;
@@ -1344,6 +1450,7 @@ export async function fireLines(
     orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
 
   const sentLineIds: string[] = [];
+  const dishPlaces: DishKitchenPlace[] = [];
   // A line with nowhere to go refuses the whole fire.
   const values = lines
     .map((line) => {
@@ -1359,6 +1466,12 @@ export async function fireLines(
       // A no-preparation line has no kitchen station or ticket item.
       if (maker?.kind === "no_preparation" && stationFor(line) === null) {
         if (courseFired) sentLineIds.push(line.id);
+        dishPlaces.push({
+          dishLineId: line.id,
+          stationId: null,
+          courseId,
+          firedAt: courseFired ? firedAt : null,
+        });
         return null;
       }
       const stationId =
@@ -1371,6 +1484,12 @@ export async function fireLines(
       // A line not fired now is HELD (`fired_at` NULL) until release, unless it is made here.
       const fired = made || courseFired;
       if (fired) sentLineIds.push(line.id);
+      dishPlaces.push({
+        dishLineId: line.id,
+        stationId,
+        courseId,
+        firedAt: fired ? firedAt : null,
+      });
       return {
         nodeId: cfg.nodeId,
         workingOrderId: orderId,
@@ -1402,25 +1521,71 @@ export async function fireLines(
     }
   }
   await stampSent(tx, orderId, sentLineIds, firedAt);
-  if (values.length === 0) return unrouted;
   // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
   // already-fired items and reprint them.
-  const inserted = await tx.insert(ticketItems).values(values).returning({
-    workingOrderLineId: ticketItems.workingOrderLineId,
-    stationId: ticketItems.stationId,
-    firedAt: ticketItems.firedAt,
-    madeHere: ticketItems.madeHere,
-  });
+  const inserted =
+    values.length === 0
+      ? []
+      : await tx.insert(ticketItems).values(values).returning({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+          firedAt: ticketItems.firedAt,
+          madeHere: ticketItems.madeHere,
+        });
 
   for (const row of inserted) {
     if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
   }
 
+  const firingDishes = dishPlaces.filter((dish) => dish.firedAt !== null);
+  const releasedExtras =
+    firingDishes.length === 0
+      ? []
+      : await tx
+          .update(ticketItems)
+          .set({ firedAt })
+          .where(
+            and(
+              eq(ticketItems.workingOrderId, orderId),
+              isNull(ticketItems.firedAt),
+              inArray(
+                ticketItems.workingOrderLineId,
+                tx
+                  .select({ id: workingOrderLines.id })
+                  .from(workingOrderLines)
+                  .where(
+                    inArray(
+                      workingOrderLines.parentLineId,
+                      firingDishes.map((dish) => dish.dishLineId),
+                    ),
+                  ),
+              ),
+            ),
+          )
+          .returning({
+            workingOrderLineId: ticketItems.workingOrderLineId,
+            stationId: ticketItems.stationId,
+          });
+  const extraInserted = await insertSplitExtras(
+    tx,
+    cfg,
+    orderId,
+    serviceContext?.zoneId ?? null,
+    dishPlaces,
+    routing,
+  );
+
   // Only newly fired items not made here print. Outbox inserts on this transaction: no hardware I/O
   // blocks the fire.
   const firedItems = inserted
     .filter((row) => row.firedAt !== null && !row.madeHere)
-    .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }));
+    .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }))
+    .concat(
+      releasedExtras,
+      extraInserted
+        .filter((row) => row.firedAt !== null)
+        .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId })),
+    );
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
   return unrouted;
 }

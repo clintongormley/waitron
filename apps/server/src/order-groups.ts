@@ -35,6 +35,7 @@ import {
   insertTabRound,
   isReleased,
   priceTabRound,
+  routingOnce,
   refusePaymentInFlight,
   splitLinesWithinOrder,
   type TabRoundLine,
@@ -183,6 +184,7 @@ export async function placeGroups(
     return { ...row, groupId, creditedTo: operatorId };
   });
   const inserted = await insertTabRound(tx, cfg, round, rows);
+  const routing = routingOnce(tx, cfg, new Date());
   for (const [i, group] of input.groups.entries()) {
     const groupId = groupIds[i]!;
     const fire = group.release === "fire";
@@ -193,6 +195,7 @@ export async function placeGroups(
       inserted
         .filter((row) => row.groupId === groupId)
         .map((row) => ({ ...row, hold: !fire, release: fire })),
+      { routing },
     );
     if (input.joinGroupId !== undefined) {
       await correctJoin(

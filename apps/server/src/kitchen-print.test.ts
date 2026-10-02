@@ -4,43 +4,29 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
-  locations,
   nowIso,
   orderGroups,
   parties,
   partyTables,
   printJobs,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   EACH_UNIT,
-  assignCatalogueToLocation,
-  createCatalogue,
-  createExtraList,
   createProduct,
   readContentLanguages,
   units,
   updateUnit,
-  writeProductModifiers,
 } from "@waitron/catalogue";
-import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  thousandthsToDecimal,
-  tillId as brandTillId,
-} from "@waitron/shared";
+import { thousandthsToDecimal } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
@@ -53,7 +39,6 @@ import {
   reprintOrderTickets,
 } from "./kitchen-print.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
-import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
   billRow,
@@ -67,6 +52,13 @@ import {
   tableAt,
 } from "./testing/party-venue.js";
 import "./errors.js";
+import {
+  setupVenue,
+  fireNewOrder,
+  createOfferedOrder,
+  addExtras,
+  useSplitExtrasDb,
+} from "./testing/split-extras-venue.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
@@ -84,53 +76,11 @@ const suite = useVenueDb({
 let db: Database;
 beforeAll(() => {
   db = suite.db;
+  useSplitExtrasDb(db);
 });
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-interface Venue {
-  cfg: TillConfig;
-  catalogueId: string;
-}
-
-/** A fresh location, till, node and assigned catalogue, returning the till's config. */
-async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
-  await seedLegacySellingUnits(db);
-  // Inserted through the table definitions, not as raw SQL: the ids and `created_at` come from
-  // `$defaultFn` generators, which a raw insert never reaches.
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
-  const catalogueId = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    await assignCatalogueToLocation(tx, locationId, cat.id);
-    return cat.id;
-  });
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
-    nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
-    locationId: brandLocationId(locationId),
-    locale: LOCALE,
-    invoiceLocales: [LOCALE],
-    tipsEnabled: false,
-    orderFlow: "prepay",
-  };
-  return { cfg, catalogueId };
-}
 
 /** The location scope the printing verbs run under. */
 function printCfg(cfg: TillConfig): PrintConfig {
@@ -357,54 +307,6 @@ async function makePrinter(
   return id;
 }
 
-type ProductLine = {
-  productId: string;
-  quantity: string;
-  extras?: ExtraSelection[];
-  options?: OptionSelection[];
-  note?: string;
-};
-
-/** Open a working order in the counter zone, selling each line through the zone's offer for its
- *  product. Call once the suite's products, stations and extras are final: the offers' routes mirror
- *  the active claim or default station each product would have taken. */
-async function createOfferedOrder(
-  tx: Transaction,
-  cfg: TillConfig,
-  id: string,
-  lines: ProductLine[],
-): ReturnType<typeof createOpenOrder> {
-  const offers = await offerProducts(tx, cfg);
-  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
-    zoneId: offers.zoneId,
-  });
-}
-
-/** Open a working order carrying `lines` and fire it, returning the order id. Passes every persisted
- *  line, children included, to `fireLines`, so the parent-only filter under test is `fireLines`' own. */
-async function fireNewOrder(
-  tx: Transaction,
-  cfg: TillConfig,
-  lines: ProductLine[],
-): Promise<string> {
-  const id = randomUUID();
-  await createOfferedOrder(tx, cfg, id, lines);
-  const fired = await tx
-    .select({
-      id: workingOrderLines.id,
-      productId: workingOrderLines.productId,
-      courseId: workingOrderLines.courseId,
-      parentLineId: workingOrderLines.parentLineId,
-      note: workingOrderLines.note,
-      quantity: workingOrderLines.quantity,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, id))
-    .orderBy(workingOrderLines.lineNo);
-  await fireLines(tx, cfg, id, fired);
-  return id;
-}
-
 /**
  * Open an order with NO service context holding one dish line and one child line per pick, then FIRE
  * it, so the dish's zone-less product exception selects its station. The lines are written straight to the table
@@ -453,55 +355,6 @@ async function fireContextlessDish(
     .orderBy(workingOrderLines.lineNo);
   await fireLines(tx, cfg, id, fired);
   return id;
-}
-
-/** Offer one optional, uncapped extras list on `dishId`, returning the list id and the offered
- *  products' ids in order. None of these products is routed to a station: a child line never resolves
- *  one. */
-async function addExtras(
-  tx: Transaction,
-  cfg: TillConfig,
-  catalogueId: string,
-  dishId: string,
-  items: { name: string; customerName?: string; kitchenName?: string; maxQuantity?: number }[],
-): Promise<{ listId: string; productIds: string[] }> {
-  const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
-  const productIds: string[] = [];
-  for (const item of items) {
-    const { id } = await createProduct(tx, {
-      catalogueId,
-      categoryId: null,
-      name: item.name,
-      ...(item.customerName === undefined
-        ? {}
-        : { customerName: { [defaultLanguage]: item.customerName } }),
-      ...(item.kitchenName === undefined ? {} : { kitchenName: item.kitchenName }),
-      pricingUnit: "each",
-      unitPrice: "0.50",
-      vatClass: "reduced",
-    });
-    productIds.push(id);
-  }
-  const list = await createExtraList(
-    tx,
-    {
-      name: "Extras",
-      customerName: null,
-      kitchenName: null,
-      minPicks: 0,
-      maxPicks: null,
-      active: true,
-      items: productIds.map((productId, index) => ({
-        productId,
-        maxQuantity: items[index]!.maxQuantity ?? 1,
-        preselected: false,
-        price: null,
-      })),
-    },
-    cfg.locale,
-  );
-  await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
-  return { listId: list.id, productIds };
 }
 
 /** Every outbound TCP open goes through `Socket.prototype.connect`. */
@@ -1186,14 +1039,14 @@ describe("a dish sold by the piece prints no unit", () => {
   );
 });
 
-describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, child sub-text)", () => {
-  it("fires a dish with two extras as ONE ticket_item (the parent), never one per child", async () => {
+describe("ordering modifiers on the kitchen ticket", () => {
+  it("keeps two unclaimed extras on their dish's one kitchen record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
-      // With a default station present, a child would otherwise route to it.
+      // Neither extra has a claim, so both follow their dish instead of the default.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
         { name: "Nata" },
@@ -1329,9 +1182,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(ticket).not.toMatch(/\+ Nata(?! x)/u);
   });
 
-  it("never station-resolves a child line: a dish-with-extras fires with NO default station", async () => {
-    // The child's product routes nowhere and there is no default station, so a child resolved on its
-    // own would fail with `station.no_default`.
+  it("lets an unclaimed extra follow its dish when no default station is on", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { stationId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });

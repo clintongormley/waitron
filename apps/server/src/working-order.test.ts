@@ -3054,19 +3054,14 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         returning id`);
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
-      const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolveMakers");
+      const routingAt = vi.spyOn(VENUE_SERVICE, "routingAt");
       try {
         await addTabRound(tx, cfg, tabId, [
           { menuItemId: premiumCafeOfferId, quantity: "1" },
           { menuItemId: premiumCafeOfferId, quantity: "1" },
           { menuItemId: aguaOffer.id, quantity: "1" },
         ]);
-        expect(resolveRoutes).toHaveBeenCalledTimes(1);
-        expect(resolveRoutes.mock.calls[0]!.slice(2)).toEqual([
-          zoneId,
-          [cafeId, aguaId],
-          expect.any(Date),
-        ]);
+        expect(routingAt).toHaveBeenCalledTimes(1);
         const items = await ticketItemsFor(tx, tabId);
         expect(items).toHaveLength(3);
         const stationsOf = (productId: string) =>
@@ -3074,7 +3069,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         expect(stationsOf(cafeId)).toEqual([bar.id, bar.id]);
         expect(stationsOf(aguaId)).toEqual([kitchen.id]);
       } finally {
-        resolveRoutes.mockRestore();
+        routingAt.mockRestore();
       }
     });
   });
