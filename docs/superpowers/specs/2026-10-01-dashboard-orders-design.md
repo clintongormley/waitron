@@ -195,8 +195,9 @@ Each row shows exactly one status, decided in this order:
    lane C's C126, which measures the gap first. This design does not change the cancel.
    _(2026-10-02, C126: the cancel now credits the whole invoice with an R5 corrective invoice in the
    same transaction, needs `sale.rectify`, and settles the invoice at nothing owed, so a bill
-   cancelled after that reads Cancelled with Credited in full; the Invoice not credited mark is
-   left to bills cancelled before it. See `docs/backlog.md`, C126's entry.)_
+   cancelled after that reads Cancelled with Credited in full. Owner, 2026-10-02 ~12:05: drop the
+   Invoice not credited mark — such bills show as Cancelled with their credit note. See
+   `docs/backlog.md`, C126's entry.)_
 
 Separately, a row with credit notes carries a **Credited** mark ("in full" when the credit notes
 bring it to zero, "in part" otherwise). It is a mark rather than a status because a paid bill can

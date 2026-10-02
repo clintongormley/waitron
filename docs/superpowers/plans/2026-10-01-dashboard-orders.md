@@ -34,8 +34,9 @@
 >
 > _(2026-10-02, C126: built in lane B — the cancel now credits an issued invoice in full and needs
 > `sale.rectify`, so row 7's three cancel cases in Task 1 Step 2 no longer yield what they expect as
-> written; the pointer at that step says what each yields. Whether the Invoice not credited mark is
-> still needed is for lane E or the owner to decide.)_
+> written; the pointer at that step says what each yields. Owner, 2026-10-02 ~12:05: the Invoice
+> not credited mark is dropped; whichever of C126 and B27a lands second updates B27a's cases in
+> `apps/server/src/orders-list.test.ts` and removes the mark from its code.)_
 >
 > The owner confirmed the append-only reprint record and amended the scope, voided-copy and
 > permission choices on 2026-10-02 ~09:50. The code and tests in B27a carry those decisions.

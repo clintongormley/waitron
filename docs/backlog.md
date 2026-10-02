@@ -2284,11 +2284,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       with no way round it, while the sibling till actions accept one: an unpaid departure
       (`apps/server/src/unpaid-departure.ts`), a bill refund (`apps/server/src/bill-refunds.ts`)
       and opening the drawer (`POST /api/drawer/open`, `apps/server/src/till-api.ts`).
-    - **Some invoices cannot be credited through `recordCorrection` as it stands, so their cancel is
-      refused (`sale.correction_breakdown_mismatch`).** It derives VAT from the lines, while the
-      invoice's VAT is the menu price less its base: a 0.55 dish at 21% was invoiced 0.45 + 0.10 and
-      reverses to -0.45 - 0.09 (measured 2026-10-02). Letting `recordCorrection` take the invoice's
-      own split changes the fiscal core; asked of the owner.
+    - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
+      negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
+      Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
+      0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.
     - **An invoice that already has a credit note cannot be cancelled**
       (`sale.correction_exceeds_total`, measured); no route issues a credit note other than this one.
     - **The credit note is not printed** for the customer (asesor Q32 (b)).

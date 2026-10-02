@@ -1674,8 +1674,7 @@ step: an R5, *por diferencias*, through `recordCorrection`
 (`packages/core/src/record-correction.ts`), the only kind the Veri\*Factu backend files
 (`TipoRectificativa: "I"`, `packages/fiscal-verifactu/src/backend.ts`).
 The original invoice is then settled at nothing owed. The same cancel reaches a bill recorded as
-*left without paying* (Q28). Where today's corrective path cannot reverse the invoice's VAT split to
-the cent, the cancel is refused instead and nothing is filed — a software limit, not a question here.
+*left without paying* (Q28). The credit note's VAT breakdown is the original's, negated.
 
 The sources, fetched raw on 2026-10-02:
 
