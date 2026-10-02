@@ -50,6 +50,12 @@ describe("id", () => {
   });
 });
 
+describe("receiptQrText", () => {
+  it("supplies AEAT's caption above the QR and the Veri*Factu legend under it, untranslated", () => {
+    expect(backend.receiptQrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
+  });
+});
+
 describe("zero-rate sales", () => {
   it("files the existing zero-rate product treatment as S1 with a zero cuota", async () => {
     const { saleId } = await withTransaction(suite.db, async (tx) => {

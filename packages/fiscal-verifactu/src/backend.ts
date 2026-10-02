@@ -12,6 +12,7 @@ import type {
   FiscalRecordRef,
   IntegrityReport,
   NodeRegistration,
+  ReceiptQrText,
   SaleForFiscalRecord,
   TrustedClock,
   VatBreakdownLine,
@@ -127,6 +128,12 @@ type OriginalAltaForCorrection = Pick<
  */
 export class VerifactuBackend implements FiscalBackend {
   readonly id = BACKEND_ID;
+
+  /**
+   * Both fixed and never translated: the caption is AEAT's (its QR specification v0.5.0, §3) and
+   * the legend is the law's (Orden HAC/1177/2024 art. 20.1.b).
+   */
+  readonly receiptQrText: ReceiptQrText = { caption: "QR tributario:", legend: "VERI*FACTU" };
 
   private readonly db: Database;
   private readonly clock: TrustedClock;

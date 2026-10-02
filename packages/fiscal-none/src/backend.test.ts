@@ -40,6 +40,10 @@ describe("NoneBackend records nothing", () => {
     expect(make().id).toBe("none");
   });
 
+  it("supplies no words to print around a verification QR, having no QR to print", () => {
+    expect(make().receiptQrText).toBeUndefined();
+  });
+
   it("recordSale writes nothing and returns a recorded ref carrying the sale's own instants", async () => {
     const sale = sampleSale();
     const ref = await make().recordSale(tx, sale);
