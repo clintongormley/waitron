@@ -111,6 +111,7 @@ export class TillCardGrid extends LitElement {
   @property() cardProvider: CardProvider = "none";
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
+  @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
   @property({ attribute: false }) capabilities: CapabilityFlag[] = [];
@@ -258,6 +259,7 @@ export class TillCardGrid extends LitElement {
             .cardProvider=${this.cardProvider}
             .tipsEnabled=${this.tipsEnabled}
             .cardOutcome=${this.cardOutcome}
+            .cardAttemptsOver=${this.cardAttemptsOver}
             .activeReaders=${this.activeReaders}
             .defaultReaderId=${this.defaultReaderId}
           ></till-tender-pay>`;

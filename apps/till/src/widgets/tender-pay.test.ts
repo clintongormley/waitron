@@ -1042,6 +1042,76 @@ describe("till-tender-pay", () => {
       expect(query(el, ".retry")).toBeNull();
     });
 
+    it("a finished attempt with no card outcome takes the spinner back to the choices", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      expect(query(el, ".collecting")).not.toBeNull();
+      el.cardAttemptsOver = 1;
+      await el.updateComplete;
+      expect(query(el, ".collecting")).toBeNull();
+      expect(query(el, ".pay")).not.toBeNull();
+      expect(query(el, ".pay-card")).not.toBeNull();
+    });
+
+    it("a finished attempt leaves cash entry alone when the operator has moved on to it", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      click(el, ".cancel");
+      await el.updateComplete;
+      click(el, ".pay");
+      await el.updateComplete;
+      expect(query(el, "till-numeric-pad")).not.toBeNull();
+      el.cardAttemptsOver = 1;
+      await el.updateComplete;
+      expect(query(el, "till-numeric-pad")).not.toBeNull();
+      expect(query(el, ".pay")).toBeNull();
+    });
+
+    it("a finished attempt leaves the card outcome on screen", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = "declined";
+      await el.updateComplete;
+      el.cardAttemptsOver = 1;
+      await el.updateComplete;
+      expect(query(el, ".retry")).not.toBeNull();
+      expect(query(el, ".pay")).toBeNull();
+    });
+
+    it("a card outcome arriving with the finished attempt shows the outcome, not the choices", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = "timeout";
+      el.cardAttemptsOver = 1;
+      await el.updateComplete;
+      expect(query(el, ".retry")).not.toBeNull();
+      expect(query(el, ".pay")).toBeNull();
+    });
+
     it("shows a tip entry only when tipsEnabled (integrated only)", async () => {
       const store = new WorkingOrderStore();
       const { el: withTip } = await mountWidget<TillTenderPay>("till-tender-pay", {

@@ -708,6 +708,37 @@ describe("the other counter requests refused because the menu changed", () => {
     expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
   });
 
+  it("keeps the pay card waiting on the reader through the retry, and puts its choices back when the retry is refused", async () => {
+    let refuseRetry: (reason: unknown) => void = () => undefined;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "stripe_terminal",
+        capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+      }),
+      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
+      pay: vi
+        .fn()
+        .mockRejectedValueOnce(refusal)
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => (refuseRetry = reject))),
+    });
+    await toCounter(el);
+    add(el, "Lemonade");
+    await flush(el);
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+    await flush(el);
+
+    expect(api.pay).toHaveBeenCalledTimes(2);
+    await tenderPay(el).updateComplete;
+    expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+
+    refuseRetry({ code: "server.internal", status: 500 });
+    await flush(el);
+    await tenderPay(el).updateComplete;
+    expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).toBeNull();
+    expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).not.toBeNull();
+  });
+
   it("retries placing an order once after a silent adoption", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),

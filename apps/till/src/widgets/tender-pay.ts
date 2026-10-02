@@ -176,6 +176,9 @@ export class TillTenderPay extends LitElement {
   @property() cardProvider: CardProvider = "none";
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
+  /** Bumped by the app when no card attempt is still running, after any retry and any
+   * kitchen-station question an attempt asks, whether or not it produced a {@link cardOutcome}. */
+  @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   /** Only NAMES the default on screen — never sent; an unset {@link chosenReaderId} already means
    * "use the device default". */
@@ -218,12 +221,15 @@ export class TillTenderPay extends LitElement {
   /**
    * Lit's default `hasChanged` (`!==`) means re-committing the SAME outcome is not a change, which
    * is what lets Switch tender and Keep waiting leave {@link view} where the operator put it. A new
-   * attempt produces a fresh value because `till-app`'s `#onCollectCard` clears `cardOutcome`
+   * attempt produces a fresh value because `till-app`'s `#collectCard` clears `cardOutcome`
    * first.
    */
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("cardOutcome") && this.cardOutcome !== undefined) {
       this.view = "card_outcome";
+    }
+    if (changed.has("cardAttemptsOver") && this.view === "collecting") {
+      this.view = "idle";
     }
   }
 
