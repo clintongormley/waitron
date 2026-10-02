@@ -332,12 +332,10 @@ it("folds the list's customer-facing and kitchen names into a closed section tha
   for (const name of ["customer-name-en", "customer-name-es", "kitchen-name"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summary).toBe(
-    t("options.names_summary").replace("{filled}", "2").replace("{total}", "3"),
-  );
+  expect(section.summary).toBe(`ES ¿En qué punto? · ${t("editor.section_kitchen")} COOK`);
   await type(el, "customer-name-en", "How would you like it?");
   expect(section.summary).toBe(
-    t("options.names_summary").replace("{filled}", "3").replace("{total}", "3"),
+    `EN How would you like it? · ES ¿En qué punto? · ${t("editor.section_kitchen")} COOK`,
   );
 });
 

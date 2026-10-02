@@ -101,9 +101,7 @@ it("opens an option with its name, a closed section holding its other names, and
   const section = disclosure(el);
   expect(section.open).toBe(false);
   expect(section.heading).toBe(t("options.names_section"));
-  expect(section.summary).toBe(
-    t("options.names_summary").replace("{filled}", "2").replace("{total}", "3"),
-  );
+  expect(section.summary).toBe(`ES Poco hecho · ${t("editor.section_kitchen")} R`);
   for (const name of ["label-customer-name-en", "label-customer-name-es", "label-kitchen-name"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "label-customer-name-en").value).toBe("");
@@ -114,12 +112,10 @@ it("opens an option with its name, a closed section holding its other names, and
 
   await type(el, "label-customer-name-en", "Barely cooked");
   expect(section.summary).toBe(
-    t("options.names_summary").replace("{filled}", "3").replace("{total}", "3"),
+    `EN Barely cooked · ES Poco hecho · ${t("editor.section_kitchen")} R`,
   );
   await type(el, "label-kitchen-name", " ");
-  expect(section.summary).toBe(
-    t("options.names_summary").replace("{filled}", "2").replace("{total}", "3"),
-  );
+  expect(section.summary).toBe("EN Barely cooked · ES Poco hecho");
 });
 
 it("opens empty and headed Add option when it is given no option", async () => {

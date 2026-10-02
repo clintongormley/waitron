@@ -691,29 +691,12 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   colour too, beside the ringed swatch (pinned in `category-form.test.ts`). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
-**The folding section jumps about when it opens (A169, owner 2026-10-01) — OPEN.** The shared
-`wt-disclosure` (`packages/ui/src/components/wt-disclosure.ts`), seen by the owner as the
-"Customer and kitchen names" section of the Options and Extras editors. It is also the product
-editor's Kitchen, Descriptors and Nutrition sections (`apps/dashboard/src/widgets/product-editor.ts`)
-and the option editor's names (`option-label-form.ts`). The owner's findings, each a result of the
-open style drawing the section as a bordered box with the header sitting on its top edge:
-
-- the chevron jumps from the far right (closed) to just after the summary (open) — open, the
-  header shrinks to its content (`width: auto`) instead of filling the row;
-- the title moves right when it opens, by the header's added side margin and padding;
-- a border appears only when it opens.
-
-**Decided (owner, 2026-10-01, choosing mockup B of
-[the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)):** no border and no lines — the
-section is set apart by spacing above and below alone. The heading and chevron stay exactly where
-they are in both states, the chevron always at the right-hand end of the row. Closed, the section
-shows its current values on a line under the heading (for the customer-facing names, each language's
-name after its code, e.g. "ES ¿Cómo la quiere hecha? · EN How would you like it cooked?"); open, it
-shows the form instead. The product editor's sections keep the one-line `summary` they show today,
-in the same place under the heading. **This changes a written rule:**
-`docs/developers/design-system.md` → "A collapsed disclosure is a borderless heading with a chevron
-… When it opens, one rounded border encloses the body and the heading sits across that border like
-a legend" describes the look being replaced, so the fix rewrites that paragraph too.
+**The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE.** `wt-disclosure`
+(`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
+heading and chevron in place when it opens (chevron at the row's end), and shows its summary on a
+line under the heading only while closed. The Options and Extras editors' "Customer and kitchen
+names" line lists the names themselves (`ES … · EN … · Kitchen …`) instead of a count. The rule in
+`docs/developers/design-system.md` is rewritten to match.
 
 **The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — OPEN.**
 Both in the editor for one options list, `apps/dashboard/src/widgets/option-list-form.ts`, and the
