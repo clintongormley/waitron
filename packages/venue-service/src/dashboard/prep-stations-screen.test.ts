@@ -1844,3 +1844,139 @@ it("localizes the fallback search field in Spanish", async () => {
     "Buscar estaciones",
   );
 });
+
+it("keeps the edited hours through a live routing refresh and saves that draft", async () => {
+  const liveData = new LiveData();
+  const saved = withUpstairs(
+    { open: false, why: "out_of_hours" },
+    { hours: [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }] },
+  );
+  const a = api({
+    liveData,
+    load: vi.fn(async () => structuredClone(saved)),
+    setStationHours: vi.fn(),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="edit-hours-upstairs"]')!.click();
+  await settle(el);
+  const form = q(el, "station-hours-form")!;
+  const closes = form.shadowRoot!.querySelector<HTMLInputElement>('[data-test="closes-0"]')!;
+  closes.value = "03:00";
+  closes.dispatchEvent(new Event("input", { bubbles: true }));
+  await settle(el);
+  liveData.invalidate([{ type: "products", id: "bread" }]);
+  await vi.waitFor(() => expect(a.load).toHaveBeenCalledTimes(2));
+  await settle(el);
+  expect(closes.value).toBe("03:00");
+  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
+  await settle(el);
+  expect(a.setStationHours).toHaveBeenCalledWith("upstairs", [
+    { weekday: 5, opensAt: "22:00", closesAt: "03:00" },
+  ]);
+  q(el, '[data-test="edit-hours-upstairs"]')!.click();
+  await settle(el);
+  expect(
+    q(el, "station-hours-form")!.shadowRoot!.querySelector<HTMLInputElement>(
+      '[data-test="closes-0"]',
+    )!.value,
+  ).toBe("02:00");
+});
+
+it.each(["success", "refusal"] as const)(
+  "keeps the pending hours editor until its %s is visible",
+  async (outcome) => {
+    let resolve!: () => void;
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise<void>((ok, no) => {
+      resolve = ok;
+      reject = no;
+    });
+    const a = api({
+      load: vi
+        .fn()
+        .mockResolvedValue(
+          withUpstairs(
+            { open: false, why: "out_of_hours" },
+            { hours: [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }] },
+          ),
+        ),
+      setStationHours: vi.fn(() => pending),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="edit-hours-upstairs"]')!.click();
+    await settle(el);
+    const form = q(el, "station-hours-form")!;
+    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
+    await settle(el);
+    const cancel = form.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      'wt-button[slot="cancel"]',
+    )!;
+    expect(cancel.disabled).toBe(true);
+    cancel.click();
+    form.dispatchEvent(new CustomEvent("hours-cancel"));
+    q(el, '[data-test="close-today-upstairs"], [data-test="open-today-upstairs"]')!.click();
+    await settle(el);
+    expect(q(el, "station-hours-form")).toBe(form);
+    if (outcome === "refusal") reject({ code: "station.not_found" });
+    else resolve();
+    await settle(el);
+    if (outcome === "refusal") {
+      expect(q(el, "station-hours-form")).toBe(form);
+      expect(form.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+        "could not be saved",
+      );
+      expect(cancel.disabled).toBe(false);
+      cancel.click();
+      await settle(el);
+    }
+    expect(q(el, "station-hours-form")).toBeNull();
+    q(el, '[data-test="edit-hours-upstairs"]')!.click();
+    await settle(el);
+    expect(q(el, "station-hours-form")).not.toBeNull();
+  },
+);
+
+it.each(["success", "refusal"] as const)(
+  "guards the pending close dialog against cancellation until %s",
+  async (outcome) => {
+    let resolve!: () => void;
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise<void>((ok, no) => {
+      resolve = ok;
+      reject = no;
+    });
+    const a = api({
+      load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+      setStationToday: vi.fn(() => pending),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="close-today-upstairs"]')!.click();
+    await settle(el);
+    q(el, '[data-test="confirm-station-action"]')!.click();
+    await settle(el);
+    const dialog = q(el, '[data-test="station-action-modal"]')!;
+    const cancel = dialog.querySelector<HTMLElement & { disabled: boolean }>(
+      'wt-button[slot="cancel"]',
+    )!;
+    expect(cancel.disabled).toBe(true);
+    cancel.click();
+    dialog.dispatchEvent(new CustomEvent("wt-close"));
+    q(el, '[data-test="edit-hours-upstairs"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-test="station-action-modal"]')).toBe(dialog);
+    if (outcome === "refusal") reject({ code: "time_zone.unreadable" });
+    else resolve();
+    await settle(el);
+    if (outcome === "refusal") {
+      expect(
+        q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!.textContent,
+      ).toContain("time zone");
+      cancel.click();
+      await settle(el);
+    }
+    expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
+    q(el, '[data-test="edit-hours-upstairs"]')!.click();
+    await settle(el);
+    expect(q(el, "station-hours-form")).not.toBeNull();
+  },
+);

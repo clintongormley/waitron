@@ -192,6 +192,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationAction?: StationAction;
   @state() private stationActionError = "";
   @state() private stationFieldError = "";
+  private editingHours: readonly WeeklyInterval[] = [];
   @state() private hoursServerErrors: Record<number, string> = {};
   @state() private outputsDown: OutputsDown = { printersDown: [], screensDark: [] };
   #outputsTimer?: ReturnType<typeof setInterval>;
@@ -781,10 +782,16 @@ export class PrepStationsScreen extends LitElement {
     ];
   }
   #openStationAction(action: StationAction) {
+    if (this.busy) return;
+    if (action.kind === "hours")
+      this.editingHours = (this.#times(action.stationId)?.hours ?? []).map((row) => ({ ...row }));
     this.stationAction = action;
     this.stationActionError = "";
     this.stationFieldError = "";
     this.hoursServerErrors = {};
+  }
+  #cancelStationAction() {
+    if (!this.busy) this.stationAction = undefined;
   }
   #openFallback(id: string, kind: "fallback" | "switch_off") {
     const fallback = this.#times(id)?.fallbackStationId;
@@ -1215,14 +1222,12 @@ export class PrepStationsScreen extends LitElement {
       return html`<station-hours-form
         data-test="station-action-modal"
         .inDialog=${true}
-        .hours=${times?.hours ?? []}
+        .hours=${this.editingHours}
         .serverErrors=${this.hoursServerErrors}
         .saveError=${this.stationActionError}
         .busy=${this.busy}
         @hours-save=${(event: CustomEvent<{ hours: WeeklyInterval[] }>) => void this.#saveStationAction(event.detail.hours)}
-        @hours-cancel=${() => {
-          this.stationAction = undefined;
-        }}
+        @hours-cancel=${() => this.#cancelStationAction()}
       ></station-hours-form>`;
     const end = this.#todayEnd();
     const isFallback = action.kind === "fallback" || action.kind === "switch_off";
@@ -1253,9 +1258,7 @@ export class PrepStationsScreen extends LitElement {
       data-test="station-action-modal"
       heading=${heading}
       .dismissible=${!this.busy}
-      @wt-close=${() => {
-        this.stationAction = undefined;
-      }}
+      @wt-close=${() => this.#cancelStationAction()}
     >
       ${todaySentence ? html`<p>${todaySentence}</p>` : nothing}
       ${
@@ -1273,7 +1276,9 @@ export class PrepStationsScreen extends LitElement {
                         .searchPlaceholder=${t("prep.search_stations")}
                         .options=${this.#fallbackOptions(action.stationId)}
                         .value=${action.choice}
+                        ?disabled=${this.busy}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                          if (this.busy) return;
                           this.stationAction = {
                             ...action,
                             choice: event.detail.value,
@@ -1293,14 +1298,14 @@ export class PrepStationsScreen extends LitElement {
         ><wt-button
           slot="cancel"
           variant="secondary"
-          @click=${() => {
-            this.stationAction = undefined;
-          }}
+          ?disabled=${this.busy}
+          @click=${() => this.#cancelStationAction()}
           >${t("prep.cancel")}</wt-button
         ><wt-button
           data-test="confirm-station-action"
           ?disabled=${this.busy}
           @click=${() => {
+            if (this.busy) return;
             if (isFallback && !action.confirming && !station?.isDefault)
               this.stationAction = { ...action, confirming: true };
             else void this.#saveStationAction();

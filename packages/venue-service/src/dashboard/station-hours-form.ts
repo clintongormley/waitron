@@ -67,7 +67,11 @@ export class StationHoursForm extends LitElement {
     this.saveError = "";
     this.rows = this.rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
   }
+  private cancel() {
+    if (!this.busy) this.dispatchEvent(new CustomEvent("hours-cancel"));
+  }
   private save() {
+    if (this.busy) return;
     this.attempted = true;
     if (this.invalid) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
@@ -152,7 +156,8 @@ export class StationHoursForm extends LitElement {
       ><wt-button
         slot="cancel"
         variant="secondary"
-        @click=${() => this.dispatchEvent(new CustomEvent("hours-cancel"))}
+        ?disabled=${this.busy}
+        @click=${() => this.cancel()}
         >${t("prep.cancel")}</wt-button
       ><wt-button
         data-test="save-hours"
@@ -166,7 +171,7 @@ export class StationHoursForm extends LitElement {
           open
           heading=${t("venue.hours")}
           .dismissible=${!this.busy}
-          @wt-close=${() => this.dispatchEvent(new CustomEvent("hours-cancel"))}
+          @wt-close=${() => this.cancel()}
           >${content}${actions}</wt-modal
         >`
       : html`${content}${actions}`;
