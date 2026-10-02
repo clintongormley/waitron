@@ -3,9 +3,8 @@
  * U=UPDATE D=DELETE T=TRUNCATE. It was first written in #255.
  *
  * THIS IS A FROZEN RECORD, NOT A MEASUREMENT, and it is unverified data: the engine it describes is
- * gone, so there are no roles and no grants to read it back from. The suite that used to do that,
- * `privileges.test.ts`, went with them, and so did the PostgreSQL schema-equivalence proof script
- * that dumped and diffed the grants. Nothing checks these letters against anything. Do not read a
+ * gone, so there are no roles and no grants to read it back from. Nothing checks these letters
+ * against anything. Do not read a
  * letter here as a statement about what the running system refuses today — it refuses nothing.
  *
  * Its one live consumer is `scripts/write-path-tables.test.ts`, which takes the four tables marked

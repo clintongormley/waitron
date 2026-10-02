@@ -5678,7 +5678,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     return id;
   }
 
-  it("voiding a PARENT dish removes its extras children too (no orphan FK 23503)", async () => {
+  it("voiding a PARENT dish removes its extras children too, leaving only the plain line", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const bacon = await addExtra(tx, catalogueId, cafeId, "Bacon");

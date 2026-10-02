@@ -6132,9 +6132,8 @@ export async function listTablesWithState(
              -- with classifyBand/worstBand in JS below. A line never sent has no ticket_items row and
              -- is excluded, same as a served one.
              --
-             -- json_group_array(json_object(...)) in place of PostgreSQL's aggregate pair:
-             -- those two are PostgreSQL names and this engine does not have them. The result is
-             -- JSON TEXT here rather than a value the driver parses, so the row mapping parses it.
+             -- json_group_array returns JSON TEXT rather than a value the driver parses, so the
+             -- row mapping parses it.
              json_group_array(
                json_object(
                  'queuedAt', ti.queued_at,

@@ -850,11 +850,11 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(1);
   });
 
-  it("concurrent double-pay of a WALK-UP (no prior row) files ONE sale — the 23505 backstop", async () => {
+  it("concurrent double-pay of a WALK-UP (no prior row) files ONE sale and both calls return its invoice number", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
-    // The case name is stale: the write queue admits the second call only once the first has
-    // committed, so it finds the row already `settled` and replays, as the PARKED case above does.
-    // `payWorkingOrder`'s duplicate-key catch for a walk-up is not reached here.
+    // The write queue admits the second call only once the first has committed, so it finds the row
+    // already `settled` and replays, as the PARKED case above does. `payWorkingOrder`'s duplicate-key
+    // catch for a walk-up is not reached here.
     const id = randomUUID();
 
     const req = {
@@ -957,14 +957,13 @@ describe("payWorkingOrder", () => {
 });
 
 describe("parkOrder concurrent replay", () => {
-  it("concurrent double-park of the same id parks ONE order — the 23505 replay backstop (two concurrent callers)", async () => {
+  it("concurrent double-park of the same id parks ONE order with one line, and both calls return the same result", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     // A fresh id with NO prior row, parked twice with both calls in flight at once. Unlike
     // `payWorkingOrder`, `parkOrder` reads no existing row first, so the second call's insert
     // collides on `working_orders`' primary key and `parkOrder`'s duplicate-key catch returns the
     // winner's committed `{ id, orderNumber }`. The catch re-throws anything `isUniqueViolation` fails
-    // to classify, so an unrecognised refusal would surface here as a rejection. The 23505 in the case
-    // name is stale.
+    // to classify, so an unrecognised refusal would surface here as a rejection.
     const id = randomUUID();
     const lines = [{ menuItemId: cafe.menuItemId, quantity: "1" }];
 

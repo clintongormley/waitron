@@ -225,7 +225,7 @@ describe("mountMeApi — whoami", () => {
     const cookie = await cookieFor(me);
     const token = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
     // Outside the template: `scripts/postgres-sql-residue.test.ts` reads a `Date.now()` inside a
-    // `sql` template as PostgreSQL's `now()`.
+    // `sql` template as a call to `now()`, which it refuses.
     const tenSecondsFromNow = new Date(Date.now() + 10_000).toISOString();
     await suite.db.execute(sql`
       update management_sessions
@@ -805,7 +805,7 @@ describe("mountMeApi — absences", () => {
     });
   });
 
-  it("400s an INVERTED date range (absence.invalid), never a 23514 500", async () => {
+  it("400s an INVERTED date range (absence.invalid), not the range check's 500", async () => {
     const res = await send(mountApp(), "POST", "/management-api/me/schedule/absences", {
       cookie: await cookieFor(me),
       body: { kind: "holiday", startsOn: "2026-05-10", endsOn: "2026-05-01", note: null },

@@ -3302,13 +3302,12 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     });
   });
 
-  it("a malformed :id is 404 table.not_found on PUT and DELETE (the screen, never an opaque 22P02 500)", async () => {
+  it("a malformed :id is 404 table.not_found on PUT and DELETE", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
     // The isUuid screen refuses a non-UUID :id with the domain `table.not_found` (404), the shape the
-    // sibling PATCH/DELETE /api/tables routes use. The MANAGER cookie shows it is the SCREEN, not the
-    // gate, that rejects it.
+    // sibling PATCH/DELETE /api/tables routes use.
     const put = await app.request("/api/tables/not-a-uuid/placement", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -3329,7 +3328,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     });
   });
 
-  it("a malformed zoneId in the PUT body is 404 zone.not_found (the screen, never an opaque 22P02 500)", async () => {
+  it("a malformed zoneId in the PUT body is 404 zone.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const tableId = await makeTable(app);

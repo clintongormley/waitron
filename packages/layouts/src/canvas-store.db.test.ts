@@ -272,7 +272,7 @@ describe("layout canvas store against a real migrated database", () => {
     expect(await rowCount()).toBe(0); // validate threw before the INSERT
   });
 
-  it("translates a duplicate name to canvas.name_taken (23505 → clean 409), no second row", async () => {
+  it("translates a duplicate name to canvas.name_taken, no second row", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
     await inTx((tx) =>

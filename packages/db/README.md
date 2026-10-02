@@ -2,7 +2,7 @@
 
 Use this package for the venue schema and the database client. The engine is **SQLite** — Node's
 own built-in `node:sqlite`, driven by Drizzle's SQLite dialect through a small adapter
-(`@waitron/store`). There is no PostgreSQL path and no PGlite. A whole database is a directory of
+(`@waitron/store`). A whole database is a directory of
 files, opened by path; there is no connection string, no server and no role. The switch to SQLite
 landed in #489.
 
@@ -31,7 +31,7 @@ A suite asks for its database through `useVenueDb` (`./src/testing/venue-db.ts`)
 SQLite venue directory under `os.tmpdir()`, applies the migration sets it is handed, installs the
 append-only triggers and empties the data between tests. That is a written rule (`CLAUDE.md` §4),
 enforced by `scripts/venue-db-helper.test.ts`: no `.ts` file under `packages/` or `apps/` may NAME
-the retired PGlite helper it replaced, this package included.
+the retired helper `usePgliteDb`, this package included.
 
 `./src/testing/` also publishes `describeSchemaConformance`
 (`./src/testing/schema-conformance.ts`), a suite factory that declares a whole database-backed suite
@@ -72,8 +72,7 @@ which includes this helper's reset and its close.
 
 Core's migrations are the schema drizzle-kit generates from the barrel — `0000_baseline.sql`
 first, then each later change — plus the `--custom` files that carry triggers, which a schema cannot
-declare: `0001_behavioural_triggers.sql`, the nine behavioural rules this package used to enforce
-with hand-written PostgreSQL triggers, restored as SQLite triggers; `0004_variant_one_level.sql`,
+declare: `0001_behavioural_triggers.sql`, the nine behavioural rules; `0004_variant_one_level.sql`,
 which keeps a variant one level deep, its parent fixed, and a product's id unchanged; and
 `0015_settled_order_freeze_new_columns.sql`, which re-creates `0001`'s
 `working_orders_enforce_transition` with the two `working_orders` columns `0014` added (`revision`

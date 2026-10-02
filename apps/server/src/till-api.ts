@@ -1757,7 +1757,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const body = await readJsonBody<{ label: string; zoneId?: string; capacity?: number }>(c);
       requireCapacity(body.capacity);
-      // A malformed zoneId would otherwise be stored in `zone_id`; it gets the missing zone's code.
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
       const result = await withTransaction(deps.db, async (tx) => {
@@ -1814,7 +1813,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await readJsonBody<{ label?: string; zoneId?: string; capacity?: number }>(c);
       requireCapacity(body.capacity);
-      // As on create: a malformed zoneId would otherwise be stored.
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
       await withTransaction(deps.db, async (tx) => {

@@ -533,7 +533,7 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
     ).toBe(0);
   });
 
-  it("404s an unknown station/printer and 400s a malformed id (never a 22P02 → 500)", async () => {
+  it("404s an unknown station/printer and 400s a malformed id (shared.invalid_id)", async () => {
     const app = mountApp(tenantA);
     const agent = await joinAndAccept(app, "Miss agent");
     const printerId = await createPrinter(app, agent.agentId, "Miss printer");
@@ -642,7 +642,7 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(await tillReceiptPrinterId(tillId)).toBeNull();
   });
 
-  it("404s a printer that is not one of the till's location's printers (never a 23503 → 500)", async () => {
+  it("404s a printer that is not one of the till's location's printers (printer.not_found, not the foreign-key 500)", async () => {
     const app = mountApp(tenantA);
     const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
     const res = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {

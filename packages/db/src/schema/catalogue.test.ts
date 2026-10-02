@@ -85,7 +85,7 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     expect(await present("locations", "catalogue_id")).toBe(true);
   });
 
-  it("products carries a plain-text name and a nullable customer_name jsonb, and no descriptions", async () => {
+  it("products carries a plain-text name and a nullable customer_name, and no descriptions", async () => {
     const cols = (await columnsOf(db, "products"))
       .filter((c) => ["name", "customer_name", "descriptions"].includes(c.name))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -96,12 +96,12 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     ]);
   });
 
-  it("products carries a nullable allergens jsonb column", async () => {
+  it("products carries a nullable allergens column", async () => {
     const col = (await columnsOf(db, "products")).find((c) => c.name === "allergens");
     expect(col).toEqual({ name: "allergens", notnull: 0 });
   });
 
-  it("products carries the three nullable diet jsonb columns", async () => {
+  it("products carries the three nullable diet columns", async () => {
     const cols = (await columnsOf(db, "products"))
       .filter((c) => ["diet_derivation", "diet_override", "diet"].includes(c.name))
       .sort((a, b) => a.name.localeCompare(b.name));

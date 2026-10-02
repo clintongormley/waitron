@@ -126,7 +126,7 @@ describe("what a read hands back, which is where the helpers still differ", () =
     expect(c.doc.mapToDriverValue({ a: 1 })).toBe('{"a":1}');
   });
 
-  it("hands labelList a string array, as the PostgreSQL array column did", () => {
+  it("hands labelList a string array, stored as JSON text", () => {
     expect(c.tags.mapFromDriverValue('["one","two"]')).toEqual(["one", "two"]);
     expect(c.tags.mapToDriverValue(["one", "two"])).toBe('["one","two"]');
     expectTypeOf<(typeof probe.$inferSelect)["tags"]>().toEqualTypeOf<string[] | null>();
@@ -144,7 +144,7 @@ describe("what a read hands back, which is where the helpers still differ", () =
     expect(c.big.mapFromDriverValue(42)).toBe(42);
   });
 
-  it("gives day and timeOfDay the driver's own string, as they had on PostgreSQL", () => {
+  it("gives day and timeOfDay the driver's own string", () => {
     expect(c.on_day.mapFromDriverValue("2026-09-16")).toBe("2026-09-16");
     expect(c.opens_at.mapFromDriverValue("06:00:00")).toBe("06:00:00");
   });
@@ -252,7 +252,7 @@ const enumTypeProbe = table("enum_type_probe", { state: ticketState("state") }, 
   check("enum_type_probe_state_ck", enumCheck(t.state)),
 ]);
 
-describe("enumType stands in for a PostgreSQL enum type", () => {
+describe("enumType builds a text column that carries its values", () => {
   it("builds a text column a check constraint can read its values off", () => {
     const c = columnsOf(enumTypeProbe);
     expect(c.state.getSQLType()).toBe("text");
@@ -264,7 +264,7 @@ describe("enumType stands in for a PostgreSQL enum type", () => {
     expect(render(constraint.value)).toBe("\"enum_type_probe\".\"state\" in ('open', 'served')");
   });
 
-  it("exposes enumValues to a caller, the way a pgEnum declaration did", () => {
+  it("exposes enumValues to a caller", () => {
     expect(ticketState.enumValues).toEqual(["open", "served"]);
   });
 

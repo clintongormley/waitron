@@ -31,12 +31,12 @@ controller who was supposed to be watching for it. The instances:
    described a route the subject of the sentence does not take.
 
 3. **"Provisioning now trims whitespace."** True of the web boundary that had just been edited, and
-   not yet true of the command line, which the author had not opened. Two new name flags were reaching
-   the planner raw: neither trimmed, and neither read a blank as "not given", so
+   not yet true of the command line, which the author had not opened. Two new name flags were
+   reaching the planner raw: neither trimmed, and neither read a blank as "not given", so
    `--admin-last-names ""` — how a script says "no last name" — arrived at the database as an empty
    string, where `persons_last_names_ck` (`packages/identity/src/schema/persons.ts`) refused it as a
-   raw SQLSTATE instead of a refusal naming the flag. The same task's review caught it and a named
-   sibling helper, `resolveWithoutPrompt`, closed it before the commit landed.
+   raw database error instead of a refusal naming the flag. The same task's review caught it and a
+   named sibling helper, `resolveWithoutPrompt`, closed it before the commit landed.
 
    **Do not go looking for the gap in `git log` — the commit was amended, so it is not there.** Read
    at `packages/provisioning/src/cli.ts` today, every path trims: `resolveOption`,
@@ -46,14 +46,7 @@ controller who was supposed to be watching for it. The instances:
    back only on an absent value, never on an empty string. That version survives only in a local
    reflog, which expires — which is why it is written out here rather than pointed at.
 
-4. **"The same transaction, and therefore the same snapshot."** The second half does not follow from
-   the first. The helper (`packages/db/src/tenancy.ts` — `withTenant` when this was written,
-   `withTransaction` since the tenant column went on 2026-09-14) opens an ordinary transaction and
-   sets no isolation level, so it runs at PostgreSQL's default of read committed, where every
-   statement takes a fresh snapshot. Only a repeatable-read transaction gives you the one snapshot the sentence
-   assumed.
-
-5. **"The property initializers are gone."** A negative grep, reported as a defect, over the output of
+4. **"The property initializers are gone."** A negative grep, reported as a defect, over the output of
    a toolchain that had just been swapped. Moving the front-ends from vite 6 to vite 8 replaced
    esbuild with Oxc; searching the new till bundle for `this.variant="secondary"` — the exact string
    the vite 6 bundle contained — returned nothing, and every decorated Lit property looked as though
@@ -70,7 +63,7 @@ controller who was supposed to be watching for it. The instances:
    and only then conclude something is missing. Here that was searching for the identifier
    (`_t=class extends x{constructor`) rather than the quoted value.
 
-6. **"The two versions parse this repository's XML identically."** Said after two probes that both
+5. **"The two versions parse this repository's XML identically."** Said after two probes that both
    looked thorough. Moving `fast-xml-parser` from 4.5.7 to 5.11.1 was checked first by replaying 217
    real AEAT documents — captured by wrapping `parser.parse` while the suites ran — through both
    versions under the four options `@waitron/verifactu`'s XML reader sets: byte-identical.

@@ -16,9 +16,9 @@
  * awaited drizzle query builder is the engine's own `Error`, with `.code` at
  * the top level and no `.cause` at all.
  *
- * Its own suite, `./errors.test.ts`, drives it with hand-built objects
- * carrying PostgreSQL values. Those establish WHICH branch each shape takes
- * and nothing about what arrives from this engine.
+ * Its own suite, `./errors.test.ts`, drives it with hand-built objects. Those
+ * establish WHICH branch each shape takes and nothing about what arrives from
+ * this engine.
  */
 export function driverErrorCode(error: unknown): string | undefined {
   const e = error as { code?: unknown; cause?: { code?: unknown } } | null | undefined;
@@ -40,13 +40,11 @@ export function driverErrorCode(error: unknown): string | undefined {
  * `String(error)` on the wrapper reproduces the failed SQL, so a silent
  * fallback would let a pattern that happens to match the SQL itself (a table
  * or column name, say) pass an assertion for the wrong reason. The thrown text
- * below quotes the PostgreSQL wrapper's older wording, `Failed query: <sql>`,
- * and is pinned verbatim by `./errors.test.ts` — the hazard it names is the
- * same one.
+ * deliberately quotes an older wrapper wording, `Failed query: <sql>`, and is
+ * pinned verbatim by `./errors.test.ts`.
  *
- * Its own suite drives it with hand-built objects carrying PostgreSQL wording.
- * Those establish which branch each shape takes, and nothing about what
- * arrives from this engine.
+ * Its own suite drives it with hand-built objects. Those establish which
+ * branch each shape takes, and nothing about what arrives from this engine.
  */
 export function engineErrorMessage(error: unknown): string {
   const e = error as { message?: unknown; cause?: { message?: unknown } } | null | undefined;

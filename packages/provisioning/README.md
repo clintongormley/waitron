@@ -8,12 +8,8 @@ path (below), so each manifest declares its name under `waitron.commands` rather
 The tool was first built in #11. This document is written for whoever runs the tool, not whoever
 reads its source.
 
-The command that **did** stand a deployment up — `waitron-provision instance`, which created a
-database, created the `waitron_migrator` and `waitron_app` roles, migrated and stamped it — was
-deleted with the PostgreSQL deployment model, along with `status`. With one SQLite directory there
-is no server to reach, no database to create and no roles to grant. Older documents that send an
-operator to `waitron-provision instance` or `waitron-provision status` are describing a tool that no
-longer exists.
+Older documents that send an operator to `waitron-provision instance` or `waitron-provision status`
+are describing commands that no longer exist.
 
 ## Building and running it
 

@@ -256,7 +256,7 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
-  it("POST /api/tables with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+  it("POST /api/tables with a MALFORMED zoneId → 404 zone.not_found", async () => {
     // A non-UUID `zoneId` is screened to the SAME `zone.not_found` a well-formed-but-missing zoneId
     // gets, so a bad zone reads the same whether it is malformed or merely absent.
     const res = await request("/api/tables", {
@@ -277,7 +277,7 @@ describe("table + tab routes", () => {
     expect(await dup.json()).toMatchObject({ error: { code: "table.label_taken" } });
   });
 
-  it("POST /api/tables with an OUT-OF-int4-RANGE capacity → 400 management.request_invalid (not an opaque 22003 500)", async () => {
+  it("POST /api/tables with a capacity above 2147483647 → 400 management.request_invalid", async () => {
     // `9999999999` is a valid JS number, so a bare type check would let it through; the route's
     // `requireCapacity` range guard refuses it as a domain 400.
     const res = await request("/api/tables", {
@@ -313,7 +313,7 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("PATCH /api/tables/:id with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+  it("PATCH /api/tables/:id with a MALFORMED zoneId → 404 zone.not_found", async () => {
     // The twin of the malformed-zoneId screen above, one field over. A real table id is used so the
     // id screen passes and the zoneId screen is what fires.
     const { id } = (await (

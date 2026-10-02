@@ -107,10 +107,7 @@ carries no stamp, from `WAITRON_ENV` — unset means `preproduction` and `produc
 out in full — which is what lets an automated deployment stand a venue up with no browser. None can
 move a stamp that is already there: `stampDeployment` refuses a different value with
 `deployment.already_stamped`, and provision and `waitron-provision venue` let it propagate; adopt
-reads the stamp first and throws that code itself, before its first write. (`waitron-provision
-instance`, which used to be the only stamping path, was deleted with the PostgreSQL deployment
-model. So was the retired `apps/server/sql/bootstrap-tenant.sql`, removed on 2026-08-04, which
-wrote the row by hand.)
+reads the stamp first and throws that code itself, before its first write.
 
 A database nobody has stamped reads `deployment` as `null` and **boots normally, with this check
 inert**, exactly as if the check did not exist. Only a database stamped for the OTHER environment
@@ -212,11 +209,10 @@ It reads its own boot env — `WAITRON_STATE_DIR`, `WAITRON_VENUE_DIR` (both res
 
 The last two refuse LOUD rather than wipe a box that is not safe to wipe.
 
-**What this command no longer checks.** It used to confirm, before wiping, that every row this box
-originated had reached the carrier — a check built on PostgreSQL replication, which has been removed and
-whose replacement has not landed. So rejoin now wipes without that confirmation, and `--accept-loss`
-waives nothing: it only records the operator's acknowledgement in the log. The wipe is irreversible
-(CLAUDE.md §5).
+**What this command does not check.** It does not confirm, before wiping, that every row this box
+originated has reached the carrier (`rejoinAsSecondary`, `apps/server/src/rejoin.ts`). So rejoin
+wipes without that confirmation, and `--accept-loss` waives nothing: it only records the operator's
+acknowledgement in the log. The wipe is irreversible (CLAUDE.md §5).
 
 ## Environment variables
 

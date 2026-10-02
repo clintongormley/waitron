@@ -67,7 +67,7 @@ function craftClose(opts: {
 }
 
 describe("verifyDailyCloseChain — the chain re-walk", () => {
-  it("passes a well-formed two-close chain (the entry_hash reproduces from the jsonb read-back)", async () => {
+  it("passes a well-formed two-close chain", async () => {
     await record("2026-08-04", []);
     await record("2026-08-05", []);
     expect(await verify()).toEqual({ ok: true });

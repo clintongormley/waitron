@@ -5,14 +5,10 @@ This file holds the evidence behind the data- and module-boundary conventions in
 that paid for each rule. `CLAUDE.md` keeps the one-line version of each rule and points here for the
 rest.
 
-**A note on the error codes, because they change shape partway down this file.** The five-character
-SQLSTATEs below — `23505`, `42501`, `22003` and the rest — are PostgreSQL's, and every one of them is
-now history: the storage switch took the engine that raised them. `node:sqlite` reports a numeric
-`errcode` instead. Measured 2026-09-22 on Node v26.7.0, in one transaction: a duplicate primary key
-is 1555, a null in a `not null` column 1299, and a trigger's `RAISE(ABORT)` 1811. The tree spells it
-that way too (`packages/db/src/sql-state.ts`). A passage
-kept for a measurement taken on PostgreSQL says so in its own words; read every SQLSTATE here as a
-reading from that engine and not as something a box can still print.
+**A note on the error codes.** `node:sqlite` reports a numeric `errcode`. Measured 2026-09-22 on
+Node v26.7.0, in one transaction: a duplicate primary key is 1555, a null in a `not null` column
+1299, and a trigger's `RAISE(ABORT)` 1811. The tree spells it that way too
+(`packages/db/src/sql-state.ts`).
 
 **Naming and error codes**
 
@@ -106,7 +102,7 @@ mounts modules without naming one, exactly as generic provisioning does not.
 pnpm counts `devDependencies` when it looks for a loop, and prints "There are cyclic workspace
 dependencies" on every install. Two test-only links made one: `@waitron/migrations` listed twelve
 modules to compare their journal table names with the manifest, while those modules used
-`@waitron/migrations` in their own tests; and the PostgreSQL replication suites in `@waitron/sync`
+`@waitron/migrations` in their own tests; and the replication suites in `@waitron/sync`
 used `@waitron/provisioning`, which reached `@waitron/sync` again through `@waitron/composition`. The
 journal-table test moved to `packages/composition/src/composition.test.ts`, and the replication suites
 moved to a package nothing depends on. Receipt, 2026-09-13:
@@ -115,7 +111,7 @@ it passed, failed again when `@waitron/provisioning` was added back to `sync`'s 
 `pnpm install` printed no loop warning.
 
 The two packages named in that receipt — `@waitron/sync` and the replication-test package — were both
-deleted with the PostgreSQL failover machinery on 2026-09-19, so the loop they closed no longer exists.
+deleted on 2026-09-19, so the loop they closed no longer exists.
 The RULE and the guard stand: any future test that needs packages from both ends of a loop needs the
 same home.
 
@@ -287,13 +283,15 @@ result as a specific cause. Other untargeted calls are still in the tree and not
 ## Editing rows one at a time can break a unique index the final state satisfies
 
 That same `writeItems` kept the rows a save still named and updated each where it stood, so a body
-exchanging two items' products put both rows on the same product midway through and
-`extra_list_items_list_product_uq` refused the first update with
-`23505 duplicate key value violates unique constraint`, although the body's final product set was
-legal. Reproduced on real PostgreSQL by `saves a body that exchanges two retained items' products`
-(`packages/catalogue/src/extras.concurrency.test.ts`). It now deletes every one of the list's rows and
-inserts the body's fresh, each under the id the body sent or a new one, which removes the
-intermediate state rather than ordering around it.
+exchanging two items' products would have put both rows on the same product midway through, which
+the index refuses, although the body's final product set was legal. Measured 2026-10-02 on
+`node:sqlite` (Node v26.7.0, SQLite 3.53.4), on a bare table with a unique index over `(list_id,
+product_id)` holding products A and B: inside one transaction, updating the first row to B printed
+`UNIQUE constraint failed: extra_list_items.list_id, extra_list_items.product_id`, errcode 2067, and
+deleting both rows then inserting the swapped pair committed. The case is `saves a body that
+exchanges two retained items' products` (`packages/catalogue/src/extras.concurrency.test.ts`). It
+now deletes every one of the list's rows and inserts the body's fresh, each under the id the body
+sent or a new one, which removes the intermediate state rather than ordering around it.
 
 That is safe under two conditions, and the second one is easy to miss. The FIRST is that nothing
 outside the table holds a key into it, so the rows may lose their identity — and it is
@@ -322,17 +320,16 @@ SQLite query builder has no `.for()` at all — so `assertExtraListForWrite`
 (`packages/catalogue/src/extras.ts`, under the heading *Why this stopped being a lock*) is now the
 404 it always also was, and nothing else.
 
-**The control moved with the lock.** It used to be two connections and a `pg_blocking_pids` poll for
-"the second one is BLOCKED"; the thing to observe now is "the second one has not STARTED". That is
-`racePair` in `packages/catalogue/test/fixtures.ts`, which every concurrency case in the package goes
-through, and its header records the reading in both directions taken back to back: two bodies started
-through `withTransaction` report `secondStarted === false` while the first is held, and the same two
-bodies started without it report `true`.
+**The control.** The thing to observe is "the second one has not STARTED". That is `racePair` in
+`packages/catalogue/test/fixtures.ts`, which every concurrency case in the package goes through, and
+its header records the reading in both directions taken back to back: two bodies started through
+`withTransaction` report `secondStarted === false` while the first is held, and the same two bodies
+started without it report `true`.
 
-**The `23505` reading itself has not been re-taken on this engine.** `saves a body that exchanges two
-retained items' products` (`packages/catalogue/src/extras.concurrency.test.ts`) still runs and still
-passes, so what is known today is that the case passes — not that deleting the delete-then-insert
-would still turn it red. `writeItems`'s own header says the same thing at the site.
+**The swap measurement in this section's first paragraph is on a bare table, not through
+`writeItems`.** `saves a body that exchanges two retained items' products` passes; that deleting the
+delete-then-insert turns it red has not been re-taken on this engine. `writeItems`'s own header says
+the same thing at the site.
 
 ## Resolve shared catalogue data once before a basket's line loop
 
@@ -354,21 +351,16 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 `tenants`, `nodes`, `deployment`, `mirror_config` and `node_roles`. `node_roles` joined on
 2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (#548);
 it inherits `deployment`'s rule and is not in the frozen matrix, which the guard's
-`ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM. The
-database used to: a request was served on a connection wearing `app_user`, which held `SELECT` and
-no write on the four, so PostgreSQL answered a write with `42501`. SQLite has no
-roles and no grants — one process opens one file, and every path, request and provisioning alike,
-shares that one venue handle. So the rule survives as a convention over source text, and that guard
-is not a second opinion on an engine that would refuse the write anyway.
+`ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM.
+SQLite has no roles and no grants — one process opens one file, and every path, request and
+provisioning alike, shares that one venue handle. So the rule is a convention over source text, and
+that guard is not a second opinion on an engine that would refuse the write anyway.
 
-The list comes from `packages/fiscal-verifactu/src/privileges.expected.ts`, the matrix that recorded
-`app_user`'s table privileges. It is a FROZEN RECORD now rather than a measurement: the suite its
-header points at, `privileges.test.ts`, read every table's privileges back from a live PostgreSQL
-catalogue and is gone with the engine. The guard says so itself, and states four ways it is weaker
-than "no write path touches a forbidden table" — it reads TEXT; it judges a FILE rather than a call
-chain; it walks `<member>/src` under `apps` and `packages` alone; and what the grants refused one
-operation at a time it does not cover at all (`docs/backlog.md` → B9). Read those hedges in the guard
-rather than trusting this line.
+The list comes from `packages/fiscal-verifactu/src/privileges.expected.ts`, a FROZEN RECORD rather
+than a measurement: nothing checks it against a database. The guard says so itself, and states the
+ways it is weaker than "no write path touches a forbidden table", among them — it reads TEXT; it
+judges a FILE rather than a call chain; and it walks `<member>/src` under `apps` and `packages`
+alone (`docs/backlog.md` → B9). Read those hedges in the guard rather than trusting this line.
 
 Real code does write all five, legitimately: the setup-mode provision route reaches `tenants`,
 `nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and
@@ -428,8 +420,8 @@ an amount wraps the expression in `cast(<expr> as text)` and passes the string t
 (`packages/shared/src/cents.ts`), which checks the shape, refuses anything past a safe integer with
 `shared.invalid_cents`, and returns the exact `Decimal`. Product source obeys it —
 `packages/reporting/src/cash-up.ts`, `top-sellers.ts`, `input-vat.ts` and
-`packages/core/src/list-outstanding-sales.ts` among them. **Only the spelling changed**: this engine
-has no `::` cast operator at all. Measured 2026-09-22 on Node v26.7.0, `select count(*)::int` is
+`packages/core/src/list-outstanding-sales.ts` among them. This engine has no `::` cast operator at
+all. Measured 2026-09-22 on Node v26.7.0, `select count(*)::int` is
 `unrecognized token: ":"`, errcode 1.
 
 **A test asserting the stored COUNT is not reading an amount, and several cast to int.** The shape is
@@ -438,10 +430,8 @@ has no `::` cast operator at all. Measured 2026-09-22 on Node v26.7.0, `select c
 `till-api.test.ts` and `till-api.transfer.test.ts` carry the same shape. Nothing converts, so there
 is no amount to get wrong, and the cast is there only to give the assertion a number.
 
-**That cast used to fail LOUDLY and now refuses nothing, and the direction is the whole point.** On
-PostgreSQL `::int` raised `22003` over 2147483647 cents, so a test that outgrew four bytes went red
-rather than wrong — which is why it was chosen. `cast(x as int)` on SQLite raises nothing at all: the
-declared type carries no width. What keeps these assertions safe is only that their literals are
+**That cast refuses nothing.** `cast(x as int)` on SQLite raises nothing at all: the declared type
+carries no width. What keeps these assertions safe is only that their literals are
 small, and `apps/server/src/till-api.test.ts` says so at its own call site. A test that converts an
 amount is a different thing and casts to text like production:
 `apps/server/scripts/demo-seed/seed-sales.test.ts` is the live example.
@@ -452,28 +442,19 @@ whenever a money column is added:
 - The hundredfold hazard, which is real on any engine: a raw read that renders a money count as a
   DECIMAL rather than as a count hands back a plausible string a hundred times too LARGE — a stored
   7734 cents is €77.34 and renders as `"7734.00"`, which a consumer reads as €7734.00. The direction
-  is worth getting right: too large is a bill a hundred times the price, not a rounding slip. The
-  PostgreSQL spelling that did it, `::numeric(12, 2)::text`, will not even parse here, so what to
-  watch for now is any raw read handing a count to a consumer expecting an amount. That sentence is written
-  once, in `rawCentsToDecimal`'s doc comment (`packages/shared/src/cents.ts`) — the near-duplicates
-  that had grown beside the converted call sites were deleted in favour of a pointer to it, so
+  is worth getting right: too large is a bill a hundred times the price, not a rounding slip. What
+  to watch for is any raw read handing a count to a consumer expecting an amount. That sentence is
+  written once, in `rawCentsToDecimal`'s doc comment (`packages/shared/src/cents.ts`), so
   `grep -rn "hundred times" packages apps --include='*.ts' | grep -v '\.test\.ts'` returns that one
-  line; `packages/core`, `packages/reporting` and `apps/server` each carried one or more of the
-  deleted duplicates. **What was actually run:** in `core` and
-  `reporting` the old cast was restored and tests went red, recorded as nineteen of twenty-seven in
-  `reporting` and five in `core`. What those two figures count is not written down anywhere, so read
-  them as "the control fired in both packages" and not as per-cast coverage. `apps/server`'s two —
-  the held-order list and the table-state query, both in `apps/server/src/working-order.ts` — were
-  converted without being put through that control at all.
-- Raw-SQL inserts, where the storage switch made things WORSE rather than better: **nothing is
-  refused any more, in any form.** Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, against a plain
-  `integer` column, by bound parameter and by raw SQL alike — `25.00` and `"25.00"` each store the
-  integer 25, `"21.50"` stores the REAL 21.5, and `"abc"` stores the text `abc`. Not one of the four
-  raised anything. On PostgreSQL a QUOTED decimal at least failed loudly with `22P02`; that half of
-  the old rule is gone, and a bare whole number still succeeds and still means cents. One instance was
-  found and corrected while money was moving to cents: a fixture inserting `('cash_only', 50)` into
-  `payment_policy` had meant an offline cap of fifty euros and silently became fifty cents. It reads
-  `('cash_only', 5000)` today — `apps/server/src/configuration-transfer.test.ts` (its `payment_policy` insert). Whether that was
+  line.
+- Raw-SQL inserts: **nothing is refused, in any form.** Measured 2026-09-22 on `node:sqlite`, Node
+  v26.7.0, against a plain `integer` column, by bound parameter and by raw SQL alike — `25.00` and
+  `"25.00"` each store the integer 25, `"21.50"` stores the REAL 21.5, and `"abc"` stores the text
+  `abc`. Not one of the four raised anything. A bare whole number succeeds and means cents. One
+  instance was found and corrected while money was moving to cents: a fixture inserting
+  `('cash_only', 50)` into `payment_policy` had meant an offline cap of fifty euros and silently
+  became fifty cents. It reads `('cash_only', 5000)` today —
+  `apps/server/src/configuration-transfer.test.ts` (its `payment_policy` insert). Whether that was
   the only one in the tree is not established; what was run was a hand sweep, not a check anything
   re-runs.
 - Money held as strings inside a JSON document — `sales.vat_breakdown` and the hashed
@@ -482,12 +463,11 @@ whenever a money column is added:
   altogether**, because this engine has no exact decimal type and summing filed cuotas in SQL would
   sum them as binary floating point. `packages/reporting/src/vat-summary.ts` reads one row per
   breakdown ELEMENT and folds them with `@waitron/shared`'s Decimal arithmetic at the money scale,
-  which is exact by construction; the whole-query comparison against PGlite and the controls that
-  break it are recorded in #601's commit message (`git log --grep='(#601)'`), not in the file.
+  which is exact by construction; the comparison it was checked by and the controls that break it
+  are recorded in #601's commit message (`git log --grep='(#601)'`), not in the file.
 
-  What that costs belongs in this list, and the file states it: `::numeric(12, 2)` REFUSED an element
-  past ten integer digits with a `22003` and `::numeric(5, 2)` refused a rate past three, and neither
-  refusal survives — an out-of-range filed amount is summed now rather than rejected.
+  What that costs belongs in this list, and the file states it: nothing in that path bounds an
+  element's width, so an out-of-range filed amount is summed rather than refused.
   `packages/fiscal-verifactu/src/monetary-columns.test.ts` states the twelve-TOTAL-digits against
   twelve-INTEGER-digits split in its own comment but does not hold it down: it neither imports
   `decimalToCents` nor reads `MAX_MONEY_INTEGER_DIGITS`, and what it would catch is those two fiscal
@@ -537,58 +517,31 @@ decimal columns applied on the way in, so the conversion is exact rather than cl
 extended to `scales.ts` and proved by deletion: a `Math.round` added to the file turns
 `contains no Math.round` red.
 
-**Each decimal column's bound moved into the converter.** `numeric(12, 3)` refused a quantity past
-nine integer digits with a `22003` and `numeric(5, 2)` refused a rate past three; an integer column
-takes both silently. `MAX_QUANTITY_INTEGER_DIGITS` and `MAX_RATE_INTEGER_DIGITS` are where those
-refusals live now. The raw RATE reader carries the same bound; the raw QUANTITY reader,
+**The bound is the converter's.** An integer column takes any width silently, so
+`MAX_QUANTITY_INTEGER_DIGITS` (nine) and `MAX_RATE_INTEGER_DIGITS` (three) are where a too-wide
+quantity or rate is refused. The raw RATE reader carries the same bound; the raw QUANTITY reader,
 `rawThousandthsToDecimal`, does not (owner decision 2026-09-24). Its caller, `top-sellers.ts`, reads
 sums, which can be wider than any one quantity, so its only width limit is what a JavaScript number
 holds exactly, refused with `shared.invalid_thousandths` (like `rawCentsToDecimal`).
-`top-sellers.ts`'s old `sum(sl.quantity)::numeric(12, 3)::text` cast refused such a sum; nothing
-does now.
 
-**A rate's CHECK constraint does not follow the column.** Four of them compared a rate against 100.
-`ALTER COLUMN ... SET DATA TYPE` keeps a check and CASTS it, so left alone every one of them would
-have refused every rate above one percent. Changing their SQL text in the schema made drizzle
-generate the DROP/ADD itself — unlike P5, where the checks' text did not change and drizzle
-therefore saw nothing. The two QUANTITY checks are P5's case exactly: `quantity <> 0` reads the
-same in either scale, so drizzle generated nothing and PostgreSQL kept
-`((quantity)::numeric <> (0)::numeric)`. Both were named by the core set's schema-conformance
-suite, which builds a database from the migrations and compares every check expression with the
-schema's, and both were rebuilt by hand in the core set's hand-written migration
-0048_scaled_integers_sql. At that point the suite covered the CORE set only and the module sets had
-nothing equivalent, which is the same asymmetry P5 recorded.
+**A rate's CHECK constraint is written against 10000, not 100.** One written as `rate <= 100`
+refuses every rate above one percent, because a rate column counts basis points
+(`packages/db/src/schema/columns.ts` says so at the `rate` builder). A QUANTITY check such as
+`quantity <> 0` reads the same in either scale. What compares the checks a set's migrations build
+with the schema's is the shared schema-conformance suite,
+`packages/db/src/testing/schema-conformance.ts`, a suite factory that any migration set can call.
+Which sets have a call site is `ls packages/*/src/schema/schema-conformance.test.ts`; a set with
+none is unguarded.
 
-_Dated 2026-09-21, the SQLite flip (F1)._ That migration file no longer exists: the flip regenerated
-every set as ONE baseline, so the whole core history — the hand-written custom migrations included —
-was replaced. The file is named above without a backticked path deliberately, because
-`scripts/claude-md-pointers.test.ts` reads a backticked path under `packages/` as a live pointer and
-would fail on a deleted one. What survives the deletion is the measurement, not the file. The
-MECHANISM behind it does not survive either: there is no `ALTER COLUMN ... SET DATA TYPE` in a single
-baseline, so a check constraint has nothing to be carried across and cast by. Read this paragraph as
-the reason the guard exists, not as a description of the tree.
+**Three ways a raw-SQL site can be wrong, and none of them is loud.** The readings are in the money
+rule's raw-insert bullet above, taken 2026-09-22 on `node:sqlite`, Node v26.7.0.
 
-_Dated 2026-09-23._ Both facts about the guard in that paragraph have since changed, and it is left
-as the record of what was true when the work was done. The comparing machinery is no longer in
-`packages/db/src/schema/schema-conformance.test.ts` — that file is a short call site now — and it is
-no longer core-only. It lives in `packages/db/src/testing/schema-conformance.ts` as a suite factory
-that any migration set can call, and when this note was written `catalogue`, `payments`, `workforce`
-and `workforce-es` did. Which sets have a call site now is `ls
-packages/*/src/schema/schema-conformance.test.ts`; a set with none is still unguarded.
-
-**Three ways a raw-SQL site can be wrong, and NONE of them is loud any more.** Measured on
-PostgreSQL in 2026-09-21 only the first was loud; the storage switch took that one too. The readings
-behind the change are in the money rule's raw-insert bullet above, re-taken 2026-09-22 on
-`node:sqlite`, Node v26.7.0.
-
-1. A QUOTED literal with a fractional part used to fail: `'21.00'` into an `integer` column gave
-   `22P02`, `invalid input syntax for type integer`, routine `pg_strtoint32_safe`. It fails at
-   nothing now — `"21.50"` is simply stored as the REAL 21.5.
-2. An UNQUOTED numeric literal never failed. `25.00` into an `integer` column took PostgreSQL's
-   assignment cast and stored 25 — a hundredfold wrong, nothing red — and it stores 25 here too.
-   Found in `packages/workforce-es/src/convenio.test.ts`, where the test PASSED before the conversion
-   because the reader was unconverted too and the two errors cancelled. CLAUDE.md §1's
-   "a measurement taken where both answers look alike", with a green suite attached.
+1. A QUOTED literal with a fractional part: `"21.50"` into an `integer` column is stored as the REAL
+   21.5.
+2. An UNQUOTED numeric literal: `25.00` into an `integer` column stores 25 — a hundredfold wrong,
+   nothing red. Found in `packages/workforce-es/src/convenio.test.ts`, where the test PASSED before
+   the conversion because the reader was unconverted too and the two errors cancelled. CLAUDE.md
+   §1's "a measurement taken where both answers look alike", with a green suite attached.
 3. A value whose text is already a whole number is accepted silently in either form and means a
    thousandth of what the author meant: a quantity sent as `'2'` stores 2, which is 0.002 units.
    Seen in `packages/core`'s pre-fix failure dump.
@@ -648,46 +601,41 @@ All of them work in decimal strings and all of them still do.
 ### The database never rounds a quantity — the converter owns the third place
 
 `packages/catalogue`'s precision guard — the `rejects excess precision before anything downstream
-can round it` case in `packages/catalogue/src/units.operations.test.ts` — used to hold a
-`select 1.2345::numeric(12,3)::text` probe beside `decimalToThousandths`, as a control that SQL and
-the converter rounded the same tie the same way, both to `1.235`. The storage switch retired the
-probe: this engine has no exact decimal type, so there is no value the line can be rewritten to
-that still says what it was there to say. Run on 2026-09-22:
+can round it` case in `packages/catalogue/src/units.operations.test.ts` — holds no SQL rounding
+probe beside the converter, because this engine has no exact decimal type to compare it with. Run
+on 2026-09-22:
 
 ```
 node -e "const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(':memory:'); const q = (s) => JSON.stringify(db.prepare('select ' + s + ' as v').get().v); console.log(q('round(1.2345, 3)'), q('cast(1.2345 as numeric(12,3))'), q(\"printf('%.3f', 1.2345)\"), q('round(1.2355, 3)'));"
 ```
 
-On Node v26.7.0 that prints `1.234 1.2345 "1.234" 1.236`. So `round` takes the tie DOWN where
-PostgreSQL's `numeric` took it up; a cast's declared scale is ignored entirely, because SQLite's
-`numeric(12,3)` is a type name carrying NUMERIC affinity and no scale; and the fourth reading is
-the control in the other direction — `round(1.2355, 3)` going up says this is binary float
-representation rather than "SQLite always rounds down".
+On Node v26.7.0 that prints `1.234 1.2345 "1.234" 1.236`. So `round` takes the tie DOWN; a cast's
+declared scale is ignored entirely, because SQLite's `numeric(12,3)` is a type name carrying NUMERIC
+affinity and no scale; and the fourth reading is the control in the other direction —
+`round(1.2355, 3)` going up says this is binary float representation rather than "SQLite always
+rounds down".
 
-The probe was deleted rather than rewritten, because a quantity column holds a whole count of
-thousandths and `decimalToThousandths` has already decided the third place before any value reaches
-storage. A test asking SQL to round a quantity asks about something no product path does. The
-converter's own rounding is still pinned, by the `rounds a fourth decimal place half away from
-zero` case in `packages/shared/src/scales.test.ts`. The case's other two assertions —
-`decimalToThousandths(decimal("1.2345"))` is `1235`, and `assertQuantityPrecision` throwing
-`quantity.invalid` — are its actual subject and are untouched.
+Nor would such a probe test anything real: a quantity column holds a whole count of thousandths and
+`decimalToThousandths` has already decided the third place before any value reaches storage, so a
+test asking SQL to round a quantity asks about something no product path does. The converter's own
+rounding is pinned by the `rounds a fourth decimal place half away from zero` case in
+`packages/shared/src/scales.test.ts`. The precision guard's own subject is its two assertions:
+`stringToThousandths("1.2345")` is `1235`, and `assertQuantityPrecision` throws `quantity.invalid`.
 
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
 
-The enforcement is no longer written into
-each migration by hand: `installAppendOnlyTriggers` (`packages/store/src/append-only.ts`) puts a
-`RAISE(ABORT)` trigger pair on each named table, and `applyMigrations`
-(`packages/migrations/src/apply.ts`) calls it after each set migrates, so boot
-(`apps/server/src/boot.ts`), the cold restore (`apps/server/src/restore.ts`) and `rejoin-command` all
-install them. `waitron-provision instance` is NOT one of them any more: the instance-provisioning
-path went with the PostgreSQL deployment model on 2026-09-22, and the `venue` command that survives
-it migrates nothing — no non-test file under `packages/provisioning/src` calls `applyMigrations` at
-all (the one caller left there is `schema-ahead.migrate.test.ts`, which migrates its own fixture).
-The two dev scripts, `apps/server/scripts/dev-setup.ts` and `apps/server/scripts/dev-onboard.ts`,
-are converted: each calls `applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null))`, so
-each installs the triggers the way everything else does. The five demo scripts beside them
-(`allergens-demo.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`,
-`recipes-demo.ts`) call it the same way with their own set list.
+The enforcement is no longer written into each migration by hand: `installAppendOnlyTriggers`
+(`packages/store/src/append-only.ts`) puts a `RAISE(ABORT)` trigger pair on each named table, and
+`applyMigrations` (`packages/migrations/src/apply.ts`) calls it after each set migrates, so boot
+(`apps/server/src/boot.ts`), the cold restore (`apps/server/src/restore.ts`) and `rejoin-command`
+all install them. `waitron-provision venue` is not one of them: it migrates nothing — no non-test
+file under `packages/provisioning/src` calls `applyMigrations` at all (the one caller left there is
+`schema-ahead.migrate.test.ts`, which migrates its own fixture). The two dev scripts,
+`apps/server/scripts/dev-setup.ts` and `apps/server/scripts/dev-onboard.ts`, are converted: each
+calls `applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null))`, so each installs the
+triggers the way everything else does. The five demo scripts beside them (`allergens-demo.ts`,
+`daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`, `recipes-demo.ts`) call it the
+same way with their own set list.
 
 **2026-09-22: the names do NOT come from the `ledger` class, and for one step group they were
 going to.** The first design said "every table the modules classify `ledger`", and the guard that
@@ -699,18 +647,13 @@ ordinary product code performs — `payments` (nine call sites in `packages/paym
 a card payment's row moving through its states), `cadenas` and `registro_sif`
 (`packages/fiscal-verifactu`), `ticket_items` (`apps/server/src/working-order.ts`),
 `daily_close_chain`, `purchase_invoices`, `purchase_invoice_vat`, `workforce_chains` and `envios` —
-and `order_amendments` came back with no trigger at all, although PostgreSQL's hand-written
-`reject_mutation()` triggers DID protect it, because it is classified `state`. The class is wrong in
-both directions.
+and `order_amendments`, which must refuse both, came back with no trigger at all, because it is
+classified `state`. The class is wrong in both directions.
 
 So the declaration is its own marker: `appendOnly(table, class, reason)` beside `classify()` in
 `@waitron/sync-enrolment`, read by `orderedMigrationSets` off the descriptor's `classification` seat
-and carried to `applyMigrations` through `MigrationSet.appendOnlyTables`. The set it names is the
-set PostgreSQL protected, table for table — `sales`, `sale_lines`, `tenders`, `sale_settlements`,
-`sale_voids`, `sale_substitutions`, `daily_closes`, `order_amendments`, `registros_facturacion`,
-`time_entries` — read out of `origin/main`'s six trigger-carrying baselines with
-`grep -oiE "BEFORE (UPDATE OR DELETE|DELETE OR UPDATE) ON ..."` before anything was written. The
-cost of the class-derived version was never paid in production because the installer was never
+and carried to `applyMigrations` through `MigrationSet.appendOnlyTables`. The cost of the
+class-derived version was never paid in production because the installer was never
 wired; it would have been paid by the first card capture after the flip.
 
 Three things about the replacement that a reader should not have to re-derive:
@@ -724,8 +667,7 @@ Three things about the replacement that a reader should not have to re-derive:
   case of nine went red, the replace one. The store sets the pragma in `openConnection`
   (`packages/store/src/index.ts`), beside `foreign_keys`.
 - **`DROP TABLE` is not refusable.** SQLite has no trigger event for it, and no `TRUNCATE` statement
-  at all, so the truncate-blocking trigger each append-only table carried on PostgreSQL has no
-  equivalent and was not replaced. A caller that can issue DDL can drop a ledger table.
+  at all. A caller that can issue DDL can drop a ledger table.
 - **A row trigger needs a row.** SQLite's only trigger granularity is `FOR EACH ROW`, so an `UPDATE`
   or `DELETE` against an EMPTY ledger table succeeds and changes nothing whether the triggers exist
   or not. Any test of this has to seed a row first; the root guard does, and states it.
@@ -942,8 +884,7 @@ expires.
 hiding it: measured 2026-09-21 on Node v26.7.0, with a second connection to the same file as the
 control, a read issued while the write lock held a transaction open returned that transaction's
 rows — including a row a rollback then removed — where the second connection returned committed
-rows only. A second connection is what node-postgres's pool used to hand a reader, so this was a
-behaviour CHANGE and not something SQLite forces. It is reachable rather than theoretical: the
+rows only. It is reachable rather than theoretical: the
 write queue holds the lock across the body's awaits, so the event loop serves other requests inside
 that window.
 
@@ -997,10 +938,8 @@ control; what the other cases in the set catch is not what this one catches.
 
 ## A refused statement does NOT abort the transaction here, and all a savepoint still buys is confinement of a losing attempt's own writes
 
-**The direction reversed with the engine, and this is the sentence in the file most worth getting
-right.** PostgreSQL would not let a transaction continue once it had refused a statement: everything
-sent afterwards failed with `25P02`, and the `COMMIT` at the end was carried out as a rollback. SQLite
-does not do that. Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one `begin immediate`: a
+**This is the sentence in the file most worth getting right: a refusal leaves the transaction
+usable.** Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one `begin immediate`: a
 duplicate primary key (errcode 1555), a null in a `not null` column (1299) and a trigger's
 `RAISE(ABORT)` (1811) were each caught and the next statement ran normally, and at `commit` the rows
 written before AND after every refusal were all present while the refused rows were not.
@@ -1278,7 +1217,7 @@ tenant itself — a by-id read as much as a list read, never trusting a globally
 deployment invariant. Cost: `getHeldOrder`/`abandonHeldOrder` keyed on the `working_orders.id` UUID
 alone, so tenant A could read AND abandon tenant B's order in a multi-tenant DB (till reroute S3, #259). The
 per-task review and four quality lenses all reasoned it "safe under one-tenant-per-db"; only the
-run-it seat, which RAN a two-tenant probe as `app_user` (rolsuper=f), caught it — reading missed it,
+run-it seat, which RAN a two-tenant probe, caught it — reading missed it,
 running caught it (§1, §4).
 
 ## No backwards-compatibility or data-migration code until Waitron is in production
@@ -1436,21 +1375,20 @@ failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 
-`assertNotAhead` (`@waitron/provisioning`) compares the database's journal hashes against the image's
-files and throws `provisioning.database_ahead`; there is no backward migration, so installing an
-older ref after a newer one has already migrated the database can fail to boot with this error.
-`waitron.sh`'s advice on that failure depends on the box: on one that is not stamped production,
-`waitron.sh reset` wipes the database and is the clean way back to a working box; on a production box
-the script refuses to suggest that (a reset there would destroy the fiscal chain) and says to install
-a newer ref instead (#314). It has two callers (`grep -rn assertNotAhead` before believing otherwise): boot, in
-`apps/server/src/node-entry.ts`, and the bucket rebuild's preparation, `prepareStreamRestore` in
-`apps/server/src/restore-stream.ts`, which checks the downloaded copy before anything is placed
-(2026-09-25, slice 2 Task 9b). WHERE boot's call sits changed with the storage switch. It used to run after
-`ensureInstance`, which had already migrated a behind database forward; `ensureInstance` no longer
-exists. It now runs after `runStagedRestore` — the restore that replaces the venue files — and
-`runStagedReset`, which removes them, and BEFORE `startServer`, so it reads a database nothing has migrated yet, because boot owns the migration now
-(`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that lets a virgin venue
-directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
+`assertNotAhead` (`@waitron/provisioning`) compares the database's journal hashes against the
+image's files and throws `provisioning.database_ahead`; there is no backward migration, so
+installing an older ref after a newer one has already migrated the database can fail to boot with
+this error. `waitron.sh`'s advice on that failure depends on the box: on one that is not stamped
+production, `waitron.sh reset` wipes the database and is the clean way back to a working box; on a
+production box the script refuses to suggest that (a reset there would destroy the fiscal chain) and
+says to install a newer ref instead (#314). It has two callers (`grep -rn assertNotAhead` before
+believing otherwise): boot, in `apps/server/src/node-entry.ts`, and the bucket rebuild's
+preparation, `prepareStreamRestore` in `apps/server/src/restore-stream.ts`, which checks the
+downloaded copy before anything is placed (2026-09-25, slice 2 Task 9b). Boot's call runs after
+`runStagedRestore` — the restore that replaces the venue files — and `runStagedReset`, which removes
+them, and BEFORE `startServer`, so it reads a database nothing has migrated yet, because boot owns
+the migration now (`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that
+lets a virgin venue directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
 
 The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths
 carrying the check, and every other path that migrates runs without one. Re-grepped 2026-09-25

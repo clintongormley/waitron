@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { redactSecrets } from "./redact-secrets.js";
 
 describe("redactSecrets", () => {
-  it("masks the password in a postgres URL", () => {
+  it("masks the password in a URL", () => {
     expect(redactSecrets("connect failed: postgres://waitron:hunter2@db:5432/waitron")).toBe(
       "connect failed: postgres://waitron:***@db:5432/waitron",
     );
@@ -52,8 +52,6 @@ describe("redactSecrets", () => {
     );
   });
 
-  // `pg` takes the QUERY one as the effective password when both are present, so masking only the
-  // user-info half would leave the password that was actually used in the log.
   it("masks both halves when a query password overrides a user-info one", () => {
     expect(redactSecrets("postgres://u:p@localhost/db?password=OVERRIDE_SECRET")).toBe(
       "postgres://u:***@localhost/db?password=***",

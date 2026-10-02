@@ -921,8 +921,8 @@ browser test** — most of these rules exist because a test passed while proving
   code and the deletion can stop failing while every test stays green — re-run the control, and move
   the proof to whatever still catches it. Cost: rewriting a job claim as one statement left
   `packages/printing`'s race suite passing with its locking clause deleted, while the suite's header
-  still recorded the old shape failing. The suite that then held the proof went with PostgreSQL, and
-  nothing holds it today. Receipt: [testing-guide.md](docs/developers/testing-guide.md).
+  still recorded the old shape failing. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect in
   `recordSale`; correcting it took 42 tests red-to-green across eight files and left three red that

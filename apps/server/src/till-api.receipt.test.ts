@@ -940,7 +940,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: a malformed override.personId (not a UUID) is 401 pin.invalid — no 22P02 500", async () => {
+  it("gated: a malformed override.personId (not a UUID) is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
