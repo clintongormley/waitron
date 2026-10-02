@@ -1248,8 +1248,8 @@ product has one category (`products.categoryId`). **Decided:** the Add category 
 `editor.add_category`. **Wanted:** the product's full path, "Drinks › Alcoholic drinks ›
 Cocktails", shown on the editor. **Open, ask before building:** whether the "Main category"
 dropdown goes too. Two things it does that dragging may not: a variant's empty category means its
-parent's, and the dropdown is where a variant is given a category of its own — check whether
-A208's tree can drag a variant on its own before dropping it; and a product made from "All
+parent's, and the dropdown is where a variant is given a category of its own — A208's tree
+cannot drag a variant on its own, because a press on a variant row starts no drag; and a product made from "All
 products" has no category until it is dragged. **Clash with A208:** its spec keeps the category
 form (`apps/dashboard/src/widgets/category-form.ts`) for one reason, this button, so if this
 lands after A208 the form has no caller left; if it lands before, A208's spec and plan change
@@ -1342,9 +1342,7 @@ base", the new `editor.base_price`) while a variant is Active; with a unit, "per
 per kg" or "Base price per kg" as before. The same holds on a variant's own page; the variant
 window, which has no unit button, labels it "Price" (`unitShortLabel` and `renderPrice` in
 `apps/dashboard/src/widgets/product-editor.ts`, `editor.price` in
-`apps/dashboard/src/i18n/strings.ts`). Left open: the unbuilt A208 branch
-(`feat/products-category-tree`) has a comment in `product-list.ts` citing `unitShortLabel` as
-returning Each, which is no longer true; fix it when that branch is rebased.
+`apps/dashboard/src/i18n/strings.ts`).
 
 **The variants' status filter becomes a "Show inactive" link (A217) — DONE (#1065).** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
@@ -1478,8 +1476,8 @@ variant's unit, and variants holding a unit of their own are cleared (allowed be
 record, so this takes the full review path (risk trigger: fiscal invariants); trace every reader
 of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a variant's own unit
 ("or a parent's, which its variants without their own inherit") and gets simpler. The owner also
-noted the Products list shows no unit in its price column; A208's spec already has it ("€19.00
-each", "€48.00 / kg").
+noted the Products list shows no unit in its price column; A208 builds it ("€19.00 each",
+"€48.00 / kg").
 
 **A product with variants is not offered in an extras list's product dropdown (A223, owner
 2026-10-02) — DECIDED, ready to build.** Today the dropdown (`extra-list-form.ts`, `#itemsSection`) offers every

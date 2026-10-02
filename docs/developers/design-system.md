@@ -473,9 +473,8 @@ was made, such as the Venue operations screen's Tills table, which leaves out re
 screens and says "No active tills." A screen that filters its rows before handing them to
 the table chooses the empty sentence itself, because the table cannot tell nothing made from nothing
 matching: the Orders screen's rows are always the result of its search and filters, so it passes
-`tableNoMatches()` as `emptyMessage`; the catalogue browser does while its search box has text; and
-the Users and Payments screens do while they hold people or readers that their own filters hide;
-and the Units screen's delete dialog always does, because its products table is drawn only when
+`tableNoMatches()` as `emptyMessage`; the Users and Payments screens do while they hold people or
+readers that their own filters hide; and the Units screen's delete dialog always does, because its products table is drawn only when
 products use the unit, so an empty one means its search found nothing.
 
 Table cells line up by their first line of text (`vertical-align: baseline`). A flex-row cell takes
@@ -524,9 +523,11 @@ the cell does not (the pinned-click cases in `wt-data-table.test.ts`).
 Supply `rowParent` — a `(row) => string | null` returning the parent row's own key, or `null` for a
 top-level row — to switch the same table into tree mode, as the Products screen does for its
 categories, products and variants. A row whose declared parent key isn't present among the current rows floats to the top
-level rather than disappearing. Each row that has children gets its own expand/collapse toggle
-(`collapseLabel`/`expandLabel` give it a localized accessible name, or `rowToggleLabel` one naming its own row); collapsed state lives inside the
-component, not the caller. The table renders `role="treegrid"` with `aria-level`/`aria-expanded` on
+level rather than disappearing. A row that has children gets its own expand/collapse toggle
+(`collapseLabel`/`expandLabel` give it a localized accessible name, or `rowToggleLabel` one naming its own row),
+unless `rowCollapsible` refuses it or the table holds it open (below), when it draws none; where
+`rowActivation` returns `"toggle"`, the arrow is only a picture and a button over the whole row carries
+that name instead. Collapsed state lives inside the component, not the caller. The table renders `role="treegrid"` with `aria-level`/`aria-expanded` on
 each row, and a sortable column sorts each level of siblings independently rather than flattening the
 whole tree into one sort. Leave `rowParent` unset for the ordinary flat table — the two modes share
 every other property. Set `initiallyCollapsed` when parent rows are summaries and children are

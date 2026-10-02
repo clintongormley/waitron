@@ -390,7 +390,7 @@ export class CatalogueBrowser extends LitElement {
   #unroutedFolderIds(): string[] {
     if (!this.routing) return [];
     const rules = {
-      // A folder is covered only by rules that apply to every dish in every service zone.
+      // A category is covered only by rules that apply to every dish in every service zone.
       exceptions: this.routing.exceptions.filter(
         ({ zoneId, productId }) => zoneId === null && productId === null,
       ),
