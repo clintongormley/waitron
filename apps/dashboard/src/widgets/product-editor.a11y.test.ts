@@ -233,13 +233,15 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       // Without these the scan could pass on a page that drew none of its hints.
       for (const name of ["allergens-hint", "dietary-hint"])
         expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).not.toBeNull();
-      const description =
-        el.shadowRoot!.querySelector<HTMLTextAreaElement>("[name=description-en]")!;
-      expect(description.placeholder).toBe("Roasted in house");
+      const area = el.shadowRoot!.querySelector<HTMLElement & { placeholder: string }>(
+        "wt-textarea[name=description-en]",
+      )!;
+      expect(area.placeholder).toBe("Roasted in house");
+      // The text box itself is see-through; the filled field box behind it is what it is read on.
       expect(
         contrastRatio(
-          getComputedStyle(description, "::placeholder").color,
-          getComputedStyle(description).backgroundColor,
+          getComputedStyle(area.shadowRoot!.querySelector("textarea")!, "::placeholder").color,
+          getComputedStyle(area.shadowRoot!.querySelector(".field")!).backgroundColor,
         ),
       ).toBeGreaterThanOrEqual(4.5);
     }
