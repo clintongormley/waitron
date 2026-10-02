@@ -44,4 +44,34 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it.each([
+    ["with its own photo", { image: "abc.png" }],
+    ["with no photo", {}],
+    ["with the inherited photo", { inheritedImage: "parent.png" }],
+    ["marked invalid", { invalid: true }],
+  ] as const)("renders accessibly as a thumbnail %s", async (_, props) => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), thumbnail: true, ...props },
+      theme,
+    );
+    // Without this the scan could pass on a thumbnail that drew no button.
+    expect(el.shadowRoot!.querySelector("button[data-test=choose-image]")).not.toBeNull();
+    if ("inheritedImage" in props)
+      expect(el.shadowRoot!.querySelector("[data-test=inherited-caption]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly as a thumbnail with its library open", async () => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), thumbnail: true, image: "abc.png" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

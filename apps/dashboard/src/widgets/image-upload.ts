@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, currentContentLanguages, ContentLanguageController } from "@waitron/ui";
+import {
+  baseStyles,
+  currentContentLanguages,
+  ContentLanguageController,
+  uniqueId,
+} from "@waitron/ui";
 import { resolveEnabledContentText } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
@@ -13,7 +18,13 @@ export interface ImageUploader {
   readonly liveData?: LiveData;
 }
 
-/** The media module registers the picker; product forms exchange only its stored image reference. */
+/**
+ * The media module registers the picker; product forms exchange only its stored image reference.
+ *
+ * As a `thumbnail` it is one small button showing the photo, which opens the picker; the picker's
+ * footer then holds Remove. Its default slot holds what sits beside the photo, taking the rest of
+ * the row, so the inherited photo's caption can run under both.
+ */
 @customElement("dashboard-image-upload")
 export class ImageUpload extends LitElement {
   static override styles = [
@@ -37,6 +48,45 @@ export class ImageUpload extends LitElement {
         max-height: 16rem;
         border-radius: var(--wt-radius-md);
       }
+      :host([thumbnail]) {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        column-gap: var(--wt-space-3);
+        row-gap: var(--wt-space-1);
+      }
+      :host([thumbnail]) slot {
+        display: block;
+      }
+      .thumb {
+        display: block;
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        padding: 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        overflow: hidden;
+        background: var(--wt-color-surface);
+        cursor: pointer;
+      }
+      .thumb.inherited {
+        border-style: dashed;
+        border-color: var(--wt-color-text-muted);
+      }
+      .thumb[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
+      .thumb img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .caption {
+        grid-column: 1 / -1;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
   @property({ attribute: false }) api!: ImageUploader;
@@ -45,9 +95,11 @@ export class ImageUpload extends LitElement {
   @property() inheritedImage: string | null = null;
   /** Marks Choose image invalid, so `focusFirstInvalid` lands on it. */
   @property({ type: Boolean }) invalid = false;
+  @property({ type: Boolean, reflect: true }) thumbnail = false;
   @state() private pickerOpen = false;
   @state() private selectedNames: Record<string, string> = {};
   #selectedFilename: string | null = null;
+  readonly #captionId = uniqueId("image-upload-caption");
   constructor() {
     super();
     new ContentLanguageController(this);
@@ -64,7 +116,41 @@ export class ImageUpload extends LitElement {
       new CustomEvent("image-changed", { detail: { image }, bubbles: true, composed: true }),
     );
   }
+  #renderThumbnail() {
+    const inherited = !this.image && this.inheritedImage ? this.inheritedImage : null;
+    const shown = this.image ?? inherited;
+    return html`<button
+        type="button"
+        class=${inherited ? "thumb inherited" : "thumb"}
+        data-test="choose-image"
+        aria-label=${t(this.image ? "image.change_photo" : "image.add_photo")}
+        aria-invalid=${this.invalid ? "true" : nothing}
+        aria-describedby=${inherited ? this.#captionId : nothing}
+        @click=${() => this.#setOpen(true)}
+      >
+        ${shown ? html`<img src=${`/media/${encodeURIComponent(shown)}`} alt="" />` : nothing}
+      </button>
+      <slot></slot>
+      ${
+        inherited
+          ? html`<span id=${this.#captionId} class="caption" data-test="inherited-caption"
+              >${t("editor.inherited_image_alt")}</span
+            >`
+          : nothing
+      }`;
+  }
+
+  #remove(): void {
+    this.selectedNames = {};
+    this.#change(null);
+  }
+
   override render() {
+    return html`${this.thumbnail ? this.#renderThumbnail() : this.#renderFull()}
+    ${this.pickerOpen ? this.#renderPicker() : nothing}`;
+  }
+
+  #renderFull() {
     return html`<p>${t("image.label")}</p>
       <div class="actions">
         <wt-button
@@ -79,10 +165,7 @@ export class ImageUpload extends LitElement {
             ? html`<wt-button
                 data-test="remove-image"
                 variant="secondary"
-                @click=${() => {
-                  this.selectedNames = {};
-                  this.#change(null);
-                }}
+                @click=${() => this.#remove()}
                 >${t("image.remove")}</wt-button
               >`
             : nothing
@@ -98,39 +181,51 @@ export class ImageUpload extends LitElement {
               alt=${t("editor.inherited_image_alt")}
             />`
           : nothing
-      }
-      ${
-        this.pickerOpen
-          ? html`<wt-modal
-              open
-              heading=${t("image.choose")}
-              @wt-close=${(event: Event) => {
-                event.stopPropagation();
-                this.#setOpen(false);
-              }}
-              @keydown=${(event: Event) => event.stopPropagation()}
-            >
-              <media-image-picker
-                .request=${this.api?.imageLibraryRequest}
-                .liveData=${this.api?.liveData}
-                @select-image=${(
-                  event: CustomEvent<{ filename: string; names: Record<string, string> }>,
-                ) => {
-                  event.stopPropagation();
-                  this.#selectedFilename = event.detail.filename;
-                  this.selectedNames = event.detail.names;
-                  this.#change(event.detail.filename);
+      }`;
+  }
+
+  #renderPicker() {
+    return html`<wt-modal
+      open
+      heading=${t("image.choose")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#setOpen(false);
+      }}
+      @keydown=${(event: Event) => event.stopPropagation()}
+    >
+      <media-image-picker
+        .request=${this.api?.imageLibraryRequest}
+        .liveData=${this.api?.liveData}
+        @select-image=${(
+          event: CustomEvent<{ filename: string; names: Record<string, string> }>,
+        ) => {
+          event.stopPropagation();
+          this.#selectedFilename = event.detail.filename;
+          this.selectedNames = event.detail.names;
+          this.#change(event.detail.filename);
+          this.#setOpen(false);
+        }}
+      ></media-image-picker>
+      <wt-form-actions slot="footer"
+        ><wt-button slot="cancel" variant="secondary" @click=${() => this.#setOpen(false)}
+          >${t("action.cancel")}</wt-button
+        >${
+          this.thumbnail && this.image
+            ? html`<wt-button
+                slot="secondary"
+                variant="secondary"
+                data-test="remove-image"
+                @click=${() => {
+                  this.#remove();
                   this.#setOpen(false);
                 }}
-              ></media-image-picker>
-              <wt-form-actions slot="footer"
-                ><wt-button slot="cancel" variant="secondary" @click=${() => this.#setOpen(false)}
-                  >${t("action.cancel")}</wt-button
-                ></wt-form-actions
-              >
-            </wt-modal>`
-          : nothing
-      }`;
+                >${t("image.remove")}</wt-button
+              >`
+            : nothing
+        }</wt-form-actions
+      >
+    </wt-modal>`;
   }
 }
 
