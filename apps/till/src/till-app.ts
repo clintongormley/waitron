@@ -6272,10 +6272,6 @@ export class TillApp extends LitElement {
       ?.key;
   }
 
-  /**
-   * Station, Expo and Schedule surfaces not authored as tabs, offered as buttons. A handheld gets none:
-   * it cannot open any of them.
-   */
   #affordances(): ShellAffordance[] {
     if (this.handheldMode) return ["find-bill"];
     const tabKeys = new Set(this.canvas?.tabs.map((tab) => tab.key) ?? []);

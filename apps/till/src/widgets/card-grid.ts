@@ -93,7 +93,6 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   /** Shown in the held-orders card, under the held orders. */
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
-  /** Shown in the held-orders card, under the waiting orders. */
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   @property({ attribute: false }) defaultStationId?: string;
   @property({ type: Boolean }) busy = false;

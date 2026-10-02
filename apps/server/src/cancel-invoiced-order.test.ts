@@ -546,9 +546,14 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(departure).toHaveLength(1);
     const original = await invoiceOf(party.tabId);
     const listedBills = async () => {
-      const listed = await send(venue.app, venue.cookie, "GET", "/api/unpaid-departures");
+      const listed = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/bills/lookup?q=${original.invoiceNumber}`,
+      );
       expect(listed.status).toBe(200);
-      return (listed.json as unknown as { workingOrderId: string }[]).map(
+      return (listed.json as { bills: { workingOrderId: string }[] }).bills.map(
         (row) => row.workingOrderId,
       );
     };

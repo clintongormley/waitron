@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./find-bill-dialog.js";
@@ -68,6 +68,14 @@ describe("Find a bill", () => {
     expect(input(el, "bill-search").error).toContain("Type an invoice number");
   });
 
+  it("searches when Enter is pressed in the search field", async () => {
+    const el = await mount();
+    await type(el, "bill-search", "A/12");
+    input(el, "bill-search").shadowRoot!.querySelector("input")!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(lookUpBills).toHaveBeenCalledWith("A/12"));
+  });
+
   it("keeps the query on a failed read and explains an empty result", async () => {
     lookUpBills.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ bills: [] });
     const el = await mount();
@@ -77,6 +85,20 @@ describe("Find a bill", () => {
     expect(input(el, "bill-search").value).toBe("A/12");
     await click(el, "[data-search]");
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("No unpaid bill matches"));
+  });
+
+  it("clears an earlier result when a new search fails", async () => {
+    lookUpBills
+      .mockResolvedValueOnce({ bills: [debt] })
+      .mockRejectedValueOnce(new Error("offline"));
+    const el = await mount();
+    await type(el, "bill-search", "A/12");
+    await click(el, "[data-search]");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
+    await type(el, "bill-search", "Mesa 4");
+    await click(el, "[data-search]");
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("The search failed"));
+    expect(el.shadowRoot!.querySelector("[data-bill]")).toBeNull();
   });
 
   it("collects the chosen invoice debt with a cash tender and closes only after the app succeeds", async () => {

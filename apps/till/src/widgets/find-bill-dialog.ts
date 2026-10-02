@@ -84,11 +84,15 @@ export class TillFindBillDialog extends LitElement {
 
   async #search(): Promise<void> {
     const q = this.query.trim();
-    this.queryError = q === "";
-    if (this.queryError) return;
     const generation = ++this.#generation;
-    this.searching = true;
+    this.results = null;
     this.searchFailed = false;
+    this.queryError = q === "";
+    if (this.queryError) {
+      this.searching = false;
+      return;
+    }
+    this.searching = true;
     try {
       const { bills } = await this.api.lookUpBills(q);
       if (generation === this.#generation) this.results = bills;
@@ -152,6 +156,11 @@ export class TillFindBillDialog extends LitElement {
           bill === null
             ? html`
                 <form
+                  @keydown=${(event: KeyboardEvent) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    void this.#search();
+                  }}
                   @submit=${(event: Event) => {
                     event.preventDefault();
                     void this.#search();
