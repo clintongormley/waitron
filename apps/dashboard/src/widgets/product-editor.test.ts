@@ -2355,21 +2355,19 @@ async function mountBilingualVariant(description: ProductEditorDraft["descriptio
   });
   return el;
 }
-const placeholders = (el: ProductEditor) =>
-  ["en", "es"].map(
-    (locale) => control<HTMLTextAreaElement>(el, `description-${locale}`).placeholder,
-  );
+const placeholders = (el: ProductEditor, locales = ["en", "es"]) =>
+  locales.map((locale) => control<HTMLTextAreaElement>(el, `description-${locale}`).placeholder);
 
-it("hints a variant's description in every language only while every language is blank", async () => {
+it("hints a variant's description with its parent's only while every language is blank", async () => {
   const el = await mountBilingualVariant();
   expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
   await input(el, "description-en", "Served in a glass");
-  expect(placeholders(el)).toEqual(["", ""]);
+  expect(placeholders(el)).toEqual(["", "Served in a glass"]);
   await input(el, "description-en", "  ");
   expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
 });
 
-it("shows no description hint on a variant that already describes itself in one language", async () => {
+it("shows no description hint on a variant described only in a language other than the default", async () => {
   const el = await mountBilingualVariant({ es: "Servido en vaso" });
   expect(placeholders(el)).toEqual(["", ""]);
 });
@@ -2410,6 +2408,24 @@ it("hints a variant's description in a language its parent left blank with the p
     categories,
   });
   expect(placeholders(el)).toEqual(["Roasted in house", "Roasted in house"]);
+});
+
+it("hints a variant's blank language with its own default-language description, as it is typed", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...glass,
+      description: { es: "Servido en vaso" },
+      inherited: { ...parentValues, description: { es: "Tostado en casa", ca: "Torrat a casa" } },
+    },
+    locales: ["es", "ca"],
+    units: [unit, litre],
+    taxChoices: taxes,
+    categories,
+  });
+  expect(placeholders(el, ["es", "ca"])).toEqual(["", "Servido en vaso"]);
+  await input(el, "description-es", "Servido en copa");
+  expect(placeholders(el, ["es", "ca"])).toEqual(["", "Servido en copa"]);
 });
 
 it("saves a variant's description as null once every language is blanked again", async () => {
