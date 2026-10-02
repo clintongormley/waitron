@@ -3,8 +3,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import type { VariantTable } from "./variant-table.js";
-import "./variant-table.js";
+import { EACH_CHOICE, type VariantTable } from "./variant-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 
@@ -153,17 +152,16 @@ it("picks the pricing unit from an unlabelled shared dropdown whose last row add
   expect(unit.label).toBe(t("product.unit"));
   expect(unit.hideLabel).toBe(true);
   expect(unit.search).toBe("auto");
-  // Each is the unit a product with none sells in: the prompt shown for no unit, and a row.
   expect(unit.placeholder).toBe("Each");
   expect(unit.options).toEqual([
-    { value: "", label: "Each" },
+    { value: EACH_CHOICE, label: "Each" },
     { value: "kg", label: "kg" },
     { value: "__add__", label: "Add unit", action: true },
   ]);
   expect(unit.value).toBe("kg");
   expect(await shown(el, "pricing-unit")).toBe("kg");
   const changed = listen(el, "wt-unit-change");
-  await chooseOption(unit, "");
+  await chooseOption(unit, EACH_CHOICE);
   expect(changed.mock.calls[0]![0].detail).toEqual({ unitId: null });
   const added = listen(el, "wt-add-unit");
   unit.dispatchEvent(
@@ -182,8 +180,31 @@ it("picks the pricing unit from an unlabelled shared dropdown whose last row add
 
 it("offers no add-unit row when the host gives it no label", async () => {
   const el = await mountTable({ unitId: null, unitOptions: [{ value: null, label: "Each" }] });
-  expect(box(el, "pricing-unit").options).toEqual([{ value: "", label: "Each" }]);
+  expect(box(el, "pricing-unit").options).toEqual([{ value: EACH_CHOICE, label: "Each" }]);
   expect(await shown(el, "pricing-unit")).toBe("Each");
+});
+
+it("draws Each as a chosen unit, not as the grey prompt for nothing chosen, and reports no unit for it", async () => {
+  const el = await mountTable({
+    unitId: null,
+    unitOptions: [
+      { value: null, label: "Each" },
+      { value: "kg", label: "kg" },
+    ],
+  });
+  const unit = box(el, "pricing-unit");
+  const each = unit.options.find((option) => option.label === "Each")!;
+  expect(each.value).not.toBe("");
+  expect(unit.value).toBe(each.value);
+  expect(await shown(el, "pricing-unit")).toBe("Each");
+  expect(unit.shadowRoot!.querySelector(".trigger .value")!.classList).not.toContain("placeholder");
+  const changed = listen(el, "wt-unit-change");
+  await chooseOption(unit, "kg");
+  await chooseOption(unit, each.value);
+  expect(changed.mock.calls.map((call) => call[0].detail)).toEqual([
+    { unitId: "kg" },
+    { unitId: null },
+  ]);
 });
 
 it("lists one row per variant with its staff name and price, and changes the unit from the header", async () => {

@@ -24,7 +24,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "./allergen-dietary-picker.js";
 import "./image-upload.js";
 import "./variant-form.js";
-import "./variant-table.js";
+import { EACH_CHOICE } from "./variant-table.js";
 import { categoryPath } from "./category-form.js";
 import { categoryField } from "./classification-fields.js";
 import {
@@ -1076,6 +1076,7 @@ export class ProductEditor extends LitElement {
     const blank = parent
       ? this.sameAs(parentUnit ? this.unitLabel(parentUnit) : t("editor.unit_each"))
       : t("editor.unit_each");
+    const none = parent ? "" : EACH_CHOICE;
     return html`<wt-combobox
         name="unit"
         label=${t("product.unit")}
@@ -1084,14 +1085,15 @@ export class ProductEditor extends LitElement {
         noResultsLabel=${t("categories.combobox_no_results")}
         placeholder=${blank}
         .options=${[
-          { value: "", label: blank },
+          { value: none, label: blank },
           ...this.units.map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
         ]}
-        .value=${this.draft.unitId ?? ""}
+        .value=${this.draft.unitId ?? none}
         error=${this.error("unit")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
-          this.change("unitId", event.detail.value || null);
+          const value = event.detail.value;
+          this.change("unitId", value === none ? null : value);
           this.unitPickerOpen = false;
         }}
       ></wt-combobox>
