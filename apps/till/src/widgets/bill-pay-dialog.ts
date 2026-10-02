@@ -125,7 +125,8 @@ function chargeableText(amount: string): string {
 }
 
 /** What the dialog says of a refusal: one of the app's own, the most a card can be charged when
- * the venue takes no tips, or the server's code in its own words. */
+ * the venue takes no tips, the till's own sentence for a device not set up for the card reader, or
+ * the server's code in its own words. */
 function refusalText(refusal: PayRefusal): string {
   switch (refusal.code) {
     case "network":
@@ -136,7 +137,8 @@ function refusalText(refusal: PayRefusal): string {
       return t("bill_pay.card_declined");
     case "card_network":
       return t("bill_pay.card_unreachable");
-    // Of the routes this dialog calls, only the reader branch of the payment route throws this code.
+    // Of the requests whose refusals this dialog shows, only the reader branch of the payment route
+    // throws this code.
     case "device.forbidden_action":
       return t("card_reader.not_set_up");
   }

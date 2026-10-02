@@ -1900,7 +1900,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       handheld is offered the card reader, on any pay card and on a bill, only when its device
       profile has integrated card payment (`#showsCounterLists` and `#cardReader`,
       `apps/till/src/till-app.ts`). A till follows its profile the same way (C129); one with no
-      device, or with no profile, reads no capabilities at boot, so it is not offered the reader
+      device reads no capabilities at boot, so it is not offered the reader
       either, and the built-in till profile has the capability. When the server still refuses a
       reader payment with `device.forbidden_action` (a profile that lost the capability after the
       till started), the counter and the bill say "This device is not set up to use the card

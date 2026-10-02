@@ -802,6 +802,11 @@ function isPermanentSaleRefusal(error: unknown): boolean {
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
 }
 
+/** `POST /api/pay` throws this code only for a device not set up for the reader. */
+function isReaderRefusal(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === "device.forbidden_action";
+}
+
 /**
  * Owns the one {@link WorkingOrderStore}, which belongs to the till and survives a change of operator,
  * and the one {@link TillApi}. Screens emit composed events; this element decides what happens next. A
@@ -2334,8 +2339,7 @@ export class TillApp extends LitElement {
           ? "sale.refused"
           : reachedFiscal && isNetworkFailure(error)
             ? "sale.unconfirmed"
-            : // `POST /api/pay` throws this code only for a device not set up for the reader.
-              (error as { code?: string } | undefined)?.code === "device.forbidden_action"
+            : isReaderRefusal(error)
               ? "card_reader.not_set_up"
               : counterError(error, "sale.error");
       paidMeanwhile = isPaymentsReceived(error);
