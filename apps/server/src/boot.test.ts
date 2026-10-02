@@ -640,7 +640,8 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     expect(await seen()).toBe(beforePreview);
     const activePreview = await fetch(previewUrl, { headers: { cookie } });
     expect(activePreview.status).toBe(200);
-    await activePreview.text();
+    const drawn = (await activePreview.json()) as { preview: { text: string } };
+    expect(drawn.preview.text).toContain("VERI*FACTU");
     expect(await seen()).not.toBe(beforePreview);
   } finally {
     await sharedDb.execute(sql`delete from management_sessions where person_id = ${personId}`);

@@ -62,6 +62,13 @@ function linesOf(result: ReceiptPreviewResponse, start: number, end: number): st
     .map((block) => (block.kind === "image" ? (block.text ?? "").trim() : ""));
 }
 
+/** The pictures that are not a drawn line of text: the sample QR's. */
+function pictures(result: ReceiptPreviewResponse) {
+  return result.preview.blocks.filter(
+    (block) => block.kind === "image" && block.text === undefined,
+  );
+}
+
 function printedLines(result: ReceiptPreviewResponse): string[] {
   return linesOf(result, 0, result.preview.blocks.length);
 }
@@ -459,6 +466,34 @@ describe("GET /management-api/receipt-preview", () => {
         error: { code: "management.request_invalid", params: { field: "language" } },
       });
     });
+  });
+
+  it("draws the sample QR with the venue fiscal backend's words around it", async () => {
+    const withWords = new Hono();
+    mountReceiptPreviewApi(
+      withWords,
+      { db: suite.db, cfg: venue.cfg, receiptQrText: { caption: "CAP-X", legend: "LEG-Y" } },
+      () => {},
+    );
+    const response = await withWords.request(
+      `/management-api/receipt-preview?receipt=${encodeURIComponent("{}")}`,
+      { method: "GET", headers: { cookie: venue.managerCookie } },
+    );
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as ReceiptPreviewResponse;
+    expect(pictures(result)).toHaveLength(1);
+    const lines = printedLines(result);
+    expect(lines.indexOf("CAP-X")).toBeGreaterThanOrEqual(0);
+    expect(lines.indexOf("LEG-Y")).toBeGreaterThan(lines.indexOf("CAP-X"));
+    expect(lines.indexOf("LEG-Y")).toBeLessThan(lines.indexOf("Deli Test SL"));
+  });
+
+  it("draws no QR, caption or legend for a venue whose fiscal backend gives no words", async () => {
+    const result = await rendered({});
+    expect(pictures(result)).toEqual([]);
+    expect(result.preview.text).not.toContain("VERI*FACTU");
+    expect(result.preview.text).not.toContain("QR tributario");
+    expect(printedLines(result)).toContain("Deli Test SL");
   });
 
   it("marks a practice installation's receipt as a practice one, as its printed receipts are", async () => {

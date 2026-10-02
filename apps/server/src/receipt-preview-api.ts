@@ -14,6 +14,7 @@ import { authorizeManager } from "@waitron/identity";
 import { validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
 import { textGrid, type EscSetting, type PaperWidth } from "@waitron/printing";
 import { createErrorBoundary, requireEnum, requireManagementSession } from "@waitron/server-kit";
+import type { ReceiptQrText } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
@@ -22,7 +23,7 @@ import {
   type PrintPreviewBlock,
 } from "./print-job-preview.js";
 import { formatReceipt } from "./receipt-ticket.js";
-import { SAMPLE_SALE } from "./sample-receipt.js";
+import { sampleSale } from "./sample-receipt.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 
@@ -128,7 +129,7 @@ function chooseSetting(settings: EscSetting[], asked: PaperWidth | undefined): E
  */
 export function mountReceiptPreviewApi(
   app: Hono,
-  deps: { db: Database; cfg: TillConfig },
+  deps: { db: Database; cfg: TillConfig; receiptQrText?: ReceiptQrText },
   log: Logger,
 ): void {
   app.get("/management-api/receipt-preview", (c) =>
@@ -166,7 +167,7 @@ export function mountReceiptPreviewApi(
       const draw = (trim: ReceiptConfig) =>
         previewPrintJob(
           formatReceipt({
-            result: SAMPLE_SALE,
+            result: sampleSale(deps.receiptQrText),
             issuer,
             receipt: trim,
             invoiceLocale: locale,

@@ -7,6 +7,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
+import type { ReceiptQrText } from "@waitron/fiscal";
 import {
   drawerOpenPolicy,
   drawerOpens,
@@ -85,6 +86,8 @@ export interface PrintApiDeps {
   listIpv4?: () => string[];
   /** The time a printer's test page shows; tests fix it. */
   now?: () => Date;
+  /** The venue fiscal backend's words around a receipt QR; the sample receipt has a QR only with them. */
+  receiptQrText?: ReceiptQrText;
 }
 
 const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
@@ -1034,10 +1037,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const payload = formatSampleReceipt({
-        paperWidth: requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues),
-        resolution: requireEnum(body.resolution, "resolution", printResolution.enumValues),
-      });
+      const payload = formatSampleReceipt(
+        {
+          paperWidth: requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues),
+          resolution: requireEnum(body.resolution, "resolution", printResolution.enumValues),
+        },
+        deps.receiptQrText,
+      );
       const result = await gated(sessionId, (tx) => enqueuePrintJob(tx, deps.cfg, id, payload));
       return c.json(result, 202);
     }),

@@ -138,6 +138,7 @@ function mountApp(
     listIpv4?: () => string[];
     log?: Logger;
     now?: () => Date;
+    receiptQrText?: { caption: string; legend: string };
   } = {},
 ): Hono {
   const app = new Hono();
@@ -154,6 +155,7 @@ function mountApp(
       venueLocale: opts.venueLocale ?? "es-ES",
       listIpv4: opts.listIpv4,
       ...(opts.now === undefined ? {} : { now: opts.now }),
+      ...(opts.receiptQrText === undefined ? {} : { receiptQrText: opts.receiptQrText }),
     },
     opts.log ?? noopLog,
   );
@@ -1714,7 +1716,29 @@ describe("mountPrintApi — management: test-print", () => {
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
-    expect([...new Uint8Array(job!.payload)]).toEqual([...formatSampleReceipt(settings)]);
+    expect([...new Uint8Array(job!.payload)]).toEqual([
+      ...formatSampleReceipt(settings, undefined),
+    ]);
+  });
+
+  it("prints the sample receipt's QR with the venue fiscal backend's words around it", async () => {
+    const words = { caption: "CAP-X", legend: "LEG-Y" };
+    const app = mountApp({ receiptQrText: words });
+    const printerId = await createNetworkPrinter(app, "10.0.0.44", 9100, "Sample with QR");
+    const settings = { paperWidth: "80mm" as const, resolution: "203dpi" as const };
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/sample-receipt`, {
+      cookie: managerCookie,
+      body: settings,
+    });
+    expect(res.status).toBe(202);
+    const { jobId } = (await res.json()) as { jobId: string };
+    const [job] = await suite.db
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.id, jobId));
+    const payload = new Uint8Array(job!.payload);
+    expect([...payload]).toEqual([...formatSampleReceipt(settings, words)]);
+    expect(printedLines(payload).map((line) => line.trim())).toContain("LEG-Y");
   });
 
   it("rejects an invalid sample-receipt resolution", async () => {
