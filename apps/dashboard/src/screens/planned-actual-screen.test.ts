@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/client.js";
@@ -42,11 +43,19 @@ async function flush(el: PlannedActualScreen): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
 }
-// The location select is inside `<dashboard-location-picker>`'s shadow root.
+// The location dropdown is inside `<dashboard-location-picker>`'s shadow root.
 const locationSelect = (el: PlannedActualScreen) =>
   el
     .shadowRoot!.querySelector("dashboard-location-picker")!
-    .shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    .shadowRoot!.querySelector<HTMLElement & { value: string; updateComplete: Promise<unknown> }>(
+      "[data-test=location-select]",
+    )!;
+/** What the closed location dropdown shows on its trigger, not what its properties say it holds. */
+async function shownLocation(el: PlannedActualScreen): Promise<string | undefined> {
+  const box = locationSelect(el);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
 afterEach(cleanupWidgets);
 
 /** Sends the week field's `wt-change`, as a date the operator finished typing does. */
@@ -97,8 +106,7 @@ describe("planned-actual-screen", () => {
     });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
       "loc-2",
@@ -190,8 +198,7 @@ describe("planned-actual-screen", () => {
     });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("convenio.not_found");
   });
@@ -236,8 +243,7 @@ describe("planned-actual-screen", () => {
     });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
 
     el.remove(); // disconnectedCallback
@@ -251,6 +257,7 @@ describe("planned-actual-screen", () => {
     );
     const reselect = locationSelect(el);
     expect(reselect.value).toBe("loc-2");
+    expect(await shownLocation(el)).toBe("Annex");
   });
 });
 
@@ -285,8 +292,7 @@ describe("planned-actual-screen — location refreshes", () => {
     });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
       "loc-2",
@@ -306,6 +312,7 @@ describe("planned-actual-screen — location refreshes", () => {
       ),
     );
     expect(locationSelect(el).value).toBe("loc-1");
+    expect(await shownLocation(el)).toBe("Main");
   });
 
   // The rows query depends on locations itself, so the refresh re-reads it once on its own; the
@@ -320,8 +327,7 @@ describe("planned-actual-screen — location refreshes", () => {
     });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     const rowLoads = vi.mocked(api.getPlannedVsActual).mock.calls.length;
     vi.mocked(api.getLocations).mockResolvedValue([
@@ -335,6 +341,7 @@ describe("planned-actual-screen — location refreshes", () => {
     const since = vi.mocked(api.getPlannedVsActual).mock.calls.slice(rowLoads);
     expect(since.map(([locationId]) => locationId)).toEqual(["loc-2"]);
     expect(locationSelect(el).value).toBe("loc-2");
+    expect(await shownLocation(el)).toBe("Annex");
   });
 });
 
