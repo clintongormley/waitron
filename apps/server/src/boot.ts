@@ -153,6 +153,7 @@ import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
+import { mountOrdersApi } from "./orders-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -1551,6 +1552,11 @@ async function bootServer(
   mountReportApi(
     app,
     { db, cfg: { nodeId: dataNodeId, locationId: till.locationId }, venueLocale },
+    log,
+  );
+  mountOrdersApi(
+    app,
+    { db, backend: tillBackend, cfg: { nodeId: dataNodeId }, till, devMode: config.devMode },
     log,
   );
   mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);

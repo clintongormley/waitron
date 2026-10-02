@@ -3033,6 +3033,50 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     });
   }, 60_000);
 
+  it("passes the development device identity to an Orders receipt-copy request", async () => {
+    const [person] = await sharedDb
+      .insert(persons)
+      .values({ displayName: "Orders copy probe", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
+    const session = await withTransaction(sharedDb, (tx) =>
+      startManagementSession(tx, { personId: person!.id }),
+    );
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: sharedVenueDir,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_HOST: "0.0.0.0",
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "dev",
+      WAITRON_MIN_TICK_MS: "50",
+      WAITRON_MAX_TICK_MS: "200",
+      WAITRON_SKIP_RETRY_MS: "100",
+    });
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/management-api/orders/${randomUUID()}/reprint`,
+        {
+          method: "POST",
+          headers: {
+            cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+            [DEV_DEVICE_HEADER]: deviceId1,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ printerId: randomUUID() }),
+        },
+      );
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        error: { code: "device.forbidden_action", params: { action: "reprint" } },
+      });
+    } finally {
+      await server.close();
+      await sharedDb.execute(sql`delete from management_sessions where person_id = ${person!.id}`);
+      await sharedDb.execute(sql`delete from persons where id = ${person!.id}`);
+    }
+  }, 60_000);
+
   it("a boot NOT in devMode ignores the header (401 with no cookie)", async () => {
     const port = await freePort();
     const server = await startServer({

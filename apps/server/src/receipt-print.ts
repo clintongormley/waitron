@@ -15,7 +15,7 @@ import type { TillSaleResult } from "./till-sale.js";
 /** Drawer commands are separate from documents, so printing and resending never open the drawer. */
 export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 
-function printConfig(cfg: TillConfig): PrintConfig {
+function printConfig(cfg: Pick<TillConfig, "locationId">): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
@@ -68,7 +68,7 @@ export async function resolveReceiptPrinter(
 /** Use the filed issuer where available, current optional trim, and the language the sale was filed in. */
 async function buildReceiptBytes(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: Pick<TillConfig, "practiceMode">,
   ticket: TillSaleResult,
   duplicate: boolean,
   printer: EscSetting,
@@ -137,16 +137,22 @@ export async function enqueueReceiptReprint(
   ticket: TillSaleResult,
   saleId: string,
 ): Promise<void> {
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, true);
-  if (resolved === undefined) return;
-  await enqueuePrintJob(
-    tx,
-    printConfig(cfg),
-    resolved.printer.id,
-    resolved.receiptBytes,
-    "document",
-    { saleId },
-  );
+  const printer = await resolveReceiptPrinter(tx, cfg);
+  if (printer === undefined) return;
+  await enqueueReceiptCopy(tx, cfg, ticket, saleId, printer);
+}
+
+/** A receipt copy is a document job; the cash drawer has its own audited job. */
+export async function enqueueReceiptCopy(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "locationId" | "practiceMode">,
+  ticket: TillSaleResult,
+  saleId: string,
+  printer: { id: string } & EscSetting,
+): Promise<{ jobId: string } | undefined> {
+  const bytes = await buildReceiptBytes(tx, cfg, ticket, true, printer);
+  if (bytes === undefined) return undefined;
+  return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", { saleId });
 }
 
 /**

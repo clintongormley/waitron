@@ -1398,7 +1398,11 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   together: deleting a printed resend brings back the "in trouble" state of the job it copied (for
   a resend of a till Reprint, also the original kitchen ticket's alert and the table's problem that
   it cleared), and deleting a chain's first job while a resend still names it is refused by the
-  `resend_of` key (read, not run).
+  `resend_of` key (read, not run). A receipt copy now adds an append-only `receipt_reprints` row
+  with a required `print_job_id` key using `ON DELETE RESTRICT`
+  (`packages/db/src/schema/receipt-reprints.ts`); include that audit link when designing retention.
+  Whether a future replication drain can carry the audit row to a node without its print job is
+  unverified and needs a test when that drain is built.
 - **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
   It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
   invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
@@ -1883,9 +1887,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
       does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
       says, so B16 left it.
-    - **Completed orders cannot be looked up.** No till or dashboard screen lists them. The Orders
-      screen covers it: spec `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`, queued
-      as lane E's B27a–B27c.
+    - **Completed orders cannot be looked up on a screen.** B27a adds the server's list, detail,
+      staff, printer choice and audited receipt-copy routes, with the owner’s 2026-10-02 scope and
+      copy decisions; B27b's dashboard screen and B27c's till lookup remain queued. Spec:
+      `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`.
     - **The waiting list is drawn only inside the held-orders card**, so a canvas without that
       card shows no waiting list.
     - **Not measured — Pay on a sent `invoice_first` order whose invoice was credited may show the
@@ -1947,8 +1952,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **Handhelds on the default phone and tablet layouts never see the list.** It sits in the
       counter's held-orders card, which those layouts lack; since B31 a handheld whose layout adds
       a held-orders card loads and shows it. The owner kept the counter list as a stopgap and wants
-      the dashboard Orders screen (B27s; queued as lane E's B27a–B27c; the till-cancel question is
-      lane C's C126).
+      the dashboard Orders screen (B27s; B27a's server routes are built, B27b's screen and B27c's
+      till lookup remain queued; the till-cancel question is lane C's C126).
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
       amount, so staff confirm a debt the server does not record.** The dialog lists each bill at
       what `GET /api/parties/:id/bills` says it owes, which reads no credit note (`#departingBills`

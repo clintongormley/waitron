@@ -18,6 +18,7 @@ export * from "./join-requests.js";
 export * from "./print-agents.js";
 export * from "./printers.js";
 export * from "./print-jobs.js";
+export * from "./receipt-reprints.js";
 export * from "./kitchen-print-job-lines.js";
 export * from "./kitchen-print-jobs.js";
 export * from "./station-printers.js";

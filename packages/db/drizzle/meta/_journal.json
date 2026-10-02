@@ -470,6 +470,13 @@
       "when": 1790933481211,
       "tag": "0066_line_make_at_station_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1790936803302,
+      "tag": "0067_receipt_reprints",
+      "breakpoints": true
     }
   ]
 }

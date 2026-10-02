@@ -43,6 +43,7 @@ const EXPECTED = [
   "order_draft_events",
   "order_group_events",
   "payment_resolutions",
+  "receipt_reprints",
   "registros_facturacion",
   "sale_lines",
   "sale_settlements",

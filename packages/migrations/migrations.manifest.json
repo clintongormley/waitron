@@ -10,6 +10,7 @@
       "sale_settlements",
       "sale_voids",
       "sale_substitutions",
+      "receipt_reprints",
       "daily_closes",
       "membership_removals",
       "membership_clearances",

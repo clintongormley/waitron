@@ -80,7 +80,7 @@ interface CategoryRequest {
 }
 
 /** Absent is false; the query string spells a flag "true" or "false". */
-function queryFlag(raw: string | undefined, field: string): boolean {
+export function queryFlag(raw: string | undefined, field: string): boolean {
   if (raw === undefined) return false;
   if (raw === "true" || raw === "false") return raw === "true";
   throw new AppError("management.request_invalid", { field });

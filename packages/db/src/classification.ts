@@ -20,6 +20,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("sale_settlements", "ledger", LEDGER),
   appendOnly("sale_voids", "ledger", LEDGER),
   appendOnly("sale_substitutions", "ledger", LEDGER),
+  appendOnly(
+    "receipt_reprints",
+    "ledger",
+    "who requested a receipt copy and which document job carries it",
+  ),
   classify("ticket_items", "ledger", LEDGER),
   classify("drawer_opens", "ledger", LEDGER),
   appendOnly("daily_closes", "ledger", LEDGER),
