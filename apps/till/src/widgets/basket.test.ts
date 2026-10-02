@@ -789,12 +789,13 @@ describe("till-basket", () => {
   function noteButton(el: TillBasket, index: number): HTMLElement | null {
     return el.shadowRoot!.querySelector<HTMLElement>(`[data-test="line-note-button-${index}"]`);
   }
+  /** The note's own textarea; null only when there is no note field at all. */
   function noteBox(el: TillBasket): HTMLTextAreaElement | null {
-    return (
-      el
-        .shadowRoot!.querySelector('[data-test="line-note"]')
-        ?.shadowRoot?.querySelector("textarea") ?? null
-    );
+    const field = el.shadowRoot!.querySelector('[data-test="line-note"]');
+    if (field === null) return null;
+    const box = field.shadowRoot?.querySelector("textarea");
+    if (!box) throw new Error("the note field is on screen but has not drawn its textarea");
+    return box;
   }
   const steak: TillProduct = {
     ...cafe,

@@ -896,13 +896,13 @@ describe("till-modifier-picker", () => {
   });
 
   describe("per-line note", () => {
-    /** The note textarea inside the picker, or null when absent. */
+    /** The note's own textarea; null only when there is no note field at all. */
     function noteBox(picker: TillModifierPicker): HTMLTextAreaElement | null {
-      return (
-        picker
-          .shadowRoot!.querySelector('[data-test="line-note"]')
-          ?.shadowRoot?.querySelector("textarea") ?? null
-      );
+      const field = picker.shadowRoot!.querySelector('[data-test="line-note"]');
+      if (field === null) return null;
+      const box = field.shadowRoot?.querySelector("textarea");
+      if (!box) throw new Error("the note field is on screen but has not drawn its textarea");
+      return box;
     }
 
     it("shows a note textarea for every product the picker opens over", async () => {
