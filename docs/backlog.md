@@ -1108,7 +1108,19 @@ beside the price and checks nothing about it.
 - the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
   100 €/kg = 5 € a pick), shown as the price field's hint; filled in, it is that amount per pick;
 - the receipt and the kitchen ticket print the **total amount** — "+ Jamón 150 g" — not
-  "50 g ×3".
+  "50 g ×3";
+- **no conversion between units** (owner, choosing the simpler of two readings of _"the
+  restaurant can choose the appropriate unit, eg g instead of kg"_): the portion is entered,
+  stored and printed in the product's own unit. A restaurant that wants "50 g" sets the product up
+  in grams (0.10 €/g); one priced per kg enters "0.050" and prints "0.150 kg". The owner accepted
+  that a per-gram price cannot hold a fraction of a cent (13.50 €/kg has no exact per-gram price);
+- **a unit change says where the product is offered** (owner: _"we need some sort of notification
+  of where it is used"_): changing a product's unit — or a parent's, which its variants without
+  their own inherit — shows the extras lists that offer it, because the stored portion is a number
+  in the old unit (50 in g becomes 50 kg). The units screen already lists the products using a
+  unit (`ProductUsingUnit`, `packages/catalogue/src/unit-types.ts`); the same applies when a unit's
+  own precision changes under portions held to it. Whether such a save also blocks, or clears
+  those portions, was not decided — ask.
 
 **For the builder:** the portion is a new column on `extra_list_items` (quantity scale) and a
 field in `parseExtraListInput` and the editor; the till's picker and the server must compute one
@@ -1116,10 +1128,8 @@ per-pick price the same way, rounded to the cent once, before it is multiplied, 
 The stored child line's quantity (`working_order_lines.quantity`, already thousandths) becomes
 picks × portion × dish count with the product's unit on it, so `editLineExtras` must divide by the
 portion as well as the dish quantity, and the receipt's `perDishOptionQuantity` (whole numbers)
-and the kitchen ticket's `extraLabel` must print an amount. Open, ask before building: how 0.150 kg
-is printed as "150 g" — a unit row has no conversion, only `hardwareUnit`; and what happens to a
-list item when its product's unit changes later (a variant inherits its parent's). The amounts
-reach a sale record, so this takes the full review path (risk trigger: fiscal invariants).
+and the kitchen ticket's `extraLabel` must print an amount, with the unit's abbreviation. The
+amounts reach a sale record, so this takes the full review path (risk trigger: fiscal invariants).
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
