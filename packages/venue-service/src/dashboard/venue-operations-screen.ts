@@ -190,9 +190,20 @@ export class VenueOperationsScreen extends LitElement {
   #close(): void {
     this.editor = undefined;
     this.#restart();
+    this.#returnFocus();
+  }
+  /** An empty table's Add button is gone once the row it made is listed; its twin beside the
+   * tablist takes the focus instead. */
+  #returnFocus(): void {
     void this.updateComplete.then(() => {
-      if (this.#opener?.isConnected) this.#opener.focus();
-      else this.renderRoot.querySelector<HTMLElement>("wt-tabs")?.focus();
+      const opener = this.#opener;
+      const twin =
+        opener?.slot === "empty-action"
+          ? this.renderRoot.querySelector<HTMLElement>(
+              `wt-tabs > [slot="actions"] [data-test="${opener.dataset.test}"]`,
+            )
+          : null;
+      (opener?.isConnected ? opener : (twin ?? this.renderRoot.querySelector("wt-tabs")))?.focus();
     });
   }
   #selectView(event: CustomEvent<{ value: View }>): void {
@@ -210,9 +221,14 @@ export class VenueOperationsScreen extends LitElement {
     this.busy = true;
     const editor = this.editor;
     if (editor === undefined) this.actionError = undefined;
+    let closed = false;
     try {
       await action();
-      if (this.editor === editor) this.#close();
+      if (this.editor === editor) {
+        this.editor = undefined;
+        this.#restart();
+        closed = editor !== undefined;
+      }
       await this.#load();
     } catch (error) {
       if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}));
@@ -220,6 +236,8 @@ export class VenueOperationsScreen extends LitElement {
     } finally {
       this.busy = false;
     }
+    // Every Add button is disabled while busy, and focus does not take on a disabled one.
+    if (closed) this.#returnFocus();
   }
   #refusal(code: string): string {
     return code === "department.has_active_zones"
@@ -395,8 +413,10 @@ export class VenueOperationsScreen extends LitElement {
               const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
               this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
               // An action that saves at once disables every action before the menu sees this click,
-              // and the menu stays open for a click on a disabled action.
+              // and the menu stays open for a click on a disabled action. Hiding it leaves focus
+              // on the page, not on the menu's button.
               menu.hide();
+              this.#opener.focus();
               action.run();
             }}
             >${action.label}</wt-button
