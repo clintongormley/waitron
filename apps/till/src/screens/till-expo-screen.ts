@@ -1,3 +1,4 @@
+import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -672,7 +673,7 @@ export class TillExpoScreen extends LitElement {
             : nothing
         }
       </span>
-      ${this.#customisation(item)}${this.#modifiers(item)}${this.#crossRefs(item)}${this.#allergens(item)}${dietBadges(
+      ${this.#customisation(item)}${this.#modifiers(item)}${queueCrossRefs(item, "item")}${this.#allergens(item)}${dietBadges(
         item.asServedDiet,
         `item-diet-${item.id}`,
       )}
@@ -727,35 +728,6 @@ export class TillExpoScreen extends LitElement {
           >`,
       )}
     </span>`;
-  }
-
-  #crossRefs(item: ExpoItem): TemplateResult | typeof nothing {
-    if (!item.crossRefs?.length) return nothing;
-    return html`<span class="item-crossrefs"
-      >${item.crossRefs.map((ref, i) => {
-        const name = `${ref.name}${ref.perDish && ref.perDish > 1 ? ` x${ref.perDish}` : ""}`;
-        const key =
-          ref.kind === "with"
-            ? "station.crossref_with"
-            : ref.stationName === null
-              ? "station.crossref_for_no_prep"
-              : "station.crossref_for";
-        const wording = t(key)
-          .replace("{name}", name)
-          .replace("{station}", ref.stationName ?? "");
-        return html`<span class="crossref" data-crossref
-          >${wording}${
-            ref.kind === "with"
-              ? extraNutrition(
-                  ref,
-                  `item-crossref-allergens-${item.id}-${i}`,
-                  `item-crossref-diet-${item.id}-${i}`,
-                )
-              : nothing
-          }</span
-        >`;
-      })}</span
-    >`;
   }
 
   /**

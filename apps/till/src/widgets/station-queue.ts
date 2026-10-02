@@ -1,3 +1,4 @@
+import { queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -1015,7 +1016,7 @@ export class TillStationQueue extends LitElement {
     </span>`;
     const customisation = this.#customisation(item);
     const modifiers = this.#modifiers(item);
-    const crossRefs = this.#crossRefs(item);
+    const crossRefs = queueCrossRefs(item, "line");
     const allergens = this.#allergens(item);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
@@ -1086,35 +1087,6 @@ export class TillStationQueue extends LitElement {
           >`,
       )}
     </span>`;
-  }
-
-  #crossRefs(item: StationQueueItem): TemplateResult | typeof nothing {
-    if (!item.crossRefs?.length) return nothing;
-    return html`<span class="line-crossrefs"
-      >${item.crossRefs.map((ref, i) => {
-        const name = `${ref.name}${ref.perDish && ref.perDish > 1 ? ` x${ref.perDish}` : ""}`;
-        const key =
-          ref.kind === "with"
-            ? "station.crossref_with"
-            : ref.stationName === null
-              ? "station.crossref_for_no_prep"
-              : "station.crossref_for";
-        const wording = t(key)
-          .replace("{name}", name)
-          .replace("{station}", ref.stationName ?? "");
-        return html`<span class="crossref" data-crossref
-          >${wording}${
-            ref.kind === "with"
-              ? extraNutrition(
-                  ref,
-                  `line-crossref-allergens-${item.id}-${i}`,
-                  `line-crossref-diet-${item.id}-${i}`,
-                )
-              : nothing
-          }</span
-        >`;
-      })}</span
-    >`;
   }
 
   /** The name is the server-resolved kitchen label and is rendered as sent. */
