@@ -212,7 +212,7 @@ const till = {
       },
     ],
   } satisfies CanvasDef,
-  capabilities: ["print-receipt"] as CapabilityFlag[],
+  capabilities: ["print-receipt", "show-station", "show-expo", "show-schedule"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
   servers: [] as {
@@ -1688,9 +1688,9 @@ describe("till-app", () => {
   // A `back-to-counter` on a phone layout with no Counter tab leaves the handheld on the floor.
   describe("a handheld on a phone layout with no Counter tab", () => {
     /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
-    async function toHandheldFloor(): Promise<TillApp> {
+    async function toHandheldFloor(capabilities = till.capabilities): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
@@ -1712,8 +1712,8 @@ describe("till-app", () => {
       expect(floor(el)!.shadowRoot!.querySelector(".back")).toBeNull();
     });
 
-    it("gives the handheld's floor no way into a station view, which a handheld cannot open", async () => {
-      const el = await toHandheldFloor();
+    it("gives the handheld's floor no way into a station view when its profile lacks the Station switch", async () => {
+      const el = await toHandheldFloor(["print-receipt"]);
       expect(floor(el)!.canOpenStation).toBe(false);
     });
 
@@ -1827,15 +1827,6 @@ describe("till-app", () => {
         }
       },
     );
-
-    it("still loads the counter's lists at login on a till whose canvas shows none of them", async () => {
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
-      });
-      await toCounter(el);
-      expect(currentApi.listWorkingOrders).toHaveBeenCalled();
-      expect(currentApi.listCounterWaiting).toHaveBeenCalled();
-    });
 
     const payCard = (el: TillApp, tab: string): TillTenderPay =>
       tab === "counter"
@@ -7981,9 +7972,7 @@ describe("till-app", () => {
         "till-tab-shell",
       );
 
-    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
-    // card). A handheld renders the FULL shell (its operator header) but NO Station/Expo/Schedule
-    // affordances — a phone reaches none of those.
+    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order` card).
     const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
       tabs: [
@@ -8017,11 +8006,13 @@ describe("till-app", () => {
       ],
     };
 
-    it("renders the tab shell for a handheld with Find a bill in its full header", async () => {
+    it("renders the tab shell for a handheld whose profile has no screen switches, with only Find a bill in its full header", async () => {
       // A handheld stays on `lock` until the waiter PIN-logs-in (then lands on this layout's first tab, `floor`);
       // the shell activates only on that authenticated surface, so boot THEN login before asserting.
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, canvas: phoneCanvas, capabilities: ["print-receipt"] }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
@@ -9396,11 +9387,13 @@ describe("persistent till destinations", () => {
 });
 
 it.each(["station", "expo", "schedule"])(
-  "rejects the %s destination on a handheld without hiding its floor",
+  "rejects the %s destination on a handheld whose profile lacks its switch, without hiding its floor",
   async (view) => {
     history.replaceState(null, "", `/tabs/floor/view/${view}`);
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities: ["print-receipt"] }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
@@ -9411,6 +9404,141 @@ it.each(["station", "expo", "schedule"])(
     expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
   },
 );
+
+describe("the device profile decides which screens a device offers", () => {
+  const switches: CapabilityFlag[] = [
+    "print-receipt",
+    "show-station",
+    "show-expo",
+    "show-schedule",
+  ];
+  const handheld = () =>
+    vi.fn().mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null });
+  const affordances = (el: TillApp) =>
+    (shell(el) as unknown as { affordances: unknown[] }).affordances;
+  const headerButton = (el: TillApp, name: string) =>
+    shell(el)!.shadowRoot!.querySelector(`.${name}`);
+
+  async function signIn(
+    device: "till" | "handheld",
+    capabilities: CapabilityFlag[],
+    canvas: CanvasDef = till.canvas,
+    overrides: Record<string, unknown> = {},
+  ): Promise<TillApp> {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas, capabilities }),
+      ...(device === "handheld" ? { getDeviceIdentity: handheld() } : {}),
+      ...overrides,
+    });
+    await toCounter(el);
+    return el;
+  }
+
+  it("gives a handheld whose profile has the switches the Station, Pass and Schedule buttons", async () => {
+    const el = await signIn("handheld", switches, phoneCanvasDef);
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    expect(affordances(el)).toEqual(["station", "expo", "schedule", "find-bill"]);
+    for (const name of ["station", "expo", "schedule", "find-bill"])
+      expect(headerButton(el, name)).not.toBeNull();
+  });
+
+  it("gives a till whose profile lacks the switches only Find a bill", async () => {
+    const el = await signIn("till", ["print-receipt"]);
+    expect(affordances(el)).toEqual(["find-bill"]);
+    for (const name of ["station", "expo", "schedule"]) expect(headerButton(el, name)).toBeNull();
+  });
+
+  it.each([
+    ["show-station", "station"],
+    ["show-expo", "expo"],
+    ["show-schedule", "schedule"],
+  ] as const)("offers a till only the screen its %s switch turns on", async (flag, screen) => {
+    const el = await signIn("till", ["print-receipt", flag]);
+    expect(affordances(el)).toEqual([screen, "find-bill"]);
+  });
+
+  it.each(["station", "expo", "schedule"])(
+    "restores the %s destination on a handheld whose profile has its switch",
+    async (view) => {
+      history.replaceState(null, "", `/tabs/floor/view/${view}`);
+      const el = await signIn("handheld", switches, phoneCanvasDef);
+      expect(location.pathname).toContain(`/tabs/floor/view/${view}`);
+      expect(el.shadowRoot!.querySelector('[slot="drill"]')).not.toBeNull();
+    },
+  );
+
+  it.each(["station", "expo", "schedule"])(
+    "rejects the %s destination on a till whose profile lacks its switch",
+    async (view) => {
+      history.replaceState(null, "", `/tabs/counter/view/${view}`);
+      const el = await signIn("till", ["print-receipt"]);
+      expect(location.pathname).toBe("/tabs/counter");
+      expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
+    },
+  );
+
+  it("lets a handheld's floor open a station view when its profile has the Station switch", async () => {
+    const el = await signIn("handheld", ["show-station"], phoneCanvasDef, {
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+    });
+    expect(floor(el)!.canOpenStation).toBe(true);
+  });
+
+  it("gives a till's floor no way into a station view when its profile lacks the Station switch", async () => {
+    const el = await signIn("till", ["print-receipt"], till.canvas, {
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+    });
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.canOpenStation).toBe(false);
+  });
+
+  it("does not load the counter's lists at login on a till whose canvas shows none of them", async () => {
+    await signIn("till", switches, phoneCanvasDef);
+    expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
+    expect(currentApi.getStationQueue).not.toHaveBeenCalled();
+    expect(currentApi.listCounterWaiting).not.toHaveBeenCalled();
+  });
+
+  it("gives the Schedule screen its roster when the profile has the Schedule switch and the layout shows no counter list", async () => {
+    const el = await signIn("handheld", ["show-schedule"], phoneCanvasDef);
+    expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
+    emit(shell(el)!, "show-schedule");
+    await flush(el);
+    expect(schedule(el)!.staff).toEqual([{ personId: "p1", displayName: "Ana" }]);
+  });
+
+  it("holds a till whose layout's first tab is the floor on the lock screen until the floor loads", async () => {
+    let resolve!: (value: TableState[]) => void;
+    const el = await signIn("till", switches, phoneCanvasDef, {
+      getTablesState: vi.fn(
+        () =>
+          new Promise<TableState[]>((done) => {
+            resolve = done;
+          }),
+      ),
+    });
+    expect(shell(el)).toBeNull();
+    resolve([freeTable]);
+    await flush(el);
+    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(floor(el)!.tables).toEqual([freeTable]);
+  });
+
+  it("opens a handheld whose layout's first tab is the counter without waiting for the floor", async () => {
+    const counterFirst: CanvasDef = {
+      formFactor: "phone-portrait",
+      tabs: [till.canvas.tabs[0]!, phoneCanvasDef.tabs[0]!],
+    };
+    const el = await signIn("handheld", ["print-receipt"], counterFirst, {
+      getTablesState: vi.fn(() => new Promise<TableState[]>(() => undefined)),
+    });
+    expect(shell(el)!.activeTabKey).toBe("counter");
+    expect(counter(el)).not.toBeNull();
+  });
+});
 
 // The venue's servers (#261). Mirrors the un-exported helpers in server-router.test.ts —
 // redefined locally rather than exported from there (they are private test fixtures).

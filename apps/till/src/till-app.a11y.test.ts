@@ -42,6 +42,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       venueName: "Bar Pepe",
       nif: "B12345678",
       orderFlow: "prepay",
+      capabilities: [],
     }),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
@@ -152,6 +153,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         venueName: "Bar Pepe",
         nif: "B12345678",
         orderFlow: "invoice_first",
+        capabilities: [],
       }),
       getStationQueue: vi.fn().mockResolvedValue({
         items: [

@@ -1079,7 +1079,7 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
-  /** An enrolled handheld: stays on the lock screen for a PIN login, then lands on the floor. */
+  /** An enrolled handheld: narrower menu columns, and never the cash drawer. */
   @state() private handheldMode = false;
   /**
    * The device front door {@link #boot} chose, shown ahead of the lock screen and shell: `"chooser"` in
@@ -1530,11 +1530,9 @@ export class TillApp extends LitElement {
     void this.#boot();
   }
 
-  /** `handheldMode` is set after `canvas` in {@link #boot}, so a change to either recomputes the
-   * affordances. */
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
-    if (changed.has("canvas") || changed.has("handheldMode"))
+    if (changed.has("canvas") || changed.has("capabilities"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
@@ -1628,9 +1626,9 @@ export class TillApp extends LitElement {
         // Not dev mode, or a transient failure.
       }
     }
-    // A KDS boots straight into its station, prefetching the queue; a handheld stays on the lock
-    // screen; any other or unknown kind is a normal operator till. A browser with no device cookie
-    // answers `device.unauthorized` and gets the join screen, which is not a boot failure.
+    // A KDS boots straight into its station, prefetching the queue; any other or unknown kind waits on
+    // the lock screen for a sign-in. A browser with no device cookie answers `device.unauthorized` and
+    // gets the join screen, which is not a boot failure.
     try {
       const identity = await this.api.getDeviceIdentity();
       if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
@@ -1694,17 +1692,22 @@ export class TillApp extends LitElement {
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
-    const landingFace = this.handheldMode ? "floor" : "counter";
-    if (landingFace === "floor") await this.#loadFloorData();
+    // Decided by the first tab, not the requested one: history may move to the floor while this loads.
+    const firstTab = this.canvas?.tabs[0];
+    const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
+    if (landsOnFloor) await this.#loadFloorData();
     // History may change while login data loads and the lock screen still owns the page.
     this.#setActiveTab(this.#requestedTab(), true, true);
-    this.#setScreen(landingFace);
+    this.#setScreen(landsOnFloor ? "floor" : "counter");
     this.#restoreDestination();
-    if (this.#showsCounterLists()) {
+    const showsCounterLists = this.#showsCounterLists();
+    if (showsCounterLists) {
       // Each list says its own failure, so one that fails never stops the others loading.
       await this.#refreshList("held", "refresh.held");
       await this.#refreshList("station", "refresh.station");
       await this.#refreshWaiting();
+    }
+    if (showsCounterLists || this.#affordances().includes("schedule")) {
       // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
         this.staff = await this.api.listStaff();
@@ -1712,8 +1715,7 @@ export class TillApp extends LitElement {
         // Non-fatal: the picker keeps the roster it had.
       }
     }
-    // A restored floor tab needs its data on first paint. The handheld landing already loads it;
-    // avoid repeating that load while still loading a floor tab restored on a counter device.
+    // A restored floor tab needs its data on first paint, unless the landing already loaded it.
     if (this.#inShell() && !this.#floorLoaded) {
       const tab = this.#activeTab();
       if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData();
@@ -3423,7 +3425,6 @@ export class TillApp extends LitElement {
   }
 
   #showsCounterLists(): boolean {
-    if (!this.handheldMode) return true;
     return (
       this.canvas?.tabs.some(
         (tab) =>
@@ -6292,10 +6293,11 @@ export class TillApp extends LitElement {
   }
 
   #affordances(): ShellAffordance[] {
-    if (this.handheldMode) return ["find-bill"];
     const tabKeys = new Set(this.canvas?.tabs.map((tab) => tab.key) ?? []);
     return [
-      ...(["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a)),
+      ...(["station", "expo", "schedule"] as const).filter(
+        (screen) => !tabKeys.has(screen) && this.capabilities.includes(`show-${screen}`),
+      ),
       "find-bill",
     ];
   }
