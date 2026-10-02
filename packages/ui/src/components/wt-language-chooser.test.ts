@@ -1,6 +1,9 @@
+import { html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
+import "./wt-data-table.js";
 import { WtLanguageChooser } from "./wt-language-chooser.js";
 
 const twoLocales = async () => [
@@ -272,6 +275,48 @@ describe("wt-language-chooser", () => {
     expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(optionOf(el, "es-ES"));
   });
 
+  it("opened over a table whose pinned column sits right under the bar, every option is still the thing a press reaches", async () => {
+    await page.viewport(390, 844);
+    await mount(
+      '<div><header style="display: flex; justify-content: space-between; align-items: center"><span>Waitron</span><wt-language-chooser active="en-GB"></wt-language-chooser></header><main><wt-data-table aria-label="Products" style="display: block; width: 100%"></wt-data-table></main></div>',
+    );
+    const wide = "A long cell that keeps the table wider than the page";
+    type Row = { id: string; name: string };
+    const table = host.querySelector<WtDataTable<Row>>("wt-data-table")!;
+    Object.assign(table, {
+      rows: ["a", "b", "c", "d"].map((id) => ({ id, name: `${id}: ${wide}` })),
+      rowKey: (row: Row) => row.id,
+      columns: [
+        { key: "name", label: "Name", cell: (row: Row) => row.name },
+        {
+          key: "actions",
+          label: "Actions",
+          pinned: "end",
+          cell: () => html`<button>Edit</button>`,
+        },
+      ] satisfies DataTableColumn<Row>[],
+    });
+    await table.updateComplete;
+    const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = twoLocales;
+    await open(el);
+
+    const pinned = [...table.shadowRoot!.querySelectorAll('[data-pinned="end"]')].map((cell) =>
+      cell.getBoundingClientRect(),
+    );
+    for (const code of ["es-ES", "en-GB"]) {
+      const option = optionOf(el, code)!.getBoundingClientRect();
+      const y = option.top + option.height / 2;
+      const under = pinned.find((cell) => y >= cell.top && y <= cell.bottom);
+      // The precondition that makes this a test: the pinned column runs under part of the option.
+      expect(under, code).toBeDefined();
+      expect(under!.left, code).toBeLessThan(option.right);
+      const x = (Math.max(option.left, under!.left) + Math.min(option.right, under!.right)) / 2;
+      expect(document.elementFromPoint(x, y), code).toBe(el);
+      expect(el.shadowRoot!.elementFromPoint(x, y), code).toBe(optionOf(el, code));
+    }
+  });
+
   it("shows the full name on the trigger and hides the short code, by default", async () => {
     const el = await mountChooser({ active: "en-GB", loadLocales: twoLocales });
     expect(nameOf(el)).toBe("English");
@@ -343,6 +388,155 @@ describe("wt-language-chooser", () => {
     const menu = getComputedStyle(menuOf(el)!);
     expect(menu.backgroundColor).toBe("rgb(1, 2, 3)");
     expect(menu.borderTopColor).toBe("rgb(4, 5, 6)");
+  });
+
+  it("lifts its menu off the page with the shadow token", async () => {
+    const el = await mountChooser({ active: "es-ES", loadLocales: twoLocales });
+    host.style.setProperty("--wt-shadow-2", "1px 2px 3px 4px rgb(9, 10, 11)");
+    await open(el);
+    expect(getComputedStyle(menuOf(el)!).boxShadow).toBe("rgb(9, 10, 11) 1px 2px 3px 4px");
+  });
+
+  it("follows its trigger when the part of the page holding it scrolls while the menu is open", async () => {
+    await mount(
+      '<div class="scroller" style="height: 400px; overflow: auto"><div style="height: 3000px"><div style="height: 200px"></div><div style="display: flex; justify-content: flex-end"><wt-language-chooser active="en-GB"></wt-language-chooser></div></div></div>',
+    );
+    const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = twoLocales;
+    // A resize left over from an earlier test's viewport change would re-place the menu by itself.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await open(el);
+    const before = triggerOf(el).getBoundingClientRect();
+
+    host.querySelector(".scroller")!.scrollTop = 150;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const trigger = triggerOf(el).getBoundingClientRect();
+    const menu = menuOf(el)!.getBoundingClientRect();
+    expect(before.top - trigger.top).toBeCloseTo(150, 0);
+    expect(menu.top).toBeGreaterThanOrEqual(trigger.bottom);
+    expect(menu.top - trigger.bottom).toBeLessThan(trigger.height);
+    expect(Math.abs(menu.right - trigger.right)).toBeLessThanOrEqual(1);
+  });
+
+  it("follows its trigger when a container inside the shadow root holding it scrolls", async () => {
+    const scroller = await mountInShadowRoot(
+      '<div style="height: 400px; overflow: auto"><div style="height: 3000px"><div style="height: 200px"></div><wt-language-chooser active="en-GB"></wt-language-chooser></div></div>',
+    );
+    const el = scroller.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = twoLocales;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await open(el);
+    const before = triggerOf(el).getBoundingClientRect();
+
+    scroller.scrollTop = 150;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const trigger = triggerOf(el).getBoundingClientRect();
+    const menu = menuOf(el)!.getBoundingClientRect();
+    expect(before.top - trigger.top).toBeCloseTo(150, 0);
+    expect(menu.top).toBeGreaterThanOrEqual(trigger.bottom);
+    expect(menu.top - trigger.bottom).toBeLessThan(trigger.height);
+  });
+
+  it("stops listening for scrolls in the shadow root holding it once the menu closes or it leaves the page", async () => {
+    const el = (await mountInShadowRoot(
+      "<wt-language-chooser active='es-ES'></wt-language-chooser>",
+    )) as WtLanguageChooser;
+    el.loadLocales = twoLocales;
+    const root = el.getRootNode() as ShadowRoot;
+    const added = vi.spyOn(root, "addEventListener");
+    const removed = vi.spyOn(root, "removeEventListener");
+    try {
+      await open(el);
+      expect(added.mock.calls.map(([type]) => type)).toEqual(["scroll"]);
+      await open(el);
+      expect(removed.mock.calls).toEqual(added.mock.calls);
+
+      await open(el);
+      el.remove();
+      expect(removed.mock.calls).toEqual(added.mock.calls);
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+    }
+  });
+
+  it("a page scroll while the list is still loading opens nothing early", async () => {
+    let finish!: (value: Awaited<ReturnType<typeof twoLocales>>) => void;
+    const el = await mountChooser({
+      active: "es-ES",
+      loadLocales: () => new Promise((resolve) => (finish = resolve)),
+    });
+    triggerOf(el).click();
+    window.dispatchEvent(new Event("scroll"));
+    expect(menuOf(el)).toBeNull();
+    finish(await twoLocales());
+    await settle(el);
+    expect(menuOf(el)).not.toBeNull();
+  });
+
+  it("a menu wider than the room before its trigger stays on screen", async () => {
+    await page.viewport(390, 844);
+    await mount('<wt-language-chooser active="en-GB"></wt-language-chooser>');
+    const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = async () => [
+      { code: "es-ES", label: "A language whose name is far longer than the button" },
+      { code: "en-GB", label: "English" },
+    ];
+    await open(el);
+    const trigger = triggerOf(el).getBoundingClientRect();
+    const menu = menuOf(el)!.getBoundingClientRect();
+    expect(menu.width).toBeGreaterThan(trigger.right);
+    expect(menu.left).toBeGreaterThanOrEqual(0);
+    expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(menu.top).toBeGreaterThanOrEqual(trigger.bottom);
+  });
+
+  it("in a right-to-left page, lines its menu up with the trigger's trailing edge, which is the left one", async () => {
+    await page.viewport(390, 844);
+    await mount(
+      '<div dir="rtl" style="display: flex; justify-content: flex-end; padding-left: 100px"><wt-language-chooser active="en-GB"></wt-language-chooser></div>',
+    );
+    const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = async () => [
+      { code: "es-ES", label: "A language with a longer name" },
+      { code: "en-GB", label: "English" },
+    ];
+    await open(el);
+    const trigger = triggerOf(el).getBoundingClientRect();
+    const menu = menuOf(el)!.getBoundingClientRect();
+    expect(trigger.left).toBeCloseTo(100, 0);
+    expect(menu.width).toBeGreaterThan(trigger.width);
+    expect(Math.abs(menu.left - trigger.left)).toBeLessThanOrEqual(1);
+  });
+
+  it("listens to the window's scrolling and resizing only while open", async () => {
+    const added = vi.spyOn(window, "addEventListener");
+    const removed = vi.spyOn(window, "removeEventListener");
+    const ours = (spy: typeof added) =>
+      spy.mock.calls.filter(([type]) => type === "scroll" || type === "resize");
+    try {
+      const el = await mountChooser({ active: "es-ES", loadLocales: twoLocales });
+      expect(ours(added)).toEqual([]);
+
+      await open(el);
+      expect(
+        ours(added)
+          .map(([type]) => type)
+          .sort(),
+      ).toEqual(["resize", "scroll"]);
+
+      await open(el);
+      expect(ours(removed)).toEqual(ours(added));
+
+      await open(el);
+      el.remove();
+      expect(ours(removed)).toEqual(ours(added));
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+    }
   });
 
   it("spaces its menu from the trigger by the spacing token", async () => {

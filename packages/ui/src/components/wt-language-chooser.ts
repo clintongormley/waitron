@@ -31,7 +31,6 @@ export class WtLanguageChooser extends LitElement {
       }
 
       .chooser {
-        position: relative;
         display: flex;
       }
 
@@ -39,20 +38,26 @@ export class WtLanguageChooser extends LitElement {
         display: none;
       }
 
+      /* In the top layer, so no positioned content later in the page can paint over it. A manual
+         popover, because the chooser's own outside-press and Escape handling decide when it closes. */
       .menu {
-        position: absolute;
-        z-index: 1;
-        top: calc(100% + var(--wt-space-1));
-        inset-inline-end: 0;
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        margin-block-start: var(--wt-space-1);
         max-width: calc(100vw - 2 * var(--wt-space-3));
-        min-width: 100%;
         padding: var(--wt-space-1);
-        display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
         background: var(--wt-color-surface);
+        color: var(--wt-color-text);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
+        box-shadow: var(--wt-shadow-2);
+      }
+
+      .menu:popover-open {
+        display: flex;
       }
 
       .option {
@@ -101,9 +106,19 @@ export class WtLanguageChooser extends LitElement {
 
   #listening = false;
 
+  #scrollTargets: EventTarget[] = [];
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#close();
+  }
+
+  /** Shown and placed in the same update that draws the menu: placed any later, its first frame is not. */
+  override updated(): void {
+    const menu = this.#menu();
+    if (menu === null) return;
+    if (!menu.matches(":popover-open")) menu.showPopover();
+    this.#place();
   }
 
   #toggle(): void {
@@ -151,6 +166,10 @@ export class WtLanguageChooser extends LitElement {
     this.#listening = false;
     document.removeEventListener("pointerdown", this.#onOutside, true);
     document.removeEventListener("focusin", this.#onOutside);
+    for (const target of this.#scrollTargets.splice(0)) {
+      target.removeEventListener("scroll", this.#place, true);
+    }
+    window.removeEventListener("resize", this.#place);
   }
 
   #listen(): void {
@@ -158,6 +177,36 @@ export class WtLanguageChooser extends LitElement {
     this.#listening = true;
     document.addEventListener("pointerdown", this.#onOutside, true);
     document.addEventListener("focusin", this.#onOutside);
+    // A scroll event does not leave its shadow root, so each root between here and the document
+    // is listened on as well as the window.
+    this.#scrollTargets = [window];
+    for (
+      let root = this.getRootNode();
+      root instanceof ShadowRoot;
+      root = root.host.getRootNode()
+    ) {
+      this.#scrollTargets.push(root);
+    }
+    for (const target of this.#scrollTargets) target.addEventListener("scroll", this.#place, true);
+    window.addEventListener("resize", this.#place);
+  }
+
+  /** Below the trigger, trailing edges aligned, and never past either side of the viewport. */
+  #place = (): void => {
+    const menu = this.#menu();
+    if (menu === null) return;
+    const trigger = this.#trigger().getBoundingClientRect();
+    menu.style.minWidth = `${trigger.width}px`;
+    menu.style.top = `${trigger.bottom}px`;
+    const width = menu.getBoundingClientRect().width;
+    const wanted =
+      getComputedStyle(this).direction === "rtl" ? trigger.left : trigger.right - width;
+    const room = document.documentElement.clientWidth;
+    menu.style.left = `${Math.max(0, Math.min(wanted, room - width))}px`;
+  };
+
+  #menu(): HTMLElement | null {
+    return this.renderRoot.querySelector<HTMLElement>('[role="menu"]');
   }
 
   #onOutside = (event: Event): void => {
@@ -249,7 +298,7 @@ export class WtLanguageChooser extends LitElement {
         </wt-button>
         ${
           this.open && this.locales
-            ? html`<div class="menu" role="menu">
+            ? html`<div class="menu" role="menu" popover="manual">
                 ${this.locales.map(
                   (l) => html`
                     <button
