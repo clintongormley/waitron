@@ -202,7 +202,7 @@ export class ReceiptsScreen extends LitElement {
   @state() private pickedLanguage: string | null = null;
   /** The server's refusal of the language, shown under it until it changes or Save is pressed. */
   @state() private languageRefusal = "";
-  /** A failed language save that names no field, until the next Save. */
+  /** A failed language save's sentence for the bottom message, until the next Save. */
   @state() private languageError: string | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
   #dirty = false;
@@ -250,10 +250,8 @@ export class ReceiptsScreen extends LitElement {
           this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
         this.receiptLanguage = value;
         this.languageLoadFailed = false;
-        if (savedElsewhere && this.receiptLoaded && this.pickedLanguage === null) {
-          this.#previewRequested = null;
-          void this.#sendPreview();
-        }
+        if (savedElsewhere && this.receiptLoaded && this.pickedLanguage === null)
+          this.#redrawInSavedLanguage();
       });
     } catch {
       this.languageLoadFailed = true;
@@ -407,6 +405,12 @@ export class ReceiptsScreen extends LitElement {
     void this.#sendPreview();
   }
 
+  /** The saved language is not part of the preview's key, because no parameter is sent for it. */
+  #redrawInSavedLanguage(): void {
+    this.#previewRequested = null;
+    void this.#sendPreview();
+  }
+
   #pickLanguage(language: string): void {
     this.pickedLanguage = language === this.receiptLanguage!.language ? null : language;
     this.languageRefusal = "";
@@ -418,10 +422,15 @@ export class ReceiptsScreen extends LitElement {
   #languageRefused(error: unknown): void {
     const code = codeOf(error);
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    if (field === "receiptLanguage")
-      this.languageRefusal =
-        code === "management.request_invalid" ? t("receipts.language_invalid") : codeMessage(code);
-    else this.languageError = code;
+    if (field !== "receiptLanguage") {
+      this.languageError = `${t("receipts.language_save_error")} ${codeMessage(code)}`;
+      return;
+    }
+    const sentence =
+      code === "management.request_invalid" ? t("receipts.language_invalid") : codeMessage(code);
+    // A fixed language is shown read-only, so there is no field to mark.
+    if (this.receiptLanguage!.fixed === null) this.languageRefusal = sentence;
+    else this.languageError = sentence;
   }
 
   /** Whether the language was saved; a refusal is shown where it belongs. */
@@ -433,6 +442,11 @@ export class ReceiptsScreen extends LitElement {
       return false;
     }
     this.receiptLanguage = { ...this.receiptLanguage!, language };
+    // A picked language was already drawn; one saved without a pick (Use Catalan) was not.
+    if (this.pickedLanguage === null) {
+      this.#previewActive = true;
+      this.#redrawInSavedLanguage();
+    }
     this.pickedLanguage = null;
     return true;
   }
@@ -635,9 +649,7 @@ export class ReceiptsScreen extends LitElement {
       this.trimRefusals.headerSubtitle !== undefined ||
       this.trimRefusals.footerMessage !== undefined;
     const bottom = [
-      this.languageError === null
-        ? ""
-        : `${t("receipts.language_save_error")} ${codeMessage(this.languageError)}`,
+      this.languageError ?? "",
       this.errorKey === null
         ? ""
         : `${t("receipts.trim_save_error")} ${codeMessage(this.errorKey)}`,

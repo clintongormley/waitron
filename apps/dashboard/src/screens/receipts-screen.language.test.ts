@@ -183,6 +183,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
     expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta en establecimiento");
     expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({});
+    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, undefined, "gl-ES"]]);
     const order = (fn: unknown) => vi.mocked(fn as () => void).mock.invocationCallOrder[0]!;
     expect(order(api.putReceiptLanguage)).toBeLessThan(order(api.putReceipt));
     expect(order(api.putReceiptLanguage)).toBeLessThan(order(api.putLocationSettings));
@@ -358,8 +359,17 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
   });
 
   it("says a stored language other than the fixed one prints until corrected, and corrects it", async () => {
-    const api = stubApi(barcelona("es-ES"));
+    let saved = "es-ES";
+    const api = stubApi(barcelona(saved), undefined, {
+      putReceiptLanguage: vi.fn(async (language: string) => {
+        saved = language;
+      }),
+      previewReceipt: vi.fn((config: ReceiptConfig, width?: PrintPaperWidth, language?: string) =>
+        Promise.resolve(drawn(config, width, language ?? saved)),
+      ),
+    });
     const el = await mount(api);
+    expect(paperText(el)).toContain("Idioma es-ES");
     expect(q(el, "[data-test=receipt-language-value]")!.textContent!.trim()).toBe("Spanish");
     expect(q(el, "[data-test=receipt-language-stored]")!.textContent!.trim()).toBe(
       t("receipts.language_stored").replace("{stored}", "Spanish").replace("{fixed}", "Catalan"),
@@ -373,9 +383,11 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     expect(q(el, "[data-test=receipt-language-value]")!.textContent!.trim()).toBe("Catalan");
     expect(q(el, "[data-test=use-fixed-language]")).toBeNull();
     expect(q(el, "[data-test=receipt-language-stored]")).toBeNull();
+    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}]]);
+    await vi.waitFor(() => expect(paperText(el)).toContain("Idioma ca-ES"));
   });
 
-  it("puts a refused correction under the language, keeping the button", async () => {
+  it("says a refused correction in the bottom message, as there is no field to fix, keeping the button", async () => {
     const api = stubApi(barcelona("es-ES"), undefined, {
       putReceiptLanguage: vi.fn().mockRejectedValue({
         code: "receipt.language_orders_open",
@@ -385,11 +397,11 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     const el = await mount(api);
     q(el, "[data-test=use-fixed-language]")!.click();
     await flush(el);
-    expect(languageError(el)).toBe(codeMessage("receipt.language_orders_open"));
-    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(languageError(el)).toBe("");
+    expect(await bottomOf(el)).toBe(codeMessage("receipt.language_orders_open"));
     expect(q(el, "[data-test=use-fixed-language]")).not.toBeNull();
     await save(el);
-    expect(languageError(el)).toBe("");
+    expect(await bottomOf(el)).toBe("");
     expect(api.putReceiptLanguage).toHaveBeenCalledTimes(1);
   });
 
