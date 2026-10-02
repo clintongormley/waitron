@@ -1299,17 +1299,16 @@ instead. The field's label has the same shape — "Price per Each", "Base price 
 (`editor.base_price_unit`, `priceLabel`) — and is read as wanted the same way: "Price" with no
 unit, "Price per kg" with one.
 
-**The variants' status filter becomes a "Show removed" link (A217) — DECIDED, ready to build.** The owner:
+**The variants' status filter becomes a "Show inactive" link (A217) — DECIDED, ready to build.** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
 (`variant-status`, `variant-table.ts`) stands alone between the base price and the table. Offer
 mockups: for example in the table's header row, beside the Add variant button, or shown only once
 some variant is inactive. Keep its rule that a reported problem or a variant just added never sits
 on a hidden row.
-**Decided (owner, 2026-10-02):** the "Show variants" dropdown goes. A "Show 1 removed" link sits
-beside Add variant, there only while some variant has been removed (Remove in a row's menu makes a
+**Decided (owner, 2026-10-02):** the "Show variants" dropdown goes. A "Show 1 inactive" link sits
+beside Add variant, there only while some variant is Inactive (Remove in a row's menu makes a
 saved variant Inactive; Restore brings it back, and this link is the only way to reach it). The
-owner chose that placement; calling them "removed" rather than "inactive" was Claude's proposal, not
-objected to — confirm the wording in the PR.
+wording is "inactive", to match the rest of the dashboard (owner).
 
 **"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — DECIDED,
 ready to build.** The owner: _"i don't like the new extras list and new options list in the
@@ -1364,7 +1363,14 @@ reproduced: "the first time" may mean the hint is missing only on a new variant;
 existing one too.
 **Decided (owner, 2026-10-02):** a customer-name field in another language shows the
 default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
-(the owner's account of the menu; check it against the reader before relying on it).
+(the owner's account of the menu; check it against the reader before relying on it). The kitchen
+name shows its hint too (read as: the staff name, which is what `kitchenPresentationName` prints;
+ask if the default-language customer name was meant). **And descriptions:** a description field
+in a secondary language shows the default-language description as its hint (owner). Today the
+description fields hint only on a variant's page, with the PARENT's text
+(`descriptionHints`, `renderDescriptors`); decide which hint wins on a variant whose parent has a
+description and whose own default-language one is filled in, and check what the menu shows for a
+missing description before claiming the hint matches it.
 
 **Variants in the Products list look like part of their product (A221, owner 2026-10-02) — OPEN,
 designed.** The owner, on a screenshot of an opened "Cured pork loin" with its variant "More
@@ -1392,6 +1398,19 @@ of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a var
 ("or a parent's, which its variants without their own inherit") and gets simpler. The owner also
 noted the Products list shows no unit in its price column; A208's spec already has it ("€19.00
 each", "€48.00 / kg").
+
+**A product with variants is not offered in an extras list's product dropdown (A223, owner
+2026-10-02) — OPEN.** Today the dropdown (`extra-list-form.ts`, `#itemsSection`) offers every
+top-level product, but saving a list that names one with an Active variant is refused with
+`extras.product_has_variants` (`assertNoParentsWithVariants`, `packages/catalogue/src/extras.ts`),
+because the till never offers such a product as an extra (`readExtraProducts`,
+`packages/catalogue/src/offered-modifiers.ts`). Read, not run. The owner declined offering the
+variants themselves as choices. **Wanted:** such a product is left out of the dropdown, or shown
+greyed and unpickable — the owner asked which; recommended: greyed, with A210's second line
+saying why ("Has variants, so it can't be an extra"), so a search for it does not just come up
+empty. That needs `wt-combobox` to draw a disabled option, which it cannot today. **Also:** a
+product already on a list that later gains its first Active variant is silently dropped by the
+till; the list form should mark that row.
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
