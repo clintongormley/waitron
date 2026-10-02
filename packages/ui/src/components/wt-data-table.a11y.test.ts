@@ -349,4 +349,30 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     ).toBe(true);
     await expectNoA11yViolations(host);
   });
+
+  test("a tree's toolbar with Expand all and slotted controls", async () => {
+    type TreeRow = { id: string; parent: string | null; name: string };
+    const el = (await mountThemed(
+      `<wt-data-table aria-label="Categories"
+        ><input slot="toolbar-start" type="search" aria-label="Search categories" /><button
+          slot="toolbar-end"
+          type="button"
+        >Select</button></wt-data-table
+      >`,
+      theme,
+    )) as WtDataTable<TreeRow>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+    ] satisfies DataTableColumn<TreeRow>[];
+    el.rows = [
+      { id: "food", parent: null, name: "Food" },
+      { id: "eggs", parent: "food", name: "Eggs" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowParent = (row) => row.parent;
+    el.expandAllLabel = "Expand all";
+    el.collapseAllLabel = "Collapse all";
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });
