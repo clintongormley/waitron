@@ -5842,6 +5842,47 @@ describe("till-app", () => {
     expect(banner.textContent).not.toContain(t("sale.refused"));
   });
 
+  it("says the operator may not take payments when the server refuses them the payment permission", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "authorization.not_permitted",
+        status: 403,
+        permission: "sale.take_payment",
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("take_payment.not_permitted"));
+    expect(banner.textContent).not.toContain(t("sale.error"));
+    expect(ticket(el)).toBeNull();
+    expect(c.store.lines).toHaveLength(1);
+  });
+
+  it("still says to retry when the server refuses a sale for another permission", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "authorization.not_permitted",
+        status: 403,
+        permission: "sale.discount",
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.error"));
+  });
+
   it("clears a prior sale error when the next payment attempt starts", async () => {
     const recordSale = vi
       .fn()
@@ -6196,6 +6237,33 @@ describe("till-app", () => {
 
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("card_reader.not_set_up"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(c.store.lines).toHaveLength(1);
+    });
+
+    it("says the operator may not take payments when the server refuses them the reader payment", async () => {
+      const pay = vi.fn().mockRejectedValue({
+        code: "authorization.not_permitted",
+        status: 403,
+        permission: "sale.take_payment",
+      });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "stripe_terminal",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("take_payment.not_permitted"));
       expect(banner.textContent).not.toContain(t("sale.error"));
       expect(c.store.lines).toHaveLength(1);
     });
@@ -6799,6 +6867,30 @@ describe("till-app", () => {
       expect(banner.textContent).toContain(t("sale.refused"));
       expect(banner.textContent).not.toContain(t("sale.error"));
       expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection
+    });
+
+    it("collect-order: says the operator may not take payments when refused the payment permission", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder: vi.fn().mockRejectedValue({
+          code: "authorization.not_permitted",
+          status: 403,
+          permission: "sale.take_payment",
+        }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("take_payment.not_permitted"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(tenderPay(el).stage).toBe("collect");
     });
 
     it("collect-order: a NETWORK failure (no answer) shows sale.unconfirmed, basket kept", async () => {

@@ -601,6 +601,7 @@ export const en = {
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
     "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
+  "take_payment.not_permitted": "You do not have permission to take payments",
   "reprint.error": "Could not reprint the receipt, try again",
   "receipt.error": "Could not print the receipt, try again",
   "payment_slip.error": "Could not print the payment slip, try again",
@@ -1436,6 +1437,7 @@ export const es: Record<StringKey, string> = {
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  "take_payment.not_permitted": "No tienes permiso para cobrar",
   "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
   "receipt.error": "No se pudo imprimir el recibo, inténtalo de nuevo",
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",

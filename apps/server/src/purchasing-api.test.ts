@@ -22,9 +22,9 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // A MANAGER (holds `purchase.manage`) and a STAFF person (holds nothing), each with a live
-    // management session. Through the table definition, not raw SQL: `persons.id` is a `$defaultFn`
-    // generator, which a raw insert never reaches.
+    // A MANAGER (holds `purchase.manage`) and a STAFF person (holds no `purchase.manage`), each
+    // with a live management session. Through the table definition, not raw SQL: `persons.id` is a
+    // `$defaultFn` generator, which a raw insert never reaches.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)

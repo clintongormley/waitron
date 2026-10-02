@@ -33,7 +33,8 @@ export interface Venue {
   aguaId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `device.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds none of the management
+   * permissions the gates check). */
   staffCookie: string;
 }
 

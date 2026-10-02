@@ -1260,7 +1260,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c, { permission: "sale.take_payment" });
       // Not fenced against a handheld: cash and manual-card sales file under the submitting node's
       // SIF, not the till, and a manual card is charged on a terminal the POS never talks to. Only
       // the integrated reader (`POST /api/pay`) is fenced, by capability.
@@ -1293,7 +1293,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // answers 200 with the outcome as data, even a decline.
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c, { permission: "sale.take_payment" });
       // Resolved once for both device guards: `tryReadDevice` may run a scrypt verification.
       const device = await tryReadDevice(deps, c);
       // A cookie-less caller passes this guard but is refused `device.unauthorized` by
@@ -1697,7 +1697,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // carries only the tender.
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c, { permission: "sale.take_payment" });
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.

@@ -247,7 +247,7 @@ export function mountBillPaymentsApi(
 
   app.post("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c, { permission: "sale.take_payment" });
       const id = requireBillParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);

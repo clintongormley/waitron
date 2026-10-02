@@ -29,8 +29,8 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 // `managerId` holds `sale.void` on its own role, so `managerSessionId` authorizes every green-path
-// void; `staffId` holds nothing, and `supervisorId` is the second person whose PIN unlocks an
-// override.
+// void; `staffId` holds no `sale.void`, and `supervisorId` is the second person whose PIN unlocks
+// an override.
 let managerId: string;
 let supervisorId: string;
 let managerSessionId: string;
@@ -311,8 +311,8 @@ describe("recordVoid — guards", () => {
 
 describe("recordVoid — authorization", () => {
   it("records the authorizing supervisor when a staff session voids under an override", async () => {
-    // The staff operator holds nothing; the supervisor's PIN authorizes, so `voided_by` names the
-    // supervisor, the person who took responsibility.
+    // The staff operator holds no `sale.void`; the supervisor's PIN authorizes, so `voided_by`
+    // names the supervisor, the person who took responsibility.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
 

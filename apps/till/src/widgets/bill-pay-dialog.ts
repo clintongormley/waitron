@@ -27,6 +27,7 @@ import type {
 } from "../api/client.js";
 import {
   PAY_WAYS,
+  isTakePaymentRefusal,
   moneyPlus,
   paidQuantities,
   refundOffered,
@@ -59,14 +60,15 @@ export interface PayRequest {
   allocation?: AllocationChoice;
 }
 
-/** A refusal's code, the request field it names when it names one, and for a tip the venue does
- * not take the most the card can be charged. The app's own codes: `network`, a payment that got no
- * answer; `unread`, a balance that could not be read again; `declined` and `card_network`, a card
- * the reader did not charge. */
+/** A refusal's code, the request field it names when it names one, for a tip the venue does not
+ * take the most the card can be charged, and the permission an `authorization.not_permitted`
+ * names. The app's own codes: `network`, a payment that got no answer; `unread`, a balance that
+ * could not be read again; `declined` and `card_network`, a card the reader did not charge. */
 export interface PayRefusal {
   code: string;
   field?: string;
   chargeable?: string;
+  permission?: string;
 }
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
@@ -125,9 +127,10 @@ function chargeableText(amount: string): string {
 }
 
 /** What the dialog says of a refusal: one of the app's own, the most a card can be charged when
- * the venue takes no tips, the till's own sentence for a device not set up for the card reader, or
- * the server's code in its own words. */
+ * the venue takes no tips, the till's own sentence for a device not set up for the card reader or
+ * for a person who may not take payments, or the server's code in its own words. */
 function refusalText(refusal: PayRefusal): string {
+  if (isTakePaymentRefusal(refusal)) return t("take_payment.not_permitted");
   switch (refusal.code) {
     case "network":
       return t("bill_pay.unconfirmed");

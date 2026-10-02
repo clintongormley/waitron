@@ -583,6 +583,20 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
     expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
   });
 
+  it("says the operator may not take payments when refused the payment permission", async () => {
+    const el = await mount({
+      refusal: { code: "authorization.not_permitted", permission: "sale.take_payment" },
+    });
+    expect(actions(el).error).toBe(t("take_payment.not_permitted"));
+  });
+
+  it("says a refusal of any other permission in that code's own words", async () => {
+    const el = await mount({
+      refusal: { code: "authorization.not_permitted", permission: "sale.refund" },
+    });
+    expect(actions(el).error).toBe(codeMessage("authorization.not_permitted"));
+  });
+
   it("reopens the confirmation with the new amounts when the bill changed, saying so", async () => {
     const el = await mount();
     await pick(el, "line", "1");

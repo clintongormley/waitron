@@ -39,7 +39,7 @@ function nextNif(): string {
 interface Venue {
   /** A live MANAGEMENT session cookie for a `manager` (holds `diagnostics.view`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds no `diagnostics.view`). */
   staffCookie: string;
   /** A live MANAGEMENT session cookie for a `supervisor` (holds no `diagnostics.view` either). */
   supervisorCookie: string;

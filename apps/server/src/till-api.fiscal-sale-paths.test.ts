@@ -2007,7 +2007,7 @@ describe("handheld sales and device capability gates", () => {
     return order!.status;
   }
 
-  it("a handheld places a Mode-I order for an operator holding no permission, filing one deferred invoice on its register, as a till does", async () => {
+  it("a handheld places a Mode-I order for an operator holding only the payment permission, filing one deferred invoice on its register, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(
       sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
@@ -2019,7 +2019,7 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual([]);
+    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2058,7 +2058,7 @@ describe("handheld sales and device capability gates", () => {
     expect(await saleTillOf(byTill)).toBe(await deviceTillOf(tillDeviceCookie));
   });
 
-  it("a handheld collects a placed Mode-T order in cash for an operator holding no permission, settling it and filing one record on its register, as a till does", async () => {
+  it("a handheld collects a placed Mode-T order in cash for an operator holding only the payment permission, settling it and filing one record on its register, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
@@ -2067,7 +2067,7 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual([]);
+    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2106,12 +2106,12 @@ describe("handheld sales and device capability gates", () => {
     expect(await saleTillOf(byTill)).toBe(await deviceTillOf(tillDeviceCookie));
   });
 
-  it("a handheld cancels a placed order for an operator holding no permission, appending the reasoned amendment, as a till does", async () => {
+  it("a handheld cancels a placed order for an operator holding only the payment permission, appending the reasoned amendment, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual([]);
+    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2139,8 +2139,9 @@ describe("handheld sales and device capability gates", () => {
     }
   });
 
-  // Place, collect and cancel check no permission, so the refusal tested here is the missing
-  // session, which a handheld meets with the same answer as a till.
+  // Place and cancel check no permission, and collect checks its permission only once the session is
+  // found, so the refusal tested here is the missing session, which a handheld meets with the same
+  // answer as a till.
   it.each(["place", "collect", "cancel"] as const)(
     "refuses %s without an operator session with the same answer on a handheld as on a till",
     async (action) => {

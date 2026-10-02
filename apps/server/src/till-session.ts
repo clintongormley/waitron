@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { AppError, isUuid } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { hashSessionToken, sessions } from "@waitron/identity";
+import { authorize, hashSessionToken, sessions, type Permission } from "@waitron/identity";
 // Side-effect only: the file that throws `session.required` imports its registry.
 import "./errors.js";
 
@@ -51,11 +51,13 @@ export function readSessionToken(c: Context): string | null {
 /**
  * Resolves the request's cookie to an OPEN shift session, or throws `session.required`. The lookup is
  * by the token's hash with `ended_at IS NULL`, so an unknown token and a logged-out session fail as a
- * missing cookie does. Login and logout deliberately do not call this.
+ * missing cookie does. Login and logout deliberately do not call this. With `permission`, the
+ * session's person must also hold it (`authorize`, no override), checked in the same transaction.
  */
 export async function requireSession(
   deps: { db: Database },
   c: Context,
+  options: { permission?: Permission } = {},
 ): Promise<{ personId: string; sessionId: string; tillId: string }> {
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
@@ -64,6 +66,9 @@ export async function requireSession(
       .select({ id: sessions.id, personId: sessions.personId, tillId: sessions.tillId })
       .from(sessions)
       .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
+    if (found !== undefined && options.permission !== undefined) {
+      await authorize(tx, { sessionId: found.id, permission: options.permission });
+    }
     return found ?? null;
   });
   if (row === null) throw new AppError("session.required", {});

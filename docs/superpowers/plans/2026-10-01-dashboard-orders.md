@@ -416,7 +416,7 @@ export interface OrderVenue extends BillVenue {
   supervisorTill: string;
   /** The supervisor's dashboard session: holds `report.view`. */
   supervisorDashboard: string;
-  /** The staff operator Ana's dashboard session: holds no permission, so reads scope `unfinished`. */
+  /** The staff operator Ana's dashboard session: holds no `report.view`, so reads scope `unfinished`. */
   staffDashboard: string;
   /** The administrator's dashboard session: holds `print.resend`. */
   adminDashboard: string;
@@ -1457,7 +1457,7 @@ describe("which index a read starts from", () => {
 
 - [ ] **Step 8: Route refusals and the detail.** Create `apps/server/src/orders-api.test.ts`, with
   `provisionOrderVenue` as above, covering:
-  - no cookie → 401 `management_session.required`; Ana's (`staffDashboard`, no permission) → 200;
+  - no cookie → 401 `management_session.required`; Ana's (`staffDashboard`, no `report.view`) → 200;
     the supervisor's → 200.
   - decision 13's scope, Ana against the supervisor: with bills opened today in Open, Waiting for
     payment, Left without paying, Paid and Cancelled, an older Open bill, an older Paid bill and a

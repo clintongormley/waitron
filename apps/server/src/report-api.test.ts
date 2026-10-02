@@ -172,8 +172,9 @@ const suite = useVenueDb({
     await seedSale(db, Q1_SALE);
     await seedPurchase(db);
 
-    // A MANAGER (role `manager`, holds `report.export`) and a STAFF person (holds nothing), then a
-    // live management session for each so the route tests drive the gate through a real cookie.
+    // A MANAGER (role `manager`, holds `report.export`) and a STAFF person (holds no
+    // `report.export`), then a live management session for each so the route tests drive the gate
+    // through a real cookie.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)

@@ -27,8 +27,9 @@ let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
 let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
 // `supervisorId` holds `sale.rectify`, so `supervisorSessionId` authorizes every green-path
-// correction; `staffId` holds nothing; `managerId` is the second person whose PIN unlocks an
-// override, and also holds `sale.void`, so `managerSessionId` authorizes the one precondition void.
+// correction; `staffId` holds no `sale.rectify`; `managerId` is the second person whose PIN unlocks
+// an override, and also holds `sale.void`, so `managerSessionId` authorizes the one precondition
+// void.
 let supervisorId: string;
 let managerId: string;
 let supervisorSessionId: string;
@@ -688,8 +689,8 @@ describe("recordCorrection — authorization", () => {
   });
 
   it("records the authorizing manager when a staff session corrects under an override", async () => {
-    // The staff operator holds nothing; the manager's PIN authorizes, so `authorized_by` names the
-    // manager.
+    // The staff operator holds no `sale.rectify`; the manager's PIN authorizes, so `authorized_by`
+    // names the manager.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 

@@ -175,17 +175,31 @@ export const REASON_MAX = 500;
 
 /**
  * A refused request as the dialogs show it: its code, or `server.internal` when it carries none,
- * with the field it names and, for a tip the venue does not take, the most a card can be charged.
+ * with the field it names, for a tip the venue does not take the most a card can be charged, and
+ * the permission an `authorization.not_permitted` names.
  * A request that `changes` the bill and got no answer is `network`, as it may have been made.
  */
 export function refusalOf(error: unknown, changes = true): PayRefusal {
   if (changes && isNetworkFailure(error)) return { code: "network" };
-  const refused = error as { code?: unknown; field?: unknown; chargeable?: unknown };
+  const refused = error as {
+    code?: unknown;
+    field?: unknown;
+    chargeable?: unknown;
+    permission?: unknown;
+  };
   return {
     code: typeof refused.code === "string" ? refused.code : "server.internal",
     ...(typeof refused.field === "string" ? { field: refused.field } : {}),
     ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
+    ...(typeof refused.permission === "string" ? { permission: refused.permission } : {}),
   };
+}
+
+export function isTakePaymentRefusal(error: unknown): boolean {
+  const refused = error as { code?: unknown; permission?: unknown } | undefined;
+  return (
+    refused?.code === "authorization.not_permitted" && refused.permission === "sale.take_payment"
+  );
 }
 
 /** A refund as confirmed: without its submission id, and without the approver's PIN, which is

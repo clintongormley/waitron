@@ -3,6 +3,8 @@
  * in one place. Permission ids are never renamed once shipped.
  */
 export const PERMISSIONS = [
+  // Held by every role until the permissions review (backlog A7) decides who keeps it.
+  "sale.take_payment",
   "sale.void",
   "sale.refund",
   "sale.discount", // no call site yet
@@ -37,7 +39,9 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 export type PersonRoleValue = "staff" | "supervisor" | "manager" | "admin";
 
+const STAFF: ReadonlySet<Permission> = new Set(["sale.take_payment"]);
 const SUPERVISOR: ReadonlySet<Permission> = new Set([
+  ...STAFF,
   "sale.void",
   "sale.refund",
   "sale.discount",
@@ -67,7 +71,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
 const ROLE_PERMISSIONS: Record<PersonRoleValue, ReadonlySet<Permission>> = {
-  staff: new Set<Permission>(),
+  staff: STAFF,
   supervisor: SUPERVISOR,
   manager: MANAGER,
   admin: ALL,
