@@ -1370,8 +1370,9 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages a copy may be reprinted in; with more than one, a reprint asks which. */
   @state() private receiptLanguages: string[] = [];
-  /** The sale whose receipt copy is waiting for its language to be chosen. */
-  @state() private reprintAsking: string | null = null;
+  /** The sale whose receipt copy is waiting for its language to be chosen, and the language it was
+   * filed in, which the question starts on. */
+  @state() private reprintAsking: { workingOrderId: string; filedLanguage?: string } | null = null;
   /**
    * The server resolves a canvas for every boot, so this is `undefined` only after a boot failure, where
    * {@link render} shows the lock screen rather than an empty shell.
@@ -3123,14 +3124,14 @@ export class TillApp extends LitElement {
    */
   async #onReprint(): Promise<void> {
     if (this.ticketWorkingOrderId === undefined) return;
-    await this.#reprint(this.ticketWorkingOrderId);
+    await this.#reprint(this.ticketWorkingOrderId, this.result?.locale);
   }
 
   /** A copy of a filed sale's receipt: with several receipt languages the dialog asks which first. */
-  async #reprint(workingOrderId: string): Promise<void> {
+  async #reprint(workingOrderId: string, filedLanguage: string | undefined): Promise<void> {
     this.errorKey = undefined;
     if (this.receiptLanguages.length > 1) {
-      this.reprintAsking = workingOrderId;
+      this.reprintAsking = { workingOrderId, filedLanguage };
       return;
     }
     await this.#sendReprint(workingOrderId);
@@ -3146,9 +3147,9 @@ export class TillApp extends LitElement {
   }
 
   async #onReprintLanguage(event: CustomEvent<ReprintLanguageDetail>): Promise<void> {
-    const workingOrderId = this.reprintAsking;
+    const asking = this.reprintAsking;
     this.reprintAsking = null;
-    if (workingOrderId !== null) await this.#sendReprint(workingOrderId, event.detail.language);
+    if (asking !== null) await this.#sendReprint(asking.workingOrderId, event.detail.language);
   }
 
   /** Enqueue the issuance-time ORIGINAL. Only a successful enqueue retires the original action; a
@@ -5575,7 +5576,8 @@ export class TillApp extends LitElement {
 
   async #onReprintBill(event: Event): Promise<void> {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
-    await this.#reprint(workingOrderId);
+    const bill = this.partyBills.find((b) => b.workingOrderId === workingOrderId);
+    await this.#reprint(workingOrderId, bill?.receiptLanguage);
   }
 
   async #onMarkCleared(event: Event): Promise<void> {
@@ -6616,7 +6618,7 @@ export class TillApp extends LitElement {
             ? nothing
             : html`<till-reprint-language-dialog
                 .languages=${this.receiptLanguages}
-                .defaultLanguage=${this.invoiceLocale}
+                .defaultLanguage=${this.reprintAsking.filedLanguage ?? this.invoiceLocale}
                 @reprint-language-confirm=${(event: CustomEvent<ReprintLanguageDetail>) =>
                   void this.#onReprintLanguage(event)}
                 @reprint-language-cancel=${() => (this.reprintAsking = null)}

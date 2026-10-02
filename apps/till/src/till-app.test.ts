@@ -2558,11 +2558,11 @@ describe("till-app", () => {
       return { el, workingOrderId };
     }
 
-    it("asks which language, starting on the location's, and reprints in the one chosen", async () => {
-      const { el, workingOrderId } = await soldWith({
-        invoiceLocale: "ca-ES",
-        receiptLanguages: SPAIN,
-      });
+    it("asks which language, starting on the one the sale was filed in, and reprints in the one chosen", async () => {
+      const { el, workingOrderId } = await soldWith(
+        { invoiceLocale: "eu-ES", receiptLanguages: SPAIN },
+        { recordSale: vi.fn().mockResolvedValue({ ...saleResult, locale: "ca-ES" }) },
+      );
 
       emit(ticket(el)!, "reprint");
       await flush(el);
@@ -2576,6 +2576,18 @@ describe("till-app", () => {
       expect(vi.mocked(currentApi.reprint).mock.calls).toEqual([[workingOrderId, "gl-ES"]]);
       expect(languageDialog(el)).toBeNull();
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it("starts on the location's language when the sale names none", async () => {
+      const { el } = await soldWith(
+        { invoiceLocale: "eu-ES", receiptLanguages: SPAIN },
+        { recordSale: vi.fn().mockResolvedValue({ ...saleResult, locale: undefined }) },
+      );
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+
+      expect(radio(el, "eu-ES").checked).toBe(true);
     });
 
     it("reprints nothing when the language question is cancelled", async () => {

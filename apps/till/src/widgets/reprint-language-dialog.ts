@@ -11,7 +11,7 @@ export interface ReprintLanguageDetail {
 }
 
 /**
- * Asks which receipt language a copy of an issued receipt prints in, starting on the location's.
+ * Asks which receipt language a copy of an issued receipt prints in.
  * The dialog only reports the choice.
  */
 @customElement("till-reprint-language-dialog")
@@ -56,7 +56,7 @@ export class TillReprintLanguageDialog extends LitElement {
 
   /** The receipt languages the venue's country offers. */
   @property({ attribute: false }) languages: string[] = [];
-  /** The location's receipt language; the first of {@link languages} when it is not one of them. */
+  /** The language the question starts on; the first of {@link languages} when it is not one of them. */
   @property() defaultLanguage = "";
 
   @state() private chosen = "";

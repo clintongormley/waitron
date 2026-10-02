@@ -36,6 +36,8 @@ export interface PartyBill {
   hasPayments: boolean;
   /** A sale has been filed for the bill, so its receipt can be printed again. */
   receiptAvailable: boolean;
+  /** The language the bill's sale was filed in; absent while no sale is filed. */
+  receiptLanguage?: string;
 }
 
 export type CommandScope =
@@ -376,10 +378,10 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
     throw new AppError("party.not_open", { partyId });
   }
   const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
-  const filed = new Set(
+  const filed = new Map(
     (
       await tx
-        .select({ workingOrderId: sales.workingOrderId })
+        .select({ workingOrderId: sales.workingOrderId, locale: sales.locale })
         .from(sales)
         .where(
           inArray(
@@ -387,18 +389,22 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
             bills.map((bill) => bill.workingOrderId),
           ),
         )
-    ).map((sale) => sale.workingOrderId),
+    ).map((sale) => [sale.workingOrderId, sale.locale]),
   );
-  return bills.map((bill) => ({
-    workingOrderId: bill.workingOrderId,
-    partyId: bill.partyId,
-    label: bill.label,
-    status: bill.status,
-    total: bill.total,
-    outstanding: bill.outstanding,
-    hasPayments: bill.hasPayments,
-    receiptAvailable: filed.has(bill.workingOrderId),
-  }));
+  return bills.map((bill) => {
+    const receiptLanguage = filed.get(bill.workingOrderId);
+    return {
+      workingOrderId: bill.workingOrderId,
+      partyId: bill.partyId,
+      label: bill.label,
+      status: bill.status,
+      total: bill.total,
+      outstanding: bill.outstanding,
+      hasPayments: bill.hasPayments,
+      receiptAvailable: receiptLanguage !== undefined,
+      ...(receiptLanguage === undefined ? {} : { receiptLanguage }),
+    };
+  });
 }
 
 /** A bill as {@link readBillsOfParties} reads it, with how many lines it holds. */

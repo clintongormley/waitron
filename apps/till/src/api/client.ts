@@ -1562,6 +1562,8 @@ export interface PartyBill {
   /** A payment is pending or received on the bill, which the single payment refuses. */
   hasPayments: boolean;
   receiptAvailable: boolean;
+  /** The language the bill's sale was filed in; absent while no sale is filed. */
+  receiptLanguage?: string;
 }
 
 /**

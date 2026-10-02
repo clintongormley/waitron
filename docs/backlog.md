@@ -3067,7 +3067,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   - **A copy can be printed in another receipt language (C114, 2026-10-02, branch
     `feat/receipt-reprint-language`).** Where the till reprints an issued receipt (the finished
     sale's Reprint and a paid bill's Receipt), a venue whose country offers more than one receipt
-    language asks which, starting on the location's; a country with one reprints at once. Only the
+    language asks which, starting on the language the sale was filed in (the location's, when the
+    till was not told it); a country with one reprints at once. Only the
     fixed words, money, date and percentages follow the choice; dish names, unit names and option
     answers print as the sale was filed. The copy is marked as one, files nothing and opens no
     drawer. `POST /api/sales/:id/reprint` takes an optional `language`, refused with
@@ -3075,9 +3076,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     receipt languages, which `GET /api/till` lists as `receiptLanguages`. A copy is offered in every
     receipt language the pack has, even in Catalonia: a product choice, which includes Spanish, the
     customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
-    [regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Open for the
-    owner: after a location's language changes, the till starts the choice on the location's
-    language, not the one the sale was filed in.
+    [regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). The till learns
+    the filed language from the sale it just recorded, and for a paid bill from `receiptLanguage` in
+    the party's bill list (`readPartyBills`, `apps/server/src/parties.ts`). Catalonia's reason on
+    setup and the Receipts page says a copy can be printed in another language. The dashboard
+    Printers screen's Resend still sends a job's stored bytes again (owner, 2026-10-02), and the
+    Orders screen's copy (`reprintOrderReceipt`, `apps/server/src/orders-reprint.ts`) prints in the
+    language the sale was filed in.
   - **Open, for the owner:**
     - **A change is refused while an open order at the location holds a line**
       (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core

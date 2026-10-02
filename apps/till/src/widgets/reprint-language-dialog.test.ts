@@ -65,7 +65,7 @@ describe("till-reprint-language-dialog", () => {
     expect(optionTexts(el)).toEqual(["Español", "Catalán", "Gallego", "Euskera"]);
   });
 
-  it("starts on the location's receipt language", async () => {
+  it("starts on the language it is given", async () => {
     const el = await mountDialog({ defaultLanguage: "gl-ES" });
 
     expect(
@@ -75,13 +75,13 @@ describe("till-reprint-language-dialog", () => {
     ).toEqual(["gl-ES"]);
   });
 
-  it("has the location's receipt language focused", async () => {
+  it("has the language it starts on focused", async () => {
     const el = await mountDialog({ defaultLanguage: "gl-ES" });
 
     expect(el.shadowRoot!.activeElement).toBe(radios(el).find((radio) => radio.value === "gl-ES"));
   });
 
-  it("starts on the first language when the location's is not among them", async () => {
+  it("starts on the first language when the one it is given is not among them", async () => {
     const el = await mountDialog({ defaultLanguage: "en-GB" });
 
     expect(

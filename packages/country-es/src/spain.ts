@@ -196,8 +196,8 @@ const CATALONIA: LanguageLaw = {
   fixedReceiptLocale: {
     locale: "ca-ES",
     reason: {
-      en: "In Catalonia, customers have the right to receive invoices in Catalan (Catalan Consumer Code, Llei 22/2010, art. 128-1.2.a). The Agència Catalana del Consum lists invoices among what must be at least in Catalan, and says customers are entitled to till receipts in Catalan. Receipts here are printed in Catalan.",
-      es: "En Cataluña, los consumidores tienen derecho a recibir las facturas en catalán (Código de consumo de Cataluña, Ley 22/2010, art. 128-1.2.a). La Agència Catalana del Consum incluye las facturas entre lo que debe estar como mínimo en catalán, e indica que los consumidores tienen derecho a recibir los tiques de caja en catalán. Aquí los tiques se imprimen en catalán.",
+      en: "In Catalonia, customers have the right to receive invoices in Catalan (Catalan Consumer Code, Llei 22/2010, art. 128-1.2.a). The Agència Catalana del Consum lists invoices among what must be at least in Catalan, and says customers are entitled to till receipts in Catalan. Receipts here are printed in Catalan; a copy can be printed in another language.",
+      es: "En Cataluña, los consumidores tienen derecho a recibir las facturas en catalán (Código de consumo de Cataluña, Ley 22/2010, art. 128-1.2.a). La Agència Catalana del Consum incluye las facturas entre lo que debe estar como mínimo en catalán, e indica que los consumidores tienen derecho a recibir los tiques de caja en catalán. Aquí los tiques se imprimen en catalán; una copia se puede imprimir en otro idioma.",
     },
   },
 };

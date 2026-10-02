@@ -1097,7 +1097,42 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(api.reprint).toHaveBeenCalledWith("wo-old");
   });
 
-  it("asks which language a paid bill's receipt copy prints in, starting on the location's", async () => {
+  it("asks which language a paid bill's receipt copy prints in, starting on the one it was filed in", async () => {
+    const paid: PartyBill = {
+      ...tabBill,
+      workingOrderId: "wo-old",
+      status: "settled",
+      outstanding: "0.00",
+      receiptAvailable: true,
+      receiptLanguage: "ca-ES",
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        invoiceLocale: "eu-ES",
+        receiptLanguages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      }),
+      getPartyBills: vi.fn().mockResolvedValue([paid, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "reprint-bill", { workingOrderId: "wo-old" });
+    await flush(el);
+
+    expect(api.reprint).not.toHaveBeenCalled();
+    const dialog = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+    const radio = (language: string) =>
+      dialog.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${language}"]`)!;
+    expect(radio("ca-ES").checked).toBe(true);
+    radio("es-ES").click();
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
+    await flush(el);
+
+    expect(vi.mocked(api.reprint).mock.calls).toEqual([["wo-old", "es-ES"]]);
+    expect(el.shadowRoot!.querySelector("till-reprint-language-dialog")).toBeNull();
+  });
+
+  it("starts a paid bill's receipt copy on the location's language when the bill names none", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
@@ -1110,17 +1145,10 @@ describe("till-app: the party's bills and Finish table", () => {
     emit(order, "reprint-bill", { workingOrderId: "wo-old" });
     await flush(el);
 
-    expect(api.reprint).not.toHaveBeenCalled();
     const dialog = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
-    const radio = (language: string) =>
-      dialog.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${language}"]`)!;
-    expect(radio("eu-ES").checked).toBe(true);
-    radio("es-ES").click();
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
-    await flush(el);
-
-    expect(vi.mocked(api.reprint).mock.calls).toEqual([["wo-old", "es-ES"]]);
-    expect(el.shadowRoot!.querySelector("till-reprint-language-dialog")).toBeNull();
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLInputElement>('input[value="eu-ES"]')!.checked,
+    ).toBe(true);
   });
 
   it("prints a paid bill's receipt copy at once when there is one receipt language", async () => {
