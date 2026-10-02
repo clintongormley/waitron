@@ -793,18 +793,6 @@ third changes all five.
 Each hint follows the field it copies as the owner types: change Name and the blank fields' hints
 change with it.
 
-**Search fields are pill-shaped; they should only round their corners (A175, owner 2026-10-01:
-"all the search fields have too much rounding they just need the corners rounded, not a
-semicircle") — OPEN.** One search box still uses `border-radius: var(--wt-radius-full)` (9999px,
-a half-circle at each end): every table's search (`.table-search`,
-`packages/ui/src/components/wt-data-table.ts`). The search box inside the searchable dropdown
-(`.search`, `packages/ui/src/components/wt-combobox.ts`) takes `var(--wt-radius-md)` since #1010.
-The sidebar's "Search pages" and the Staff screen's search are `wt-input` since A178b, which draws
-the filled field's corners, as do the Products screen's folder search and the till's menu search.
-**Wanted:** the table's search takes `var(--wt-radius-md)` (8px), the radius the filled field
-rounds its top corners to (`packages/ui-core/src/field-styles.ts`), so the focus ring follows it
-too. Small; no guard checks a field's radius.
-
 **An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
 — OPEN.** The owner, on the Extras tab with no lists: _"The "No extras lists to show" could be
 inset a bit. How could we improve the styling?"_ Today, when a table has no rows at all,
@@ -871,8 +859,8 @@ owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is w
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
 
-**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178 is done; next
-A169–A172 and A175–A177, built in the new style rather than restyled twice.
+**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178 and A175 are
+done; next A169–A172 and A176–A177, built in the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line

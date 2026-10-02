@@ -1315,6 +1315,19 @@ test("the search box and filter dropdown paint from the theme tokens", async () 
   expect(filter.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
 });
 
+test("the search box rounds its corners to the medium radius, not into a pill", async () => {
+  const el = await tableS({ searchable: true });
+  host.style.setProperty("--wt-radius-md", "7px");
+  host.style.setProperty("--wt-radius-full", "9999px");
+  const style = getComputedStyle(el.shadowRoot!.querySelector(".table-search")!);
+  expect([
+    style.borderTopLeftRadius,
+    style.borderTopRightRadius,
+    style.borderBottomRightRadius,
+    style.borderBottomLeftRadius,
+  ]).toEqual(["7px", "7px", "7px", "7px"]);
+});
+
 test("the toolbar stacks the filters under a full-width search box at phone width", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   el.style.width = "360px";
