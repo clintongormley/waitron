@@ -29,13 +29,15 @@ export class WtNumberStepper extends LitElement {
       }
 
       .field {
+        /* A row aligned by baseline must line up the number text, not a button. */
         align-self: baseline;
         display: grid;
         grid-template-columns: minmax(var(--wt-tap-min), 1fr) repeat(2, var(--wt-tap-min));
         align-items: stretch;
       }
 
-      /* The hidden label copy reserves its full resting width while the visible label floats. */
+      /* The sizing copy is hidden rather than clipped: Chromium exposes clipped generated text
+         to the accessibility tree. */
       .field::before {
         content: attr(data-label-text);
         order: 1;

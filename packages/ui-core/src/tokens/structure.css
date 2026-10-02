@@ -72,10 +72,8 @@
      quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
-  /* The box includes a four-digit value area and two tap-width buttons. */
+  /* Both widths include the two buttons; the wide one leaves room for word placeholders. */
   --wt-stepper-field-width: 152px;
-  /* A stepper box whose blank value reads as a word ("No limit", "Sin límite" at
-     --wt-font-size-md), with its 8px padding on each side. */
   --wt-stepper-field-width-wide: 184px;
 
   /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
