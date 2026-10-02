@@ -1125,9 +1125,14 @@ locations. Once a session is active, put the account menu — a person-icon `wt-
 holding Account settings and Log out — at the banner's trailing (right-hand in the shipped locales)
 edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
 two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
-space runs short, and the legal name and mode pill take the second in full. The language chooser
-sits at the trailing edge too, before the alerts bell and the account menu, signed in and signed out
-(see "Navigation and language controls").
+space runs short, and the legal name, the mode pill and, in a demo, the email inbox link take the
+second in full. The language chooser sits at the trailing edge too, before the alerts bell and the
+account menu, signed in and signed out (see "Navigation and language controls"). In a demo, an
+"Email inbox" link to `/manage/email` (the Test inbox screen, the address the setup wizard's done
+page links to) sits just before the language chooser: signed out it always shows, and signed in it
+shows only to a session that may open the Test inbox screen (a manager or an admin). Below the
+drawer breakpoint it goes on the second row, after the mode pill, so the lockup keeps its room on
+the first.
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
 the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the account menu.
@@ -1837,7 +1842,8 @@ static assets keep their own responses; setup continues to use its existing root
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each
 app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
 header, after the logo; in the dashboard's banner, before the alerts bell and the account menu, and
-there on its own when nobody is signed in; in the till's tab-shell bar, before the operator's name,
+there on its own when nobody is signed in (in a demo, above the drawer breakpoint, the email inbox
+link sits just before it); in the till's tab-shell bar, before the operator's name,
 as in the counter screen's own header (which it draws only when not embedded in the shell, and the
 app always embeds it). A till screen with no top bar — the sign-in and join screens, and the
 kitchen display, whose shell draws no bar — holds it at the top right on its own, above the
