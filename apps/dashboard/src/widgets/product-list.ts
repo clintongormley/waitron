@@ -381,8 +381,10 @@ export class ProductList extends LitElement {
   }
 
   /** Over a category or All products a drop files into it; over a product or variant, into the
-   * category that product is in. A drop that would move nothing is not offered. */
+   * category that product is in. A drop that would move nothing is not offered, nor one over the
+   * row the drag started on, even when other selected rows sit in other categories. */
   #dropTargetFor(key: string): string | undefined {
+    if (key === this.#pointerDrag?.key) return undefined;
     const row = this.#rowByKey.get(key);
     if (!row || row.kind === "draft") return undefined;
     const target =

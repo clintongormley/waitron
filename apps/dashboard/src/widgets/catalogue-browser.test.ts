@@ -591,6 +591,68 @@ it("in Select mode, dragging a selected row moves every selected row, from two c
   await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
 });
 
+it("in Select mode, a drop where the drag started moves nothing, even with rows selected from two categories", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  await selectKeys(el, ["cola", "burger"]);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const drops = vi.fn();
+  list.addEventListener("drop-items", drops);
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "cola");
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "folder:b"), "pointermove");
+  pointerEvent(cell, "pointermove");
+  await list.updateComplete;
+  expect(table.shadowRoot!.querySelector('[part~="drop-target"]')).toBeNull();
+  pointerEvent(cell, "pointerup");
+  await el.updateComplete;
+  expect(drops).not.toHaveBeenCalled();
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("no dragged row stays marked inactive after a drop that moves, Esc, or a drop where the drag started", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  await selectKeys(el, ["cola", "burger"]);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const table = await tableOf(el);
+  const inactive = () =>
+    [...table.shadowRoot!.querySelectorAll<HTMLElement>("tr[aria-disabled]")].map(
+      (row) => row.dataset.rowKey,
+    );
+  const lift = async () => {
+    pointerEvent(await nameCell(el, "cola"), "pointerdown");
+    pointerEvent(await nameCell(el, "folder:b"), "pointermove");
+    await list.updateComplete;
+    await table.updateComplete;
+    await vi.waitFor(() => expect(inactive()).toEqual(["cola", "burger"]));
+  };
+
+  await lift();
+  pointerEvent(await nameCell(el, "cola"), "pointermove");
+  pointerEvent(await nameCell(el, "cola"), "pointerup");
+  await table.updateComplete;
+  expect(inactive(), "after a drop where the drag started").toEqual([]);
+
+  await lift();
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+  await table.updateComplete;
+  expect(inactive(), "after Esc").toEqual([]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  pointerEvent(await nameCell(el, "cola"), "pointerup");
+
+  await lift();
+  pointerEvent(await nameCell(el, "folder:b"), "pointerup");
+  await vi.waitFor(() => expect(el.api.moveCatalogueItems).toHaveBeenCalledOnce());
+  await table.updateComplete;
+  expect(inactive(), "after a drop that moves").toEqual([]);
+});
+
 it("a selection holding a category and a product inside it moves the category alone, and the product goes with it", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
