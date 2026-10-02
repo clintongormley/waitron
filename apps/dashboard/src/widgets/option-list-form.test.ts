@@ -501,6 +501,77 @@ it("opens the option editor on an option when its name is clicked", async () => 
   expect(field(editor(el), "label-name").value).toBe("Medium");
 });
 
+it("opens an option from the rest of its row, including Enter on the focused row", async () => {
+  const { el } = await mount({ value: cooked });
+  const row = el.shadowRoot!.querySelector<HTMLTableRowElement>(`tr[data-label="${MEDIUM}"]`)!;
+
+  await userEvent.click(row.querySelector("td:nth-child(2)")!, { position: { x: 2, y: 2 } });
+  await el.updateComplete;
+  expect(editor(el).open).toBe(true);
+  expect(editor(el).value).toEqual({ ...cooked.labels[1]!, kitchenName: "M" });
+
+  await click(editor(el), "cancel");
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(row));
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(editor(el).open).toBe(true);
+  expect(editor(el).value).toEqual({ ...cooked.labels[1]!, kitchenName: "M" });
+});
+
+it("does not open an option when a pointer gesture ends in another cell of its row", async () => {
+  const { el } = await mount({ value: cooked });
+  const row = el.shadowRoot!.querySelector<HTMLTableRowElement>(`tr[data-label="${RARE}"]`)!;
+  const handle = row.querySelector<HTMLElement>(".handle")!;
+  const nameCell = row.querySelector("td:nth-child(2)")!;
+
+  await userEvent.dragAndDrop(handle, nameCell);
+  await el.updateComplete;
+
+  expect(editor(el).open).toBe(false);
+  expect(el.shadowRoot!.querySelector(`tr[data-label="${RARE}"]`)).toBe(row);
+});
+
+it("does not open an option when text selection ends over its Default cell", async () => {
+  const { el } = await mount({ value: cooked });
+  const row = el.shadowRoot!.querySelector<HTMLTableRowElement>(`tr[data-label="${RARE}"]`)!;
+  const name = row.querySelector<HTMLElement>('[data-test="label-0-name"]')!;
+  const defaultCell = row.querySelector("td:nth-child(3)")!;
+
+  await userEvent.dragAndDrop(name, defaultCell);
+  await el.updateComplete;
+
+  expect(editor(el).open).toBe(false);
+});
+
+it("lets Enter open the row menu without opening the option editor", async () => {
+  const { el } = await mount({ value: cooked });
+  const row = el.shadowRoot!.querySelector<HTMLTableRowElement>(`tr[data-label="${RARE}"]`)!;
+  const trigger = row.querySelector("wt-row-actions")!.shadowRoot!.querySelector("button")!;
+
+  trigger.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(editor(el).open).toBe(false);
+});
+
+it("leaves the handle, Default radio and row menu to their own actions", async () => {
+  const { el } = await mount({ value: cooked });
+  const row = el.shadowRoot!.querySelector<HTMLTableRowElement>(`tr[data-label="${RARE}"]`)!;
+
+  row.querySelector<HTMLElement>(".handle")!.click();
+  await el.updateComplete;
+  expect(editor(el).open).toBe(false);
+
+  row.querySelector<HTMLElement>(".pick")!.click();
+  await el.updateComplete;
+  expect(checkedDefault(el)).toEqual([0]);
+  expect(editor(el).open).toBe(false);
+
+  row.querySelector<HTMLElement>("wt-row-actions")!.click();
+  await el.updateComplete;
+  expect(editor(el).open).toBe(false);
+});
+
 it("draws an option's name as a button that says it edits that option", async () => {
   const { el } = await mount({ value: cooked });
   const button = nameButton(el, 0);

@@ -75,6 +75,13 @@ export class OptionListForm extends LitElement {
       tbody td {
         vertical-align: middle;
       }
+      tbody tr[data-label] {
+        cursor: pointer;
+      }
+      tbody tr[data-label]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
       /* The preselect control is a native radio, which is far smaller than a finger. The tap target
          is the LABEL that contains it, never the radio stretched past its own box
          (design-system.md → "Hit targets must not overflow their container"). */
@@ -140,6 +147,7 @@ export class OptionListForm extends LitElement {
    * held against the label's ID rather than the position the server named, so moving a label
    * carries its message with it. */
   @state() private serverErrors: Record<string, string> = {};
+  #rowPointerStart: EventTarget | null = null;
 
   readonly #reorder = new ReorderController(
     this,
@@ -323,9 +331,9 @@ export class OptionListForm extends LitElement {
     this.#closeEditor();
   }
 
-  #openedFrom: "name" | "menu" = "menu";
+  #openedFrom: "name" | "menu" | "row" = "menu";
 
-  #openEditor(label: DraftLabel | "new", from: "name" | "menu" = "menu"): void {
+  #openEditor(label: DraftLabel | "new", from: "name" | "menu" | "row" = "menu"): void {
     this.editingLabel = label;
     this.#openedFrom = from;
   }
@@ -341,14 +349,14 @@ export class OptionListForm extends LitElement {
     );
   }
 
-  async #returnFocus(id: string | null, to: "name" | "menu" = "menu"): Promise<void> {
+  async #returnFocus(id: string | null, to: "name" | "menu" | "row" = "menu"): Promise<void> {
     await this.updateComplete;
     await this.shadowRoot!.querySelector("dashboard-option-label-form")!.updateComplete;
     const target =
       id === null
         ? this.shadowRoot!.querySelector<HTMLElement>('[data-test="add-option"]')
         : this.shadowRoot!.querySelector<HTMLElement>(
-            `tr[data-label="${id}"] ${to === "name" ? ".open-label" : "wt-row-actions"}`,
+            `tr[data-label="${id}"]${to === "row" ? "" : to === "name" ? " .open-label" : " wt-row-actions"}`,
           );
     target?.focus();
   }
@@ -457,7 +465,39 @@ export class OptionListForm extends LitElement {
   }
 
   #labelRow(label: DraftLabel, index: number, rowErrors: Record<string, string>) {
-    return html`<tr data-label=${label.id}>
+    return html`<tr
+      data-label=${label.id}
+      tabindex=${this.busy ? -1 : 0}
+      aria-label=${`${t("options.edit_option")}: ${label.name}`}
+      @pointerdown=${(event: PointerEvent) => {
+        this.#rowPointerStart = event.target;
+      }}
+      @click=${(event: MouseEvent) => {
+        const pointerStart = this.#rowPointerStart;
+        this.#rowPointerStart = null;
+        // A drag across cells sends its click to the row, losing the control where it began.
+        if (
+          this.busy ||
+          (event.detail > 0 &&
+            event.target === event.currentTarget &&
+            pointerStart !== event.currentTarget) ||
+          event
+            .composedPath()
+            .some(
+              (node) =>
+                node instanceof Element &&
+                node.matches("button, input, label, wt-row-actions, wt-button"),
+            )
+        )
+          return;
+        this.#openEditor(label, "row");
+      }}
+      @keydown=${(event: KeyboardEvent) => {
+        if (this.busy || event.target !== event.currentTarget || event.key !== "Enter") return;
+        event.preventDefault();
+        this.#openEditor(label, "row");
+      }}
+    >
       <td class="handle-cell">${this.#reorder.handle(label.id)}</td>
       <td>
         <div class="option-name">
