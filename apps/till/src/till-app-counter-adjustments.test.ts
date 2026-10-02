@@ -320,6 +320,29 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-app: counter station choice", () => {
+  it("lets a new basket choose Make at while the held basket's station read still hangs", async () => {
+    const oldRead = deferred<typeof stations>();
+    const el = await retrieved({ listStations: vi.fn().mockResolvedValue(stations) });
+    vi.mocked(api.listStations).mockImplementationOnce(() => oldRead.promise);
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    emit(counter(el), "park-order", {});
+    await flush(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    counter(el).store.addProduct(product("new-cana", "New caña", "2.50"), "1");
+    await flush(el);
+    inBasket(el, '[data-make-at="0"]')!.click();
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog");
+    expect(chooser?.getAttribute("mode")).toBe("make-at");
+    oldRead.resolve(stations);
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("till-station-choice-dialog")).toHaveLength(1);
+    emit(chooser!, "station-chosen", { stationId: "bar" });
+    await flush(el);
+    expect(counter(el).store.lines[0]!.makeAt).toBe("bar");
+  });
+
   it("does not show a delayed Make at dialog after switching to the Floor tab", async () => {
     const read = deferred<typeof stations>();
     const floorCanvas: CanvasDef = {
@@ -363,7 +386,10 @@ describe("till-app: counter station choice", () => {
 
   it("does not show a delayed Make at dialog after opening Schedule", async () => {
     const read = deferred<typeof stations>();
-    const el = await retrieved({ listStations: vi.fn().mockResolvedValue(stations) });
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["show-schedule"] }),
+    });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
     inBasket(el, '[data-make-at="1"]')!.click();
     await flush(el);

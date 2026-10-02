@@ -3048,6 +3048,7 @@ export class TillApp extends LitElement {
       } else {
         await this.api.parkOrder({ id, lines, label });
       }
+      this.#dismissStationChoices();
       this.#store.clear();
       this.cardOutcome = undefined;
       await this.#refreshAfterWrite("held", "refresh.held_after_park");
@@ -3132,6 +3133,8 @@ export class TillApp extends LitElement {
 
   /** Replaces the basket with `order`, rebuilt against today's live offer. */
   #loadIntoBasket(order: HeldOrder, listed: StoredLines | null): void {
+    // A submitted counter Move keeps its refusal choice while the order is reread.
+    if (this.#counterMoveSubmitting === null) this.#dismissStationChoices();
     const lines: OrderLine[] = [];
     let droppedAProduct = false;
     let extraNotOffered = false;
@@ -3475,6 +3478,7 @@ export class TillApp extends LitElement {
 
   /** Clear the completed order and return home, retaining this browser tab's menu preference. */
   #onNewSale(): void {
+    this.#dismissStationChoices();
     this.#store.clear();
     this.ticketWorkingOrderId = undefined;
     this.originalReceiptAvailable = false;
@@ -5433,6 +5437,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#store.id === orderId) {
+      this.#dismissStationChoices();
       this.#store.clear();
       this.cardOutcome = undefined;
     }
@@ -6635,7 +6640,7 @@ export class TillApp extends LitElement {
     await this.#rereadPayingOrder(open, balance);
   }
 
-  /** A pending station read belongs to the face and session where its choice started. */
+  /** A pending station read belongs to the basket, face, and session where its choice started. */
   #dismissStationChoices(): void {
     this.#makeAtOpening = null;
     this.#moveStationOpening = null;
