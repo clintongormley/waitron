@@ -82,10 +82,10 @@ export class FakeFiscalBackend implements FiscalBackend {
         -- numeric(12, 2) is the trap this replaced, and it is a trap because the engine ACCEPTS
         -- the type name: it gives the column numeric affinity, so the stored '12.10' comes back as
         -- the number 12.1 (measured on node:sqlite, Node v26.7.0, against a text column as the
-        -- control, which returns '12.10'). What no spelling here restores is the refusal the
-        -- PostgreSQL column made: neither type rejects 'abc', so recordSale's own DECIMAL_PATTERN
-        -- is the whole check, and recordCorrection/recordSubstitution -- which do not run it --
-        -- now store whatever string they are handed.
+        -- control, which returns '12.10'). Neither type rejects 'abc' (measured 2026-10-02 the
+        -- same way: both store the text 'abc'), so recordSale's own DECIMAL_PATTERN is the whole
+        -- check, and recordCorrection/recordSubstitution -- which do not run it -- store whatever
+        -- string they are handed.
         total text not null,
         state text not null,
         -- The filed VAT breakdown, stored so filedReceiptFor can hand back the EXACT figures the

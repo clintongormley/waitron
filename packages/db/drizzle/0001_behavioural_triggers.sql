@@ -1,4 +1,4 @@
--- The nine BEHAVIOURAL rules this package carried under PostgreSQL, restored as SQLite triggers.
+-- This package's nine BEHAVIOURAL rules, as SQLite triggers.
 --
 -- Regenerating every migration set from the TypeScript schema for the storage switch dropped every
 -- hand-written trigger: a trigger has never been declarable in TypeScript, so all of them lived in
@@ -6,9 +6,7 @@
 -- (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`, called from
 -- `packages/migrations/src/apply.ts`, from names each module declares): one trigger per event,
 -- `update` and `delete`, for each table a module classified `appendOnly` — so the set is whatever
--- those classifications hold rather than a fixed number. Comparing totals with PostgreSQL would
--- mislead. It wrote two per table as well, but split differently: an `UPDATE OR DELETE` trigger and
--- a TRUNCATE-blocking one, and SQLite has no TRUNCATE at all. These nine came back as nothing, and
+-- those classifications hold rather than a fixed number. These nine came back as nothing, and
 -- this file is where they come back.
 --
 -- WHY ALL NINE ARE TRIGGERS AGAIN, rather than checks moved into the callers: each is a
@@ -16,17 +14,15 @@
 -- as triggers preserves the behaviour exactly rather than moving a refusal into one code path and
 -- leaving every other path — a repair script, a future route, a restore — unguarded.
 --
--- THREE ENGINE DIFFERENCES, none of them a behaviour change:
+-- TWO THINGS THIS ENGINE DECIDES ABOUT THEIR SHAPE (measured 2026-10-02 on `node:sqlite`, Node
+-- v26.7.0, SQLite 3.53.4):
 --
---   1. SQLite has no `BEFORE INSERT OR UPDATE` — one trigger takes exactly one event. The three
---      triggers that covered more than one event are split, keeping the PostgreSQL name as the base
---      and suffixing the event, so fourteen names stand for nine rules. (The binding rule at the
---      foot of this file arrived split ALREADY: PostgreSQL wrote it as two triggers of its own, for
---      a reason that outlives the engine, and its names are unchanged.)
---   2. PostgreSQL interpolated ids into its messages with `%` (`working order % cannot transition
---      from % to %`). SQLite's `raise` takes a LITERAL only, so every message here is a fixed
---      string. `packages/db/drizzle/0001_db_baseline_sql.sql` on `origin/main` has the originals.
---   3. `is` is SQLite's null-safe comparison, which is PostgreSQL's `IS DISTINCT FROM` inverted.
+--   1. SQLite has no `BEFORE INSERT OR UPDATE` — one trigger takes exactly one event; that
+--      statement fails with `near "or": syntax error`. A rule that covers more than one event is
+--      split, one trigger per event with the event suffixed to its name, so fourteen names stand
+--      for nine rules.
+--   2. `is` is SQLite's null-safe comparison: `null is null` and `1 is not null` are 1, `1 is null`
+--      and `null is not null` are 0, where `null = null` is NULL.
 --
 -- Each body is `select raise(abort, '…') where <the refused case>;` rather than a trigger `WHEN`
 -- clause. Both parse here (measured 2026-09-22 on Node v26.7.0, SQLite 3.53.4, against this
@@ -48,9 +44,7 @@
 -- A settlement's tenders must cover the sale: the sale's total, plus the SIGNED total of every
 -- rectificativa that corrects it (usually negative), plus the tips those tenders carried.
 --
--- A settlement for a sale row that does not exist is ACCEPTED, silently, exactly as
--- `sales_assert_tenders_cover` returned early — "the sale itself was rolled back; nothing left to
--- reconcile". The `exists` on the first line of the WHERE says so out loud, and it changes no
+-- A settlement for a sale row that does not exist is ACCEPTED, silently. The `exists` on the first line of the WHERE says so out loud, and it changes no
 -- outcome: deleted from this trigger, the whole suite in `scripts/behavioural-triggers.test.ts`
 -- still passes in full (measured 2026-09-22, when it held 35 cases), because with no sale row
 -- `(SELECT total …)` is NULL,
@@ -71,8 +65,7 @@ BEGIN
            + (SELECT coalesce(sum(tip_amount), 0) FROM tenders WHERE sale_id = new.sale_id);
 END;
 --> statement-breakpoint
--- Once a sale is settled its tender set is closed. PostgreSQL raised this under SQLSTATE `WT002`;
--- this engine has no SQLSTATEs, so the message is what a caller matches on.
+-- Once a sale is settled its tender set is closed.
 CREATE TRIGGER tenders_reject_post_settlement
 BEFORE INSERT ON tenders
 FOR EACH ROW
@@ -93,7 +86,7 @@ END;
 -- and is untouched here. That is what the column-by-column list enforces, and it names every column
 -- of `working_orders` except the two the stamp itself moves (`status`, `collected_at`).
 --
--- `is` is SQLite's null-safe comparison — PostgreSQL wrote this as `IS NOT DISTINCT FROM`. It never
+-- `is` is SQLite's null-safe comparison (the file header's point 2). It never
 -- yields NULL, so the whole `not (…)` is a plain true or false.
 CREATE TRIGGER working_orders_enforce_transition
 BEFORE UPDATE ON working_orders
@@ -117,8 +110,7 @@ BEGIN
 END;
 --> statement-breakpoint
 -- Lines may only be written while their order is open. A parent that does not exist refuses too —
--- `not exists (… AND status = 'open')` covers the missing row and the wrong status in one clause,
--- which is what the PostgreSQL body's `IS DISTINCT FROM 'open'` did with a NULL parent status.
+-- `not exists (… AND status = 'open')` covers the missing row and the wrong status in one clause.
 --
 -- Three triggers for one rule: SQLite takes one event per trigger. The insert and update pair read
 -- `new`, the delete one reads `old`.
@@ -163,12 +155,6 @@ END;
 -- `ORDER BY` fixes the order `group_concat` accumulates in, so that shape would need a version
 -- claim this file cannot make. Two `not exists` need none and are order-independent by
 -- construction.
---
--- PostgreSQL raised a SECOND, distinct message when the join resolved to no location at all
--- ("working order % has no resolvable location"). Here that case FOLDS INTO THIS SAME REFUSAL — the
--- first clause below — because `raise` takes a literal, so a second message would mean a second
--- trigger, and from a caller's side the two are the same fault: the line's locales could not be
--- shown to match the venue's. Stated here so nobody reading the SQL assumes two messages survive.
 CREATE TRIGGER working_order_lines_check_locales_insert
 BEFORE INSERT ON working_order_lines
 FOR EACH ROW
@@ -236,7 +222,7 @@ END;
 -- uncovered and nothing in the database covers it instead — what holds the rule for a sold line is
 -- the ROUTE (the till files from a persisted working order whose lines this already checked, and
 -- `packages/core/src/sale-line-rows.ts` copies the maps across verbatim). The two `check_locales`
--- triggers above carry the set-comparison and folded-message reasoning that applies here too.
+-- triggers above carry the set-comparison reasoning that applies here too.
 CREATE TRIGGER working_order_lines_check_variant_locales_insert
 BEFORE INSERT ON working_order_lines
 FOR EACH ROW
@@ -311,7 +297,6 @@ END;
 --> statement-breakpoint
 -- The one that ACTS rather than refusing: a dining table's service status belongs to the tab that
 -- is open on it, so when that tab closes — settled or abandoned — the status comes off the table.
--- The `WHEN` clause carries the same condition PostgreSQL's did.
 CREATE TRIGGER working_orders_clear_table_status
 AFTER UPDATE ON working_orders
 FOR EACH ROW
@@ -343,16 +328,15 @@ END;
 -- other form factor binds a register and no station. No CHECK constraint can say this, because the
 -- deciding value lives in another table; it has always been a trigger.
 --
--- TWO triggers for one rule, the file header's difference 1: SQLite takes one event per trigger.
--- PostgreSQL split the same rule in two as well, and for a second reason that survives here — the
--- UPDATE half is GATED. `requireDevice` touches `last_seen_at` on every authenticated request, and
+-- TWO triggers for one rule, the file header's point 1: SQLite takes one event per trigger. The
+-- UPDATE half is also GATED. `requireDevice` touches `last_seen_at` when a sighting is due, and
 -- that UPDATE changes no binding column, so the gate is false and the `device_profiles` lookup
 -- never runs.
 --
 -- The gate is a `WHEN` rather than the body form the rest of this file uses: it decides WHETHER the
 -- rule runs at all and is shared by all three refusals below it, so in the bodies it would be the
--- same four lines written three times. `is not` is SQLite's null-safe comparison, which is
--- PostgreSQL's `IS DISTINCT FROM`, and `active` is a boolean column — an integer on this engine —
+-- same four lines written three times. `is not` is SQLite's null-safe comparison (the file
+-- header's point 2), and `active` is a boolean column — an integer on this engine —
 -- so it is read against 0 rather than against a truthy value this file would have to assume.
 --
 -- The `old.active = 0 and new.active <> 0` disjunct re-validates a REACTIVATION, and without it
@@ -368,14 +352,6 @@ END;
 -- NULL and stay silent, so dropping this line would ACCEPT such a device rather than refuse it.
 -- `scripts/behavioural-triggers.test.ts` runs with `pragma foreign_keys = off` and is where it is
 -- exercised.
---
--- ENGINE DIFFERENCE, beyond the header's three: PostgreSQL enforced this with a pair of CONSTRAINT
--- triggers that took `for share` on the profile row so a concurrent form-factor UPDATE serialised
--- against an insert instead of racing it. There are no row locks here and nothing below takes one;
--- what serialises two writers now is the venue file's write queue
--- (`packages/store/src/write-queue.ts`). Nothing in this repository re-proves that claim for this
--- rule — the concurrency case that made it was deleted with the PostgreSQL harness, as
--- `packages/db/src/schema/device-profiles.trigger.test.ts` records.
 CREATE TRIGGER device_binding_rule_insert
 BEFORE INSERT ON devices
 FOR EACH ROW

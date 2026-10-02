@@ -1,14 +1,13 @@
 /**
- * The password of a URL, masked, in the two positions `pg`'s connection-string parser reads one
- * from (measured with `pg-connection-string@2.14.0`):
+ * The password of a URL, masked, in two positions:
  *
  *   `scheme://user:secret@host`              → `scheme://user:***@host`
  *   `scheme://user@host/db?password=secret`  → `?password=***`
  *
  * A string carrying both has both masked. The authority ends at the first `/`, `?`, `#`, newline or
- * `"` and splits on the LAST `@`, so `postgres://u:p@ss@localhost/db` masks `p@ss`, and a space
+ * `"` and splits on the LAST `@`, so `scheme://u:p@ss@localhost/db` masks `p@ss`, and a space
  * does not end a password. The user half is split off at the FIRST `:` of the user-info, so
- * `postgres://user@server:secret@host/db` masks the secret and not the role name.
+ * `scheme://user@server:secret@host/db` masks the secret and not the user name.
  *
  * It is not a general secret scrubber and must not be described as one: a password outside a URL
  * (a `keyword=value` string, an environment dump) and any other token, key or secret pass through.
@@ -25,7 +24,7 @@
  * anyone on the venue's LAN with no login; and the entrypoint's own boot-failure report
  * (`node-entry.ts`). The box's stdout is deliberately NOT filtered — see `boot.ts`.
  *
- * The user-info half is left visible: naming the role is what makes the line diagnosable.
+ * The user-info half is left visible: naming the user is what makes the line diagnosable.
  */
 
 /** The authority of a URL: everything between `scheme://` and the first `/`, `?`, `#`, newline or

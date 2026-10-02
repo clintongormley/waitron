@@ -260,8 +260,8 @@ describe("currentBusinessDay / businessDayOf", () => {
   });
 
   // A venue WEST of UTC, both sides of its DST change: every other case here uses Europe/Madrid, so
-  // none reaches a negative offset. The expected days were read off PostgreSQL's `at time zone` on
-  // 2026-09-22, not worked out by hand.
+  // none reaches a negative offset. The local times below were read off macOS's
+  // `TZ=America/New_York date -r <epoch seconds>` on 2026-10-02, not worked out by hand.
   it.each([
     ["2026-08-04T07:59:59.999Z", "2026-08-03"], // 03:59 local, EDT (UTC-4): before the cutover
     ["2026-08-04T08:00:00.000Z", "2026-08-04"], // 04:00 local: the cutover itself

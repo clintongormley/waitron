@@ -321,9 +321,7 @@ describe("recordTillSale", () => {
     const snapshots = await suite.db.execute<StoredNames & { unit_price_gross?: number | null }>(
       sql`
       -- unit_price_gross counts whole cents, and the assertion below is on that COUNT, not on an
-      -- amount. The integer cast that used to sit on this column only normalised node-postgres's
-      -- answer to a number; the column is an integer column on this engine and the driver already
-      -- hands back a number, so the cast is dropped rather than replaced. The count is unchanged.
+      -- amount.
       select name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, unit_price_gross
       from working_order_lines

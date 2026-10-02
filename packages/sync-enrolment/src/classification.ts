@@ -8,8 +8,8 @@
  * `scripts/two-file-foreign-keys.test.ts`, which reads drizzle's GENERATED snapshots, so a key only
  * in hand-written migration SQL is outside it.
  *
- * Some per-module reason strings and file docstrings still describe the deleted PostgreSQL
- * replication's copy-and-drain directions; nothing copies a table between nodes today.
+ * Some per-module reason strings and file docstrings still describe copy-and-drain directions;
+ * nothing copies a table between nodes today.
  */
 export type TableClass = "ledger" | "state" | "local";
 
@@ -48,8 +48,7 @@ export function appendOnlyTablesIn(classifications: readonly ClassifiedTable[]):
   return classifications.filter((c) => c.appendOnly === true).map((c) => c.table);
 }
 
-/** No production consumer. The `Publication` in the name is left over from the deleted PostgreSQL
- * replication. */
+/** No production consumer. */
 export function tablesForPublication(
   classifications: readonly ClassifiedTable[],
   cls: "ledger" | "state",

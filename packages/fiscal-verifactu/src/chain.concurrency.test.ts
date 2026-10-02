@@ -21,16 +21,7 @@ let node: SeededTill;
 /**
  * Twenty appends started together against ONE venue file.
  *
- * Two properties the PostgreSQL version of this suite held are GONE, with no counterpart here:
- *
- * 1. **Per-node parallelism.** Every writer serialises on the FILE, whichever node it appends to,
- *    so a busy node can stall a quiet one. Nothing can restore that while one file holds every
- *    node's chain.
- * 2. **The premise check that writers ran on distinct backends.** One writer at a time is now the
- *    design, not the thing that would make this suite theatre; `holds a second appender on the same
- *    chain until the first commits` is the discriminating case instead.
- *
- * What still holds: twenty appends started together and NOT awaited in turn must land on twenty
+ * Twenty appends started together and NOT awaited in turn must land on twenty
  * distinct, contiguous positions, each linked to its predecessor's huella. A queue that failed to
  * serialise breaks exactly that, because appends reading the same head compute the same position.
  */

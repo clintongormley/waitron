@@ -9,11 +9,11 @@ import { customType, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
  * Every helper below emits `text`, `integer` or `blob`, so picking the wrong helper of a group
  * leaves the generated schema byte-identical, and what separates them is the helper's NAME, its
  * read mapping and the typechecker. No column type here refuses a wrong value; the one refusal this
- * file builds is an `enumText` column's `check()` constraint. Measured 2026-09-21, the same seven
- * inserts against PGlite and a real `node:sqlite` file: `'not-a-uuid'`, `'not-a-day'`,
- * `'not-a-time'`, `'{not json'`, 1000.00 into `numeric(5, 2)`, 2147483648 into `integer` and 32768
- * into `smallint` were each refused by PostgreSQL and each ACCEPTED and stored by the SQLite column
- * that replaces it. `smallCount` and `bigCount` bound nothing, because SQLite's INTEGER is 64-bit
+ * file builds is an `enumText` column's `check()` constraint. Measured 2026-10-02 on `node:sqlite`
+ * (Node v26.7.0, SQLite 3.53.4), in a table with one plain `text` and one plain `integer` column:
+ * `'not-a-uuid'`, `'not-a-day'`, `'not-a-time'` and `'{not json'` into the `text` column, and
+ * 1000.00, 2147483648 and 32768 into the `integer` one, were each ACCEPTED and stored.
+ * `smallCount` and `bigCount` bound nothing, because SQLite's INTEGER is 64-bit
  * whatever the name says, and the integer-digit bounds of money, quantity and rate live only in
  * `@waitron/shared`'s converters.
  */
