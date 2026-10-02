@@ -1190,6 +1190,74 @@ it("leaves a box opened while an earlier name was saving", async () => {
   ).toBe("Food");
 });
 
+it("saves a second name, and its box answers Enter, Esc and leaving it, while an earlier name is still saving", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const table = await tableOf(el);
+  const boxGone = () =>
+    vi.waitFor(() =>
+      expect(table.shadowRoot!.querySelector('wt-input[name="category-name"]')).toBeNull(),
+    );
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await menuAction(el, "rename-f");
+  await nameBox(el);
+  await userEvent.keyboard("{Escape}");
+  await boxGone();
+  await menuAction(el, "rename-f");
+  await nameBox(el);
+  await userEvent.keyboard("Fresh{Enter}");
+  await boxGone();
+  expect(el.api.updateCategory).toHaveBeenCalledExactlyOnceWith("f", {
+    name: "Fresh",
+    parentId: null,
+  });
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Tea{Tab}");
+  await boxGone();
+  finish(folder("j", "Juice", "d"));
+  await vi.waitFor(() =>
+    expect(vi.mocked(el.api.createCategory).mock.calls).toEqual([
+      [{ name: "Juice", parentId: "d" }],
+      [{ name: "Tea", parentId: null }],
+    ]),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(el.api.updateCategory).toHaveBeenCalledOnce();
+  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+});
+
+it("shows a refused name at the bottom, not under a box opened since", async () => {
+  const el = await mountBrowser();
+  let refuse!: (reason: unknown) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        refuse = reject;
+      }),
+  );
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await menuAction(el, "rename-f");
+  const box = await nameBox(el);
+  refuse({ code: "category.invalid" });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+      codeMessage("category.invalid"),
+    ),
+  );
+  expect(box.error).toBe("");
+});
+
 it("Add category clears a typed search, so its name box shows", async () => {
   const el = await mountBrowser();
   await typeSearch(el, "cola");

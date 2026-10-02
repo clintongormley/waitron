@@ -424,6 +424,7 @@ export class ProductList extends LitElement {
   }
 
   #nameBox() {
+    const draft = this.nameDraft;
     return html`<wt-input
       part="name-box"
       name="category-name"
@@ -446,7 +447,8 @@ export class ProductList extends LitElement {
         }
       }}
       @focusout=${() => {
-        if (this.nameDraft === null || this.#nameSent) return;
+        // A box removed while it holds the cursor also loses it, after the next box's draft is set.
+        if (this.nameDraft !== draft || this.#nameSent) return;
         if (this.#nameValue.trim() === "") this.#cancelName();
         else this.#commitName();
       }}

@@ -1868,6 +1868,20 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual(["cancel", { name: "Juice" }]);
   });
 
+  it("sends nothing for a box that loses the cursor because another box replaced it", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(sent).toEqual([]);
+  });
+
   it("closes a category's menu when Rename is chosen from it", async () => {
     const { el, root } = await mountTree();
     const renames: unknown[] = [];

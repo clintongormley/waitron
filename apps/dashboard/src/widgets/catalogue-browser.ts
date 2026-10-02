@@ -86,7 +86,6 @@ export class CatalogueBrowser extends LitElement {
   @state() private search = "";
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
-  #nameBusy = false;
 
   @state() private selecting = false;
   @state() private selected: string[] = [];
@@ -400,9 +399,10 @@ export class CatalogueBrowser extends LitElement {
   }
   async #saveName(event: CustomEvent<{ name: string }>): Promise<void> {
     event.stopPropagation();
+    // A box sends its name once until refused, so saves run alongside each other, and each answer
+    // reaches its own box only while that box is still open.
     const draft = this.nameDraft;
-    if (!draft || this.#nameBusy) return;
-    this.#nameBusy = true;
+    if (!draft) return;
     this.nameError = "";
     const parentId =
       draft.kind === "create"
@@ -414,9 +414,9 @@ export class CatalogueBrowser extends LitElement {
       else await this.api.updateCategory(draft.categoryId, { name: event.detail.name, parentId });
       if (this.nameDraft === draft) this.nameDraft = null;
     } catch (error) {
-      this.nameError = Object.values(categoryRefusalErrors(error, parentId))[0]!;
-    } finally {
-      this.#nameBusy = false;
+      const message = Object.values(categoryRefusalErrors(error, parentId))[0]!;
+      if (this.nameDraft === draft) this.nameError = message;
+      else this.dropError = message;
     }
   }
   override render() {
@@ -471,7 +471,6 @@ export class CatalogueBrowser extends LitElement {
         @name-commit=${(event: CustomEvent<{ name: string }>) => void this.#saveName(event)}
         @name-cancel=${(event: Event) => {
           event.stopPropagation();
-          if (this.#nameBusy) return;
           this.nameDraft = null;
           this.nameError = "";
         }}
