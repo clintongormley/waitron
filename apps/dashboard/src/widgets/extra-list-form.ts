@@ -489,12 +489,11 @@ export class ExtraListForm extends LitElement {
 
   #namesSection(errors: Record<string, string>) {
     const locales = this.languages.languages;
-    const hasError =
-      !!errors["kitchen-name"] || locales.some((locale) => !!errors[`customer-name-${locale}`]);
+    const hasError = locales.some((locale) => !!errors[`customer-name-${locale}`]);
     return html`<wt-disclosure
       data-test="names-section"
-      heading=${t("extras.names_section")}
-      summary=${namesLine(locales, this.customerName, this.kitchenName)}
+      heading=${t("extras.customer_names")}
+      summary=${namesLine(locales, this.customerName)}
       .hasError=${hasError}
     >
       <div class="names">
@@ -512,19 +511,6 @@ export class ExtraListForm extends LitElement {
             ),
           this.name,
         )}
-        <wt-input
-          name="kitchen-name"
-          label=${t("extras.kitchen_name")}
-          placeholder=${this.name}
-          .disabled=${this.busy}
-          .value=${this.kitchenName}
-          .error=${errors["kitchen-name"] ?? ""}
-          .invalid=${!!errors["kitchen-name"]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#edit(() => (this.kitchenName = event.detail.value), "kitchen-name");
-          }}
-        ></wt-input>
       </div>
     </wt-disclosure>`;
   }
@@ -709,6 +695,19 @@ export class ExtraListForm extends LitElement {
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
               this.#edit(() => (this.name = event.detail.value), "name");
+            }}
+          ></wt-input>
+          <wt-input
+            name="kitchen-name"
+            label=${t("extras.kitchen_name")}
+            placeholder=${this.name}
+            .disabled=${this.busy}
+            .value=${this.kitchenName}
+            .error=${errors["kitchen-name"] ?? ""}
+            .invalid=${!!errors["kitchen-name"]}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.#edit(() => (this.kitchenName = event.detail.value), "kitchen-name");
             }}
           ></wt-input>
           ${this.#namesSection(errors)}

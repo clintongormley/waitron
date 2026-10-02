@@ -74,7 +74,7 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
           state === "server-error"
             ? { name: "That name is already used.", "labels.0.name": "Give this option a name." }
             : state === "names-error"
-              ? { kitchenName: "Too long for the kitchen." }
+              ? { customerName: "Too long for the menu." }
               : {},
       },
       theme,

@@ -699,7 +699,8 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
 heading and chevron in place when it opens (chevron at the row's end), and shows its summary under
 the heading only while closed. The Options and Extras editors' "Customer and kitchen
 names" line lists the names themselves (`ES … · EN … · Kitchen …`) instead of a count. The rule in
-`docs/developers/design-system.md` is rewritten to match.
+`docs/developers/design-system.md` is rewritten to match. (A171 later took the kitchen name out of
+that section and its line.)
 
 **The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — DONE (#1040).**
 In the editor for one options list (`apps/dashboard/src/widgets/option-list-form.ts`), an option's
@@ -716,23 +717,15 @@ the same words (owner, 2026-10-02): "Customer-facing names" / "Nombres para el c
 
 **The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171,
 owner 2026-10-01: "i think we should separate kitchen name from customer facing names
-(everywhere)") — OPEN.** Two editors put the kitchen name inside one "Customer and kitchen
-names" section with the customer-facing name in each language: an options list
-(`apps/dashboard/src/widgets/option-list-form.ts`) and an extras list (`extra-list-form.ts`). The
-window for one option (`option-label-form.ts`) was done with A170: Kitchen name sits directly under
-Name there, and the window has no folding section. The product editor already keeps them apart — the kitchen name
-is in its "Kitchen" section with course, the customer-facing names under
-"Descriptors" (`product-editor.ts`) — and the variant form (`variant-form.ts`) has no section but
-shows the kitchen name as its own field directly above the customer-facing names. **Decided
-(owner, 2026-10-01, mockup B):** in the two list editors the kitchen name is a plain field, always
-shown, directly under Name; only the customer-facing names stay in the folding section, now headed
-"Customer-facing names". The product editor and the variant form already keep the two apart and are
-left as they are. A170 added `options.customer_names` ("Customer-facing names", "Nombres para el
-cliente") for the option window's heading. The section heading strings
-(`options.names_section`, `extras.names_section` in `apps/dashboard/src/i18n/strings.ts`, English
-and Spanish) change with it, and so does the closed section's summary: A169 (#1026) landed first
-and its summary lists the kitchen name with the customer-facing names (`namesLine`,
-`apps/dashboard/src/widgets/form-fields.ts`).
+(everywhere)") — DONE (#PR).** In the options list and extras list editors
+(`apps/dashboard/src/widgets/option-list-form.ts`, `extra-list-form.ts`) the Kitchen name is a
+plain field, always shown, directly under Name (owner, 2026-10-01, mockup B). Only the
+customer-facing names fold, in a section headed "Customer-facing names" ("Nombres para el
+cliente"). Its closed line (`namesLine`, `apps/dashboard/src/widgets/form-fields.ts`) lists those
+names alone, and a refusal naming the kitchen name shows under the kitchen field without opening
+the section. The option window (`option-label-form.ts`, A170), the product editor
+(`product-editor.ts`) and the variant form (`variant-form.ts`) already kept the two apart and are
+unchanged.
 
 **A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — OPEN.**
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
@@ -978,7 +971,7 @@ stays pinned at the screen's edge.
 The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to
 the right of the header, at the moment you don't see it"_. `wt-disclosure`
 (`packages/ui/src/components/wt-disclosure.ts`) lays its header out as a grid of `1fr auto`, so on a
-wide form the chevron sits at the far edge, away from the "Customer and kitchen names" heading it
+wide form the chevron sits at the far edge, away from the "Customer-facing names" heading it
 belongs to. **Wanted:** the chevron directly after the heading text. It is the shared primitive, so
 every collapsible section moves with it — the extras list form, the product editor and the content
 languages screen as well (`grep -rln wt-disclosure apps`); LOOK at each, and at phone width.
@@ -1055,7 +1048,7 @@ list and extras list forms (the option form stopped folding its names with A170)
 in the summary's usual muted text. (C, the field names in full-strength text rather than bold, was
 the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give
 the primitive a way to take the parts (a slot, or name/value pairs) rather than building markup in
-each screen.
+each screen. Since A171 the line holds only the customer-facing names, so it has no "Kitchen:" part.
 
 **The product editor's folded sections follow the same pattern, with real values (owner,
 2026-10-02):** _"regarding products, i think we should include the field values not just the fact
@@ -1457,8 +1450,8 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033), A177 (#1037) and A170 (#1040) are done; next A171 and A172, built in
-the new style rather than restyled twice.
+A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040) and A171 (#PR) are done; next A172, built
+in the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line

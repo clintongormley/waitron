@@ -129,7 +129,7 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
                 "items.0.productId": "That product was deleted.",
               }
             : state === "names-error"
-              ? { kitchenName: "Too long for the kitchen." }
+              ? { customerName: "Too long for the menu." }
               : {},
       },
       theme,
