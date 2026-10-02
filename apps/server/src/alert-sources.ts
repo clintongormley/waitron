@@ -3,7 +3,7 @@
 // per-alert facts.
 
 import { and, count, eq, isNull, lt, min, ne, or } from "drizzle-orm";
-import { printAgents, printJobs, printers } from "@waitron/db";
+import { printAgents, printJobs, printers, type Transaction } from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
   type CardProviderContribution,
@@ -17,6 +17,11 @@ import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
+import {
+  stationPrintersDown,
+  stationScreensDark,
+  stationsWithWaitingDishes,
+} from "./station-outputs-down.js";
 import { FIRST_START_PENDING } from "./stream-host.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
@@ -306,6 +311,57 @@ export function printingAlertSource(): AlertSource {
           severity: "error",
           since: new Date(r.oldest!).toISOString(),
           screen: "printers",
+        });
+      }
+      return alerts;
+    },
+  };
+}
+
+export function stationOutputAlertSource(deps: {
+  locationId: string;
+  stationStates: (
+    tx: Transaction,
+    at: Date,
+  ) => Promise<
+    ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
+  >;
+}): AlertSource {
+  return {
+    area: "kitchen",
+    permission: "venue_service.manage",
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
+      const printersDown = await stationPrintersDown(tx, deps.locationId, now);
+      const screensDark = await stationScreensDark(tx, deps.locationId, now);
+      const states = await deps.stationStates(tx, now);
+      const closed = printersDown
+        .filter((p) => !states.get(p.stationId)?.open)
+        .map((p) => p.stationId);
+      const waiting = await stationsWithWaitingDishes(tx, deps.locationId, now, closed);
+      const alerts: OngoingAlert[] = [];
+      for (const p of printersDown) {
+        if (!states.get(p.stationId)?.open && !waiting.has(p.stationId)) continue;
+        alerts.push({
+          key: `station.printer_down:${p.stationId}:${p.printerId}`,
+          ...(states.get(p.stationId)?.isDefault
+            ? { code: "station.default_printer_down" }
+            : { code: "station.printer_down" }),
+          params: { station: p.stationName, printer: p.printerName },
+          severity: "error",
+          since: p.since,
+          screen: "prep-stations",
+        });
+      }
+      for (const s of screensDark) {
+        alerts.push({
+          key: `station.screens_dark:${s.stationId}`,
+          ...(states.get(s.stationId)?.isDefault
+            ? { code: "station.default_screens_dark" }
+            : { code: "station.screens_dark" }),
+          params: { station: s.stationName },
+          severity: "warning",
+          since: s.lastSeenAt ?? now.toISOString(),
+          screen: "prep-stations",
         });
       }
       return alerts;

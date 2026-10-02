@@ -11,7 +11,15 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, deviceProfiles, kitchenStations, printers, withTransaction } from "@waitron/db";
+import {
+  devices,
+  deviceProfiles,
+  kitchenStations,
+  printJobs,
+  printers,
+  stationPrinters,
+  withTransaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -715,12 +723,34 @@ describe("Device API — the device-guarded routes", () => {
 
     const { deviceId, jar } = await enrolKds(app, venue, venue.defaultStationId);
 
+    const ownPrinter = await seedPrinter(venue.cfg);
+    const foreignPrinter = await seedPrinter(venue.cfg);
+    await suite.db.insert(stationPrinters).values([
+      { stationId: venue.defaultStationId, printerId: ownPrinter },
+      { stationId: fria.id, printerId: foreignPrinter },
+    ]);
+    for (const printerId of [ownPrinter, foreignPrinter]) {
+      await suite.db.insert(printJobs).values({
+        locationId: venue.cfg.locationId,
+        printerId,
+        payload: Uint8Array.of(1),
+        status: "failed",
+        attempts: 5,
+        createdAt: "2026-10-02T18:00:00.000Z",
+      });
+    }
+
     const stationRes = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(stationRes.status).toBe(200);
     const station = (await stationRes.json()) as {
-      station: { id: string; queue: { items: { id: string }[] }[] };
+      station: {
+        id: string;
+        queue: { items: { id: string }[] }[];
+        printersDown: { printerId: string }[];
+      };
     };
     expect(station.station.id).toBe(venue.defaultStationId);
+    expect(station.station.printersDown).toMatchObject([{ printerId: ownPrinter }]);
     const queuedItemIds = station.station.queue.flatMap((g) => g.items.map((i) => i.id));
     expect(queuedItemIds).toContain(ownItem);
     expect(queuedItemIds).not.toContain(foreignItem);

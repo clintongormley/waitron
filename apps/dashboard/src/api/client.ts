@@ -31,6 +31,7 @@ export interface MadeAt {
   stationId: string | null;
   stationName: string | null;
   noPreparation: boolean;
+  noReplacement: boolean;
   variesByZone: boolean;
 }
 import type {

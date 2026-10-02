@@ -15,6 +15,7 @@ import type {
 } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
+import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
@@ -202,7 +203,12 @@ type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
  * `menuVersionId` is the menu version an UNSAVED line was priced against on the till: what staff
  * saw, never a request for that version's prices. Absent, the line takes the live version.
  */
-export type LineExtras = { note?: string; variantId?: string; menuVersionId?: string };
+export type LineExtras = {
+  note?: string;
+  variantId?: string;
+  menuVersionId?: string;
+  makeAt?: string | null;
+};
 
 /**
  * The extras and options lists one published offer puts in front of a diner, as the validators
@@ -365,7 +371,7 @@ const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
  * the same basket rates those rather than pricing it twice. The stored gross unit price, class and
  * classification are what the line files.
  */
-async function priceOrderLines(
+export async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
@@ -387,6 +393,7 @@ async function priceOrderLines(
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
   snapshot?: ZoneOffers,
+  invalidMakeAt: "refuse" | "ignore" = "refuse",
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
@@ -464,6 +471,30 @@ async function priceOrderLines(
 
   // `grossBasketWithOptions` expands each item to a parent row then its child rows in this same
   // order, so `lineMeta[i]` lines up with `gross.lines[i]` one-for-one.
+  const namedStations = [
+    ...new Set(lines.flatMap((line) => (line.makeAt == null ? [] : [line.makeAt]))),
+  ];
+  const activeStations = new Set(
+    namedStations.length === 0
+      ? []
+      : (
+          await tx
+            .select({ id: kitchenStations.id })
+            .from(kitchenStations)
+            .where(
+              and(
+                inArray(kitchenStations.id, namedStations),
+                eq(kitchenStations.locationId, cfg.locationId),
+                eq(kitchenStations.active, true),
+              ),
+            )
+        ).map((station) => station.id),
+  );
+  if (invalidMakeAt === "refuse") {
+    const invalidStationId = namedStations.find((stationId) => !activeStations.has(stationId));
+    if (invalidStationId !== undefined)
+      throw new AppError("route.station_inactive", { stationId: invalidStationId });
+  }
   type LineMeta =
     | {
         kind: "parent";
@@ -471,6 +502,7 @@ async function priceOrderLines(
         menuItemId: string;
         courseId: string | null;
         note: string | null;
+        makeAt: string | null;
       }
     | { kind: "child"; productId: string; menuItemId: string; extraListId: string };
   const items: BasketItemWithOptions[] = [];
@@ -550,6 +582,7 @@ async function priceOrderLines(
       menuItemId: line.menuItemId,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
+      makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
     });
     for (const child of extraChildren) {
       lineMeta.push({
@@ -632,6 +665,7 @@ async function priceOrderLines(
       category: line.category ?? null,
       courseId: meta.kind === "parent" ? meta.courseId : null,
       note: meta.kind === "parent" ? meta.note : null,
+      makeAtStationId: meta.kind === "parent" ? meta.makeAt : null,
       extraListId: meta.kind === "child" ? meta.extraListId : null,
       // From the priced row, never the request: only it holds the re-keyed customer text.
       variantName: line.variantName ?? null,
@@ -927,6 +961,7 @@ export async function createOpenOrder(
     zoneId?: string;
     partyId?: string | null;
     creditedTo?: string;
+    invalidMakeAt?: "ignore";
   } = {},
 ): Promise<{
   orderNumber: number;
@@ -950,7 +985,15 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  const pricedLines = await priceOrderLines(tx, cfg, id, lines, effectiveZoneId);
+  const pricedLines = await priceOrderLines(
+    tx,
+    cfg,
+    id,
+    lines,
+    effectiveZoneId,
+    undefined,
+    placement.invalidMakeAt ?? "refuse",
+  );
   const { gross, identities, lineContexts, offers } = pricedLines;
   const lineRows = pricedLines.lineRows.map((row) => ({
     ...row,
@@ -1143,7 +1186,7 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
  * Every order routes by exceptions, folder claims and the active default station. Station and
  * course are snapshotted at fire time: later rule edits never move work already sent. A made-here
  * item is recorded and never printed.
- * A null outcome refuses `station.no_default`, unless payment uses `unroutable: "skip"` to leave
+ * An unroutable outcome refuses the send, unless payment uses `unroutable: "skip"` to leave
  * the dish unfired and unstamped and return it for the paid-order alert.
  */
 export async function fireLines(
@@ -1157,17 +1200,48 @@ export async function fireLines(
   lines: (FireableLine & { hold?: boolean; release?: boolean })[],
   options: {
     unroutable?: "skip";
+    keepStations?: ReadonlyMap<string, string>;
     keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
   } = {},
 ): Promise<FireableLine[]> {
+  // One clock reading for the whole round, including routing and the fire stamp.
+  const now = new Date();
+  const firedAt = now.toISOString();
   const parentLines = lines.filter((line) => line.parentLineId === null);
   if (parentLines.length === 0) {
     return [];
   }
   lines = parentLines;
+  const chosenRows = await tx
+    .select({
+      id: workingOrderLines.id,
+      makeAtStationId: workingOrderLines.makeAtStationId,
+      stationActive: kitchenStations.active,
+      stationLocationId: kitchenStations.locationId,
+    })
+    .from(workingOrderLines)
+    .leftJoin(kitchenStations, eq(kitchenStations.id, workingOrderLines.makeAtStationId))
+    .where(
+      inArray(
+        workingOrderLines.id,
+        lines.map((line) => line.id),
+      ),
+    );
+  const chosenStations = new Map(
+    chosenRows.flatMap((row) =>
+      row.makeAtStationId !== null && row.stationActive && row.stationLocationId === cfg.locationId
+        ? [[row.id, row.makeAtStationId] as const]
+        : [],
+    ),
+  );
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
   const productIds = [
-    ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
+    ...new Set(
+      lines
+        .filter((line) => !chosenStations.has(line.id))
+        .map((line) => line.productId)
+        .filter((id): id is string => id !== null),
+    ),
   ];
 
   const makers = await VENUE_SERVICE.resolveMakers(
@@ -1175,9 +1249,24 @@ export async function fireLines(
     cfg,
     serviceContext?.zoneId ?? null,
     productIds,
+    now,
   );
+  const keepStates = options.keepStations?.size
+    ? await VENUE_SERVICE.stationStates(tx, cfg, now)
+    : null;
+  const stationFor = (line: FireableLine): string | null => {
+    const chosen = chosenStations.get(line.id);
+    if (chosen !== undefined) return chosen;
+    const outcome = line.productId === null ? undefined : makers.get(line.productId);
+    if (outcome?.kind === "made") return null;
+    if (outcome?.kind === "no_replacement") {
+      const kept = options.keepStations?.get(line.id);
+      if (kept !== undefined && keepStates?.get(kept)?.active) return kept;
+    }
+    return null;
+  };
   let fallbackStationId: string | null = null;
-  if (lines.some((line) => line.productId === null)) {
+  if (lines.some((line) => line.productId === null && !chosenStations.has(line.id))) {
     const [fallback] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
@@ -1193,15 +1282,25 @@ export async function fireLines(
       throw new AppError("station.no_default", { locationId: cfg.locationId });
   }
   const unrouted: FireableLine[] = [];
+  const noReplacement: { stationId: string; productId: string }[] = [];
   lines = lines.filter((line) => {
+    const outcome = line.productId === null ? undefined : makers.get(line.productId);
     const hasMaker =
-      line.productId === null ? fallbackStationId !== null : makers.get(line.productId) != null;
+      stationFor(line) !== null ||
+      (line.productId === null ? fallbackStationId !== null : outcome?.kind === "made");
     if (hasMaker) return true;
-    if (options.unroutable !== "skip")
+    if (outcome?.kind === "no_replacement")
+      noReplacement.push({ stationId: outcome.stationId, productId: line.productId! });
+    if (options.unroutable !== "skip" && outcome?.kind !== "no_replacement")
       throw new AppError("station.no_default", { locationId: cfg.locationId });
     unrouted.push(line);
     return false;
   });
+  if (noReplacement.length > 0 && options.unroutable !== "skip")
+    throw new AppError("station.no_replacement", {
+      stationId: noReplacement[0]!.stationId,
+      productIds: noReplacement.map((line) => line.productId),
+    });
   if (lines.length === 0) return unrouted;
 
   const madeHere = await readMadeHereStations(tx, cfg.sendingDeviceId);
@@ -1241,14 +1340,12 @@ export async function fireLines(
   const earliestDisplayOrder =
     orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
 
-  // One clock reading for the whole round, so every item of it carries the same `fired_at` and
-  // every line sent in it the same `sent_at`.
-  const firedAt = nowIso();
   const sentLineIds: string[] = [];
   // A line with nowhere to go refuses the whole fire.
   const values = lines
     .map((line) => {
-      const maker = line.productId === null ? null : makers.get(line.productId);
+      const outcome = line.productId === null ? undefined : makers.get(line.productId);
+      const maker = outcome?.kind === "made" ? outcome.route : null;
       const courseId = courseByLine.get(line.id) ?? null;
       const courseFired =
         line.release === true ||
@@ -1257,11 +1354,12 @@ export async function fireLines(
             firedCourseIds.has(courseId) ||
             displayOrderByCourse.get(courseId) === earliestDisplayOrder));
       // A no-preparation line has no kitchen station or ticket item.
-      if (maker?.kind === "no_preparation") {
+      if (maker?.kind === "no_preparation" && stationFor(line) === null) {
         if (courseFired) sentLineIds.push(line.id);
         return null;
       }
-      const stationId = maker?.kind === "station" ? maker.stationId : fallbackStationId!;
+      const stationId =
+        stationFor(line) ?? (maker?.kind === "station" ? maker.stationId : fallbackStationId!);
       const kept = options.keepMadeHere?.get(line.id);
       const made =
         kept === undefined
@@ -1396,11 +1494,18 @@ async function heldNoRouteLines(
         inScope,
       ),
     );
-  const routes = await VENUE_SERVICE.resolveMakers(tx, cfg, serviceContext?.zoneId ?? null, [
-    ...new Set(candidates.map((line) => line.productId!)),
-  ]);
+  const routes = await VENUE_SERVICE.resolveMakers(
+    tx,
+    cfg,
+    serviceContext?.zoneId ?? null,
+    [...new Set(candidates.map((line) => line.productId!))],
+    new Date(),
+  );
   return candidates
-    .filter((line) => routes.get(line.productId!)?.kind === "no_preparation")
+    .filter((line) => {
+      const outcome = routes.get(line.productId!);
+      return outcome?.kind === "made" && outcome.route.kind === "no_preparation";
+    })
     .map((line) => line.id);
 }
 
@@ -2845,6 +2950,7 @@ export async function carveOffLines(
       servedAt: workingOrderLines.servedAt,
       servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
+      makeAtStationId: workingOrderLines.makeAtStationId,
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       groupId: workingOrderLines.groupId,
@@ -3028,6 +3134,7 @@ export async function carveOffLines(
         servedQuantity: splitServed,
         servedAt: splitServed === movedThousandths ? (row.servedAt ?? nowIso()) : null,
         courseId: row.courseId,
+        makeAtStationId: row.makeAtStationId,
         note: row.note,
         extraListId: row.extraListId,
         groupId: row.groupId,
@@ -3204,6 +3311,7 @@ export interface HeldOrder {
     /** The variant the line was sold as, absent when it names none. */
     variantId?: string;
     quantity: string;
+    makeAt: string | null;
     /** One entry per CHILD line: the frozen values, and the list the pick was taken from. */
     extras?: {
       productId: string | null;
@@ -3353,6 +3461,7 @@ async function readBasketOrder(
         optionSnapshots: workingOrderLines.optionSnapshots,
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
+        makeAt: workingOrderLines.makeAtStationId,
         parentLineId: workingOrderLines.parentLineId,
         extraListId: workingOrderLines.extraListId,
         note: workingOrderLines.note,
@@ -3398,6 +3507,7 @@ async function readBasketOrder(
           return {
             productId: line.productId,
             quantity: line.quantity,
+            makeAt: line.makeAt,
             optionSnapshots: line.optionSnapshots,
             ...(line.optionSnapshots.length ? { workingOrderLineId: line.id } : {}),
           };
@@ -3418,6 +3528,7 @@ async function readBasketOrder(
           menuItemId: context.menuItemId,
           productId: line.productId,
           quantity: line.quantity,
+          makeAt: line.makeAt,
           ...(extras.length === 0 ? {} : { extras }),
           ...(line.note === null ? {} : { note: line.note }),
           ...(line.variantId === null ? {} : { variantId: line.variantId }),
@@ -3489,6 +3600,7 @@ interface IssueOnSave {
 
 /** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
 export interface OrderLinePatch {
+  makeAt?: string | null;
   quantity?: string;
   note?: string | null;
   options?: OptionSelection[];
@@ -3510,6 +3622,7 @@ interface EditableLine {
   optionSnapshots: OptionSnapshot[];
   extraListId: string | null;
   courseId: string | null;
+  makeAtStationId: string | null;
   sentAt: string | null;
   groupId: string | null;
   creditedTo: string | null;
@@ -3564,6 +3677,7 @@ function kitchenStateOf(line: EditableLine): EditableOrder["newWork"] {
 
 /** What an edit asks of one stored dish line. `null` options or extras keep the stored ones. */
 interface LineIntent {
+  makeAt?: string | null;
   quantity: string;
   note: string | null;
   options: { set: unknown } | null;
@@ -3720,6 +3834,7 @@ async function readEditableOrder(
       optionSnapshots: workingOrderLines.optionSnapshots,
       extraListId: workingOrderLines.extraListId,
       courseId: workingOrderLines.courseId,
+      makeAtStationId: workingOrderLines.makeAtStationId,
       sentAt: workingOrderLines.sentAt,
       groupId: workingOrderLines.groupId,
       groupState: orderGroups.state,
@@ -3751,6 +3866,7 @@ async function readEditableOrder(
     optionSnapshots: row.optionSnapshots,
     extraListId: row.extraListId,
     courseId: row.courseId,
+    makeAtStationId: row.makeAtStationId,
     sentAt: row.sentAt,
     groupId: row.groupId,
     creditedTo: row.creditedTo,
@@ -3931,6 +4047,7 @@ async function applyLineEdits(
     /** The dish quantity the stored row takes. */
     quantity: Decimal;
     note: string | null;
+    makeAt: string | null;
     optionSnapshots: OptionSnapshot[];
     kept: { child: EditableLine; perDish: number }[];
     removedChildren: EditableLine[];
@@ -3950,7 +4067,8 @@ async function applyLineEdits(
         /** The stored line whose group the new one joins, for units added apart from it. */
         joins?: EditableParent;
         /** The sent dish whose kitchen decision the added units follow. */
-        follows?: EditableParent;
+        origin?: EditableParent;
+        inheritMakeAt?: boolean;
       }
     | { kind: "extras" }
     | { kind: "check" }
@@ -3964,6 +4082,16 @@ async function applyLineEdits(
       positive: true,
     });
     const requested = decimal(intent.quantity);
+    const rise = compareDecimal(requested, parent.quantity);
+    if (
+      intent.makeAt !== undefined &&
+      intent.makeAt !== null &&
+      ((parent.sentAt === null &&
+        parent.ticket === null &&
+        intent.makeAt !== parent.makeAtStationId) ||
+        ((parent.sentAt !== null || parent.ticket !== null) && rise > 0))
+    )
+      await requireMakeAtStation(tx, cfg, intent.makeAt);
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     if (intent.options !== null) {
@@ -3992,10 +4120,13 @@ async function applyLineEdits(
           });
     const changed =
       intent.note !== parent.note ||
+      (parent.sentAt === null &&
+        parent.ticket === null &&
+        intent.makeAt !== undefined &&
+        intent.makeAt !== parent.makeAtStationId) ||
       optionSnapshots !== parent.optionSnapshots ||
       extras.added.length > 0 ||
       extras.removed.length > 0;
-    const rise = compareDecimal(requested, parent.quantity);
     if (!changed && rise === 0) continue;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
@@ -4019,6 +4150,7 @@ async function applyLineEdits(
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
       quantity,
+      makeAt: intent.makeAt === undefined ? parent.makeAtStationId : intent.makeAt,
       ...(intent.note === null ? {} : { note: intent.note }),
       frozenOptions: optionSnapshots,
       extras: picks,
@@ -4030,8 +4162,19 @@ async function applyLineEdits(
       });
       pricedAs.push(
         addedApart
-          ? { kind: "line", kitchen: kitchenStateOf(parent), joins: parent }
-          : { kind: "line", kitchen: "fire", follows: parent },
+          ? {
+              kind: "line",
+              kitchen: kitchenStateOf(parent),
+              joins: parent,
+              origin: parent,
+              inheritMakeAt: intent.makeAt === undefined,
+            }
+          : {
+              kind: "line",
+              kitchen: "fire",
+              origin: parent,
+              inheritMakeAt: intent.makeAt === undefined,
+            },
       );
     }
     if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
@@ -4058,6 +4201,10 @@ async function applyLineEdits(
       action,
       quantity,
       note: intent.note,
+      makeAt:
+        parent.sentAt === null && parent.ticket === null && intent.makeAt !== undefined
+          ? intent.makeAt
+          : parent.makeAtStationId,
       optionSnapshots,
       kept: extras.kept,
       removedChildren: extras.removed,
@@ -4090,7 +4237,17 @@ async function applyLineEdits(
   }
 
   // Priced before anything is written, so a refused line leaves the order as it was.
-  const priced = await priceOrderLines(tx, cfg, orderId, pricing, context?.zoneId, snapshot);
+  for (const line of plan.fresh)
+    if (line.makeAt != null) await requireMakeAtStation(tx, cfg, line.makeAt);
+  const priced = await priceOrderLines(
+    tx,
+    cfg,
+    orderId,
+    pricing,
+    context?.zoneId,
+    snapshot,
+    "ignore",
+  );
   const groups: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.lineContexts }[] = [];
   priced.lineRows.forEach((row, index) => {
     if (row.parentLineId === null) groups.push({ rows: [], contexts: [] });
@@ -4180,6 +4337,7 @@ async function applyLineEdits(
   const insertedContexts: typeof priced.lineContexts = [];
   const fireNow: Parameters<typeof fireLines>[3] = [];
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
+  const keepStations = new Map<string, string>();
   for (const change of changes.filter(({ action }) => action === "free" || action === "change")) {
     const { parent, quantity, note, optionSnapshots, kept } = change;
     await tx
@@ -4188,6 +4346,7 @@ async function applyLineEdits(
         quantity: decimalToThousandths(quantity),
         lineTotal: decimalToCents(grossLineTotal(parent.unitPriceGross, quantity)),
         note,
+        makeAtStationId: change.makeAt,
         optionSnapshots,
       })
       .where(eq(workingOrderLines.id, parent.id));
@@ -4228,6 +4387,7 @@ async function applyLineEdits(
         stationId: parent.ticket!.stationId,
       });
       await tx.delete(ticketItems).where(eq(ticketItems.id, parent.ticket!.id));
+      keepStations.set(parent.id, parent.ticket!.stationId);
       fireNow.push({
         id: parent.id,
         productId: parent.productId,
@@ -4256,14 +4416,26 @@ async function applyLineEdits(
       joinedHeld.push({ groupId, lineId: group.rows[0]!.id! });
     }
     for (const [rowIndex, row] of group.rows.entries()) {
-      inserted.push({ ...row, lineNo: ++nextLineNo, groupId, creditedTo: operatorId ?? null });
+      inserted.push({
+        ...row,
+        lineNo: ++nextLineNo,
+        groupId,
+        creditedTo: operatorId ?? null,
+        ...(as.inheritMakeAt &&
+        as.origin !== undefined &&
+        row.parentLineId === null &&
+        row.makeAtStationId == null &&
+        as.origin.makeAtStationId !== null
+          ? { makeAtStationId: as.origin.makeAtStationId }
+          : {}),
+      });
       insertedContexts.push(group.contexts[rowIndex]!);
       if (row.parentLineId === null && as.kitchen !== "none") {
-        const followed = as.joins ?? as.follows;
-        if (followed?.ticket !== null && followed?.ticket !== undefined) {
+        if (as.origin?.ticket !== null && as.origin?.ticket !== undefined) {
+          keepStations.set(row.id!, as.origin.ticket.stationId);
           keepMadeHere.set(row.id!, {
-            madeHere: followed.ticket.madeHere,
-            stationId: followed.ticket.stationId,
+            madeHere: as.origin.ticket.madeHere,
+            stationId: as.origin.ticket.stationId,
           });
         }
         const courseId = row.courseId ?? null;
@@ -4292,7 +4464,7 @@ async function applyLineEdits(
   // After the extras a line gains are written: a slip reads the line as it now stands.
   await correctHoldTickets(tx, cfg, held.given, { kind: "HOLD CHANGED", direction: "added" });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
-  await fireLines(tx, cfg, orderId, fireNow, { keepMadeHere });
+  await fireLines(tx, cfg, orderId, fireNow, { keepStations, keepMadeHere });
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
@@ -4465,6 +4637,7 @@ export async function updateHeldOrder(
           note: screenNote(line.note),
           options: { set: line.options ?? [] },
           extras: { set: line.extras ?? [] },
+          makeAt: line.makeAt,
         },
       });
     }
@@ -4531,6 +4704,7 @@ export async function updateOrderLine(
             note: Object.hasOwn(patch, "note") ? screenNote(patch.note) : parent.note,
             options: patch.options === undefined ? null : { set: patch.options },
             extras: patch.extras === undefined ? null : { set: patch.extras },
+            makeAt: patch.makeAt,
           },
         },
       ],

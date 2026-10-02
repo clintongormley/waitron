@@ -19,7 +19,7 @@ import { createProduct } from "@waitron/catalogue";
 import { hashPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import { createException } from "@waitron/venue-service";
+import { createException, setStationFallback, setStationToday } from "@waitron/venue-service";
 import { takeBillPayment } from "./bill-payments.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
@@ -29,7 +29,16 @@ import { placeGroups } from "./order-groups.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { markCollected, parkOrder } from "./working-order.js";
+import {
+  carveOffLines,
+  fireLines,
+  markCollected,
+  parkOrder,
+  placeOrder,
+  readOrderRevision,
+  unsentDishLines,
+  updateOrderLine,
+} from "./working-order.js";
 
 // A pay-first order, or an open counter order in a zone that sends before payment, is sent to the
 // kitchen when it is paid. A dish no rule or active default station can take does not refuse the
@@ -288,7 +297,7 @@ function dishNotSent(workingOrderId: string, dishes: string, orderNumber: number
 }
 
 describe("paying a pay-first order, or an open counter order in a zone that sends before payment, whose dish no kitchen station can take", () => {
-  it("sends a dish whose station is switched off to the next matching route whose station is on", async () => {
+  it("alerts for a switched-off station instead of using a later matching rule", async () => {
     const made = await dish("Steak");
     const closed = await station("Closed grill");
     const open = await station("Kitchen");
@@ -301,9 +310,11 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const res = await payCash(await enrolTill(), id);
 
     expect(res.status).toBe(200);
-    expect(await kitchenItems(id)).toEqual([{ productId: made.productId, stationId: open }]);
+    expect(await kitchenItems(id)).toEqual([]);
     expect(await filedFor(id)).toBe(1);
-    expect(await alertsFor(await saleOf(id))).toEqual([]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3")),
+    ]);
   });
 
   it("takes a cash payment, files it, sends nothing for the dish and raises one alert naming it", async () => {
@@ -781,7 +792,632 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         }),
       );
 
-    await expect(round(stranded)).rejects.toMatchObject({ code: "station.no_default" });
+    await expect(round(stranded)).rejects.toMatchObject({ code: "station.no_replacement" });
     await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
+  });
+
+  it("stores a chosen station on a parked dish and refuses a switched-off station", async () => {
+    const made = await dish("Chosen lager");
+    const chosen = await station("Upstairs bar");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+      zoneId: v.counter.zoneId,
+    });
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(line?.makeAt).toBe(chosen);
+    await switchOff(chosen);
+    await expect(
+      parkOrder({ db: suite.db }, v.cfg, {
+        id: randomUUID(),
+        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+        zoneId: v.counter.zoneId,
+      }),
+    ).rejects.toMatchObject({ code: "route.station_inactive" });
+  });
+
+  it("saves a retrieved order when its chosen station is the only edit", async () => {
+    const made = await dish("Retrieved lager");
+    const chosen = await station("Upstairs bar");
+    const id = randomUUID();
+    await park(id, [made]);
+    const before = await app.request(`/api/working-orders/${id}`, { headers: { cookie: session } });
+    expect(before.status).toBe(200);
+    const order = (await before.json()) as {
+      revision: number;
+      lines: { menuItemId: string; quantity: string; workingOrderLineId: string }[];
+    };
+    const saved = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        revision: order.revision,
+        lines: order.lines.map((line) => ({
+          menuItemId: line.menuItemId,
+          quantity: line.quantity,
+          workingOrderLineId: line.workingOrderLineId,
+          makeAt: chosen,
+        })),
+      }),
+    });
+    expect(saved.status, await saved.clone().text()).toBe(200);
+    const [stored] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(stored?.makeAt).toBe(chosen);
+    const after = await app.request(`/api/working-orders/${id}`, { headers: { cookie: session } });
+    const read = (await after.json()) as { lines: { makeAt: string | null }[] };
+    expect(read.lines[0]?.makeAt).toBe(chosen);
+    const copy = (await saved.json()) as { revision: number };
+    const repeat = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        revision: copy.revision,
+        lines: order.lines.map((line) => ({
+          menuItemId: line.menuItemId,
+          quantity: line.quantity,
+          workingOrderLineId: line.workingOrderLineId,
+        })),
+      }),
+    });
+    expect(repeat.status).toBe(200);
+    const [kept] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(kept?.makeAt).toBe(chosen);
+    const next = (await repeat.json()) as { revision: number };
+    const cleared = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        revision: next.revision,
+        lines: order.lines.map((line) => ({
+          menuItemId: line.menuItemId,
+          quantity: line.quantity,
+          workingOrderLineId: line.workingOrderLineId,
+          makeAt: null,
+        })),
+      }),
+    });
+    expect(cleared.status).toBe(200);
+    const [empty] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(empty?.makeAt).toBeNull();
+  });
+
+  it("keeps an unchanged chosen station after it is switched off, including with a note edit", async () => {
+    const made = await dish("Later closed lager");
+    const chosen = await station("Later closed bar");
+    const id = randomUUID();
+    const parked = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        id,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+      }),
+    });
+    expect(parked.status).toBe(200);
+    const retrieved = await app.request(`/api/working-orders/${id}`, {
+      headers: { cookie: session },
+    });
+    const order = (await retrieved.json()) as {
+      revision: number;
+      lines: { menuItemId: string; quantity: string; workingOrderLineId: string; makeAt: string }[];
+    };
+    expect(order.lines[0]?.makeAt).toBe(chosen);
+    await switchOff(chosen);
+    const bodyLine = {
+      menuItemId: order.lines[0]!.menuItemId,
+      quantity: order.lines[0]!.quantity,
+      workingOrderLineId: order.lines[0]!.workingOrderLineId,
+      makeAt: order.lines[0]!.makeAt,
+    };
+    const same = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ revision: order.revision, lines: [bodyLine] }),
+    });
+    expect(same.status, await same.clone().text()).toBe(200);
+    const withNote = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        revision: ((await same.json()) as { revision: number }).revision,
+        lines: [{ ...bodyLine, note: "extra cold" }],
+      }),
+    });
+    expect(withNote.status, await withNote.clone().text()).toBe(200);
+    const [stored] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId, note: workingOrderLines.note })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(stored).toMatchObject({ makeAt: chosen, note: "extra cold" });
+  });
+
+  it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
+    "asks for a counter pay dish in %s before taking money",
+    async (mode) => {
+      const made = await strandedDish(`Question ${mode}`);
+      await inTx(v, (tx) =>
+        offerProducts(tx, v.cfg, {
+          zone: "counter",
+          serviceMode: mode,
+          productIds: [made.productId],
+        }),
+      );
+      const response = await app.request("/api/dead-ends/sale", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: session },
+        body: JSON.stringify({
+          step: "pay",
+          zoneId: v.counter.zoneId,
+          lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+        }),
+      });
+      expect(response.status).toBe(200);
+      const answer = (await response.json()) as {
+        sends: boolean;
+        deadEnds: { key: string; name: string; why: string }[];
+      };
+      expect(answer.sends).toBe(true);
+      expect(answer.deadEnds).toMatchObject([{ key: "0", name: made.name, why: "switched_off" }]);
+    },
+  );
+
+  it("asks an existing sale in its stored zone when the request omits or conflicts on zone", async () => {
+    const made = await dish("Table zone lager");
+    await inTx(v, (tx) =>
+      offerProducts(tx, v.cfg, {
+        zone: "tables",
+        serviceMode: "prepay",
+        productIds: [made.productId],
+      }),
+    );
+    const tableStation = await station("Table bar");
+    const counterStation = await station("Counter bar");
+    await routeTo(made.productId, tableStation, v.tables.zoneId);
+    await routeTo(made.productId, counterStation, v.counter.zoneId);
+    await switchOff(tableStation);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.tables.zoneId,
+      lines: [{ menuItemId: made.tablesOffer, quantity: "1" }],
+    });
+    for (const suppliedZone of [undefined, v.counter.zoneId]) {
+      const question = await app.request("/api/dead-ends/sale", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: session },
+        body: JSON.stringify({
+          step: "pay",
+          workingOrderId: id,
+          ...(suppliedZone === undefined ? {} : { zoneId: suppliedZone }),
+          lines: [{ menuItemId: made.tablesOffer, quantity: "1" }],
+        }),
+      });
+      expect(question.status, await question.clone().text()).toBe(200);
+      expect(await question.json()).toMatchObject({
+        sends: true,
+        deadEnds: [{ key: "0", name: made.name, stationId: tableStation }],
+      });
+    }
+    const paid = await payCash(await enrolTill(), id);
+    expect(paid.status, await paid.clone().text()).toBe(200);
+    expect(await kitchenItems(id)).toEqual([]);
+    expect((await alertsFor(await saleOf(id))).map((alert) => alert.code)).toContain(
+      "route.dish_not_sent",
+    );
+  });
+
+  it("names an unsent order line and stores the answer with its revision", async () => {
+    const made = await strandedDish("Order question");
+    const chosen = await station("Fallback bar");
+    const id = randomUUID();
+    await park(id, [made]);
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    const question = await app.request("/api/dead-ends/order", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ workingOrderId: id }),
+    });
+    expect(question.status).toBe(200);
+    const answer = (await question.json()) as {
+      sends: boolean;
+      revision: number;
+      deadEnds: { key: string }[];
+    };
+    expect(answer).toMatchObject({ sends: true, deadEnds: [{ key: line!.id }] });
+    const saved = await app.request(`/api/working-orders/${id}/make-at`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ revision: answer.revision, lines: { [line!.id]: chosen } }),
+    });
+    expect(saved.status).toBe(200);
+    const [stored] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, line!.id)),
+    );
+    expect(stored?.makeAt).toBe(chosen);
+    const stale = await app.request(`/api/working-orders/${id}/make-at`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ revision: answer.revision, lines: { [line!.id]: null } }),
+    });
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).error.code).toBe("working_order.out_of_date");
+  });
+
+  it("copies the chosen station to both parts of a split dish", async () => {
+    const made = await dish("Split lager");
+    const chosen = await station("Split bar");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "2", makeAt: chosen }],
+    });
+    await inTx(v, (tx) =>
+      carveOffLines(tx, v.cfg, id, id, [{ lineNo: 1, quantity: "1" }], { refuseHeld: false }),
+    );
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(rows.map((row) => row.makeAt)).toEqual([chosen, chosen]);
+  });
+
+  it("ignores a switched-off chosen station on a cash sale and lets the payment complete", async () => {
+    const made = await dish("Cash lager");
+    const closed = await station("Cash bar");
+    await switchOff(closed);
+    const id = randomUUID();
+    const response = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${session}; ${await enrolTill()}` },
+      body: JSON.stringify({
+        workingOrderId: id,
+        zoneId: v.counter.zoneId,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: closed }],
+        tender: { method: "cash", amount: "50.00" },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const [stored] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(stored?.makeAt).toBeNull();
+  });
+
+  it("sends a cash sale to a chosen station that is closed but still switched on", async () => {
+    const made = await dish("Chosen closed lager");
+    const chosen = await station("Closed chosen bar");
+    await routeTo(made.productId, chosen);
+    await inTx(v, (tx) => setStationToday(tx, v.cfg, chosen, "closed", new Date()));
+    const id = randomUUID();
+    const paid = await app.request("/api/sales", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${session}; ${await enrolTill()}`,
+      },
+      body: JSON.stringify({
+        workingOrderId: id,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+        tender: { method: "cash", amount: "50.00" },
+      }),
+    });
+    expect(paid.status, await paid.clone().text()).toBe(200);
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(line?.makeAt).toBe(chosen);
+    expect(await kitchenItems(id)).toEqual([{ productId: made.productId, stationId: chosen }]);
+  });
+
+  it("ignores a switched-off chosen station on an integrated card payment", async () => {
+    const made = await dish("Card lager");
+    const closed = await station("Card bar");
+    await switchOff(closed);
+    const id = randomUUID();
+    const out = await payWorkingOrderIntegrated(
+      {
+        db: suite.db,
+        backend: v.backend,
+        clock: v.clock,
+        provider: new SimulatorPaymentProvider(suite.db),
+      },
+      v.cfg,
+      {
+        id,
+        zoneId: v.counter.zoneId,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: closed }],
+        simulationOutcome: "captured",
+      },
+    );
+    expect(out.outcome).toBe("captured");
+    const [stored] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(stored?.makeAt).toBeNull();
+  });
+
+  it("refuses to change an open order's dish after the kitchen has its ticket", async () => {
+    const made = await dish("Sent lager");
+    const chosen = await station("Sent bar");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+    });
+    await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+    const response = await app.request(`/api/working-orders/${id}/make-at`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ revision, lines: { [line!.id]: chosen } }),
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe("management.request_invalid");
+  });
+
+  it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
+    "asks about an open counter order on pay in %s",
+    async (mode) => {
+      const made = await strandedDish(`Order ${mode}`);
+      await inTx(v, (tx) =>
+        offerProducts(tx, v.cfg, {
+          zone: "counter",
+          serviceMode: mode,
+          productIds: [made.productId],
+        }),
+      );
+      const id = randomUUID();
+      await parkOrder({ db: suite.db }, v.cfg, {
+        id,
+        zoneId: v.counter.zoneId,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+      });
+      const [line] = await inTx(v, (tx) =>
+        tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id)),
+      );
+      const response = await app.request("/api/dead-ends/order", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: session },
+        body: JSON.stringify({ workingOrderId: id }),
+      });
+      expect(response.status).toBe(200);
+      const answer = await response.json();
+      expect(answer).toMatchObject({ sends: true, deadEnds: [{ key: line!.id }] });
+    },
+  );
+
+  it("does not say a placed counter order sends when all its dishes already have tickets", async () => {
+    const made = await dish("Placed lager");
+    const chosen = await station("Placed bar");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+    });
+    await placeOrder(
+      { db: suite.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      id,
+      OPERATOR,
+      v.cfg.tillId,
+    );
+    const response = await app.request("/api/dead-ends/order", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ workingOrderId: id }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ sends: false, deadEnds: [] });
+  });
+
+  it("does not say a placed sale basket sends when its stored dish already has a ticket", async () => {
+    const made = await dish("Placed basket");
+    const chosen = await station("Basket bar");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+    });
+    await placeOrder(
+      { db: suite.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      id,
+      OPERATOR,
+      v.cfg.tillId,
+    );
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    const response = await app.request("/api/dead-ends/sale", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        step: "pay",
+        workingOrderId: id,
+        zoneId: v.counter.zoneId,
+        lines: [{ workingOrderLineId: line!.id, menuItemId: made.counterOffer, quantity: "1" }],
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ sends: false, deadEnds: [] });
+  });
+
+  it("puts added units of a sent dish at the station named on the patch", async () => {
+    const made = await dish("Extra lager");
+    const original = await station("Original bar");
+    const chosen = await station("Extra bar");
+    await routeTo(made.productId, original);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+    });
+    await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
+    await switchOff(original);
+    const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+    const ignored = await inTx(v, (tx) =>
+      updateOrderLine(tx, v.cfg, id, 1, { makeAt: original }, revision, OPERATOR),
+    );
+    expect(ignored).toBe(revision);
+    await inTx(v, (tx) =>
+      updateOrderLine(tx, v.cfg, id, 1, { quantity: "2", makeAt: chosen }, revision, OPERATOR),
+    );
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId, stationId: ticketItems.stationId })
+        .from(workingOrderLines)
+        .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(rows).toMatchObject([
+      { makeAt: null, stationId: original },
+      { makeAt: chosen, stationId: chosen },
+    ]);
+  });
+
+  it("routes explicitly cleared added units by the rule instead of the sent dish's choice", async () => {
+    const made = await dish("Cleared extra lager");
+    const chosen = await station("Chosen bar");
+    const byRule = await station("Rule bar");
+    await routeTo(made.productId, byRule);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+    });
+    await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
+    const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+    await inTx(v, (tx) =>
+      updateOrderLine(tx, v.cfg, id, 1, { quantity: "2", makeAt: null }, revision, OPERATOR),
+    );
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId, stationId: ticketItems.stationId })
+        .from(workingOrderLines)
+        .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(rows).toEqual([
+      { makeAt: chosen, stationId: chosen },
+      { makeAt: null, stationId: byRule },
+    ]);
+  });
+
+  it("keeps the kitchen's station for added units when that sent dish's route closes", async () => {
+    const made = await dish("Keep lager");
+    const original = await station("Keep bar");
+    await routeTo(made.productId, original);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+    });
+    await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
+    await inTx(v, (tx) => setStationToday(tx, v.cfg, original, "closed", new Date()));
+    const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+    await inTx(v, (tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "2" }, revision, OPERATOR));
+    const items = await kitchenItems(id);
+    expect(items.map((item) => item.stationId)).toEqual([original, original]);
+  });
+
+  it("asks about a counter bill's unsent dish when it moves into table service", async () => {
+    const made = await strandedDish("Moved lager");
+    const id = randomUUID();
+    await park(id, [made]);
+    const question = async (toZoneId: string) => {
+      const response = await app.request("/api/dead-ends/order", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: session },
+        body: JSON.stringify({ workingOrderId: id, toZoneId }),
+      });
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    expect(await question(v.tables.zoneId)).toMatchObject({
+      sends: true,
+      deadEnds: [{ name: made.name, why: "switched_off" }],
+    });
+    expect(await question(v.counter.zoneId)).toMatchObject({ sends: false, deadEnds: [] });
+  });
+
+  it("routes new units by the rules after a sent dish's stored choice is switched off", async () => {
+    const made = await dish("Replaced lager");
+    const original = await station("Old bar");
+    const fallback = await station("New bar");
+    await routeTo(made.productId, original);
+    await inTx(v, (tx) => setStationFallback(tx, v.cfg, original, fallback));
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: original }],
+    });
+    await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
+    await switchOff(original);
+    const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+    await inTx(v, (tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "2" }, revision, OPERATOR));
+    expect((await kitchenItems(id)).map((item) => item.stationId)).toEqual([original, fallback]);
   });
 });

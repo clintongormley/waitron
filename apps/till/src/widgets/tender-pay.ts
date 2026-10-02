@@ -195,6 +195,7 @@ export class TillTenderPay extends LitElement {
   /** Stays chosen for later sales on this widget instance, until the operator picks again. */
   @state() private chosenReaderId?: string;
   @state() private pickingReader = false;
+  #checkingTender = false;
 
   constructor() {
     super();
@@ -238,9 +239,28 @@ export class TillTenderPay extends LitElement {
     this.entry = (event as CustomEvent<{ value: string }>).detail.value;
   }
 
+  #checkBeforeTender(onProceed: () => void): void {
+    if (this.#checkingTender) return;
+    this.#checkingTender = true;
+    const resolve = (proceed: boolean) => {
+      this.#checkingTender = false;
+      if (proceed) onProceed();
+    };
+    const event = new CustomEvent("check-before-tender", {
+      detail: { resolve },
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    this.dispatchEvent(event);
+    if (!event.defaultPrevented) resolve(true);
+  }
+
   #startPaying(): void {
-    this.entry = "";
-    this.view = "paying";
+    this.#checkBeforeTender(() => {
+      this.entry = "";
+      this.view = "paying";
+    });
   }
 
   #startHolding(): void {
@@ -254,18 +274,20 @@ export class TillTenderPay extends LitElement {
   }
 
   #onCardTap(): void {
-    if (this.cardProvider === "none") {
-      this.#startCard();
-      return;
-    }
-    const tip = this.tipEntry.trim();
-    this.#collectCard({
-      ...(this.tipsEnabled && tip !== "" ? { tip } : {}),
-      ...(this.cardProvider === "stripe_on_device" && this.allowOffline
-        ? { allowOffline: true }
-        : {}),
-      ...(this.cardProvider === "simulator" ? { simulationOutcome: this.simulationOutcome } : {}),
-      ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
+    this.#checkBeforeTender(() => {
+      if (this.cardProvider === "none") {
+        this.#startCard();
+        return;
+      }
+      const tip = this.tipEntry.trim();
+      this.#collectCard({
+        ...(this.tipsEnabled && tip !== "" ? { tip } : {}),
+        ...(this.cardProvider === "stripe_on_device" && this.allowOffline
+          ? { allowOffline: true }
+          : {}),
+        ...(this.cardProvider === "simulator" ? { simulationOutcome: this.simulationOutcome } : {}),
+        ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
+      });
     });
   }
 

@@ -73,7 +73,9 @@ const barraQueue: StationQueueGroup[] = [
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations),
-    getStationQueue: vi.fn().mockResolvedValue({ items: cocinaQueue, notices: [] }),
+    getStationQueue: vi
+      .fn()
+      .mockResolvedValue({ printersDown: [], items: cocinaQueue, notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
@@ -126,8 +128,8 @@ describe("till-station-screen", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] }) // default station on connect
-        .mockResolvedValueOnce({ items: barraQueue, notices: [] }), // the picked station
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] }) // default station on connect
+        .mockResolvedValueOnce({ printersDown: [], items: barraQueue, notices: [] }), // the picked station
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
@@ -418,7 +420,7 @@ describe("till-station-screen", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementationOnce(
           () =>
             new Promise<StationQueue>((done) => {
@@ -432,7 +434,7 @@ describe("till-station-screen", () => {
     await el.updateComplete;
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
-    resolveReload({ items: barraQueue, notices: [] });
+    resolveReload({ printersDown: [], items: barraQueue, notices: [] });
     await vi.waitFor(() => expect(queueWidget(el)!.groups).toEqual(barraQueue));
   });
 
@@ -440,7 +442,7 @@ describe("till-station-screen", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementationOnce(() => new Promise<StationQueue>(() => {})),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -505,7 +507,7 @@ describe("till-station-screen", () => {
     const api = stubApi({
       getDeviceStation: vi
         .fn()
-        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
+        .mockResolvedValue({ station: { id: "st-dev", printersDown: [], queue: [], notices: [] } }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -518,7 +520,7 @@ describe("till-station-screen", () => {
 });
 
 describe("till-station-screen device mode (device-identity-1 §5a)", () => {
-  const boundStation = { id: "st-dev", queue: cocinaQueue, notices: [] };
+  const boundStation = { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] };
 
   /** Carries the session verbs the screen must NEVER reach in device mode, so a stray call is
    * observable. */
@@ -527,7 +529,9 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       getDeviceStation: vi.fn().mockResolvedValue({ station: boundStation }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       listStations: vi.fn().mockResolvedValue(stations),
-      getStationQueue: vi.fn().mockResolvedValue({ items: cocinaQueue, notices: [] }),
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValue({ printersDown: [], items: cocinaQueue, notices: [] }),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
       advanceTicket: vi.fn().mockResolvedValue(undefined),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
@@ -555,9 +559,9 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     // getDeviceStation returns a DISTINCT queue, so losing the fast path would both re-fetch AND render
     // the wrong queue.
     const api = deviceApi({
-      getDeviceStation: vi
-        .fn()
-        .mockResolvedValue({ station: { id: "st-dev", queue: barraQueue, notices: [] } }),
+      getDeviceStation: vi.fn().mockResolvedValue({
+        station: { id: "st-dev", printersDown: [], queue: barraQueue, notices: [] },
+      }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -692,9 +696,9 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       },
     ];
     const api = deviceApi({
-      getDeviceStation: vi
-        .fn()
-        .mockResolvedValue({ station: { id: "st-dev", queue: heldCourseQueue, notices: [] } }),
+      getDeviceStation: vi.fn().mockResolvedValue({
+        station: { id: "st-dev", printersDown: [], queue: heldCourseQueue, notices: [] },
+      }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -830,9 +834,9 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       },
     ];
     const api = deviceApi({
-      getDeviceStation: vi
-        .fn()
-        .mockResolvedValue({ station: { id: "st-dev", queue: twoLine, notices: [] } }),
+      getDeviceStation: vi.fn().mockResolvedValue({
+        station: { id: "st-dev", printersDown: [], queue: twoLine, notices: [] },
+      }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -898,9 +902,9 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
 
   function deviceApi(): TillApi {
     return {
-      getDeviceStation: vi
-        .fn()
-        .mockResolvedValue({ station: { id: "st-dev", queue: mixed, notices: [] } }),
+      getDeviceStation: vi.fn().mockResolvedValue({
+        station: { id: "st-dev", printersDown: [], queue: mixed, notices: [] },
+      }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       advanceTicket: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
@@ -953,7 +957,9 @@ describe("station destination history", () => {
     history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api: stubApi({
-        getStationQueue: vi.fn().mockResolvedValue({ items: barraQueue, notices: [] }),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValue({ printersDown: [], items: barraQueue, notices: [] }),
       }),
     });
     await flush(el);
@@ -976,7 +982,7 @@ describe("station destination history", () => {
             ? new Promise((done) => {
                 resolve = done;
               })
-            : Promise.resolve({ items: cocinaQueue, notices: [] }),
+            : Promise.resolve({ printersDown: [], items: cocinaQueue, notices: [] }),
         ),
       }),
     });
@@ -986,7 +992,7 @@ describe("station destination history", () => {
     history.replaceState(null, "", "/tabs/counter/view/station/station/st-1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
-    resolve({ items: barraQueue, notices: [] });
+    resolve({ printersDown: [], items: barraQueue, notices: [] });
     await flush(el);
     expect(queueWidget(el)!.stationId).toBe("st-1");
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
@@ -1032,7 +1038,11 @@ describe("till-station-screen kitchen notices", () => {
     note: "no onions",
     wasStarted: false,
   });
-  const twoNotices: StationQueue = { items: cocinaQueue, notices: [voidStarted, changed] };
+  const twoNotices: StationQueue = {
+    printersDown: [],
+    items: cocinaQueue,
+    notices: [voidStarted, changed],
+  };
 
   const noticeRows = (el: TillStationScreen) => [
     ...queueWidget(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-notice]"),
@@ -1122,7 +1132,7 @@ describe("till-station-screen kitchen notices", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
     await flush(el);
     expect(queueWidget(el)!.notices).toEqual([]);
-    answerBarra({ items: barraQueue, notices: [] });
+    answerBarra({ printersDown: [], items: barraQueue, notices: [] });
     await flush(el);
   });
 
@@ -1130,7 +1140,12 @@ describe("till-station-screen kitchen notices", () => {
     function deviceApi(overrides: Record<string, unknown> = {}): TillApi {
       return {
         getDeviceStation: vi.fn().mockResolvedValue({
-          station: { id: "st-dev", queue: cocinaQueue, notices: [voidStarted, changed] },
+          station: {
+            id: "st-dev",
+            printersDown: [],
+            queue: cocinaQueue,
+            notices: [voidStarted, changed],
+          },
         }),
         deviceAdvance: vi.fn().mockResolvedValue(undefined),
         deviceAcknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined),
@@ -1154,7 +1169,9 @@ describe("till-station-screen kitchen notices", () => {
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
         deviceMode: true,
-        initialDeviceStation: { station: { id: "st-dev", queue: cocinaQueue, notices: [changed] } },
+        initialDeviceStation: {
+          station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [changed] },
+        },
       });
       await flush(el);
       expect(api.getDeviceStation).not.toHaveBeenCalled();
@@ -1189,6 +1206,7 @@ describe("till-station-screen 15-second refresh", () => {
   });
 
   const later: StationQueue = {
+    printersDown: [],
     items: barraQueue,
     notices: [
       {
@@ -1215,7 +1233,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockResolvedValue(later),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -1244,7 +1262,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementationOnce(() => new Promise((resolve) => (answerHung = resolve)))
         .mockResolvedValue(later),
     });
@@ -1258,7 +1276,7 @@ describe("till-station-screen 15-second refresh", () => {
     expect(api.getStationQueue).toHaveBeenCalledTimes(3);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
     expect(queueWidget(el)!.notices).toEqual(later.notices);
-    answerHung({ items: cocinaQueue, notices: [] }); // older than what is on screen
+    answerHung({ printersDown: [], items: cocinaQueue, notices: [] }); // older than what is on screen
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
     expect(queueWidget(el)!.notices).toEqual(later.notices);
@@ -1268,10 +1286,12 @@ describe("till-station-screen 15-second refresh", () => {
     const api = {
       getDeviceStation: vi
         .fn()
-        .mockResolvedValueOnce({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } })
+        .mockResolvedValueOnce({
+          station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] },
+        })
         .mockImplementationOnce(() => new Promise(() => {}))
         .mockResolvedValue({
-          station: { id: "st-dev", queue: barraQueue, notices: later.notices },
+          station: { id: "st-dev", printersDown: [], queue: barraQueue, notices: later.notices },
         }),
     } as unknown as TillApi;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -1290,6 +1310,7 @@ describe("till-station-screen 15-second refresh", () => {
   /** Read `n`'s answer: the Barra queue and one notice named after it, so the test can tell which
    * read's answer is on screen. */
   const answerNumber = (n: number): StationQueue => ({
+    printersDown: [],
     items: barraQueue,
     notices: [{ ...later.notices[0]!, id: `kn-read-${n}` }],
   });
@@ -1311,7 +1332,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementation((_stationId: string, options?: { signal?: AbortSignal }) => {
           const answer = answerNumber(++read);
           // As fetch does, a cancelled read never answers.
@@ -1343,7 +1364,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementationOnce(
           () => new Promise((resolve) => setTimeout(() => resolve(answerNumber(2)), 20_000)),
         )
@@ -1398,7 +1419,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementation((stationId: string, options?: { signal?: AbortSignal }) => {
           // Counted as the read starts: a limit due at the same moment as a tick is still pending here.
           outWhenSettingOut.push(signals.filter((signal) => !signal.aborted).length + 1);
@@ -1419,7 +1440,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementation(hangUntilAborted(signals)),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -1436,7 +1457,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementationOnce(() => new Promise((resolve) => (answerCocina = resolve)))
         .mockImplementationOnce(() => new Promise((resolve) => (answerBarra = resolve))),
     });
@@ -1450,7 +1471,7 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual([]);
     expect(queueWidget(el)!.notices).toEqual([]);
-    answerBarra({ items: barraQueue, notices: [] });
+    answerBarra({ printersDown: [], items: barraQueue, notices: [] });
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
   });
@@ -1458,12 +1479,19 @@ describe("till-station-screen 15-second refresh", () => {
   it("device mode: a display slower than the interval still updates, and a hung read is cancelled", async () => {
     const signals: AbortSignal[] = [];
     const station = (n: number): DeviceStation => ({
-      station: { id: "st-dev", queue: barraQueue, notices: answerNumber(n).notices },
+      station: {
+        id: "st-dev",
+        printersDown: [],
+        queue: barraQueue,
+        notices: answerNumber(n).notices,
+      },
     });
     const api = {
       getDeviceStation: vi
         .fn()
-        .mockResolvedValueOnce({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } })
+        .mockResolvedValueOnce({
+          station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] },
+        })
         .mockImplementationOnce(
           () => new Promise((resolve) => setTimeout(() => resolve(station(2)), 20_000)),
         )
@@ -1496,7 +1524,7 @@ describe("till-station-screen 15-second refresh", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementationOnce(() => new Promise(() => {}))
         .mockResolvedValue(later),
     });
@@ -1558,14 +1586,18 @@ describe("till-station-screen 15-second refresh", () => {
   });
 
   it("an answer that set out before an Acknowledge does not bring the acknowledged row back", async () => {
-    const withNotice: StationQueue = { items: cocinaQueue, notices: later.notices };
+    const withNotice: StationQueue = {
+      printersDown: [],
+      items: cocinaQueue,
+      notices: later.notices,
+    };
     let answerPoll!: (queue: StationQueue) => void;
     const api = stubApi({
       getStationQueue: vi
         .fn()
         .mockResolvedValueOnce(withNotice)
         .mockImplementationOnce(() => new Promise((resolve) => (answerPoll = resolve)))
-        .mockResolvedValue({ items: cocinaQueue, notices: [] }),
+        .mockResolvedValue({ printersDown: [], items: cocinaQueue, notices: [] }),
       acknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -1595,9 +1627,11 @@ describe("till-station-screen 15-second refresh", () => {
     const api = {
       getDeviceStation: vi
         .fn()
-        .mockResolvedValueOnce({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } })
+        .mockResolvedValueOnce({
+          station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] },
+        })
         .mockResolvedValue({
-          station: { id: "st-dev", queue: barraQueue, notices: later.notices },
+          station: { id: "st-dev", printersDown: [], queue: barraQueue, notices: later.notices },
         }),
       getStationQueue: vi.fn(),
     } as unknown as TillApi;
@@ -1619,9 +1653,13 @@ describe("till-station-screen 15-second refresh", () => {
     const api = {
       getDeviceStation: vi
         .fn()
-        .mockResolvedValueOnce({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } })
+        .mockResolvedValueOnce({
+          station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] },
+        })
         .mockImplementationOnce(() => new Promise((resolve) => (answerRefresh = resolve)))
-        .mockResolvedValue({ station: { id: "st-dev", queue: barraQueue, notices: [] } }),
+        .mockResolvedValue({
+          station: { id: "st-dev", printersDown: [], queue: barraQueue, notices: [] },
+        }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -1640,7 +1678,7 @@ describe("till-station-screen 15-second refresh", () => {
     );
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
-    answerRefresh({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } });
+    answerRefresh({ station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] } });
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
   });
@@ -1650,9 +1688,13 @@ describe("till-station-screen 15-second refresh", () => {
     const api = {
       getDeviceStation: vi
         .fn()
-        .mockResolvedValueOnce({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } })
+        .mockResolvedValueOnce({
+          station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] },
+        })
         .mockImplementationOnce(() => new Promise((resolve) => (answerReload = resolve)))
-        .mockResolvedValue({ station: { id: "st-dev", queue: barraQueue, notices: [] } }),
+        .mockResolvedValue({
+          station: { id: "st-dev", printersDown: [], queue: barraQueue, notices: [] },
+        }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -1671,7 +1713,7 @@ describe("till-station-screen 15-second refresh", () => {
     vi.advanceTimersByTime(15_000);
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
-    answerReload({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } });
+    answerReload({ station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] } });
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
   });
@@ -1683,7 +1725,9 @@ describe("till-station-screen 15-second refresh", () => {
       const api = {
         getDeviceStation: vi
           .fn()
-          .mockResolvedValueOnce({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } })
+          .mockResolvedValueOnce({
+            station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] },
+          })
           .mockRejectedValue({ code: "device.unauthorized" }),
       } as unknown as TillApi;
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -1718,6 +1762,7 @@ describe("till-station-screen out-of-date banner", () => {
   });
 
   const later: StationQueue = {
+    printersDown: [],
     items: barraQueue,
     notices: [
       {
@@ -1760,7 +1805,7 @@ describe("till-station-screen out-of-date banner", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] }) // 10:19:50
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] }) // 10:19:50
         .mockResolvedValueOnce(later) // 10:20:05
         .mockRejectedValue({ code: "server.internal" }),
     });
@@ -1781,7 +1826,7 @@ describe("till-station-screen out-of-date banner", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockRejectedValueOnce({ code: "server.internal" })
         .mockResolvedValue(later),
     });
@@ -1822,7 +1867,7 @@ describe("till-station-screen out-of-date banner", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementation(
           (_stationId: string, options?: { signal?: AbortSignal }) =>
             new Promise((_resolve, reject) =>
@@ -1843,7 +1888,7 @@ describe("till-station-screen out-of-date banner", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockImplementationOnce(
           () =>
             new Promise((_resolve, reject) =>
@@ -1890,7 +1935,7 @@ describe("till-station-screen out-of-date banner", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockRejectedValue({ code: "server.internal" }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -1905,7 +1950,7 @@ describe("till-station-screen out-of-date banner", () => {
     stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] }) // 10:19:50
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] }) // 10:19:50
         .mockRejectedValue({ code: "server.internal" }),
     });
 
@@ -1969,7 +2014,7 @@ describe("till-station-screen out-of-date banner", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
         .mockRejectedValueOnce({ code: "server.internal" })
         .mockResolvedValue(later),
     });
@@ -1998,7 +2043,7 @@ describe("till-station-screen out-of-date banner", () => {
 
   describe("device mode", () => {
     const deviceStation = (queue: StationQueueGroup[]): DeviceStation => ({
-      station: { id: "st-dev", queue, notices: [] },
+      station: { id: "st-dev", printersDown: [], queue, notices: [] },
     });
 
     it("a failed refresh shows the banner, and the next good one clears it", async () => {
@@ -2277,7 +2322,7 @@ describe("till-station-screen — firing a party's held group", () => {
   it("device mode ignores a stray fire-kitchen-group: no session verb, no reload", async () => {
     const api = {
       getDeviceStation: vi.fn().mockResolvedValue({
-        station: { id: "st-dev", queue: cocinaQueue, notices: [] },
+        station: { id: "st-dev", printersDown: [], queue: cocinaQueue, notices: [] },
       }),
       fireGroup: vi.fn(),
     } as unknown as TillApi;
@@ -2290,5 +2335,102 @@ describe("till-station-screen — firing a party's held group", () => {
     await flush(el);
     expect(api.fireGroup).not.toHaveBeenCalled();
     expect(api.getDeviceStation).toHaveBeenCalledOnce();
+  });
+});
+
+describe.each([false, true])("printer warnings (device mode: %s)", (deviceMode) => {
+  const down = [
+    {
+      printerId: "printer-1",
+      printerName: "Epson",
+      since: new Date(2026, 7, 17, 20, 14).toISOString(),
+    },
+    {
+      printerId: "printer-2",
+      printerName: "Star",
+      since: new Date(2026, 7, 17, 20, 18).toISOString(),
+    },
+  ];
+  beforeEach(() => {
+    setLocale("en-GB");
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    setLocale("en-GB");
+  });
+
+  async function mount(printersDown = down.slice(0, 1), next = printersDown) {
+    const response = (printers: typeof down) =>
+      deviceMode
+        ? { station: { id: "st-1", queue: cocinaQueue, notices: [], printersDown: printers } }
+        : { items: cocinaQueue, notices: [], printersDown: printers };
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(response(printersDown))
+      .mockResolvedValue(response(next));
+    const api = stubApi(deviceMode ? { getDeviceStation: read } : { getStationQueue: read });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api, deviceMode });
+    await flush(el);
+    return el;
+  }
+
+  const warnings = (el: TillStationScreen) => [
+    ...el.shadowRoot!.querySelectorAll("[data-printer-down]"),
+  ];
+
+  it("shows one printer's name and sent time above tickets as a status", async () => {
+    const el = await mount();
+    const rows = warnings(el);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent?.trim()).toBe(
+      "Printer Epson has printed nothing since something sent to it at 20:14 got stuck. Tickets are still shown here; tell a manager.",
+    );
+    expect(rows[0].getAttribute("role")).toBe("status");
+    expect(
+      rows[0].compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+  });
+
+  it("shows a separate warning for each down printer", async () => {
+    const el = await mount(down);
+    expect(warnings(el)).toHaveLength(2);
+    expect(warnings(el)[1].textContent).toContain("Printer Star");
+    expect(warnings(el)[1].textContent).toContain("20:18");
+  });
+
+  it("shows no printer warning when the response lists none", async () => {
+    const el = await mount([]);
+    expect(warnings(el)).toHaveLength(0);
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+  });
+
+  it("removes a recovered printer on the next fifteen-second read", async () => {
+    const el = await mount(down, down.slice(1));
+    expect(warnings(el)).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flush(el);
+    expect(warnings(el)).toHaveLength(1);
+    expect(warnings(el)[0].textContent).toContain("Printer Star");
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flush(el);
+    expect(warnings(el)).toHaveLength(1);
+  });
+
+  it("removes all warnings when the next read lists no down printers", async () => {
+    const el = await mount(down, []);
+    expect(warnings(el)).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flush(el);
+    expect(warnings(el)).toHaveLength(0);
+  });
+
+  it("explains the printer failure in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    expect(warnings(el)[0]?.textContent?.trim()).toBe(
+      "La impresora Epson no ha impreso nada desde que se atascó algo que se le envió a las 20:14. Las comandas siguen apareciendo aquí; avisa a un encargado.",
+    );
   });
 });

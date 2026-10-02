@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
-import { t } from "../i18n/t.js";
+import { clockTime, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "../widgets/stale-since.js";
 import "../widgets/station-queue.js";
@@ -16,6 +16,7 @@ import type {
   KitchenNotice,
   Station,
   StationQueueGroup,
+  StationPrinterDown,
   TicketState,
   TillApi,
 } from "../api/client.js";
@@ -94,12 +95,14 @@ export class TillStationScreen extends LitElement {
         margin: 0;
       }
 
-      .table-changed {
+      .table-changed,
+      .printer-down {
         margin: 0;
       }
 
       .stale[data-stale],
-      .table-changed {
+      .table-changed,
+      .printer-down {
         flex-basis: 100%;
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
@@ -144,6 +147,7 @@ export class TillStationScreen extends LitElement {
   @state() private stations: Station[] = [];
   @state() private activeStationId?: string;
   @state() private groups: StationQueueGroup[] = [];
+  @state() private printersDown: StationPrinterDown[] = [];
   @state() private notices: KitchenNotice[] = [];
   @state() private view: "kanban" | "rail" = "kanban";
   /**
@@ -308,6 +312,7 @@ export class TillStationScreen extends LitElement {
   #adoptDeviceStation({ station }: DeviceStation): void {
     this.activeStationId = station.id;
     this.groups = station.queue;
+    this.printersDown = station.printersDown ?? [];
     this.#adoptNotices(station.notices);
     this.#readSucceeded();
   }
@@ -326,11 +331,12 @@ export class TillStationScreen extends LitElement {
     if (this.activeStationId === undefined) return;
     const request = ++this.#queueRequest;
     try {
-      const { items, notices } = await (signal === undefined
+      const { items, notices, printersDown } = await (signal === undefined
         ? this.api.getStationQueue(this.activeStationId)
         : this.api.getStationQueue(this.activeStationId, { signal }));
       if (this.isConnected && this.#isNewest(request)) {
         this.groups = items;
+        this.printersDown = printersDown ?? [];
         this.#adoptNotices(notices);
         this.#readSucceeded();
       }
@@ -346,6 +352,7 @@ export class TillStationScreen extends LitElement {
     if (this.activeStationId !== undefined && this.activeStationId !== id) {
       this.groups = [];
       this.notices = [];
+      this.printersDown = [];
       // Reads still out are for the station being left.
       this.#appliedRequest = this.#queueRequest;
       this.#lastGoodAt = new Date();
@@ -600,16 +607,24 @@ export class TillStationScreen extends LitElement {
   /** Reprint shows in OPERATOR mode only: the reprint route is session-guarded and a device holds no
    * session. */
   #queue(advanceOnly: boolean): TemplateResult {
-    return html`<till-station-queue
-      .groups=${this.groups}
-      .notices=${this.notices}
-      .view=${this.view}
-      .bumpMode=${this.bumpMode}
-      .fireControl=${this.fireControl}
-      .stationId=${this.activeStationId}
-      .advanceOnly=${advanceOnly}
-      .showReprint=${!advanceOnly}
-    ></till-station-queue>`;
+    return html` ${this.printersDown.map(
+        (printer) =>
+          html`<p class="printer-down" role="status" data-printer-down>
+            ${t("station.printer_down")
+              .replace("{name}", () => printer.printerName)
+              .replace("{time}", () => clockTime(Date.parse(printer.since)))}
+          </p>`,
+      )}
+      <till-station-queue
+        .groups=${this.groups}
+        .notices=${this.notices}
+        .view=${this.view}
+        .bumpMode=${this.bumpMode}
+        .fireControl=${this.fireControl}
+        .stationId=${this.activeStationId}
+        .advanceOnly=${advanceOnly}
+        .showReprint=${!advanceOnly}
+      ></till-station-queue>`;
   }
 
   #pick(station: Station): TemplateResult {

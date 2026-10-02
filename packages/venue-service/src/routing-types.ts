@@ -1,9 +1,27 @@
-import type { RouteException, RouteTarget, RoutingDecision, SkippedRule } from "./routing.js";
+import type {
+  FallbackStep,
+  RouteException,
+  RouteTarget,
+  RoutingDecision,
+  StationStatus,
+  WeeklyInterval,
+} from "./routing.js";
+
+export interface StationTimes {
+  stationId: string;
+  status: StationStatus;
+  hours: WeeklyInterval[];
+  fallbackStationId: string | null;
+  today: "open" | "closed" | null;
+  closedSendsTo: string | null;
+}
 
 export interface RouteExplanation {
   route: RouteTarget | null;
   decidedBy: RoutingDecision | null;
-  skipped: SkippedRule[];
+  fallbacks: FallbackStep[];
+  noReplacement: boolean;
+  clockReadable: boolean;
   stations: { id: string; name: string; active: boolean }[];
 }
 
@@ -28,9 +46,13 @@ export interface RoutingMove {
   zoneName: string | null;
   from: RouteTarget | null;
   to: RouteTarget | null;
+  toNoReplacement: boolean;
 }
 
 export interface RoutingModel {
+  stationTimes: StationTimes[];
+  todayEnds: { timeOfDay: string; tomorrow: boolean } | null;
+  clockReadable: boolean;
   claims: { categoryId: string; target: RouteTarget; stationOff: boolean }[];
   exceptions: (RouteException & { neverMatches: boolean; stationOff: boolean })[];
   unassigned: { folders: { id: string; name: string }[]; products: { id: string; name: string }[] };

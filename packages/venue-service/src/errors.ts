@@ -16,6 +16,8 @@ declare module "@waitron/shared" {
     "route.not_found": { routeId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.station_inactive": { stationId: string };
+    "station.fallback_loop": { stationId: string; fallbackStationId: string };
+    "time_zone.unreadable": Record<string, never>;
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };

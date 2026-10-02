@@ -96,6 +96,47 @@ const click = (el: TillTenderPay, selector: string) =>
 afterEach(cleanupWidgets);
 
 describe("till-tender-pay", () => {
+  it("waits for a counter cash question before opening amount entry and stays idle on cancel", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    let answer: ((proceed: boolean) => void) | undefined;
+    el.addEventListener("check-before-tender", (event) => {
+      event.preventDefault();
+      answer = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail.resolve;
+    });
+    click(el, ".pay");
+    await el.updateComplete;
+    expect(answer).toBeTypeOf("function");
+    expect(query(el, ".paying")).toBeNull();
+    answer!(false);
+    await el.updateComplete;
+    expect(query(el, ".pay")).not.toBeNull();
+    click(el, ".pay");
+    answer!(true);
+    await vi.waitFor(() => expect(query(el, "till-numeric-pad")).not.toBeNull());
+  });
+
+  it("waits for the question before integrated card collection", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider: "simulator",
+    });
+    const order: string[] = [];
+    let answer: ((proceed: boolean) => void) | undefined;
+    el.addEventListener("check-before-tender", (event) => {
+      event.preventDefault();
+      order.push("question");
+      answer = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail.resolve;
+    });
+    el.addEventListener("collect-card", () => order.push("collect"));
+    click(el, ".pay-card");
+    expect(order).toEqual(["question"]);
+    answer!(true);
+    await vi.waitFor(() => expect(order).toEqual(["question", "collect"]));
+  });
   it("registers as a custom element", () => {
     expect(customElements.get("till-tender-pay")).toBe(TillTenderPay);
   });

@@ -26,6 +26,7 @@ import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from 
 import type { TillConfig } from "./till-config.js";
 import { checkAndBumpParty, partyZone, requireOpenParty, runServiceCommand } from "./parties.js";
 import { screenNote } from "./working-order.js";
+import { requireMakeAtStation } from "./dead-ends.js";
 import "./errors.js";
 
 export interface DraftLine {
@@ -38,6 +39,7 @@ export interface DraftLine {
   note: string | null;
   quantity: string;
   courseId: string | null;
+  makeAt?: string | null;
   noMerge: boolean;
   unavailable: boolean;
 }
@@ -114,6 +116,7 @@ export async function saveDraft(
     }
   }
   let draftId: string;
+  let previous: DraftLine[] = [];
   if (input.draftId === null) {
     const [held] = await openDraftsOn(tx, partyId, operatorId);
     if (held !== undefined) {
@@ -133,10 +136,24 @@ export async function saveDraft(
     const draft = await requireDraft(tx, foldIfUuid(input.draftId), partyId);
     await requireOwnDraftAt(tx, draft, operatorId, input.revision);
     draftId = draft.id;
+    previous = (await storedLines(tx, [draftId])).map(({ line }) => line);
     await tx
       .update(orderDrafts)
       .set({ revision: draft.revision + 1, updatedAt: nowIso() })
       .where(eq(orderDrafts.id, draftId));
+  }
+  const priorChoices = new Map<string, number>();
+  for (const line of previous) {
+    if (line.makeAt == null) continue;
+    const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
+    priorChoices.set(key, (priorChoices.get(key) ?? 0) + 1);
+  }
+  for (const line of lines) {
+    if (line.makeAt == null) continue;
+    const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
+    const held = priorChoices.get(key) ?? 0;
+    if (held > 0) priorChoices.set(key, held - 1);
+    else await requireMakeAtStation(tx, cfg, line.makeAt);
   }
   await replaceLines(
     tx,
@@ -399,6 +416,7 @@ function groupLine(line: DraftLine): GroupLine {
     ...(line.variantId === null ? {} : { variantId: line.variantId }),
     ...(line.menuVersionId === null ? {} : { menuVersionId: line.menuVersionId }),
     ...(line.courseId === null ? {} : { courseId: line.courseId }),
+    ...(line.makeAt == null ? {} : { makeAt: line.makeAt }),
     ...(line.note === null ? {} : { note: line.note }),
   };
 }
@@ -434,6 +452,7 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
       note: screenNote(note),
       quantity,
       courseId: optionalId(entry.courseId, field("courseId")),
+      makeAt: optionalId(entry.makeAt, field("makeAt")),
       noMerge: noMerge ?? false,
     };
   });
@@ -603,6 +622,7 @@ async function storedLines(
       note: row.note,
       quantity: thousandthsToDecimal(row.quantity),
       courseId: row.courseId,
+      makeAt: row.makeAtStationId,
       noMerge: row.noMerge,
       unavailable: false,
     },
@@ -631,6 +651,7 @@ async function replaceLines(
       note: line.note,
       quantity: stringToThousandths(line.quantity),
       courseId: line.courseId,
+      makeAtStationId: line.makeAt ?? null,
       noMerge: line.noMerge,
     })),
   );

@@ -76,6 +76,7 @@ export const ticketItems = table(
     unique("ticket_items_working_order_line_id_key").on(t.workingOrderLineId),
     index("ticket_items_queue_idx").on(t.stationId, t.state),
     index("ticket_items_order_idx").on(t.workingOrderId),
+    index("ticket_items_waiting_idx").on(t.stationId, t.state, t.firedAt),
     check("ticket_items_state_ck", enumCheck(t.state)),
   ],
 );

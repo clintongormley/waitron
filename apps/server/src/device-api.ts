@@ -20,6 +20,7 @@ import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitro
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
 import { isUuid } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
@@ -208,6 +209,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         id: stationId,
         queue: await listStationQueue(tx, stationId),
         notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, stationId),
+        printersDown: (
+          await stationPrintersDown(tx, deps.cfg.locationId, new Date(), stationId)
+        ).map(({ printerId, printerName, since }) => ({ printerId, printerName, since })),
       }));
       return c.json({ station });
     }),

@@ -16,6 +16,7 @@ import {
   tsString,
 } from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
+import { kitchenStations } from "./kitchen-stations.js";
 import { parties } from "./parties.js";
 
 export const orderDraftState = enumType(["open", "submitted", "discarded"]);
@@ -73,6 +74,7 @@ export const orderDraftLines = table(
     note: label("note"),
     quantity: quantity("quantity").notNull(),
     courseId: id("course_id"),
+    makeAtStationId: id("make_at_station_id"),
     // `normaliseDraftLines` never adds this row to another, nor another to it.
     noMerge: flag("no_merge").notNull().default(false),
   },
@@ -86,6 +88,11 @@ export const orderDraftLines = table(
       columns: [t.courseId],
       foreignColumns: [kitchenCourses.id],
       name: "order_draft_lines_course_fk",
+    }),
+    foreignKey({
+      columns: [t.makeAtStationId],
+      foreignColumns: [kitchenStations.id],
+      name: "order_draft_lines_make_at_station_fk",
     }),
     index("order_draft_lines_draft_idx").on(t.draftId),
     check("order_draft_lines_quantity_ck", sql`${t.quantity} > 0`),

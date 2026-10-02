@@ -488,6 +488,7 @@ export async function payWorkingOrder(
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
           creditedTo: operatorId,
+          invalidMakeAt: "ignore",
         });
       } else {
         order = await priceStoredOrderForIssuance(tx, req.id);
@@ -908,6 +909,7 @@ async function payIntegrated(
         ? await createOpenOrder(tx, cfg, req.id, req.lines, null, {
             zoneId: req.zoneId,
             creditedTo: operatorId,
+            invalidMakeAt: "ignore",
           })
         : await priceStoredOrderForIssuance(tx, req.id);
     const wasPlaced = locked?.status === "placed";

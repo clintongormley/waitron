@@ -1,5 +1,6 @@
 // Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
+import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -1688,6 +1689,19 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       const stations = await withVenueAuth(deps, sessionId, (tx) => listStations(tx, cfg));
       return c.json(stations);
+    }),
+  );
+
+  app.get("/management-api/stations/outputs-down", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const now = new Date();
+      const result = await withVenueAuth(deps, sessionId, async (tx) => ({
+        printersDown: await stationPrintersDown(tx, cfg.locationId, now),
+        screensDark: await stationScreensDark(tx, cfg.locationId, now),
+      }));
+      return c.json(result);
     }),
   );
 

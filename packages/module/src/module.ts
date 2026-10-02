@@ -278,6 +278,12 @@ export interface ZoneMenuOfferVariant {
 export type PreparationRoute =
   { readonly kind: "station"; readonly stationId: string } | { readonly kind: "no_preparation" };
 
+/** What the rules say for one product at one moment. */
+export type MakerOutcome =
+  | { readonly kind: "made"; readonly route: PreparationRoute }
+  | { readonly kind: "no_replacement"; readonly stationId: string }
+  | { readonly kind: "no_station" };
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
   listServiceZones(
@@ -290,7 +296,6 @@ export interface VenueServiceContribution {
     zoneId: string,
   ): Promise<OrderServiceContext>;
   /** Where each product is made, for an order in `zoneId` (null: an order with no service zone).
-   *  `null` means nothing can take it: no rule matched and there is no active default station.
    *  An unknown product throws `route.subject_not_found`; an unknown zone `service_zone.not_found`.
    *  Keys are the caller's spelling of each id (the first, when two spellings name one product). */
   resolveMakers(
@@ -298,12 +303,31 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string | null,
     productIds: readonly string[],
-  ): Promise<ReadonlyMap<string, PreparationRoute | null>>;
+    at: Date,
+  ): Promise<ReadonlyMap<string, MakerOutcome>>;
+  /** Every station's state at one instant, including stations switched off. */
+  stationStates(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    at: Date,
+  ): Promise<
+    ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
+  >;
   /** Base maker for active products and variants, plus whether a zone-specific exception matches. */
   describeMakers(
     tx: Transaction,
     cfg: { locationId: LocationId },
-  ): Promise<ReadonlyMap<string, { route: PreparationRoute | null; variesByZone: boolean }>>;
+  ): Promise<
+    ReadonlyMap<
+      string,
+      {
+        route: PreparationRoute | null;
+        variesByZone: boolean;
+        noReplacement: boolean;
+        unavailableStationId: string | null;
+      }
+    >
+  >;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
    *  the zone's active menus. With `menuItemIds`, only the offers it names are served. Each menu's home
    *  layout is the one `deviceProfileId` chose for it when the menu's live version holds it, and

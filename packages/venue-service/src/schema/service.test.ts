@@ -13,6 +13,7 @@ import {
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
 import { routeExceptions, stationClaims } from "./routing.js";
+import { stationDayStates, stationFallbacks, stationHours } from "./station-times.js";
 
 /**
  * The Drizzle declarations, read without a database. A foreign key's name exists only here: the
@@ -77,6 +78,30 @@ const EXPECTED: Record<
     ],
     checks: ["station_claims_target_ck"],
     indexes: ["station_claims_folder_key"],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
+  station_hours: {
+    table: stationHours,
+    foreignKeys: ["station_hours_station_fk"],
+    checks: ["station_hours_weekday_ck", "station_hours_distinct_ck"],
+    indexes: ["station_hours_interval_key"],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
+  station_fallbacks: {
+    table: stationFallbacks,
+    foreignKeys: ["station_fallbacks_station_fk", "station_fallbacks_fallback_fk"],
+    checks: ["station_fallbacks_not_self_ck"],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
+  station_day_states: {
+    table: stationDayStates,
+    foreignKeys: ["station_day_states_station_fk"],
+    checks: [],
+    indexes: ["station_day_states_day_key"],
     uniqueConstraints: [],
     primaryKeys: [],
   },
@@ -161,8 +186,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers all eleven of the package's tables", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(11);
+  it("covers all fourteen of the package's tables", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(14);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

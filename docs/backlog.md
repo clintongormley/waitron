@@ -215,18 +215,13 @@ Track C.
 **Product folders, menus that include menus, and prep station routing: partly built
 (design approved 2026-09-30).** The
 [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
-1, 2, 3a and 3c-1 have landed (above). **Owner decision (2026-10-01):** deleting only empty folders
+1, 2, 3a, 3b and 3c-1 have landed (above). Slice 3b ([#1024](https://github.com/clintongormley/waitron/pull/1024)) adds station opening hours, by-hand open and close, fallbacks, the till's dead-end question before sending or payment, and down-printer and dark-screen alerts; a station with no replacement asks the waiter where to make its dishes or to remove them. It follows the [approved plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md) and needs no venue reset. **Owner decision (2026-10-01):** deleting only empty folders
 stays immediate, including any routing rules attached to them; a confirmation is shown when the
 selected folders contain products or subfolders. Each dev venue needs `wa-wt reset demo
 <worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
 older build before using the new published document. What is left:
 
-- **3b**, opening hours, by-hand open and close, fallbacks (a real replacement; a station with
-  none is a dead end, and the till asks the waiter where to make such a dish, or to remove it,
-  before sending or taking payment), and down-printer and dark-screen alerts
-  ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner
-  on 2026-10-01, lands on its own when green) — lane D's PF4.
 - **3c-2**, extras made at their own station, with the dish's and the extra's tickets naming each
   other ([plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md), starts once 3b has
   landed) — lane D's PF6.
@@ -249,6 +244,15 @@ older build before using the new published document. What is left:
   remains open; and a device's made-here stations do not travel in configuration export, because
   devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
   from an export sets them again on the Devices screen.
+- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
+  may never mark dishes ready on its screen. With that screen switched off, each send can raise
+  the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
+  opened through the dev stack's device chooser never records a check-in: the override returns
+  before the cookie path updates `lastSeenAt` (`apps/server/src/device-session.ts:176-186`).
+  Improve how the alert distinguishes a kitchen using paper and how the dev chooser records check-ins.
+- **Opening or closing a station from the till** (S11, owner, 2026-10-01). Add a core till route
+  calling a new `VENUE_SERVICE` seat method, so staff can open or close the station from the till.
+  Take a manager's PIN as the cash drawer route does (`apps/server/src/till-api.ts:1631-1659`).
 - **Deleting or moving a folder does not show which products change station** (slice 3a, approved
   R6). The delete dialog counts claims and exceptions removed but lists no products whose
   destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that

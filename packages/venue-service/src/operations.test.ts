@@ -384,12 +384,32 @@ describe("venue service routing", () => {
         },
       );
 
-      await expect(resolveMakers(tx, { locationId }, upstairsZone, [negroni.id])).resolves.toEqual(
-        new Map([[negroni.id, { kind: "station", stationId: upstairsBar }]]),
+      await expect(
+        resolveMakers(
+          tx,
+          { locationId },
+          upstairsZone,
+          [negroni.id],
+          new Date("2026-10-02T18:30:00Z"),
+        ),
+      ).resolves.toEqual(
+        new Map([
+          [negroni.id, { kind: "made", route: { kind: "station", stationId: upstairsBar } }],
+        ]),
       );
       await expect(
-        resolveMakers(tx, { locationId }, downstairsZone, [negroni.id]),
-      ).resolves.toEqual(new Map([[negroni.id, { kind: "station", stationId: downstairsBar }]]));
+        resolveMakers(
+          tx,
+          { locationId },
+          downstairsZone,
+          [negroni.id],
+          new Date("2026-10-02T18:30:00Z"),
+        ),
+      ).resolves.toEqual(
+        new Map([
+          [negroni.id, { kind: "made", route: { kind: "station", stationId: downstairsBar } }],
+        ]),
+      );
     });
   });
 
@@ -823,16 +843,16 @@ describe("routing outcomes and menu readiness", () => {
         target: station(bar),
       });
 
-      await expect(resolveMakers(tx, cfg, zoneId, [cocktail.id])).resolves.toEqual(
-        new Map([[cocktail.id, station(bar)]]),
-      );
-      await expect(resolveMakers(tx, cfg, otherZoneId, [cocktail.id])).resolves.toEqual(
-        new Map([[cocktail.id, station(kitchen)]]),
-      );
+      await expect(
+        resolveMakers(tx, cfg, zoneId, [cocktail.id], new Date("2026-10-02T18:30:00Z")),
+      ).resolves.toEqual(new Map([[cocktail.id, { kind: "made", route: station(bar) }]]));
+      await expect(
+        resolveMakers(tx, cfg, otherZoneId, [cocktail.id], new Date("2026-10-02T18:30:00Z")),
+      ).resolves.toEqual(new Map([[cocktail.id, { kind: "made", route: station(kitchen) }]]));
     });
   });
 
-  it("skips a switched-off folder claim for its active parent claim", async () => {
+  it("treats a switched-off folder claim without a fallback as a dead end", async () => {
     const { cfg, zoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const kitchen = await insertStation(tx, cfg.locationId, "Kitchen");
@@ -855,9 +875,9 @@ describe("routing outcomes and menu readiness", () => {
         .set({ active: false })
         .where(eq(kitchenStations.id, closedGrill));
 
-      await expect(resolveMakers(tx, cfg, zoneId, [steak.id])).resolves.toEqual(
-        new Map([[steak.id, station(kitchen)]]),
-      );
+      await expect(
+        resolveMakers(tx, cfg, zoneId, [steak.id], new Date("2026-10-02T18:30:00Z")),
+      ).resolves.toEqual(new Map([[steak.id, { kind: "no_replacement", stationId: closedGrill }]]));
     });
   });
 

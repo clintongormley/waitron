@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { parties, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  kitchenStations,
+  orderDraftLines,
+  parties,
+  products,
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
+import { createException, routeExceptions, setStationToday } from "@waitron/venue-service";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -162,6 +171,78 @@ describe("GET /api/parties/:id/drafts", () => {
 });
 
 describe("PUT /api/parties/:id/drafts", () => {
+  it("keeps a chosen station through re-minting and keeps identical dishes at different stations apart", async () => {
+    const party = await seated();
+    const [bar] = await inTx(venue, (tx) =>
+      tx
+        .insert(kitchenStations)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: `Upstairs bar ${randomUUID()}`,
+        })
+        .returning({ id: kitchenStations.id }),
+    );
+    const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: null,
+      revision: 0,
+      lines: [{ ...dish("Caña"), makeAt: bar!.id }, dish("Caña")],
+    });
+    expect(saved.status).toBe(200);
+    const answer = saved.json as { id: string; lines: { makeAt: string | null }[] };
+    expect(answer.lines.map((line) => line.makeAt)).toEqual([bar!.id, null]);
+    const stored = await inTx(venue, (tx) =>
+      tx
+        .select({ makeAt: orderDraftLines.makeAtStationId })
+        .from(orderDraftLines)
+        .where(eq(orderDraftLines.draftId, answer.id)),
+    );
+    expect(stored.map((line) => line.makeAt)).toEqual([bar!.id, null]);
+  });
+
+  it("keeps a draft saveable after its already chosen station is switched off", async () => {
+    const party = await seated();
+    const [bar] = await inTx(venue, (tx) =>
+      tx
+        .insert(kitchenStations)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: `Closing bar ${randomUUID()}`,
+        })
+        .returning({ id: kitchenStations.id }),
+    );
+    const first = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: null,
+      revision: 0,
+      lines: [{ ...dish("Caña"), makeAt: bar!.id }],
+    });
+    expect(first.status).toBe(200);
+    const draft = first.json as unknown as DraftAnswer;
+    await inTx(venue, (tx) =>
+      tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, bar!.id)),
+    );
+    const second = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: draft.id,
+      revision: draft.revision,
+      lines: [{ ...dish("Caña"), quantity: "2", makeAt: bar!.id }],
+    });
+    expect(second.status).toBe(200);
+    expect(second.json).toMatchObject({ lines: [{ quantity: "2.000", makeAt: bar!.id }] });
+    const updated = second.json as unknown as DraftAnswer;
+    const newChoice = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: draft.id,
+      revision: updated.revision,
+      lines: [
+        { ...dish("Caña"), quantity: "2", makeAt: bar!.id },
+        { ...dish("Tarta"), makeAt: bar!.id },
+      ],
+    });
+    expect(newChoice.status).toBe(409);
+    expect(newChoice.json).toMatchObject({
+      code: "route.station_inactive",
+      params: { stationId: bar!.id },
+    });
+  });
+
   it("saves the session's person's draft, whatever operator the body names", async () => {
     const party = await seated();
 
@@ -214,7 +295,152 @@ describe("PUT /api/parties/:id/drafts", () => {
   });
 });
 
+describe("POST /api/dead-ends/draft", () => {
+  it("answers a selected draft line with the closed station and current station choices", async () => {
+    const party = await seated();
+    const draft = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const [bar] = await inTx(venue, (tx) =>
+      tx
+        .insert(kitchenStations)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: `Upstairs bar ${randomUUID()}`,
+        })
+        .returning({ id: kitchenStations.id, name: kitchenStations.name }),
+    );
+    const [beer] = await inTx(venue, (tx) =>
+      tx.select({ id: products.id }).from(products).where(eq(products.name, "Caña")),
+    );
+    await inTx(venue, async (tx) => {
+      await createException(tx, venue.cfg, {
+        productId: beer!.id,
+        zoneId: null,
+        categoryId: null,
+        target: { kind: "station", stationId: bar!.id },
+      });
+      await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
+    });
+    const response = await ana("POST", "/api/dead-ends/draft", {
+      partyId: party.partyId,
+      draftId: draft.id,
+      lineIds: [draft.lines[0]!.id],
+    });
+    expect(response.status).toBe(200);
+    expect(response.json).toMatchObject({
+      sends: true,
+      deadEnds: [
+        {
+          key: draft.lines[0]!.id,
+          name: "Caña",
+          quantity: "1.000",
+          stationId: bar!.id,
+          stationName: bar!.name,
+          why: "closed",
+        },
+      ],
+      stations: expect.arrayContaining([{ id: bar!.id, name: bar!.name, open: false }]),
+    });
+    await inTx(venue, async (tx) => {
+      await tx.delete(routeExceptions).where(eq(routeExceptions.productId, beer!.id));
+      await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
+    });
+  });
+});
+
+describe("a draft's chosen station at submission", () => {
+  it("sends a dish to its chosen active station after that station closes, and refuses it without a choice", async () => {
+    const party = await seated();
+    const [bar] = await inTx(venue, (tx) =>
+      tx
+        .insert(kitchenStations)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: `Draft bar ${randomUUID()}`,
+        })
+        .returning({ id: kitchenStations.id }),
+    );
+    const [beer] = await inTx(venue, (tx) =>
+      tx.select({ id: products.id }).from(products).where(eq(products.name, "Caña")),
+    );
+    await inTx(venue, async (tx) => {
+      await createException(tx, venue.cfg, {
+        productId: beer!.id,
+        zoneId: null,
+        categoryId: null,
+        target: { kind: "station", stationId: bar!.id },
+      });
+      await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
+    });
+    const chosen = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: null,
+      revision: 0,
+      lines: [{ ...dish("Caña"), makeAt: bar!.id }],
+    });
+    expect(chosen.status).toBe(200);
+    const draft = chosen.json as unknown as DraftAnswer;
+    const sent = await ana(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
+      await submitBody(party.partyId, draft),
+    );
+    expect(sent.status).toBe(200);
+    const items = await inTx(venue, (tx) =>
+      tx
+        .select({ stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, party.tabId)),
+    );
+    expect(items.map((item) => item.stationId)).toContain(bar!.id);
+    const another = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const refused = await ana(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${another.id}/submit`,
+      await submitBody(party.partyId, another),
+    );
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({ code: "station.no_replacement" });
+    await inTx(venue, async (tx) => {
+      await tx.delete(routeExceptions).where(eq(routeExceptions.productId, beer!.id));
+      await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
+    });
+  });
+});
+
 describe("POST /api/parties/:id/drafts/:did/take-over", () => {
+  it("carries a chosen station when a taken draft is discarded into the owner's draft", async () => {
+    const party = await seated();
+    const [bar] = await inTx(venue, (tx) =>
+      tx
+        .insert(kitchenStations)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: `Taken bar ${randomUUID()}`,
+        })
+        .returning({ id: kitchenStations.id }),
+    );
+    const own = await newDraft(ana, party.partyId, [dish("Tarta")]);
+    const other = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: null,
+      revision: 0,
+      lines: [{ ...dish("Caña"), makeAt: bar!.id }],
+    });
+    expect(other.status).toBe(200);
+    const otherDraft = other.json as unknown as DraftAnswer;
+    const taken = await ana(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${otherDraft.id}/take-over`,
+      { revision: otherDraft.revision },
+    );
+    expect(taken.status).toBe(200);
+    expect(taken.json).toMatchObject({
+      id: own.id,
+      lines: [
+        { menuItemId: venue.offerFor("Tarta"), makeAt: null },
+        { menuItemId: venue.offerFor("Caña"), makeAt: bar!.id },
+      ],
+    });
+  });
+
   it("makes the session's person the owner, and refuses 409 draft.out_of_date for a stale revision and draft.already_submitted for a sent draft", async () => {
     const party = await seated();
     const anas = await newDraft(ana, party.partyId, [dish("Croquetas")]);

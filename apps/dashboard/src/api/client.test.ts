@@ -48,7 +48,13 @@ describe("DashboardApi", () => {
   });
   it("reads the products' made-at descriptions", async () => {
     const makers = {
-      lager: { stationId: "bar", stationName: "Bar", noPreparation: false, variesByZone: false },
+      lager: {
+        stationId: "bar",
+        stationName: "Bar",
+        noPreparation: false,
+        noReplacement: false,
+        variesByZone: false,
+      },
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(makers));
     const api = new DashboardApi("", fetchImpl);

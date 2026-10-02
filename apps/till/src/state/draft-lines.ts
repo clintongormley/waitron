@@ -37,6 +37,7 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
     note: note === "" ? null : note,
     quantity: line.quantity,
     courseId: line.courseId ?? null,
+    ...(line.makeAt === undefined ? {} : { makeAt: line.makeAt }),
     noMerge: line.noMerge === true,
   };
 }
@@ -93,6 +94,7 @@ export function fromDraftLine(
     ...(snapshots.length === 0 ? {} : { optionSnapshots: snapshots }),
     ...(line.note === null ? {} : { note: line.note }),
     ...(line.courseId === null ? {} : { courseId: line.courseId }),
+    ...(line.makeAt == null ? {} : { makeAt: line.makeAt }),
     ...(line.noMerge ? { noMerge: true as const } : {}),
     ...(line.unavailable ? { unavailableOnServer: true as const } : {}),
     ...(earlierPrice ? { earlierPriceUnknown: true as const } : {}),

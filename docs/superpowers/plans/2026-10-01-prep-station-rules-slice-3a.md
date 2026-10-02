@@ -37,6 +37,9 @@ Each is a default this plan takes. Approving the plan approves them.
 - **R1. The rules live in venue-service**, beside today's `preparation_routes`, which they replace:
   `station_claims` (one row per claimed folder) and `route_exceptions` (an ordered list).
   `preparation_routes` is dropped.
+- _2026-10-02 (slice 3b): R2 and the corresponding skipped-rule examples and screen wording below
+  are superseded by [3b's S3](2026-10-01-station-hours-fallbacks-slice-3b.md): the rule still matches
+  and follows the station's fallback. With no replacement, it is a dead end._
 - **R2. A claim or exception whose station is switched off is skipped**, and the next rule down
   decides — the next matching exception, then the next claim further up the folders, then the
   default. This carries today's A143 rule ("a switched-off station falls back to the next one that

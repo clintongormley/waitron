@@ -11,11 +11,17 @@ import { AppError, normaliseUuid } from "@waitron/shared";
 import { resolveZoneContext, type VenueScope } from "./operations.js";
 import {
   chooseMaker,
+  closedSendsTo,
   folderAncestors,
+  stationStatus,
   unreachableExceptions,
   type RouteTarget,
   type RoutingRules,
+  type RoutingMoment,
 } from "./routing.js";
+import { readLocationClock } from "@waitron/reporting";
+import { venueMoment } from "./station-times.js";
+import { stationDayStates, stationFallbacks, stationHours } from "./schema/station-times.js";
 import type {
   ExceptionInput,
   RouteExplanation,
@@ -25,6 +31,7 @@ import type {
 } from "./routing-types.js";
 import { routeExceptions, stationClaims } from "./schema/routing.js";
 import "./errors.js";
+import type { MakerOutcome } from "@waitron/module";
 export type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
 
 /** Shared write validation also serves callers that need to check a proposed exception. */
@@ -248,7 +255,7 @@ export async function reorderExceptions(
       .where(and(eq(routeExceptions.locationId, cfg.locationId), eq(routeExceptions.id, id)));
 }
 
-async function snapshot(tx: Transaction, cfg: VenueScope) {
+async function snapshot(tx: Transaction, cfg: VenueScope, businessDay: string | null = null) {
   const claims = await tx
     .select()
     .from(stationClaims)
@@ -274,6 +281,54 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
+  const stationIds = stations.map((row) => row.id);
+  const hours =
+    stationIds.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(stationHours)
+          .where(inArray(stationHours.stationId, stationIds))
+          .orderBy(asc(stationHours.weekday), asc(stationHours.opensAt), asc(stationHours.id));
+  const fallbacks =
+    stationIds.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(stationFallbacks)
+          .where(inArray(stationFallbacks.stationId, stationIds));
+  const dayStates =
+    stationIds.length === 0 || businessDay === null
+      ? []
+      : await tx
+          .select()
+          .from(stationDayStates)
+          .where(
+            and(
+              inArray(stationDayStates.stationId, stationIds),
+              eq(stationDayStates.businessDay, businessDay),
+            ),
+          );
+  const fallbackByStation = new Map(fallbacks.map((row) => [row.stationId, row.fallbackStationId]));
+  const todayByStation = new Map(
+    dayStates.map((row) => [row.stationId, row.open ? ("open" as const) : ("closed" as const)]),
+  );
+  const timing = new Map(
+    stations.map((station) => [
+      station.id,
+      {
+        hours: hours
+          .filter((row) => row.stationId === station.id)
+          .map((row) => ({
+            weekday: row.weekday,
+            opensAt: row.opensAt.slice(0, 5),
+            closesAt: row.closesAt.slice(0, 5),
+          })),
+        fallbackId: fallbackByStation.get(station.id) ?? null,
+        today: todayByStation.get(station.id) ?? null,
+      },
+    ]),
+  );
   const rules: RoutingRules = {
     claims: new Map(claims.map((row) => [row.categoryId, readTarget(row)])),
     exceptions: exceptions.map(({ id, position, zoneId, categoryId, productId, ...row }) => ({
@@ -287,23 +342,33 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
     parentOf: new Map(folders.map((row) => [row.id, row.parentId])),
     activeStationIds: new Set(stations.filter((row) => row.active).map((row) => row.id)),
     defaultStationId: stations.find((row) => row.active && row.isDefault)?.id ?? null,
+    timing,
   };
   return { rules, folders, stations };
 }
 
-export async function loadRoutingRules(tx: Transaction, cfg: VenueScope): Promise<RoutingRules> {
-  return (await snapshot(tx, cfg)).rules;
+export async function loadRoutingRules(
+  tx: Transaction,
+  cfg: VenueScope,
+  businessDay: string | null,
+): Promise<RoutingRules> {
+  return (await snapshot(tx, cfg, businessDay)).rules;
 }
+
+export type ExplainWhen = { kind: "now"; at: Date } | { kind: "at"; moment: RoutingMoment };
 
 export async function explainRoute(
   tx: Transaction,
   cfg: VenueScope,
   productId: string,
   zoneId: string | null,
+  when: ExplainWhen,
 ): Promise<RouteExplanation> {
   const uuid = storedUuid(productId);
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  const { rules, stations } = await snapshot(tx, cfg);
+  const now = when.kind === "now" ? await venueMoment(tx, cfg, when.at) : null;
+  const moment = when.kind === "at" ? when.moment : now;
+  const { rules, stations } = await snapshot(tx, cfg, now?.businessDay ?? null);
   const [product] = await tx
     .select({
       id: products.id,
@@ -323,10 +388,12 @@ export async function explainRoute(
       categoryId: product.categoryId,
     },
     zoneId,
+    moment,
   );
   return {
     ...choice,
-    skipped: [...choice.skipped],
+    clockReadable: moment !== null,
+    fallbacks: [...choice.fallbacks],
     stations: stations.map(({ id, name, active }) => ({ id, name, active })),
   };
 }
@@ -438,9 +505,14 @@ export async function previewRoutingChange(
         routedProductId: product.routedId,
         categoryId: product.categoryId,
       };
-      const from = chooseMaker(rules, facts, zone.id).route;
-      const to = chooseMaker(after, facts, zone.id).route;
-      if (JSON.stringify(from) !== JSON.stringify(to))
+      const previous = chooseMaker(rules, facts, zone.id, null);
+      const from = previous.route;
+      const next = chooseMaker(after, facts, zone.id, null);
+      const to = next.route;
+      if (
+        JSON.stringify(from) !== JSON.stringify(to) ||
+        previous.noReplacement !== next.noReplacement
+      )
         moves.push({
           productId: product.id,
           productName: product.name,
@@ -448,6 +520,7 @@ export async function previewRoutingChange(
           zoneName: zone.name,
           from,
           to,
+          toNoReplacement: next.noReplacement,
         });
     }
   return moves.sort(
@@ -468,17 +541,19 @@ export async function resolveMakers(
   cfg: VenueScope,
   zoneId: string | null,
   productIds: readonly string[],
-): Promise<ReadonlyMap<string, RouteTarget | null>> {
+  at: Date,
+): Promise<ReadonlyMap<string, MakerOutcome>> {
   const spellingByUuid = new Map<string, string>();
   for (const id of productIds) {
     const uuid = storedUuid(id);
     if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
   }
   const ids = [...spellingByUuid.keys()];
-  const outcomes = new Map<string, RouteTarget | null>();
+  const outcomes = new Map<string, MakerOutcome>();
   if (ids.length === 0) return outcomes;
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  const rules = await loadRoutingRules(tx, cfg);
+  const moment = await venueMoment(tx, cfg, at);
+  const rules = await loadRoutingRules(tx, cfg, moment?.businessDay ?? null);
   const productRows = await tx
     .select({
       id: products.id,
@@ -493,27 +568,65 @@ export async function resolveMakers(
     const product = byId.get(uuid);
     if (product === undefined)
       throw new AppError("route.subject_not_found", { subject: "product", id });
+    const choice = chooseMaker(
+      rules,
+      {
+        productId: uuid,
+        routedProductId: storedUuid(product.routedId),
+        categoryId: product.categoryId,
+      },
+      zoneId,
+      moment,
+    );
     outcomes.set(
       id,
-      chooseMaker(
-        rules,
-        {
-          productId: uuid,
-          routedProductId: storedUuid(product.routedId),
-          categoryId: product.categoryId,
-        },
-        zoneId,
-      ).route,
+      choice.route !== null
+        ? { kind: "made", route: choice.route }
+        : choice.noReplacement
+          ? { kind: "no_replacement", stationId: choice.fallbacks[0]!.stationId }
+          : { kind: "no_station" },
     );
   }
   return outcomes;
 }
 
+export async function stationStates(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<
+  ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
+> {
+  const moment = await venueMoment(tx, cfg, at);
+  const { rules, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
+  return new Map(
+    stations.map((station) => [
+      station.id,
+      {
+        open: stationStatus(rules, station.id, moment).open,
+        isDefault: station.isDefault,
+        active: station.active,
+        name: station.name,
+      },
+    ]),
+  );
+}
+
 export async function describeMakers(
   tx: Transaction,
   cfg: VenueScope,
-): Promise<ReadonlyMap<string, { route: RouteTarget | null; variesByZone: boolean }>> {
-  const rules = await loadRoutingRules(tx, cfg);
+): Promise<
+  ReadonlyMap<
+    string,
+    {
+      route: RouteTarget | null;
+      variesByZone: boolean;
+      noReplacement: boolean;
+      unavailableStationId: string | null;
+    }
+  >
+> {
+  const rules = await loadRoutingRules(tx, cfg, null);
   const rows = await tx
     .select({
       id: products.id,
@@ -524,16 +637,28 @@ export async function describeMakers(
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .where(eq(products.active, true));
-  const result = new Map<string, { route: RouteTarget | null; variesByZone: boolean }>();
+  const result = new Map<
+    string,
+    {
+      route: RouteTarget | null;
+      variesByZone: boolean;
+      noReplacement: boolean;
+      unavailableStationId: string | null;
+    }
+  >();
   for (const row of rows) {
     if (row.parentActive === false) continue;
     const ancestors = folderAncestors(rules.parentOf, row.categoryId);
+    const choice = chooseMaker(
+      rules,
+      { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
+      null,
+      null,
+    );
     result.set(row.id, {
-      route: chooseMaker(
-        rules,
-        { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
-        null,
-      ).route,
+      route: choice.route,
+      noReplacement: choice.noReplacement,
+      unavailableStationId: choice.noReplacement ? choice.fallbacks[0]!.stationId : null,
       variesByZone: rules.exceptions.some(
         (exception) =>
           exception.zoneId !== null &&
@@ -545,8 +670,15 @@ export async function describeMakers(
   return result;
 }
 
-export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<RoutingModel> {
-  const { rules, folders, stations } = await snapshot(tx, cfg);
+export async function routingModel(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<RoutingModel> {
+  const moment = await venueMoment(tx, cfg, at);
+  const { rules, folders, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const cutover = clock.dayCutover.slice(0, 5);
   const neverMatches = unreachableExceptions(rules);
   const productFolders = await tx
     .select({
@@ -570,8 +702,6 @@ export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<Ro
         .some(
           (earlier) =>
             earlier.categoryId !== null &&
-            (earlier.target.kind === "no_preparation" ||
-              rules.activeStationIds.has(earlier.target.stationId)) &&
             (earlier.zoneId === null || earlier.zoneId === candidate.zoneId) &&
             family.every((row) => below(row.categoryId, earlier.categoryId!)),
         )
@@ -580,9 +710,6 @@ export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<Ro
   }
   const stationOff = (target: RouteTarget) =>
     target.kind === "station" && !rules.activeStationIds.has(target.stationId);
-  const namedStations = new Set<string>();
-  for (const target of [...rules.claims.values(), ...rules.exceptions.map((e) => e.target)])
-    if (target.kind === "station") namedStations.add(target.stationId);
   const unfiled = await tx
     .select({ id: products.id, name: products.name })
     .from(products)
@@ -606,8 +733,17 @@ export async function routingModel(tx: Transaction, cfg: VenueScope): Promise<Ro
       products: unfiled,
     },
     defaultStationId: rules.defaultStationId,
-    stations: stations
-      .filter((row) => row.isDefault || namedStations.has(row.id))
-      .map(({ id, name, active }) => ({ id, name, active })),
+    stations: stations.map(({ id, name, active }) => ({ id, name, active })),
+    stationTimes: stations.map(({ id }) => ({
+      stationId: id,
+      status: stationStatus(rules, id, moment),
+      hours: [...(rules.timing.get(id)?.hours ?? [])],
+      fallbackStationId: rules.timing.get(id)?.fallbackId ?? null,
+      today: rules.timing.get(id)?.today ?? null,
+      closedSendsTo: closedSendsTo(rules, id, moment),
+    })),
+    todayEnds:
+      moment === null ? null : { timeOfDay: cutover, tomorrow: moment.timeOfDay >= cutover },
+    clockReadable: moment !== null,
   };
 }

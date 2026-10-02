@@ -11,6 +11,24 @@ it("registers the dashboard's alert wording on import", () => {
   );
 });
 
+it("explains station output failures in English and Spanish without promising rerouting", () => {
+  for (const code of [
+    "station.printer_down",
+    "station.default_printer_down",
+    "station.screens_dark",
+    "station.default_screens_dark",
+  ]) {
+    const en = alertMessage(code, { station: "Grill", printer: "Epson" }, "en");
+    const es = alertMessage(code, { station: "Grill", printer: "Epson" }, "es");
+    expect(en, code).toContain("Grill");
+    expect(es, code).toContain("Grill");
+    if (code !== "station.printer_down") {
+      expect(en, code).toContain("till's station view");
+      expect(es, code).toContain("vista de estación del TPV");
+    }
+  }
+});
+
 // The clock only raises this for a clock that reads earlier, so the number is never positive: a
 // backward step under a second is stored, and shown, as 0.
 it("reads a backwards clock jump correctly with its negative number", () => {
@@ -70,10 +88,10 @@ it("names the dishes a paid order could not send to the kitchen", () => {
     orderLabel: null,
   };
   expect(alertMessage("route.dish_not_sent", params, "en")).toBe(
-    "Paid order 42 has dishes no prep station could take: Croquetas, Pulpo. They were not sent to the kitchen. Pass them to the kitchen by hand, and switch on a default station on the Prep stations page.",
+    "Paid order 42 has dishes no prep station could take: Croquetas, Pulpo. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no default station switched on, leaves a dish nowhere to go.",
   );
   expect(alertMessage("route.dish_not_sent", params, "es")).toBe(
-    "El pedido pagado 42 tiene platos que ninguna estación de preparación podía recibir: Croquetas, Pulpo. No se han enviado a cocina. Pásalos a cocina a mano y activa una estación predeterminada en la página de Estaciones de preparación.",
+    "El pedido pagado 42 tiene platos que ninguna estación de preparación podía recibir: Croquetas, Pulpo. No se han enviado a cocina. Pásalos a cocina a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
   );
 });
 

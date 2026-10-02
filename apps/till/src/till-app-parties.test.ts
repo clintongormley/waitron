@@ -2365,6 +2365,93 @@ describe("till-app: moving a bill", () => {
     el.shadowRoot!.querySelector<HTMLElement & { heldOrders: unknown[] }>("till-counter-screen")
       ?.heldOrders ?? null;
 
+  it("asks where to make a bill's dish before moving it to the counter", async () => {
+    const askOrderDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      revision: 3,
+      deadEnds: [
+        {
+          key: "line-1",
+          name: "Café",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
+    const moveBill = vi
+      .fn()
+      .mockResolvedValue({ partyId: null, billId: "wo-check", merged: false });
+    const { el } = await mountApp({ askOrderDeadEnds, setMakeAt, moveBill });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "separate" });
+    await flush(el);
+    expect(askOrderDeadEnds).toHaveBeenCalledWith("wo-check", zone.id);
+    expect(moveBill).not.toHaveBeenCalled();
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(
+        new CustomEvent("make-at", { detail: { key: "line-1", stationId: "kitchen" } }),
+      );
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(setMakeAt).toHaveBeenCalledWith("wo-check", 3, { "line-1": "kitchen" });
+    expect(moveBill).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks a table bill move after its replacement station closes", async () => {
+    const askOrderDeadEnds = vi
+      .fn()
+      .mockResolvedValueOnce({ sends: false, deadEnds: [], stations: [] })
+      .mockResolvedValue({
+        sends: true,
+        revision: 3,
+        deadEnds: [
+          {
+            key: "line-1",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      });
+    const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
+    const moveBill = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue({ partyId: null, billId: "wo-check", merged: false });
+    const { el } = await mountApp({ askOrderDeadEnds, setMakeAt, moveBill });
+    const order = await openMesa(el);
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+    expect(askOrderDeadEnds).toHaveBeenCalledTimes(2);
+    expect(moveBill).toHaveBeenCalledOnce();
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(
+        new CustomEvent("make-at", { detail: { key: "line-1", stationId: "kitchen" } }),
+      );
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(setMakeAt).toHaveBeenCalledOnce();
+    expect(moveBill).toHaveBeenCalledTimes(2);
+  });
+
   it("moves the bill on screen to the counter, sending the counter's zone and the party revision", async () => {
     const { el } = await mountApp();
     const order = await openMesa(el);

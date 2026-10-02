@@ -37,6 +37,9 @@ const TABLES = [
   "zone_menus",
   "device_zone_defaults",
   "station_claims",
+  "station_hours",
+  "station_fallbacks",
+  "station_day_states",
   "route_exceptions",
   "department_hours",
   "order_service_contexts",
@@ -178,6 +181,18 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(station_id) -> kitchen_stations(id)",
         ],
       },
+      station_hours: { primaryKey: ["id"], foreignKeys: ["(station_id) -> kitchen_stations(id)"] },
+      station_fallbacks: {
+        primaryKey: ["station_id"],
+        foreignKeys: [
+          "(fallback_station_id) -> kitchen_stations(id)",
+          "(station_id) -> kitchen_stations(id)",
+        ],
+      },
+      station_day_states: {
+        primaryKey: ["id"],
+        foreignKeys: ["(station_id) -> kitchen_stations(id)"],
+      },
       route_exceptions: {
         primaryKey: ["id"],
         foreignKeys: [
@@ -228,6 +243,15 @@ describe("the venue-service migration set carries no tenant column", () => {
     // No PRAGMA reports a partial index's `WHERE`, so it is read off the stored statement.
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
     expect(columns("station_claims_folder_key")).toEqual(["location_id", "category_id"]);
+    expect(columns("station_hours_interval_key")).toEqual([
+      "station_id",
+      "weekday",
+      "opens_at",
+      "closes_at",
+    ]);
+    expect(columns("station_day_states_day_key")).toEqual(["station_id", "business_day"]);
+    expect(defs["station_hours_interval_key"]?.unique).toBe(true);
+    expect(defs["station_day_states_day_key"]?.unique).toBe(true);
     expect(defs["station_claims_folder_key"]?.unique).toBe(true);
     expect(columns("route_exceptions_order_idx")).toEqual(["location_id", "position"]);
     expect(defs["route_exceptions_order_idx"]?.unique).toBe(false);

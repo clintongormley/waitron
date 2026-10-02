@@ -2,6 +2,22 @@ import { expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
 
+it("writes station hours, fallback and today to venue service, and reads output failures passively", async () => {
+  const request = vi.fn(async () => ({ printersDown: [], screensDark: [] }));
+  const api = new PrepStationsApi(request as DashboardRequest);
+  const hours = [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }];
+  await api.setStationHours("bar", hours);
+  await api.setStationFallback("bar", null);
+  await api.setStationToday("bar", "closed");
+  await api.listOutputsDown();
+  expect(request.mock.calls).toEqual([
+    ["/management-api/venue-service/stations/bar/hours", "PUT", { hours }],
+    ["/management-api/venue-service/stations/bar/fallback", "PUT", { fallbackStationId: null }],
+    ["/management-api/venue-service/stations/bar/today", "PUT", { state: "closed" }],
+    ["/management-api/stations/outputs-down", "GET", undefined, { passive: true }],
+  ]);
+});
+
 it("loads the routing and station context, including each station printer assignment", async () => {
   const responses: Record<string, unknown> = {
     "/management-api/venue-service/routing": {
@@ -80,7 +96,13 @@ it("offers an active product to the tester when it has no variants", async () =>
 });
 
 it("asks the route tester for a product and an optional zone", async () => {
-  const request = vi.fn(async () => ({ route: null, decidedBy: null, skipped: [], stations: [] }));
+  const request = vi.fn(async () => ({
+    route: null,
+    decidedBy: null,
+    fallbacks: [],
+    noReplacement: false,
+    stations: [],
+  }));
   const result = await new PrepStationsApi(request as DashboardRequest).explain("lager", null);
   expect(result.route).toBeNull();
   expect(request).toHaveBeenCalledWith(
@@ -92,7 +114,13 @@ it("asks the route tester for a product and an optional zone", async () => {
 });
 
 it("escapes product and zone identifiers in a zoned route explanation", async () => {
-  const request = vi.fn(async () => ({ route: null, decidedBy: null, skipped: [], stations: [] }));
+  const request = vi.fn(async () => ({
+    route: null,
+    decidedBy: null,
+    fallbacks: [],
+    noReplacement: false,
+    stations: [],
+  }));
   await new PrepStationsApi(request as DashboardRequest).explain("rice & beans", "front/bar");
   expect(request).toHaveBeenCalledWith(
     "/management-api/venue-service/routing/explain?productId=rice+%26+beans&zoneId=front%2Fbar",
@@ -326,4 +354,22 @@ it("writes station targets for a claim and an edited exception", async () => {
       },
     ],
   ]);
+});
+
+it("switches a station on through the core station PATCH", async () => {
+  const request = vi.fn(async () => undefined);
+  await new PrepStationsApi(request as DashboardRequest).activateStation("bar");
+  expect(request).toHaveBeenCalledWith("/management-api/stations/bar", "PATCH", { active: true });
+});
+
+it("serializes the scheduled weekday and time together", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.explain("lager", null, { weekday: 5, timeOfDay: "22:00" });
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/venue-service/routing/explain?productId=lager&zoneId=&weekday=5&time=22%3A00",
+    "GET",
+    undefined,
+    { passive: false },
+  );
 });

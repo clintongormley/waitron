@@ -338,6 +338,226 @@ const savedLines = () =>
     each.lines.map((line) => `${line.menuItemId} ×${Number(line.quantity)}`),
   );
 
+it("asks where a refused line edit should be made and retries with the chosen station", async () => {
+  const updateOrderLine = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "station.no_replacement" })
+    .mockResolvedValueOnce({ revision: 1, party: { id: "v1", revision: 4 } });
+  const askSaleDeadEnds = vi.fn().mockResolvedValue({
+    sends: true,
+    deadEnds: [
+      {
+        key: "0",
+        name: "Beer",
+        quantity: "2",
+        stationId: "bar",
+        stationName: "Upstairs bar",
+        why: "switched_off",
+      },
+    ],
+    stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+  });
+  const { el } = await mountApp({ updateOrderLine, askSaleDeadEnds });
+  const order = await openMesa(el);
+  emit(order, "change-line", {
+    lineNo: 1,
+    lineName: "Beer",
+    patch: { quantity: "2" },
+    revision: 0,
+    saleLine: { menuItemId: "offer-beer", quantity: "2" },
+  });
+  await flush(el);
+  expect(askSaleDeadEnds).toHaveBeenCalledWith(
+    [{ menuItemId: "offer-beer", quantity: "2" }],
+    "wo-4",
+  );
+  const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-edit-dead-ends]")!;
+  expect(dialog).not.toBeNull();
+  const section = dialog.querySelector<HTMLElement>("till-dead-ends-section")!;
+  section.dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+  await flush(el);
+  dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!.click();
+  await flush(el);
+  expect(updateOrderLine).toHaveBeenLastCalledWith(
+    "wo-4",
+    1,
+    { quantity: "2", makeAt: "kitchen" },
+    0,
+  );
+});
+
+describe("dead-end questions with no timely answer", () => {
+  afterEach(() => vi.useRealTimers());
+
+  async function settleTimers(el: TillApp): Promise<void> {
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+    }
+  }
+
+  it("shows the original edit refusal after a stalled station question", async () => {
+    const { el } = await mountApp({
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
+      askSaleDeadEnds: vi.fn(() => new Promise(() => {})),
+    });
+    const order = await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Beer",
+      patch: { quantity: "2" },
+      revision: 0,
+      saleLine: { menuItemId: "offer-beer", quantity: "2" },
+    });
+    await settleTimers(el);
+    expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(2_999);
+    await settleTimers(el);
+    expect(banner(el)).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    await settleTimers(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it("releases Send after three seconds and ignores a later station answer", async () => {
+    let answer!: (value: unknown) => void;
+    const askDraftDeadEnds = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ askDraftDeadEnds });
+    await openMesa(el);
+    await tap(el, "Beer");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
+      .click();
+    await settleTimers(el);
+    expect(askDraftDeadEnds).toHaveBeenCalledOnce();
+    const screen = tableOrder(el)!;
+    const confirm = () =>
+      screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-draft-confirm]",
+      )!;
+    expect(confirm().disabled).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_999);
+    await settleTimers(el);
+    expect(confirm().disabled).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await settleTimers(el);
+    expect(confirm().disabled).toBe(false);
+    answer({
+      sends: true,
+      deadEnds: [
+        {
+          key: "late-id",
+          name: "Beer",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Upstairs bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    await settleTimers(el);
+    expect(screen.shadowRoot!.querySelector("till-dead-ends-section")).toBeNull();
+  });
+});
+
+it("saves a Send preview station choice on the matching live draft line", async () => {
+  const askDraftDeadEnds = vi.fn(async (_partyId: string, _draftId: string, lineIds: string[]) => ({
+    sends: true,
+    deadEnds: [
+      {
+        key: lineIds[0]!,
+        name: "Beer",
+        quantity: "1",
+        stationId: "bar",
+        stationName: "Upstairs bar",
+        why: "closed" as const,
+      },
+    ],
+    stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+  }));
+  const { el } = await mountApp({ askDraftDeadEnds });
+  await openMesa(el);
+  await tap(el, "Beer");
+  await tap(el, "Steak");
+  await actOpenPreview(el, "send-all");
+  const screen = tableOrder(el)!;
+  expect(askDraftDeadEnds).toHaveBeenCalledWith(
+    "v1",
+    "draft-1",
+    expect.any(Array),
+    expect.any(Object),
+  );
+  expect(
+    screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-draft-confirm]")!
+      .disabled,
+  ).toBe(true);
+  screen
+    .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+    .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+  await flush(el);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+  await flush(el, 6);
+  expect(api.saveDraft.mock.calls.at(-1)![1].lines[0].makeAt).toBe("kitchen");
+  expect(api.submitDraft).toHaveBeenCalledOnce();
+});
+
+it("reopens the Send preview and checks again after a station refusal", async () => {
+  const askDraftDeadEnds = vi
+    .fn()
+    .mockResolvedValueOnce({ sends: true, deadEnds: [], stations: [] })
+    .mockImplementationOnce(async (_partyId: string, _draftId: string, ids: string[]) => ({
+      sends: true,
+      deadEnds: [
+        {
+          key: ids[0],
+          name: "Beer",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Upstairs bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    }));
+  const submitDraft = vi.fn().mockRejectedValueOnce({ code: "station.no_replacement" });
+  const { el } = await mountApp({ askDraftDeadEnds, submitDraft });
+  await openMesa(el);
+  await tap(el, "Beer");
+  await act(el, "send-all");
+  expect(submitDraft).toHaveBeenCalledOnce();
+  expect(askDraftDeadEnds).toHaveBeenCalledTimes(2);
+  expect(tableOrder(el)!.shadowRoot!.querySelector("till-dead-ends-section")).not.toBeNull();
+  expect(
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-draft-confirm]",
+    )!.disabled,
+  ).toBe(true);
+});
+
+it("keeps Confirm available when the station question fails", async () => {
+  const { el } = await mountApp({
+    askDraftDeadEnds: vi.fn().mockRejectedValue(new TypeError("offline")),
+  });
+  await openMesa(el);
+  await tap(el, "Beer");
+  await actOpenPreview(el, "send-all");
+  const screen = tableOrder(el)!;
+  expect(screen.shadowRoot!.querySelector("till-dead-ends-section")).toBeNull();
+  expect(
+    screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-draft-confirm]")!
+      .disabled,
+  ).toBe(false);
+});
+
+async function actOpenPreview(el: TillApp, kind: string): Promise<void> {
+  tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!.click();
+  await flush(el);
+}
+
 /**
  * A floor read from what the draft server holds when it is asked, and saves that answer late, so a
  * floor read made before a save lands shows no unsent-order mark.
@@ -1604,12 +1824,20 @@ describe("till-app: how long a send may take", () => {
   });
 
   it("unlocks the draft at the limit when the save before the send gets no answer", async () => {
-    const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+    const { el } = await mountApp();
     await openMesa(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
-    await confirmFireAll(el);
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
+      .click();
+    await settle(el);
+    api.saveDraft.mockImplementation(noAnswer);
+    draft(el).setLineCourse(0, "mains");
+    await settle(el);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await settle(el);
 
     await vi.advanceTimersByTimeAsync(149_999);
     await settle(el);
@@ -1623,7 +1851,13 @@ describe("till-app: how long a send may take", () => {
   });
 
   it("unlocks the draft 150 seconds after Send even when a save was already out", async () => {
-    const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const saveDraft = vi.fn(server.saveDraft).mockImplementationOnce(async (...args) => {
+      await held;
+      return server.saveDraft(...args);
+    });
+    const { el } = await mountApp({ saveDraft });
     await openMesa(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
@@ -1633,7 +1867,17 @@ describe("till-app: how long a send may take", () => {
     await vi.advanceTimersByTimeAsync(100_000);
     press(el, "Steak");
     await settle(el);
-    await confirmFireAll(el);
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
+      .click();
+    await settle(el);
+    release();
+    await settle(el);
+    api.saveDraft.mockImplementation(noAnswer);
+    draft(el).setLineCourse(0, "mains");
+    await settle(el);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await settle(el);
 
     await vi.advanceTimersByTimeAsync(149_999);
     await settle(el);

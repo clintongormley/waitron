@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -32,6 +32,7 @@ import {
   previewRoutingChange,
   removeClaim,
   resolveMakers,
+  stationStates,
   reorderExceptions,
   routingModel,
   setClaim,
@@ -41,6 +42,7 @@ import {
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { routeExceptions } from "./schema/routing.js";
+import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -135,13 +137,20 @@ describe("route explanation", () => {
       expect(makers.get(f.bread)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: false,
+        noReplacement: false,
+        unavailableStationId: null,
       });
     }));
 
   it("rejects an unknown product", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await expect(explainRoute(tx, f.cfg, randomUUID(), null)).rejects.toMatchObject({
+      await expect(
+        explainRoute(tx, f.cfg, randomUUID(), null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).rejects.toMatchObject({
         code: "route.subject_not_found",
         params: { subject: "product" },
       });
@@ -160,14 +169,20 @@ describe("route explanation", () => {
       expect(makers.get(f.mojito)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: true,
+        noReplacement: false,
+        unavailableStationId: null,
       });
       expect(makers.get(f.variant)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: true,
+        noReplacement: false,
+        unavailableStationId: null,
       });
       expect(makers.get(f.bread)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: false,
+        noReplacement: false,
+        unavailableStationId: null,
       });
     }));
   it("names a matching exception, including a variant's parent product", async () =>
@@ -179,15 +194,21 @@ describe("route explanation", () => {
         productId: f.mojito,
         target: { kind: "station", stationId: f.terraceBar },
       });
-      expect(await explainRoute(tx, f.cfg, f.variant, f.terrace)).toMatchObject({
+      expect(
+        await explainRoute(tx, f.cfg, f.variant, f.terrace, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
         route: { kind: "station", stationId: f.terraceBar },
         decidedBy: { kind: "exception", exceptionId: id },
-        skipped: [],
+        fallbacks: [],
+        noReplacement: false,
         stations: expect.arrayContaining([{ id: f.terraceBar, name: "Terrace Bar", active: true }]),
       });
     }));
 
-  it("names a claim after skipping a switched-off exception", async () =>
+  it("names a switched-off exception as a dead end", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
@@ -201,10 +222,16 @@ describe("route explanation", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
-      expect(await explainRoute(tx, f.cfg, f.mojito, f.terrace)).toMatchObject({
-        route: { kind: "station", stationId: f.bar },
-        decidedBy: { kind: "claim", categoryId: f.drinks },
-        skipped: [{ decision: { kind: "exception", exceptionId: id }, stationId: f.terraceBar }],
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, f.terrace, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
+        route: null,
+        decidedBy: { kind: "exception", exceptionId: id },
+        fallbacks: [{ stationId: f.terraceBar, why: "switched_off" }],
+        noReplacement: true,
         stations: expect.arrayContaining([
           { id: f.terraceBar, name: "Terrace Bar", active: false },
         ]),
@@ -214,12 +241,22 @@ describe("route explanation", () => {
   it("names the default and reports no route when no active default remains", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      expect(await explainRoute(tx, f.cfg, f.bread, null)).toMatchObject({
+      expect(
+        await explainRoute(tx, f.cfg, f.bread, null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
         route: { kind: "station", stationId: f.bar },
         decidedBy: { kind: "default" },
       });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      expect(await explainRoute(tx, f.cfg, f.bread, null)).toMatchObject({
+      expect(
+        await explainRoute(tx, f.cfg, f.bread, null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
         route: null,
         decidedBy: null,
       });
@@ -232,7 +269,7 @@ describe("stored preparation rules", () => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      expect((await routingModel(tx, f.cfg)).claims).toEqual([
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims).toEqual([
         {
           categoryId: f.drinks,
           target: { kind: "station", stationId: f.terraceBar },
@@ -240,10 +277,10 @@ describe("stored preparation rules", () => {
         },
       ]);
       await setClaim(tx, f.cfg, f.drinks, noPrep);
-      expect((await loadRoutingRules(tx, f.cfg)).claims.get(f.drinks)).toEqual(noPrep);
+      expect((await loadRoutingRules(tx, f.cfg, null)).claims.get(f.drinks)).toEqual(noPrep);
       await removeClaim(tx, f.cfg, f.drinks);
       await removeClaim(tx, f.cfg, f.drinks);
-      expect((await routingModel(tx, f.cfg)).claims).toEqual([]);
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims).toEqual([]);
     }));
 
   it("refuses inactive stations, missing folders, missing products, variants and missing zones", async () =>
@@ -302,7 +339,11 @@ describe("stored preparation rules", () => {
       const a = await createException(tx, f.cfg, f.input);
       const b = await createException(tx, f.cfg, { ...f.input, categoryId: f.cocktails });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position, e.neverMatches]),
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+          e.neverMatches,
+        ]),
       ).toEqual([
         [a, 0, false],
         [b, 1, true],
@@ -314,14 +355,23 @@ describe("stored preparation rules", () => {
           params: { field: "ids" },
         });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position, e.neverMatches]),
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+          e.neverMatches,
+        ]),
       ).toEqual([
         [b, 0, false],
         [a, 1, false],
       ]);
       await deleteException(tx, f.cfg, a);
       const c = await createException(tx, f.cfg, { ...f.input, target: noPrep });
-      expect((await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position])).toEqual([
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+        ]),
+      ).toEqual([
         [b, 0],
         [c, 1],
       ]);
@@ -331,7 +381,9 @@ describe("stored preparation rules", () => {
         productId: f.mojito,
         target: noPrep,
       });
-      expect((await routingModel(tx, f.cfg)).exceptions[0]).toMatchObject({
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions[0],
+      ).toMatchObject({
         id: b,
         position: 0,
         zoneId: null,
@@ -353,8 +405,8 @@ describe("stored preparation rules", () => {
         other = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, noPrep);
       await removeClaim(tx, other.cfg, f.drinks);
-      const ownRules = await loadRoutingRules(tx, f.cfg);
-      const otherRules = await loadRoutingRules(tx, other.cfg);
+      const ownRules = await loadRoutingRules(tx, f.cfg, null);
+      const otherRules = await loadRoutingRules(tx, other.cfg, null);
       expect(ownRules.claims.get(f.drinks)).toEqual(noPrep);
       expect(otherRules.claims.size).toBe(0);
       expect(ownRules.activeStationIds).toEqual(new Set([f.bar, f.terraceBar]));
@@ -384,12 +436,17 @@ describe("stored preparation rules", () => {
         code: "management.request_invalid",
         params: { field: "ids" },
       });
-      expect((await routingModel(tx, f.cfg)).exceptions.map((e) => [e.id, e.position])).toEqual([
-        [a, 0],
-      ]);
-      expect((await routingModel(tx, other.cfg)).exceptions.map((e) => [e.id, e.position])).toEqual(
-        [[b, 0]],
-      );
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
+          e.id,
+          e.position,
+        ]),
+      ).toEqual([[a, 0]]);
+      expect(
+        (await routingModel(tx, other.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map(
+          (e) => [e.id, e.position],
+        ),
+      ).toEqual([[b, 0]]);
     }));
 
   it("flags a product caught with all variants, but permits a variant in another folder", async () =>
@@ -402,16 +459,22 @@ describe("stored preparation rules", () => {
         productId: f.mojito,
       });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(true);
       await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.variant));
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(false);
       await tx.update(products).set({ categoryId: null }).where(eq(products.id, f.variant));
       await updateException(tx, f.cfg, earlier, { ...f.input, zoneId: null, target: noPrep });
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(true);
       await updateException(tx, f.cfg, product, {
         ...f.input,
@@ -421,7 +484,9 @@ describe("stored preparation rules", () => {
       });
       await updateException(tx, f.cfg, earlier, f.input);
       expect(
-        (await routingModel(tx, f.cfg)).exceptions.find((e) => e.id === product)?.neverMatches,
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
+          (e) => e.id === product,
+        )?.neverMatches,
       ).toBe(false);
       await updateException(tx, f.cfg, product, {
         ...f.input,
@@ -429,9 +494,9 @@ describe("stored preparation rules", () => {
         productId: f.mojito,
       });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.exceptions.find((e) => e.id === product)).toMatchObject({
-        neverMatches: false,
+        neverMatches: true,
         stationOff: true,
       });
       expect(model.defaultStationId).toBeNull();
@@ -442,7 +507,7 @@ describe("stored preparation rules", () => {
       const f = await fixture(tx);
       const [plain] = await tx.insert(categories).values({ name: "Plain" }).returning();
       await setClaim(tx, f.cfg, f.drinks, noPrep);
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.unassigned.folders).toContainEqual({ id: f.food, name: "Food" });
       expect(model.unassigned.folders).toContainEqual({ id: plain!.id, name: "Plain" });
       expect(
@@ -454,10 +519,13 @@ describe("stored preparation rules", () => {
       );
       await tx.update(products).set({ active: false }).where(eq(products.id, f.bread));
       expect(
-        (await routingModel(tx, f.cfg)).unassigned.products.some((p) => p.id === f.bread),
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).unassigned.products.some(
+          (p) => p.id === f.bread,
+        ),
       ).toBe(false);
       expect(model.defaultStationId).toBe(f.bar);
-      expect(model.stations).toEqual([{ id: f.bar, name: "Bar", active: true }]);
+      expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: true });
+      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
     }));
 
   it("cascades folder rules and moves its product to the nearest surviving claim", async () =>
@@ -467,7 +535,7 @@ describe("stored preparation rules", () => {
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await createException(tx, f.cfg, { ...f.input, categoryId: f.cocktails });
       await deleteCatalogueItems(tx, { productIds: [], categoryIds: [f.cocktails] }, "move_up");
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.claims.some((c) => c.categoryId === f.cocktails)).toBe(false);
       expect(model.exceptions).toEqual([]);
       const [moved] = await tx
@@ -477,9 +545,10 @@ describe("stored preparation rules", () => {
       expect(moved!.categoryId).toBe(f.drinks);
       expect(
         chooseMaker(
-          await loadRoutingRules(tx, f.cfg),
+          await loadRoutingRules(tx, f.cfg, null),
           { productId: f.mojito, routedProductId: f.mojito, categoryId: moved!.categoryId },
           f.terrace,
+          null,
         ),
       ).toMatchObject({ decidedBy: { kind: "claim", categoryId: f.drinks } });
     }));
@@ -493,13 +562,20 @@ describe("stored preparation rules", () => {
         target: { kind: "station", stationId: f.terraceBar },
       });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.claims).toContainEqual({
         categoryId: f.beer,
         target: { kind: "station", stationId: f.bar },
         stationOff: true,
       });
       expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
+      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
+      expect(model.stationTimes).toContainEqual(
+        expect.objectContaining({
+          stationId: f.switchedOff,
+          status: { open: false, why: "switched_off" },
+        }),
+      );
       expect(model.stations).toContainEqual({
         id: f.terraceBar,
         name: "Terrace Bar",
@@ -522,9 +598,10 @@ describe("stored preparation rules", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.defaultStationId).toBeNull();
-      expect(model.stations).toEqual([{ id: f.bar, name: "Bar", active: false }]);
+      expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
+      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
     }));
 
   it("permits a service-zone-only exception and keeps its no-preparation target", async () =>
@@ -536,7 +613,7 @@ describe("stored preparation rules", () => {
         productId: null,
         target: noPrep,
       });
-      expect((await routingModel(tx, f.cfg)).exceptions).toEqual([
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions).toEqual([
         {
           id,
           position: 0,
@@ -552,6 +629,118 @@ describe("stored preparation rules", () => {
 });
 
 describe("resolveMakers", () => {
+  it("sends a closed station's work to its fallback, and an open one's to itself", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.bar },
+      });
+    }));
+
+  it("answers no_replacement for a closed station with no fallback", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", new Date("2026-10-02T18:00:00Z"));
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "no_replacement",
+        stationId: f.terraceBar,
+      });
+    }));
+
+  it("sends a switched-off station's work to its fallback", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.bar },
+      });
+    }));
+  it("ignores hours when the venue's clock cannot be read", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(
+          f.mojito,
+        ),
+      ).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.terraceBar },
+      });
+    }));
+  it("reports every station's active and open state at an instant", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      const states = await stationStates(tx, f.cfg, new Date("2026-10-02T20:00:00Z"));
+      expect(states.get(f.bar)).toEqual({ open: true, isDefault: true, active: true, name: "Bar" });
+      expect(states.get(f.terraceBar)).toEqual({
+        open: false,
+        isDefault: false,
+        active: true,
+        name: "Terrace Bar",
+      });
+      expect(states.get(f.switchedOff)).toEqual({
+        open: false,
+        isDefault: false,
+        active: false,
+        name: "Off",
+      });
+    }));
   it("keeps the database read count constant as a batch grows", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -561,22 +750,36 @@ describe("resolveMakers", () => {
       ).session;
       const prepared = vi.spyOn(session, "prepareQuery");
       try {
-        expect(await resolveMakers(tx, f.cfg, null, [f.mojito])).toEqual(
-          new Map([[f.mojito, { kind: "station", stationId: f.terraceBar }]]),
+        expect(
+          await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z")),
+        ).toEqual(
+          new Map([
+            [f.mojito, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
+          ]),
         );
         const reads = prepared.mock.calls.length;
         expect(reads).toBeGreaterThan(0);
         prepared.mockClear();
-        expect(await resolveMakers(tx, f.cfg, null, [f.mojito, f.bread, f.variant])).toEqual(
+        expect(
+          await resolveMakers(
+            tx,
+            f.cfg,
+            null,
+            [f.mojito, f.bread, f.variant],
+            new Date("2026-10-02T18:30:00Z"),
+          ),
+        ).toEqual(
           new Map([
-            [f.mojito, { kind: "station", stationId: f.terraceBar }],
-            [f.bread, { kind: "station", stationId: f.bar }],
-            [f.variant, { kind: "station", stationId: f.terraceBar }],
+            [f.mojito, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
+            [f.bread, { kind: "made", route: { kind: "station", stationId: f.bar } }],
+            [f.variant, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
           ]),
         );
         expect(prepared.mock.calls.length).toBe(reads);
         prepared.mockClear();
-        expect(await resolveMakers(tx, f.cfg, randomUUID(), [])).toEqual(new Map());
+        expect(
+          await resolveMakers(tx, f.cfg, randomUUID(), [], new Date("2026-10-02T18:30:00Z")),
+        ).toEqual(new Map());
         expect(prepared).not.toHaveBeenCalled();
       } finally {
         prepared.mockRestore();
@@ -587,23 +790,43 @@ describe("resolveMakers", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      const made = await resolveMakers(tx, f.cfg, null, [f.mojito, f.bread]);
-      expect(made.get(f.mojito)).toEqual({ kind: "station", stationId: f.terraceBar });
-      expect(made.get(f.bread)).toEqual({ kind: "station", stationId: f.bar });
+      const made = await resolveMakers(
+        tx,
+        f.cfg,
+        null,
+        [f.mojito, f.bread],
+        new Date("2026-10-02T18:30:00Z"),
+      );
+      expect(made.get(f.mojito)).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(made.get(f.bread)).toEqual({
+        kind: "made",
+        route: { kind: "station", stationId: f.bar },
+      });
     }));
   it("answers null for every product when the default is off and nothing matches", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      expect((await resolveMakers(tx, f.cfg, f.terrace, [f.bread])).get(f.bread)).toBeNull();
+      expect(
+        (
+          await resolveMakers(tx, f.cfg, f.terrace, [f.bread], new Date("2026-10-02T18:30:00Z"))
+        ).get(f.bread),
+      ).toEqual({ kind: "no_station" });
     }));
   it("refuses an unknown product and an unknown zone", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await expect(resolveMakers(tx, f.cfg, null, [randomUUID()])).rejects.toMatchObject({
+      await expect(
+        resolveMakers(tx, f.cfg, null, [randomUUID()], new Date("2026-10-02T18:30:00Z")),
+      ).rejects.toMatchObject({
         code: "route.subject_not_found",
       });
-      await expect(resolveMakers(tx, f.cfg, randomUUID(), [f.bread])).rejects.toMatchObject({
+      await expect(
+        resolveMakers(tx, f.cfg, randomUUID(), [f.bread], new Date("2026-10-02T18:30:00Z")),
+      ).rejects.toMatchObject({
         code: "service_zone.not_found",
       });
     }));
@@ -612,11 +835,17 @@ describe("resolveMakers", () => {
       const f = await fixture(tx);
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       const upper = f.variant.toUpperCase();
-      expect(await resolveMakers(tx, f.cfg, null, [upper, f.variant])).toEqual(
-        new Map([[upper, { kind: "station", stationId: f.terraceBar }]]),
+      expect(
+        await resolveMakers(tx, f.cfg, null, [upper, f.variant], new Date("2026-10-02T18:30:00Z")),
+      ).toEqual(
+        new Map([[upper, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }]]),
       );
-      expect(await resolveMakers(tx, f.cfg, null, [f.variant, upper])).toEqual(
-        new Map([[f.variant, { kind: "station", stationId: f.terraceBar }]]),
+      expect(
+        await resolveMakers(tx, f.cfg, null, [f.variant, upper], new Date("2026-10-02T18:30:00Z")),
+      ).toEqual(
+        new Map([
+          [f.variant, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
+        ]),
       );
     }));
 });
@@ -630,7 +859,9 @@ describe("assigning an unfiled product from Prep stations", () => {
           code: "route.subject_not_found",
           params: { subject: "product" },
         });
-      expect((await routingModel(tx, f.cfg)).exceptions).toEqual([]);
+      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions).toEqual(
+        [],
+      );
     }));
 
   it("collapses repeated product assignments to one effective rule", async () =>
@@ -658,7 +889,9 @@ describe("assigning an unfiled product from Prep stations", () => {
       ]);
       const { assignUnfiledProduct } = await import("./routing-store.js");
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
-      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toMatchObject([
         { productId: f.bread, target: { kind: "station", stationId: f.terraceBar } },
       ]);
     }));
@@ -679,21 +912,25 @@ describe("assigning an unfiled product from Prep stations", () => {
         target: { kind: "station", stationId: f.bar },
       });
       const product = { productId: f.bread, routedProductId: f.bread, categoryId: null };
-      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual(
-        noPrep,
-      );
+      expect(
+        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
+      ).toEqual(noPrep);
       const { assignUnfiledProduct } = await import("./routing-store.js");
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
-      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual({
+      expect(
+        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
+      ).toEqual({
         kind: "station",
         stationId: f.terraceBar,
       });
       await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.bar });
-      expect(chooseMaker(await loadRoutingRules(tx, f.cfg), product, f.terrace).route).toEqual({
+      expect(
+        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
+      ).toEqual({
         kind: "station",
         stationId: f.bar,
       });
-      const model = await routingModel(tx, f.cfg);
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(
         model.exceptions.filter((e) => e.productId === f.bread && e.zoneId === null),
       ).toHaveLength(1);
@@ -704,6 +941,52 @@ describe("assigning an unfiled product from Prep stations", () => {
 });
 
 describe("routing previews", () => {
+  it("marks a preview that exposes a switched-off rule as no replacement", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      const id = await createException(tx, f.cfg, {
+        zoneId: null,
+        categoryId: f.drinks,
+        productId: null,
+        target: { kind: "station", stationId: f.bar },
+      });
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
+      expect(moves).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ productId: f.mojito, to: null, toNoReplacement: true }),
+        ]),
+      );
+    }));
+  it("reports a preview from no replacement to no default station", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const id = await createException(tx, f.cfg, {
+        zoneId: null,
+        categoryId: f.drinks,
+        productId: null,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(inArray(kitchenStations.id, [f.bar, f.terraceBar]));
+      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
+      expect(moves).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            productId: f.mojito,
+            from: null,
+            to: null,
+            toNoReplacement: false,
+          }),
+        ]),
+      );
+    }));
   it("previews an appended exception over a saved broader rule without saving it", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -713,7 +996,7 @@ describe("routing previews", () => {
         productId: null,
         target: noPrep,
       });
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "exception",
         id: null,
@@ -731,7 +1014,7 @@ describe("routing previews", () => {
           to: noPrep,
         }),
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
 
   it("previews a revised assignment ahead of broader exceptions without saving it", async () =>
@@ -739,7 +1022,7 @@ describe("routing previews", () => {
       const f = await fixture(tx);
       const { assignUnfiledProduct } = await import("./routing-store.js");
       await assignUnfiledProduct(tx, f.cfg, f.bread, noPrep);
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "assignment",
         productId: f.bread,
@@ -750,9 +1033,10 @@ describe("routing previews", () => {
           zoneId: f.terrace,
           from: noPrep,
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         }),
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
 
   it("previews replacing duplicate product assignments as one rule", async () =>
@@ -778,7 +1062,7 @@ describe("routing previews", () => {
           noPreparation: true,
         },
       ]);
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "assignment",
         productId: f.bread,
@@ -788,9 +1072,10 @@ describe("routing previews", () => {
         expect.objectContaining({
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         }),
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
 
   it("shows the fallback after removing a claim without removing the stored claim", async () =>
@@ -809,9 +1094,9 @@ describe("routing previews", () => {
           to: { kind: "station", stationId: f.bar },
         }),
       ]);
-      expect((await routingModel(tx, f.cfg)).claims).toMatchObject([
-        { categoryId: f.drinks, target: noPrep },
-      ]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims,
+      ).toMatchObject([{ categoryId: f.drinks, target: noPrep }]);
     }));
 
   it("shows the fallback after deleting an exception and rejects unknown exception ids", async () =>
@@ -831,7 +1116,9 @@ describe("routing previews", () => {
           to: { kind: "station", stationId: f.bar },
         }),
       ]);
-      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([{ id }]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toMatchObject([{ id }]);
       for (const change of [
         { kind: "exception_delete", id: randomUUID() } as const,
         { kind: "exception", id: randomUUID(), input: f.input } as const,
@@ -856,7 +1143,9 @@ describe("routing previews", () => {
           code: "route.subject_not_found",
           params: { subject: "product" },
         });
-      expect((await routingModel(tx, f.cfg)).exceptions).toMatchObject([{ id }]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toMatchObject([{ id }]);
     }));
 
   it("shows a claim move in every active zone without writing it", async () =>
@@ -876,7 +1165,7 @@ describe("routing previews", () => {
         vatClass: "general",
       });
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
-      const before = await routingModel(tx, f.cfg);
+      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
         kind: "claim",
         categoryId: f.drinks,
@@ -890,6 +1179,7 @@ describe("routing previews", () => {
           zoneName: "Terrace",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
       ]);
       expect(moves.some((m) => m.productId === f.variant && m.zoneId === f.terrace)).toBe(true);
@@ -901,6 +1191,7 @@ describe("routing previews", () => {
           zoneName: "Inside",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
         {
           productId: lager.id,
@@ -909,9 +1200,10 @@ describe("routing previews", () => {
           zoneName: "Terrace",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
       ]);
-      expect(await routingModel(tx, f.cfg)).toEqual(before);
+      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
   it("rejects an inactive destination with the write code", async () =>
     scoped(async (tx) => {
@@ -972,10 +1264,15 @@ describe("routing previews", () => {
           zoneName: "Terrace",
           from: { kind: "station", stationId: f.bar },
           to: { kind: "station", stationId: f.terraceBar },
+          toNoReplacement: false,
         },
       ]);
       expect(moves.some((m) => m.zoneId === inside!.id)).toBe(false);
-      expect((await routingModel(tx, f.cfg)).exceptions.map((e) => e.id)).toEqual([first, second]);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map(
+          (e) => e.id,
+        ),
+      ).toEqual([first, second]);
     }));
   it("puts an unfiled assignment before a broader zone exception", async () =>
     scoped(async (tx) => {
@@ -995,6 +1292,85 @@ describe("routing previews", () => {
         from: noPrep,
         to: { kind: "station", stationId: f.terraceBar },
       });
-      expect((await routingModel(tx, f.cfg)).exceptions).toHaveLength(1);
+      expect(
+        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
+      ).toHaveLength(1);
     }));
 });
+
+describe("timed routing explanation", () => {
+  it("uses Friday hours and names the fallback, while now honors today's open", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
+      ]);
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      const at = new Date("2026-10-02T22:00:00Z");
+      const scheduled = await explainRoute(tx, f.cfg, f.mojito, null, {
+        kind: "at",
+        moment: { weekday: 5, timeOfDay: "22:00" },
+      });
+      expect(scheduled).toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+        fallbacks: [{ stationId: f.terraceBar, why: "out_of_hours" }],
+        noReplacement: false,
+        clockReadable: true,
+      });
+      await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
+      expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
+        route: { kind: "station", stationId: f.terraceBar },
+        fallbacks: [],
+        clockReadable: true,
+      });
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, null, {
+          kind: "at",
+          moment: { weekday: 5, timeOfDay: "22:00" },
+        }),
+      ).toEqual(scheduled);
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+      expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+        fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
+      });
+    }));
+  it("reports an unreadable venue clock and does not apply hours", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
+      ]);
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
+        route: { kind: "station", stationId: f.terraceBar },
+        clockReadable: false,
+        fallbacks: [],
+      });
+    }));
+});
+
+it("explains now with today's manual closure", async () =>
+  scoped(async (tx) => {
+    const f = await fixture(tx);
+    const at = new Date("2026-10-02T22:00:00Z");
+    await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+    await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+    await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+    await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+    expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
+      route: { kind: "station", stationId: f.bar },
+      fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
+    });
+  }));

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -980,6 +980,30 @@ describe("mountCatalogueApi — products", () => {
     expect(body[lager]).toMatchObject({ stationName: "Bar", variesByZone: false });
     expect(body[mojito]).toMatchObject({ stationName: "Bar", variesByZone: true });
     expect(body[bread]).toMatchObject({ stationName: "Bar", variesByZone: false });
+    await withTransaction(suite.db, async (tx) => {
+      const cfg = venueCfg();
+      const [cocktailBar] = await tx
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(
+          and(
+            eq(kitchenStations.locationId, cfg.locationId),
+            eq(kitchenStations.name, "Cocktail bar"),
+          ),
+        );
+      await setClaim(tx, cfg, drinks, { kind: "station", stationId: cocktailBar!.id });
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, cocktailBar!.id));
+    });
+    const changed = await send(app, "GET", "/management-api/products/made-at");
+    const changedBody = (await changed.json()) as Record<string, unknown>;
+    expect(changedBody[lager]).toMatchObject({
+      stationId: null,
+      stationName: "Cocktail bar",
+      noReplacement: true,
+    });
   });
   it("GET /management-api/catalogues/:id/products → 200 (empty for a fresh catalogue)", async () => {
     const app = mountApp();

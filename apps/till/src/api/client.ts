@@ -468,6 +468,7 @@ export interface SaleLine {
   extras?: ExtraSelection[];
   options?: OptionSelection[];
   note?: string;
+  makeAt?: string | null;
 }
 
 /** Whether a submitted group goes to the kitchen now or waits until it is fired. */
@@ -605,6 +606,8 @@ export interface DraftLine {
   quantity: string;
   /** The waiter's course override; null means the product's default course. */
   courseId: string | null;
+  /** The waiter's chosen making station; null follows the venue route. */
+  makeAt?: string | null;
   /** Never merged with another line, either way; Split quantity's rows carry it. */
   noMerge: boolean;
   unavailable: boolean;
@@ -612,6 +615,20 @@ export interface DraftLine {
 
 /** A draft line as the till saves it. */
 export type DraftLineInput = Omit<DraftLine, "id" | "unavailable">;
+
+export interface DeadEndAnswer {
+  sends: boolean;
+  deadEnds: {
+    key: string;
+    name: string;
+    quantity: string;
+    stationId: string;
+    stationName: string;
+    why: "closed" | "switched_off";
+  }[];
+  stations: { id: string; name: string; open: boolean }[];
+  revision?: number;
+}
 
 /** One person's unsent order on a party, at the revision a save or submit sends back. */
 export interface Draft {
@@ -1243,8 +1260,16 @@ export interface KitchenNotice {
   createdAt: string;
 }
 
-/** `GET /api/stations/:id/queue` — the station's work, oldest first, and its unacknowledged notices. */
+/** A station printer whose oldest outstanding print has blocked its output. */
+export interface StationPrinterDown {
+  printerId: string;
+  printerName: string;
+  since: string;
+}
+
+/** `GET /api/stations/:id/queue` — work, unacknowledged notices and down printers. */
 export interface StationQueue {
+  printersDown: StationPrinterDown[];
   items: StationQueueGroup[];
   notices: KitchenNotice[];
 }
@@ -1316,7 +1341,12 @@ export interface DeviceIdentity {
  * device cookie names the station, so there is no id to pass.
  */
 export interface DeviceStation {
-  station: { id: string; queue: StationQueueGroup[]; notices: KitchenNotice[] };
+  station: {
+    id: string;
+    queue: StationQueueGroup[];
+    notices: KitchenNotice[];
+    printersDown: StationPrinterDown[];
+  };
 }
 
 /**
@@ -1668,6 +1698,7 @@ export interface OrderLinePatch {
   note?: string | null;
   options?: OptionSelection[];
   extras?: ExtraSelection[];
+  makeAt?: string | null;
 }
 
 /** `GET /api/working-orders/:id/lines` — an open tab's lines and the revision they were read at. */
@@ -2363,6 +2394,51 @@ export class TillApi {
    */
   saveDraft(partyId: string, save: DraftSave, options: ReadOptions = {}): Promise<Draft> {
     return this.#request(`/api/parties/${partyId}/drafts`, "PUT", save, options.signal);
+  }
+
+  askDraftDeadEnds(
+    partyId: string,
+    draftId: string,
+    lineIds: string[],
+    options: ReadOptions = {},
+  ): Promise<DeadEndAnswer> {
+    return this.#request(
+      "/api/dead-ends/draft",
+      "POST",
+      { partyId, draftId, lineIds },
+      options.signal,
+    );
+  }
+
+  askSaleDeadEnds(
+    request:
+      | { step: "pay" | "place"; lines: SaleLine[]; zoneId?: string; workingOrderId?: string }
+      | (SaleLine & { workingOrderLineId?: string })[],
+    workingOrderId?: string,
+  ): Promise<DeadEndAnswer> {
+    return this.#request(
+      "/api/dead-ends/sale",
+      "POST",
+      Array.isArray(request) ? { step: "edit", lines: request, workingOrderId } : request,
+    );
+  }
+
+  askOrderDeadEnds(workingOrderId: string, toZoneId?: string): Promise<DeadEndAnswer> {
+    return this.#request("/api/dead-ends/order", "POST", {
+      workingOrderId,
+      ...(toZoneId === undefined ? {} : { toZoneId }),
+    });
+  }
+
+  setMakeAt(
+    workingOrderId: string,
+    revision: number,
+    lines: Record<string, string>,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/working-orders/${workingOrderId}/make-at`, "PUT", {
+      revision,
+      lines,
+    });
   }
 
   /**

@@ -54,6 +54,7 @@ describe("merging by draftLineMergeKey (D10)", () => {
     ["variant", { variantId: "variant-large" }],
     ["menu version", { menuVersionId: "version-8" }],
     ["course", { courseId: "course-mains" }],
+    ["make-at station", { makeAt: "upstairs-bar" }],
     ["note", { note: "no salt" }],
     ["options answer", { options: [RARE] }],
     ["extras pick", { extras: [{ listId: TOPPINGS, picks: [cheese(1)] }] }],

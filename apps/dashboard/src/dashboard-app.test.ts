@@ -3043,7 +3043,7 @@ describe("dashboard URL navigation", () => {
               stations: [],
             } as never)
           : path.startsWith("/management-api/venue-service/routing/explain?")
-            ? ({ route: null, decidedBy: null, skipped: [], stations: [] } as never)
+            ? ({ route: null, decidedBy: null, fallbacks: [], clockReadable: true } as never)
             : stubRequest(path, method, body, options),
     });
     await flush(el);

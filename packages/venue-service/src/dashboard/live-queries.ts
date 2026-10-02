@@ -10,6 +10,9 @@ export const QUERY_DEPENDENCIES = {
     "station_printers",
     "printers",
     "devices",
+    "station_hours",
+    "station_fallbacks",
+    "station_day_states",
   ],
   operations: [
     "departments",

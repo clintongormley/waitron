@@ -1,10 +1,25 @@
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq } from "drizzle-orm";
-import { AppError, isAppError, isValidGuestCount, SUPPORTED_LOCALES } from "@waitron/shared";
+import { and, eq, inArray } from "drizzle-orm";
+import {
+  AppError,
+  isAppError,
+  isValidGuestCount,
+  SUPPORTED_LOCALES,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
-import { locations, readNodeMembership, readTenant, withTransaction } from "@waitron/db";
+import {
+  locations,
+  newId,
+  readNodeMembership,
+  readTenant,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -87,6 +102,11 @@ import {
   readOrderRevision,
   updateHeldOrder,
   updateOrderLine,
+  bumpRevision,
+  refusePaymentInFlight,
+  priceOrderLines,
+  paysAfterSending,
+  unsentDishLines,
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
@@ -97,10 +117,11 @@ import {
   seatTable,
   setPartyName,
   partyRevisionOfOrder,
+  partyZone,
 } from "./parties.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
 import type { TableActionOptions } from "./table-actions.js";
@@ -118,6 +139,7 @@ import {
 } from "./order-groups.js";
 import type { GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
+import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -152,6 +174,7 @@ import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
+import { stationPrintersDown } from "./station-outputs-down.js";
 
 export interface TillApiDeps {
   db: Database;
@@ -318,6 +341,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "ticket.already_started": 409,
   "course.not_found": 404,
   "station.no_default": 409,
+  "station.no_replacement": 409,
   "station.not_found": 404,
   "kitchen_notice.not_found": 404,
   "service_zone.not_found": 404,
@@ -327,6 +351,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "service_zone.join_mismatch": 409,
   "order.service_context_missing": 409,
   "route.subject_not_found": 404,
+  "route.station_inactive": 409,
   "management.request_invalid": 400,
   "reader.not_found": 404,
   "reader.provider_disconnected": 409,
@@ -1126,6 +1151,113 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.post("/api/dead-ends/sale", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const body = await readJsonBody<{
+        step: "pay" | "place" | "edit";
+        lines: (TillSaleRequest["lines"][number] & { workingOrderLineId?: string })[];
+        zoneId?: string;
+        workingOrderId?: string;
+      }>(c);
+      if (!Array.isArray(body.lines) || !["pay", "place", "edit"].includes(body.step))
+        throw invalid("lines");
+      if (body.workingOrderId !== undefined)
+        requireUuidParam(body.workingOrderId, "WorkingOrderId");
+      if (body.zoneId !== undefined) requireUuidParam(body.zoneId, "ServiceZoneId");
+      const answer = await withTransaction(deps.db, async (tx) => {
+        const at = new Date();
+        const order =
+          body.workingOrderId === undefined
+            ? undefined
+            : (
+                await tx
+                  .select({
+                    id: workingOrders.id,
+                    partyId: workingOrders.partyId,
+                    status: workingOrders.status,
+                  })
+                  .from(workingOrders)
+                  .where(eq(workingOrders.id, body.workingOrderId))
+              )[0];
+        const context =
+          order === undefined ? null : await VENUE_SERVICE.findOrderContext(tx, deps.cfg, order.id);
+        const zoneId =
+          order === undefined
+            ? await resolveHttpOrderZone(deps, body.lines.length, body.zoneId)
+            : context?.zoneId;
+        const mode =
+          context?.serviceMode ??
+          (zoneId === undefined
+            ? deps.cfg.orderFlow
+            : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).serviceMode);
+        const unsentCount =
+          order === undefined ? body.lines.length : (await unsentDishLines(tx, order.id)).length;
+        const sends =
+          body.step === "pay"
+            ? unsentCount > 0 &&
+              (mode === "prepay" ||
+                (order?.partyId !== null && order?.partyId !== undefined
+                  ? false
+                  : paysAfterSending(mode, deps.cfg)))
+            : body.step === "place"
+              ? unsentCount > 0
+              : body.lines.length > 0;
+        const alreadySent = new Set<string>();
+        if (order !== undefined) {
+          const rows = await tx
+            .select({
+              id: workingOrderLines.id,
+              sentAt: workingOrderLines.sentAt,
+              ticketId: ticketItems.id,
+            })
+            .from(workingOrderLines)
+            .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+            .where(eq(workingOrderLines.workingOrderId, order.id));
+          for (const row of rows)
+            if (row.sentAt !== null || row.ticketId !== null) alreadySent.add(row.id);
+        }
+        const active = body.lines.flatMap((line, index) =>
+          line.workingOrderLineId !== undefined && alreadySent.has(line.workingOrderLineId)
+            ? []
+            : [{ line, key: String(index) }],
+        );
+        const priced =
+          sends && active.length > 0
+            ? await priceOrderLines(
+                tx,
+                deps.cfg,
+                body.workingOrderId ?? newId(),
+                active.map(({ line }) => line),
+                zoneId ?? undefined,
+                undefined,
+                "ignore",
+              )
+            : null;
+        const parents = priced?.lineRows.filter((line) => line.parentLineId === null) ?? [];
+        return {
+          sends,
+          deadEnds: sends
+            ? await findDeadEnds(
+                tx,
+                deps.cfg,
+                zoneId ?? null,
+                active.map(({ line, key }, index) => ({
+                  key,
+                  productId: parents[index]!.productId!,
+                  quantity: line.quantity,
+                  makeAt: line.makeAt ?? null,
+                })),
+                at,
+              )
+            : [],
+          stations: await availableStations(tx, deps.cfg, at),
+        };
+      });
+      return c.json(answer);
+    }),
+  );
+
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -1363,6 +1495,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const queue = await withTransaction(deps.db, async (tx) => ({
         items: await listStationQueue(tx, id),
         notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
+        printersDown: (await stationPrintersDown(tx, deps.cfg.locationId, new Date(), id)).map(
+          ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
+        ),
       }));
       return c.json(queue);
     }),
@@ -2022,6 +2157,64 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.post("/api/dead-ends/draft", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const body = await readJsonBody<{ partyId: string; draftId: string; lineIds: string[] }>(c);
+      const partyId = requireDraftPartyParam(body.partyId);
+      const draftId = requireDraftParam(body.draftId);
+      if (!Array.isArray(body.lineIds)) throw invalid("lineIds");
+      const answer = await withTransaction(deps.db, async (tx) => {
+        const at = new Date();
+        const draft = (await readDrafts(tx, deps.cfg, partyId)).find(
+          (entry) => entry.id === draftId,
+        );
+        if (draft === undefined) throw new AppError("draft.not_found", { draftId });
+        const ids = new Set(body.lineIds);
+        const lines = draft.lines.filter((line) => ids.has(line.id));
+        if (lines.length !== ids.size) throw invalid("lineIds");
+        const zoneId = await partyZone(tx, deps.cfg, partyId);
+        const priced = await priceOrderLines(
+          tx,
+          deps.cfg,
+          newId(),
+          lines.map((line) => ({
+            menuItemId: line.menuItemId,
+            quantity: line.quantity,
+            options: line.options,
+            extras: line.extras,
+            note: line.note ?? undefined,
+            variantId: line.variantId ?? undefined,
+            menuVersionId: line.menuVersionId ?? undefined,
+            courseId: line.courseId ?? undefined,
+            makeAt: line.makeAt,
+          })),
+          zoneId ?? undefined,
+          undefined,
+          "ignore",
+        );
+        const parents = priced.lineRows.filter((line) => line.parentLineId === null);
+        return {
+          sends: true,
+          deadEnds: await findDeadEnds(
+            tx,
+            deps.cfg,
+            zoneId,
+            lines.map((line, index) => ({
+              key: line.id,
+              productId: parents[index]!.productId!,
+              quantity: line.quantity,
+              makeAt: line.makeAt ?? null,
+            })),
+            at,
+          ),
+          stations: await availableStations(tx, deps.cfg, at),
+        };
+      });
+      return c.json(answer);
+    }),
+  );
+
   app.post("/api/parties/:id/drafts/:did/submit", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -2045,6 +2238,116 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // A tab does not re-price: the stored locked gross rides back verbatim. The revision is read in
   // the same transaction, so it is the one these lines are at.
+  app.post("/api/dead-ends/order", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const body = await readJsonBody<{ workingOrderId: string; toZoneId?: string }>(c);
+      const id = requireUuidParam(body.workingOrderId, "WorkingOrderId");
+      if (body.toZoneId !== undefined) requireUuidParam(body.toZoneId, "ServiceZoneId");
+      const answer = await withTransaction(deps.db, async (tx) => {
+        const at = new Date();
+        const [order] = await tx
+          .select({
+            status: workingOrders.status,
+            partyId: workingOrders.partyId,
+            revision: workingOrders.revision,
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id));
+        if (order === undefined || (order.status !== "open" && order.status !== "placed"))
+          throw new AppError("working_order.not_found", { workingOrderId: id });
+        const context = await VENUE_SERVICE.findOrderContext(tx, deps.cfg, id);
+        const zoneId = body.toZoneId ?? context?.zoneId ?? null;
+        const unsent = await unsentDishLines(tx, id);
+        const sends =
+          unsent.length > 0 &&
+          (body.toZoneId === undefined
+            ? (context?.serviceMode ?? deps.cfg.orderFlow) === "prepay" ||
+              (order.partyId === null && paysAfterSending(context?.serviceMode, deps.cfg))
+            : await moveWouldSend(tx, deps.cfg, id, body.toZoneId));
+        const chosen =
+          unsent.length === 0
+            ? []
+            : await tx
+                .select({ id: workingOrderLines.id, makeAt: workingOrderLines.makeAtStationId })
+                .from(workingOrderLines)
+                .where(
+                  inArray(
+                    workingOrderLines.id,
+                    unsent.map((line) => line.id),
+                  ),
+                );
+        const makeAtById = new Map(chosen.map((line) => [line.id, line.makeAt]));
+        return {
+          sends,
+          deadEnds: sends
+            ? await findDeadEnds(
+                tx,
+                deps.cfg,
+                zoneId,
+                unsent
+                  .filter((line) => line.productId !== null)
+                  .map((line) => ({
+                    key: line.id,
+                    productId: line.productId!,
+                    quantity: thousandthsToDecimal(line.quantity),
+                    makeAt: makeAtById.get(line.id) ?? null,
+                  })),
+                at,
+              )
+            : [],
+          stations: await availableStations(tx, deps.cfg, at),
+          revision: order.revision,
+        };
+      });
+      return c.json(answer);
+    }),
+  );
+
+  app.put("/api/working-orders/:id/make-at", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      const body = await readJsonBody<{ revision: unknown; lines: Record<string, string | null> }>(
+        c,
+      );
+      const copy = requireRevision(body.revision);
+      if (body.lines === null || typeof body.lines !== "object" || Array.isArray(body.lines))
+        throw invalid("lines");
+      const revision = await withTransaction(deps.db, async (tx) => {
+        const [order] = await tx
+          .select({ status: workingOrders.status, revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id));
+        if (order === undefined || order.status !== "open")
+          throw new AppError("working_order.not_open", { workingOrderId: id });
+        if (copy !== order.revision)
+          throw new AppError("working_order.out_of_date", {
+            workingOrderId: id,
+            revision: order.revision,
+          });
+        const entries = Object.entries(body.lines);
+        const unsent = new Set((await unsentDishLines(tx, id)).map((line) => line.id));
+        for (const [lineId, stationId] of entries) {
+          if (!unsent.has(lineId)) throw invalid("lines");
+          if (stationId !== null) {
+            if (typeof stationId !== "string") throw invalid("lines");
+            await requireMakeAtStation(tx, deps.cfg, stationId);
+          }
+        }
+        for (const [lineId, stationId] of entries)
+          await tx
+            .update(workingOrderLines)
+            .set({ makeAtStationId: stationId })
+            .where(eq(workingOrderLines.id, lineId));
+        if (entries.length > 0) await bumpRevision(tx, [id]);
+        else await refusePaymentInFlight(tx, [id]);
+        return copy + (entries.length > 0 ? 1 : 0);
+      });
+      return c.json({ revision });
+    }),
+  );
+
   app.get("/api/working-orders/:id/lines", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

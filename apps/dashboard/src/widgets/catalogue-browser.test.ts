@@ -95,6 +95,9 @@ export async function rowKeys(el: CatalogueBrowser) {
 it("marks only folders without an active own or inherited routing claim and clears the mark when claimed", async () => {
   setLocale("en-GB");
   const routing = {
+    stationTimes: [],
+    todayEnds: null,
+    clockReadable: true,
     claims: [
       {
         categoryId: "d",
@@ -154,6 +157,9 @@ it("marks only folders without an active own or inherited routing claim and clea
 it("does not mark a folder covered by a global folder exception", async () => {
   const el = await mountBrowser({
     routing: {
+      stationTimes: [],
+      todayEnds: null,
+      clockReadable: true,
       claims: [],
       exceptions: [
         {

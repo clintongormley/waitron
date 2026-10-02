@@ -33,8 +33,10 @@ import {
   DraftSync,
   asRefusal,
   limited,
+  pause,
   resendUnanswered,
   type DraftRefused,
+  type DraftSaveOutcome,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
@@ -78,6 +80,8 @@ import {
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
 import "./widgets/make-now.js";
+import "./widgets/dead-ends-dialog.js";
+import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
 import type {
   PayLine,
   PayRefusal,
@@ -88,6 +92,8 @@ import type {
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
 import "./widgets/unpaid-departure-dialog.js";
+import "./widgets/dead-ends-section.js";
+import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import {
   confirmationOf,
@@ -113,6 +119,7 @@ import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
@@ -131,6 +138,7 @@ import type {
   UnpaidDeparture,
   UnpaidDepartureRequest,
   DeviceStation,
+  DeadEndAnswer,
   DraftSubmission,
   FloorZone,
   HeldOrder,
@@ -252,7 +260,13 @@ const TABLE_REQUEST_LIMIT_MS = 150_000;
  * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
  * one it was sent to.
  */
-type DraftFollowUp = "read-tab" | "find-tab" | "mark-unsellable" | { landedOn: string } | undefined;
+type DraftFollowUp =
+  | "read-tab"
+  | "find-tab"
+  | "mark-unsellable"
+  | "recheck-dead-ends"
+  | { landedOn: string }
+  | undefined;
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
  * when its read failed. Undefined when the operator session it was opened in has ended. */
@@ -906,6 +920,12 @@ export class TillApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-align: center;
       }
+      .edit-dead-ends-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        inline-size: 100%;
+      }
     `,
   ];
 
@@ -1300,6 +1320,16 @@ export class TillApp extends LitElement {
   @state() private editSentLines = true;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
   @state() private cancelOffer: number | null = null;
+  @state() private editDeadEnds: {
+    answer: DeadEndAnswer;
+    change: ChangeLineDetail;
+    orderId: string;
+    visit: number;
+    stationId?: string;
+  } | null = null;
+  @state() private deadEndsQuestion: { answer: DeadEndAnswer; allowRemove: boolean } | null = null;
+  #resolveDeadEnds?: (decision: DeadEndsDecision | null) => void;
+  #previewSaveOutcome?: { sent: readonly OrderLine[]; outcome: DraftSaveOutcome };
   /** Defaults to prepay, so an unresolved boot never shows the Place/Collect controls. */
   @state() private orderFlow: OrderFlow = "prepay";
   @state() private onboardingIntent?: TillInfo["onboardingIntent"];
@@ -2247,6 +2277,8 @@ export class TillApp extends LitElement {
     let reachedFiscal = false;
     let paidMeanwhile = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
+    let recheck = false;
+    let inactiveChoice = false;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
@@ -2262,7 +2294,16 @@ export class TillApp extends LitElement {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed; anything else is the free-to-retry `sale.error`.
-      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      if (
+        !reachedFiscal &&
+        !retried &&
+        ["station.no_replacement", "route.station_inactive"].includes(
+          (error as { code?: string }).code ?? "",
+        )
+      ) {
+        recheck = true;
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
         this.errorKey = isPermanentSaleRefusal(error)
           ? "sale.refused"
@@ -2278,6 +2319,8 @@ export class TillApp extends LitElement {
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#onConfirmPayment(event, true),
       );
+    if (recheck && (await this.#askCounterDeadEnds("pay", true, inactiveChoice)))
+      await this.#onConfirmPayment(event, true);
   }
 
   /** Another till took a payment on the basket's order first: the held orders are read again, so
@@ -2307,6 +2350,8 @@ export class TillApp extends LitElement {
     let reachedFiscal = false;
     let paidMeanwhile = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
+    let recheck = false;
+    let inactiveChoice = false;
     try {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
       reachedFiscal = true;
@@ -2333,7 +2378,16 @@ export class TillApp extends LitElement {
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
-      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      if (
+        !reachedFiscal &&
+        !retried &&
+        ["station.no_replacement", "route.station_inactive"].includes(
+          (error as { code?: string }).code ?? "",
+        )
+      ) {
+        recheck = true;
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
         this.errorKey = isPermanentSaleRefusal(error)
           ? "sale.refused"
@@ -2349,6 +2403,8 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onCollectCard(event, true));
+    if (recheck && (await this.#askCounterDeadEnds("pay", true, inactiveChoice)))
+      await this.#onCollectCard(event, true);
   }
 
   #basketPaidInPartFor?: {
@@ -2394,6 +2450,7 @@ export class TillApp extends LitElement {
       const saleLine: SaleLine = {
         ...toWireProductIdentity(line.product),
         quantity: line.quantity,
+        makeAt: line.makeAt ?? null,
         ...toWireLineExtras(line),
         ...toWireModifiers(line),
       };
@@ -2402,6 +2459,100 @@ export class TillApp extends LitElement {
       }
       return saleLine;
     });
+  }
+
+  #openDeadEnds(answer: DeadEndAnswer, allowRemove: boolean): Promise<DeadEndsDecision | null> {
+    return new Promise((resolve) => {
+      this.#resolveDeadEnds = resolve;
+      this.deadEndsQuestion = { answer, allowRemove };
+    });
+  }
+
+  #answerDeadEnds(decision: DeadEndsDecision | null): void {
+    this.deadEndsQuestion = null;
+    const resolve = this.#resolveDeadEnds;
+    this.#resolveDeadEnds = undefined;
+    resolve?.(decision);
+  }
+
+  async #askCounterDeadEnds(
+    step: "pay" | "place",
+    proceedWithoutAnswer = true,
+    clearInactiveChoices = false,
+  ): Promise<boolean> {
+    const id = this.#store.id;
+    const question = limited(3_000);
+    let answer: DeadEndAnswer | undefined;
+    try {
+      answer = await Promise.race([
+        this.api.askSaleDeadEnds({
+          step,
+          lines: this.#currentSaleLines(),
+          ...(this.#store.persisted
+            ? { workingOrderId: id }
+            : { zoneId: this.counterServiceZoneId }),
+        }),
+        pause(question.signal).then(() => undefined),
+      ]);
+    } catch {
+      return proceedWithoutAnswer;
+    } finally {
+      question.done();
+    }
+    if (this.#store.id !== id) return false;
+    if (answer === undefined) return proceedWithoutAnswer;
+    if (clearInactiveChoices) {
+      // The question lists only unresolved routes, so an invalid explicit choice can have no row.
+      const available = new Set(answer.stations.map((station) => station.id));
+      this.#store.lines.forEach((line, index) => {
+        if (line.makeAt !== undefined && !available.has(line.makeAt))
+          this.#store.setLineMakeAt(index, undefined);
+      });
+    }
+    if (!answer.sends || answer.deadEnds.length === 0) return true;
+    const decision = await this.#openDeadEnds(answer, true);
+    if (decision === null || this.#store.id !== id) return false;
+    for (const [key, stationId] of Object.entries(decision.choices)) {
+      const index = Number(key);
+      if (Number.isInteger(index)) this.#store.setLineMakeAt(index, stationId);
+    }
+    for (const index of decision.removed.map(Number).sort((a, b) => b - a))
+      if (Number.isInteger(index)) this.#store.removeLine(index);
+    return this.#store.lineCount > 0;
+  }
+
+  async #askStoredDeadEnds(workingOrderId: string, toZoneId?: string): Promise<boolean> {
+    const question = limited(3_000);
+    let answer: DeadEndAnswer | undefined;
+    try {
+      answer = await Promise.race([
+        this.api.askOrderDeadEnds(workingOrderId, toZoneId),
+        pause(question.signal).then(() => undefined),
+      ]);
+    } catch {
+      return true;
+    } finally {
+      question.done();
+    }
+    if (!answer?.sends || answer.deadEnds.length === 0) return true;
+    const decision = await this.#openDeadEnds(answer, false);
+    if (decision === null) return false;
+    try {
+      await this.api.setMakeAt(workingOrderId, answer.revision!, decision.choices);
+      return true;
+    } catch (error) {
+      if ((error as { code?: string }).code === "route.station_inactive")
+        return this.#askStoredDeadEnds(workingOrderId, toZoneId);
+      throw error;
+    }
+  }
+
+  #onCheckBeforeTender(event: Event): void {
+    const tender = event.target as HTMLElement & { store?: WorkingOrderStore };
+    if (tender.store !== this.#store || this.stage !== "order") return;
+    event.preventDefault();
+    const { resolve } = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail;
+    void this.#askCounterDeadEnds("pay").then(resolve);
   }
 
   /**
@@ -2436,18 +2587,25 @@ export class TillApp extends LitElement {
    * saved only if edited (see {@link #syncIfDirty}); re-parking a retrieved order would replay it
    * server-side and drop the edit. On success the SAME order moves to the `"collect"` stage.
    */
-  async #onPlaceOrder(retried = false): Promise<void> {
+  async #onPlaceOrder(
+    retried = false,
+    refusalRetry = false,
+    clearInactiveChoices = false,
+  ): Promise<void> {
     if (this.placing) return;
     this.placing = true;
     this.#counterSends++;
     const id = this.#store.id;
-    const lines = this.#currentSaleLines();
-    const label = this.#store.label;
-    this.errorKey = undefined;
+    if (!refusalRetry) this.errorKey = undefined;
     // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
     let reachedFiscal = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
+    let recheck = false;
+    let inactiveChoice = false;
     try {
+      if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
+      const lines = this.#currentSaleLines();
+      const label = this.#store.label;
       if (this.#store.persisted) {
         if (!(await this.#syncIfDirty(id, lines, label))) return;
       } else {
@@ -2462,7 +2620,15 @@ export class TillApp extends LitElement {
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
-      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      if (
+        !refusalRetry &&
+        ["station.no_replacement", "route.station_inactive"].includes(
+          (error as { code?: string }).code ?? "",
+        )
+      ) {
+        recheck = true;
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
         this.errorKey = isPermanentSaleRefusal(error)
           ? "place.refused"
@@ -2474,6 +2640,10 @@ export class TillApp extends LitElement {
     }
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onPlaceOrder(true));
+    if (recheck) {
+      this.errorKey = "place.refused";
+      await this.#onPlaceOrder(retried, true, inactiveChoice);
+    }
   }
 
   /**
@@ -2690,6 +2860,8 @@ export class TillApp extends LitElement {
     const lines = this.#currentSaleLines();
     this.errorKey = undefined;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
+    let recheck = false;
+    let inactiveChoice = false;
     try {
       if (this.#store.persisted) {
         // The Hold field opens blank, so fall back to the stored label rather than wipe it. A typed
@@ -2702,13 +2874,26 @@ export class TillApp extends LitElement {
       this.cardOutcome = undefined;
       await this.#refreshAfterWrite("held", "refresh.held_after_park");
     } catch (error) {
-      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      if (
+        !retried &&
+        ["station.no_replacement", "route.station_inactive"].includes(
+          (error as { code?: string }).code ?? "",
+        )
+      ) {
+        recheck = true;
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else this.errorKey = counterError(error, "held.park_error");
     } finally {
       this.parking = false;
     }
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
+    if (recheck) {
+      this.errorKey = "held.park_error";
+      if (await this.#askCounterDeadEnds("place", false, inactiveChoice))
+        await this.#onParkOrder(event, true);
+    }
   }
 
   /**
@@ -2822,6 +3007,7 @@ export class TillApp extends LitElement {
         ...(answers.options.length === 0 ? {} : { options: answers.options }),
         ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
         ...(line.note === undefined ? {} : { note: line.note }),
+        ...(line.makeAt == null ? {} : { makeAt: line.makeAt }),
       });
     }
     // One banner, so a DROPPED product is reported first: it has already changed what the basket
@@ -3834,6 +4020,12 @@ export class TillApp extends LitElement {
       await this.#markUnsellable(store);
       return;
     }
+    if (followUp === "recheck-dead-ends") {
+      this.renderRoot
+        .querySelector<TillTableOrderScreen>("till-table-order-screen")
+        ?.reopenDraftPreview(sent);
+      return;
+    }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
     if (followUp !== "find-tab" && draft !== undefined) this.#tally(draft, groups, joinGroupId);
     if (followUp === "find-tab" && onSentTable()) {
@@ -3857,6 +4049,68 @@ export class TillApp extends LitElement {
     this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
     this.#returnToFloor();
+  }
+
+  async #onCheckDeadEnds(event: Event): Promise<void> {
+    event.preventDefault();
+    const { sent, checkId } = (
+      event as CustomEvent<{ sent: readonly OrderLine[]; checkId: number }>
+    ).detail;
+    const screen = event
+      .composedPath()
+      .find((node) => node instanceof HTMLElement && node.tagName === "TILL-TABLE-ORDER-SCREEN") as
+      TillTableOrderScreen | undefined;
+    if (screen === undefined) return;
+    this.#previewSaveOutcome = undefined;
+    const sync = this.#draftSync;
+    const party = this.orderParty;
+    if (sync === undefined || party === null) {
+      screen.answerDeadEnds(sent, undefined, checkId);
+      return;
+    }
+    const session = this.#operatorSession;
+    const request = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const saved = await sync.flush(request.signal);
+      if (saved !== "saved") {
+        if (screen.currentDeadEndsCheck(checkId))
+          this.#previewSaveOutcome = { sent, outcome: saved };
+        return;
+      }
+      const positions = sent.map((line) => sync.store.lines.indexOf(line));
+      const ids = positions.includes(-1) ? null : sync.lineIds(positions);
+      if (ids === null || sync.draftId === null) return;
+      screen.beginDeadEndsQuestion(sent, checkId);
+      const question = limited(3_000, request.signal);
+      let answer: DeadEndAnswer | undefined;
+      try {
+        answer = await Promise.race([
+          this.api.askDraftDeadEnds(party.id, sync.draftId, ids, { signal: question.signal }),
+          pause(question.signal).then(() => undefined),
+        ]);
+      } finally {
+        question.done();
+      }
+      if (answer === undefined) return;
+      if (session !== this.#operatorSession) return;
+      const byId = new Map(ids.map((id, index) => [id, index]));
+      screen.answerDeadEnds(
+        sent,
+        {
+          ...answer,
+          deadEnds: answer.deadEnds.flatMap((row) => {
+            const index = byId.get(row.key);
+            return index === undefined ? [] : [{ ...row, key: String(index) }];
+          }),
+        },
+        checkId,
+      );
+    } catch {
+      // A check may have no answer; the submit still enforces station routing.
+    } finally {
+      request.done();
+      if (session === this.#operatorSession) screen.answerDeadEnds(sent, undefined, checkId);
+    }
   }
 
   #tally({ tally }: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
@@ -3887,7 +4141,14 @@ export class TillApp extends LitElement {
     const send = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
     try {
-      const saved = await sync.flush(send.signal);
+      const checked = this.#previewSaveOutcome;
+      this.#previewSaveOutcome = undefined;
+      const saved =
+        checked !== undefined &&
+        checked.sent.length === sent.length &&
+        checked.sent.every((line, index) => line === sent[index])
+          ? checked.outcome
+          : await sync.flush(send.signal);
       if (!live()) return;
       if (saved !== "saved") {
         this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
@@ -3940,6 +4201,7 @@ export class TillApp extends LitElement {
         return;
       }
       const refusal = asRefusal(error);
+      if (refusal?.refused === "station.no_replacement") return "recheck-dead-ends";
       if (refusal !== undefined && DRAFT_REFUSALS.has(refusal.refused)) {
         await sync.load();
         if (!live()) return;
@@ -4499,7 +4761,8 @@ export class TillApp extends LitElement {
    * take the order off screen without that counter moving.
    */
   async #onChangeLine(event: Event): Promise<void> {
-    const { lineNo, lineName, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
+    const change = (event as CustomEvent<ChangeLineDetail>).detail;
+    const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
     const visit = this.#orderVisit;
@@ -4533,6 +4796,24 @@ export class TillApp extends LitElement {
       };
       return;
     }
+    if (code === "station.no_replacement" && change.saleLine !== undefined) {
+      const question = limited(3_000);
+      try {
+        const answer = await Promise.race([
+          this.api.askSaleDeadEnds([change.saleLine], orderId),
+          pause(question.signal).then(() => undefined),
+        ]);
+        if (left()) return;
+        if (answer !== undefined && answer.deadEnds.length > 0) {
+          this.editDeadEnds = { answer, change, orderId, visit };
+          return;
+        }
+      } catch {
+        // The original refusal remains available below when the question has no answer.
+      } finally {
+        question.done();
+      }
+    }
     this.errorKey =
       code === "working_order.out_of_date"
         ? "held.changed_elsewhere"
@@ -4547,6 +4828,60 @@ export class TillApp extends LitElement {
 
   /** Leaving an order clears the banner, except a failed change to a line of an order already left,
    * which has to outlive the switch. */
+  #retryEditDeadEnd(): void {
+    const pending = this.editDeadEnds;
+    if (pending === null || pending.stationId === undefined) return;
+    this.editDeadEnds = null;
+    if (this.activeTabId !== pending.orderId || this.#hasLeftOrder(pending.orderId, pending.visit))
+      return;
+    void this.#onChangeLine(
+      new CustomEvent<ChangeLineDetail>("change-line", {
+        detail: {
+          ...pending.change,
+          patch: { ...pending.change.patch, makeAt: pending.stationId },
+        },
+      }),
+    );
+  }
+
+  #renderEditDeadEnds(): TemplateResult | typeof nothing {
+    const pending = this.editDeadEnds;
+    if (
+      pending === null ||
+      this.activeTabId !== pending.orderId ||
+      this.#hasLeftOrder(pending.orderId, pending.visit)
+    )
+      return nothing;
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-edit-dead-ends
+      .open=${true}
+      .heading=${t("table.preview_title")}
+      @wt-close=${() => (this.editDeadEnds = null)}
+    >
+      <till-dead-ends-section
+        .answer=${pending.answer}
+        .choices=${new Map(pending.stationId === undefined ? [] : [["0", pending.stationId]])}
+        .allowRemove=${false}
+        @make-at=${(event: CustomEvent<{ key: string; stationId: string }>) => {
+          this.editDeadEnds = { ...pending, stationId: event.detail.stationId || undefined };
+        }}
+      ></till-dead-ends-section>
+      <div slot="footer" class="edit-dead-ends-actions">
+        <wt-button variant="secondary" @click=${() => (this.editDeadEnds = null)}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-edit-dead-ends-retry
+          ?disabled=${pending.stationId === undefined}
+          @click=${() => this.#retryEditDeadEnd()}
+          >${t("table.preview_confirm")}</wt-button
+        >
+      </div>
+    </wt-dialog>`;
+  }
+
   #clearErrorKeepingLateChange(): void {
     const late = this.#lateChangeShown();
     this.errorKey = late === undefined ? undefined : { lateChange: late };
@@ -4643,20 +4978,30 @@ export class TillApp extends LitElement {
       ...this.#billRevisions(),
       ...(toTable ? otherPartyRead(to.seated, party.id) : {}),
     };
-    let result: MoveBillResult;
-    try {
-      result = await this.api.moveBill(
-        billId,
-        toTable
-          ? { tableId: to.tableId }
-          : { counter: { zoneId: this.counterServiceZoneId || null } },
-        bills,
-        revisions,
-      );
-    } catch (error) {
-      await this.#onTableRefusal(error);
-      return;
+    let result: MoveBillResult | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const zoneId = toTable
+          ? this.tables.find((table) => table.id === to.tableId)?.zoneId
+          : this.counterServiceZoneId;
+        if (!(await this.#askStoredDeadEnds(billId, zoneId || undefined))) return;
+        result = await this.api.moveBill(
+          billId,
+          toTable
+            ? { tableId: to.tableId }
+            : { counter: { zoneId: this.counterServiceZoneId || null } },
+          bills,
+          revisions,
+        );
+        break;
+      } catch (error) {
+        if (attempt === 0 && (error as { code?: string }).code === "station.no_replacement")
+          continue;
+        await this.#onTableRefusal(error);
+        return;
+      }
     }
+    if (result === undefined) return;
     if (!toTable) void this.#refreshAfterWrite("held", "refresh.held_after_move");
     const floorRead = await this.#refreshFloor();
     if (this.#hasLeftOrder(billId, visit)) return;
@@ -4685,16 +5030,22 @@ export class TillApp extends LitElement {
    * A counter order, read with no party, moves to a table. The counter stays on screen and says
    * where it went; a basket holding that order is emptied, since it is now the table's bill.
    */
-  async #onMoveHeldOrder(event: Event): Promise<void> {
+  async #onMoveHeldOrder(event: Event, retried = false): Promise<void> {
     const { orderId, tableId, seated, bills } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
     const label = this.tables.find((table) => table.id === tableId)?.label ?? "";
     this.errorKey = undefined;
     try {
+      const zoneId = this.tables.find((table) => table.id === tableId)?.zoneId;
+      if (!(await this.#askStoredDeadEnds(orderId, zoneId ?? undefined))) return;
       await this.api.moveBill(orderId, { tableId }, bills, {
         partyId: null,
         ...otherPartyRead(seated, null),
       });
     } catch (error) {
+      if (!retried && (error as { code?: string }).code === "station.no_replacement") {
+        await this.#onMoveHeldOrder(event, true);
+        return;
+      }
       await this.#onTableRefusal(error);
       // A failed re-read keeps the list it had; the banner says the refusal.
       await this.#refreshHeldOrders().catch(() => undefined);
@@ -5273,7 +5624,7 @@ export class TillApp extends LitElement {
 
   /** The pay card's offer on a counter order a payment is already on: the bill payment dialog opens
    * on it, once an edit made to it in the basket is saved, as a single payment saves it first. */
-  async #onCounterBillPay(event: Event): Promise<void> {
+  async #onCounterBillPay(event: Event, retried = false): Promise<void> {
     const { amount } = (event as CustomEvent<{ amount: string }>).detail;
     if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
     this.#counterSends++;
@@ -5284,6 +5635,20 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (!this.#hasLeftCounterOrder(id, session))
         this.errorKey = counterError(error, "sale.error");
+      if (
+        !retried &&
+        ["station.no_replacement", "route.station_inactive"].includes(
+          (error as { code?: string }).code ?? "",
+        ) &&
+        (await this.#askCounterDeadEnds(
+          "place",
+          false,
+          (error as { code?: string }).code === "route.station_inactive",
+        ))
+      ) {
+        this.errorKey = undefined;
+        await this.#onCounterBillPay(event, true);
+      }
       return;
     }
     if (this.#hasLeftCounterOrder(id, session)) return;
@@ -5373,6 +5738,11 @@ export class TillApp extends LitElement {
     if (open.busy) return;
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     try {
+      if (!(await this.#askStoredDeadEnds(open.billId))) {
+        const now = this.#billPayingNow(open.id);
+        if (now !== null) this.billPaying = { ...now, busy: false };
+        return;
+      }
       const preview = await this.api.previewBillPayment(
         open.billId,
         paymentAsk(asked.choice, asked.pay, asked.allocation),
@@ -6059,6 +6429,7 @@ export class TillApp extends LitElement {
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
         @collect-card=${(event: Event) => void this.#onCollectCard(event)}
+        @check-before-tender=${(event: Event) => this.#onCheckBeforeTender(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
@@ -6085,6 +6456,7 @@ export class TillApp extends LitElement {
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
+        @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}
         @take-over-draft=${(event: Event) => void this.#onTakeOverDraft(event)}
         @fire-group=${(event: Event) => void this.#onFireGroup(event)}
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
@@ -6179,6 +6551,17 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
+        ${this.#renderEditDeadEnds()}
+        ${
+          this.deadEndsQuestion === null
+            ? nothing
+            : html`<till-dead-ends-dialog
+                .answer=${this.deadEndsQuestion.answer}
+                .allowRemove=${this.deadEndsQuestion.allowRemove}
+                @dead-ends-continue=${(event: CustomEvent<DeadEndsDecision>) => this.#answerDeadEnds(event.detail)}
+                @dead-ends-cancel=${() => this.#answerDeadEnds(null)}
+              ></till-dead-ends-dialog>`
+        }
         ${
           this.basketRefresh === undefined
             ? nothing

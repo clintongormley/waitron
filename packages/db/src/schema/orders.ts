@@ -18,6 +18,7 @@ import {
 import { products } from "./catalogue.js";
 import { diningTables } from "./dining-tables.js";
 import { kitchenCourses } from "./kitchen-courses.js";
+import { kitchenStations } from "./kitchen-stations.js";
 import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
 import { tills } from "./tenants.js";
@@ -167,6 +168,7 @@ export const workingOrderLines = table(
     servedQuantity: quantity("served_quantity").notNull().default(0),
     // The kitchen course this line was rung under. No course means the line fires earliest.
     courseId: id("course_id"),
+    makeAtStationId: id("make_at_station_id"),
     // The dish line an extras pick belongs to; a top-level line leaves it NULL.
     parentLineId: id("parent_line_id"),
     note: label("note"),
@@ -209,6 +211,11 @@ export const workingOrderLines = table(
       columns: [t.courseId],
       foreignColumns: [kitchenCourses.id],
       name: "working_order_lines_course_fk",
+    }),
+    foreignKey({
+      columns: [t.makeAtStationId],
+      foreignColumns: [kitchenStations.id],
+      name: "working_order_lines_make_at_station_fk",
     }),
     foreignKey({
       columns: [t.parentLineId],

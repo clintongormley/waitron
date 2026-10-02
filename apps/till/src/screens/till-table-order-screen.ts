@@ -76,6 +76,8 @@ import type {
   GroupLine,
   OrderGroup,
   OrderLinePatch,
+  SaleLine,
+  DeadEndAnswer,
   PrintProblem,
   TabLine,
   TableServiceStatus,
@@ -105,6 +107,7 @@ import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
+import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
 
 export type { TableServiceStatus };
@@ -210,6 +213,12 @@ interface PendingDraft {
   join?: { group: OrderGroup; index: number };
   detail: SubmitDraftDetail;
   leftOut: readonly OrderLine[];
+  action: DraftAction;
+  checking: boolean;
+  deadEnds?: {
+    rows: ReadonlyMap<OrderLine, DeadEndAnswer["deadEnds"][number]>;
+    stations: DeadEndAnswer["stations"];
+  };
 }
 
 /** A held row whose Move to… is open, on whichever bill of the party it sits. */
@@ -319,6 +328,8 @@ export interface ChangeLineDetail {
   lineName: string;
   patch: OrderLinePatch;
   revision: number;
+  /** The complete edited dish for a station check after a routing refusal. */
+  saleLine?: SaleLine;
 }
 
 /**
@@ -513,6 +524,10 @@ export class TillTableOrderScreen extends LitElement {
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--wt-space-2);
+      }
+      .draft-preview .cancel-actions {
+        inline-size: 100%;
+        justify-content: space-between;
       }
 
       .served-line {
@@ -1307,6 +1322,8 @@ export class TillTableOrderScreen extends LitElement {
   /** The held group Add to held group joins; the first held group when unset or gone. */
   @state() private joinTarget: string | null = null;
   @state() private pendingDraft: PendingDraft | null = null;
+  #checkId = 0;
+  #lastPreview?: { store: WorkingOrderStore; action: DraftAction };
   /** The bill the waiter chose in the open preview, under the name it had then; null sends no
    * bill, so the lines go on the party's main bill as the server finds it when it takes the
    * request. */
@@ -1508,7 +1525,14 @@ export class TillTableOrderScreen extends LitElement {
    * `courseId`, so the server applies the product's default course. The answers name lists, products
    * and labels by id alone: the server takes every price, VAT class and name from the published offer.
    */
-  #openPreview(store: WorkingOrderStore, action: DraftAction): void {
+  #openPreview(
+    store: WorkingOrderStore,
+    action: DraftAction,
+    check = true,
+    deadEnds?: PendingDraft["deadEnds"],
+  ): void {
+    const checkId = ++this.#checkId;
+    this.#lastPreview = { store, action };
     const lines = store.lines;
     const entries = this.#draftEntries(lines);
     const selected = this.#selectedIndexes(lines);
@@ -1545,12 +1569,119 @@ export class TillTableOrderScreen extends LitElement {
       ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
       detail,
       leftOut: (submission.leftOut ?? []).map((at) => lines[at]!),
+      action,
+      checking: check && sent.length > 0,
+      ...(deadEnds === undefined ? {} : { deadEnds }),
     };
+    if (check && sent.length > 0) {
+      const request = new CustomEvent("check-dead-ends", {
+        detail: { sent, checkId },
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      });
+      this.dispatchEvent(request);
+      if (!request.defaultPrevented) this.answerDeadEnds(sent, undefined, checkId);
+    }
+  }
+
+  reopenDraftPreview(sent: readonly OrderLine[]): void {
+    const last = this.#lastPreview;
+    if (last === undefined || sent.some((line) => !last.store.lines.includes(line))) return;
+    this.#openPreview(last.store, last.action);
+  }
+
+  currentDeadEndsCheck(checkId: number): boolean {
+    return this.pendingDraft !== null && this.#checkId === checkId;
+  }
+
+  answerDeadEnds(sent: readonly OrderLine[], answer?: DeadEndAnswer, checkId?: number): void {
+    if (checkId !== undefined && !this.currentDeadEndsCheck(checkId)) return;
+    const pending = this.pendingDraft;
+    if (
+      pending === null ||
+      pending.detail.sent.length !== sent.length ||
+      pending.detail.sent.some((line, index) => line !== sent[index])
+    )
+      return;
+    const deadEnds =
+      answer === undefined
+        ? undefined
+        : {
+            rows: new Map(
+              answer.deadEnds.flatMap((row) => {
+                const line = sent[Number(row.key)];
+                if (
+                  line?.makeAt !== undefined &&
+                  !answer.stations.some((station) => station.id === line.makeAt)
+                )
+                  pending.detail.store.setLineMakeAt(
+                    pending.detail.store.lines.indexOf(line),
+                    undefined,
+                  );
+                return line === undefined ? [] : [[line, row] as const];
+              }),
+            ),
+            stations: answer.stations,
+          };
+    this.pendingDraft = {
+      ...pending,
+      checking: false,
+      ...(deadEnds === undefined ? {} : { deadEnds }),
+    };
+  }
+
+  beginDeadEndsQuestion(sent: readonly OrderLine[], checkId?: number): void {
+    if (checkId !== undefined && !this.currentDeadEndsCheck(checkId)) return;
+    const pending = this.pendingDraft;
+    if (
+      pending === null ||
+      pending.detail.sent.length !== sent.length ||
+      pending.detail.sent.some((line, index) => line !== sent[index])
+    )
+      return;
+    this.pendingDraft = { ...pending, checking: true };
+  }
+
+  #previewMakeAt(event: Event): void {
+    const pending = this.pendingDraft;
+    if (pending === null) return;
+    const { key, stationId } = (event as CustomEvent<{ key: string; stationId: string }>).detail;
+    const line = pending.detail.sent[Number(key)];
+    if (line === undefined) return;
+    pending.detail.store.setLineMakeAt(
+      pending.detail.store.lines.indexOf(line),
+      stationId || undefined,
+    );
+    this.requestUpdate();
+  }
+
+  #previewRemove(event: Event): void {
+    const pending = this.pendingDraft;
+    if (pending === null) return;
+    const { key } = (event as CustomEvent<{ key: string }>).detail;
+    const line = pending.detail.sent[Number(key)];
+    if (line === undefined) return;
+    const store = pending.detail.store;
+    const sendTo = this.sendTo;
+    store.removeLine(store.lines.indexOf(line));
+    const answer = pending.deadEnds;
+    const deadEnds =
+      answer === undefined
+        ? undefined
+        : {
+            stations: answer.stations,
+            rows: new Map([...answer.rows].filter(([item]) => item !== line)),
+          };
+    this.#openPreview(store, pending.action, false, deadEnds);
+    this.sendTo = sendTo;
   }
 
   #confirmPreview(): void {
     const pending = this.pendingDraft;
     if (pending === null) return;
+    if (pending.checking || [...(pending.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt))
+      return;
     this.pendingDraft = null;
     // Sent by id even when it is the main bill: the server refuses a chosen bill that is no longer
     // open, where sending none would put the order on the party's main bill as it stands then, or
@@ -1956,6 +2087,16 @@ export class TillTableOrderScreen extends LitElement {
       lineName: this.#nameForLine(line),
       patch,
       revision: this.#changeRevision,
+      saleLine: {
+        menuItemId: line.menuItemId ?? undefined,
+        ...(line.parentProductId === null || line.productId === null
+          ? {}
+          : { variantId: line.productId }),
+        quantity: patch.quantity ?? line.quantity,
+        options: detail.options ?? [],
+        extras: toWireModifiers({ extras: detail.extras }).extras ?? [],
+        ...(detail.note ? { note: detail.note } : {}),
+      },
     };
     this.dispatchEvent(
       new CustomEvent("change-line", { detail: change, bubbles: true, composed: true }),
@@ -2678,6 +2819,17 @@ export class TillTableOrderScreen extends LitElement {
   #previewDialog(): TemplateResult {
     const pending = this.pendingDraft;
     const preview = pending?.preview;
+    const deadEnds =
+      pending?.deadEnds === undefined
+        ? undefined
+        : {
+            sends: true,
+            stations: pending.deadEnds.stations,
+            deadEnds: pending.detail.sent.flatMap((line, index) => {
+              const row = pending.deadEnds!.rows.get(line);
+              return row === undefined ? [] : [{ ...row, key: String(index) }];
+            }),
+          };
     return html`<wt-dialog
       ${trackDialog()}
       class="draft-preview"
@@ -2726,6 +2878,22 @@ export class TillTableOrderScreen extends LitElement {
             : html`<p data-preview-left-out>${leftOutText(pending.leftOut)}</p>`
         }
         ${pending === null || pending.detail.sent.length === 0 ? nothing : this.#sendToChoice()}
+        ${
+          deadEnds?.deadEnds.length
+            ? html`<till-dead-ends-section
+                .answer=${deadEnds}
+                .choices=${new Map(
+                  deadEnds.deadEnds.flatMap((row) => {
+                    const stationId = pending?.detail.sent[Number(row.key)]?.makeAt;
+                    return stationId === undefined ? [] : [[row.key, stationId] as const];
+                  }),
+                )}
+                .allowRemove=${true}
+                @make-at=${(event: Event) => this.#previewMakeAt(event)}
+                @remove=${(event: Event) => this.#previewRemove(event)}
+              ></till-dead-ends-section>`
+            : nothing
+        }
       </div>
       <div slot="footer" class="cancel-actions">
         <wt-button
@@ -2743,6 +2911,7 @@ export class TillTableOrderScreen extends LitElement {
                 class="preview-confirm"
                 variant="primary"
                 data-draft-confirm
+                ?disabled=${pending?.checking === true || [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt)}
                 @click=${() => this.#confirmPreview()}
               >
                 ${t("table.preview_confirm")}

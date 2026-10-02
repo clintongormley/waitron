@@ -14,6 +14,7 @@ import {
   validateCutover,
   validateTimeZone,
   validatedRangeWindow,
+  venueMomentAt,
 } from "./business-day.js";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
@@ -37,6 +38,36 @@ describe("validateCutover", () => {
   });
   it.each(["5:00", "24:00", "23:60", "05:0", "0500", "05:00:00"])("rejects %s", (bad) => {
     expect(() => validateCutover(bad)).toThrow(/cutover/i);
+  });
+});
+
+describe("venueMomentAt", () => {
+  const madrid = { timeZone: "Europe/Madrid", dayCutover: "06:00" };
+
+  it("gives the venue's weekday, not UTC's, just after local midnight", () => {
+    expect(venueMomentAt(new Date("2026-10-02T22:30:00Z"), madrid)).toEqual({
+      businessDay: "2026-10-02",
+      weekday: 6,
+      timeOfDay: "00:30",
+    });
+  });
+
+  it("starts the business day at the cutover", () => {
+    expect(venueMomentAt(new Date("2026-10-03T03:59:00Z"), madrid)?.businessDay).toBe("2026-10-02");
+    expect(venueMomentAt(new Date("2026-10-03T04:00:00Z"), madrid)?.businessDay).toBe("2026-10-03");
+  });
+
+  it("reads the wall clock across both clock changes", () => {
+    expect(venueMomentAt(new Date("2026-03-29T00:59:00Z"), madrid)?.timeOfDay).toBe("01:59");
+    expect(venueMomentAt(new Date("2026-03-29T01:00:00Z"), madrid)?.timeOfDay).toBe("03:00");
+    expect(venueMomentAt(new Date("2026-10-25T00:30:00Z"), madrid)?.timeOfDay).toBe("02:30");
+    expect(venueMomentAt(new Date("2026-10-25T01:30:00Z"), madrid)?.timeOfDay).toBe("02:30");
+  });
+
+  it("answers null for a zone or cutover it cannot read", () => {
+    expect(venueMomentAt(new Date(), { timeZone: "Mars/Base", dayCutover: "06:00" })).toBeNull();
+    expect(venueMomentAt(new Date(), { timeZone: "+02:00", dayCutover: "06:00" })).toBeNull();
+    expect(venueMomentAt(new Date(), { timeZone: "Europe/Madrid", dayCutover: "6am" })).toBeNull();
   });
 });
 
