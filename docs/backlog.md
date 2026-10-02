@@ -2425,6 +2425,11 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       staff list longer than the screen still makes the page scroll to reach the language button,
       as it did before. Before, the page was taller than the screen even with no banner, by the
       body's padding and the demo strip.
+      Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
+      a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
+      `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
+      no longer has — the language button now sits in the tab shell's own footer. Removing the
+      space changes the screen's layout, so it is its own change.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
