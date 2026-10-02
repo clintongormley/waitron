@@ -422,10 +422,12 @@ describe("cancelling a placed order whose invoice was issued", () => {
   it("refuses an operator without sale.rectify, writing nothing and using no invoice number", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
 
-    await expectRefusedUnwritten(id, cancel(id, venue.cookie), {
+    const answer = cancel(id, venue.cookie);
+    await expectRefusedUnwritten(id, answer, {
       status: 403,
       code: "authorization.not_permitted",
     });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
   });
 
   it("refuses a bill holding a payment, writing nothing", async () => {
