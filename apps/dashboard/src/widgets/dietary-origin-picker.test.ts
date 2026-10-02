@@ -111,7 +111,7 @@ describe("dietary-origin-picker", () => {
     expect(event.composed).toBe(true);
   });
 
-  it("seeds the select from a passed value", async () => {
+  it("seeds the dropdown from a passed value", async () => {
     const { el } = await mountWidget<DietaryOriginPicker>("dashboard-dietary-origin-picker", {
       value: "dairy",
     });

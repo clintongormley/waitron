@@ -16,7 +16,7 @@ const locations: LocationSummary[] = [
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("dashboard-location-picker a11y (%s theme)", (theme) => {
-  it("has no violations with the select shown (more than one location)", async () => {
+  it("has no violations with the dropdown shown (more than one location)", async () => {
     const { host } = await mountWidget<LocationPicker>(
       "dashboard-location-picker",
       { locations, selected: "loc-1", label: "Location" },

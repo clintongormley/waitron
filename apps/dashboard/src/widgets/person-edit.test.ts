@@ -258,7 +258,7 @@ describe("person-edit", () => {
     }
   });
 
-  it("keeps inactive users' status select constrained to suspended while editing", async () => {
+  it("keeps inactive users' status dropdown constrained to suspended while editing", async () => {
     const inactive = { ...person, status: "suspended" as const };
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       person: inactive,

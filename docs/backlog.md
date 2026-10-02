@@ -1652,7 +1652,7 @@ listed in the pull request. **Seen, for the owner:** a chosen option whose value
 placeholder's muted style, because `wt-combobox` shows an empty value as its placeholder.
 The decimal-places sentence, which a `hint` never shows on a field that always holds a value, is
 also behind a help button in the dropdown's `help` slot. `wt-combobox`'s open list is now at least
-as wide as its field and otherwise as wide as its longest row, inside the screen's margins, so the
+as wide as its field and otherwise as wide as its longest row, never wider than the screen less 16px unless the field is, so the
 variants table's narrow unit dropdown no longer wraps "Add unit". **Seen, not changed:** once other
 fields in a purchase line show errors, its VAT-kind dropdown sits lower than its neighbours —
 `.line { align-items: flex-end }` in `purchase-form.ts`, from commit `6b299998ba` (2026-08-16).
@@ -1919,10 +1919,10 @@ product is now the variant itself. What it left open:
   whether the list should read a variant's effective allergens, and add them to that read if so.
 - **Not yet looked at on a phone (390px wide):** a variant's name may sit a few pixels low in its
   product-list row. **Next action:** open it at that width, in both themes, and look. (The variants
-  table's unit select, once cut to "Unid" in Spanish at that width, is no longer shown there: a
-  table 30rem wide or less hides its price column, heading select included, and puts each price
+  table's unit dropdown, once cut to "Unid" in Spanish at that width, is no longer shown there: a
+  table 30rem wide or less hides its price column, heading dropdown included, and puts each price
   under the variant's name, so on a phone the price field's unit button is the way to the unit. A
-  wider table still shows the select.)
+  wider table still shows the dropdown.)
 - **The product list's variant read repeats a grouping.** `listedVariantsOfProducts`
   (`packages/catalogue/src/operations.ts`) groups variants by parent the same way
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does. **Next action:** share one
@@ -2868,7 +2868,7 @@ venue screen already used it, so its country and province dropdowns gain the out
 province one is the case tested). Two dashboard screens also use that style, mark their dropdowns
 `aria-invalid` and have no invalid-dropdown rule of their own, so they gain the outline too: the
 product editor (`apps/dashboard/src/widgets/product-editor.ts`, its routing, VAT and unit
-dropdowns) and the venue operations screen
+dropdowns; _2026-10-02: those moved to `wt-combobox` in A178c_) and the venue operations screen
 (`packages/venue-service/src/dashboard/venue-operations-screen.ts`). Looked at after the review
 (#944's comment): the product editor's kitchen station and course dropdowns refused, and the venue
 operations screen's "Identical dishes on a kitchen ticket" dropdown after a refused save, in light
@@ -7102,8 +7102,8 @@ ongoing overhaul listed at the top of Track A.
   wizard has no "Print block" button or "Advanced text settings" any more; its width-ruler row holds
   the cap.)_ Left open: a `wt-disclosure`'s heading row (the product editor's Kitchen, Descriptors
   and Nutrition sections, among others) and a screen's own paragraphs still run the modal's full
-  width; the product editor's description `<textarea>`, which the screen styles itself, is not
-  capped; the content-languages editor's rows of enabled languages still put each Remove button at
+  width (the product editor's description moved to `wt-textarea`, which takes the cap, in
+  A178c, 2026-10-02); the content-languages editor's rows of enabled languages still put each Remove button at
   the modal's far edge (left for C111, which rewrites that screen; _2026-10-01, C111: that editor is
   gone, the rows are on the page itself_); a native select labelled by a
   separate `<label for>` keeps that label, and an error outside it, at the modal's full width unless
