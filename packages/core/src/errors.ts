@@ -41,22 +41,27 @@ declare module "@waitron/shared" {
      * exactly zero, and any positive one, is accepted. Refused before a number is allocated. */
     "sale.correction_exceeds_total": { saleId: string; remaining: string; correction: string };
     /** Thrown by `recordCorrection` for a whole-invoice credit (`wholeInvoice`) whose `correction`,
-     * at the cent, is not minus `invoiceTotal`, or of an invoice that `corrections` corrective
+     * at the cent, is not minus `invoiceTotal`, or of an invoice that `correctionCount` corrective
      * invoices already correct. Refused before a number is allocated. */
     "sale.correction_not_whole": {
       saleId: string;
       invoiceTotal: string;
-      corrections: number;
+      correctionCount: number;
       correction: string;
     };
-    /** Thrown by `recordCorrection` for a whole-invoice credit whose lines, summed at the cent for
-     * `rate`, are not the base the copied breakdown files at that rate (`"0"` when it files none),
-     * so the stored lines would disagree with the record. Refused before a number is allocated. */
+    /** Thrown by `recordCorrection` for a whole-invoice credit whose lines at `rate`, summed at the
+     * cent, are not what the copied breakdown files there: `linesBase` (their line totals) against
+     * `breakdownBase`, or `linesGross` (their gross amounts, a line stating none counted as none)
+     * against `breakdownGross`, its base plus tax. Both breakdown params are `"0"` at a rate it does
+     * not file; `linesGross` is `null`, and not compared, when no line at `rate` states a gross. The
+     * stored lines would disagree with the record. Refused before a number is allocated. */
     "sale.correction_lines_mismatch": {
       saleId: string;
       rate: string;
       linesBase: string;
       breakdownBase: string;
+      linesGross: string | null;
+      breakdownGross: string;
     };
     /** Registered, but nothing throws it: no path translates a `sales_series_invoice_number_key`
      * violation into this code. */

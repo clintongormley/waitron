@@ -515,13 +515,14 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
   /** Runs a correction expected to be refused inside a transaction that then commits, so a number
    * allocated before the refusal would stay allocated. */
   async function expectRefusedUnwritten(
-    backend: FiscalBackend,
+    backend: FakeFiscalBackend,
     originalId: SaleId,
     overrides: Partial<RecordCorrectionInput>,
     refusal: { code: string; params?: Record<string, unknown> },
   ) {
     const correctives = await countCorrectives(originalId);
     const next = await rectSeriesNext();
+    const filed = (await backend.recordsFor(nodeId)).map((r) => r.kind);
     await withTransaction(suite.db, async (tx) => {
       await expect(
         recordCorrection(tx, backend, correctionInput(originalId, overrides)),
@@ -529,6 +530,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     });
     expect(await countCorrectives(originalId)).toBe(correctives);
     expect(await rectSeriesNext()).toBe(next);
+    expect((await backend.recordsFor(nodeId)).map((r) => r.kind)).toEqual(filed);
   }
 
   it("stores and files the invoice's breakdown negated, where the lines would derive another", async () => {
@@ -560,7 +562,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
 
     await expectRefusedUnwritten(backend, originalId, wholeCredit({ total: "-0.54" }), {
       code: "sale.correction_not_whole",
-      params: { saleId: originalId, invoiceTotal: "0.55", corrections: 0, correction: "-0.54" },
+      params: { saleId: originalId, invoiceTotal: "0.55", correctionCount: 0, correction: "-0.54" },
     });
   });
 
@@ -575,7 +577,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
 
     await expectRefusedUnwritten(backend, originalId, wholeCredit(), {
       code: "sale.correction_not_whole",
-      params: { saleId: originalId, invoiceTotal: "0.55", corrections: 1, correction: "-0.55" },
+      params: { saleId: originalId, invoiceTotal: "0.55", correctionCount: 1, correction: "-0.55" },
     });
   });
 
@@ -595,7 +597,14 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
       }),
       {
         code: "sale.correction_lines_mismatch",
-        params: { saleId: originalId, rate: "21.00", linesBase: "-0.40", breakdownBase: "-0.45" },
+        params: {
+          saleId: originalId,
+          rate: "21.00",
+          linesBase: "-0.40",
+          breakdownBase: "-0.45",
+          linesGross: "-0.55",
+          breakdownGross: "-0.55",
+        },
       },
     );
   });
@@ -613,10 +622,108 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
       }),
       {
         code: "sale.correction_lines_mismatch",
-        params: { saleId: originalId, rate: "10.00", linesBase: "-0.01", breakdownBase: "0" },
+        params: {
+          saleId: originalId,
+          rate: "10.00",
+          linesBase: "-0.01",
+          breakdownBase: "0",
+          linesGross: "-0.55",
+          breakdownGross: "0",
+        },
       },
     );
   });
+
+  it.each(["-0.54", "1.00"])(
+    "refuses lines whose gross, %s, is not the invoice's base plus tax at their rate",
+    async (lineGross) => {
+      const backend = new FakeFiscalBackend(suite.db);
+      const { saleId: originalId } = await sellMosto(backend);
+      const [reversed] = wholeCredit().lines;
+
+      await expectRefusedUnwritten(
+        backend,
+        originalId,
+        wholeCredit({ lines: [{ ...reversed!, lineGross }] }),
+        {
+          code: "sale.correction_lines_mismatch",
+          params: {
+            saleId: originalId,
+            rate: "21.00",
+            linesBase: "-0.45",
+            breakdownBase: "-0.45",
+            linesGross: lineGross,
+            breakdownGross: "-0.55",
+          },
+        },
+      );
+    },
+  );
+
+  it("refuses a gross stated on some lines of a rate and not others, counting the others as none", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+    const [reversed] = wholeCredit().lines;
+
+    await expectRefusedUnwritten(
+      backend,
+      originalId,
+      wholeCredit({
+        lines: [
+          { ...reversed!, lineTotal: "-0.40", lineGross: "-0.49" },
+          { ...reversed!, lineNo: 2, lineTotal: "-0.05", lineGross: null },
+        ],
+      }),
+      {
+        code: "sale.correction_lines_mismatch",
+        params: {
+          saleId: originalId,
+          rate: "21.00",
+          linesBase: "-0.45",
+          breakdownBase: "-0.45",
+          linesGross: "-0.49",
+          breakdownGross: "-0.55",
+        },
+      },
+    );
+  });
+
+  it("credits an invoice whose lines state no gross, comparing their bases alone", async () => {
+    const backend = new FilesBreakdownsBackend(suite.db);
+    const { saleId: originalId } = await sell(backend, {
+      total: "0.55",
+      lines: [{ ...mosto, lineGross: null }],
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("0.45"), tax: decimal("0.10") }],
+      settlement: {
+        kind: "immediate",
+        tenders: [{ method: "cash", amount: "0.55", tipAmount: "0.00", settledAt: BASE }],
+      },
+    });
+    const [reversed] = wholeCredit().lines;
+
+    await correct(backend, originalId, wholeCredit({ lines: [{ ...reversed!, lineGross: null }] }));
+
+    expect(backend.filed).toEqual([[{ rate: "21.00", base: "-0.45", tax: "-0.10" }]]);
+  });
+
+  it.each([
+    ["1000000000", "shared.decimal_overflow"],
+    ["abc", "shared.invalid_decimal"],
+  ])(
+    "refuses a line whose quantity %s no column can store before a number is allocated",
+    async (quantity, code) => {
+      const backend = new FakeFiscalBackend(suite.db);
+      const { saleId: originalId } = await sellMosto(backend);
+      const [reversed] = wholeCredit().lines;
+
+      await expectRefusedUnwritten(
+        backend,
+        originalId,
+        wholeCredit({ lines: [{ ...reversed!, quantity }] }),
+        { code, params: { value: quantity } },
+      );
+    },
+  );
 
   it("refuses to copy an invoice breakdown that does not sum to the invoice's total", async () => {
     const backend = new FakeFiscalBackend(suite.db);

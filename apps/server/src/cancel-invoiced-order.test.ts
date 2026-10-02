@@ -669,6 +669,54 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(await creditsOf(original.id)).toEqual(raised);
   });
 
+  // The route sends only a reason; both refusals below come from the invoice as stored, so a
+  // retry meets the same one.
+  it("answers 409 when the invoice's stored lines disagree with its breakdown, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    await inTx(venue, (tx) =>
+      tx.insert(saleLines).values({
+        saleId: original.id,
+        lineNo: 99,
+        name: "Añadida",
+        descriptions: { [venue.cfg.locale]: "Añadida" },
+        quantity: 1000,
+        unitPrice: 1,
+        vatRate: 2100,
+        lineTotal: 1,
+      }),
+    );
+
+    await expectRefusedUnwritten(id, cancel(id), {
+      status: 409,
+      code: "sale.correction_lines_mismatch",
+    });
+  });
+
+  it("answers 409 when the invoice's stored breakdown does not sum to its total, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const [trigger] = venue.db.all<{ sql: string }>(
+      sql`select sql from sqlite_master where type = 'trigger' and name = 'sales_append_only_update'`,
+    );
+    venue.db.run(sql.raw(`drop trigger "sales_append_only_update"`));
+    try {
+      await inTx(venue, (tx) =>
+        tx
+          .update(sales)
+          .set({ vatBreakdown: [{ rate: "21.00", base: "2.48", tax: "0.51" }] })
+          .where(eq(sales.id, original.id)),
+      );
+    } finally {
+      venue.db.run(sql.raw(trigger!.sql));
+    }
+
+    await expectRefusedUnwritten(id, cancel(id), {
+      status: 409,
+      code: "sale.total_mismatch",
+    });
+  });
+
   it("files one credit when two cancels of the order arrive together, refusing the second", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);

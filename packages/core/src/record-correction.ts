@@ -66,8 +66,9 @@ export interface RecordCorrectionInput {
    * Credits the whole invoice: the corrective's VAT breakdown is the original's stored one,
    * negated, instead of one derived from `lines`, whose per-rate tax can differ from the invoice's
    * by a cent. Refused with `sale.correction_not_whole` unless `total` is minus the original's and
-   * nothing corrects the original yet, and with `sale.correction_lines_mismatch` unless `lines`
-   * carry the copied bases rate by rate.
+   * nothing corrects the original yet; with `sale.total_mismatch` unless the copy sums to `total`;
+   * and with `sale.correction_lines_mismatch` unless, rate by rate, the lines' totals are the
+   * copy's base and the gross amounts they state are its base plus tax.
    */
   wholeInvoice?: boolean;
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
@@ -82,11 +83,11 @@ export interface RecordCorrectionInput {
  * action.
  *
  * The authorization gate runs after the sale and series checks, so those still report their own
- * codes, and before the number is allocated, so a refused correction burns no number. A
+ * codes, and before the number is allocated, so a correction it refuses burns no number. A
  * derived breakdown's `sale.total_mismatch` refusal comes before all three; a whole-invoice
  * credit's refusals come after the gate and `sale.correction_exceeds_total`, because they read
- * what is on the invoice. A failed integrity check records an incident and the correction proceeds
- * anyway.
+ * what is on the invoice, and before the number, the refusal of a line no column can store
+ * included. A failed integrity check records an incident and the correction proceeds anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
@@ -190,6 +191,9 @@ export async function recordCorrection(
   // The stored `sales.vat_breakdown` and the filed breakdown are this one value.
   const vatBreakdown =
     derived ?? wholeInvoiceBreakdown(input.correctsSaleId, original, totalCents, input.lines);
+  // A whole-invoice credit converts its lines before a number is allocated, so one no column can
+  // store is refused with nothing written; the sale's id is filled in once it exists.
+  const wholeLineRows = input.wholeInvoice === true ? saleLineRows("", input.lines) : undefined;
 
   // Nothing branches on `verification.ok`: a failed check records one incident carrying every
   // issue, once `saleId` exists, and the correction is chained anyway.
@@ -259,7 +263,9 @@ export async function recordCorrection(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
+  await tx
+    .insert(saleLines)
+    .values(wholeLineRows?.map((row) => ({ ...row, saleId })) ?? saleLineRows(saleId, input.lines));
 
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })
@@ -299,8 +305,10 @@ export async function recordCorrection(
 /**
  * The original's stored breakdown negated, for a credit of the whole invoice. Refused unless the
  * credit is minus the invoice's total and the first correction of it, so the two net to zero rate
- * by rate; and unless the copy sums to the credit and the lines carry its bases, so the record
- * agrees with its own total and with the lines stored beside it.
+ * by rate; and unless the copy sums to the credit and the lines carry its bases and, where they
+ * state one, its gross, so the record agrees with its own total and with the lines stored beside
+ * it. A line stating no gross counts as none at its rate; a rate where no line states one is not
+ * compared, so an invoice whose lines were written without one can still be credited.
  */
 function wholeInvoiceBreakdown(
   saleId: SaleId,
@@ -317,7 +325,7 @@ function wholeInvoiceBreakdown(
     throw new AppError("sale.correction_not_whole", {
       saleId,
       invoiceTotal: centsToDecimal(original.total),
-      corrections: original.correctionCount,
+      correctionCount: original.correctionCount,
       correction,
     });
   }
@@ -329,16 +337,28 @@ function wholeInvoiceBreakdown(
   assertSumsTo(breakdown, correction);
   for (const rate of [...breakdown.map((g) => g.rate), ...lines.map((l) => decimal(l.vatRate))]) {
     const atRate = (other: Decimal) => compareDecimal(other, rate) === 0;
-    const linesBase = sumDecimals(
-      lines.filter((l) => atRate(decimal(l.vatRate))).map((l) => atCents(l.lineTotal)),
+    const linesAtRate = lines.filter((l) => atRate(decimal(l.vatRate)));
+    const groupsAtRate = breakdown.filter((g) => atRate(g.rate));
+    const linesBase = sumDecimals(linesAtRate.map((l) => atCents(l.lineTotal)));
+    const breakdownBase = sumDecimals(groupsAtRate.map((g) => g.base));
+    // `rateLines` (`@waitron/catalogue`) files tax as gross − base per rate, so a priced invoice's
+    // line grosses sum to base + tax there.
+    const statedGross = linesAtRate.flatMap((l) =>
+      l.lineGross == null ? [] : [atCents(l.lineGross)],
     );
-    const breakdownBase = sumDecimals(breakdown.filter((g) => atRate(g.rate)).map((g) => g.base));
-    if (compareDecimal(linesBase, breakdownBase) !== 0) {
+    const linesGross = statedGross.length === 0 ? null : sumDecimals(statedGross);
+    const breakdownGross = sumDecimals(groupsAtRate.flatMap((g) => [g.base, g.tax]));
+    if (
+      compareDecimal(linesBase, breakdownBase) !== 0 ||
+      (linesGross !== null && compareDecimal(linesGross, breakdownGross) !== 0)
+    ) {
       throw new AppError("sale.correction_lines_mismatch", {
         saleId,
         rate,
         linesBase,
         breakdownBase,
+        linesGross,
+        breakdownGross,
       });
     }
   }

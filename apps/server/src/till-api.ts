@@ -335,6 +335,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_placed": 409,
   "series.no_rectificative_for_node": 409,
   "sale.correction_not_whole": 409,
+  // A record built from the invoice as stored, or from the server's own pricing, disagrees with
+  // itself: nothing the request sent, and permanent for the same invoice or basket.
+  "sale.correction_lines_mismatch": 409,
+  "sale.total_mismatch": 409,
   "sale.correction_exceeds_total": 409,
   "sale.voided": 409,
   "sale.already_settled": 409,
