@@ -1293,30 +1293,116 @@ describe("till-app", () => {
         : activeTabGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
 
     const withReader = ["print-receipt", "integrated-card-payment"];
+    const tillCounterTab: CanvasDef = { ...withCounterTab, formFactor: "till" };
+    const tillSaleTab: CanvasDef = { ...withSaleTab, formFactor: "till" };
     it.each([
       {
+        device: "phone-portrait",
         tab: "counter",
         canvas: withCounterTab,
         capabilities: withReader,
         offered: "stripe_terminal",
       },
-      { tab: "counter", canvas: withCounterTab, capabilities: ["print-receipt"], offered: "none" },
-      { tab: "sale", canvas: withSaleTab, capabilities: withReader, offered: "stripe_terminal" },
-      { tab: "sale", canvas: withSaleTab, capabilities: ["print-receipt"], offered: "none" },
+      {
+        device: "phone-portrait",
+        tab: "counter",
+        canvas: withCounterTab,
+        capabilities: ["print-receipt"],
+        offered: "none",
+      },
+      {
+        device: "phone-portrait",
+        tab: "sale",
+        canvas: withSaleTab,
+        capabilities: withReader,
+        offered: "stripe_terminal",
+      },
+      {
+        device: "phone-portrait",
+        tab: "sale",
+        canvas: withSaleTab,
+        capabilities: ["print-receipt"],
+        offered: "none",
+      },
+      {
+        device: "till",
+        tab: "counter",
+        canvas: tillCounterTab,
+        capabilities: withReader,
+        offered: "stripe_terminal",
+      },
+      {
+        device: "till",
+        tab: "counter",
+        canvas: tillCounterTab,
+        capabilities: ["print-receipt"],
+        offered: "none",
+      },
+      {
+        device: "till",
+        tab: "sale",
+        canvas: tillSaleTab,
+        capabilities: withReader,
+        offered: "stripe_terminal",
+      },
+      {
+        device: "till",
+        tab: "sale",
+        canvas: tillSaleTab,
+        capabilities: ["print-receipt"],
+        offered: "none",
+      },
     ])(
-      "on its $tab tab, gives the pay card the reader $offered when its profile's capabilities are $capabilities",
-      async ({ tab, canvas, capabilities, offered }) => {
-        const el = await toHandheld(canvas, {
-          capabilities,
-          cardProvider: "stripe_terminal",
-          activeReaders: readers,
-          defaultReaderId: readers[0]!.id,
-        });
+      "on a $device device's $tab tab, gives the pay card the reader $offered when its profile's capabilities are $capabilities",
+      async ({ device, tab, canvas, capabilities, offered }) => {
+        const el = await toHandheld(
+          canvas,
+          {
+            capabilities,
+            cardProvider: "stripe_terminal",
+            activeReaders: readers,
+            defaultReaderId: readers[0]!.id,
+          },
+          {
+            getDeviceIdentity: vi
+              .fn()
+              .mockResolvedValue({ deviceId: "d1", formFactor: device, stationId: null }),
+          },
+        );
         selectTab(el, tab);
         await flush(el);
         expect(payCard(el, tab).cardProvider).toBe(offered);
       },
     );
+
+    it("says the handheld is not set up for the reader when the server refuses it the reader", async () => {
+      const el = await toHandheld(
+        withCounterTab,
+        {
+          capabilities: withReader,
+          cardProvider: "stripe_terminal",
+          activeReaders: readers,
+          defaultReaderId: readers[0]!.id,
+        },
+        {
+          pay: vi
+            .fn()
+            .mockRejectedValue({ code: "device.forbidden_action", status: 403, action: "pay" }),
+        },
+      );
+      selectTab(el, "counter");
+      await flush(el);
+      const c = counter(el)!;
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("card_reader.not_set_up"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+    });
 
     describe("a list that cannot be read at login", () => {
       let rejections: unknown[];
@@ -5254,7 +5340,11 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountWidget<TillApp>("till-app", {
         api: stubApi({
-          getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "simulator" }),
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            cardProvider: "simulator",
+            capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+          }),
           pay,
         }),
       });
@@ -5494,6 +5584,31 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1); // basket intact, like every other refusal
     });
 
+    it("says the till is not set up for the reader when the server refuses it the reader", async () => {
+      const pay = vi
+        .fn()
+        .mockRejectedValue({ code: "device.forbidden_action", status: 403, action: "pay" });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "stripe_terminal",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("card_reader.not_set_up"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(c.store.lines).toHaveLength(1);
+    });
+
     it("a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed (pay never reached)", async () => {
       // The pre-pay `#syncIfDirty` save network-fails, so the integrated `pay` is never
       // called — nothing filed, safe to retry — so this is `sale.error`, not `sale.unconfirmed`.
@@ -5644,9 +5759,12 @@ describe("till-app", () => {
 
     it("threads a real integrated cardProvider + tipsEnabled through to the widget", async () => {
       const { el } = await mountApp({
-        getTill: vi
-          .fn()
-          .mockResolvedValue({ ...till, cardProvider: "stripe_on_device", tipsEnabled: true }),
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "stripe_on_device",
+          tipsEnabled: true,
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
       });
       await toCounter(el);
       expect(tenderPay(el).cardProvider).toBe("stripe_on_device");
@@ -5656,7 +5774,11 @@ describe("till-app", () => {
     it("threads a declined cardOutcome through to the widget, driving its card_outcome view", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "stripe_terminal" }),
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "stripe_terminal",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
         pay,
       });
       const c = await toCounter(el);

@@ -1899,18 +1899,20 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       held-orders or prep-queue card, loads the counter's lists at login as a till does, and a
       handheld is offered the card reader, on any pay card and on a bill, only when its device
       profile has integrated card payment (`#showsCounterLists` and `#cardReader`,
-      `apps/till/src/till-app.ts`). A till is still offered the reader whatever its profile says,
-      and the server refuses one without the capability (`device.forbidden_action`). At login each
-      counter list shows its own failure with a retry notice, so one list that fails no longer
-      stops the others loading (they are still read one after another, so a read that hangs still
-      delays the rest); this changed for tills too. Left as they were: a handheld gets no Station,
-      Expo or Schedule button (an existing test pins it), and never opens the drawer.
+      `apps/till/src/till-app.ts`). A till follows its profile the same way (C129); one with no
+      device, or with no profile, reads no capabilities at boot, so it is not offered the reader
+      either, and the built-in till profile has the capability. When the server still refuses a
+      reader payment with `device.forbidden_action` (a profile that lost the capability after the
+      till started), the counter and the bill say "This device is not set up to use the card
+      reader" (`card_reader.not_set_up`). At login each counter list shows its own failure with a
+      retry notice, so one list that fails no longer stops the others loading (they are still read
+      one after another, so a read that hangs still delays the rest); this changed for tills too.
+      Left as they were: a handheld gets no Station, Expo or Schedule button (an existing test pins
+      it), and never opens the drawer.
     - **Open — who may use the card reader.** Neither reader route (`/api/pay`, and
       `POST /api/working-orders/:id/payments` with `entry: "reader"`) checks the signed-in
       person's permissions: beyond being signed in on an enrolled device with a till, the device
-      profile's capability is the only check. `device.forbidden_action` has no message of its own
-      in the till: a bill shows "Something went wrong, try again" and the counter "Could not
-      complete the sale, try again".
+      profile's capability is the only check (queued as C128).
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a

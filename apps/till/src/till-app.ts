@@ -2334,7 +2334,10 @@ export class TillApp extends LitElement {
           ? "sale.refused"
           : reachedFiscal && isNetworkFailure(error)
             ? "sale.unconfirmed"
-            : counterError(error, "sale.error");
+            : // `POST /api/pay` throws this code only for a device not set up for the reader.
+              (error as { code?: string } | undefined)?.code === "device.forbidden_action"
+              ? "card_reader.not_set_up"
+              : counterError(error, "sale.error");
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
@@ -3143,10 +3146,8 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** A till is offered the reader whatever its profile says; the server's `assertDeviceCapability`
-   * refuses a device whose profile lacks it. */
   #cardReader(): TillInfo["cardProvider"] {
-    if (this.handheldMode && !this.capabilities.includes("integrated-card-payment")) return "none";
+    if (!this.capabilities.includes("integrated-card-payment")) return "none";
     return this.cardProvider;
   }
 

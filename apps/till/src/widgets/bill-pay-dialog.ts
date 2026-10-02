@@ -136,6 +136,9 @@ function refusalText(refusal: PayRefusal): string {
       return t("bill_pay.card_declined");
     case "card_network":
       return t("bill_pay.card_unreachable");
+    // Of the routes this dialog calls, only the reader branch of the payment route throws this code.
+    case "device.forbidden_action":
+      return t("card_reader.not_set_up");
   }
   if (refusal.code === "bill.tip_not_allowed" && refusal.chargeable !== undefined)
     return chargeableText(refusal.chargeable);

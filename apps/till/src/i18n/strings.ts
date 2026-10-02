@@ -204,6 +204,7 @@ export const en = {
   "reader_picker.heading": "Choose a card reader",
   "reader_picker.empty": "No active readers configured",
   "reader_picker.offline": "Offline",
+  "card_reader.not_set_up": "This device is not set up to use the card reader",
   // Allergen screen chrome; the allergen names are in `allergen-names.ts`.
   "allergens.open": "Allergens",
   "allergens.title": "Allergens",
@@ -1048,6 +1049,7 @@ export const es: Record<StringKey, string> = {
   "reader_picker.heading": "Elige un lector de tarjetas",
   "reader_picker.empty": "No hay lectores activos configurados",
   "reader_picker.offline": "Sin conexión",
+  "card_reader.not_set_up": "Este dispositivo no está configurado para usar el lector de tarjetas",
   "allergens.open": "Alérgenos",
   "allergens.title": "Alérgenos",
   "allergens.notice": "Hay información sobre alérgenos disponible — pregunta al personal.",
