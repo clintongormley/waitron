@@ -3,7 +3,8 @@
 The box image carries software written by others under their own licences. This folder is
 copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream,
 the Iosevka font printed text is drawn from, the Moby template the print agent's AppArmor
-profile is copied from, and the Material Symbols icons the web apps carry; the npm packages bundled
+profile is copied from, the Material Symbols icons the web apps carry, and the Google Sans font and
+Google's "G" on the dashboard's Sign in with Google button; the npm packages bundled
 into the server, the web apps and the print-agent have no notice file yet (`docs/backlog.md`).
 The print-agent image, built by the same `deploy/Dockerfile`, does not carry this folder; its own
 `/app/third-party/` holds the notices of its Python, described below.
@@ -66,6 +67,25 @@ Google, licensed under the Apache License, Version 2.0: some of the dashboard's 
 files says so beside the paths.
 
 - `licenses/Apache-2.0.txt` is that licence.
+
+## Google Sans
+
+The dashboard web app, served from `/app/web/dashboard/` in the image, carries the font Google
+Sans Medium for its Sign in with Google button, in `assets/` under a name beginning
+`google-sans-medium-latin`, built from `apps/dashboard/src/assets/google-sans-medium-latin.woff2`
+(SHA-256 `4d71eed21cc1dc806f17ef26749c5376980b27bed7996c0546de5a9e54688b81`): the latin subset of
+weight 500, as Google Fonts serves it. Copyright 2025 The Google Sans Project Authors
+(https://github.com/googlefonts/googlesans). It is licensed under the SIL Open Font License,
+Version 1.1.
+
+- `google-sans/OFL.txt` is that licence with the font's copyright line, copied unchanged from
+  `ofl/googlesans/OFL.txt` in Google's fonts repository (<https://github.com/google/fonts>).
+
+## Google "G" mark
+
+The dashboard's Sign in with Google button carries Google's "G" from the download bundle of
+Google's sign-in branding guidelines (<https://developers.google.com/identity/branding-guidelines>),
+used as those guidelines describe. Google and the Google "G" logo are trademarks of Google LLC.
 
 ## The print agent's Python
 

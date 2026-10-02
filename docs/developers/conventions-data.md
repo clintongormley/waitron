@@ -151,7 +151,10 @@ golang.org/toolchain archive per platform, from proxy.golang.org; `deploy/third-
 has the steps to regenerate it.
 
 What the guards leave open. The third-party blocks in `scripts/deploy-image-env.test.ts` read
-text and cover libvips, Litestream, the print agent's python3-minimal and the Iosevka font only;
+text and cover libvips, Litestream, the print agent's python3-minimal, the Iosevka font and the
+dashboard's Google Sans only; for Google Sans they check the copyright line in the notice and in
+`deploy/third-party/google-sans/OFL.txt` and that the font file is in the dashboard's source,
+never that the built image serves it;
 for Litestream they compare `NOTICES.txt`'s `Litestream version:` line with the pin, never the
 module list with the binary; for the font they check that `deploy/third-party/iosevka/LICENSE.md`
 carries the copyright line `packages/printing/src/glyphs.ts`'s header names and that the

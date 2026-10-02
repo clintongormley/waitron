@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
@@ -681,6 +681,42 @@ describe("the box image carries the licence of the font printed text is drawn in
     expect(section).toMatch(/SIL Open Font License,\s+Version 1\.1/);
     expect(IMAGE_SMOKE).toContain("test -s /app/third-party/iosevka/LICENSE.md");
   });
+});
+
+/**
+ * The dashboard bundles Google Sans Medium for its Sign in with Google button, under the SIL Open
+ * Font License 1.1. Reads TEXT: it proves the notice and the licence file exist and name the font's
+ * copyright line, and that the font file is in the dashboard's source — not that the built image
+ * serves it, nor that the licence is the one Google publishes beside the font.
+ */
+describe("the box image carries the licence of the font the Google button is drawn in", () => {
+  const COPYRIGHT =
+    "Copyright 2025 The Google Sans Project Authors (https://github.com/googlefonts/googlesans)";
+
+  it("ships the SIL Open Font License with Google Sans's copyright line", () => {
+    const licence = read("deploy/third-party/google-sans/OFL.txt");
+    expect(licence).toContain("SIL OPEN FONT LICENSE Version 1.1");
+    expect(licence).toContain(COPYRIGHT);
+  });
+
+  it("describes it in the notice, naming the licence file and the copyright line", () => {
+    const section = noticeSection("Google Sans");
+    expect(section).toContain("`google-sans/OFL.txt`");
+    expect(section.replace(/\s+/g, " ")).toContain(COPYRIGHT);
+    expect(section).toMatch(/SIL Open Font License,\s+Version 1\.1/);
+  });
+
+  it("bundles the font file it describes into the dashboard", () => {
+    expect(
+      statSync(`${ROOT}apps/dashboard/src/assets/google-sans-medium-latin.woff2`).size,
+    ).toBeGreaterThan(0);
+  });
+});
+
+it("names Google's \"G\" on the dashboard's Google button as Google's trademark in the notice", () => {
+  expect(noticeSection('Google "G" mark').replace(/\s+/g, " ")).toContain(
+    'Google and the Google "G" logo are trademarks of Google LLC.',
+  );
 });
 
 /**
