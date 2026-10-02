@@ -4713,12 +4713,12 @@ approved.
   Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites, which name
   no engine.
 
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92; the `pg` handles, the `.sqlite.` infix and the `bytea` title are C127's second pull request).**
-  Still open: the `.sqlite.` infix in
-  `packages/db/src/constraint-target.sqlite.test.ts` and `migrate.sqlite.test.ts`;
-  the `packages/media` title that says `bytea` (the importer still checks that format);
-  and `pg.db` fixture handles across suites. Rename the fixture handles only after checking
-  current users with `rg -l 'const pg = useVenueDb|pg\.db' packages apps -g '*.test.ts'`.
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and by C127's second pull request, which renamed the `pg` handles to `suite`, dropped five `.sqlite.` infixes and retitled the `bytea` test).**
+  Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
+  because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`,
+  lane E's PF8, not started) edits it by that name; rename it once PF8 has landed. The `pg` handle
+  stays in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts`,
+  the fiscal gates no runner edits.
   `generatePassword` has a caller in `apps/server/src/break-glass.ts` and remains exported.
   The `provisioning.invalid_identifier` error registry entry remains; the A92 tree search
   (`rg -n provisioning.invalid_identifier packages apps`) found no product throw site. Retire it

@@ -34,7 +34,7 @@ function wire(input: ReturnType<typeof tables>) {
   };
 }
 
-it("accepts the database bytea wire format with one matching metadata row", () => {
+it("accepts image data written as \\x-prefixed hex with one matching metadata row", () => {
   expect(() => validateMediaConfiguration(wire(tables()))).not.toThrow();
   expect(() => validateMediaConfiguration({})).not.toThrow();
 });

@@ -1,6 +1,6 @@
 /**
  * The cause WALK and `sameTarget` — the parts of `./constraint-target.ts` that turn on the shape of
- * an error object rather than on one engine's words. `./constraint-target.sqlite.test.ts` asks the
+ * an error object rather than on one engine's words. `./constraint-target.refusals.test.ts` asks the
  * message-grammar questions against REAL `node:sqlite` refusals; a second copy driven by crafted
  * strings would only prove the parser reads itself.
  *

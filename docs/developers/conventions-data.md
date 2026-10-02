@@ -985,7 +985,7 @@ SQLite reports a delete refused by an `ON DELETE RESTRICT` key and a trigger's `
 the same result code, 1811; only the message separates them. Measured 2026-09-27 on `node:sqlite`
 (Node v26.7.0): a restricted delete reports 1811 with `FOREIGN KEY constraint failed`, and an insert
 naming no parent reports the same words under 787 (both driven in
-`packages/db/src/constraint-target.sqlite.test.ts`). So `restrictRefused` checks the code and the
+`packages/db/src/constraint-target.refusals.test.ts`). So `restrictRefused` checks the code and the
 words on one layer, and it would also accept a trigger that raised exactly those words (none does
 today).
 
