@@ -1307,6 +1307,23 @@ status filter is A217's question; mock up both together. A VAT or base-price err
 fold, as an error in a folded section does today (`SECTION_FIELDS`), and a new product with
 variants but no VAT yet starts with the fold open.
 
+**The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
+— OPEN.** The owner: _"the Kitchen name, and customer facing names aren't showing the internal
+name as the default value, at least when I add a variant and fill in the internal name the first
+time"_. A blank kitchen name or customer name falls back to the staff name
+(`kitchenPresentationName` and `customerPresentationText`,
+`packages/catalogue/src/product-presentation.ts`), but no field says so: the product editor's
+header comment states "The names are never hinted", and the variant window
+(`apps/dashboard/src/widgets/variant-form.ts`) sets no hint on them either. **Wanted:** while a
+kitchen or customer name is blank, its field shows what will be used instead, as a placeholder
+that follows the staff name as it is typed — on a product, on a variant's page and in the variant
+window. The placeholder must say what `product-presentation.ts` would print, not a second rule: a
+variant falls back to its OWN name, never its parent's kitchen or customer name; and the customer
+name falls back only in the venue's default language, so decide with the owner what the other
+languages' fields show (blank, or the default-language name the reader falls back to). Read, not
+reproduced: "the first time" may mean the hint is missing only on a new variant; check an
+existing one too.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
