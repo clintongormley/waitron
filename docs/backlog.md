@@ -1523,8 +1523,8 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040) and A171 (#1044) are done; next A172, built
-in the new style rather than restyled twice.
+A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040), A171 (#1044) and A172 (#1053) are done,
+A172 built in the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
