@@ -35,6 +35,62 @@ describe("crossRefText", () => {
 });
 
 describe("formatKitchenTicket", () => {
+  it.each([
+    ["en-GB", "From Bar"],
+    ["es-ES", "Viene de Bar"],
+  ])("prints the origin after the time for %s", (locale, origin) => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          scope: "station",
+          stationName: "Grill",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          items: [{ qty: 1, name: "Steak" }],
+          from: { stationName: "Bar", locale },
+          mark: "HOLD",
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** HOLD ***",
+      "Grill",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      origin,
+      "1 x Steak",
+      "",
+    ]);
+  });
+
+  it("prints the origin on an order-scope ticket", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          scope: "order",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          stations: [{ stationName: "Grill", items: [{ qty: 1, name: "Steak" }] }],
+          from: { stationName: "Bar", locale: "en-GB" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "PASE",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "From Bar",
+      "Grill",
+      "1 x Steak",
+      "",
+    ]);
+  });
   describe("station scope", () => {
     it("prints a modifier, cross-reference, then note beneath the dish", () => {
       const paper = decodeTicket(
@@ -402,6 +458,27 @@ describe("the rest of the order on a station's ticket", () => {
 });
 
 describe("formatCorrectionSlip", () => {
+  it.each([
+    ["en-GB", "Grill", "*** MOVED TO GRILL ***"],
+    ["es-ES", "Parrilla", "*** PASADO A PARRILLA ***"],
+  ])("prints the destination and old station for %s", (locale, toStation, header) => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          kind: "TO STATION",
+          toStation,
+          locale,
+          stationName: "Bar",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          at: new Date(2026, 7, 17, 14, 30).toISOString(),
+          item: { qty: 1, name: "Steak" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([header, "Bar", "Mesa 4", "A-17", "14:30", "1 x Steak", ""]);
+  });
   it("prints a VOID header, station, table, order, time, and the item via emitItem, ending in a cut", () => {
     const bytes = formatCorrectionSlip(
       {

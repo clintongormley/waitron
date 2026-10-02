@@ -423,11 +423,13 @@ async function planKitchenTickets(
   {
     reprint,
     mark,
+    from,
     orderScopeAlsoAt = [],
     restOfOrderExcept,
   }: {
     reprint: boolean;
     mark?: "HOLD" | "FIRE";
+    from?: string;
     orderScopeAlsoAt?: readonly string[];
     restOfOrderExcept?: ReadonlySet<string>;
   },
@@ -500,6 +502,7 @@ async function planKitchenTickets(
   const head = {
     reprint,
     mark,
+    from: from === undefined ? undefined : { stationName: from, locale: cfg.locale },
     tableLabel: order.tableLabel ?? "",
     orderNumber: order.orderNumber,
     firedAt: new Date(),
@@ -591,9 +594,13 @@ export async function enqueueKitchenTickets(
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
-  { mark }: { mark?: "HOLD" | "FIRE" } = {},
+  { mark, from }: { mark?: "HOLD" | "FIRE"; from?: string } = {},
 ): Promise<boolean> {
-  const jobs = await planKitchenTickets(tx, cfg, orderId, firedItems, { reprint: false, mark });
+  const jobs = await planKitchenTickets(tx, cfg, orderId, firedItems, {
+    reprint: false,
+    mark,
+    from,
+  });
   await enqueueKitchenJobs(tx, cfg, orderId, jobs, false);
   return jobs.length > 0;
 }
@@ -644,6 +651,7 @@ export interface CorrectionItem {
 type CorrectionChange =
   | { kind: "VOID" | "RECALLED" }
   | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
+  | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
   | HoldCorrection;
 
@@ -702,6 +710,38 @@ export async function enqueueCorrectionSlips(
     kind === "VOID" ? "void" : "recalled",
   );
   await printCorrectionSlips(tx, cfg, orderId, items, { kind });
+}
+
+/** Record a reroute and correct the paper at the item's old station before its station changes. */
+export async function enqueueStationMoved(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  items: CorrectionItem[],
+  toStationName: string,
+): Promise<void> {
+  if (items.length === 0) return;
+  await VENUE_SERVICE.recordKitchenNotices(
+    tx,
+    cfg,
+    orderId,
+    items.map(toNoticeItem),
+    "rerouted",
+    null,
+    null,
+    null,
+    toStationName,
+  );
+  const fired = items.filter((item) => item.group === undefined);
+  const held = items.filter((item) => item.group !== undefined);
+  if (fired.length > 0)
+    await printCorrectionSlips(tx, cfg, orderId, fired, {
+      kind: "TO STATION",
+      toStation: toStationName,
+      locale: cfg.locale,
+    });
+  if (held.length > 0)
+    await printCorrectionSlips(tx, cfg, orderId, held, { kind: "HOLD CANCELLED" });
 }
 
 /**
