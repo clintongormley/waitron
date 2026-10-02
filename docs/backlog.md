@@ -1010,14 +1010,13 @@ directly after the heading text, including in the extras list form, product edit
 languages screen. The focused Chromium test covers the position at desktop and phone widths.
 
 **Clicking an option's row on the options list form opens that option (A197, owner 2026-10-02) —
-OPEN.** The owner: _"clicking on the options rows should open the edit page, like the previous
+DONE.** The owner: _"clicking on the options rows should open the edit page, like the previous
 screen"_ — the Modifiers screen's table, where a click anywhere on a row opens it (`wt-data-table`'s
 row activation). The options list form (`apps/dashboard/src/widgets/option-list-form.ts`) draws its
 own `<table>`. Since A170 a click on an option's name, which is a button, opens it as its row menu's
-Edit does; the rest of the row does not. **Wanted:** a click elsewhere on the row, or Enter on the
-row, opens the option's edit form too, while the drag handle, the Default radio and the row menu keep
-doing their own thing. The extras list form (`extra-list-form.ts`) draws the same kind of table;
-check it and give it the same if its rows open an editor.
+Edit does. A click elsewhere on the row, or Enter on the row, opens the option's edit form too,
+while the drag handle, the Default radio and the row menu keep doing their own thing. The extras
+list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
 
 **Clicking a product's row on the Products screen opens it (A205, owner 2026-10-02) — FOLDED INTO A208** (the category tree spec builds it; kept here for the owner's words). The
 owner: _"clicking on a product row should open the edit screen"_. The Products table

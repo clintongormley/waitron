@@ -501,6 +501,42 @@ it("opens the option editor on an option when its name is clicked", async () => 
   expect(field(editor(el), "label-name").value).toBe("Medium");
 });
 
+it("opens an option from the rest of its row, including Enter on the focused row", async () => {
+  const { el } = await mount({ value: cooked });
+  const row = el.shadowRoot!.querySelector<HTMLTableRowElement>(`tr[data-label="${MEDIUM}"]`)!;
+
+  row.querySelector("td:nth-child(2)")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await el.updateComplete;
+  expect(editor(el).open).toBe(true);
+  expect(editor(el).value).toEqual({ ...cooked.labels[1]!, kitchenName: "M" });
+
+  await click(editor(el), "cancel");
+  row.focus();
+  expect(el.shadowRoot!.activeElement).toBe(row);
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(editor(el).open).toBe(true);
+  expect(editor(el).value).toEqual({ ...cooked.labels[1]!, kitchenName: "M" });
+});
+
+it("leaves the handle, Default radio and row menu to their own actions", async () => {
+  const { el } = await mount({ value: cooked });
+  const row = el.shadowRoot!.querySelector<HTMLTableRowElement>(`tr[data-label="${RARE}"]`)!;
+
+  row.querySelector<HTMLElement>(".handle")!.click();
+  await el.updateComplete;
+  expect(editor(el).open).toBe(false);
+
+  row.querySelector<HTMLElement>(".pick")!.click();
+  await el.updateComplete;
+  expect(checkedDefault(el)).toEqual([0]);
+  expect(editor(el).open).toBe(false);
+
+  row.querySelector<HTMLElement>("wt-row-actions")!.click();
+  await el.updateComplete;
+  expect(editor(el).open).toBe(false);
+});
+
 it("draws an option's name as a button that says it edits that option", async () => {
   const { el } = await mount({ value: cooked });
   const button = nameButton(el, 0);
