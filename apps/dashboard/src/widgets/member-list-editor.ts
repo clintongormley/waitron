@@ -2,10 +2,11 @@ import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, disabledStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import type { MenuStructureNode } from "../api/client.js";
 import type { MemberRef, SectionMember, TileRef } from "@waitron/catalogue/src/section-types.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel } from "./category-form.js";
@@ -66,7 +67,6 @@ export function sectionsHolding(parents: SectionParents, sectionId: string): str
 export class MemberListEditor extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     ReorderController.styles,
     ReorderController.tableStyles,
     css`
@@ -115,42 +115,22 @@ export class MemberListEditor extends LitElement {
       .add {
         display: flex;
         flex-wrap: wrap;
-        align-items: flex-end;
+        align-items: flex-start;
         gap: var(--wt-space-2);
+        max-width: var(--wt-field-max-width);
         margin-top: var(--wt-space-4);
+      }
+      /* Level with the bottom of the dropdown's box, not with the error line under it. */
+      .add > wt-button {
+        margin-top: calc(var(--wt-field-height) - var(--wt-tap-min));
       }
       .replacement .field,
       wt-form-actions {
         flex-basis: 100%;
       }
-      .add,
-      .error {
-        max-width: var(--wt-field-max-width);
-      }
       .field {
-        display: grid;
         flex: 1;
-        gap: var(--wt-space-1);
         min-width: 0;
-      }
-      /* Matches wt-input's own label, so a select beside one reads as the same kind of field. */
-      .field-label {
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      select {
-        min-height: var(--wt-tap-min);
-      }
-      select:disabled {
-        ${disabledStyles}
-      }
-      select[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-      }
-      .error {
-        margin: var(--wt-space-1) 0 0;
-        color: var(--wt-color-danger);
-        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
@@ -274,8 +254,13 @@ export class MemberListEditor extends LitElement {
   override updated(): void {
     if (this.#focusReplacement && !this.busy) {
       this.#focusReplacement = false;
-      if (this.replacing !== null && this.replacementFieldError)
-        this.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!.focus();
+      if (this.replacing !== null && this.replacementFieldError) {
+        const picker = this.shadowRoot!.querySelector<HTMLElement & LitElement>(
+          'wt-combobox[name="member-ref"]',
+        )!;
+        // The dropdown takes this render's `disabled` in its own update, which has not run yet.
+        void picker.updateComplete.then(() => picker.focus());
+      }
     }
   }
 
@@ -347,7 +332,7 @@ export class MemberListEditor extends LitElement {
     if (at < 0) {
       this.addError = true;
       if (this.replacing !== null)
-        this.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!.focus();
+        this.shadowRoot!.querySelector<HTMLElement>('wt-combobox[name="member-ref"]')!.focus();
       return;
     }
     const id = this.choice.slice(at + 1);
@@ -437,8 +422,8 @@ export class MemberListEditor extends LitElement {
                     this.choice = "";
                     this.addError = false;
                     await this.updateComplete;
-                    this.shadowRoot!.querySelector<HTMLSelectElement>(
-                      'select[name="member-ref"]',
+                    this.shadowRoot!.querySelector<HTMLElement>(
+                      'wt-combobox[name="member-ref"]',
                     )!.focus();
                   }}
                   >${t("action.replace")}</wt-button
@@ -474,48 +459,48 @@ export class MemberListEditor extends LitElement {
     </div>`;
   }
 
-  #group(label: string, choices: Choice[]) {
-    if (choices.length === 0) return nothing;
-    return html`<optgroup label=${label}>
-      ${choices.map(
-        (choice) =>
-          html`<option value=${choice.value} .selected=${choice.value === this.choice}>
-            ${choice.label}
-          </option>`,
-      )}
-    </optgroup>`;
+  #options(prompt: string) {
+    const grouped = (group: string, choices: Choice[]) =>
+      choices.map((choice) => ({ ...choice, group }));
+    return [
+      ...(this.replacing === null ? [{ value: "", label: prompt }] : []),
+      ...grouped(t("members.products"), this.#offer.products),
+      ...(this.sectionChoices ? grouped(t("members.sections"), this.#offer.sections) : []),
+    ];
+  }
+
+  #error(): string {
+    if (this.replacing !== null)
+      return this.addError ? t("members.tile_choose_first") : this.replacementFieldError;
+    if (!this.addError) return "";
+    return t(this.sectionChoices ? "members.tile_choose_first" : "members.choose_first");
   }
 
   override render() {
+    const prompt = t(this.sectionChoices ? "members.tile_placeholder" : "members.add_placeholder");
     return html`${this.#reorder.liveRegion()} ${this.#list()}
       <div class=${this.replacing === null ? "add" : "add replacement"}>
-        <label class="field">
-          <span class="field-label"
-            >${this.replacing === null ? t("members.add_label") : t("action.replace")}
-            ${this.replacing !== null ? html`<span aria-hidden="true">*</span>` : nothing}</span
-          >
-          <select
-            name="member-ref"
-            ?required=${this.replacing !== null}
-            .disabled=${this.busy}
-            aria-invalid=${this.addError || this.replacementFieldError ? "true" : "false"}
-            aria-describedby=${this.addError || this.replacementFieldError ? "member-add-error" : nothing}
-            @change=${(event: Event) => {
-              event.stopPropagation();
-              this.choice = (event.target as HTMLSelectElement).value;
-              this.addError =
-                this.replacing !== null && this.replacementAttempted && this.choice === "";
-              this.replacementFieldError = "";
-            }}
-          >
-            <option value="" .selected=${this.choice === ""}>
-              ${t(this.sectionChoices ? "members.tile_placeholder" : "members.add_placeholder")}
-            </option>
-            ${this.#group(t("members.products"), this.#offer.products)}
-            ${this.sectionChoices ? this.#group(t("members.sections"), this.#offer.sections) : nothing}
-          </select>
-          ${this.replacing !== null && (this.addError || this.replacementFieldError) ? html`<span class="error" id="member-add-error" data-test="add-error">${this.addError ? t("members.tile_choose_first") : this.replacementFieldError}</span>` : nothing}
-        </label>
+        <wt-combobox
+          class="field"
+          name="member-ref"
+          label=${this.replacing === null ? t("members.add_label") : t("action.replace")}
+          ?required=${this.replacing !== null}
+          search="auto"
+          placeholder=${prompt}
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${this.#options(prompt)}
+          .value=${this.choice}
+          error=${this.#error()}
+          .disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.choice = event.detail.value;
+            this.addError =
+              this.replacing !== null && this.replacementAttempted && this.choice === "";
+            this.replacementFieldError = "";
+          }}
+        ></wt-combobox>
         ${
           this.replacing === null
             ? html`<wt-button
@@ -552,14 +537,7 @@ export class MemberListEditor extends LitElement {
                 >
               </wt-form-actions>`
         }
-      </div>
-      ${
-        this.addError && this.replacing === null
-          ? html`<p class="error" id="member-add-error" data-test="add-error">
-              ${t(this.sectionChoices ? "members.tile_choose_first" : "members.choose_first")}
-            </p>`
-          : nothing
-      }`;
+      </div>`;
   }
 }
 

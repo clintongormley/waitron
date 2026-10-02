@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { page } from "vitest/browser";
 import type { HomeLayout } from "../api/client.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { MemberListEditor } from "./member-list-editor.js";
 import { HomeLayoutEditor } from "./home-layout-editor.js";
@@ -109,11 +110,10 @@ describe.each(["light", "dark"] as const)("home layout editor (%s)", (theme) => 
       list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-missing"]')!.click();
       await list.updateComplete;
       if (state === "refused replacement" || state === "field refusal") {
-        const select = list.shadowRoot!.querySelector<HTMLSelectElement>(
-          'select[name="member-ref"]',
-        )!;
-        select.value = "section:s-wines";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+        await chooseOption(
+          list.shadowRoot!.querySelector('wt-combobox[name="member-ref"]')!,
+          "section:s-wines",
+        );
         el.replacementCompletion("t-missing")("Request refused", state === "field refusal");
         await list.updateComplete;
       }

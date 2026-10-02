@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import type { HomeLayout } from "../api/client.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
 import { HomeLayoutEditor } from "./home-layout-editor.js";
@@ -87,6 +88,28 @@ async function mount(props: Partial<HomeLayoutEditor> = {}) {
 
 function q<T extends Element = HTMLElement>(el: HomeLayoutEditor, selector: string): T | null {
   return el.shadowRoot!.querySelector<T>(selector);
+}
+
+type Picker = HTMLElement & {
+  value: string;
+  error: string;
+  required: boolean;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+/** The tile editor's add-or-replace dropdown. */
+const pickerOf = (list: MemberListEditor): Picker =>
+  list.shadowRoot!.querySelector<Picker>('wt-combobox[name="member-ref"]')!;
+
+/** The dropdown's own trigger, which carries its invalid state. */
+const controlOf = (picker: Picker): HTMLElement =>
+  picker.shadowRoot!.querySelector<HTMLElement>("button.trigger")!;
+
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownIn(picker: Picker): Promise<string | undefined> {
+  await picker.updateComplete;
+  return picker.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
 }
 
 function members(el: HomeLayoutEditor): MemberListEditor {
@@ -197,8 +220,8 @@ it("edits the chosen layout's tiles in the member-list editor, offering only wha
       ref: { kind: "missing", name: t("home.missing").replace("{name}", "Salad") },
     },
   ]);
-  const offered = [...editor.shadowRoot!.querySelectorAll('select[name="member-ref"] option')]
-    .map((option) => (option as HTMLOptionElement).value)
+  const offered = pickerOf(editor)
+    .options.map((option) => option.value)
     .filter((value) => value !== "");
   expect(offered).toEqual(["product:p-chips", "product:p-lemonade", "section:s-beer"]);
   // A tile keeps its name when its target is no longer offered.
@@ -288,9 +311,7 @@ it("passes the tile editor's add, remove and keyboard move on for the layout bei
   const moves = capture(el, "wt-tile-move");
   const inner = capture(el, "wt-member-add");
   const editor = members(el);
-  const select = editor.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
-  select.value = "section:s-beer";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(pickerOf(editor), "section:s-beer");
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
   editor.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-t-burger"]')!.click();
@@ -354,9 +375,7 @@ it("keeps a missing tile in the editable list by its recorded name, with remove 
   await list.updateComplete;
   list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-missing"]')!.click();
   await list.updateComplete;
-  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
-  select.value = "section:s-beer";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(pickerOf(list), "section:s-beer");
   await list.updateComplete;
   list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
   expect(removes).toEqual([{ layoutId: "l-home", memberId: "t-missing" }]);
@@ -385,14 +404,14 @@ it("keeps a replacement choice through an unchanged passive snapshot and cancels
   const list = members(el);
   list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
   await list.updateComplete;
-  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
-  select.value = "section:s-beer";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  const select = pickerOf(list);
+  await chooseOption(select, "section:s-beer");
   await list.updateComplete;
   el.layouts = layouts();
   await el.updateComplete;
   await list.updateComplete;
   expect(select.value).toBe("section:s-beer");
+  expect(await shownIn(select)).toBe("Beer");
   expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).not.toBeNull();
   const next = layouts();
   next[0]!.tiles = next[0]!.tiles.filter((tile) => tile.memberId !== "t-salad");
@@ -409,14 +428,15 @@ it("explains an empty replacement beside its picker and before its disabled acti
   await list.updateComplete;
   list.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
   await list.updateComplete;
-  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
-  const error = list.shadowRoot!.querySelector('[data-test="add-error"]')!;
+  const select = pickerOf(list);
+  // The dropdown draws its error inside itself, so the dropdown's place in the order is the error's.
+  expect(select.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
   const action =
     list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!;
-  expect(select.getAttribute("aria-invalid")).toBe("true");
+  expect(controlOf(select).getAttribute("aria-invalid")).toBe("true");
   expect(list.shadowRoot!.activeElement).toBe(select);
   expect(action.disabled).toBe(true);
-  expect(error.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(select.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 it("keeps a blank cell between its neighbours at both column counts", async () => {
@@ -464,7 +484,7 @@ it("closes the missing row menu before focusing the replacement picker", async (
   replace.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   await list.updateComplete;
   expect(actions.shadowRoot!.querySelector("#actions")!.matches(":popover-open")).toBe(false);
-  expect(list.shadowRoot!.activeElement).toBe(list.shadowRoot!.querySelector("select"));
+  expect(list.shadowRoot!.activeElement).toBe(list.shadowRoot!.querySelector("wt-combobox"));
 });
 
 it("cancels the picker when the same tile row has already been replaced by a refresh", async () => {
@@ -494,29 +514,28 @@ it("rechecks a required replacement after an invalid attempt and a removed passi
   const list = members(el);
   list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-salad"]')!.click();
   await list.updateComplete;
-  const select = list.shadowRoot!.querySelector<HTMLSelectElement>('select[name="member-ref"]')!;
+  const select = pickerOf(list);
   const action =
     list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!;
   action.click();
   await list.updateComplete;
   for (const value of ["section:s-beer", ""]) {
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(select, value);
     await list.updateComplete;
     expect(action.disabled).toBe(value === "");
-    expect(select.getAttribute("aria-invalid")).toBe(value === "" ? "true" : "false");
+    expect(controlOf(select).getAttribute("aria-invalid")).toBe(value === "" ? "true" : "false");
   }
-  select.value = "section:s-beer";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(select, "section:s-beer");
   await list.updateComplete;
   el.sections = el.sections.filter((section) => section.id !== "s-beer");
   await el.updateComplete;
   await list.updateComplete;
   expect(select.value).toBe("");
+  expect(await shownIn(select)).toBe(t("members.tile_placeholder"));
   expect(action.disabled).toBe(true);
-  expect(select.getAttribute("aria-invalid")).toBe("true");
+  expect(controlOf(select).getAttribute("aria-invalid")).toBe("true");
   expect(select.required).toBe(true);
-  expect(text(list.shadowRoot!.querySelector(".field-label"))).toContain("*");
+  expect(text(select.shadowRoot!.querySelector(".field-label"))).toContain("*");
 });
 
 it("ignores an old replacement completion after cancellation and reopening the same row", async () => {
