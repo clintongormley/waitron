@@ -280,6 +280,10 @@ function tender(id, saleId, amount, tip = 0) {
   );
 }
 
+/** A line's two maps, keyed to `["es","ca"]`, the list `loc-relocale-text` later drops `ca` from. */
+const OLD_TEXT = '{"es":"Plato","ca":"Plat"}';
+const OLD_VARIANT = '{"es":"Grande","ca":"Gran"}';
+
 /**
  * The fixture rows the cases below need, written straight into a migrated venue file.
  *
@@ -481,6 +485,29 @@ function seed(connection) {
     `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
       `where id = 'wo-sent-settled'`,
     `update working_orders set status = 'abandoned' where id = 'wo-sent-abandoned'`,
+
+    // A venue whose invoice locales change once every line below is written, as a receipt-language
+    // change leaves them. Lines carrying a variant map reach both locale triggers; the `plain` ones
+    // reach only the descriptions trigger, so its refusal is the one that comes back.
+    `insert into locations (id, name, invoice_locales, operation_description) ` +
+      `values ('loc-relocale-text', 'Venue 3', '["es","ca"]', 'Restaurante')`,
+    `insert into tills (id, location_id, name, created_at) ` +
+      `values ('till-relocale-text', 'loc-relocale-text', 'Till 4', '${STAMP}')`,
+    workingOrder("wo-text-a", "open", { tillId: "till-relocale-text" }),
+    workingOrder("wo-text-b", "open", { tillId: "till-relocale-text" }),
+    workingOrder("wo-text-paid", "open", { tillId: "till-relocale-text" }),
+    workingOrder("wo-text-placed", "open", { tillId: "till-relocale-text" }),
+    line("line-text-paid-served", "wo-text-paid", OLD_TEXT, OLD_VARIANT),
+    line("line-text-paid-sent", "wo-text-paid", OLD_TEXT, OLD_VARIANT),
+    line("line-text-placed", "wo-text-placed", OLD_TEXT, OLD_VARIANT),
+    line("line-text-open", "wo-text-a", OLD_TEXT, OLD_VARIANT),
+    line("line-text-plain", "wo-text-a", OLD_TEXT),
+    line("line-text-variant", "wo-text-a", OLD_TEXT, OLD_VARIANT),
+    line("line-text-plain-move", "wo-text-a", OLD_TEXT),
+    line("line-text-variant-move", "wo-text-a", OLD_TEXT, OLD_VARIANT),
+    `update working_orders set status = 'settled', settled_at = '${STAMP}' where id = 'wo-text-paid'`,
+    `update working_orders set status = 'placed' where id = 'wo-text-placed'`,
+    `update locations set invoice_locales = '["es"]' where id = 'loc-relocale-text'`,
   ];
   for (const statement of statements) connection.exec(statement);
 }
@@ -986,27 +1013,15 @@ describe("working_order_lines_require_open_parent_update's served exception", ()
     ).toBe(OPEN_PARENT_REFUSAL);
   });
 
-  // An order that does not exist resolves to no venue, so the locale check refuses this write too;
-  // it is set aside for the one statement, so the answer is this rule's alone.
   it("refuses a served mark on a line whose order row disappeared", () => {
     connection.exec(`delete from working_orders where id = 'wo-served-orphan'`);
-    const localeCheck = connection
-      .prepare(
-        `select sql from sqlite_master where name = 'working_order_lines_check_locales_update'`,
-      )
-      .get().sql;
-    connection.exec(`drop trigger working_order_lines_check_locales_update`);
-    try {
-      expect(
-        refusalFor(
-          connection,
-          `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
-            `where id = 'line-served-orphan'`,
-        ),
-      ).toBe(OPEN_PARENT_REFUSAL);
-    } finally {
-      connection.exec(localeCheck);
-    }
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
+          `where id = 'line-served-orphan'`,
+      ),
+    ).toBe(OPEN_PARENT_REFUSAL);
   });
 
   it("leaves a line on an open order writable in every column, served ones included", () => {
@@ -1020,9 +1035,7 @@ describe("working_order_lines_require_open_parent_update's served exception", ()
     ).toBeUndefined();
   });
 
-  // The locale triggers have no `UPDATE OF`, so they re-read `descriptions` against the venue's
-  // CURRENT invoice locales on any update, a served mark on a settled order's line included.
-  it("refuses a served mark on a settled line once its venue's invoice locales changed", () => {
+  it("accepts a served mark on a settled line once its venue's invoice locales changed", () => {
     connection.exec(`update locations set invoice_locales = '["es"]' where id = 'loc-relocale'`);
     expect(
       refusalFor(
@@ -1030,7 +1043,7 @@ describe("working_order_lines_require_open_parent_update's served exception", ()
         `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
           `where id = 'line-served-relocale'`,
       ),
-    ).toBe(LOCALES_REFUSAL);
+    ).toBeUndefined();
   });
 });
 
@@ -1291,6 +1304,106 @@ describe("working_order_lines_check_variant_locales", () => {
         `update working_order_lines set variant_descriptions = '{"zz":"x"}' where id = 'line-var-ok'`,
       ),
     ).toBe(VARIANT_LOCALES_REFUSAL);
+  });
+});
+
+describe("the locale triggers once a venue's invoice locales changed", () => {
+  it("accepts a served mark, its undo and a first sent stamp on a paid line", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
+          `where id = 'line-text-paid-served'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 0, served_at = null ` +
+          `where id = 'line-text-paid-served'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set sent_at = '${STAMP}' where id = 'line-text-paid-sent'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("accepts a kitchen group change on a presented bill's line", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set group_id = 'group' where id = 'line-text-placed'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("accepts an open line's quantity change, and both maps set to their own values", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set quantity = 2000, line_total = 242 where id = 'line-text-open'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set descriptions = descriptions, ` +
+          `variant_descriptions = variant_descriptions where id = 'line-text-open'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses new text written under the old locales, in either map", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set descriptions = '{"es":"Plato grande","ca":"Plat gran"}' ` +
+          `where id = 'line-text-plain'`,
+      ),
+    ).toBe(LOCALES_REFUSAL);
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set variant_descriptions = '{"es":"Mediano","ca":"Mitja"}' ` +
+          `where id = 'line-text-variant'`,
+      ),
+    ).toBe(VARIANT_LOCALES_REFUSAL);
+  });
+
+  it("refuses moving a line whose descriptions carry the old locales", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set working_order_id = 'wo-text-b' ` +
+          `where id = 'line-text-plain-move'`,
+      ),
+    ).toBe(LOCALES_REFUSAL);
+  });
+
+  it("refuses moving a line whose variant map alone carries the old locales", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set descriptions = '{"es":"Plato"}' ` +
+          `where id = 'line-text-variant-move'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set working_order_id = 'wo-text-b' ` +
+          `where id = 'line-text-variant-move'`,
+      ),
+    ).toBe(VARIANT_LOCALES_REFUSAL);
+  });
+
+  it("accepts a fresh line keyed to the new locales", () => {
+    expect(
+      refusalFor(connection, line("line-text-fresh", "wo-text-a", '{"es":"Plato"}')),
+    ).toBeUndefined();
   });
 });
 
