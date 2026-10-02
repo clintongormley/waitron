@@ -1555,7 +1555,6 @@ export async function sendLines(
   lineNos: number[],
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
-  // A made-here line in a held group was made at its send; the remaining lines wait for the group.
   const heldGroupLines = await tx
     .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
     .from(workingOrderLines)
@@ -3067,7 +3066,7 @@ export async function carveOffLines(
 
 /**
  * Refuse `group.held_leaves_party` for the lowest-numbered of these lines whose group is held: a
- * group belongs to its party (D1). A made-here line in it was made at its send.
+ * group belongs to its party (D1).
  */
 export async function refuseHeldLeavingParty(
   tx: Transaction,

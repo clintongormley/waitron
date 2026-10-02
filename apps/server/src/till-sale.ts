@@ -1395,7 +1395,6 @@ export async function fireDishesAtPayment(
           )[0]!.partyId;
     if (party !== null) return null;
   }
-  const before = new Set(cfg.madeHereSink);
   const unrouted = await fireLines(
     tx,
     cfg,
@@ -1403,11 +1402,7 @@ export async function fireDishesAtPayment(
     await unsentDishLines(tx, workingOrderId),
     { unroutable: "skip" },
   );
-  await storePrepayMadeHere(
-    tx,
-    workingOrderId,
-    [...(cfg.madeHereSink ?? [])].filter((id) => !before.has(id)),
-  );
+  await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
   return unrouted.length === 0 ? null : { productIds: unrouted.map((line) => line.productId!) };
 }
 

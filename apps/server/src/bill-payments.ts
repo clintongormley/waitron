@@ -80,6 +80,7 @@ import {
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
+import { storePrepayMadeHere } from "./made-here.js";
 import "./errors.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 
@@ -719,6 +720,7 @@ async function issueWhenFullyPaid(
   }
 
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, order.partyId);
+  await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
   const settledAt = received
     .map((row) => row.receivedAt!)
     .reduce((latest, at) => (at > latest ? at : latest));

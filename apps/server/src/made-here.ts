@@ -122,13 +122,25 @@ export function madeHereAnswer(db: Database): MiddlewareHandler {
 
 const PREPAY_SUBMISSION = "made-here:prepay";
 
-/** Store only a pay-first send that has made-here rows. */
+/** Store only made-here rows committed on this bill for a later payment replay. */
 export async function storePrepayMadeHere(
   tx: Transaction,
   orderId: string,
   lineIds: readonly string[],
 ): Promise<void> {
   if (lineIds.length === 0) return;
+  const rows = await tx
+    .select({ lineId: ticketItems.workingOrderLineId })
+    .from(ticketItems)
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.madeHere, true),
+        inArray(ticketItems.workingOrderLineId, [...lineIds]),
+      ),
+    );
+  const madeHereIds = rows.map((row) => row.lineId);
+  if (madeHereIds.length === 0) return;
   const [existing] = await tx
     .select({ kind: serviceCommands.kind, result: serviceCommands.result })
     .from(serviceCommands)
@@ -145,7 +157,7 @@ export async function storePrepayMadeHere(
     await tx
       .update(serviceCommands)
       .set({
-        result: { value: [...new Set([...(existing.result.value as string[]), ...lineIds])] },
+        result: { value: [...new Set([...(existing.result.value as string[]), ...madeHereIds])] },
       })
       .where(
         and(
@@ -162,7 +174,7 @@ export async function storePrepayMadeHere(
     submissionId: PREPAY_SUBMISSION,
     kind: "made_here",
     fingerprint: "",
-    result: { value: [...lineIds] },
+    result: { value: madeHereIds },
   });
 }
 
