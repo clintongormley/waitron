@@ -1,9 +1,9 @@
 /**
  * Formats kitchen tickets and correction slips into ESC/POS bytes. Pure: no state, no database.
  *
- * A `station` ticket is one station's copy, a flat list under the station's name that may end with
- * the rest of the order. An `order` ticket is the pass copy: every fired item grouped under its
- * station's name.
+ * A `station` ticket lists its own printable items under the station's name and may end with
+ * the rest of the order. An `order` ticket is the pass copy: printable fired items grouped under
+ * their station's name.
  *
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */

@@ -23,7 +23,7 @@ import { workingOrderLines } from "./orders.js";
 export const ticketState = enumType(["queued", "preparing", "ready"]);
 
 /**
- * A per-line, per-station kitchen TICKET ITEM, inserted when a line is sent to the kitchen, with its
+ * A per-line, per-station kitchen TICKET ITEM, recorded when a line is sent, with its
  * station SNAPSHOTTED so later routing changes never reroute food already sent. MUTABLE: it advances
  * independently of the parent order's fiscal status (a settled order still has its lines cooked).
  * A `made_here` item was made on the spot at the sending device (design §5.11): it is never printed,

@@ -5330,7 +5330,7 @@ function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]
 
 /**
  * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected
- * order drops out; kitchen items are not filtered by state, so a `ready` line stays until its order collects.
+ * order drops out; printable kitchen items are not filtered by state, so a `ready` line stays until its order collects.
  * Items made at the till are absent from the station queue.
  * When the station shows the rest of the order, each card also carries its unserved items at other stations.
  */

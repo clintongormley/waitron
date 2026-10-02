@@ -409,12 +409,16 @@ action appears on the expediter's watcher screen.
   - on a **screen**, each line shows its progress;
   - on **paper**, it is a plain list. Many kitchens work from print alone.
 
+_2026-10-01 (slice 3c-1): a station's own tickets, first send, FIRE, HOLD and reprint, and its kitchen screen's card view list it. The whole-order PASE ticket and correction slips do not, and neither does the column view. It lists items now with other stations, held ones as on hold; served, sent-away, made-here and no-preparation lines and dishes not yet sent are left out._
+
 ### 5.11 "Made here, no ticket"
 
 A till can be set to say that items for certain stations are made on the spot. For example, on the
 bar till: "Items for these stations are made here: [Bar]". Those items get no ticket. The bar is
 still their maker. This is a **device setting, not routing**. Left empty, the bar gets tickets as
 usual. Watchers do not see these items either.
+
+_2026-10-01 (slice 3c-1): set this per device on the Devices screen, not per profile, and set it again after configuration export and import. "Here" is the device that first sends the item; paths with no device give it a ticket. The final station decides whether the device makes it here. A made-here item is never held: it is made the moment it is sent, even for a later course or in a held group, and the sending till shows a "Make now" list until the waiter dismisses it (owner, 2026-10-01). Once made it can be cancelled, not changed (D1). A dish an edit sends again keeps its first send's decision._
 
 ### 5.12 The screen
 

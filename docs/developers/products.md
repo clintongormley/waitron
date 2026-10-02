@@ -155,7 +155,9 @@ Where each one surfaces:
 | Receipt line — the goods identification, art. 7.1.e | the variant's frozen customer map on a variant line, else the product's | `apps/server/src/receipt-lines.ts` |
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
 | Kitchen ticket | the four frozen staff and kitchen names, plus each frozen answer's kitchen names falling back to its staff names | `apps/server/src/kitchen-print.ts` |
+| Also on this order (not for this station), on a station's own ticket and in its kitchen screen's order card | the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
 | Kitchen display and the expediter's pass | the same four names, through the same resolver | `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
+| Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name with ` x<n>` | `readMadeHereItems`, `apps/server/src/made-here.ts`, shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
 | Current orders on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts` |
