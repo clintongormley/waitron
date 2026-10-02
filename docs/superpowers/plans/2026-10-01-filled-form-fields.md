@@ -147,6 +147,9 @@ describe.each(["light", "dark"] as const)("field tokens (%s)", (theme) => {
   --wt-dropdown-row-height: 48px;
 ```
 
+(2026-10-02: `--wt-field-label-rest-size` was removed; a resting label now takes the value's size —
+A184.)
+
 - [ ] **Step 4: Run, see them pass.** Same command. Then prove the contrast case by mutation: set
   the light `--wt-color-field-line` to `#d6d9e0` (today's border colour, 1.32:1), see it fail,
   restore.

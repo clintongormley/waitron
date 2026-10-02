@@ -55,7 +55,7 @@ Two things make this more than a stylesheet change:
    top left, small, once there is a value or the field is focused.
 7. Measurements from the approved mockups: a field is 56px tall, with 8px rounded top corners,
    square bottom corners and a 1px bottom line; focused, the line is 2px in the primary blue and the
-   label turns blue. The label is 16px (2026-10-02: now the value's size, A184) resting and 12px
+   label turns blue. The label is 16px resting (2026-10-02: now the value's size, A184) and 12px
    floated; the required `*` travels with it. A hint is grey and italic. An error turns the line
    (2px) and the label red, with the message under the field. Disabled: a paler fill, a dashed
    bottom line, greyed text. A filled-in value is pure black in light and pure white in dark.
@@ -497,10 +497,10 @@ passes.
 - `docs/developers/conventions-ui.md` and CLAUDE.md §3: the Lit `<select>` `.selected` rule goes,
   in the same pull request as the guard; the new rule and its guard's hedge go in.
 - **Tests that pin today's LOOK change with the owner's approved mockups.** Examples read on
-  2026-10-01: `wt-input.test.ts`'s 12px-label case (a resting label is now 16px; 2026-10-02: now the
-  value's size, A184), the border cases of each field primitive, `wt-combobox`'s pill-shaped search
-  box, and `base-styles.test.ts`'s `selectStyles` cases (deleted with `selectStyles`). The plan
-  names each such test in its task, and every pull request names them again. Every BEHAVIOURAL
+  2026-10-01: `wt-input.test.ts`'s 12px-label case (a resting label is now 16px; 2026-10-02: the
+  value's size since A184), the border cases of each field primitive, `wt-combobox`'s pill-shaped
+  search box, and `base-styles.test.ts`'s `selectStyles` cases (deleted with `selectStyles`). The
+  plan names each such test in its task, and every pull request names them again. Every BEHAVIOURAL
   assertion — labels, `aria-*` wiring, events, hints as descriptions, `focusFirstInvalid`, refusals
   placed under fields — is kept.
 - **Tests that READ a native field's parts change where they read, not what they expect** — a
