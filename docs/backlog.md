@@ -1687,7 +1687,7 @@ filter is a compact `wt-combobox` (`hide-label`) whose "all" row is its placehol
 search box stays as it was (A175). The floor plan's zone name is a `wt-input` that sends its change
 once, on Enter or on leaving the field, not at every key, because the dashboard and the till save
 every placement change they hear. On the adjustment report a backwards range puts its sentence
-under the first day and marks the last day without repeating it. SumUp's merchant dropdown is
+under both days. SumUp's merchant dropdown is
 labelled "Merchant", with the sentence that was its label ("This key covers more than one
 merchant…") shown above it. The image library's sort dropdowns take a minimum width, so a short
 choice no longer cuts the label. `selectStyles` (`packages/ui/src/base-styles.ts`) is no longer used
