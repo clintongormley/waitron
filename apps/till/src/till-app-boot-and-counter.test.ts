@@ -344,6 +344,106 @@ describe("till-app session activity", () => {
     localStorage.removeItem("waitron.makeNow.other-device");
   });
 
+  it("clears old instructions on a same-app device switch and restores them on return", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "till-dev");
+    const identity = vi.fn(async () => ({
+      deviceId: sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY),
+      name: "Device",
+      formFactor: "till",
+      stationId: null,
+    }));
+    let receive: ((items: unknown[]) => void) | undefined;
+    const { el } = await mountApp({
+      getDeviceIdentity: identity,
+      getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
+      onMadeHere: vi.fn((listener) => {
+        receive = listener;
+      }),
+    });
+    await flush(el);
+    receive!([
+      {
+        lineId: "old-line",
+        name: "Old drink",
+        quantity: "1.000",
+        unitName: null,
+        soldInEach: true,
+        optionSnapshots: [],
+        extras: [],
+        note: null,
+      },
+    ]);
+    await flush(el);
+    const widget = el.shadowRoot!.querySelector("till-make-now")!;
+    expect(widget.shadowRoot!.textContent).toContain("Old drink");
+    emit(el.shadowRoot!.querySelector(".app")!, "switch-device");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-device-chooser")).not.toBeNull();
+    expect(widget.shadowRoot!.textContent).not.toContain("Old drink");
+    expect(localStorage.getItem("waitron.makeNow.till-dev")).toContain("old-line");
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "other-device");
+    emit(el.shadowRoot!.querySelector(".app")!, "enrolled");
+    await flush(el);
+    expect(widget.shadowRoot!.textContent).not.toContain("Old drink");
+    emit(el.shadowRoot!.querySelector(".app")!, "switch-device");
+    await flush(el);
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "till-dev");
+    emit(el.shadowRoot!.querySelector(".app")!, "enrolled");
+    await flush(el);
+    expect(widget.shadowRoot!.textContent).toContain("Old drink");
+  });
+
+  it("clears old instructions on a same-app switch when localStorage access throws", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "till-dev");
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+    try {
+      let receive: ((items: unknown[]) => void) | undefined;
+      const { el } = await mountApp({
+        getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
+        getDeviceIdentity: vi.fn(async () => ({
+          deviceId: sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY),
+          name: "Device",
+          formFactor: "till",
+          stationId: null,
+        })),
+        onMadeHere: vi.fn((listener) => {
+          receive = listener;
+        }),
+      });
+      await flush(el);
+      receive!([
+        {
+          lineId: "old-line",
+          name: "Old drink",
+          quantity: "1.000",
+          unitName: null,
+          soldInEach: true,
+          optionSnapshots: [],
+          extras: [],
+          note: null,
+        },
+      ]);
+      await flush(el);
+      const widget = el.shadowRoot!.querySelector("till-make-now")!;
+      expect(widget.shadowRoot!.textContent).toContain("Old drink");
+      emit(el.shadowRoot!.querySelector(".app")!, "switch-device");
+      await flush(el);
+      expect(widget.shadowRoot!.textContent).not.toContain("Old drink");
+      sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "other-device");
+      emit(el.shadowRoot!.querySelector(".app")!, "enrolled");
+      await flush(el);
+      expect(widget.shadowRoot!.textContent).not.toContain("Old drink");
+    } finally {
+      if (previous !== undefined) Object.defineProperty(globalThis, "localStorage", previous);
+    }
+  });
+
   it("ignores a stored value that is not an item list", async () => {
     localStorage.setItem("waitron.makeNow.till-dev", "{}");
     let receive: ((items: unknown[]) => void) | undefined;
@@ -368,6 +468,51 @@ describe("till-app session activity", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
       "Lager",
+    );
+  });
+
+  it("drops a stored item with malformed option snapshots before rendering", async () => {
+    localStorage.setItem(
+      "waitron.makeNow.till-dev",
+      JSON.stringify([
+        {
+          lineId: "bad",
+          name: "Lager",
+          quantity: "1.000",
+          unitName: null,
+          soldInEach: true,
+          optionSnapshots: [{}],
+          extras: [],
+          note: null,
+        },
+        {
+          lineId: "good",
+          name: "Coffee",
+          quantity: "1.000",
+          unitName: null,
+          soldInEach: true,
+          optionSnapshots: [
+            {
+              listName: { es: "Tamaño" },
+              listCustomerName: null,
+              listKitchenName: null,
+              labelName: { es: "Grande" },
+              labelCustomerName: null,
+              labelKitchenName: null,
+            },
+          ],
+          extras: [],
+          note: null,
+        },
+      ]),
+    );
+    const { el } = await mountApp();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).not.toContain(
+      "Lager",
+    );
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
+      "Tamaño: Grande",
     );
   });
 

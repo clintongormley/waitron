@@ -300,13 +300,20 @@ describe("made-here route wiring", () => {
       });
       const id = randomUUID();
       const check = await assertMadeHere(id);
-      const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      const body = {
         workingOrderId: id,
         zoneId,
         lines: [{ menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "3.00" },
-      });
+      };
+      const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", body);
       expect(answer.status).toBe(200);
+      expect(answer.json.madeHere).toEqual([
+        expect.objectContaining({ name: "Caña", quantity: "1.000", lineId: expect.any(String) }),
+      ]);
+      const replay = await send(venue.app, venue.cookie, "POST", "/api/sales", body);
+      expect(replay.status).toBe(200);
+      expect(replay.json.madeHere).toEqual(answer.json.madeHere);
       await check();
     },
   );

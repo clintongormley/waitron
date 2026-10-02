@@ -1065,6 +1065,27 @@ export class TillApp extends LitElement {
       const stored = localStorage.getItem(key);
       const parsed: unknown = stored === null ? [] : JSON.parse(stored);
       if (!Array.isArray(parsed)) return;
+      const textMap = (value: unknown): value is Record<string, string> =>
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.values(value).every((part) => typeof part === "string");
+      const optionSnapshot = (value: unknown): boolean =>
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        "listName" in value &&
+        textMap(value.listName) &&
+        "listCustomerName" in value &&
+        (value.listCustomerName === null || textMap(value.listCustomerName)) &&
+        "listKitchenName" in value &&
+        (value.listKitchenName === null || typeof value.listKitchenName === "string") &&
+        "labelName" in value &&
+        textMap(value.labelName) &&
+        "labelCustomerName" in value &&
+        (value.labelCustomerName === null || textMap(value.labelCustomerName)) &&
+        "labelKitchenName" in value &&
+        (value.labelKitchenName === null || typeof value.labelKitchenName === "string");
       this.makeNow = parsed.filter(
         (item): item is MadeHereItem =>
           typeof item === "object" &&
@@ -1073,10 +1094,11 @@ export class TillApp extends LitElement {
           typeof item.name === "string" &&
           typeof item.quantity === "string" &&
           typeof item.soldInEach === "boolean" &&
-          (item.unitName === null ||
-            (typeof item.unitName === "object" && !Array.isArray(item.unitName))) &&
+          (item.unitName === null || textMap(item.unitName)) &&
           Array.isArray(item.optionSnapshots) &&
+          item.optionSnapshots.every(optionSnapshot) &&
           Array.isArray(item.extras) &&
+          item.extras.every((extra: unknown) => typeof extra === "string") &&
           (item.note === null || typeof item.note === "string"),
       );
     } catch {
@@ -1519,6 +1541,7 @@ export class TillApp extends LitElement {
     this.deviceMode = false;
     this.#deviceKind = "till";
     this.deviceName = undefined;
+    const previousDeviceId = this.deviceId;
     this.deviceId = undefined;
     this.frontDoor = undefined;
     this.devTab = readDevDeviceId() !== null;
@@ -1540,6 +1563,8 @@ export class TillApp extends LitElement {
     // answers `device.unauthorized` and gets the join screen, which is not a boot failure.
     try {
       const identity = await this.api.getDeviceIdentity();
+      if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
+        this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
       this.#restoreMakeNow();
@@ -2623,12 +2648,14 @@ export class TillApp extends LitElement {
   }
 
   async #onSwitchDevice(): Promise<void> {
+    this.makeNow = [];
     clearDevDeviceId();
     await this.#boot();
   }
 
   /** A revoked device cookie: re-boot, which routes the device to the join screen. */
   async #onDeviceUnauthorized(): Promise<void> {
+    this.makeNow = [];
     await this.#boot();
   }
 
