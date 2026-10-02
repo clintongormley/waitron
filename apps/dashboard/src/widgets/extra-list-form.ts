@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   namesLine,
   optionalTextFields,
+  textField,
   translations,
   wholeWithin,
   type FieldContext,
@@ -684,32 +685,23 @@ export class ExtraListForm extends LitElement {
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
       >
         <div class="names">
-          <wt-input
-            name="name"
-            label=${t("extras.name")}
-            required
-            .disabled=${this.busy}
-            .value=${this.name}
-            .error=${errors.name ?? ""}
-            .invalid=${!!errors.name}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.name = event.detail.value), "name");
-            }}
-          ></wt-input>
-          <wt-input
-            name="kitchen-name"
-            label=${t("extras.kitchen_name")}
-            placeholder=${this.name}
-            .disabled=${this.busy}
-            .value=${this.kitchenName}
-            .error=${errors["kitchen-name"] ?? ""}
-            .invalid=${!!errors["kitchen-name"]}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.kitchenName = event.detail.value), "kitchen-name");
-            }}
-          ></wt-input>
+          ${textField(
+            this.#fields(errors),
+            "name",
+            t("extras.name"),
+            this.name,
+            (name) => this.#edit(() => (this.name = name), "name"),
+            true,
+          )}
+          ${textField(
+            this.#fields(errors),
+            "kitchen-name",
+            t("extras.kitchen_name"),
+            this.kitchenName,
+            (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName), "kitchen-name"),
+            false,
+            this.name,
+          )}
           ${this.#namesSection(errors)}
           <div class="picks-row" data-test="picks-row">
             <wt-number-stepper
