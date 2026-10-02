@@ -616,11 +616,11 @@ export class ProductEditor extends LitElement {
     const abbr = this.text(unit.abbreviation);
     return abbr ? `${name} (${abbr})` : name;
   }
-  /** Never empty: a product with no stored unit is sold by the each, and that is what it reads as. */
+  /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
   private get unitShortLabel(): string {
     const unitId = this.draft.unitId ?? this.inherited?.unitId ?? null;
     const unit = this.units.find((unit) => unit.id === unitId);
-    if (!unit) return t("editor.unit_each");
+    if (!unit) return "";
     return this.text(unit.abbreviation) || this.text(unit.name);
   }
   /** The unit dropdown is a chooser behind the price field's button. It also has to be on screen
@@ -1118,9 +1118,13 @@ export class ProductEditor extends LitElement {
       <wt-price-input
         name="unit-price"
         label=${
-          base ? t("editor.base_price_unit").replace("{unit}", unitLabel) : priceLabel(unitLabel)
+          !base
+            ? priceLabel(unitLabel)
+            : unitLabel
+              ? t("editor.base_price_unit").replace("{unit}", unitLabel)
+              : t("editor.base_price")
         }
-        unit=${t("editor.per_unit").replace("{unit}", unitLabel)}
+        unit=${unitLabel ? t("editor.per_unit").replace("{unit}", unitLabel) : t("editor.unit_each")}
         locale=${currentLocale()}
         placeholder=${parent?.unitPrice ?? ""}
         ?required=${parent === null}

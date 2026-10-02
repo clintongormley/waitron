@@ -94,9 +94,9 @@ describe("priceLabel", () => {
     expect(priceLabel("kg")).toBe("Precio por kg");
   });
 
-  it("falls back to the per-unit label for a blank unit", () => {
-    expect(priceLabel("  ")).toBe("Precio por unidad");
-    expect(priceLabel("")).toBe("Precio por unidad");
+  it("says only Price for a blank unit", () => {
+    expect(priceLabel("  ")).toBe("Precio");
+    expect(priceLabel("")).toBe("Precio");
   });
 });
 
