@@ -18,6 +18,9 @@ interface VariantRow {
 type StatusFilter = "active" | "inactive" | "all";
 
 const ADD_UNIT = "__add__";
+/** The dropdown's value for Each, which a product stores as no unit: the shared dropdown draws an
+ * empty value as the grey prompt for nothing chosen. Translated back to `null` before it leaves. */
+export const EACH_CHOICE = "__each__";
 
 /**
  * A plain `<table>`, deliberately NOT `wt-data-table`: the rows are a draft being edited in place,
@@ -417,18 +420,21 @@ export class VariantTable extends LitElement {
                     placeholder=${noUnit}
                     .options=${[
                       ...this.unitOptions.map((option) => ({
-                        value: option.value ?? "",
+                        value: option.value ?? EACH_CHOICE,
                         label: option.label,
                       })),
                       ...(this.addUnitLabel
                         ? [{ value: ADD_UNIT, label: this.addUnitLabel, action: true as const }]
                         : []),
                     ]}
-                    .value=${this.unitId ?? ""}
+                    .value=${this.unitId ?? EACH_CHOICE}
                     .disabled=${this.busy}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
-                      this.#emit("wt-unit-change", { unitId: event.detail.value || null });
+                      const value = event.detail.value;
+                      this.#emit("wt-unit-change", {
+                        unitId: value === EACH_CHOICE ? null : value,
+                      });
                     }}
                     @wt-combobox-action=${(event: Event) => {
                       event.stopPropagation();

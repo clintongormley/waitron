@@ -832,9 +832,15 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
-cuts the label. Queued: A178h ("Each" drawn as a normal choice), in lane A's queue. **Seen while building,
+cuts the label. Done: A178h, "Each" on a product and in the variants table's unit heading is drawn as
+a chosen value rather than the grey prompt (the dropdown gives it the stand-in value `__each__`, and
+a save still stores no unit); a variant's "Same as …" keeps the grey look. **Seen while building,
 not changed:**
 
+- on a product of its own, the main category's "Uncategorised" and the course's "No course"
+  choices still have the empty value, so the shared dropdown draws them as the grey prompt when
+  chosen, as Each was; the owner's answer on A178c (2026-10-02) asked for the stand-in for Each
+  alone;
 - a blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is
   on `main` before A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not
   checked;

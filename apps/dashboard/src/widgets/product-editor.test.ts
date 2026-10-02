@@ -16,6 +16,7 @@ import { localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import { formatMoney } from "@waitron/shared";
 import { setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
+import { EACH_CHOICE } from "./variant-table.js";
 
 // The app registers these at startup; without them every icon in the editor — the "+" chip, both
 // chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
@@ -262,7 +263,7 @@ it("changes a product's unit from the price field when the table's heading dropd
   await openUnits(el);
   const select = combobox(el, "unit")!;
   expect(select.getClientRects().length).toBeGreaterThan(0);
-  expect(select.options.map((option) => option.value)).toEqual(["", unit.id, litre.id]);
+  expect(select.options.map((option) => option.value)).toEqual([EACH_CHOICE, unit.id, litre.id]);
   expect(el.shadowRoot!.querySelector('[data-test="add-unit"]')).not.toBeNull();
   await chooseOption(select, litre.id);
   await el.updateComplete;
@@ -1794,7 +1795,7 @@ it("defaults a new product to Each (no unit)", async () => {
   );
   await openUnits(el);
   const select = combobox(el, "unit")!;
-  expect(select.value).toBe(""); // the Each option
+  expect(select.value).toBe(EACH_CHOICE);
   expect(await shownIn(el, "unit")).toBe(t("editor.unit_each"));
   expect(el.shadowRoot!.querySelector('[data-test="add-unit"]')).toBeTruthy();
 });
@@ -1812,6 +1813,35 @@ it("submits unitId null when Each stays selected", async () => {
   await input(el, "unit-price", "1.00");
   save(el);
   expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.unitId).toBeNull();
+});
+
+it("draws Each as a chosen unit on a product, not as the grey prompt for nothing chosen, and saves no unit", async () => {
+  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, unitId: null },
+    locales: ["en"],
+    units: [kg],
+    taxChoices: reduced,
+  });
+  await openUnits(el);
+  const box = sharedField(el, "wt-combobox", "unit");
+  const each = box.options.find((option) => option.label === t("editor.unit_each"))!;
+  expect(each.value).not.toBe("");
+  expect(box.value).toBe(each.value);
+  expect(await shownIn(el, "unit")).toBe(t("editor.unit_each"));
+  expect(box.shadowRoot!.querySelector(".trigger .value")!.classList).not.toContain("placeholder");
+  await chooseOption(box, kg.id);
+  await el.updateComplete;
+  expect(el.currentValue.unitId).toBe(kg.id);
+  await openUnits(el);
+  await chooseOption(sharedField(el, "wt-combobox", "unit"), each.value);
+  await el.updateComplete;
+  expect(el.currentValue.unitId).toBeNull();
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
   expect(submit.mock.calls[0]![0].detail.value.unitId).toBeNull();
 });
 
@@ -2776,7 +2806,7 @@ it("picks the unit from a shared dropdown behind the price field, Each being its
   expect(box.search).toBe("auto");
   expect(box.placeholder).toBe(t("editor.unit_each"));
   expect(box.options).toEqual([
-    { value: "", label: t("editor.unit_each") },
+    { value: EACH_CHOICE, label: t("editor.unit_each") },
     { value: unit.id, label: "Each (ea)" },
     { value: litre.id, label: "Litre (l)" },
   ]);
@@ -2807,5 +2837,9 @@ it("keeps a variant's 'Same as' choice as each inherited dropdown's prompt and f
     expect(box.value, name).toBe("");
     expect(box.required, name).toBe(false);
     expect(await shownIn(el, name), name).toBe(text);
+    await box.updateComplete;
+    expect(box.shadowRoot!.querySelector(".trigger .value")!.classList, name).toContain(
+      "placeholder",
+    );
   }
 });
