@@ -15,6 +15,7 @@ import type {
 } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
+import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
@@ -202,7 +203,12 @@ type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
  * `menuVersionId` is the menu version an UNSAVED line was priced against on the till: what staff
  * saw, never a request for that version's prices. Absent, the line takes the live version.
  */
-export type LineExtras = { note?: string; variantId?: string; menuVersionId?: string };
+export type LineExtras = {
+  note?: string;
+  variantId?: string;
+  menuVersionId?: string;
+  makeAt?: string | null;
+};
 
 /**
  * The extras and options lists one published offer puts in front of a diner, as the validators
@@ -365,7 +371,7 @@ const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
  * the same basket rates those rather than pricing it twice. The stored gross unit price, class and
  * classification are what the line files.
  */
-async function priceOrderLines(
+export async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
@@ -387,6 +393,7 @@ async function priceOrderLines(
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
   snapshot?: ZoneOffers,
+  invalidMakeAt: "refuse" | "ignore" = "refuse",
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
@@ -464,6 +471,30 @@ async function priceOrderLines(
 
   // `grossBasketWithOptions` expands each item to a parent row then its child rows in this same
   // order, so `lineMeta[i]` lines up with `gross.lines[i]` one-for-one.
+  const namedStations = [
+    ...new Set(lines.flatMap((line) => (line.makeAt == null ? [] : [line.makeAt]))),
+  ];
+  const activeStations = new Set(
+    namedStations.length === 0
+      ? []
+      : (
+          await tx
+            .select({ id: kitchenStations.id })
+            .from(kitchenStations)
+            .where(
+              and(
+                inArray(kitchenStations.id, namedStations),
+                eq(kitchenStations.locationId, cfg.locationId),
+                eq(kitchenStations.active, true),
+              ),
+            )
+        ).map((station) => station.id),
+  );
+  if (invalidMakeAt === "refuse") {
+    const invalidStationId = namedStations.find((stationId) => !activeStations.has(stationId));
+    if (invalidStationId !== undefined)
+      throw new AppError("route.station_inactive", { stationId: invalidStationId });
+  }
   type LineMeta =
     | {
         kind: "parent";
@@ -471,6 +502,7 @@ async function priceOrderLines(
         menuItemId: string;
         courseId: string | null;
         note: string | null;
+        makeAt: string | null;
       }
     | { kind: "child"; productId: string; menuItemId: string; extraListId: string };
   const items: BasketItemWithOptions[] = [];
@@ -550,6 +582,7 @@ async function priceOrderLines(
       menuItemId: line.menuItemId,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
+      makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
     });
     for (const child of extraChildren) {
       lineMeta.push({
@@ -632,6 +665,7 @@ async function priceOrderLines(
       category: line.category ?? null,
       courseId: meta.kind === "parent" ? meta.courseId : null,
       note: meta.kind === "parent" ? meta.note : null,
+      makeAtStationId: meta.kind === "parent" ? meta.makeAt : null,
       extraListId: meta.kind === "child" ? meta.extraListId : null,
       // From the priced row, never the request: only it holds the re-keyed customer text.
       variantName: line.variantName ?? null,
@@ -927,6 +961,7 @@ export async function createOpenOrder(
     zoneId?: string;
     partyId?: string | null;
     creditedTo?: string;
+    invalidMakeAt?: "ignore";
   } = {},
 ): Promise<{
   orderNumber: number;
@@ -950,7 +985,15 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  const pricedLines = await priceOrderLines(tx, cfg, id, lines, effectiveZoneId);
+  const pricedLines = await priceOrderLines(
+    tx,
+    cfg,
+    id,
+    lines,
+    effectiveZoneId,
+    undefined,
+    placement.invalidMakeAt ?? "refuse",
+  );
   const { gross, identities, lineContexts, offers } = pricedLines;
   const lineRows = pricedLines.lineRows.map((row) => ({
     ...row,
@@ -2907,6 +2950,7 @@ export async function carveOffLines(
       servedAt: workingOrderLines.servedAt,
       servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
+      makeAtStationId: workingOrderLines.makeAtStationId,
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       groupId: workingOrderLines.groupId,
@@ -3090,6 +3134,7 @@ export async function carveOffLines(
         servedQuantity: splitServed,
         servedAt: splitServed === movedThousandths ? (row.servedAt ?? nowIso()) : null,
         courseId: row.courseId,
+        makeAtStationId: row.makeAtStationId,
         note: row.note,
         extraListId: row.extraListId,
         groupId: row.groupId,
@@ -3266,6 +3311,7 @@ export interface HeldOrder {
     /** The variant the line was sold as, absent when it names none. */
     variantId?: string;
     quantity: string;
+    makeAt: string | null;
     /** One entry per CHILD line: the frozen values, and the list the pick was taken from. */
     extras?: {
       productId: string | null;
@@ -3415,6 +3461,7 @@ async function readBasketOrder(
         optionSnapshots: workingOrderLines.optionSnapshots,
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
+        makeAt: workingOrderLines.makeAtStationId,
         parentLineId: workingOrderLines.parentLineId,
         extraListId: workingOrderLines.extraListId,
         note: workingOrderLines.note,
@@ -3460,6 +3507,7 @@ async function readBasketOrder(
           return {
             productId: line.productId,
             quantity: line.quantity,
+            makeAt: line.makeAt,
             optionSnapshots: line.optionSnapshots,
             ...(line.optionSnapshots.length ? { workingOrderLineId: line.id } : {}),
           };
@@ -3480,6 +3528,7 @@ async function readBasketOrder(
           menuItemId: context.menuItemId,
           productId: line.productId,
           quantity: line.quantity,
+          makeAt: line.makeAt,
           ...(extras.length === 0 ? {} : { extras }),
           ...(line.note === null ? {} : { note: line.note }),
           ...(line.variantId === null ? {} : { variantId: line.variantId }),
@@ -3551,6 +3600,7 @@ interface IssueOnSave {
 
 /** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
 export interface OrderLinePatch {
+  makeAt?: string | null;
   quantity?: string;
   note?: string | null;
   options?: OptionSelection[];
@@ -3627,6 +3677,7 @@ function kitchenStateOf(line: EditableLine): EditableOrder["newWork"] {
 
 /** What an edit asks of one stored dish line. `null` options or extras keep the stored ones. */
 interface LineIntent {
+  makeAt?: string | null;
   quantity: string;
   note: string | null;
   options: { set: unknown } | null;
@@ -3996,6 +4047,7 @@ async function applyLineEdits(
     /** The dish quantity the stored row takes. */
     quantity: Decimal;
     note: string | null;
+    makeAt: string | null;
     optionSnapshots: OptionSnapshot[];
     kept: { child: EditableLine; perDish: number }[];
     removedChildren: EditableLine[];
@@ -4029,6 +4081,13 @@ async function applyLineEdits(
       positive: true,
     });
     const requested = decimal(intent.quantity);
+    const rise = compareDecimal(requested, parent.quantity);
+    if (
+      intent.makeAt !== undefined &&
+      intent.makeAt !== null &&
+      ((parent.sentAt === null && parent.ticket === null) || rise > 0)
+    )
+      await requireMakeAtStation(tx, cfg, intent.makeAt);
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     if (intent.options !== null) {
@@ -4057,10 +4116,13 @@ async function applyLineEdits(
           });
     const changed =
       intent.note !== parent.note ||
+      (parent.sentAt === null &&
+        parent.ticket === null &&
+        intent.makeAt !== undefined &&
+        intent.makeAt !== parent.makeAtStationId) ||
       optionSnapshots !== parent.optionSnapshots ||
       extras.added.length > 0 ||
       extras.removed.length > 0;
-    const rise = compareDecimal(requested, parent.quantity);
     if (!changed && rise === 0) continue;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
@@ -4084,6 +4146,7 @@ async function applyLineEdits(
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
       quantity,
+      makeAt: intent.makeAt === undefined ? parent.makeAtStationId : intent.makeAt,
       ...(intent.note === null ? {} : { note: intent.note }),
       frozenOptions: optionSnapshots,
       extras: picks,
@@ -4123,6 +4186,10 @@ async function applyLineEdits(
       action,
       quantity,
       note: intent.note,
+      makeAt:
+        parent.sentAt === null && parent.ticket === null && intent.makeAt !== undefined
+          ? intent.makeAt
+          : parent.makeAtStationId,
       optionSnapshots,
       kept: extras.kept,
       removedChildren: extras.removed,
@@ -4155,7 +4222,17 @@ async function applyLineEdits(
   }
 
   // Priced before anything is written, so a refused line leaves the order as it was.
-  const priced = await priceOrderLines(tx, cfg, orderId, pricing, context?.zoneId, snapshot);
+  for (const line of plan.fresh)
+    if (line.makeAt != null) await requireMakeAtStation(tx, cfg, line.makeAt);
+  const priced = await priceOrderLines(
+    tx,
+    cfg,
+    orderId,
+    pricing,
+    context?.zoneId,
+    snapshot,
+    "ignore",
+  );
   const groups: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.lineContexts }[] = [];
   priced.lineRows.forEach((row, index) => {
     if (row.parentLineId === null) groups.push({ rows: [], contexts: [] });
@@ -4254,6 +4331,7 @@ async function applyLineEdits(
         quantity: decimalToThousandths(quantity),
         lineTotal: decimalToCents(grossLineTotal(parent.unitPriceGross, quantity)),
         note,
+        makeAtStationId: change.makeAt,
         optionSnapshots,
       })
       .where(eq(workingOrderLines.id, parent.id));
@@ -4328,7 +4406,11 @@ async function applyLineEdits(
         lineNo: ++nextLineNo,
         groupId,
         creditedTo: operatorId ?? null,
-        ...(as.origin !== undefined ? { makeAtStationId: as.origin.makeAtStationId } : {}),
+        ...(as.origin !== undefined &&
+        row.makeAtStationId == null &&
+        as.origin.makeAtStationId !== null
+          ? { makeAtStationId: as.origin.makeAtStationId }
+          : {}),
       });
       insertedContexts.push(group.contexts[rowIndex]!);
       if (row.parentLineId === null && as.kitchen !== "none") {
@@ -4538,6 +4620,7 @@ export async function updateHeldOrder(
           note: screenNote(line.note),
           options: { set: line.options ?? [] },
           extras: { set: line.extras ?? [] },
+          makeAt: line.makeAt,
         },
       });
     }
@@ -4604,6 +4687,7 @@ export async function updateOrderLine(
             note: Object.hasOwn(patch, "note") ? screenNote(patch.note) : parent.note,
             options: patch.options === undefined ? null : { set: patch.options },
             extras: patch.extras === undefined ? null : { set: patch.extras },
+            makeAt: patch.makeAt,
           },
         },
       ],

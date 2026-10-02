@@ -402,12 +402,27 @@ async function adoptZone(
   // Within table service a later course's dishes wait for their course. `fireLines` judges the
   // earliest course from this bill's ticket items and the lines it is given, and a no-preparation
   // dish leaves no ticket item, so it would send one waiting for a later course.
-  if ((previous?.serviceMode ?? cfg.orderFlow) === "table_tab") return;
-  if ((await VENUE_SERVICE.findOrderContext(tx, cfg, billId))!.serviceMode !== "table_tab") return;
+  if (!(await moveWouldSend(tx, cfg, billId, zoneId, previous?.serviceMode ?? cfg.orderFlow)))
+    return;
   const unsent = await unsentDishLines(tx, billId);
   await assertSendable(
     tx,
     unsent.map((line) => line.id),
   );
   await fireLines(tx, cfg, billId, unsent);
+}
+
+export async function moveWouldSend(
+  tx: Transaction,
+  cfg: TillConfig,
+  billId: string,
+  toZoneId: string,
+  previousMode?: string,
+): Promise<boolean> {
+  const sourceMode =
+    previousMode ??
+    (await VENUE_SERVICE.findOrderContext(tx, cfg, billId))?.serviceMode ??
+    cfg.orderFlow;
+  const targetMode = (await VENUE_SERVICE.resolveZoneContext(tx, cfg, toZoneId)).serviceMode;
+  return sourceMode !== "table_tab" && targetMode === "table_tab";
 }

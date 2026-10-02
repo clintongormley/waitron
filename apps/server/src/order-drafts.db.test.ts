@@ -500,6 +500,7 @@ describe("saving a draft", () => {
         id: draft.lines[0]!.id,
         quantity: "1.500",
         note: "no salt",
+        makeAt: null,
         unavailable: false,
       },
     ]);
@@ -536,12 +537,14 @@ describe("saving a draft", () => {
         ...item(v, "burger", lower),
         id: draft.lines[0]!.id,
         quantity: "2.000",
+        makeAt: null,
         unavailable: false,
       },
       {
         ...item(v, "wine", { variantId: v.glass }),
         id: draft.lines[1]!.id,
         quantity: "1.000",
+        makeAt: null,
         unavailable: false,
       },
     ]);
@@ -582,6 +585,7 @@ describe("saving a draft", () => {
         note: null,
         quantity: "1.000",
         courseId: null,
+        makeAt: null,
         noMerge: false,
         unavailable: false,
       },
