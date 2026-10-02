@@ -2418,10 +2418,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - An extra counts its dish's percentage under a reason's per-line cap, and a dish the largest
       of its extras', which errs toward refusing. **Next action:** none unless staff find it gets
       in the way.
-    - **Only give-aways and discounts split a dish's extras with it.** Splitting a bill,
-      transferring items and moving part of a dish to another group still refuse part of a dish
-      with extras (`tab.transfer_modifier_line`). **Next action:** decide whether those moves
-      should split extras too.
+    - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
+      transferring items and moving part of a dish to another group still refuse a partial move
+      of a dish with extras (`tab.transfer_modifier_line`). A whole dish moves with its extras.
+      **Next action:** decide whether those partial moves should split extras too.
     - **Two dashboard tests have the Escape flake fixed in Task 11** (a check made before the
       browser's close report arrives with the next animation frame): "saves on Enter and cancels on
       Escape from a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and

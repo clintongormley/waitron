@@ -3864,7 +3864,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("attaches a parent's picked extras as sub-items on listStationQueue and listExpoQueue", async () => {
+  it("attaches unclaimed extras as sub-items on listStationQueue and listExpoQueue", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -5197,7 +5197,6 @@ describe("addTabRound hold-on-send (A3)", () => {
         { productId: plain, quantity: "1", hold: true },
       ]);
 
-      // A child modifier line never gets a ticket item, so the only items are the two PARENT dishes.
       const items = await courseItemsFor(tx, tabId);
       expect(items).toHaveLength(2);
       expect(byLine(items, modified).firedAt).not.toBeNull(); // the modified dish (+ child) fires
