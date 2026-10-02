@@ -1479,7 +1479,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, and A178b (the dashboard screens) as #1012; A178c–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, and A178c (the dashboard widgets) in its pull request; A178d–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1636,6 +1636,20 @@ backup screen's two retention steppers cut their labels to "Keep…" and "Dele�
 §12 point 9 behaviour; the alternative is a box that widens to its label). **Seen, not changed:** a
 blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is on
 `main` before this change (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
+
+**A178c — DONE.** Every field spec §9.2 lists for `apps/dashboard/src/widgets/` is drawn by a
+primitive: the native selects are `wt-combobox` (`search="auto"`) and the product editor's
+per-language description is `wt-textarea`; `autofill-username.ts`'s hidden input stays. Also moved,
+though the spec's list predates it: `menu-prices-table.ts`'s select. The member list's option groups
+and the content-language dialog's official-languages group are options carrying `group`; the
+variants table's "add unit" row is an `action` option whose `wt-combobox-action` opens the unit
+form; the unit form's decimal-places help is the dropdown's `hint`, so it is no longer a visible
+line; each allergen row's dropdown is `hide-label`, named by the allergen; the location dropdown
+gains the name `location`. The allergen picker binds its value with Lit's `live()`, so a refused
+change shows the stored value again. **Existing tests changed** are the three approved kinds, each
+listed in the pull request. **Seen, for the owner:** a chosen option whose value is empty — "Each"
+(no unit) on a product and in the variants table's heading, and every "Same as …" — is drawn in the
+placeholder's muted style, because `wt-combobox` shows an empty value as its placeholder.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
