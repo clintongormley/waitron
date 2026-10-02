@@ -83,6 +83,18 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  test("a long label, its box widened to fit it", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Borrar las copias después de (días)" name="days" value="30" required></wt-number-stepper>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+    const text = host
+      .querySelector("wt-number-stepper")!
+      .shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+    expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+  });
+
   test("disabled", async () => {
     await mountThemed(
       '<wt-number-stepper label="Max quantity" name="q" value="2" disabled></wt-number-stepper>',

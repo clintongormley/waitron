@@ -23,9 +23,11 @@ export class WtNumberStepper extends LitElement {
         max-width: var(--wt-field-max-width);
       }
 
+      /* The box's column runs from the width token up to what its label needs, so a long label
+         widens the box and a row too narrow for it narrows the box again, cutting the label. */
       .control {
         display: grid;
-        grid-template-columns: auto auto auto;
+        grid-template-columns: auto minmax(var(--wt-stepper-field-width), max-content) auto;
         justify-content: start;
         align-items: center;
         gap: var(--wt-space-1);
@@ -35,6 +37,27 @@ export class WtNumberStepper extends LitElement {
          aligned by baseline lines the text up — while the buttons centre on the box. */
       .field {
         align-self: baseline;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      /* An invisible copy of the label, at its larger resting size, is what widens the box: the
+         label itself is positioned over the box and takes no room. Ordered after the number so the
+         number stays the box's baseline. */
+      .field::before {
+        content: attr(data-label-text);
+        order: 1;
+        grid-area: 1 / 1;
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        padding-inline: var(--wt-space-2);
+        font-size: var(--wt-field-label-rest-size);
+      }
+
+      .field[data-label-required]::before {
+        content: attr(data-label-text) "*";
+        padding-inline-end: calc(var(--wt-space-2) + var(--wt-space-1));
       }
 
       .field-label {
@@ -42,7 +65,9 @@ export class WtNumberStepper extends LitElement {
       }
 
       .field-control {
+        grid-area: 1 / 1;
         width: var(--wt-stepper-field-width);
+        min-width: 100%;
         padding-inline: var(--wt-space-2);
         text-align: center;
       }
@@ -153,6 +178,8 @@ export class WtNumberStepper extends LitElement {
           ?data-invalid=${invalid}
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
+          data-label-text=${showLabel ? this.label : nothing}
+          ?data-label-required=${showLabel && this.required}
         >
           ${showLabel ? fieldLabel(inputId, this.label, this.required) : nothing}
           <input

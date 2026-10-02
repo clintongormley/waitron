@@ -565,21 +565,94 @@ test("hide-label makes the box compact, the same height as the buttons", async (
   expect(box(labelled).hasAttribute("data-compact")).toBe(false);
 });
 
-test("a stepper labelled with 40 characters keeps its box at --wt-stepper-field-width and its label on one line", async () => {
-  const long = "Maximum number of portions in an order x";
-  const el = await mount(`<wt-number-stepper label="${long}" value="3"></wt-number-stepper>`);
-  host.style.setProperty("--wt-stepper-field-width", "77px");
-  const short = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
-  const text = (stepper: Element) =>
-    stepper.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
-  expect(long).toHaveLength(40);
-  expect(box(el).getBoundingClientRect().width).toBe(77);
-  expect(getComputedStyle(text(el)).textOverflow).toBe("ellipsis");
-  expect(text(el).scrollWidth).toBeGreaterThan(text(el).clientWidth);
-  expect(text(el).scrollHeight).toBe(text(short).scrollHeight);
+const LONG_LABEL = "Maximum number of portions in an order x";
+
+function labelText(stepper: Element): HTMLElement {
+  return stepper.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+}
+
+/** The test window is narrower than a resting 40-character label needs. */
+async function mountInWideRow(html: string): Promise<HTMLElement> {
+  const el = await mount(html);
+  host.style.width = "600px";
+  return el;
+}
+
+function expectWholeLabelShown(el: Element): void {
+  const text = labelText(el);
+  expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
   expect(parts(el).label!.getBoundingClientRect().right).toBeLessThanOrEqual(
     box(el).getBoundingClientRect().right,
   );
+}
+
+test("a stepper labelled with 40 characters widens its box past --wt-stepper-field-width to show the whole label on one line", async () => {
+  const el = await mount(`<wt-number-stepper label="${LONG_LABEL}" value="3"></wt-number-stepper>`);
+  host.style.setProperty("--wt-stepper-field-width", "77px");
+  const short = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
+  expect(LONG_LABEL).toHaveLength(40);
+  expect(box(el).getBoundingClientRect().width).toBeGreaterThan(77);
+  expectWholeLabelShown(el);
+  expect(labelText(el).scrollHeight).toBe(labelText(short).scrollHeight);
+});
+
+test("the number fills the widened box, so the whole box takes a tap and centres the number", async () => {
+  const el = await mount(`<wt-number-stepper label="${LONG_LABEL}" value="3"></wt-number-stepper>`);
+  host.style.setProperty("--wt-stepper-field-width", "77px");
+  expect(box(el).getBoundingClientRect().width).toBeGreaterThan(77);
+  expect(parts(el).input.getBoundingClientRect().width).toBe(box(el).getBoundingClientRect().width);
+});
+
+test("the widened box shows the whole label resting large as well as floated small, without changing width when it floats", async () => {
+  const resting = await mountInWideRow(
+    `<wt-number-stepper label="${LONG_LABEL}"></wt-number-stepper>`,
+  );
+  expect(box(resting).getAttribute("data-label")).toBe("rest");
+  expectWholeLabelShown(resting);
+  const floated = await mountInWideRow(
+    `<wt-number-stepper label="${LONG_LABEL}" value="3"></wt-number-stepper>`,
+  );
+  expect(box(floated).getBoundingClientRect().width).toBe(
+    box(resting).getBoundingClientRect().width,
+  );
+});
+
+test("a required stepper's widened box shows the whole label and its star", async () => {
+  const el = await mountInWideRow(
+    `<wt-number-stepper label="${LONG_LABEL}" required></wt-number-stepper>`,
+  );
+  expectWholeLabelShown(el);
+  const star = el.shadowRoot!.querySelector("[data-required]")!.getBoundingClientRect();
+  expect(star.right).toBeLessThanOrEqual(box(el).getBoundingClientRect().right);
+});
+
+test("a short label leaves the box at --wt-stepper-field-width, however wide the row", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
+  host.style.setProperty("--wt-stepper-field-width", "77px");
+  host.style.width = "600px";
+  expect(box(el).getBoundingClientRect().width).toBe(77);
+});
+
+test("in a row too narrow for the whole label, the stepper fits the row and cuts its label with an ellipsis", async () => {
+  const el = await mount(`<wt-number-stepper label="${LONG_LABEL}" value="3"></wt-number-stepper>`);
+  host.style.setProperty("--wt-stepper-field-width", "77px");
+  host.style.width = "220px";
+  const row = host.getBoundingClientRect();
+  expect(parts(el).plus.getBoundingClientRect().right).toBeLessThanOrEqual(row.right);
+  expect(box(el).getBoundingClientRect().width).toBeGreaterThan(77);
+  expect(getComputedStyle(labelText(el)).textOverflow).toBe("ellipsis");
+  expect(labelText(el).scrollWidth).toBeGreaterThan(labelText(el).clientWidth);
+  expect(parts(el).label!.getBoundingClientRect().right).toBeLessThanOrEqual(
+    box(el).getBoundingClientRect().right,
+  );
+});
+
+test("in a row narrower than the buttons and the standard box, the box stays at --wt-stepper-field-width", async () => {
+  const el = await mount(`<wt-number-stepper label="${LONG_LABEL}" value="3"></wt-number-stepper>`);
+  host.style.setProperty("--wt-stepper-field-width", "77px");
+  host.style.width = "100px";
+  expect(box(el).getBoundingClientRect().width).toBe(77);
+  expect(parts(el).input.getBoundingClientRect().width).toBe(77);
 });
 
 test("a required stepper keeps its star inside the box", async () => {
