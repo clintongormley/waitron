@@ -1164,7 +1164,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined)
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       if (body.zoneId !== undefined) requireUuidParam(body.zoneId, "ServiceZoneId");
-      const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
       const answer = await withTransaction(deps.db, async (tx) => {
         const at = new Date();
         const order =
@@ -1182,6 +1181,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               )[0];
         const context =
           order === undefined ? null : await VENUE_SERVICE.findOrderContext(tx, deps.cfg, order.id);
+        const zoneId =
+          order === undefined
+            ? await resolveHttpOrderZone(deps, body.lines.length, body.zoneId)
+            : context?.zoneId;
         const mode =
           context?.serviceMode ??
           (zoneId === undefined
@@ -1225,7 +1228,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 deps.cfg,
                 body.workingOrderId ?? newId(),
                 active.map(({ line }) => line),
-                zoneId ?? context?.zoneId ?? undefined,
+                zoneId ?? undefined,
                 undefined,
                 "ignore",
               )
@@ -1237,7 +1240,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             ? await findDeadEnds(
                 tx,
                 deps.cfg,
-                zoneId ?? context?.zoneId ?? null,
+                zoneId ?? null,
                 active.map(({ line, key }, index) => ({
                   key,
                   productId: parents[index]!.productId!,

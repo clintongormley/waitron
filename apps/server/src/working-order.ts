@@ -4068,6 +4068,7 @@ async function applyLineEdits(
         joins?: EditableParent;
         /** The sent dish whose kitchen decision the added units follow. */
         origin?: EditableParent;
+        inheritMakeAt?: boolean;
       }
     | { kind: "extras" }
     | { kind: "check" }
@@ -4085,7 +4086,10 @@ async function applyLineEdits(
     if (
       intent.makeAt !== undefined &&
       intent.makeAt !== null &&
-      ((parent.sentAt === null && parent.ticket === null) || rise > 0)
+      ((parent.sentAt === null &&
+        parent.ticket === null &&
+        intent.makeAt !== parent.makeAtStationId) ||
+        ((parent.sentAt !== null || parent.ticket !== null) && rise > 0))
     )
       await requireMakeAtStation(tx, cfg, intent.makeAt);
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
@@ -4158,8 +4162,19 @@ async function applyLineEdits(
       });
       pricedAs.push(
         addedApart
-          ? { kind: "line", kitchen: kitchenStateOf(parent), joins: parent, origin: parent }
-          : { kind: "line", kitchen: "fire", origin: parent },
+          ? {
+              kind: "line",
+              kitchen: kitchenStateOf(parent),
+              joins: parent,
+              origin: parent,
+              inheritMakeAt: intent.makeAt === undefined,
+            }
+          : {
+              kind: "line",
+              kitchen: "fire",
+              origin: parent,
+              inheritMakeAt: intent.makeAt === undefined,
+            },
       );
     }
     if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
@@ -4406,7 +4421,8 @@ async function applyLineEdits(
         lineNo: ++nextLineNo,
         groupId,
         creditedTo: operatorId ?? null,
-        ...(as.origin !== undefined &&
+        ...(as.inheritMakeAt &&
+        as.origin !== undefined &&
         row.makeAtStationId == null &&
         as.origin.makeAtStationId !== null
           ? { makeAtStationId: as.origin.makeAtStationId }

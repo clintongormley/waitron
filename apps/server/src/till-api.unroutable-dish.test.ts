@@ -902,6 +902,58 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(empty?.makeAt).toBeNull();
   });
 
+  it("keeps an unchanged chosen station after it is switched off, including with a note edit", async () => {
+    const made = await dish("Later closed lager");
+    const chosen = await station("Later closed bar");
+    const id = randomUUID();
+    const parked = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        id,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+      }),
+    });
+    expect(parked.status).toBe(200);
+    const retrieved = await app.request(`/api/working-orders/${id}`, {
+      headers: { cookie: session },
+    });
+    const order = (await retrieved.json()) as {
+      revision: number;
+      lines: { menuItemId: string; quantity: string; workingOrderLineId: string; makeAt: string }[];
+    };
+    expect(order.lines[0]?.makeAt).toBe(chosen);
+    await switchOff(chosen);
+    const bodyLine = {
+      menuItemId: order.lines[0]!.menuItemId,
+      quantity: order.lines[0]!.quantity,
+      workingOrderLineId: order.lines[0]!.workingOrderLineId,
+      makeAt: order.lines[0]!.makeAt,
+    };
+    const same = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ revision: order.revision, lines: [bodyLine] }),
+    });
+    expect(same.status, await same.clone().text()).toBe(200);
+    const withNote = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        revision: ((await same.json()) as { revision: number }).revision,
+        lines: [{ ...bodyLine, note: "extra cold" }],
+      }),
+    });
+    expect(withNote.status, await withNote.clone().text()).toBe(200);
+    const [stored] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId, note: workingOrderLines.note })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(stored).toMatchObject({ makeAt: chosen, note: "extra cold" });
+  });
+
   it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
     "asks for a counter pay dish in %s before taking money",
     async (mode) => {
@@ -931,6 +983,51 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       expect(answer.deadEnds).toMatchObject([{ key: "0", name: made.name, why: "switched_off" }]);
     },
   );
+
+  it("asks an existing sale in its stored zone when the request omits or conflicts on zone", async () => {
+    const made = await dish("Table zone lager");
+    await inTx(v, (tx) =>
+      offerProducts(tx, v.cfg, {
+        zone: "tables",
+        serviceMode: "prepay",
+        productIds: [made.productId],
+      }),
+    );
+    const tableStation = await station("Table bar");
+    const counterStation = await station("Counter bar");
+    await routeTo(made.productId, tableStation, v.tables.zoneId);
+    await routeTo(made.productId, counterStation, v.counter.zoneId);
+    await switchOff(tableStation);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.tables.zoneId,
+      lines: [{ menuItemId: made.tablesOffer, quantity: "1" }],
+    });
+    for (const suppliedZone of [undefined, v.counter.zoneId]) {
+      const question = await app.request("/api/dead-ends/sale", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: session },
+        body: JSON.stringify({
+          step: "pay",
+          workingOrderId: id,
+          ...(suppliedZone === undefined ? {} : { zoneId: suppliedZone }),
+          lines: [{ menuItemId: made.tablesOffer, quantity: "1" }],
+        }),
+      });
+      expect(question.status, await question.clone().text()).toBe(200);
+      expect(await question.json()).toMatchObject({
+        sends: true,
+        deadEnds: [{ key: "0", name: made.name, stationId: tableStation }],
+      });
+    }
+    const paid = await payCash(await enrolTill(), id);
+    expect(paid.status, await paid.clone().text()).toBe(200);
+    expect(await kitchenItems(id)).toEqual([]);
+    expect((await alertsFor(await saleOf(id))).map((alert) => alert.code)).toContain(
+      "route.dish_not_sent",
+    );
+  });
 
   it("names an unsent order line and stores the answer with its revision", async () => {
     const made = await strandedDish("Order question");
@@ -1021,6 +1118,35 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         .where(eq(workingOrderLines.workingOrderId, id)),
     );
     expect(stored?.makeAt).toBeNull();
+  });
+
+  it("sends a cash sale to a chosen station that is closed but still switched on", async () => {
+    const made = await dish("Chosen closed lager");
+    const chosen = await station("Closed chosen bar");
+    await routeTo(made.productId, chosen);
+    await inTx(v, (tx) => setStationToday(tx, v.cfg, chosen, "closed", new Date()));
+    const id = randomUUID();
+    const paid = await app.request("/api/sales", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${session}; ${await enrolTill()}`,
+      },
+      body: JSON.stringify({
+        workingOrderId: id,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+        tender: { method: "cash", amount: "50.00" },
+      }),
+    });
+    expect(paid.status, await paid.clone().text()).toBe(200);
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(line?.makeAt).toBe(chosen);
+    expect(await kitchenItems(id)).toEqual([{ productId: made.productId, stationId: chosen }]);
   });
 
   it("ignores a switched-off chosen station on an integrated card payment", async () => {
@@ -1205,6 +1331,36 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(rows).toMatchObject([
       { makeAt: null, stationId: original },
       { makeAt: chosen, stationId: chosen },
+    ]);
+  });
+
+  it("routes explicitly cleared added units by the rule instead of the sent dish's choice", async () => {
+    const made = await dish("Cleared extra lager");
+    const chosen = await station("Chosen bar");
+    const byRule = await station("Rule bar");
+    await routeTo(made.productId, byRule);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+    });
+    await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
+    const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+    await inTx(v, (tx) =>
+      updateOrderLine(tx, v.cfg, id, 1, { quantity: "2", makeAt: null }, revision, OPERATOR),
+    );
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId, stationId: ticketItems.stationId })
+        .from(workingOrderLines)
+        .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(rows).toEqual([
+      { makeAt: chosen, stationId: chosen },
+      { makeAt: null, stationId: byRule },
     ]);
   });
 
