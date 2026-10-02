@@ -386,6 +386,84 @@ it("asks where a refused line edit should be made and retries with the chosen st
   );
 });
 
+describe("dead-end questions with no timely answer", () => {
+  afterEach(() => vi.useRealTimers());
+
+  async function settleTimers(el: TillApp): Promise<void> {
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+    }
+  }
+
+  it("shows the original edit refusal after a stalled station question", async () => {
+    const { el } = await mountApp({
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
+      askSaleDeadEnds: vi.fn(() => new Promise(() => {})),
+    });
+    const order = await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Beer",
+      patch: { quantity: "2" },
+      revision: 0,
+      saleLine: { menuItemId: "offer-beer", quantity: "2" },
+    });
+    await settleTimers(el);
+    expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(2_999);
+    await settleTimers(el);
+    expect(banner(el)).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    await settleTimers(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it("releases Send after three seconds and ignores a later station answer", async () => {
+    let answer!: (value: unknown) => void;
+    const askDraftDeadEnds = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ askDraftDeadEnds });
+    await openMesa(el);
+    await tap(el, "Beer");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
+      .click();
+    await settleTimers(el);
+    expect(askDraftDeadEnds).toHaveBeenCalledOnce();
+    const screen = tableOrder(el)!;
+    const confirm = () =>
+      screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-draft-confirm]",
+      )!;
+    expect(confirm().disabled).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_999);
+    await settleTimers(el);
+    expect(confirm().disabled).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await settleTimers(el);
+    expect(confirm().disabled).toBe(false);
+    answer({
+      sends: true,
+      deadEnds: [
+        {
+          key: "late-id",
+          name: "Beer",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Upstairs bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    await settleTimers(el);
+    expect(screen.shadowRoot!.querySelector("till-dead-ends-section")).toBeNull();
+  });
+});
+
 it("saves a Send preview station choice on the matching live draft line", async () => {
   const askDraftDeadEnds = vi.fn(async (_partyId: string, _draftId: string, lineIds: string[]) => ({
     sends: true,
@@ -1746,12 +1824,20 @@ describe("till-app: how long a send may take", () => {
   });
 
   it("unlocks the draft at the limit when the save before the send gets no answer", async () => {
-    const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+    const { el } = await mountApp();
     await openMesa(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
-    await confirmFireAll(el);
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
+      .click();
+    await settle(el);
+    api.saveDraft.mockImplementation(noAnswer);
+    draft(el).setLineCourse(0, "mains");
+    await settle(el);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await settle(el);
 
     await vi.advanceTimersByTimeAsync(149_999);
     await settle(el);
@@ -1765,7 +1851,13 @@ describe("till-app: how long a send may take", () => {
   });
 
   it("unlocks the draft 150 seconds after Send even when a save was already out", async () => {
-    const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const saveDraft = vi.fn(server.saveDraft).mockImplementationOnce(async (...args) => {
+      await held;
+      return server.saveDraft(...args);
+    });
+    const { el } = await mountApp({ saveDraft });
     await openMesa(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
@@ -1775,7 +1867,17 @@ describe("till-app: how long a send may take", () => {
     await vi.advanceTimersByTimeAsync(100_000);
     press(el, "Steak");
     await settle(el);
-    await confirmFireAll(el);
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
+      .click();
+    await settle(el);
+    release();
+    await settle(el);
+    api.saveDraft.mockImplementation(noAnswer);
+    draft(el).setLineCourse(0, "mains");
+    await settle(el);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await settle(el);
 
     await vi.advanceTimersByTimeAsync(149_999);
     await settle(el);

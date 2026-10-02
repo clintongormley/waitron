@@ -65,6 +65,25 @@ it("checks sent line objects and requires a station before Confirm", async () =>
   expect(confirm.disabled).toBe(false);
 });
 
+it("keeps Confirm disabled and does not submit while the draft save is pending", async () => {
+  const { el } = await mount();
+  el.parentElement!.style.width = "1280px";
+  await resized(el);
+  store(el).loadFrom(store(el).id, [{ product: beer, quantity: "1" }]);
+  await el.updateComplete;
+  let submitted = false;
+  el.addEventListener("check-dead-ends", (event) => event.preventDefault());
+  el.addEventListener("submit-draft", () => (submitted = true));
+  el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+  await el.updateComplete;
+  const confirm = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    "[data-draft-confirm]",
+  )!;
+  expect(confirm.disabled).toBe(true);
+  confirm.click();
+  expect(submitted).toBe(false);
+});
+
 it("removes a dead-end line and confirms only the remaining dish with recomputed groups", async () => {
   const el = await preview([
     { product: beer, quantity: "1" },

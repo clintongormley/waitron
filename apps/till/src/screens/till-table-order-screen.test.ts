@@ -1714,7 +1714,19 @@ describe("till-table-order-screen", () => {
         }),
       );
       expect(changes.map((event) => event.detail)).toEqual([
-        { lineNo: 3, lineName: "Croquetas", patch: { note: "no salt" }, revision: 7 },
+        {
+          lineNo: 3,
+          lineName: "Croquetas",
+          patch: { note: "no salt" },
+          revision: 7,
+          saleLine: {
+            menuItemId: undefined,
+            quantity: "1.000",
+            options: [],
+            extras: [],
+            note: "no salt",
+          },
+        },
       ]);
     });
     describe("the kitchen's progress on a fired group", () => {
@@ -2295,6 +2307,13 @@ describe("till-table-order-screen", () => {
         lineName: "Burger",
         patch: { note: "no onions" },
         revision: 7,
+        saleLine: {
+          menuItemId: "menu-item-burger",
+          quantity: "1.000",
+          options: [],
+          extras: [],
+          note: "no onions",
+        },
       });
       expect(seen.event!.bubbles).toBe(true);
       expect(seen.event!.composed).toBe(true);
@@ -2357,6 +2376,13 @@ describe("till-table-order-screen", () => {
         patch: {
           note: "sin sal",
           extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],
+        },
+        saleLine: {
+          menuItemId: "menu-item-burger",
+          quantity: "2.000",
+          options: [{ listId: "list-cooked", labelId: "label-rare" }],
+          extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],
+          note: "sin sal",
         },
       });
     });
@@ -2545,6 +2571,7 @@ describe("till-table-order-screen", () => {
       picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       expect(seen.event!.detail.patch).toEqual({ note: "sin pepinillo" });
       expect(seen.event!.detail.lineName).toBe("Grande");
+      expect(seen.event!.detail.saleLine.variantId).toBe("burger-large");
     });
 
     it("closing the editor changes nothing", async () => {

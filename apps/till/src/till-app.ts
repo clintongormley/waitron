@@ -4633,15 +4633,21 @@ export class TillApp extends LitElement {
       return;
     }
     if (code === "station.no_replacement" && change.saleLine !== undefined) {
+      const question = limited(3_000);
       try {
-        const answer = await this.api.askSaleDeadEnds([change.saleLine], orderId);
+        const answer = await Promise.race([
+          this.api.askSaleDeadEnds([change.saleLine], orderId),
+          pause(question.signal).then(() => undefined),
+        ]);
         if (left()) return;
-        if (answer.deadEnds.length > 0) {
+        if (answer !== undefined && answer.deadEnds.length > 0) {
           this.editDeadEnds = { answer, change, orderId, visit };
           return;
         }
       } catch {
         // The original refusal remains available below when the question has no answer.
+      } finally {
+        question.done();
       }
     }
     this.errorKey =

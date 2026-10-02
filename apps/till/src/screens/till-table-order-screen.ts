@@ -1570,7 +1570,7 @@ export class TillTableOrderScreen extends LitElement {
       detail,
       leftOut: (submission.leftOut ?? []).map((at) => lines[at]!),
       action,
-      checking: false,
+      checking: check && sent.length > 0,
       ...(deadEnds === undefined ? {} : { deadEnds }),
     };
     if (check && sent.length > 0) {
@@ -2089,6 +2089,9 @@ export class TillTableOrderScreen extends LitElement {
       revision: this.#changeRevision,
       saleLine: {
         menuItemId: line.menuItemId ?? undefined,
+        ...(line.parentProductId === null || line.productId === null
+          ? {}
+          : { variantId: line.productId }),
         quantity: patch.quantity ?? line.quantity,
         options: detail.options ?? [],
         extras: toWireModifiers({ extras: detail.extras }).extras ?? [],
