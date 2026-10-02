@@ -1,6 +1,6 @@
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import {
   cleanupWidgets,
@@ -9,7 +9,11 @@ import {
   menuDocument,
   mountWidget,
 } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
   CatalogueSummary,
@@ -4688,20 +4692,26 @@ it("offers only menus that can be included, and includes one as a folder", async
   });
   const el = await mountLunch(client);
   await click(el, "include-menu");
-  const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[name="included-menu"]')!;
+  const picker = el.shadowRoot!.querySelector<
+    HTMLElement & {
+      required: boolean;
+      placeholder: string;
+      options: { value: string; label: string }[];
+    }
+  >('[name="included-menu"]')!;
   expect(picker.required).toBe(true);
-  expect(picker.closest("label")!.textContent).toContain("*");
-  expect(picker.options[0]!.textContent).toBe(t("menus.choose_menu"));
-  const label = picker.closest("label")!;
-  expect(getComputedStyle(label).display).toBe("grid");
-  expect(label.querySelector("span")!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-    picker.getBoundingClientRect().top,
-  );
-  expect(
-    [...picker.options].filter((option) => option.value).map((option) => option.textContent),
-  ).toEqual(["Drinks"]);
-  picker.value = "drinks-root";
-  picker.dispatchEvent(new Event("change"));
+  expect(picker.shadowRoot!.querySelector("label")!.textContent).toContain("*");
+  expect(picker.placeholder).toBe(t("menus.choose_menu"));
+  const field = picker
+    .shadowRoot!.querySelector<HTMLElement>('[part="field"]')!
+    .getBoundingClientRect();
+  const label = picker.shadowRoot!.querySelector("label")!.getBoundingClientRect();
+  expect(label.top).toBeGreaterThanOrEqual(field.top);
+  expect(label.bottom).toBeLessThanOrEqual(field.bottom);
+  expect(picker.options.filter((option) => option.value).map((option) => option.label)).toEqual([
+    "Drinks",
+  ]);
+  await chooseOption(picker, "drinks-root");
   await el.updateComplete;
   await click(el, "include-save");
   await vi.waitFor(() =>
@@ -4710,6 +4720,89 @@ it("offers only menus that can be included, and includes one as a folder", async
       sectionId: "drinks-root",
     }),
   );
+});
+
+describe("the include-a-menu field", () => {
+  type Combobox = HTMLElement & {
+    options: { value: string; label: string }[];
+    value: string;
+    label: string;
+    name: string;
+    placeholder: string;
+    search: string;
+    required: boolean;
+    disabled: boolean;
+    error: string;
+  };
+  const includable = [
+    { id: "drinks", name: "Drinks", rootSectionId: "drinks-root" },
+    { id: "wine", name: "Wines", rootSectionId: "wine-root" },
+  ];
+  function includeClient(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+    return api({
+      getMenuStructure: vi.fn().mockResolvedValue({
+        rootSectionId: "root-lunch",
+        root: {
+          id: "root-lunch",
+          internalName: "Lunch Menu",
+          names: {},
+          image: null,
+          color: null,
+          members: [],
+        },
+        nodes: [],
+        includable,
+        includedBy: [],
+      }),
+      ...overrides,
+    });
+  }
+
+  it("picks the menu from a required labelled dropdown, prompting a choice", async () => {
+    const adding = deferred<SectionMember>();
+    const client = includeClient({ addSectionMember: vi.fn(() => adding.promise) });
+    const el = await mountLunch(client);
+    await click(el, "include-menu");
+    const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
+    expect(picker).not.toBeNull();
+    expect(picker.label).toBe(t("menus.include_menu"));
+    expect(picker.required).toBe(true);
+    expect(picker.search).toBe("auto");
+    expect(picker.placeholder).toBe(t("menus.choose_menu"));
+    expect(picker.options).toEqual([
+      { value: "drinks-root", label: "Drinks" },
+      { value: "wine-root", label: "Wines" },
+    ]);
+    expect(picker.value).toBe("");
+
+    await click(el, "include-save");
+    expect(picker.error).toBe(t("menus.choose_menu_required"));
+    await chooseOption(picker, "wine-root");
+    await el.updateComplete;
+    expect(picker.error).toBe("");
+    expect(picker.value).toBe("wine-root");
+    await click(el, "include-save");
+    expect(picker.disabled).toBe(true);
+    expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("root-lunch", {
+      kind: "section",
+      sectionId: "wine-root",
+    });
+  });
+
+  it("closes an open list on Escape and leaves the dialog open", async () => {
+    const el = await mountLunch(includeClient());
+    await click(el, "include-menu");
+    const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
+    const list = picker.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    expect(list.matches(":popover-open")).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(list.matches(":popover-open")).toBe(false);
+    await el.updateComplete;
+    expect(modal(el, "include").open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+  });
 });
 
 it("lists the menus that include this one, with their clashes", async () => {
@@ -4765,10 +4858,13 @@ describe("review fix: inclusion target and validation", () => {
   }
   async function openInclude(el: MenusScreen, choose = true) {
     await click(el, "include-menu");
-    const picker = inModal<HTMLSelectElement>(el, "include", '[name="included-menu"]');
+    const picker = inModal<HTMLElement & { error: string }>(
+      el,
+      "include",
+      '[name="included-menu"]',
+    );
     if (choose) {
-      picker.value = "wine-root";
-      picker.dispatchEvent(new Event("change"));
+      await chooseOption(picker, "wine-root");
       await el.updateComplete;
     }
     return picker;
@@ -4871,25 +4967,24 @@ describe("review fix: inclusion target and validation", () => {
       '[data-test="include-save"]',
     );
     expect(save.disabled).toBe(false);
-    expect(picker.getAttribute("aria-invalid")).not.toBe("true");
+    const control = picker.shadowRoot!.querySelector(".trigger")!;
+    expect(control.getAttribute("aria-invalid")).not.toBe("true");
     await click(el, "include-save");
     expect(save.disabled).toBe(true);
-    expect(picker.getAttribute("aria-invalid")).toBe("true");
-    const error = inModal(el, "include", "#include-menu-error");
-    expect(text(error)).toBe(t("menus.choose_menu_required"));
+    expect(control.getAttribute("aria-invalid")).toBe("true");
+    const error = picker.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+    expect(picker.error).toBe(t("menus.choose_menu_required"));
     expect(getComputedStyle(error).color).toBe(
-      getComputedStyle(inModal(el, "include", ".required-mark")).color,
+      getComputedStyle(picker.shadowRoot!.querySelector("[data-required]")!).color,
     );
-    expect(picker.getAttribute("aria-describedby")).toContain(error.id);
+    expect(control.getAttribute("aria-describedby")).toContain(error.id);
     expect(await bottom(el, "include")).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.activeElement).toBe(picker);
-    picker.value = "wine-root";
-    picker.dispatchEvent(new Event("change"));
+    await chooseOption(picker, "wine-root");
     await el.updateComplete;
     expect(save.disabled).toBe(false);
     expect(await bottom(el, "include")).toBe("");
-    picker.value = "";
-    picker.dispatchEvent(new Event("change"));
+    await chooseOption(picker, "");
     await el.updateComplete;
     expect(save.disabled).toBe(true);
     await click(el, "include-cancel");
