@@ -246,7 +246,14 @@ describe("applyVenue", () => {
       {
         name: "Mostrador",
         canvas_id: null,
-        capabilities: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
+        capabilities: [
+          "integrated-card-payment",
+          "open-cash-drawer",
+          "print-receipt",
+          "show-station",
+          "show-expo",
+          "show-schedule",
+        ],
         inactivity_timeout_seconds: 300,
       },
       { name: "Móvil", canvas_id: null, capabilities: [], inactivity_timeout_seconds: 300 },

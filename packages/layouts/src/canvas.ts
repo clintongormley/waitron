@@ -31,12 +31,17 @@ export const CARD_TYPES = [
 ] as const;
 export type CardType = (typeof CARD_TYPES)[number];
 
-/** Carried by a device profile, not a canvas. Enforced by `assertDeviceCapability`, apps/server. */
+/** Carried by a device profile, not a canvas. `assertDeviceCapability` (apps/server) checks the
+ * card-payment, drawer and receipt flags; the `show-*` flags only decide which screens the till
+ * offers, and the server never checks them. */
 export const CAPABILITY_FLAGS = [
   "integrated-card-payment",
   "open-cash-drawer",
   "act-as-kds",
   "print-receipt",
+  "show-station",
+  "show-expo",
+  "show-schedule",
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 

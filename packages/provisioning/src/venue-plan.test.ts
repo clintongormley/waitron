@@ -72,7 +72,14 @@ describe("planVenue", () => {
         {
           name: "Mostrador",
           formFactor: "till",
-          capabilities: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
+          capabilities: [
+            "integrated-card-payment",
+            "open-cash-drawer",
+            "print-receipt",
+            "show-station",
+            "show-expo",
+            "show-schedule",
+          ],
           inactivityTimeoutSeconds: 300,
         },
         {

@@ -2,7 +2,7 @@ import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { CAPABILITY_FLAGS, type CapabilityFlag, type FormFactor } from "./canvas.js";
 
-/** Refuses an unknown flag rather than dropping it: capabilities gate server routes. */
+/** Refuses an unknown flag rather than dropping it: some capabilities gate server routes. */
 export function validateCapabilities(input: unknown): CapabilityFlag[] {
   if (!Array.isArray(input)) {
     throw new AppError("device_profile.invalid", { reason: "bad_capabilities" });
@@ -36,7 +36,14 @@ export function validateInactivityTimeout(
 }
 
 export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> = {
-  till: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
+  till: [
+    "integrated-card-payment",
+    "open-cash-drawer",
+    "print-receipt",
+    "show-station",
+    "show-expo",
+    "show-schedule",
+  ],
   "phone-portrait": [],
   "tablet-landscape": [],
   kds: ["act-as-kds"],

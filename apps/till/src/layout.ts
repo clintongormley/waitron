@@ -31,7 +31,13 @@ export function kindOfFormFactor(ff: string): DeviceKind | undefined {
 }
 
 export type CapabilityFlag =
-  "integrated-card-payment" | "open-cash-drawer" | "act-as-kds" | "print-receipt";
+  | "integrated-card-payment"
+  | "open-cash-drawer"
+  | "act-as-kds"
+  | "print-receipt"
+  | "show-station"
+  | "show-expo"
+  | "show-schedule";
 
 export type CardType =
   | "product-grid"
