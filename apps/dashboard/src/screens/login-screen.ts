@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import {
   browserSupportsWebAuthnAutofill,
   startAuthentication,
@@ -32,6 +33,9 @@ import {
   readLoginPreference,
   prepareGoogleLoginPreference,
 } from "../login-preference.js";
+import waitronLockup from "../../../../packages/ui/brand/waitron-lockup.svg?raw";
+
+const GOOGLE_G_URL = new URL("../assets/google-g.svg", import.meta.url).href;
 
 interface CompletedLogin {
   personId: string;
@@ -68,8 +72,29 @@ export class LoginScreen extends LitElement {
 
       .screen {
         width: 100%;
-        max-width: 30rem;
+        max-width: calc(var(--wt-space-6) * 15);
         margin-inline: auto;
+        padding: var(--wt-space-5) var(--wt-modal-inline-padding);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-surface-raised);
+      }
+
+      .logo {
+        margin-bottom: var(--wt-space-4);
+      }
+      .logo svg {
+        display: block;
+        width: calc(var(--wt-space-6) * 5);
+        height: auto;
+      }
+      /* The brand file paints fixed light-theme ink; inlined, its two groups (the waiter, then the
+         word) follow the theme. */
+      .logo svg > g:first-of-type {
+        fill: var(--wt-color-primary);
+      }
+      .logo svg > g:last-of-type {
+        fill: var(--wt-color-text);
       }
 
       .field {
@@ -98,67 +123,72 @@ export class LoginScreen extends LitElement {
       }
 
       .password-toggle svg,
-      .change-account svg {
+      .change-account svg,
+      .method svg,
+      .method img {
         display: block;
+        flex: none;
         width: var(--wt-font-size-lg);
         height: var(--wt-font-size-lg);
+      }
+      .password-toggle svg,
+      .change-account svg,
+      .method svg {
         fill: none;
         stroke: currentColor;
       }
-
-      .other-way {
-        margin-top: var(--wt-space-4);
+      .method svg {
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
 
-      .alternative-list {
-        margin-block: 0;
-        padding-inline-start: var(--wt-space-6);
+      /* Pulled up into the field's bottom margin, so the link's tap area starts at the field. */
+      .field-link {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: calc(-1 * var(--wt-space-4));
       }
-      .alternative-list li {
-        margin-block: var(--wt-space-2);
+      .field-link a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-primary);
+        font-size: var(--wt-font-size-sm);
       }
 
       .form-message {
         margin: var(--wt-space-4) 0 0;
       }
 
-      /* The list's top padding centres the first link on the buttons. Text-baseline alignment
-         put the buttons 16 px high on steps with no Cancel, because wt-form-actions takes its
-         baseline from its empty cancel slot. */
-      .links-and-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-start;
-        justify-content: space-between;
-        column-gap: var(--wt-space-4);
-        margin-block: var(--wt-space-4);
+      wt-button.method {
+        display: block;
       }
-      .links-and-actions .alternative-list {
-        padding-top: calc((var(--wt-tap-min) - 1lh) / 2);
-      }
-      .links-and-actions .alternative-list li:first-child {
-        margin-top: 0;
-      }
-      .links-and-actions wt-form-actions {
-        width: auto;
-        margin-top: 0;
-        margin-inline-start: auto;
+      wt-button.method[variant="primary"] {
+        margin-top: var(--wt-space-4);
       }
 
-      /* Without this, the buttons wrap below the list when they do not fit beside its WIDEST link.
-         On a form at its full width only the first link must fit beside them: it never breaks, and
-         a longer later link breaks inside the list instead. The query repeats .screen's max-width
-         because a container query cannot read a --wt-* token. */
-      .links-and-actions {
-        container-type: inline-size;
+      .or {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-block: var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
-      @container (min-width: 30rem) {
-        .links-and-actions .alternative-list {
-          flex: 1 1 0;
-        }
-        .links-and-actions .alternative-list li:first-child {
-          white-space: nowrap;
-        }
+      .or::before,
+      .or::after {
+        content: "";
+        flex: 1;
+        border-top: 1px solid var(--wt-color-border);
+      }
+
+      .other-ways {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
       }
 
       .alternative-hint {
@@ -854,6 +884,8 @@ export class LoginScreen extends LitElement {
 
   async #googleLogin(): Promise<void> {
     if (this.busy) return;
+    // The email step's autofill passkey would otherwise sign in after Google was chosen.
+    this.#cancelPasskeyCeremony();
     this.busy = true;
     this.errorKey = null;
     try {
@@ -863,6 +895,7 @@ export class LoginScreen extends LitElement {
       this.navigate(authorizationUrl);
     } catch (error) {
       this.errorKey = codeOf(error);
+      if (this.isConnected && this.step === "email") void this.#conditionalPasskeyLogin();
     } finally {
       this.busy = false;
     }
@@ -910,52 +943,87 @@ export class LoginScreen extends LitElement {
     </wt-input>`;
   }
 
-  #methodLink(id: string, label: string, action: () => void) {
-    return html`<a
-      href=${`#${id}`}
+  #fieldLink(id: string, label: string, action: () => void) {
+    return html`<div class="field-link">
+      <a
+        href=${`#${id}`}
+        data-test=${id}
+        aria-disabled=${this.busy}
+        @click=${(event: Event) => {
+          event.preventDefault();
+          if (!this.busy) action();
+        }}
+        >${label}</a
+      >
+    </div>`;
+  }
+
+  #otherWay(id: string, label: string, icon: TemplateResult, action: () => void) {
+    return html`<wt-button
+      class="method"
+      variant="secondary"
       data-test=${id}
-      aria-disabled=${this.busy}
-      @click=${(event: Event) => {
-        event.preventDefault();
+      ?disabled=${this.busy}
+      @click=${() => {
         if (!this.busy) action();
       }}
-      >${label}</a
+      >${icon}${label}</wt-button
     >`;
   }
 
-  #alternatives(): TemplateResult[] {
-    const reset = this.#methodLink(
-      "reset-by-email",
-      t("login.reset_by_email"),
-      () => void this.#requestPasswordReset(),
+  #otherWays() {
+    const password = this.#otherWay(
+      "use-password",
+      t("login.use_password"),
+      html`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="7.5" cy="15.5" r="4.5"></circle>
+        <path d="m10.7 12.3 9.8-9.8M17 5.8l2.7 2.7M14.6 8.2l2.2 2.2"></path>
+      </svg>`,
+      () => this.#showPasswordStep(),
     );
-    const passkey = this.#methodLink(
+    const passkey = this.#otherWay(
       "passkey-login",
       t("login.with_passkey"),
+      html`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="9" cy="7" r="4"></circle>
+        <path d="M2 21v-1a7 7 0 0 1 10.5-6"></path>
+        <circle cx="18" cy="14" r="2.5"></circle>
+        <path d="M18 16.5V22M18 19.5h2"></path>
+      </svg>`,
       () => void this.#passkeyLogin(),
     );
-    const google =
-      this.googleConfigured && this.step !== "google"
-        ? [this.#methodLink("google-login", t("login.with_google"), () => void this.#googleLogin())]
-        : [];
-    if (this.step === "password") return [reset, passkey, ...google];
-    return [
-      this.#methodLink("use-password", t("login.use_password"), () => this.#showPasswordStep()),
-      ...(this.step !== "passkey" ? [passkey] : []),
-      reset,
-      ...google,
-    ];
+    const google = this.googleConfigured
+      ? [
+          this.#otherWay(
+            "google-login",
+            t("login.with_google"),
+            html`<img src=${GOOGLE_G_URL} alt="" />`,
+            () => void this.#googleLogin(),
+          ),
+        ]
+      : [];
+    const others =
+      this.step === "email"
+        ? google
+        : this.step === "password"
+          ? [passkey, ...google]
+          : this.step === "passkey"
+            ? [password, ...google]
+            : [password, passkey];
+    if (others.length === 0) return nothing;
+    return html`<p class="or" data-test="login-or">${t("login.or")}</p>
+      <div class="other-ways">${others}</div>`;
   }
 
-  /** `message` goes above the row, at the form's left edge, not inside the narrower action row. */
-  #linksAndActions(links: TemplateResult[], actions: TemplateResult, message: string) {
-    return html`${formMessage(message)}
-      <div class="links-and-actions">
-        <ul class="alternative-list">
-          ${links.map((link) => html`<li>${link}</li>`)}
-        </ul>
-        ${actions}
-      </div>`;
+  #methodActions(primary: TemplateResult, message: string) {
+    return html`${formMessage(message)}${primary}${this.#otherWays()}`;
+  }
+
+  /** Decorative: the banner above the card already names Waitron. */
+  #logo() {
+    return html`<div class="logo" data-test="login-logo" aria-hidden="true">
+      ${unsafeHTML(waitronLockup)}
+    </div>`;
   }
 
   #privacyLink() {
@@ -999,6 +1067,7 @@ export class LoginScreen extends LitElement {
     if (this.token !== null) {
       return html`
         <div class="screen">
+          ${this.#logo()}
           <h1>
             ${this.actionPurpose === "password_reset" ? t("account.reset_title") : t("account.setup_title")}
           </h1>
@@ -1121,6 +1190,7 @@ export class LoginScreen extends LitElement {
       this.step === "email" ? "continue" : this.step === "factor" ? "submit-factor" : "submit";
     return html`
       <div class="screen">
+        ${this.#logo()}
         ${this.noticeCode && this.noticeCode !== "management_session.required" ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
         ${
           this.step === "setup-passkey"
@@ -1194,31 +1264,33 @@ export class LoginScreen extends LitElement {
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
                   ></wt-input>
                   ${this.#rememberChoice()}
-                  <wt-form-actions .error=${form.bottom}>
-                    <wt-button
+                  ${this.#methodActions(
+                    html`<wt-button
+                      class="method"
                       variant="primary"
                       data-test="continue"
-                      ?disabled=${form.blocked}
-                      @click=${() => this.#continue()}
+                      ?disabled=${this.busy || form.blocked}
+                      @click=${() => {
+                        if (!this.busy) this.#continue();
+                      }}
                       >${t("action.continue")}</wt-button
-                    >
-                  </wt-form-actions>
+                    >`,
+                    form.bottom,
+                  )}
                 `
               : this.step === "google"
                 ? html`
                     <h1>${t("login.google_heading")}</h1>
                     ${this.#renderLoginContext()}
                     <p class="alternative-hint">${t("login.google_hint")}</p>
-                    ${this.#linksAndActions(
-                      this.#alternatives(),
-                      html`<wt-form-actions
-                        ><wt-button
-                          variant="primary"
-                          data-test="google-login"
-                          ?disabled=${this.busy || !this.googleConfigured}
-                          @click=${() => void this.#googleLogin()}
-                          >${t("login.with_google")}</wt-button
-                        ></wt-form-actions
+                    ${this.#methodActions(
+                      html`<wt-button
+                        class="method"
+                        variant="primary"
+                        data-test="google-login"
+                        ?disabled=${this.busy || !this.googleConfigured}
+                        @click=${() => void this.#googleLogin()}
+                        >${t("login.with_google")}</wt-button
                       >`,
                       form.bottom,
                     )}
@@ -1228,17 +1300,15 @@ export class LoginScreen extends LitElement {
                       <h1>${t("login.use_passkey_heading")}</h1>
                       ${this.#renderLoginContext()}
                       <p class="alternative-hint">${t("login.passkey_hint")}</p>
-                      ${this.#linksAndActions(
-                        this.#alternatives(),
-                        html`<wt-form-actions>
-                          <wt-button
-                            variant="primary"
-                            data-test="passkey-login"
-                            ?disabled=${this.busy}
-                            @click=${() => void this.#passkeyLogin()}
-                            >${t("login.with_passkey")}</wt-button
-                          >
-                        </wt-form-actions>`,
+                      ${this.#methodActions(
+                        html`<wt-button
+                          class="method"
+                          variant="primary"
+                          data-test="passkey-login"
+                          ?disabled=${this.busy}
+                          @click=${() => void this.#passkeyLogin()}
+                          >${t("login.with_passkey")}</wt-button
+                        >`,
                         form.bottom,
                       )}
                     `
@@ -1284,24 +1354,27 @@ export class LoginScreen extends LitElement {
                             >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
                           >
                         </wt-input>
-                        ${this.#linksAndActions(
-                          this.#alternatives(),
-                          html`<wt-form-actions>
-                            <wt-button
-                              variant="primary"
-                              data-test="submit"
-                              ?disabled=${this.busy || form.blocked}
-                              @click=${() => void this.#submit()}
-                              >${t("action.login")}</wt-button
-                            >
-                          </wt-form-actions>`,
+                        ${this.#fieldLink(
+                          "reset-by-email",
+                          t("login.reset_by_email"),
+                          () => void this.#requestPasswordReset(),
+                        )}
+                        ${this.#methodActions(
+                          html`<wt-button
+                            class="method"
+                            variant="primary"
+                            data-test="submit"
+                            ?disabled=${this.busy || form.blocked}
+                            @click=${() => void this.#submit()}
+                            >${t("action.login")}</wt-button
+                          >`,
                           form.bottom,
                         )}
                       `
                     : this.step === "factor"
                       ? html`
-                          ${this.#renderLoginContext()}
                           <h1>${t("login.factor_heading")}</h1>
+                          ${this.#renderLoginContext()}
                           <input
                             class="autofill-username"
                             data-autofill-username
@@ -1328,44 +1401,39 @@ export class LoginScreen extends LitElement {
                             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]"))}
                             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
                           ></wt-input>
-                          ${this.#linksAndActions(
-                            [
-                              this.#methodLink(
-                                "switch-factor",
-                                this.factorMode === "totp"
-                                  ? t("login.use_recovery_code")
-                                  : t("login.use_authenticator_code"),
-                                () => {
-                                  this.factorMode =
-                                    this.factorMode === "totp" ? "recovery" : "totp";
-                                  this.secondFactor = "";
-                                  this.attempted = false;
-                                },
-                              ),
-                            ],
-                            html`<wt-form-actions>
-                              <wt-button
-                                slot="cancel"
-                                variant="secondary"
-                                data-test="back-to-password"
-                                ?disabled=${this.busy}
-                                @click=${() => {
-                                  this.secondFactor = "";
-                                  this.errorKey = null;
-                                  this.step = "password";
-                                }}
-                                >${t("action.back")}</wt-button
-                              >
-                              <wt-button
-                                variant="primary"
-                                data-test="submit-factor"
-                                ?disabled=${this.busy || form.blocked}
-                                @click=${() => void this.#submit()}
-                                >${t("action.login")}</wt-button
-                              >
-                            </wt-form-actions>`,
-                            form.bottom,
+                          ${this.#fieldLink(
+                            "switch-factor",
+                            this.factorMode === "totp"
+                              ? t("login.use_recovery_code")
+                              : t("login.use_authenticator_code"),
+                            () => {
+                              this.factorMode = this.factorMode === "totp" ? "recovery" : "totp";
+                              this.secondFactor = "";
+                              this.attempted = false;
+                            },
                           )}
+                          <wt-form-actions .error=${form.bottom}>
+                            <wt-button
+                              slot="cancel"
+                              variant="secondary"
+                              data-test="back-to-password"
+                              ?disabled=${this.busy}
+                              @click=${() => {
+                                if (this.busy) return;
+                                this.secondFactor = "";
+                                this.errorKey = null;
+                                this.step = "password";
+                              }}
+                              >${t("action.back")}</wt-button
+                            >
+                            <wt-button
+                              variant="primary"
+                              data-test="submit-factor"
+                              ?disabled=${this.busy || form.blocked}
+                              @click=${() => void this.#submit()}
+                              >${t("action.login")}</wt-button
+                            >
+                          </wt-form-actions>
                         `
                       : this.step === "reset-sent"
                         ? html`

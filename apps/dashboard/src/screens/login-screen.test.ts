@@ -109,14 +109,15 @@ function input(el: LoginScreen, name: string, value: string): void {
   );
 }
 
-/** The current form's one message about a failed submission: shown by the form itself above a
- * row of links and buttons, or else by its action row. */
+/** The current form's one message about a failed submission: shown by the form itself above its
+ * primary button, or else by its action row. */
 async function bottomMessageOf(el: LoginScreen): Promise<Element | null> {
-  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
+  const actions = el.shadowRoot!.querySelector("wt-form-actions");
+  await actions?.updateComplete;
   return (
     el.shadowRoot!.querySelector("[data-error]") ??
-    actions.shadowRoot!.querySelector("[data-error]")
+    actions?.shadowRoot!.querySelector("[data-error]") ??
+    null
   );
 }
 
@@ -262,7 +263,9 @@ describe("login-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe(t("login.google_heading"));
     expect(navigate).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("ul li a[data-test=use-password]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("wt-button[variant=secondary][data-test=use-password]"),
+    ).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=google-login]")!.click();
     await flush(el);
     expect(navigate).toHaveBeenCalledWith("https://accounts.google.test/login");
@@ -510,12 +513,14 @@ describe("login-screen", () => {
     expect(
       el
         .shadowRoot!.querySelector("wt-input[name=password]")
-        ?.nextElementSibling?.matches(
-          ".links-and-actions:has(li:first-child a[data-test=reset-by-email])",
-        ),
+        ?.nextElementSibling?.matches(".field-link:has(a[data-test=reset-by-email])"),
     ).toBe(true);
-    expect(el.shadowRoot!.querySelector("ul li a[data-test=passkey-login]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("ul li a[data-test=google-login]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("wt-button[variant=secondary][data-test=passkey-login]"),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("wt-button[variant=secondary][data-test=google-login]"),
+    ).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=use-invitation-code]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=back]")).toBeNull();
   });
@@ -954,27 +959,27 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=submit]")).toBeNull();
   });
 
-  it("keeps primary actions at the right and alternatives as visible links", async () => {
+  it("makes each step's own way in its one primary button and offers the others as buttons", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     expect(
-      el
-        .shadowRoot!.querySelector("wt-form-actions wt-button:not([slot])")
-        ?.getAttribute("data-test"),
+      el.shadowRoot!.querySelector("wt-button[variant=primary]")?.getAttribute("data-test"),
     ).toBe("continue");
     await continueWithEmail(el);
     expect(
-      el
-        .shadowRoot!.querySelector("wt-form-actions wt-button:not([slot])")
-        ?.getAttribute("data-test"),
+      el.shadowRoot!.querySelector("wt-button[variant=primary]")?.getAttribute("data-test"),
     ).toBe("submit");
-    expect(el.shadowRoot!.querySelector('wt-form-actions [slot="cancel"]')).toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-button[variant=secondary]")].map((b) =>
+        b.getAttribute("data-test"),
+      ),
+    ).toEqual(["passkey-login", "google-login"]);
     await openPasskey(el);
     expect(
-      el
-        .shadowRoot!.querySelector("wt-form-actions wt-button:not([slot])")
-        ?.getAttribute("data-test"),
+      el.shadowRoot!.querySelector("wt-button[variant=primary]")?.getAttribute("data-test"),
     ).toBe("passkey-login");
-    expect(el.shadowRoot!.querySelector("ul li a[data-test=use-password]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("wt-button[variant=secondary][data-test=use-password]"),
+    ).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
@@ -1163,7 +1168,7 @@ describe("login-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
   });
 
-  it("offers password and reset email as alternatives to the preferred passkey", async () => {
+  it("offers the password as an alternative to the preferred passkey, and the reset email from there", async () => {
     const api = stubApi();
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await openPasskey(el, "bea@x.com");
@@ -1171,12 +1176,14 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=forgot-password]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=passkey-login]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=use-password]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=reset-by-email]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=reset-by-email]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=change-account]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")?.value).toBe(
       "bea@x.com",
     );
 
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
     await flush(el);
     expect(api.requestPasswordReset).toHaveBeenCalledWith("bea@x.com");
@@ -1199,10 +1206,11 @@ describe("login-screen", () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     const api = stubApi();
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
-    await openPasskey(el, "bea@x.com");
+    await openPassword(el, "bea@x.com");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=use-password]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=passkey-login]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=login-or]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")?.textContent).toContain(
       "bea@x.com",
     );
@@ -1220,7 +1228,7 @@ describe("login-screen", () => {
     expect(resend().textContent).toContain("1");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=change-account]")!.click();
     await el.updateComplete;
-    await openPasskey(el, "bea@x.com");
+    await openPassword(el, "bea@x.com");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
     await flush(el);
     expect(api.requestPasswordReset).toHaveBeenCalledTimes(1);
@@ -1330,36 +1338,6 @@ describe("login-screen", () => {
       "passkey.challenge_expired",
     );
   });
-
-  it.each([1280, 390])(
-    "puts a refused passkey sign-in's message on its own line at the form's left edge, above the links and the button (%ipx)",
-    async (width) => {
-      await page.viewport(width, 900);
-      try {
-        const api = stubApi({
-          passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
-        });
-        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
-        await continueWithEmail(el);
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
-        await flush(el);
-        const message = (await bottomMessageOf(el))!;
-        expect(message.textContent!.trim()).not.toBe("");
-        const row = el.shadowRoot!.querySelector(".links-and-actions")!.getBoundingClientRect();
-        const button = el
-          .shadowRoot!.querySelector("[data-test=passkey-login]")!
-          .getBoundingClientRect();
-        const box = message.getBoundingClientRect();
-        expect(box.bottom).toBeLessThanOrEqual(row.top);
-        expect(box.bottom).toBeLessThanOrEqual(button.top);
-        expect(box.left).toBeCloseTo(row.left, 0);
-        expect(box.right).toBeCloseTo(row.right, 0);
-        expect(getComputedStyle(message).textAlign).toBe("start");
-      } finally {
-        await page.viewport(1280, 900);
-      }
-    },
-  );
 
   it("leaves the spacing token between the hint and a refused passkey sign-in's message", async () => {
     const api = stubApi({
@@ -1931,6 +1909,28 @@ describe("login-screen: password and second factor", () => {
     });
   });
 
+  it("keeps the code step and its code while the code's sign-in is pending", async () => {
+    const pending = deferred<{ personId: string }>();
+    const login = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "totp.required" })
+      .mockReturnValueOnce(pending.promise);
+    const { el } = await signInWithPassword({ login });
+    input(el, "one-time-code", "123456");
+    click(el, "submit-factor");
+    await el.updateComplete;
+    const back = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=back-to-password]",
+    )!;
+    expect(back.disabled).toBe(true);
+    back.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe(t("login.factor_heading"));
+    expect(field(el, "one-time-code").value).toBe("123456");
+    pending.resolve({ personId: "p1" });
+    await flush(el);
+  });
+
   it("signs in with a recovery code, then asks for an authenticator code before adding a passkey", async () => {
     const login = vi
       .fn()
@@ -2152,7 +2152,7 @@ describe("login-screen: signing in with a passkey", () => {
     await openPasskey(el);
     click(el, "passkey-login");
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("a[data-test=use-password]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
     await el.updateComplete;
     expect(field(el, "password")).toBeNull();
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe(t("login.use_passkey_heading"));
@@ -2914,7 +2914,7 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
   });
 });
 
-describe("login-screen: a step's links are one bulleted list with its buttons on the first item's row", () => {
+describe("login-screen: the sign-in card", () => {
   let restoreLocale: ReturnType<typeof currentLocale>;
   let restoreViewport: [number, number];
   beforeEach(() => {
@@ -2926,36 +2926,44 @@ describe("login-screen: a step's links are one bulleted list with its buttons on
     await page.viewport(...restoreViewport);
   });
 
-  /** Every sign-in method link on the step, in order, and the one list holding them. */
-  function links(el: LoginScreen) {
-    const lists = el.shadowRoot!.querySelectorAll("ul.alternative-list");
-    const methods = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a[data-test]")];
-    return { lists, methods, order: methods.map((a) => a.dataset.test) };
+  const withoutGoogle = () =>
+    stubApi({ getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }) });
+
+  /** A token's resolved value for one CSS property, read off a probe inside the screen. */
+  function tokenValue(el: LoginScreen, property: string, value: string): string {
+    const probe = document.createElement("div");
+    probe.style.setProperty(property, value);
+    el.shadowRoot!.appendChild(probe);
+    const resolved = getComputedStyle(probe).getPropertyValue(property);
+    probe.remove();
+    return resolved;
   }
 
-  /**
-   * Each of the step's buttons shares the first item's row, to the right of its link — or, where
-   * `mayWrap` allows it because the row is too narrow for both, sits wholly below the list. Either
-   * way the last button ends at the form's right edge.
-   */
-  function expectButtonsOnFirstRow(el: LoginScreen, mayWrap = false) {
-    const list = el.shadowRoot!.querySelector("ul.alternative-list")!;
-    const listBox = list.getBoundingClientRect();
-    const first = list.querySelector("li")!.getBoundingClientRect();
-    const link = list.querySelector("li a")!.getBoundingClientRect();
-    const screen = el.shadowRoot!.querySelector(".screen")!.getBoundingClientRect();
-    const buttons = [...el.shadowRoot!.querySelectorAll("wt-form-actions wt-button")];
-    expect(buttons.length).toBeGreaterThan(0);
-    for (const button of buttons) {
-      const box = button.getBoundingClientRect();
-      if (mayWrap && box.top >= listBox.bottom) continue;
-      const firstMiddle = first.top + first.height / 2;
-      expect(Math.abs(firstMiddle - (box.top + box.height / 2))).toBeLessThanOrEqual(2);
-      expect(box.left).toBeGreaterThan(link.right);
-    }
-    const last = buttons.at(-1)!.getBoundingClientRect();
-    expect(Math.abs(last.right - screen.right)).toBeLessThan(1);
+  function card(el: LoginScreen): HTMLElement {
+    return el.shadowRoot!.querySelector<HTMLElement>(".screen")!;
   }
+
+  /** The card's content box: inside its border and padding. */
+  function contentBox(el: LoginScreen) {
+    const screen = card(el);
+    const box = screen.getBoundingClientRect();
+    const style = getComputedStyle(screen);
+    return {
+      left: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+      right: box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+    };
+  }
+
+  /** The step's ways in and the "or" between them, in order, by `data-test`. */
+  function methodControls(el: LoginScreen): HTMLElement[] {
+    return [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+        ".screen wt-button[variant=primary], .screen wt-button[variant=secondary], [data-test=login-or]",
+      ),
+    ].filter((control) => !control.matches("wt-form-actions *"));
+  }
+
+  const order = (el: LoginScreen) => methodControls(el).map((control) => control.dataset.test);
 
   async function openFactor() {
     const login = vi.fn().mockRejectedValueOnce({ code: "totp.required" });
@@ -2963,115 +2971,435 @@ describe("login-screen: a step's links are one bulleted list with its buttons on
     return el;
   }
 
-  const widths = [
+  async function openAccountAction() {
+    history.replaceState(null, "", "/manage/account?token=setup&purpose=invitation");
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    return el;
+  }
+
+  async function openResetSent() {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    await openPassword(el, "bea@x.com");
+    click(el, "reset-by-email");
+    await flush(el);
+    return el;
+  }
+
+  async function mountOn(open?: (el: LoginScreen) => Promise<void>, api = stubApi()) {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await flush(el);
+    if (open) await open(el);
+    await flush(el);
+    return el;
+  }
+
+  const steps: ReadonlyArray<readonly [string, () => Promise<LoginScreen>]> = [
+    ["email", () => mountOn()],
+    ["password", () => mountOn(openPassword)],
+    ["passkey", () => mountOn(openPasskey)],
+    ["Google", () => mountOn(openGoogle)],
+    ["code", openFactor],
+    ["Check your email", openResetSent],
+    ["passkey offer", async () => (await mountPasskeyOffer()).el],
+    ["account setup", openAccountAction],
+  ];
+
+  it.each(steps)(
+    "draws the %s step as a card with the Waitron logo first, above the heading",
+    async (_step, open) => {
+      const el = await open();
+      const screen = card(el);
+      const style = getComputedStyle(screen);
+      expect(style.borderTopWidth).toBe("1px");
+      expect(style.borderTopStyle).toBe("solid");
+      expect(style.borderTopColor).toBe(tokenValue(el, "color", "var(--wt-color-border)"));
+      expect(style.backgroundColor).toBe(
+        tokenValue(el, "background-color", "var(--wt-color-surface-raised)"),
+      );
+      expect(style.borderTopLeftRadius).toBe(
+        tokenValue(el, "border-top-left-radius", "var(--wt-radius-lg)"),
+      );
+      const logo = screen.querySelector<HTMLElement>("[data-test=login-logo]");
+      expect(logo).not.toBeNull();
+      expect(screen.firstElementChild).toBe(logo);
+      expect(logo!.querySelector("svg")).not.toBeNull();
+      // The banner above already names Waitron, so the card's logo is decoration.
+      expect(logo!.getAttribute("aria-hidden")).toBe("true");
+      const heading = screen.querySelector("h1")!;
+      expect(
+        logo!.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "paints the logo's waiter in the primary colour and its word in the text colour (%s theme)",
+    async (theme) => {
+      const { el } = await mountWidget<LoginScreen>(
+        "dashboard-login-screen",
+        { api: stubApi() },
+        theme,
+      );
+      const svg = el.shadowRoot!.querySelector("[data-test=login-logo] svg")!;
+      // Found by the brand file's own ink, not by position, so a reordered file fails here.
+      const waiter = svg.querySelector(':scope > g[fill="#1f6feb"]')!;
+      const word = svg.querySelector(':scope > g[fill="#16181d"]')!;
+      expect(getComputedStyle(waiter).fill).toBe(
+        tokenValue(el, "color", "var(--wt-color-primary)"),
+      );
+      expect(getComputedStyle(word).fill).toBe(tokenValue(el, "color", "var(--wt-color-text)"));
+    },
+  );
+
+  const methodPages = [
+    ["email", undefined, ["continue", "login-or", "google-login"]],
+    ["password", openPassword, ["submit", "login-or", "passkey-login", "google-login"]],
+    ["passkey", openPasskey, ["passkey-login", "login-or", "use-password", "google-login"]],
+    ["Google", openGoogle, ["google-login", "login-or", "use-password", "passkey-login"]],
+  ] as const;
+  const viewports = [
     ["en-GB", 1280, 900],
     ["es-ES", 1280, 900],
     ["en-GB", 390, 844],
     ["es-ES", 390, 844],
   ] as const;
+  const pagesAtViewports = methodPages.flatMap(([step, open, expected]) =>
+    viewports.map(
+      ([locale, width, height]) => [step, locale, width, height, open, expected] as const,
+    ),
+  );
 
-  it.each(widths)(
-    "the password step lists the forgotten-password link first, then passkey and Google, with Log in on its row (%s, %i px)",
-    async (locale, width, height) => {
+  it.each(pagesAtViewports)(
+    "the %s page shows its one primary button, then or, then the other ways in, each the card's width (%s, %i px)",
+    async (_step, locale, width, height, open, expected) => {
       setLocale(locale);
       await page.viewport(width, height);
-      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-      await flush(el);
-      await openPassword(el);
-      const { lists, methods, order } = links(el);
-      expect(lists).toHaveLength(1);
-      expect(order).toEqual(["reset-by-email", "passkey-login", "google-login"]);
-      for (const method of methods) expect(method.closest("ul.alternative-list li")).not.toBeNull();
-      expect(
-        el
-          .shadowRoot!.querySelector("wt-input[name=password]")!
-          .nextElementSibling!.contains(lists[0]!),
-      ).toBe(true);
-      expectButtonsOnFirstRow(el);
+      const el = await mountOn(open);
+      expect(order(el)).toEqual(expected);
+      expect(el.shadowRoot!.querySelectorAll("wt-button[variant=primary]")).toHaveLength(1);
+      expect(el.shadowRoot!.querySelector("[data-test=login-or]")!.textContent!.trim()).toBe(
+        t("login.or"),
+      );
+      const content = contentBox(el);
+      for (const control of methodControls(el)) {
+        const box = control.getBoundingClientRect();
+        expect(Math.abs(box.left - content.left)).toBeLessThanOrEqual(1);
+        expect(Math.abs(box.right - content.right)).toBeLessThanOrEqual(1);
+      }
+      const screen = card(el).getBoundingClientRect();
+      for (const node of card(el).querySelectorAll("*")) {
+        const box = node.getBoundingClientRect();
+        if (box.width === 0) continue;
+        expect(box.left).toBeGreaterThanOrEqual(screen.left - 0.5);
+        expect(box.right).toBeLessThanOrEqual(screen.right + 0.5);
+      }
     },
   );
 
-  it.each(widths)(
-    "the passkey step's links are one list with its button on the first item's row, or below it on a phone (%s, %i px)",
-    async (locale, width, height) => {
-      setLocale(locale);
-      await page.viewport(width, height);
-      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-      await flush(el);
-      await openPasskey(el);
-      const { lists, order } = links(el);
-      expect(lists).toHaveLength(1);
-      expect(order).toEqual(["use-password", "reset-by-email", "google-login"]);
-      expectButtonsOnFirstRow(el, width < 600);
-    },
-  );
-
-  it.each(widths)(
-    "the Google step's links are one list with its button on the first item's row, or below it on a phone (%s, %i px)",
-    async (locale, width, height) => {
-      setLocale(locale);
-      await page.viewport(width, height);
-      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-      await flush(el);
-      await openGoogle(el);
-      const { lists, order } = links(el);
-      expect(lists).toHaveLength(1);
-      expect(order).toEqual(["use-password", "passkey-login", "reset-by-email"]);
-      expectButtonsOnFirstRow(el, width < 600);
-    },
-  );
-
-  // Verdana with extra letter spacing stands in for the wider sans-serif a Linux desktop falls
-  // back to: with it, the widest link plus the button is wider than the form, while the first
-  // link plus the button is not.
   it.each([
+    ["email", undefined, ["continue"]],
+    ["password", openPassword, ["submit", "login-or", "passkey-login"]],
+    ["passkey", openPasskey, ["passkey-login", "login-or", "use-password"]],
+  ] as const)(
+    "without Google set up, the %s page offers only the ways in it has",
+    async (_step, open, expected) => {
+      const el = await mountOn(open, withoutGoogle());
+      expect(order(el)).toEqual(expected);
+    },
+  );
+
+  it.each([
+    ["password", openPassword, "submit"],
+    ["passkey", openPasskey, "passkey-login"],
+    ["Google", openGoogle, "google-login"],
+  ] as const)(
+    "each other way in on the %s page has an icon hidden from assistive technology, and is named by its label",
+    async (_step, open, primary) => {
+      const el = await mountOn(open);
+      const others = methodControls(el).filter(
+        (control) => control.matches("wt-button") && control.dataset.test !== primary,
+      );
+      expect(others.length).toBeGreaterThan(0);
+      const iconSize = tokenValue(el, "width", "var(--wt-font-size-lg)");
+      for (const other of others) {
+        const icons = other.querySelectorAll("svg, img");
+        expect(icons).toHaveLength(1);
+        const icon = icons[0]!;
+        if (icon instanceof HTMLImageElement) expect(icon.getAttribute("alt")).toBe("");
+        else expect(icon.getAttribute("aria-hidden")).toBe("true");
+        expect(getComputedStyle(icon).width).toBe(iconSize);
+        const label = other.textContent!.trim();
+        expect(label).not.toBe("");
+        expect(
+          await page.getByRole("button", { name: label, exact: true }).elements(),
+        ).toHaveLength(1);
+      }
+      if (others.some((other) => other.dataset.test === "google-login"))
+        expect(
+          el
+            .shadowRoot!.querySelector<HTMLImageElement>("[data-test=google-login] img")!
+            .getAttribute("src"),
+        ).toBe(new URL("../assets/google-g.svg", import.meta.url).href);
+    },
+  );
+
+  it.each([1280, 390])(
+    "puts I've forgotten my password under the password field, at the card's right, above Log in (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      const el = await mountOn(openPassword);
+      const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=reset-by-email]")!;
+      expect(link).not.toBeNull();
+      expect(link.textContent!.trim()).toBe(t("login.reset_by_email"));
+      const box = link.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(field(el, "password").getBoundingClientRect().bottom);
+      expect(box.bottom).toBeLessThanOrEqual(
+        el.shadowRoot!.querySelector("[data-test=submit]")!.getBoundingClientRect().top,
+      );
+      expect(Math.abs(box.right - contentBox(el).right)).toBeLessThanOrEqual(1);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+    },
+  );
+
+  it.each([
+    ["email", undefined],
     ["passkey", openPasskey],
     ["Google", openGoogle],
-  ] as const)(
-    "the %s step keeps its button on the first item's row at desktop width in a wide font, however long a later link is",
-    async (_step, open) => {
-      setLocale("es-ES");
-      await page.viewport(1280, 900);
-      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-      el.style.setProperty("--wt-font-family", "Verdana");
-      el.style.letterSpacing = "1px";
-      await flush(el);
-      await open(el);
-      expectButtonsOnFirstRow(el);
-    },
-  );
-
-  it("at desktop width, where even the first link and the button do not fit, the button wraps below an unbroken first link", async () => {
-    setLocale("es-ES");
-    await page.viewport(1280, 900);
-    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-    // Wide enough in any font: the extra spacing alone makes the first link wider than the room
-    // the button leaves.
-    el.style.letterSpacing = "24px";
-    await flush(el);
-    await openGoogle(el);
-    const list = el.shadowRoot!.querySelector("ul.alternative-list")!;
-    const button = el.shadowRoot!.querySelector("wt-form-actions wt-button")!;
-    expect(button.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-      list.getBoundingClientRect().bottom,
-    );
-    // An inline link broken across lines has one box per line.
-    expect(list.querySelector("li a")!.getClientRects()).toHaveLength(1);
-    expectButtonsOnFirstRow(el, true);
+  ] as const)("does not offer I've forgotten my password on the %s page", async (_step, open) => {
+    const el = await mountOn(open);
+    expect(el.shadowRoot!.querySelector("[data-test=reset-by-email]")).toBeNull();
   });
 
-  it.each(widths)(
-    "the code step's link is one list with Back and Log in on its row, or below it on a phone (%s, %i px)",
-    async (locale, width, height) => {
-      setLocale(locale);
-      await page.viewport(width, height);
-      const el = await openFactor();
-      const { lists, order } = links(el);
-      expect(lists).toHaveLength(1);
-      expect(order).toEqual(["switch-factor"]);
-      expectButtonsOnFirstRow(el, width < 600);
+  it.each([1280, 390])(
+    "puts a refusal's message on its own line above the primary button, from the card's left (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      const api = stubApi({
+        passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+      });
+      const el = await mountOn(openPasskey, api);
+      click(el, "passkey-login");
+      await flush(el);
+      const message = (await bottomMessageOf(el))!;
+      expect(message.textContent!.trim()).toBe(codeMessage("passkey.challenge_expired"));
+      const box = message.getBoundingClientRect();
+      const primary = el.shadowRoot!.querySelector("wt-button[data-test=passkey-login]")!;
+      expect(message.nextElementSibling).toBe(primary);
+      const button = primary.getBoundingClientRect();
+      expect(box.bottom).toBeLessThanOrEqual(button.top);
+      expect(Math.abs(box.left - contentBox(el).left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(box.right - contentBox(el).right)).toBeLessThanOrEqual(1);
+      expect(getComputedStyle(message).textAlign).toBe("start");
     },
   );
+
+  it.each([1280, 390])(
+    "on the code step, puts the code switch under the field at the right, Back at the bottom left and Log in at the bottom right (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      const el = await openFactor();
+      const content = contentBox(el);
+      const heading = el.shadowRoot!.querySelector("h1")!;
+      const chosen = el.shadowRoot!.querySelector("[data-test=login-context]")!;
+      expect(
+        heading.compareDocumentPosition(chosen) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const link = el.shadowRoot!.querySelector<HTMLElement>("a[data-test=switch-factor]")!;
+      const linkBox = link.getBoundingClientRect();
+      const back = el.shadowRoot!.querySelector("[data-test=back-to-password]")!;
+      const submit = el.shadowRoot!.querySelector("[data-test=submit-factor]")!;
+      expect(back.getAttribute("slot")).toBe("cancel");
+      expect(linkBox.top).toBeGreaterThanOrEqual(
+        field(el, "one-time-code").getBoundingClientRect().bottom,
+      );
+      expect(linkBox.bottom).toBeLessThanOrEqual(back.getBoundingClientRect().top);
+      expect(Math.abs(linkBox.right - content.right)).toBeLessThanOrEqual(1);
+      expect(linkBox.height).toBeGreaterThanOrEqual(44);
+      expect(linkBox.width).toBeGreaterThanOrEqual(44);
+      expect(Math.abs(back.getBoundingClientRect().left - content.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(submit.getBoundingClientRect().right - content.right)).toBeLessThanOrEqual(1);
+      expect(el.shadowRoot!.querySelector("ul")).toBeNull();
+    },
+  );
+});
+
+describe("login-screen: Google on the first page", () => {
+  it("starts Google with no email typed, asking nothing about the address", async () => {
+    const api = stubApi();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    await flush(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(api.beginGoogleLogin).toHaveBeenCalledExactlyOnceWith();
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+    expect(field(el, "email").error).toBe("");
+  });
+
+  it("shows the same choices whatever email is typed", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    const controls = () =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test]")].map((c) => c.dataset.test);
+    const empty = controls();
+    expect(empty).toContain("google-login");
+    for (const email of ["owner@example.com", "nobody@nowhere.test", "not-an-email"]) {
+      input(el, "email", email);
+      await el.updateComplete;
+      expect(controls()).toEqual(empty);
+    }
+  });
+
+  it("still starts Google after Continue was pressed with no email", async () => {
+    const api = stubApi();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    await flush(el);
+    click(el, "continue");
+    await el.updateComplete;
+    const button = (test: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`)!;
+    expect(field(el, "email").error).toBe(t("form.email_required"));
+    expect(button("continue").disabled).toBe(true);
+    expect(button("google-login").disabled).toBe(false);
+    click(el, "google-login");
+    await flush(el);
+    expect(api.beginGoogleLogin).toHaveBeenCalledExactlyOnceWith();
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+  });
+
+  it("holds Continue while Google is starting", async () => {
+    const begin = deferred<{ authorizationUrl: string }>();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ beginGoogleLogin: vi.fn().mockReturnValue(begin.promise) }),
+      navigate: vi.fn(),
+    });
+    await flush(el);
+    input(el, "email", "owner@example.com");
+    click(el, "google-login");
+    await el.updateComplete;
+    const go = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=continue]",
+    )!;
+    expect(go.disabled).toBe(true);
+    begin.resolve({ authorizationUrl: "https://accounts.google.test/login" });
+    await flush(el);
+  });
+
+  it("does not sign in with an autofilled passkey the browser returns after Google was chosen", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const got = deferred<Credential | null>();
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(got.promise);
+    const api = stubApi();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    const { signal } = vi.mocked(navigator.credentials.get).mock.calls[0]![0]!;
+    await flush(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+    expect(signal!.aborted).toBe(true);
+    got.resolve(passkeyCredential());
+    await flush(el);
+    expect(api.passkeyAuthVerify).not.toHaveBeenCalled();
+    expect(loggedIn).not.toHaveBeenCalled();
+  });
+
+  it("does not sign in when an autofilled passkey is confirmed after Google was chosen", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const verified = deferred<{ personId: string }>();
+    const api = stubApi({ passkeyAuthVerify: vi.fn().mockReturnValue(verified.promise) });
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
+    await flush(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+    verified.resolve({ personId: "p9" });
+    await flush(el);
+    expect(loggedIn).not.toHaveBeenCalled();
+  });
+
+  it("ignores Google while the passkey page's own prompt is pending", async () => {
+    const got = deferred<Credential | null>();
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(got.promise);
+    const api = stubApi();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await flush(el);
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    await el.updateComplete;
+    click(el, "google-login");
+    await flush(el);
+    expect(api.beginGoogleLogin).not.toHaveBeenCalled();
+    got.resolve(passkeyCredential());
+    await vi.waitFor(() => expect(loggedIn).toHaveBeenCalledTimes(1));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("offers passkey autofill again, never a passkey prompt, when Google cannot be started", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockImplementation(never);
+    const api = stubApi({
+      beginGoogleLogin: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    await flush(el);
+    click(el, "google-login");
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(2));
+    for (const [request] of vi.mocked(navigator.credentials.get).mock.calls)
+      expect(request).toEqual(expect.objectContaining({ mediation: "conditional" }));
+    expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
+    expect(field(el, "email")).not.toBeNull();
+  });
+
+  it("with Remember ticked, carries the consent to Google without an email", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi(),
+      navigate: vi.fn(),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=remember-email]")!.click();
+    click(el, "google-login");
+    await flush(el);
+    expect(JSON.parse(sessionStorage.getItem("waitron-google-login-preference")!)).toEqual({
+      expiresAt: expect.any(Number),
+    });
+  });
+
+  it("with Remember unticked, carries no consent and forgets the saved shortcut", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi(),
+      navigate: vi.fn(),
+    });
+    await flush(el);
+    localStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "old@example.com", method: "passkey" }),
+    );
+    sessionStorage.setItem(
+      "waitron-google-login-preference",
+      JSON.stringify({ expiresAt: Date.now() + 60_000 }),
+    );
+    click(el, "google-login");
+    await flush(el);
+    expect(sessionStorage.getItem("waitron-google-login-preference")).toBeNull();
+    expect(localStorage.getItem("waitron-login-preference")).toBeNull();
+  });
 });
 
 describe("login-screen: a passkey Waitron no longer holds", () => {

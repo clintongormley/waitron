@@ -566,6 +566,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 9. **Operator utilities** — `backup-screen.ts`, `diagnostics-screen.ts`, `email-screen.ts`.
 10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
     (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
+    A191 (2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
+    steps put their one primary button outside the action row (design-system.md, login section).
 
 The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
 shared components. Whether they follow in this pass or later is open — decide it before the
@@ -946,28 +948,25 @@ profile accepted a saved test password through `navigator.credentials.store`, bu
 it after a reload or restart under automation; that saved-password visual check remains unverified.
 
 **The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
-owner 2026-10-02) — OPEN.** The owner, on the passkey page: _"this page also looks a bit messy"_.
-**Decided (owner, 2026-10-02, layout A of three mockups, then "i love it" to the version with more
-providers):** this replaces C96's arrangement (one bulleted list, Log in on its first row).
-
-- every step of `apps/dashboard/src/screens/login-screen.ts` sits in a white card with the Waitron
-  logo above the heading, as the setup wizard's steps do;
-- the method the page is for is the one primary button, full width;
-- under an "or" divider, every other way in is a full-width outlined button with its own icon or
-  logo ("Use your password", "Log in with passkey", "Continue with Google");
-- "I've forgotten my password" is a small link under the password field on the password page,
-  and appears nowhere else among the methods — not on the passkey page (owner: "we probably don't
-  need it on the passkey page");
-- the chosen email is the read-only field of A189;
-- if the list of other ways in passes three or four, the outside providers (Google and later
-  others) may become a row of logo-only buttons.
-
-**Also wanted, if it holds:** "Continue with Google" on the first page, under the email field's
-Continue, since it does not need the email. Today Google is offered only after the email step,
-when the venue has it set up (`googleConfigured`). Check whether the Google sign-in needs the email
-first; if it does, leave it where it is and say so in the PR. The login rules in CLAUDE.md §3 stand:
-the first page shows the same choices to everyone. Sign in with Apple does not exist; the mockup
-only showed where it would go.
+owner 2026-10-02) — DONE.** The owner, on the passkey page: _"this page also looks a bit messy"_;
+layout A of three mockups was approved ("i love it"), replacing C96's single bulleted list. Every
+step of `apps/dashboard/src/screens/login-screen.ts` now sits in a card drawn like the setup
+wizard's, with the Waitron logo first (decorative there: the banner above already names Waitron, so
+the page shows the logo twice). On the email, password, passkey and Google pages the page's own way
+in is one full-width blue button, with the form's message on its own line directly above it; every
+other way in follows under an "or" line as a full-width outlined button with an icon — a key for
+"Use your password", a person with a key for "Log in with passkey", and Google's four-colour "G" for
+"Continue with Google". "I've forgotten my password" is a small link at the right under the password
+field, on the password page only. On the code step the code switch is the same kind of link under
+its field, the heading comes before the email, and Back and Log in are the ordinary action row. The
+chosen email is still A189's read-only field. No page has more than two other ways in, so the
+"row of logo-only buttons" fallback was not needed. **"Continue with Google" is also on the first
+page**, when the venue has Google set up: that holds because starting a Google sign-in takes no
+email (`POST /management-api/google/login` reads no body, `apps/server/src/management-api.ts:525`),
+and whether it shows depends only on the venue's settings, so the first page still shows everyone
+the same choices. The Google "G" (`apps/dashboard/src/assets/google-g.svg`) is the commonly
+reproduced four-colour mark; neither the drawing nor Google's branding terms were checked against
+Google's own sources. Sign in with Apple does not exist; the mockup only showed where it would go.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
 2026-10-02) — OPEN.** The owner, on two screenshots of the Modifiers screen's "Search extras
