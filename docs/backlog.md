@@ -366,7 +366,7 @@ the 2026-09-30 folders design; what remains:
   path that publishes a menu BEFORE the import runs fails the import's commit on the append-only
   `menu_versions` → `catalogues` key. `apps/dashboard/src/widgets/variant-form.test.ts` failed once
   in a local dashboard coverage run; which of its tests failed was not recorded. The one
-  intermittent failure in that file whose cause is known, the Escape test, is fixed (A220f; see the
+  intermittent failure in that file whose cause is known, the Escape test, is fixed (A220f, #1075; see the
   flaky-test entry); whether it was this one is not known.
 - **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).**
   The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
@@ -2519,7 +2519,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
       presses, Chromium 153 let every Escape be refused, and a dialog without `closedby` passed the
       repeated-Escape tests. The variant form's "saves on Enter and cancels on Escape from a focused field",
-      once listed here with it, is fixed (A220f; see the flaky-test entry). **Next action:** decide
+      once listed here with it, is fixed (A220f, #1075; see the flaky-test entry). **Next action:** decide
       whether "closes on a real Escape press" should wait for its `wt-close` instead, keeping the
       timer for the stays-open tests.
     - The till's "Amount off (€)" writes the euro sign into the label rather than taking the
@@ -5164,7 +5164,7 @@ approved.
   code change. The original log and screenshot were kept; the cause is unexplained, so retain them
   again on the next sighting rather than re-running to green.
 - **A sixth: `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and cancels on
-  Escape from a focused field" — FIXED (A220f).** Seen in CI 2026-09-20 on #469, failing at
+  Escape from a focused field" — FIXED (A220f, #1075).** Seen in CI 2026-09-20 on #469, failing at
   `expect(cancel).toHaveBeenCalledTimes(1)`. Cause, measured 2026-10-03 with a throwaway probe that
   repeated the test's own Enter-then-Escape sequence 150 times: when `userEvent.keyboard("{Escape}")`
   resolved, the native dialog was already shut every time, but in 13 of 150 its `close` event — which
