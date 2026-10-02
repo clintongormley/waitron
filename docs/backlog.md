@@ -3771,7 +3771,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     - **The translations need a native or official check before go-live.** Apart from the Catalan
       «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the
       table was checked against a terminology source. The owner landed it as is on 2026-10-02
-      ("land, review words later"); the follow-up (lane E's C125s) was then parked by the owner on
+      ("land, review words later"); the follow-up (C125, below) was then parked by the owner on
       2026-10-02 ("save the full translations for much later").
     - The provisioning command (`waitron-provision`) and the configuration import can still store
       two languages, or one no pack offers; the first entry is what prints. Neither holds Catalonia
@@ -3801,6 +3801,24 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
   flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
   `sale.empty_basket`.
+- **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
+  four (C125, owner 2026-10-02) — PARKED by the owner (2026-10-02: "save the full translations for
+  much later"); taken out of the campaign queues the same day.** Asked for on C113's question
+  ("Land, review words later, and add full translations for catalán, valenciano, and gallego";
+  "Receipt + whole app"; Basque: "Treat it like the others"). Nothing was written: the
+  `docs/regional-languages` branch holds no commit and no draft. When it is picked up, the first
+  step is a spec and plan, ending with the owner's choices:
+  - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque checked against an
+    official or authoritative source (for example Termcat, the Acadèmia Valenciana de la Llengua,
+    the Real Academia Galega or Xunta terminology, Euskaltzaindia or Euskalterm), each with a
+    provenance row quoting the source; and Valencian as its own receipt language — which locations
+    may or must use it (provinces 03, 12 and 46), what the law requires there, with sources, and
+    which printed words differ from Catalan.
+  - **Whole app:** the dashboard, the till and setup offered in all four beside English and
+    Spanish — how strings are held today and every place that pins the list of interface
+    languages (language choosers, `Accept-Language` matching, tests); how translations are
+    produced and checked, and what shows when one is missing; whether Valencian is its own
+    interface language or a variant; and an order of work that keeps `main` green.
 
 ### A9. Product depth — after the primary works
 
