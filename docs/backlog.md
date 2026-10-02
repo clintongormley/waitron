@@ -2848,7 +2848,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
       Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
       `cash.drawer`, so its cases cannot tell which of those it reads.
-    - **Done by C132 (2026-10-02): a credit note's line names the invoice line it reverses.**
+    - **Done by C132 (landed as #1060, 2026-10-03): a credit note's line names the invoice line it reverses.**
       `sale_lines.corrects_line_id` (core migration `0070_sale_line_corrects`, a foreign key to
       `sale_lines.id`) holds, on a corrective invoice's line, the original line it reverses or
       adjusts; it is null on an ordinary sale's line, on a substitution's, and on a partial
