@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { FEED_BEFORE_CUT, columnsFor, type EscSetting } from "@waitron/printing";
-import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
+import {
+  arrangeTicketItems,
+  crossRefText,
+  formatCorrectionSlip,
+  formatKitchenTicket,
+} from "./kitchen-ticket.js";
 import type { KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 
@@ -13,8 +18,74 @@ const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
 const KITCHEN_80: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 const KITCHEN_58: EscSetting = { paperWidth: "58mm", resolution: "180dpi" };
 
+describe("crossRefText", () => {
+  it.each([
+    ["en-GB", "with CHIPS from Fryer", "for BURG at Grill", "for AGUA, no preparation"],
+    ["es-ES", "con CHIPS de Fryer", "para BURG en Grill", "para AGUA, sin preparación"],
+    ["fr-FR", "with CHIPS from Fryer", "for BURG at Grill", "for AGUA, no preparation"],
+  ])("words both references for %s", (locale, withText, forText, unpreparedText) => {
+    expect(crossRefText({ kind: "with", name: "CHIPS", stationName: "Fryer" }, locale)).toBe(
+      withText,
+    );
+    expect(crossRefText({ kind: "for", name: "BURG", stationName: "Grill" }, locale)).toBe(forText);
+    expect(crossRefText({ kind: "for", name: "AGUA", stationName: null }, locale)).toBe(
+      unpreparedText,
+    );
+  });
+});
+
 describe("formatKitchenTicket", () => {
   describe("station scope", () => {
+    it("prints a modifier, cross-reference, then note beneath the dish", () => {
+      const paper = decodeTicket(
+        formatKitchenTicket(
+          {
+            scope: "station",
+            stationName: "Grill",
+            tableLabel: "Mesa 1",
+            orderNumber: "A-1",
+            firedAt: new Date(2026, 7, 17, 9, 5),
+            items: [
+              {
+                qty: 1,
+                name: "BURG",
+                modifiers: ["Cheese"],
+                crossRefs: ["with CHIPS from Fryer"],
+                note: "well done",
+              },
+            ],
+          },
+          KITCHEN_80,
+        ),
+      );
+      expect(
+        printedLines(
+          formatKitchenTicket(
+            {
+              scope: "station",
+              stationName: "Grill",
+              tableLabel: "Mesa 1",
+              orderNumber: "A-1",
+              firedAt: new Date(2026, 7, 17, 9, 5),
+              items: [
+                {
+                  qty: 1,
+                  name: "BURG",
+                  modifiers: ["Cheese"],
+                  crossRefs: ["with CHIPS from Fryer"],
+                  note: "well done",
+                },
+              ],
+            },
+            KITCHEN_80,
+          ),
+        ),
+      ).toEqual(
+        expect.arrayContaining(["  + Cheese", "  > with CHIPS from Fryer", "  * well done"]),
+      );
+      expect(paper.indexOf("+ Cheese")).toBeLessThan(paper.indexOf("> with CHIPS from Fryer"));
+      expect(paper.indexOf("> with CHIPS from Fryer")).toBeLessThan(paper.indexOf("* well done"));
+    });
     it("prints the station name, table/order/time, each qty x name line, and ends in a cut", () => {
       const bytes = formatKitchenTicket(
         {
@@ -690,6 +761,20 @@ describe("the reprint mark and a party's group numbers", () => {
 });
 
 describe("arrangeTicketItems (D14)", () => {
+  it("keeps different cross-references separate and merges identical ones", () => {
+    const fryer: KitchenTicketItem = { qty: 1, name: "BURG", crossRefs: ["with CHIPS from Fryer"] };
+    const kitchen: KitchenTicketItem = {
+      qty: 1,
+      name: "BURG",
+      crossRefs: ["with CHIPS from Kitchen"],
+    };
+    const plain: KitchenTicketItem = { qty: 1, name: "BURG" };
+    expect(arrangeTicketItems([fryer, kitchen], "combined")).toHaveLength(2);
+    expect(arrangeTicketItems([fryer, plain], "combined")).toHaveLength(2);
+    expect(arrangeTicketItems([fryer, { ...fryer }], "combined")).toEqual([
+      { ...fryer, qty: "2.000" },
+    ]);
+  });
   const burger = { qty: "1.000", name: "Burger", modifiers: ["Cheese"] };
 
   // Fails if identical entries stop merging, or the quantities are not added.

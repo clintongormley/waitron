@@ -13,8 +13,7 @@ import { stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
 /** The printed header of an `order`-scope ticket. */
 const ORDER_HEADER = "PASE";
 
-/** One fired line. `modifiers` print as indented `+ <name>` sub-lines beneath the dish, so a dish and
- *  its modifiers read as one kitchen item. */
+/** One fired line. Modifiers and cross-references print beneath the item. */
 export interface KitchenTicketItem {
   qty: number | string;
   unit?: string;
@@ -22,6 +21,8 @@ export interface KitchenTicketItem {
   /** The free-text kitchen note, printed as an indented `* <note>` sub-line beneath the dish. */
   note?: string;
   modifiers?: string[];
+  /** Already-worded links to lines at other stations, printed after modifiers and before the note. */
+  crossRefs?: string[];
   /** The position of the party's group the item fired in; absent for an item in no group. */
   group?: number;
   /** Printed as sold, never merged or split. */
@@ -76,6 +77,7 @@ function entryKey(item: KitchenTicketItem): string {
     item.note === undefined ? "" : sanitizeNote(item.note),
     item.group ?? null,
     item.modifiers ?? [],
+    item.crossRefs ?? [],
   ]);
 }
 
@@ -153,6 +155,7 @@ function emitItem(
   const prefix = `${sign}${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
   text(`${sign}${itemLine(item)}`, prepareText(prefix).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
+  for (const ref of item.crossRefs ?? []) text(`  > ${ref}`, 4);
   if (item.note !== undefined && item.note !== "") {
     // A note of nothing but control bytes sanitises to "" and is skipped.
     const note = sanitizeNote(item.note);
@@ -250,6 +253,20 @@ const EXTRA_CANCELLED_WORDS = {
   en: { changed: "CHANGED", cancel: "CANCEL:" },
   es: { changed: "CAMBIADO", cancel: "QUITAR:" },
 } as const;
+
+export type KitchenCrossRef =
+  | { kind: "with"; name: string; stationName: string }
+  | { kind: "for"; name: string; stationName: string | null };
+
+/** Station names print as stored; Spanish locales use Spanish connector words. */
+export function crossRefText(ref: KitchenCrossRef, locale: string): string {
+  const spanish = ticketLanguage(locale) === "es";
+  if (ref.kind === "with")
+    return `${spanish ? "con" : "with"} ${ref.name} ${spanish ? "de" : "from"} ${ref.stationName}`;
+  if (ref.stationName === null)
+    return `${spanish ? "para" : "for"} ${ref.name}, ${spanish ? "sin preparación" : "no preparation"}`;
+  return `${spanish ? "para" : "for"} ${ref.name} ${spanish ? "en" : "at"} ${ref.stationName}`;
+}
 
 const ALSO_ON_ORDER_WORDS = {
   en: { heading: "Also on this order (not for this station)", held: "(on hold)" },

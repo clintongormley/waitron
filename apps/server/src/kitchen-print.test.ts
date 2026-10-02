@@ -30,7 +30,14 @@ import { thousandthsToDecimal } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
-import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
+import {
+  listStationNotices,
+  writeKitchenTicketGrouping,
+  writePrintHeldWork,
+  setStationFallback,
+  setStationToday,
+} from "@waitron/venue-service";
+import { placeGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,
@@ -58,6 +65,7 @@ import {
   createOfferedOrder,
   addExtras,
   useSplitExtrasDb,
+  setupSplitExtrasVenue,
 } from "./testing/split-extras-venue.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
@@ -1039,7 +1047,194 @@ describe("a dish sold by the piece prints no unit", () => {
   );
 });
 
-describe("ordering modifiers on the kitchen ticket", () => {
+describe("dish extras on kitchen tickets", () => {
+  it("prints split chips once on Fryer paper and cross-references both station and PASE paper", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const { cfg, products, lists, printers } = venue;
+    const jobs = await asApp(cfg, async (tx) => {
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [
+            {
+              listId: lists.burger,
+              picks: [
+                { productId: products.chips, quantity: 1 },
+                { productId: products.cheese, quantity: 1 },
+              ],
+            },
+          ],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+    const paper = (printerId: string) =>
+      decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
+    expect(jobs.map((job) => job.printerId)).toEqual(
+      expect.arrayContaining([printers.grill, printers.fryer, printers.pass]),
+    );
+    expect(paper(printers.grill)).toContain("1.000 x BURG");
+    expect(paper(printers.grill)).toContain("+ Cheese");
+    expect(paper(printers.grill)).toContain("> con CHIPS de Fryer");
+    expect(paper(printers.grill)).not.toContain("+ Chips");
+    expect(paper(printers.fryer)).toContain("1.000 x CHIPS");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.fryer)!.payload).filter((line) =>
+        line.includes("x CHIPS"),
+      ),
+    ).toHaveLength(1);
+    expect(paper(printers.fryer)).toContain("> para BURG en Grill");
+    expect(paper(printers.pass)).toContain("> con CHIPS de Fryer");
+    expect(paper(printers.pass)).toContain("> para BURG en Grill");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.pass)!.payload).filter((line) =>
+        line.includes("x CHIPS"),
+      ),
+    ).toHaveLength(1);
+    for (const job of jobs) {
+      expect(decodeTicket(job.payload)).not.toContain("Patatas fritas");
+      expect(decodeTicket(job.payload)).not.toContain("Hamburguesa clásica");
+    }
+  });
+
+  it("keeps an unclaimed cheese as a modifier without a Fryer job", async () => {
+    const { cfg, products, lists, printers } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [{ listId: lists.burger, picks: [{ productId: products.cheese, quantity: 1 }] }],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+    expect(jobs.some((job) => job.printerId === printers.fryer)).toBe(false);
+    const paper = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
+    expect(paper).toContain("+ Cheese");
+    expect(paper).not.toContain("  > ");
+  });
+
+  it("names no preparation for a water's split chips", async () => {
+    const { cfg, products, lists, printers } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.water,
+          quantity: "1",
+          extras: [{ listId: lists.water, picks: [{ productId: products.chips, quantity: 1 }] }],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+    expect(jobs.some((job) => job.printerId === printers.grill)).toBe(false);
+    expect(decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload)).toContain(
+      "> para AGUA, sin preparación",
+    );
+  });
+
+  it("keeps the Fryer and Kitchen references on separate burger lines in a reprint", async () => {
+    const { cfg, products, lists, printers, stations, tables, party } =
+      await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const pick = {
+        menuItemId: tables.offerFor(products.burger),
+        quantity: "1",
+        extras: [{ listId: lists.burger, picks: [{ productId: products.chips, quantity: 1 }] }],
+      };
+      const orderId = party.tabId;
+      await addTabRound(tx, cfg, orderId, [pick]);
+      await setStationFallback(tx, cfg, stations.fryer, stations.kitchen);
+      await setStationToday(tx, cfg, stations.fryer, "closed", new Date());
+      await addTabRound(tx, cfg, orderId, [pick]);
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await reprintOrderTickets(tx, cfg, orderId);
+      return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+    });
+    const grill = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
+    expect(grill).toContain("> con CHIPS de Fryer");
+    expect(grill).toContain("> con CHIPS de Kitchen");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.grill)!.payload).filter((line) =>
+        line.includes("x BURG"),
+      ),
+    ).toHaveLength(2);
+    expect(grill).not.toContain("2.000 x BURG");
+  });
+
+  it("keeps both references on the burger and chips VOID slips", async () => {
+    const { cfg, products, lists, printers } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const orderId = await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [{ listId: lists.burger, picks: [{ productId: products.chips, quantity: 1 }] }],
+        },
+      ]);
+      const records = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        records.map((record) => ({ ...record, quantity: 1000, wasStarted: false })),
+        "VOID",
+      );
+      return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+    });
+    expect(decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload)).toContain(
+      "> con CHIPS de Fryer",
+    );
+    expect(decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload)).toContain(
+      "> para BURG en Grill",
+    );
+  });
+
+  it("prints held chips once at Fryer and only as a reference at Grill", async () => {
+    const { cfg, products, lists, printers, party, tables } = await setupSplitExtrasVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      await writePrintHeldWork(tx, true);
+      await placeGroups(tx, cfg, party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              {
+                menuItemId: tables.offerFor(products.burger),
+                quantity: "1",
+                extras: [
+                  { listId: lists.burger, picks: [{ productId: products.chips, quantity: 1 }] },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      return printJobsFor(tx);
+    });
+    const grill = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
+    const fryer = decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload);
+    expect(grill).toContain("*** HOLD ***");
+    expect(grill).toContain("> con CHIPS de Fryer");
+    expect(grill).not.toContain("+ Chips");
+    expect(fryer).toContain("*** HOLD ***");
+    expect(
+      printedLines(jobs.find((job) => job.printerId === printers.fryer)!.payload).filter((line) =>
+        line.includes("x CHIPS"),
+      ),
+    ).toHaveLength(1);
+    expect(fryer).toContain("> para BURG en Grill");
+  });
+
   it("keeps two unclaimed extras on their dish's one kitchen record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
