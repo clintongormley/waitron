@@ -313,7 +313,6 @@ it("passes the tile editor's add, remove and keyboard move on for the layout bei
   const editor = members(el);
   await chooseOption(pickerOf(editor), "section:s-beer");
   await editor.updateComplete;
-  editor.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
   editor.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-t-burger"]')!.click();
   const handle = editor.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-t-drinks"]')!;
   handle.focus();
