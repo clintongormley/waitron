@@ -73,8 +73,8 @@
      quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
-  /* Wide enough for four digits, and never below --wt-tap-min: the number box is what a
-     wt-number-stepper hands focus to. */
+  /* The narrowest a wt-number-stepper's box gets (a longer label widens it): wide enough for four
+     digits, and never below --wt-tap-min, because the box is what the stepper hands focus to. */
   --wt-stepper-field-width: 64px;
   /* A stepper box whose blank value reads as a word ("No limit", "Sin límite" at
      --wt-font-size-md), with its 8px padding on each side. */

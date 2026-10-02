@@ -830,8 +830,9 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
   languages; a table with no Add action keeps just the sentence.
 
-**Form fields after A178 (#1010 to #1019).** Queued: A178g (a stepper's box widens to fit its
-label) and A178h ("Each" drawn as a normal choice), both in lane A's queue. **Seen while building,
+**Form fields after A178 (#1010 to #1019).** Done: A178g, a stepper's box widens to fit its
+label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
+cuts the label. Queued: A178h ("Each" drawn as a normal choice), in lane A's queue. **Seen while building,
 not changed:**
 
 - a blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is
@@ -848,6 +849,11 @@ not changed:**
   kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`,
   which a field that always holds a value never shows, so only screen readers read them while the
   two switches beside them keep visible lines.
+
+Seen in A178g's LOOK, not changed and not checked against `main` before it (screenshots kept
+outside the repository): at 390px the extras list form's item table runs past the dialog's edge,
+its headings cut ("Preselecc…"); and the venue operations "Make available" dialog draws its
+"Default" checkbox as a large plain square.
 
 **Text size after A179 (#988).** The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
 system font, for the dashboard, setup and the till (owner: _"yes for now, then we can revisit

@@ -207,7 +207,7 @@ tap-target suite.
 side, each a `--wt-tap-min` square vertically centred on the box; the box between them is an
 ordinary field whose label floats above the number. The box keeps today's width tokens
 (`--wt-stepper-field-width`, `--wt-stepper-field-width-wide`), so a label longer than the box is cut
-with an ellipsis (the whole label stays the accessible name). Section 12 asks. A compact field (`hide-label`) is
+with an ellipsis (the whole label stays the accessible name). Section 12 asks. (2026-10-02: the owner chose the alternative afterwards — the box now widens to fit its label; A178g, design-system.md's `wt-number-stepper` row.) A compact field (`hide-label`) is
 exactly `--wt-tap-min` tall. `wt-textarea` is at least `--wt-field-height` tall and grows with its
 `rows`. Every field keeps `max-width: var(--wt-field-max-width)` on its host.
 
@@ -542,7 +542,8 @@ passes.
 7. **A173 becomes moot and A175 narrows** to the table's own search box (section 9.6).
 8. **Arrow keys wrap** in an open dropdown, where today they stop at the ends (section 7.2).
 9. **The stepper's − and + sit outside the field box**, and a label longer than the box is cut
-   (section 5.5). Alternative: the box widens to its label.
+   (section 5.5). Alternative: the box widens to its label. (2026-10-02: the owner chose the
+   alternative; A178g.)
 
 ## 13. Not in this change
 

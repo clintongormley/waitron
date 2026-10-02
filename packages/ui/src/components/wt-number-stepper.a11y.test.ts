@@ -83,6 +83,19 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  test("a long label, its box widened to fit it", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Borrar las copias después de (días)" name="days" value="30" required></wt-number-stepper>',
+      theme,
+    );
+    host.style.width = "600px";
+    await expectNoA11yViolations(host);
+    const text = host
+      .querySelector("wt-number-stepper")!
+      .shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+    expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+  });
+
   test("disabled", async () => {
     await mountThemed(
       '<wt-number-stepper label="Max quantity" name="q" value="2" disabled></wt-number-stepper>',
@@ -114,12 +127,17 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  test("a label longer than the box", async () => {
+  test("a label cut in a row too narrow for it", async () => {
     await mountThemed(
       '<wt-number-stepper label="Maximum number of portions in an order" name="max" value="3"></wt-number-stepper>',
       theme,
     );
+    host.style.width = "220px";
     await expectNoA11yViolations(host);
+    const text = host
+      .querySelector("wt-number-stepper")!
+      .shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+    expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
   });
 
   test("hide-label", async () => {
