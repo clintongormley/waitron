@@ -338,7 +338,6 @@ export class TillTicketView extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
 
-      /* The QR block opens the invoice, set apart from what follows. */
       .qr-block {
         margin: 0 0 var(--wt-space-3);
         padding: 0 0 var(--wt-space-3);
