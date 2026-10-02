@@ -835,11 +835,9 @@ export class ProductEditor extends LitElement {
     // Storage inherits a variant's description as one value across every language, so a parent's
     // text is a hint only while the variant describes itself in none of them.
     const hintSource =
-      this.inherited === null
+      this.inherited === null || described.length
         ? this.draft.description
-        : described.length
-          ? null
-          : this.inherited.description;
+        : this.inherited.description;
     const descriptionHint = (locale: string) => {
       if (!hintSource || (this.draft.description?.[locale] ?? "").trim()) return "";
       return hintSource[locale]?.trim()
