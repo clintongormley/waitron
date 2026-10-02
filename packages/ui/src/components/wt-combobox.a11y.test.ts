@@ -33,9 +33,9 @@ const TAGS = [
 ];
 
 const DESCRIBED: ComboboxOption[] = [
-  { value: "public", label: "Público", description: "Se puede pedir por sí solo." },
-  { value: "staff", label: "Solo personal", description: "Solo el personal puede pedirlo." },
-  { value: "plain", label: "Sin descripción" },
+  { value: "public", label: "Public", description: "Can be ordered on its own." },
+  { value: "staff", label: "Staff only", description: "Only staff can order it." },
+  { value: "plain", label: "Plain" },
 ];
 
 describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme) => {
@@ -139,7 +139,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("open, with options described by a second line", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Pedido por separado" search="never" value="staff"></wt-combobox>',
+      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
       theme,
       DESCRIBED,
     );
@@ -152,7 +152,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   // from the panel's.
   test("open, with the cursor over a described row", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Pedido por separado" search="never" value="staff"></wt-combobox>',
+      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
       theme,
       DESCRIBED,
     );
@@ -166,7 +166,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("opened from the keyboard, with a described row active", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Pedido por separado" search="never" value="staff"></wt-combobox>',
+      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = DESCRIBED;
