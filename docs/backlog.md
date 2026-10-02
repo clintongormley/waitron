@@ -701,7 +701,7 @@ the heading only while closed. The Options and Extras editors' "Customer and kit
 names" line lists the names themselves (`ES … · EN … · Kitchen …`) instead of a count. The rule in
 `docs/developers/design-system.md` is rewritten to match.
 
-**The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — DONE (#PR).**
+**The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — DONE (#1040).**
 In the editor for one options list (`apps/dashboard/src/widgets/option-list-form.ts`), an option's
 name in its row is now a button, drawn as the name's text, that opens its "Edit option" window; the
 Default radio button and the row menu keep their own clicks, and closing a window the name opened
@@ -1029,7 +1029,7 @@ controls, and Name taking the rest. Same check on the extras list form's table. 
 of `wt-data-table`'s Actions column; one approach for both is welcome.
 
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
-(#PR):** the option window no longer folds its names at all, so they show on open on Add and Edit;
+(#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;
 "can still be collapsed" no longer applies, because nothing folds. The
 owner, on screenshots of "Add option": _"on the edit/add options page start with the names block
 expanded as there is very little else on this page"_. The single option's form
@@ -1228,8 +1228,8 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033), A177 (#1037) and A170 (#PR) are done; next A171 and A172, built in the
-new style rather than restyled twice.
+A169 (#1026), A176 (#1033), A177 (#1037) and A170 (#1040) are done; next A171 and A172, built in
+the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
