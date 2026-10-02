@@ -2540,9 +2540,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       `apps/server/src/cancel-invoiced-order.test.ts`, "cancelling an invoiced order on a
       supervisor's PIN". No till screen sends the PIN yet: that is B32's.
     - **No till screen offers the cancel yet.** A "Cancel and credit" action on an invoiced, unpaid
-      bill, shown only to someone allowed to correct a sale (since B33, also to anyone else, asking for
-      the PIN of someone who holds it), is queued as lane B's B32 (owner,
-      2026-10-02 ~12:05). The PIN prompt's list of who may approve it is
+      bill, offered to anyone signed in — someone without `sale.rectify` is asked for the PIN of
+      someone who holds it — is queued as lane B's B32 (owner, 2026-10-02 ~12:05). The PIN
+      prompt's list of who may approve it is
       `GET /api/cancel-credit-authorizers` (B33, owner 2026-10-02 ~16:50): the active holders of
       `sale.rectify`, by id and name, for any signed-in operator, like the drawer's, refund's and
       unpaid departure's lists. Every role holding `sale.rectify` today also holds `sale.refund`,

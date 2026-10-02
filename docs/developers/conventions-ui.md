@@ -297,12 +297,14 @@ right PIN whose role is too low (`apps/server/src/adjustments-apply.ts`). Guards
 `promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and
 `till-api.receipt.test.ts` (a drawer override) — weaker than the set looks:
 `GET /management-api/membership` (whose suite, `management-api.membership.test.ts`, tries a wrong
-password and a wrong code, not every cause), the adjustment approver
-(`apps/server/src/adjustments-apply.ts`), the refund override and the manual-refund confirmer
-(`apps/server/src/bill-refunds.ts`) rest on identity's cases alone; the unpaid-departure override
-(`apps/server/src/unpaid-departure.ts`) and the cancel override (`apps/server/src/working-order.ts`)
-have suites that try a wrong PIN (and, for the cancel, a malformed override), not an unknown,
-suspended or pending person; and a new sign-in route is seen by none of them. Built in C95, #930.
+password and a wrong code), the adjustment approver (`apps/server/src/adjustments-apply.ts`, tried
+in `adjustments-api.test.ts`), the refund override and the manual-refund confirmer
+(`apps/server/src/bill-refunds.ts`, both tried in `bill-payments-api.test.ts`), the
+unpaid-departure override (`apps/server/src/unpaid-departure.ts`) and the cancel override
+(`apps/server/src/working-order.ts`) have suites that try a wrong password or PIN (and, for the
+membership route, the adjustment approver and the cancel, a malformed one), not an unknown,
+suspended or pending person, so for those causes they rest on identity's cases alone; and a new
+sign-in route is seen by none of them. Built in C95, #930.
 
 **UI primitives in `packages/ui`**
 
