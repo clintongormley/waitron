@@ -2295,8 +2295,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **No till screen offers the cancel yet.** A "Cancel and credit" action on an invoiced, unpaid
       bill, shown only to someone allowed to correct a sale, is queued as lane B's B32 (owner,
       2026-10-02 ~12:05).
-    - **The credit note's line is shown as a credit line, not as the reversed dish line** — changing
-      that is queued as lane C's C132 (owner, 2026-10-02).
+    - **A credit note's lines do not record which invoice line each one reverses** — no column
+      holds that link, so a credit note cannot be traced back line by line. Storing it on every
+      corrective line `recordCorrection` writes is queued as lane C's C132 (owner, 2026-10-02).
     - **A fully credited bill's original invoice can still be reprinted**, from the till and from
       the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
       not decided.
