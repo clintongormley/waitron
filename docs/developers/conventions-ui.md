@@ -365,7 +365,8 @@ the test `a restored filter's dropdown shows the restored choice` in
 
 One that avoids it, marking each mapped option `.selected` and binding no `.value` on the `<select>`
 at all, which is the shape this rule recommends: `wt-data-table`'s filter dropdown
-(`packages/ui/src/components/wt-data-table.ts`). Nothing guards the rule.
+(`packages/ui/src/components/wt-data-table.ts`). Nothing guards the rule. _2026-10-02: A178e made
+that filter a `wt-combobox`, and no product screen draws a native `<select>` now; A178f removes this rule._
 
 **Printing and hardware**
 
