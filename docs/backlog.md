@@ -1898,7 +1898,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       one after another, so a read that hangs still delays the rest); this changed for tills too.
       Left as they were: a handheld gets no Station, Expo or Schedule button (an existing test pins
       it), and never opens the drawer.
-    - **Done (C128) — who may take a payment.** Every till or handheld payment route now also needs
+    - **Done (C128, #1031) — who may take a payment.** Every till or handheld payment route now also needs
       `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
     - **Open — the counter's pay card stays on "Tap or insert card…" after a refused reader
       payment.** Seen in a browser test on C129's branch: after `/api/pay` is refused (with
@@ -2696,8 +2696,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   remove it.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Input
-  since C128: `sale.take_payment` gates every till payment route and is held by every role, staff
-  included, chosen so nobody lost the ability to take payment; the review decides who keeps it. The list in
+  since C128 (#1031): `sale.take_payment` gates every till payment route and is held by every role,
+  staff included, chosen so nobody lost the ability to take payment; the review decides who keeps
+  it, and whether to rename it — it is the only permission whose action is two words (a reviewer
+  suggested e.g. `payment.take`). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
   `node.promote` split today (adding a machine, promoting a standby and, since #708, removing a
