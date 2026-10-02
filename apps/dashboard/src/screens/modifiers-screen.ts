@@ -118,6 +118,8 @@ export class ModifiersScreen extends LitElement {
   @state() private error: string | null = null;
   /** A null `value` is a create. */
   @state() private editing: { kind: Kind; value: ModifierList | null } | null = null;
+  /** The Add button that opened the create form, which the closing dialog hands focus back to. */
+  #addOpener: HTMLElement | null = null;
   @state() private busy = false;
   @state() private fieldErrors: Record<string, string> = {};
   @state() private deleting: Target | null = null;
@@ -300,9 +302,18 @@ export class ModifiersScreen extends LitElement {
     }
     // The write succeeded, so the editor closes BEFORE the refresh: a failed refresh is a load
     // failure, not a failed save, and a retained create form invites a duplicate submission.
+    const opener = editing.value ? null : this.#addOpener;
     this.#closeEditor();
     this.busy = false;
     await this.#load();
+    await this.updateComplete;
+    // The empty table's Add button is gone once the list it made is listed.
+    if (opener?.isConnected === false)
+      this.renderRoot
+        .querySelector<HTMLElement>(
+          `[slot="actions"] [data-test="add-${kind === "extras" ? "extra" : "option"}-list"]`,
+        )
+        ?.focus();
   }
   async #delete(): Promise<void> {
     const target = this.deleting;
@@ -558,7 +569,10 @@ export class ModifiersScreen extends LitElement {
       slot=${ifDefined(slot)}
       variant="primary"
       .disabled=${!this.locales}
-      @click=${() => this.#edit(kind, null)}
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        this.#edit(kind, null);
+      }}
       >${t(`${kind}.add`)}</wt-button
     >`;
   }

@@ -1576,6 +1576,61 @@ it("ignores a submission when no editor is open", async () => {
   expect(optionForm(el).busy).toBe(false);
 });
 
+/** Lets a closing native dialog hand focus back, which it does a task after it closes. */
+async function afterDialogCloses(el: ModifiersScreen): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await el.updateComplete;
+}
+
+it.each([
+  ["extras", "extra-lists", "add-extra-list", extraForm, "listExtraLists", extraList],
+  ["options", "option-lists", "add-option-list", optionForm, "listOptionLists", optionList],
+] as const)(
+  "returns focus to the %s tab's Add button after the first list is made from the empty table",
+  async (tab, tableId, addButton, formOf, list, made) => {
+    const client = api({ [list]: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([made]) });
+    const el = await mount(client);
+    await selectTab(el, tab);
+    const button = el
+      .shadowRoot!.querySelector(`[data-test="${tableId}"]`)!
+      .querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    button.focus();
+    button.click();
+    await el.updateComplete;
+    const form = formOf(el);
+    submitFrom(form, tab === "extras" ? { ...extraList, items: [] } : { ...optionList });
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    await vi.waitFor(() => expect(button.isConnected).toBe(false));
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector(`[slot="actions"] [data-test="${addButton}"]`),
+    );
+  },
+);
+
+it.each([
+  ["extras", "extra-lists", extraForm, "listExtraLists"],
+  ["options", "option-lists", optionForm, "listOptionLists"],
+] as const)(
+  "returns focus to the %s empty table's Add button after Cancel",
+  async (tab, tableId, formOf, list) => {
+    const el = await mount(api({ [list]: vi.fn().mockResolvedValue([]) }));
+    await selectTab(el, tab);
+    const button = el
+      .shadowRoot!.querySelector(`[data-test="${tableId}"]`)!
+      .querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    button.focus();
+    button.click();
+    await el.updateComplete;
+    const form = formOf(el);
+    form.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(button);
+  },
+);
+
 it.each([
   ["extras", "add-extra-list", extraForm, "createExtraList"],
   ["options", "add-option-list", optionForm, "createOptionList"],

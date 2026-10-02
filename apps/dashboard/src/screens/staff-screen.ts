@@ -190,6 +190,9 @@ export class StaffScreen extends LitElement {
     this.errorField = typeof field === "string" ? field : null;
   }
 
+  /** The add button that opened the create form, which the closing dialog hands focus back to. */
+  #addOpener: HTMLElement | null = null;
+
   #openForm(): void {
     this.rowAction = null;
     this.errorKey = null;
@@ -284,8 +287,13 @@ export class StaffScreen extends LitElement {
     try {
       const result = await this.api.createPerson(event.detail);
       this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+      const opener = this.#addOpener;
       this.formOpen = false;
       await this.#load();
+      await this.updateComplete;
+      // The empty table's add button is gone once the person it made is listed.
+      if (opener?.isConnected === false)
+        this.renderRoot.querySelector<HTMLElement>(".header [data-test=add]")?.focus();
     } catch (error) {
       const code = codeOf(error);
       const email = event.detail.email.trim().toLocaleLowerCase();
@@ -313,7 +321,10 @@ export class StaffScreen extends LitElement {
       variant="primary"
       data-test="add"
       slot=${ifDefined(slot)}
-      @click=${() => this.#openForm()}
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        this.#openForm();
+      }}
       >${t("staff.add_user")}</wt-button
     >`;
   }

@@ -126,6 +126,7 @@ export class CatalogueScreen extends LitElement {
   @state() private placementFailures: PlacementFailure[] = [];
   @state() private placementBusy = false;
   #editorGeneration = 0;
+  #addOpener: HTMLElement | null = null;
   #emptyAction = () => this.#renderAddProduct("empty-action");
   #linkedProduct: string | null = null;
   /** The parent the last nested category create named, to place a `category.not_found` about it. */
@@ -272,7 +273,10 @@ export class CatalogueScreen extends LitElement {
       data-test="add-product"
       slot=${ifDefined(slot)}
       ?disabled=${!locales.length || !this.units.length}
-      @click=${() => this.#openCreate()}
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        this.#openCreate();
+      }}
       >${t("catalogue.add_product")}</wt-button
     >`;
   }
@@ -471,6 +475,14 @@ export class CatalogueScreen extends LitElement {
     if (this.placing !== placing) return;
     if (failures.length) this.placementFailures = failures;
     else this.#closePlacement();
+  }
+
+  /** The Add to menus step follows a create, so its closing dialog hands focus back to the Add
+   * product that started it; the empty table's one is gone once the product it made is listed. */
+  #refocusAdd(): void {
+    if (this.#addOpener?.isConnected === false)
+      this.renderRoot.querySelector<HTMLElement>(".actions [data-test=add-product]")?.focus();
+    this.#addOpener = null;
   }
 
   #closePlacement(): void {
@@ -683,6 +695,7 @@ export class CatalogueScreen extends LitElement {
         }}
       ></dashboard-product-editor>
       <dashboard-add-to-menus
+        @wt-close=${() => this.#refocusAdd()}
         .open=${this.placing !== null}
         .busy=${this.placementBusy}
         productName=${this.placing?.name ?? ""}

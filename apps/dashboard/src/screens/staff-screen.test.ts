@@ -291,6 +291,60 @@ describe("staff-screen", () => {
     expect(form(el).open).toBe(true);
   });
 
+  /** Focuses and presses the empty table's add button, as a person's click leaves it. */
+  async function pressEmptyAdd(el: StaffScreen): Promise<HTMLElement> {
+    await list(el).updateComplete;
+    const button = list(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    button.focus();
+    button.click();
+    await el.updateComplete;
+    expect(form(el).open).toBe(true);
+    return button;
+  }
+
+  /** Lets a closing native dialog hand focus back, which it does a task after it closes. */
+  async function afterDialogCloses(el: StaffScreen): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await el.updateComplete;
+  }
+
+  it("returns focus to the header's add button after the first person is made from the empty table", async () => {
+    let rows: PersonSummary[] = [];
+    const api = stubApi({
+      listStaff: vi.fn(() => Promise.resolve(rows)),
+      createPerson: vi.fn(() => {
+        rows = people;
+        return Promise.resolve({ id: "p1", invitationSent: true });
+      }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    const button = await pressEmptyAdd(el);
+    const detail = { displayName: "Cy", role: "staff" as const, pin: "1234", email: "cy@x.com" };
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
+    );
+    await vi.waitFor(() => expect(form(el).open).toBe(false));
+    await vi.waitFor(() => expect(button.isConnected).toBe(false));
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector(".header [data-test=add]"),
+    );
+  });
+
+  it("returns focus to the empty table's add button after Cancel", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const button = await pressEmptyAdd(el);
+    form(el).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await vi.waitFor(() => expect(form(el).open).toBe(false));
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(button);
+  });
+
   it("draws no add button in the staff table once people exist", async () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
     await flush(el);

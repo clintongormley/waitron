@@ -419,6 +419,64 @@ describe("catalogue-screen", () => {
     expect((await slotted()).hasAttribute("disabled")).toBe(false);
   });
 
+  /** Focuses and presses the empty product table's Add product, as a person's click leaves it. */
+  async function pressEmptyAdd(el: CatalogueScreen): Promise<HTMLElement> {
+    const button = (await productTable(el)).querySelector<HTMLElement>(
+      ":scope > [slot=empty-action]",
+    )!;
+    button.focus();
+    button.click();
+    await el.updateComplete;
+    expect(editor(el).open).toBe(true);
+    return button;
+  }
+
+  /** Lets a closing native dialog hand focus back, which it does a task after it closes. */
+  async function afterDialogCloses(el: CatalogueScreen): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await el.updateComplete;
+  }
+
+  it("returns focus to the header's Add product after the first product is made from the empty table", async () => {
+    let rows: Product[] = [];
+    const api = stubApi({
+      listCategories: vi.fn().mockResolvedValue([]),
+      listProducts: vi.fn((id: string) => Promise.resolve(id === "cat-a" ? rows : [])),
+      createProductEditor: vi.fn(() => {
+        // Made from the top level of an empty catalogue, so it is filed in no folder.
+        rows = products.map((product) => ({ ...product, primaryCategoryId: null }));
+        return Promise.resolve({ ...value, id: "new" });
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    const button = await pressEmptyAdd(el);
+    emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
+    await vi.waitFor(() => expect(step(el).open).toBe(true));
+    await vi.waitFor(() => expect(button.isConnected).toBe(false));
+    step(el).shadowRoot!.querySelector<HTMLElement>('[data-test="skip"]')!.click();
+    await vi.waitFor(() => expect(step(el).open).toBe(false));
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector(".actions [data-test=add-product]"),
+    );
+  });
+
+  it("returns focus to the empty table's Add product after Cancel", async () => {
+    const api = stubApi({
+      listCategories: vi.fn().mockResolvedValue([]),
+      listProducts: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    const button = await pressEmptyAdd(el);
+    emit(editor(el), "wt-cancel", {});
+    await vi.waitFor(() => expect(editor(el).open).toBe(false));
+    await afterDialogCloses(el);
+    expect(button.matches(":focus")).toBe(true);
+  });
+
   it("draws no Add product button in the product table once it lists something", async () => {
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
       api: stubApi(),

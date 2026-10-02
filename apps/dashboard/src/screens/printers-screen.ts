@@ -586,6 +586,7 @@ export class PrintersScreen extends LitElement {
   #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
+  #addOpener?: HTMLElement;
   /** A retained printer Add again switched on so its calibration can print; closing the wizard
    * without saving switches it off again. */
   #readdingId?: string;
@@ -1786,7 +1787,10 @@ export class PrintersScreen extends LitElement {
       data-test="new-agent-modal"
       heading=${t("printers.add_agent")}
       .open=${true}
-      @wt-close=${() => this.#stopAgentModal()}
+      @wt-close=${() => {
+        this.#stopAgentModal();
+        this.#refocusAdd("open-add-agent");
+      }}
     >
       ${this.#renderRefreshError()}
       <p class="hint">${t("printers.agent_setup_hint")}</p>
@@ -2185,7 +2189,10 @@ export class PrintersScreen extends LitElement {
       slot=${ifDefined(slot)}
       variant="primary"
       data-test="open-add-agent"
-      @click=${() => this.#openAgentModal()}
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        this.#openAgentModal();
+      }}
       >${t("printers.add_agent")}</wt-button
     >`;
   }
@@ -2196,7 +2203,10 @@ export class PrintersScreen extends LitElement {
       slot=${ifDefined(slot)}
       variant="primary"
       data-test="open-add-printer"
-      @click=${() => this.#openAddPrinter()}
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        this.#openAddPrinter();
+      }}
       >${t("printers.add_printer")}</wt-button
     >`;
   }
@@ -2340,6 +2350,17 @@ export class PrintersScreen extends LitElement {
       : undefined;
   }
 
+  /** A closing dialog hands focus back to the Add button that opened it; the empty table's one is
+   * gone once the row it made is listed, so focus is lost once the dialog leaves the page. */
+  #refocusAdd(key: "open-add-printer" | "open-add-agent"): void {
+    void this.updateComplete.then(() => {
+      if (this.#addOpener?.isConnected === false && this.shadowRoot!.activeElement === null)
+        this.renderRoot
+          .querySelector<HTMLElement>(`[slot="actions"] [data-test="${key}"]`)
+          ?.focus();
+    });
+  }
+
   #restoreEditFocus(): void {
     // The action that opened the editor is hidden when its popover closes.
     this.#editTrigger?.focus();
@@ -2437,6 +2458,7 @@ export class PrintersScreen extends LitElement {
         this.editingPrinter = null;
         this.#closeTest();
         this.#restoreEditFocus();
+        this.#refocusAdd("open-add-printer");
         if (this.#readdingId === p.id) {
           this.#readdingId = undefined;
           void this.#deactivatePrinter(p.id);

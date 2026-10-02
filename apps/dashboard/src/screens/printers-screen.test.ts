@@ -873,6 +873,127 @@ describe("printer configuration tabs", () => {
     expect(api.openPairingMode).toHaveBeenCalledOnce();
   });
 
+  /** Focuses and presses the empty table's Add button, as a person's click leaves it. */
+  async function pressEmptyAction(el: PrintersScreen, tableId: string): Promise<HTMLElement> {
+    const button = q(el, `[data-test="${tableId}"]`)!.querySelector<HTMLElement>(
+      ":scope > [slot=empty-action]",
+    )!;
+    button.focus();
+    button.click();
+    await flush(el);
+    return button;
+  }
+
+  it("returns focus to the tab's Add printer after the first printer is made from the empty table", async () => {
+    let rows: Printer[] = [];
+    const api = stubApi({
+      listPrinters: vi.fn(() => Promise.resolve(rows)),
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
+      createPrinter: vi.fn(() => {
+        rows = [{ ...printers[0]!, id: "p9" }];
+        return Promise.resolve({ id: "p9" });
+      }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    const button = await pressEmptyAction(el, "printers-table");
+    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await flush(el);
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
+    );
+    await vi.waitFor(() => expect(button.isConnected).toBe(false));
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.activeElement).toBe(
+      q(el, '[slot="actions"] [data-test="open-add-printer"]'),
+    );
+  });
+
+  it("still returns focus to a row's menu after an edit, once the first printer came from the empty table", async () => {
+    let rows: Printer[] = [];
+    const api = stubApi({
+      listPrinters: vi.fn(() => Promise.resolve(rows)),
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
+      createPrinter: vi.fn(() => {
+        rows = [{ ...printers[0]!, id: "p9" }];
+        return Promise.resolve({ id: "p9" });
+      }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    const button = await pressEmptyAction(el, "printers-table");
+    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await flush(el);
+    await vi.waitFor(() => expect(button.isConnected).toBe(false));
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    await flush(el);
+
+    const menu = q(el, "[data-test=edit-printer-p9]")!.closest("dashboard-row-actions")!;
+    const trigger = menu.shadowRoot!.querySelector("button")!;
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{Tab}{Enter}");
+    await flush(el);
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    await flush(el);
+    expect(menu.shadowRoot!.activeElement).toBe(trigger);
+  });
+
+  it("returns focus to the empty printer table's Add printer after Close", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    const button = await pressEmptyAction(el, "printers-table");
+    q(el, "[data-test=cancel-new-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.activeElement).toBe(button);
+  });
+
+  it("returns focus to the tab's Add agent after the first agent joins from the empty table", async () => {
+    let rows: PrintAgentRow[] = [];
+    const api = stubApi({
+      listAgents: vi.fn(() => Promise.resolve(rows)),
+      acceptPrintAgentJoinRequest: vi.fn(() => {
+        rows = agents;
+        return Promise.resolve(undefined);
+      }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "agents");
+    const button = await pressEmptyAction(el, "agents-table");
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(button.isConnected).toBe(false));
+    q(el, "[data-test=cancel-new-agent]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-agent-modal]")).toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.activeElement).toBe(
+      q(el, '[slot="actions"] [data-test="open-add-agent"]'),
+    );
+  });
+
+  it("returns focus to the empty agent table's Add agent after Close", async () => {
+    const api = stubApi({ listAgents: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "agents");
+    const button = await pressEmptyAction(el, "agents-table");
+    q(el, "[data-test=cancel-new-agent]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-agent-modal]")).toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.activeElement).toBe(button);
+  });
+
   it("draws no Add button in the printer or agent table once they have rows", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi(),

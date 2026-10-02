@@ -780,6 +780,46 @@ it("puts Add menu under the empty menu table's sentence, opening the same form",
   expect(modal(el, "menu-form").open).toBe(true);
 });
 
+/** Opens the menu form from the empty table's Add menu, focused as a person's click leaves it. */
+async function openFromEmptyTable(el: MenusScreen): Promise<HTMLElement> {
+  const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+  button.focus();
+  button.click();
+  await el.updateComplete;
+  expect(modal(el, "menu-form").open).toBe(true);
+  return button;
+}
+
+/** Lets a closing native dialog hand focus back, which it does a task after it closes. */
+async function afterDialogCloses(el: MenusScreen): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await el.updateComplete;
+}
+
+it("returns focus to the top Add menu after the first menu is made from the empty table", async () => {
+  const el = await mount(
+    api({ listCatalogues: vi.fn().mockResolvedValueOnce([]).mockResolvedValue(menus) }),
+  );
+  const button = await openFromEmptyTable(el);
+  type(inModal(el, "menu-form", 'wt-input[name="name"]'), "Brunch");
+  await el.updateComplete;
+  inModal(el, "menu-form", '[data-test="menu-save"]').click();
+  await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+  await vi.waitFor(() => expect(button.isConnected).toBe(false));
+  await afterDialogCloses(el);
+  expect(el.shadowRoot!.activeElement).toBe(q(el, '.page-actions [data-test="add-menu"]'));
+});
+
+it("returns focus to the empty table's Add menu after Cancel", async () => {
+  const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue([]) }));
+  const button = await openFromEmptyTable(el);
+  inModal(el, "menu-form", '[data-test="cancel"]').click();
+  await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+  await afterDialogCloses(el);
+  expect(el.shadowRoot!.activeElement).toBe(button);
+});
+
 it("draws no Add menu button in the menu table once menus exist", async () => {
   const el = await mount();
   expect(table(el).querySelector(":scope > [slot=empty-action]")).toBeNull();

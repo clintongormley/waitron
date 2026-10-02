@@ -956,6 +956,9 @@ export class MenusScreen extends LitElement {
     super.disconnectedCallback();
   }
 
+  /** The Add menu that opened the create form, which the closing dialog hands focus back to. */
+  #addOpener: HTMLElement | null = null;
+
   async #openMenuForm(menu: CatalogueSummary | null): Promise<void> {
     const generation = ++this.#menuFormGeneration;
     this.menuFormErrors = {};
@@ -1020,9 +1023,14 @@ export class MenusScreen extends LitElement {
       this.busy = false;
       return;
     }
+    const opener = form.id === null ? this.#addOpener : null;
     this.busy = false;
     this.menuForm = null;
     await this.#watchMenus().catch(() => undefined);
+    await this.updateComplete;
+    // The empty table's Add menu is gone once the menu it made is listed.
+    if (opener?.isConnected === false)
+      this.renderRoot.querySelector<HTMLElement>('.page-actions [data-test="add-menu"]')?.focus();
     this.#followStatus(true);
   }
 
@@ -1668,7 +1676,10 @@ export class MenusScreen extends LitElement {
       data-test="add-menu"
       slot=${ifDefined(slot)}
       variant="primary"
-      @click=${() => this.#openMenuForm(null)}
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        void this.#openMenuForm(null);
+      }}
       >${t("menus.add")}</wt-button
     >`;
   }
