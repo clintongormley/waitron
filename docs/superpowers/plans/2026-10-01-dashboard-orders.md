@@ -125,6 +125,9 @@ the reply that delivered the plan.
    till should refuse that cancel, or credit the invoice as it cancels, is lane C's C126, not this
    plan. If C126 lands first and the till refuses the cancel, the three cancel cases in Task 1
    Step 2 cannot be produced through the till: report it rather than inserting rows by hand.
+   _(2026-10-02, C126 built the other option: the cancel credits the whole invoice and needs
+   `sale.rectify`, which staff do not hold, so a cancel case run with a staff session is refused
+   and one run with a supervisor's yields Cancelled with Credited in full.)_
 9. **A bare number in the search also finds the bill with that order number**
    (`working_orders.order_number`, spec §4.3), on the dashboard and in the till's Find a bill. Order
    numbers repeat over time, so a bare-number search can return several bills.

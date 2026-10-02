@@ -13,6 +13,10 @@ On **2026-10-01** (lane B item B17): the owner decided **Q28** without the aseso
 simplified invoice is issued when the table leaves, and a later payment is recorded against it —
 and leaving without paying is now built on that decision. Q28 stays open for the asesor to confirm. The standalone copy's section 1.8 (Q28) has not been updated for this.
 
+On **2026-10-02** (lane C item C126, built in lane B): **Q32 added** — the owner decided, without
+the asesor, that cancelling an order whose ticket was already issued credits it in full with an R5
+corrective invoice; Q32 asks whether that, or an annulment, is right.
+
 Later on **2026-09-30** (C90, owner decision that day): Q29's notes and parts (a), (c) and (e) now
 describe the new receipt. It prints each dish at its full price with each comp or discount on a line
 of its own beneath it, and a discount on the whole bill on a line of its own; the filed record is
@@ -1651,6 +1655,56 @@ And tickets and full invoices need separate series (Q5).
 > **(b)** Si se corrige varias veces la misma factura, ¿puede emitirse una rectificativa por
 > diferencias sobre cada corrección anterior? ¿O conviene, a partir de la segunda, una rectificativa
 > por sustitución que recoja el importe final?
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q32. Cancelling an order whose ticket was already issued — a corrective invoice, or an annulment? (added 2026-10-02)
+
+**Why it matters.** In a zone that invoices first, the simplified invoice is issued when the order
+is placed, before anyone pays. If the order is then cancelled, the invoice must not be left standing
+with nothing to collect it. On 2026-10-02 (lane B item C126) the owner decided, without the asesor,
+that the cancel issues a corrective invoice for the whole amount in the same step: an R5, *por
+diferencias*, through `recordCorrection` (`packages/core/src/record-correction.ts`), the only kind
+the Veri\*Factu backend files (`TipoRectificativa: "I"`, `packages/fiscal-verifactu/src/backend.ts`).
+The original invoice is then settled at nothing owed. The same cancel reaches a bill recorded as
+*left without paying* (Q28). Where today's corrective path cannot reverse the invoice's VAT split to
+the cent, the cancel is refused instead and nothing is filed — a software limit, not a question here.
+
+The sources, fetched raw on 2026-10-02:
+
+- Ley 37/1992 (IVA), art. 80.Dos: «Cuando por resolución firme, judicial o administrativa o con
+  arreglo a Derecho o a los usos de comercio queden sin efecto total o parcialmente las operaciones
+  gravadas o se altere el precio después del momento en que la operación se haya efectuado, la base
+  imponible se modificará en la cuantía correspondiente.»
+  (<https://www.boe.es/buscar/act.php?id=BOE-A-1992-28740>)
+- RD 1619/2012, art. 15.2: a corrective invoice is due when «se hubieran producido las
+  circunstancias que, según lo dispuesto en el artículo 80 de la Ley del Impuesto, dan lugar a la
+  modificación de la base imponible» (<https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696>).
+- AEAT, *FAQs-Desarrolladores* v1.3 (4 December 2025), §17, p.35: «Si se considera que "toda la
+  factura" en sí misma está mal o no debería haberse emitido, siempre que para solucionarlo no deba
+  emplearse algún procedimiento (de rectificativa u otro) previsto en el ROF, se podrá "anular"
+  generando para ello un RF de anulación», and «La anulación no es, por lo tanto, un concepto
+  jurídico […] cuando se llega a emitir con el SIF una factura por un servicio o una entrega que no
+  existen y que, por tanto, no se han realizado.»
+
+What we cannot settle from those: whether an order cancelled before it was served is an operation
+that "quedó sin efecto" (a corrective invoice) or one that never took place (an annulment), and
+whether the corrective invoice has to reach the customer.
+
+> Nuestro TPV puede expedir la factura simplificada al registrar el pedido, antes del cobro. Si
+> después se cancela el pedido, hoy emitimos en el mismo momento una factura rectificativa (R5) por
+> diferencias por el importe total, y damos la factura original por saldada sin cobro.
+>
+> **(a)** ¿Es correcta una rectificativa R5 por el total, o debería ser un registro de anulación de
+> la factura original? ¿Cambia la respuesta según si lo pedido llegó a servirse o no?
+>
+> **(b)** ¿Debe entregarse la rectificativa al cliente (impresa o de otro modo), o basta con
+> expedirla y registrarla?
+>
+> **(c)** Si el cliente se marchó sin pagar (pregunta Q28) y después se cancela esa cuenta, ¿es
+> correcto emitir la rectificativa, o la deuda debe seguir registrada como impagada?
 
 This records a question; no enquiry has been sent.
 

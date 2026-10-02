@@ -2213,7 +2213,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       counter's held-orders card, which those layouts lack; since B31 a handheld whose layout adds
       a held-orders card loads and shows it. The owner kept the counter list as a stopgap and wants
       the dashboard Orders screen (B27s; B27a's server routes and B27b's screen are built; B27c's
-      till lookup remains queued; the cancel-and-credit change is lane C's C126).
+      till lookup remains queued; the till-cancel question was C126, now built: see its entry below).
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
       amount, so staff confirm a debt the server does not record.** The dialog lists each bill at
       what `GET /api/parties/:id/bills` says it owes, which reads no credit note (`#departingBills`
@@ -2269,13 +2269,31 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     recording which element has focus just before the Escape; then press a real Escape during a
     save on each form tried only with a hand-built event or not at all, and move the ones that close
     to `dismissible`.
+  - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
+    decided without the asesor).** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
+    `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) now issues
+    an R5 corrective invoice, by differences, for the whole invoice in the same transaction, settles
+    the original at nothing owed and abandons the order; an order with no invoice cancels as before.
+    It needs `sale.rectify` from the signed-in person (no manager-PIN override), and refuses a bill
+    holding a payment or with one in flight. No till screen calls the route. Open:
+    - **Some invoices cannot be credited through `recordCorrection` as it stands, so their cancel is
+      refused (`sale.correction_breakdown_mismatch`).** It derives VAT from the lines, while the
+      invoice's VAT is the menu price less its base: a 0.55 dish at 21% was invoiced 0.45 + 0.10 and
+      reverses to -0.45 - 0.09 (measured 2026-10-02). Letting `recordCorrection` take the invoice's
+      own split changes the fiscal core; asked of the owner.
+    - **An invoice that already has a credit note cannot be cancelled**
+      (`sale.correction_exceeds_total`, measured); no route issues a credit note other than this one.
+    - **The credit note is not printed** for the customer (asesor Q32 (b)).
   - **Asesor questions to send:**
     [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
     (money before the invoice, then a split; printing the invoice first),
     [Q28](compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
     (unpaid departure; built on the owner's decision, asked to confirm) and
     [Q29](compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
-    (how a discount or comp appears on the invoice). Q19 stays open.
+    (how a discount or comp appears on the invoice), and
+    [Q32](compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
+    (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
+    open.
 
   Owner decisions (2026-09-26), each in the spec where it applies:
   - groups replace named courses, and who may release a held group stays a venue setting;
