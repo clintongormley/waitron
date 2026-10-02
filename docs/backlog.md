@@ -1013,11 +1013,20 @@ each screen.
 2026-10-02):** _"regarding products, i think we should include the field values not just the fact
 that they're filled in, and we should show a thumbnail of the image too"_. Today
 `product-editor.ts` writes the Kitchen section as "SOLOMILLO · Mains" and the Descriptors section as
-"customer name (EN, ES) · description (EN) · image". **Wanted:** each value after its bold field
-name — "Kitchen name: SOLOMILLO · Course: Mains"; the customer name and the description given per
-language, as the names line gives them; and the image as a small thumbnail rather than the word.
-Not settled: how a long description is cut down to fit the line, and where the thumbnail sits
-(before the text or after it). Mock both up for the owner before building, at phone width too.
+"customer name (EN, ES) · description (EN) · image". **Decided (owner, 2026-10-02, from mockups):**
+
+- the Kitchen line gives each value after its bold field name: "**Kitchen name:** SOLOMILLO ·
+  **Course:** Mains";
+- the Descriptors line is one row per field, its languages side by side: "**Name:** EN: Beef
+  tenderloin · ES: Solomillo de ternera", then "**Description:** EN: … · ES: …". The Name row is cut
+  to one line, the Description row may wrap to two before it is cut, each with an ellipsis, so it
+  stays two rows however many languages the venue has;
+- the image is not in that line at all: the product's photo sits beside the Name field at the top
+  of the editor, as the product list (`product-list.ts`) shows it beside each product's name (the
+  owner's suggestion). Whether that thumbnail also opens the image picker was not discussed; the
+  picker stays in the Descriptors section unless the owner says otherwise.
+
+LOOK at it at phone width, where a long English description leaves little room for the Spanish.
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
