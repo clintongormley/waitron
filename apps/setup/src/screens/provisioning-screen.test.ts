@@ -148,9 +148,7 @@ describe("setup-provisioning-screen", () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {});
     expect(q(el, "h1")!.textContent!.trim()).toBe("Configurando este servidor");
-    expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
-      "Mantén esta página abierta.",
-    );
+    expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe("Mantén esta página abierta.");
     expect(q(el, "wt-spinner")).not.toBeNull();
     expect(q(el, "[data-test=provision]")).toBeNull();
   });
