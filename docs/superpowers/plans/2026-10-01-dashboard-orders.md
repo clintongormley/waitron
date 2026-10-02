@@ -38,7 +38,7 @@
 > not credited mark is dropped: such a bill reads Cancelled with its credit note. B27a landed
 > first (#1027) with the mark — `invoiceNotCredited` in `apps/server/src/orders-list.ts` and its
 > cases in `apps/server/src/orders-list.test.ts`. C126, landing second, removes them and updates
-> those cases (owner-approved). The mark's text below is kept as written, with a pointer back
+> those cases (owner-approved). Task 1's mark text below is kept as written, with a pointer back
 > here.)_
 >
 > The owner confirmed the append-only reprint record and amended the scope, voided-copy and
@@ -1799,7 +1799,7 @@ export interface OrderRowDto {
   kind: "bill" | "sale"; id: string; at: string; orderNumber: number | null; label: string | null;
   partyId: string | null; partyName: string | null; tables: string[]; counter: boolean;
   saleId: string | null; invoiceNumber: string | null; creditNotes: string[]; status: OrderStatus;
-  credited: "in_full" | "in_part" | null; invoiceNotCredited: boolean; total: string; stillOwed: string | null;
+  credited: "in_full" | "in_part" | null; total: string; stillOwed: string | null;
   staff: { id: string; name: string | null }[]; departedAt: string | null;
 }
 export interface OrdersPageDto { rows: OrderRowDto[]; next: string | null; from: string | null; to: string | null }
@@ -2266,8 +2266,6 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
   (`formatMoney(row.total, currentLocale())`), `owed` (`choosable: "shown"`; blank when `stillOwed`
   is null; `part="owed"`), `staff` (`choosable: "shown"`; names joined, a null name as
 `orders.staff_unknown`), and:
-  _(The Status column's "Invoice not credited" text was dropped by the owner 2026-10-02 ~12:05,
-  see the banner.)_
 
 ```ts
       {
@@ -2436,9 +2434,6 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
 | `orders.reprint.print`               | Print a copy                              | Imprimir una copia                            |
 | `orders.reprint.sent`                | Copy sent to {printer}                    | Copia enviada a {printer}                     |
 | `nav.my_schedule`                    | My schedule                               | Mi horario                                    |
-
-  _(The `orders.invoice_not_credited` row was dropped by the owner 2026-10-02 ~12:05, see the
-  banner.)_
 
   Interpolate with `t(key).replace("{name}", …)`, as `apps/dashboard/src/screens/alerts-screen.ts:212`
   does. In `apps/dashboard/src/i18n/codes.ts` add `"working_order.not_found": { en: "That bill was not found", es: "No se encontró esa cuenta" }`
