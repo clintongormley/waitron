@@ -952,6 +952,16 @@ meant, ask. Measuring the longest choice is the combobox's job if it is to hold 
 dropdown, the table's if only for filters — decide which, and LOOK at phone width, where the
 filters wrap below the search box.
 
+**A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — OPEN.** The
+owner, on a screenshot of a one-row table whose Actions column is wide, with the menu button in
+empty space: _"The pinned Actions column should be a fixed size, not resizing and so adding extra
+whitespace"_. `wt-data-table`'s `table` is `width: 100%`, so the browser shares the width the
+columns do not need among all of them, the pinned `actions` column (CLAUDE.md §3, A155) included.
+**Wanted:** the actions column is always as narrow as its content — the menu button and its
+heading — and the spare width goes to the other columns. Its heading sets that width too, and
+"Acciones" is longer than "Actions": LOOK in both languages, and at phone width, where the column
+stays pinned at the screen's edge.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
