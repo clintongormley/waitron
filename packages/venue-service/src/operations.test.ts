@@ -56,6 +56,7 @@ import {
   allowMenuInZone,
   findOrderServiceContext,
   findOrderServiceModes,
+  findOrderServiceZones,
   getOrderServiceContext,
   listDepartmentHours,
   listDepartments,
@@ -1982,6 +1983,43 @@ describe("findOrderServiceModes", () => {
       const order = await openOrder(tx, venue, 1);
       await recordOrderServiceContext(tx, venue.cfg, order, venue.diningZone);
       await expect(findOrderServiceModes(tx, elsewhere, [order])).resolves.toEqual(new Map());
+    });
+  });
+});
+
+describe("findOrderServiceZones", () => {
+  it("reads recorded zones for many orders, omitting orders without context", async () => {
+    const venue = await seedSellingVenue();
+    await scoped(async (tx) => {
+      const dining = await openOrder(tx, venue, 1);
+      const bar = await openOrder(tx, venue, 2);
+      const none = await openOrder(tx, venue, 3);
+      await recordOrderServiceContext(tx, venue.cfg, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, venue.cfg, bar, venue.barZone);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      prepared.mockClear();
+
+      expect(await findOrderServiceZones(tx, venue.cfg, [dining, bar, none])).toEqual(
+        new Map([
+          [dining, venue.diningZone],
+          [bar, venue.barZone],
+        ]),
+      );
+      expect(prepared).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("reads nothing for an empty list or another location", async () => {
+    const venue = await seedSellingVenue();
+    const elsewhere = { locationId: brandLocationId(await seedLocation("Elsewhere zones")) };
+    await scoped(async (tx) => {
+      const order = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, venue.cfg, order, venue.diningZone);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      prepared.mockClear();
+      expect(await findOrderServiceZones(tx, venue.cfg, [])).toEqual(new Map());
+      expect(prepared).not.toHaveBeenCalled();
+      expect(await findOrderServiceZones(tx, elsewhere, [order])).toEqual(new Map());
     });
   });
 });

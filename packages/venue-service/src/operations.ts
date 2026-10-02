@@ -763,6 +763,28 @@ export async function findOrderServiceModes(
   return new Map(rows.map((row) => [row.workingOrderId, row.serviceMode as ServiceMode]));
 }
 
+/** Each named order's recorded service zone in one read; an order with no context is absent. */
+export async function findOrderServiceZones(
+  tx: Transaction,
+  cfg: VenueScope,
+  workingOrderIds: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  if (workingOrderIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      workingOrderId: orderServiceContexts.workingOrderId,
+      zoneId: orderServiceContexts.zoneId,
+    })
+    .from(orderServiceContexts)
+    .where(
+      and(
+        eq(orderServiceContexts.locationId, cfg.locationId),
+        inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]),
+      ),
+    );
+  return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
+}
+
 export async function listWorkingLineContexts(
   tx: Transaction,
   cfg: VenueScope,
