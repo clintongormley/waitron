@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WtCombobox } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import {
   adjustmentStubs,
   cancelThroughDialog,
@@ -5165,7 +5167,7 @@ describe("till-app: submitting the draft", () => {
         .mocked(api.getTablesState)
         .mockResolvedValue([seated({}, { revision: 4, mainBillId: "wo-next" }), mesa7, mesa9]);
     const courseOf = (order: TillTableOrderScreen, index: number) =>
-      order.shadowRoot!.querySelector<HTMLSelectElement>(`[data-round-course="${index}"]`)!.value;
+      order.shadowRoot!.querySelector<WtCombobox>(`[data-round-course="${index}"]`)!.value;
 
     const firedGroup = (id: string, summary: string): OrderGroup => ({
       id,
@@ -5191,10 +5193,8 @@ describe("till-app: submitting the draft", () => {
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
-      const steakCourse =
-        order.shadowRoot!.querySelector<HTMLSelectElement>('[data-round-course="1"]')!;
-      steakCourse.value = "desserts";
-      steakCourse.dispatchEvent(new Event("change"));
+      const steakCourse = order.shadowRoot!.querySelector<WtCombobox>('[data-round-course="1"]')!;
+      await chooseOption(steakCourse, "desserts");
       await flush(el);
       partyOnNextBill();
 

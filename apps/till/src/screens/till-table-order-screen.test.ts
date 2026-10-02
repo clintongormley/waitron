@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
+import type { WtCombobox } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
+import { resized } from "./till-table-order-screen.test-helpers.js";
 import {
   TillTableOrderScreen,
   type AdjustDetail,
@@ -537,10 +541,10 @@ describe("till-table-order-screen", () => {
     );
   });
 
-  async function ringAndPickers(el: TillTableOrderScreen): Promise<HTMLSelectElement[]> {
+  async function ringAndPickers(el: TillTableOrderScreen): Promise<WtCombobox[]> {
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
-    return [...el.shadowRoot!.querySelectorAll<HTMLSelectElement>("[data-round-course]")];
+    return [...el.shadowRoot!.querySelectorAll<WtCombobox>("[data-round-course]")];
   }
 
   it("renders a per-line course picker per round line, pre-selecting the product's default course", async () => {
@@ -552,8 +556,55 @@ describe("till-table-order-screen", () => {
     // option per active venue course plus the "use default" placeholder.
     expect(picker).not.toBeUndefined();
     expect(picker!.value).toBe("postres");
-    const optionValues = [...picker!.options].map((o) => o.value);
+    const optionValues = picker!.options.map((o) => o.value);
     expect(optionValues).toEqual(["", "entrantes", "postres"]);
+  });
+
+  it("picks a draft line's course from a compact shared dropdown, named for the line", async () => {
+    const { el } = await mount({ courses });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const picker = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-round-course="0"]');
+    expect(picker).not.toBeNull();
+    expect(picker!.name).toBe("course");
+    expect(picker!.hideLabel).toBe(true);
+    expect(picker!.label).toBe(`${t("table.course_label")} · Café`);
+    expect(picker!.getAttribute("search")).toBe("auto");
+    expect(picker!.searchPlaceholder).toBe(t("form.combobox_search"));
+    expect(picker!.noResultsLabel).toBe(t("form.combobox_no_results"));
+    expect(picker!.placeholder).toBe(t("table.course_default"));
+    expect(picker!.options).toEqual([
+      { value: "", label: t("table.course_default") },
+      { value: "entrantes", label: "Entrantes" },
+      { value: "postres", label: "Postres" },
+    ]);
+    expect(picker!.value).toBe("postres");
+
+    await chooseOption(picker!, "entrantes");
+    await el.updateComplete;
+    const captured = await submitDraft(el, "fire-all");
+    expect(captured!.detail.lines).toEqual([
+      { menuItemId: "menu-item-cafe", quantity: "1", courseId: "entrantes" },
+    ]);
+  });
+
+  it("keeps a draft line's course box a whole tap target tall on the till's screen", async () => {
+    await page.viewport(1024, 768);
+    try {
+      const { el, host } = await mount({ courses });
+      await resized(el);
+      host.style.setProperty("--wt-tap-min", "60px");
+      grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+      await el.updateComplete;
+      const picker = el.shadowRoot!.querySelector<WtCombobox>(
+        'wt-combobox[data-round-course="0"]',
+      )!;
+      await picker.updateComplete;
+      const box = picker.shadowRoot!.querySelector<HTMLElement>("[part=field]")!;
+      expect(box.getBoundingClientRect().height).toBeGreaterThanOrEqual(60);
+    } finally {
+      await page.viewport(414, 896);
+    }
   });
 
   it("hides the course picker when the venue has no courses to pick", async () => {
@@ -575,8 +626,7 @@ describe("till-table-order-screen", () => {
     const { el } = await mount({ courses });
     const [picker] = await ringAndPickers(el);
     // Override the café line from its default (Postres) to Entrantes.
-    picker!.value = "entrantes";
-    picker!.dispatchEvent(new Event("change"));
+    await chooseOption(picker!, "entrantes");
     await el.updateComplete;
     const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([
@@ -740,9 +790,8 @@ describe("till-table-order-screen", () => {
     it("groups a line by the course the waiter picked over its product's", async () => {
       const { el } = await mount({ courses, products: [cafe, pan] });
       await ringTwoCourses(el);
-      const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-round-course="0"]')!;
-      picker.value = "entrantes";
-      picker.dispatchEvent(new Event("change"));
+      const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
+      await chooseOption(picker, "entrantes");
       await el.updateComplete;
       const sent = await submitDraft(el, "send-all");
       expect(sent!.detail.groups).toEqual([{ release: "hold", lineIndexes: [0, 1] }]);
@@ -813,9 +862,8 @@ describe("till-table-order-screen", () => {
     it("moves a line to the section of the course the waiter picks", async () => {
       const { el } = await mount({ courses: serviceCourses, products: menu });
       await ring(el, [steak, "1"], [beer, "1"]);
-      const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-round-course="0"]')!;
-      picker.value = "drinks";
-      picker.dispatchEvent(new Event("change"));
+      const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
+      await chooseOption(picker, "drinks");
       await el.updateComplete;
       expect(sectionNames(el)).toEqual([{ heading: "Drinks", lines: ["Steak ×1", "Beer ×1"] }]);
     });
@@ -1717,21 +1765,49 @@ describe("till-table-order-screen", () => {
     // heldLine: firedAt null, current course Postres ⇒ an editable select bound to it.
     const { el } = await mount({ lines: [heldLine], courses });
     await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-line-course="3"]');
+    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]');
     expect(picker).not.toBeNull();
     expect(picker!.value).toBe("postres");
     // The reused picker's options: the no-course placeholder plus one per active venue course.
-    expect([...picker!.options].map((o) => o.value)).toEqual(["", "entrantes", "postres"]);
+    expect(picker!.options.map((o) => o.value)).toEqual(["", "entrantes", "postres"]);
+  });
+
+  it("picks a held tab line's course from a compact shared dropdown, named for the line", async () => {
+    const { el, host } = await mount({ lines: [heldLine], courses });
+    host.style.setProperty("--wt-tap-min", "60px");
+    await openDrawer(el);
+    const picker = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-line-course="3"]');
+    expect(picker).not.toBeNull();
+    expect(picker!.name).toBe("course");
+    expect(picker!.hideLabel).toBe(true);
+    expect(picker!.label).toBe(`${t("table.course_label")} · Café`);
+    expect(picker!.getAttribute("search")).toBe("auto");
+    expect(picker!.searchPlaceholder).toBe(t("form.combobox_search"));
+    expect(picker!.noResultsLabel).toBe(t("form.combobox_no_results"));
+    expect(picker!.placeholder).toBe(t("table.course_none"));
+    expect(picker!.options).toEqual([
+      { value: "", label: t("table.course_none") },
+      { value: "entrantes", label: "Entrantes" },
+      { value: "postres", label: "Postres" },
+    ]);
+    expect(picker!.value).toBe("postres");
+    await picker!.updateComplete;
+    const box = picker!.shadowRoot!.querySelector<HTMLElement>("[part=field]")!;
+    expect(box.getBoundingClientRect().height).toBeGreaterThanOrEqual(60);
+
+    let captured: CustomEvent | undefined;
+    el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
+    await chooseOption(picker!, "");
+    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null });
   });
 
   it("emits set-line-course { lineNo, courseId } when a held tab line is re-pointed", async () => {
     const { el } = await mount({ lines: [heldLine], courses, orderId: "wo-9" });
     await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-line-course="3"]')!;
+    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]')!;
     let captured: CustomEvent | undefined;
     el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
-    picker.value = "entrantes";
-    picker.dispatchEvent(new Event("change"));
+    await chooseOption(picker, "entrantes");
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
@@ -1741,12 +1817,11 @@ describe("till-table-order-screen", () => {
   it("clears a held tab line's course to null when the no-course placeholder is picked", async () => {
     const { el } = await mount({ lines: [heldLine], courses });
     await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-line-course="3"]')!;
+    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]')!;
     let captured: CustomEvent | undefined;
     el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
     // The "" placeholder is the explicit no-course null (setLineCourse takes `string | null`).
-    picker.value = "";
-    picker.dispatchEvent(new Event("change"));
+    await chooseOption(picker, "");
     expect(captured!.detail).toEqual({ lineNo: 3, courseId: null });
   });
 

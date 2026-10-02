@@ -4,8 +4,9 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
+import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
+import { type ComboboxOption, baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import {
   addDecimal,
@@ -19,7 +20,6 @@ import {
 import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
@@ -38,6 +38,7 @@ import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
@@ -365,7 +366,6 @@ export class TillTableOrderScreen extends LitElement {
       }
     `,
     baseStyles,
-    selectStyles,
     tableTargetStyles,
     css`
       :host {
@@ -529,8 +529,8 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      /* The per-line course control (coursing editing A1): an editable select on a held line, a muted
-         read-only label on a fired one. Capped so a long course name never crowds out the line total. */
+      /* A tab line's course: a dropdown on a held line, a muted read-only label on a fired one. Capped
+         so a long course name never crowds out the line total. */
       .line-course {
         min-width: 0;
         max-width: 8rem;
@@ -1635,16 +1635,38 @@ export class TillTableOrderScreen extends LitElement {
     return line.courseId ?? line.product.courseId ?? "";
   }
 
-  /** The placeholder's meaning is the CALLER's: "use the product default" for a draft line (never sent
-   * as a course), "no course" for a tab line (the explicit `null`). */
-  #courseOptions(selected: string, placeholder: string): TemplateResult {
-    return html`<option value="" .selected=${selected === ""}>${placeholder}</option>
-      ${this.courses.map(
-        (course) =>
-          html`<option value=${course.id} .selected=${selected === course.id}>
-            ${course.name}
-          </option>`,
-      )}`;
+  /** The empty row's meaning is the CALLER's: "use the product default" for a draft line (never sent
+   * as a course), "no course" for a tab line (the explicit `null`). A dropdown shows no row's text for
+   * the empty value, so that row's text is also the placeholder. */
+  #coursePicker(
+    attrs: { lineCourse?: number; roundCourse?: number },
+    lineName: string,
+    selected: string,
+    empty: string,
+    onPick: (courseId: string) => void,
+  ): TemplateResult {
+    const options: ComboboxOption[] = [
+      { value: "", label: empty },
+      ...this.courses.map((course) => ({ value: course.id, label: course.name })),
+    ];
+    return html`<wt-combobox
+      class=${attrs.lineCourse === undefined ? nothing : "line-course"}
+      data-line-course=${attrs.lineCourse ?? nothing}
+      data-round-course=${attrs.roundCourse ?? nothing}
+      name="course"
+      label=${`${t("table.course_label")} · ${lineName}`}
+      hide-label
+      search="auto"
+      searchPlaceholder=${t("form.combobox_search")}
+      noResultsLabel=${t("form.combobox_no_results")}
+      placeholder=${empty}
+      .options=${options}
+      .value=${live(selected)}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        onPick(event.detail.value);
+      }}
+    ></wt-combobox>`;
   }
 
   /** The course goes on the line, so the draft saves it. */
@@ -1973,19 +1995,13 @@ export class TillTableOrderScreen extends LitElement {
         >${this.#courseName(line.courseId)}</span
       >`;
     }
-    const name = this.#nameForLine(line);
-    return html`<select
-      class="line-course"
-      data-line-course=${line.lineNo}
-      aria-label=${`${t("table.course_label")} · ${name}`}
-      @change=${(event: Event) =>
-        this.#setLineCourse(
-          line.lineNo,
-          this.#courseValue((event.target as HTMLSelectElement).value),
-        )}
-    >
-      ${this.#courseOptions(line.courseId ?? "", t("table.course_none"))}
-    </select>`;
+    return this.#coursePicker(
+      { lineCourse: line.lineNo },
+      this.#nameForLine(line),
+      line.courseId ?? "",
+      t("table.course_none"),
+      (courseId) => this.#setLineCourse(line.lineNo, this.#courseValue(courseId)),
+    );
   }
 
   #toggleDrawer(): void {
@@ -2467,14 +2483,13 @@ export class TillTableOrderScreen extends LitElement {
       ...(this.courses.length === 0
         ? []
         : [
-            html`<select
-              data-round-course=${index}
-              aria-label=${`${t("table.course_label")} · ${name}`}
-              @change=${(event: Event) =>
-                this.#pickCourse(store, line, (event.target as HTMLSelectElement).value)}
-            >
-              ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
-            </select>`,
+            this.#coursePicker(
+              { roundCourse: index },
+              name,
+              this.#selectedCourseId(line),
+              t("table.course_default"),
+              (courseId) => this.#pickCourse(store, line, courseId),
+            ),
           ]),
       ...(splits
         ? [
