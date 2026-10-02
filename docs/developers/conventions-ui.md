@@ -30,6 +30,24 @@ bottom-left, except on the sign-in code step (design-system.md, login section). 
 explanations use `wt-help-tooltip`, whose button closes on outside click or Escape. Cost: the dashboard login exposed `wt-input-N` to password safes and disabled incomplete
 forms without saying what was missing (`ui-login`, owner review 2026-09-09).
 
+## A screen does not draw its own form field
+
+A `<select>`, a `<textarea>` or an `<input>` that takes text is drawn by a field primitive
+(`wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`, `wt-combobox`); where none fits,
+add to one or add one (owner, 2026-10-01, A178). Cost: a native `<select>`'s open list is drawn by
+the browser and cannot take the approved look, and fields a screen drew itself did not follow
+changes to the shared ones, so A178 moved the fields screens drew in the dashboard, setup, the till and
+the module screens onto the primitives (#1012, #1015, #1016, #1017). Guard:
+`scripts/native-form-fields.test.ts`, weaker than its name — it reads text, and only the literals
+of non-test `.ts` files under `apps/` and `packages/`, so a field made with
+`document.createElement`, from markup no single literal holds (built at run time, or read from a
+file or a response), or with its tag name split across a `${…}` is invisible to it;
+the field primitives' own files, and `wt-data-table`'s (its search box), are not read at all, so a
+second field added inside one passes; and some files are allowed by name (the hidden username
+inputs for the browser's password manager, in two files, and the print agent's setup page), each
+held to the number of LINES it draws a field on, so a field swapped for another, a hidden input
+made visible, or a field added on a line that already has one passes. See design-system.md → Forms.
+
 ## A refusal reaches a field by what the error carries, not by one parameter name
 
 The product editor binds a refused save to an editor field. `product.invalid` carries the `field` it
@@ -344,29 +362,6 @@ outside, delivered `input` with `composed: true`, which a listener on the docume
 with `composed: false`, which a listener inside the shadow root saw and the one on the document did
 not. App screens and app-owned components may name their local action events plainly, as the till
 screens do with events such as `fire-course` and `mark-collected`.
-
-## A `<select>` over rendered options marks the chosen option, not only the select's `.value`
-
-In a Lit template, a `.value=${…}` binding on a `<select>` whose `<option>`s come from a `${…}`
-expression does not show the chosen value on the first render. A throwaway probe run on 2026-09-14
-in `packages/ui`'s real-Chromium Vitest rendered `<select .value=${"b"}>` holding a static
-`<option value="">` followed by two options from `${options.map(…)}`. An element directive on the
-same `<select>` recorded 1 option when the select's own bindings ran and 3 once the render finished,
-and `select.value` was `""`. Rendering the same template again with the same value left it `""`,
-because Lit does not set a property binding again when its value is unchanged. Two controls went the
-other way: the same `.value` binding over three static options gave `"b"` (3 options when the
-bindings ran), and `.selected=${…}` on each mapped option, with no `.value`, gave `"b"`.
-
-Cost: `wt-data-table` restored a remembered filter and narrowed the rows while its dropdown read the
-"all" option. The fix, commit `4ca816b2`, moved the choice onto each option's `.selected` and added
-the test `a restored filter's dropdown shows the restored choice` in
-`packages/ui/src/components/wt-data-table.test.ts`. Putting the lone `.value` binding back on the
-2026-09-14 tree fails that test with `expected '' to be 'off'`.
-
-One that avoids it, marking each mapped option `.selected` and binding no `.value` on the `<select>`
-at all, which is the shape this rule recommends: `wt-data-table`'s filter dropdown
-(`packages/ui/src/components/wt-data-table.ts`). Nothing guards the rule. _2026-10-02: A178e made
-that filter a `wt-combobox`, and no product screen draws a native `<select>` now; A178f removes this rule._
 
 **Printing and hardware**
 

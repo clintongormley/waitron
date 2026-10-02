@@ -29,27 +29,3 @@ export const floorTrayStyles = css`
     cursor: pointer;
   }
 `;
-
-/** A native form `<select>`; a consumer needing more layers its own `select` rule after this. */
-export const selectStyles = css`
-  select {
-    font: inherit;
-    padding: var(--wt-space-2);
-    border-radius: var(--wt-radius-md);
-    border: 1px solid var(--wt-color-border);
-    background: var(--wt-color-surface);
-    color: var(--wt-color-text);
-    width: 100%;
-    max-width: var(--wt-field-max-width);
-  }
-
-  select[aria-invalid="true"] {
-    border-color: var(--wt-color-danger);
-  }
-
-  /* A select capped alone fits on its label text's line; capping the block label around it too keeps
-     the select below that text and holds the hint and error to the same width. */
-  label:has(select) {
-    max-width: var(--wt-field-max-width);
-  }
-`;

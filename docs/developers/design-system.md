@@ -236,27 +236,14 @@ dialog, set `--wt-dialog-max-width` (the till's device chooser does).
 inside a `wt-modal` (owner, 2026-09-30, C105): a field there grows no wider than it, however wide the
 modal is. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
 `--wt-field-max-width` as its `max-width` — `wt-input`, `wt-textarea`, `wt-combobox`, `wt-price-input`,
-`wt-number-stepper`, `wt-switch`, a native `<select>` styled by `selectStyles` and a `<label>` that
-contains one (`label:has(select)`, in the same stylesheet), and the line that shows a form's message
+`wt-number-stepper`, `wt-switch`, and the line that shows a form's message
 (`formMessageStyles`, so both the message a dialog shows at the end of its body and the one a
 `wt-form-actions` placed in the body shows above its buttons). `--wt-field-max-width` is `none` at
 the theme root. It narrows nothing else: a table, a preview, a `wt-disclosure`, a screen's own
 paragraphs and the footer's buttons keep the modal's full width. There is one standard modal size;
 a screen does not set its own form width.
 
-What the cap covers of a field's label, hint and error depends on how the field is written:
-
-- The six custom elements: the label, hint and error are inside the element, so the cap holds them.
-- A native select inside a block, grid or flex `<label>`:
-  the label holds the label text, the select, and any hint or error written inside it, and all of
-  them stop at the form width. The select is still `width: 100%` of that label, so it stays on its
-  own line below the text.
-- Not covered by `selectStyles`, measured 2026-10-01 with a temporary test in a `wt-modal` at
-  1280px (form width 576px, body 974px), at the 15px body size before A179: a select labelled by a separate `<label for>` keeps that
-  label, and an error written outside it, at the body's width (label 974px, select 576px, error
-  974px); and an inline `<label>` ignores `max-width`, so the 576px select fits on its text's line
-  (the select's top 187px, the text's bottom 215px). The select labels in the modals read for C105
-  are block, grid or flex; no inline one was found, but nothing checks for one.
+The six field elements' label, hint and error are inside the element, so the cap holds them too.
 
 Outside a `wt-modal`, `--wt-field-max-width` is the theme root's `none`, so a field on a page, or in a `wt-dialog`
 that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
@@ -274,10 +261,8 @@ button beside the ruler's answer, and the section member list's `.add` row does,
 (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
 the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
-`wt-price-input`, `wt-number-stepper` and `wt-switch`, a native select
-field's label, select, hint and error, and the message at 1280px; the select below its label text
-at 1280px; wide content and the footer row at full width; each field at the
-body's width at 390px; each field at its container's width outside a modal); the calibration case in
+`wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; wide content and
+the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
 `apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
@@ -889,6 +874,17 @@ html`
 `;
 ```
 
+**A screen does not draw its own form field.** A `<select>`, a `<textarea>` or an `<input>` that
+takes text is drawn by a field primitive; where none fits, add to one or add one. Guard:
+`scripts/native-form-fields.test.ts`, weaker than its name — it reads text, and only the literals
+of non-test `.ts` files under `apps/` and `packages/`, so a field made with
+`document.createElement`, from markup no single literal holds, or with its tag name split across a
+`${…}` is invisible to it, and the field primitives' own files, and `wt-data-table`'s (its search
+box), are not read at all. It allows some files by name: the hidden username inputs the browser's
+password manager reads, in two files, and the print agent's setup page, each held to the number of
+lines it draws a field on, so a field swapped for another, a hidden input made visible, or a field
+added on a line that already has one passes.
+
 #### The field box
 
 Every field primitive — `wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper` and
@@ -971,20 +967,16 @@ shows its placeholder hints only while every language is blank; once any languag
 record's own value applies and its blank languages show no placeholder hint.
 
 - **Text and price fields** (`wt-input`, `wt-price-input`, `wt-textarea`): the fallback value is the
-  field's `placeholder`. All three primitives paint it `--wt-color-text-muted`; a bespoke `<textarea>`
-  needs its own `::placeholder` rule with that token, because Chromium's default grey measured
-  3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the 4.5:1 text needs. axe does not check placeholder
-  contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
+  field's `placeholder`. All three primitives paint it `--wt-color-text-muted`, because Chromium's
+  default grey measured 3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the
+  4.5:1 text needs. axe does not check placeholder contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
   (`packages/ui-core/src/components/wt-input.a11y.test.ts`).
-- **A `<select>`**: the FIRST option has an empty value and reads "Same as &lt;fallback value&gt;"
-  (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
-  product" (`editor.same_as_parent`). Mark it chosen with `.selected` while the stored value is null,
-  like every option built from an expression.
 - **A single-choice `wt-combobox`** (the product editor's main category, VAT, unit and course): its
-  first option has an empty value and reads "Same as &lt;fallback value&gt;", and so does its
-  placeholder, which is what it shows while the stored value is null; like a `<select>`, it has no
-  separate hint line. A choice that means "none" on a record of its own (`editor.unit_each` for the
-  unit and `product.no_course` for the course) is left out where the empty value already means "fall
+  first option has an empty value and reads "Same as &lt;fallback value&gt;" (`editor.same_as`,
+  e.g. "Same as Reduced (10%)"; when there is nothing to name, "Same as the main product",
+  `editor.same_as_parent`), and so does its placeholder, which is what it shows while the stored
+  value is null; it has no separate hint line. A choice that means "none" on a record of its own
+  (`editor.unit_each` for the unit and `product.no_course` for the course) is left out where the empty value already means "fall
   back": offering both would read as one thing and save as another.
 - **Any other control** (the allergen and dietary picker, an image): a muted
   hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
