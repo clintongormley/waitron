@@ -2712,7 +2712,9 @@ export class TillApp extends LitElement {
         ? "sale.refused"
         : isNetworkFailure(error)
           ? "sale.unconfirmed"
-          : "sale.error";
+          : isTakePaymentRefusal(error)
+            ? "take_payment.not_permitted"
+            : "sale.error";
     } finally {
       this.submitting = false;
       this.findBillBusy = false;

@@ -7384,6 +7384,36 @@ describe("till-app", () => {
       expect(ticket(el)).toBeNull();
     });
 
+    it("tells the operator when Find a bill collection is refused for payment permission", async () => {
+      const { el } = await mountApp({
+        collectOrder: vi.fn().mockRejectedValue({
+          code: "authorization.not_permitted",
+          status: 403,
+          permission: "sale.take_payment",
+        }),
+      });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      dialog.dispatchEvent(
+        new CustomEvent("find-bill-pay", {
+          detail: {
+            workingOrderId: "wo-debt",
+            tender: { method: "cash", amount: "30.00" },
+            invoiced: true,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(dialog.error).toBe("take_payment.not_permitted");
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(dialog);
+    });
+
     it("a failed collect keeps the counter (collect stage) and the basket, showing a non-fatal error", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
