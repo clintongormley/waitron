@@ -1122,6 +1122,7 @@ export interface PlaceOrderResult {
   issuedAt?: string;
   total?: string;
   qr?: string;
+  qrText?: { caption: string; legend: string };
   vatBreakdown?: VatBreakdownEntry[];
 }
 

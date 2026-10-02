@@ -162,7 +162,6 @@ export function formatReceipt({
     b.line();
   }
 
-  // The QR block opens the invoice, after any practice warning.
   if (result.qr !== "") {
     const matrix = qrModules(result.qr);
     const dots = chooseQrDots(
@@ -171,9 +170,9 @@ export function formatReceipt({
       safeWidthDots(printer.paperWidth),
     );
     b.align("center");
-    if (result.qrText) b.line(prepareText(result.qrText.caption));
+    if (result.qrText) text(result.qrText.caption);
     b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
-    if (result.qrText) b.line(prepareText(result.qrText.legend));
+    if (result.qrText) text(result.qrText.legend);
     b.line().align("left");
   }
 

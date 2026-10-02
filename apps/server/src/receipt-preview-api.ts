@@ -132,6 +132,7 @@ export function mountReceiptPreviewApi(
   deps: { db: Database; cfg: TillConfig; receiptQrText?: ReceiptQrText },
   log: Logger,
 ): void {
+  const sample = sampleSale(deps.receiptQrText);
   app.get("/management-api/receipt-preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -167,7 +168,7 @@ export function mountReceiptPreviewApi(
       const draw = (trim: ReceiptConfig) =>
         previewPrintJob(
           formatReceipt({
-            result: sampleSale(deps.receiptQrText),
+            result: sample,
             issuer,
             receipt: trim,
             invoiceLocale: locale,

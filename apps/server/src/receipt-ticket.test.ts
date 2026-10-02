@@ -163,6 +163,33 @@ it("prints the caption and the legend the sale carries, not words of its own", (
   expect(lines.join("\n")).not.toContain("QR tributario");
 });
 
+it.each([PRINTER_58, PRINTER_80])(
+  "wraps a caption and a legend wider than the paper on $paperWidth, losing no word",
+  (printer) => {
+    const caption = "Alpha bravo charlie delta echo foxtrot golf hotel india juliet";
+    const legend = "Kilo lima mike november oscar papa quebec romeo sierra tango";
+    const lines = drawn(
+      formatReceipt({
+        result: { ...FILED_SALE, qrText: { caption, legend } },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+      }),
+    );
+    const qrAt = lines.indexOf("<QR>");
+    const columns = columnsFor(printer.paperWidth);
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    const words = (from: string[]): string[] => from.join(" ").trim().split(/\s+/);
+    expect(words(lines.slice(0, qrAt))).toEqual(caption.split(" "));
+    const blankAfterLegend = lines.indexOf("", qrAt);
+    expect(words(lines.slice(qrAt + 1, blankAfterLegend))).toEqual(legend.split(" "));
+    for (const line of [...lines.slice(0, qrAt), ...lines.slice(qrAt + 1, blankAfterLegend)]) {
+      expect(line).toBe(centred(printer, line.trim()));
+    }
+  },
+);
+
 it("prints a QR the regime gives no words for on its own, before the issuer", () => {
   const lines = drawn(
     formatReceipt({

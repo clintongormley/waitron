@@ -4747,6 +4747,7 @@ export interface PlaceOrderResult {
   issuedAt?: string;
   total?: string;
   qr?: string;
+  qrText?: TillSaleResult["qrText"];
   vatBreakdown?: { rate: string; base: string; tax: string }[];
 }
 
@@ -4815,6 +4816,7 @@ export async function placeOrder(
         issuedAt: ticket.issuedAt,
         total: ticket.total,
         qr: ticket.qr,
+        ...(ticket.qrText === undefined ? {} : { qrText: ticket.qrText }),
         vatBreakdown: ticket.vatBreakdown,
       };
       await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket, saleId);

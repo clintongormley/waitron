@@ -1609,6 +1609,26 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
   });
 
+  it("Mode I: the placed result carries the backend's words beside its QR", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+
+    const placed = await placeOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+      cfg.tillId,
+    );
+    expect(placed.qr).not.toBe("");
+    expect(placed.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
+  });
+
   it("Mode I: a covered cash over-tender at collect settles at the total and hands back change", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const id = randomUUID();
