@@ -13,7 +13,13 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { namesLine, optionalTextFields, translations, type FieldContext } from "./form-fields.js";
+import {
+  namesLine,
+  optionalTextFields,
+  textField,
+  translations,
+  type FieldContext,
+} from "./form-fields.js";
 import "./option-label-form.js";
 import type { DraftLabel } from "./option-label-form.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
@@ -423,12 +429,11 @@ export class OptionListForm extends LitElement {
 
   #namesSection(errors: Record<string, string>) {
     const locales = this.languages.languages;
-    const hasError =
-      !!errors["kitchen-name"] || locales.some((locale) => !!errors[`customer-name-${locale}`]);
+    const hasError = locales.some((locale) => !!errors[`customer-name-${locale}`]);
     return html`<wt-disclosure
       data-test="names-section"
-      heading=${t("options.names_section")}
-      summary=${namesLine(locales, this.customerName, this.kitchenName)}
+      heading=${t("options.customer_names")}
+      summary=${namesLine(locales, this.customerName)}
       .hasError=${hasError}
     >
       <div class="names">
@@ -446,19 +451,6 @@ export class OptionListForm extends LitElement {
             ),
           this.name,
         )}
-        <wt-input
-          name="kitchen-name"
-          label=${t("options.kitchen_name")}
-          placeholder=${this.name}
-          .disabled=${this.busy}
-          .value=${this.kitchenName}
-          .error=${errors["kitchen-name"] ?? ""}
-          .invalid=${!!errors["kitchen-name"]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#edit(() => (this.kitchenName = event.detail.value), "kitchen-name");
-          }}
-        ></wt-input>
       </div>
     </wt-disclosure>`;
   }
@@ -589,6 +581,7 @@ export class OptionListForm extends LitElement {
 
   override render() {
     const { errors, fieldKeys } = this.#messages();
+    const fields = this.#fields(errors);
     const byLabel = this.#errorsByLabel(errors);
     // The options table shows its own message, even one that marks no field.
     const bottom = [
@@ -613,19 +606,23 @@ export class OptionListForm extends LitElement {
             submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
         >
           <div class="names">
-            <wt-input
-              name="name"
-              label=${t("options.name")}
-              required
-              .disabled=${this.busy}
-              .value=${this.name}
-              .error=${errors.name ?? ""}
-              .invalid=${!!errors.name}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.#edit(() => (this.name = event.detail.value), "name");
-              }}
-            ></wt-input>
+            ${textField(
+              fields,
+              "name",
+              t("options.name"),
+              this.name,
+              (name) => this.#edit(() => (this.name = name), "name"),
+              true,
+            )}
+            ${textField(
+              fields,
+              "kitchen-name",
+              t("options.kitchen_name"),
+              this.kitchenName,
+              (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName), "kitchen-name"),
+              false,
+              this.name,
+            )}
             ${this.#namesSection(errors)}
             <wt-switch
               name="active"

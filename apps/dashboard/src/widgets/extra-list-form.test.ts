@@ -785,7 +785,7 @@ function disclosure(el: ExtraListForm): HTMLElementTagNameMap["wt-disclosure"] {
   )!;
 }
 
-it("folds the customer-facing and kitchen names into a closed section that lists them", async () => {
+it("folds the customer-facing names into a closed section that lists them", async () => {
   const { el } = await mount({
     value: { ...addons, customerName: { es: "Añádele algo" }, kitchenName: "ADD" },
   });
@@ -793,23 +793,19 @@ it("folds the customer-facing and kitchen names into a closed section that lists
 
   expect(section.tagName).toBe("WT-DISCLOSURE");
   expect(section.open).toBe(false);
-  expect(section.heading).toBe(t("extras.names_section"));
-  for (const name of ["customer-name-en", "customer-name-es", "kitchen-name"])
+  expect(section.heading).toBe(t("extras.customer_names"));
+  for (const name of ["customer-name-en", "customer-name-es"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summary).toBe(`ES Añádele algo · ${t("editor.section_kitchen")} ADD`);
+  expect(section.summary).toBe("ES Añádele algo");
 
   await type(el, "customer-name-en", "Make it yours");
-  expect(section.summary).toBe(
-    `EN Make it yours · ES Añádele algo · ${t("editor.section_kitchen")} ADD`,
-  );
-  await type(el, "kitchen-name", "  ");
   expect(section.summary).toBe("EN Make it yours · ES Añádele algo");
 });
 
 it.each([
   ["customerName", true],
-  ["kitchenName", true],
+  ["kitchenName", false],
   ["name", false],
 ])("opens the names section when the server refuses %s: %s", async (path, opened) => {
   const { el } = await mount({ value: addons, fieldErrors: { [path]: "Refused." } });
@@ -818,6 +814,58 @@ it.each([
     hasError: opened,
     open: opened,
   });
+});
+
+it("draws the kitchen name as its own field directly under Name, shown while the names section is closed", async () => {
+  const { el } = await mount({ value: addons });
+  const kitchen = field<HTMLElementTagNameMap["wt-input"]>(el, "kitchen-name");
+
+  expect(disclosure(el).open).toBe(false);
+  expect(kitchen.closest("wt-disclosure")).toBeNull();
+  expect(field(el, "name").nextElementSibling).toBe(kitchen);
+  expect(kitchen.checkVisibility()).toBe(true);
+  expect(kitchen.value).toBe("ADD");
+});
+
+it.each([
+  ["en", "Customer-facing names"],
+  ["es", "Nombres para el cliente"],
+])("heads the folded section with the customer-facing names alone (%s)", async (locale, words) => {
+  setLocale(locale);
+  try {
+    const { el } = await mount({ value: addons });
+    expect(disclosure(el).heading).toBe(words);
+  } finally {
+    setLocale("en");
+  }
+});
+
+it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
+  const { el } = await mount({ value: addons });
+
+  expect(disclosure(el).summary).toBe("EN Make it yours · ES Añádele algo");
+});
+
+it("shows a kitchen-name refusal under the kitchen field without marking the names section", async () => {
+  const { el } = await mount({ value: addons, fieldErrors: { kitchenName: "Too long." } });
+  await disclosure(el).updateComplete;
+
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "kitchen-name").error).toBe("Too long.");
+  expect({ hasError: disclosure(el).hasError, open: disclosure(el).open }).toEqual({
+    hasError: false,
+    open: false,
+  });
+});
+
+it("focuses the kitchen field when a refusal naming it arrives, leaving the names section closed", async () => {
+  const { el } = await mount({ value: addons });
+  el.fieldErrors = { kitchenName: "Too long." };
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+
+  const kitchen = field<HTMLElement>(el, "kitchen-name");
+  expect(disclosure(el).open).toBe(false);
+  expect(kitchen.shadowRoot!.activeElement).toBe(kitchen.shadowRoot!.querySelector("input"));
 });
 
 it("puts the minimum and maximum choices side by side as steppers, with their meaning in a hint", async () => {
@@ -1429,13 +1477,13 @@ it("clears a refusal about the items as a whole once the items change", async ()
 
 it("focuses the field a refusal names when the refusal arrives, opening its folded section", async () => {
   const { el } = await mount({ value: addons });
-  el.fieldErrors = { kitchenName: "Too long." };
+  el.fieldErrors = { customerName: "Too long." };
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve));
 
-  const kitchen = field<HTMLElement>(el, "kitchen-name");
+  const customer = field<HTMLElement>(el, "customer-name-en");
   expect(disclosure(el).open).toBe(true);
-  expect(kitchen.shadowRoot!.activeElement).toBe(kitchen.shadowRoot!.querySelector("input"));
+  expect(customer.shadowRoot!.activeElement).toBe(customer.shadowRoot!.querySelector("input"));
 });
 
 it("keeps a refusal naming no field in the bottom message alone, leaving Save working until it is submitted again", async () => {

@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   namesLine,
   optionalTextFields,
+  textField,
   translations,
   wholeWithin,
   type FieldContext,
@@ -489,12 +490,11 @@ export class ExtraListForm extends LitElement {
 
   #namesSection(errors: Record<string, string>) {
     const locales = this.languages.languages;
-    const hasError =
-      !!errors["kitchen-name"] || locales.some((locale) => !!errors[`customer-name-${locale}`]);
+    const hasError = locales.some((locale) => !!errors[`customer-name-${locale}`]);
     return html`<wt-disclosure
       data-test="names-section"
-      heading=${t("extras.names_section")}
-      summary=${namesLine(locales, this.customerName, this.kitchenName)}
+      heading=${t("extras.customer_names")}
+      summary=${namesLine(locales, this.customerName)}
       .hasError=${hasError}
     >
       <div class="names">
@@ -512,19 +512,6 @@ export class ExtraListForm extends LitElement {
             ),
           this.name,
         )}
-        <wt-input
-          name="kitchen-name"
-          label=${t("extras.kitchen_name")}
-          placeholder=${this.name}
-          .disabled=${this.busy}
-          .value=${this.kitchenName}
-          .error=${errors["kitchen-name"] ?? ""}
-          .invalid=${!!errors["kitchen-name"]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#edit(() => (this.kitchenName = event.detail.value), "kitchen-name");
-          }}
-        ></wt-input>
       </div>
     </wt-disclosure>`;
   }
@@ -675,6 +662,7 @@ export class ExtraListForm extends LitElement {
 
   override render() {
     const { errors, fieldKeys } = this.#messages();
+    const fields = this.#fields(errors);
     // The items table shows its own message, even one that marks no field.
     const bottom = [
       ...Object.entries(errors)
@@ -698,19 +686,23 @@ export class ExtraListForm extends LitElement {
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
       >
         <div class="names">
-          <wt-input
-            name="name"
-            label=${t("extras.name")}
-            required
-            .disabled=${this.busy}
-            .value=${this.name}
-            .error=${errors.name ?? ""}
-            .invalid=${!!errors.name}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.name = event.detail.value), "name");
-            }}
-          ></wt-input>
+          ${textField(
+            fields,
+            "name",
+            t("extras.name"),
+            this.name,
+            (name) => this.#edit(() => (this.name = name), "name"),
+            true,
+          )}
+          ${textField(
+            fields,
+            "kitchen-name",
+            t("extras.kitchen_name"),
+            this.kitchenName,
+            (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName), "kitchen-name"),
+            false,
+            this.name,
+          )}
           ${this.#namesSection(errors)}
           <div class="picks-row" data-test="picks-row">
             <wt-number-stepper

@@ -1038,11 +1038,11 @@ Three rules make the fold safe rather than merely tidy.
 nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
 empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Drinks` (kitchen name
 and course). An empty summary means an empty section, which is a useful signal in itself. A names
-section (the Options and Extras editors' "Customer and kitchen names") puts each language's
-customer-facing name after its upper-case code, then the kitchen name after the dashboard's word for
-kitchen (`editor.section_kitchen`) — `ES ¿Cómo la quiere hecha? · EN How would you like it cooked?
-· Kitchen COOK` — leaving blank names out, so a section with every name blank shows no line. It is
-built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`).
+section (the Options and Extras editors' "Customer-facing names") puts each language's
+customer-facing name after its upper-case code — `ES ¿Cómo la quiere hecha? · EN How would you like
+it cooked?` — leaving blank names out, so a section with every name blank shows no line. It is
+built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`). Those two editors keep the
+kitchen name out of the section, as a field of its own directly under Name.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
 stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the

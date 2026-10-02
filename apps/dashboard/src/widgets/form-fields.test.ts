@@ -118,28 +118,30 @@ describe("nonBlankNames and translations", () => {
 describe("namesLine", () => {
   afterEach(() => setLocale("es-ES"));
 
-  it("puts each language's name after its upper-case code, in the languages' order, then the labelled kitchen name", () => {
+  it("lists the customer-facing names alone, with no kitchen name", () => {
+    setLocale("en-GB");
+    expect(namesLine(["es", "en"], { en: "Make it yours", es: "Añádele algo" })).toBe(
+      "ES Añádele algo · EN Make it yours",
+    );
+  });
+
+  it("puts each language's name after its upper-case code, in the languages' order", () => {
     setLocale("en-GB");
     expect(
-      namesLine(
-        ["es", "en"],
-        { en: "How would you like it cooked?", es: "¿Cómo la quiere hecha?" },
-        "COOK",
-      ),
-    ).toBe("ES ¿Cómo la quiere hecha? · EN How would you like it cooked? · Kitchen COOK");
+      namesLine(["es", "en"], {
+        en: "How would you like it cooked?",
+        es: "¿Cómo la quiere hecha?",
+      }),
+    ).toBe("ES ¿Cómo la quiere hecha? · EN How would you like it cooked?");
     setLocale("es-ES");
-    expect(namesLine(["es"], { es: "¿Cómo la quiere hecha?" }, "COOK")).toBe(
-      "ES ¿Cómo la quiere hecha? · Cocina COOK",
-    );
+    expect(namesLine(["es"], { es: "¿Cómo la quiere hecha?" })).toBe("ES ¿Cómo la quiere hecha?");
   });
 
   it("leaves out a blank name, trims the rest, and is empty when every name is blank", () => {
     setLocale("en-GB");
-    expect(namesLine(["es", "en"], { es: "  ", en: " Make it yours " }, " ")).toBe(
-      "EN Make it yours",
-    );
-    expect(namesLine(["es", "en"], { es: "", en: " " }, "")).toBe("");
-    expect(namesLine(["es", "en"], {}, "ADD")).toBe("Kitchen ADD");
+    expect(namesLine(["es", "en"], { es: "  ", en: " Make it yours " })).toBe("EN Make it yours");
+    expect(namesLine(["es", "en"], { es: "", en: " " })).toBe("");
+    expect(namesLine(["es", "en"], {})).toBe("");
   });
 });
 

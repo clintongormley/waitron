@@ -36,11 +36,12 @@ you are editing, not what is stored: nothing is sent until you save the list its
 
 ## Name a list and decide whether it is active
 
-Give the list a staff name in plain text — what you and your staff call it. A **Customer-facing
-name**, with one field per content language, and a **Kitchen name** are both optional and fall back
-to the staff name when you leave them blank. They sit in a **Customer and kitchen names** section
-that stays folded until you open it; while it is folded, the names you have filled in show under
-its heading, and it opens by itself when one of them needs correcting. An option carries the same
+Give the list a staff name in plain text — what you and your staff call it. A **Kitchen name**,
+directly under it, and a **Customer-facing name**, with one field per content language, are both
+optional and fall back to the staff name when you leave them blank. The customer-facing names sit
+in a **Customer-facing names** section that stays folded until you open it; while it is folded, the
+names you have filled in show under its heading, and it opens by itself when one of them needs
+correcting. An option carries the same
 three names, shown in its own window with nothing folded: **Name**, then **Kitchen name**, then the
 customer-facing names under their own heading. See
 [content languages](content-and-images.md).
