@@ -253,6 +253,13 @@ export class TillStationQueue extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      .line-crossrefs {
+        display: flex;
+        flex-direction: column;
+        padding-left: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
 
       /* Each selected extra's OWN allergens/diet (nutrition redesign, pass 1), flowing inline after the
          extra's "+ name" — never a fold, just the extra's own list beside the dish's own rows below. */
@@ -1008,13 +1015,14 @@ export class TillStationQueue extends LitElement {
     </span>`;
     const customisation = this.#customisation(item);
     const modifiers = this.#modifiers(item);
+    const crossRefs = this.#crossRefs(item);
     const allergens = this.#allergens(item);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
     if (held || NEXT[item.state] === undefined) {
       const stateModifier = held ? "held" : "terminal";
       return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
-        >${main}${customisation}${modifiers}${allergens}${diet}</span
+        >${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
       >`;
     }
     return html`<button
@@ -1023,7 +1031,7 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${main}${customisation}${modifiers}${allergens}${diet}
+      ${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}
     </button>`;
   }
 
@@ -1078,6 +1086,35 @@ export class TillStationQueue extends LitElement {
           >`,
       )}
     </span>`;
+  }
+
+  #crossRefs(item: StationQueueItem): TemplateResult | typeof nothing {
+    if (!item.crossRefs?.length) return nothing;
+    return html`<span class="line-crossrefs"
+      >${item.crossRefs.map((ref, i) => {
+        const name = `${ref.name}${ref.perDish && ref.perDish > 1 ? ` x${ref.perDish}` : ""}`;
+        const key =
+          ref.kind === "with"
+            ? "station.crossref_with"
+            : ref.stationName === null
+              ? "station.crossref_for_no_prep"
+              : "station.crossref_for";
+        const wording = t(key)
+          .replace("{name}", name)
+          .replace("{station}", ref.stationName ?? "");
+        return html`<span class="crossref" data-crossref
+          >${wording}${
+            ref.kind === "with"
+              ? extraNutrition(
+                  ref,
+                  `line-crossref-allergens-${item.id}-${i}`,
+                  `line-crossref-diet-${item.id}-${i}`,
+                )
+              : nothing
+          }</span
+        >`;
+      })}</span
+    >`;
   }
 
   /** The name is the server-resolved kitchen label and is rendered as sent. */

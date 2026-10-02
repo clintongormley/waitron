@@ -5763,12 +5763,22 @@ export interface StationQueueCourse {
   displayOrder: number;
 }
 
-/** A child modifier line on a queue item: never its own ticket item. */
+/** A child without its own ticket item, shown beneath its dish. */
 export interface QueueModifier {
   descriptions: Record<string, string>;
   /** The extra's OWN allergens, shown beside the dish's own, never folded into them. */
   addAllergens?: ProductAllergens | null;
 
+  suitableFor?: string[] | null;
+}
+
+/** A line on another station's ticket that this item goes with. */
+export interface QueueCrossRef {
+  kind: "with" | "for";
+  name: string;
+  perDish?: number;
+  stationName: string | null;
+  addAllergens?: ProductAllergens | null;
   suitableFor?: string[] | null;
 }
 
@@ -5799,6 +5809,7 @@ export interface StationQueueItem {
   /** Counted in Each, whose unit the kitchen screen leaves out. */
   soldInEach: boolean;
   modifiers: QueueModifier[];
+  crossRefs?: QueueCrossRef[];
   /** The dish's OWN allergens, no modifier contribution. `pending` when they are unreviewed. */
   asServed: { allergens: ProductAllergens; pending: boolean };
   asServedDiet?: DietProfile;
@@ -5847,14 +5858,14 @@ export interface StationQueueGroup {
 }
 
 /**
- * Each parent line's child modifier lines, then its product's OWN allergens and diet: no modifier
- * fold, each dish shows its own figures.
+ * Queue lines' child modifiers and cross references, then each line's own allergens and diet.
  */
 async function readQueueSubItems(
   tx: Transaction,
-  parentLineIds: string[],
+  lineIds: string[],
 ): Promise<{
   modifiersByParent: Map<string, QueueModifier[]>;
+  crossRefsByLine: Map<string, QueueCrossRef[]>;
   asServedByParent: Map<
     string,
     {
@@ -5864,6 +5875,7 @@ async function readQueueSubItems(
   >;
 }> {
   const modifiersByParent = new Map<string, QueueModifier[]>();
+  const crossRefsByLine = new Map<string, QueueCrossRef[]>();
   const asServedByParent = new Map<
     string,
     {
@@ -5871,22 +5883,59 @@ async function readQueueSubItems(
       asServedDiet: DietProfile;
     }
   >();
-  if (parentLineIds.length === 0) return { modifiersByParent, asServedByParent };
+  if (lineIds.length === 0) return { modifiersByParent, crossRefsByLine, asServedByParent };
+
+  const parentQuantities = new Map(
+    (
+      await tx
+        .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(inArray(workingOrderLines.id, lineIds))
+    ).map((line) => [line.id, line.quantity]),
+  );
+
+  const childTicket = alias(ticketItems, "queue_child_ticket");
+  const childStation = alias(kitchenStations, "queue_child_station");
 
   // LEFT join, so a child whose product row has gone still renders its frozen text.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
       descriptions: workingOrderLines.descriptions,
+      name: workingOrderLines.name,
+      kitchenName: workingOrderLines.kitchenName,
+      variantName: workingOrderLines.variantName,
+      variantKitchenName: workingOrderLines.variantKitchenName,
+      quantity: workingOrderLines.quantity,
+      stationName: childStation.name,
+      ticketId: childTicket.id,
       addAllergens: effectiveProductColumns.allergens,
       dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
-    .where(inArray(workingOrderLines.parentLineId, parentLineIds))
+    .leftJoin(childTicket, eq(childTicket.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(childStation, eq(childStation.id, childTicket.stationId))
+    .where(inArray(workingOrderLines.parentLineId, lineIds))
     .orderBy(workingOrderLines.lineNo);
   for (const child of childRows) {
+    if (child.ticketId !== null) {
+      const refs = crossRefsByLine.get(child.parentLineId!) ?? [];
+      refs.push({
+        kind: "with",
+        name: kitchenPresentationName(child),
+        perDish: perDishOptionQuantity(
+          thousandthsToDecimal(child.quantity),
+          thousandthsToDecimal(parentQuantities.get(child.parentLineId!)!),
+        ),
+        stationName: child.stationName,
+        addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
+        suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
+      });
+      crossRefsByLine.set(child.parentLineId!, refs);
+      continue;
+    }
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
     mods.push({
       descriptions: child.descriptions,
@@ -5905,7 +5954,7 @@ async function readQueueSubItems(
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
-    .where(inArray(workingOrderLines.id, parentLineIds));
+    .where(inArray(workingOrderLines.id, lineIds));
   for (const p of parents) {
     const allergens = (p.allergens ?? {}) as ProductAllergens;
     const expanded = expandDietaryDeclarations(p.dietaryDeclarations as DietaryLabel[]);
@@ -5921,7 +5970,33 @@ async function readQueueSubItems(
       asServedDiet,
     });
   }
-  return { modifiersByParent, asServedByParent };
+  const dish = alias(workingOrderLines, "queue_dish_line");
+  const dishTicket = alias(ticketItems, "queue_dish_ticket");
+  const dishStation = alias(kitchenStations, "queue_dish_station");
+  const extraRows = await tx
+    .select({
+      lineId: workingOrderLines.id,
+      name: dish.name,
+      kitchenName: dish.kitchenName,
+      variantName: dish.variantName,
+      variantKitchenName: dish.variantKitchenName,
+      stationName: dishStation.name,
+    })
+    .from(workingOrderLines)
+    .innerJoin(dish, eq(dish.id, workingOrderLines.parentLineId))
+    .leftJoin(dishTicket, eq(dishTicket.workingOrderLineId, dish.id))
+    .leftJoin(dishStation, eq(dishStation.id, dishTicket.stationId))
+    .where(inArray(workingOrderLines.id, lineIds));
+  for (const extra of extraRows) {
+    crossRefsByLine.set(extra.lineId, [
+      {
+        kind: "for",
+        name: kitchenPresentationName(extra),
+        stationName: extra.stationName,
+      },
+    ]);
+  }
+  return { modifiersByParent, crossRefsByLine, asServedByParent };
 }
 
 const queueGroupColumns = {
@@ -6019,7 +6094,7 @@ export async function listStationQueue(
     // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
-  const { modifiersByParent, asServedByParent } = await readQueueSubItems(
+  const { modifiersByParent, crossRefsByLine, asServedByParent } = await readQueueSubItems(
     tx,
     rows.map((row) => row.workingOrderLineId),
   );
@@ -6094,6 +6169,7 @@ export async function listStationQueue(
       unitPrecision: row.unitPrecision,
       soldInEach: soldInEach.has(row.workingOrderLineId),
       modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
+      ...optional("crossRefs", crossRefsByLine.get(row.workingOrderLineId)),
       asServed: asServedByParent.get(row.workingOrderLineId)?.asServed ?? {
         allergens: {},
         pending: true,
@@ -6136,6 +6212,7 @@ export interface ExpoItem {
   awayAt: string | null;
   note: string | null;
   modifiers: QueueModifier[];
+  crossRefs?: QueueCrossRef[];
   asServed: { allergens: ProductAllergens; pending: boolean };
   asServedDiet?: DietProfile;
   queuedAt: string;
@@ -6261,7 +6338,7 @@ export async function listExpoQueue(
       ticketItems.id,
     );
 
-  const { modifiersByParent, asServedByParent } = await readQueueSubItems(
+  const { modifiersByParent, crossRefsByLine, asServedByParent } = await readQueueSubItems(
     tx,
     rows.map((row) => row.lineId),
   );
@@ -6358,6 +6435,7 @@ export async function listExpoQueue(
       awayAt: row.awayAt,
       note: row.note,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
+      ...optional("crossRefs", crossRefsByLine.get(row.lineId)),
       asServed: asServedByParent.get(row.lineId)?.asServed ?? {
         allergens: {},
         pending: true,

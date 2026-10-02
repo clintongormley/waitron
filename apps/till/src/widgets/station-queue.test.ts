@@ -1753,3 +1753,93 @@ describe("till-station-queue — printing problems", () => {
     expect(el.shadowRoot!.querySelector("[data-print-problems]")).toBeNull();
   });
 });
+
+describe("cross-station extra references", () => {
+  it("renders the extra beside its dish without a second modifier line", async () => {
+    const item = {
+      ...groupA.items[0]!,
+      modifiers: [{ descriptions: { "es-ES": "Queso" } }],
+      crossRefs: [
+        {
+          kind: "with" as const,
+          name: "CHIPS",
+          perDish: 2,
+          stationName: "Fryer",
+          addAllergens: { gluten: { presence: "contains" as const } },
+          suitableFor: [],
+        },
+      ],
+    };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...groupA, items: [item] }],
+      stationId: "st-1",
+    });
+    const line = el.shadowRoot!.querySelector('[data-item="ti-1"]')!;
+    expect(line.querySelector("[data-crossref]")!.textContent).toContain(
+      "with CHIPS x2 from Fryer",
+    );
+    expect(line.querySelector("[data-crossref]")!.textContent).toContain(
+      allergenName("gluten", currentLocale()),
+    );
+    expect(line.textContent).not.toContain("+ CHIPS");
+    expect(line.textContent).toContain("Queso");
+  });
+  it("renders the dish station and no-preparation parent in both locales", async () => {
+    const previousLocale = currentLocale();
+    try {
+      for (const [locale, expected] of [
+        ["en-GB", ["for BURG at Grill", "for AGUA, no preparation"]],
+        ["es-ES", ["para BURG en Grill", "para AGUA, sin preparación"]],
+      ] as const) {
+        setLocale(locale);
+        const item = {
+          ...groupA.items[0]!,
+          crossRefs: [
+            { kind: "for" as const, name: "BURG", stationName: "Grill" },
+            { kind: "for" as const, name: "AGUA", stationName: null },
+          ],
+        };
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [{ ...groupA, items: [item] }],
+          stationId: "st-1",
+        });
+        expect(
+          [...el.shadowRoot!.querySelectorAll("[data-crossref]")].map((node) =>
+            node.textContent!.trim(),
+          ),
+        ).toEqual(expected);
+      }
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+  it("omits a cross reference when an item has none", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [groupA],
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector(".crossref")).toBeNull();
+  });
+});
+
+describe("Spanish split extra wording", () => {
+  it("names the split extra and its station", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const item = {
+        ...groupA.items[0]!,
+        crossRefs: [{ kind: "with" as const, name: "CHIPS", perDish: 2, stationName: "Fryer" }],
+      };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [{ ...groupA, items: [item] }],
+        stationId: "st-1",
+      });
+      expect(el.shadowRoot!.querySelector("[data-crossref]")!.textContent).toContain(
+        "con CHIPS x2 de Fryer",
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+});

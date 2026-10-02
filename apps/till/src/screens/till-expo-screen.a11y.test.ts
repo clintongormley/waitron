@@ -35,6 +35,15 @@ const queue: ExpoOrder[] = [
           {
             id: "ti-0",
             name: "Pan",
+            crossRefs: [
+              {
+                kind: "with",
+                name: "CHIPS",
+                perDish: 2,
+                stationName: "Fryer",
+                addAllergens: { gluten: { presence: "contains" } },
+              },
+            ],
             qty: "1.000",
             stationName: "Barra",
             state: "ready",
@@ -59,6 +68,7 @@ const queue: ExpoOrder[] = [
           {
             id: "ti-1",
             name: "Croquetas",
+            crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }],
             qty: "2.000",
             stationName: "Cocina",
             state: "ready", // all-ready → the En camino (away) lever
@@ -80,6 +90,7 @@ const queue: ExpoOrder[] = [
           {
             id: "ti-2",
             name: "Solomillo",
+            crossRefs: [{ kind: "for", name: "AGUA", stationName: null }],
             qty: "1.000",
             stationName: "Parrilla",
             state: "queued",

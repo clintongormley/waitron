@@ -1140,7 +1140,7 @@ export interface Station {
 
 /**
  * One selected option on a queue item: the child modifier line's SNAPSHOTTED `descriptions`, which the
- * display localises client-side. A modifier is never its own ticket item; it rides beneath its parent.
+ * display localises client-side. A modifier without its own ticket item rides beneath its parent.
  */
 export interface QueueModifier {
   descriptions: Record<string, string>;
@@ -1150,6 +1150,16 @@ export interface QueueModifier {
   /** The extra's OWN positive dietary suitability, shown beside the dish's own. Absent/empty when it
    *  declares none. */
   suitableFor?: string[] | null;
+}
+
+/** A line on another station's ticket that this item goes with. */
+export interface QueueCrossRef {
+  kind: "with" | "for";
+  name: string;
+  perDish?: number;
+  stationName: string | null;
+  addAllergens?: QueueModifier["addAllergens"];
+  suitableFor?: QueueModifier["suitableFor"];
 }
 
 /**
@@ -1195,6 +1205,7 @@ export interface StationQueueItem {
   soldInEach?: boolean;
   /** The dish's selected options, in selection order; absent reads as none. */
   modifiers?: QueueModifier[];
+  crossRefs?: QueueCrossRef[];
   /** The dish's OWN allergen profile; absent renders nothing. */
   asServed?: AsServedAllergens;
   /** The dish's OWN diet profile, the diet twin of {@link asServed}; absent renders nothing. */
@@ -1395,6 +1406,7 @@ export interface ExpoItem {
   note?: string | null;
   /** The dish's selected options, in selection order; absent reads as none. */
   modifiers?: QueueModifier[];
+  crossRefs?: QueueCrossRef[];
   /** The dish's OWN allergen profile; absent renders nothing. */
   asServed?: AsServedAllergens;
   /** The dish's OWN diet profile; absent renders nothing. */
