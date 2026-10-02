@@ -131,6 +131,21 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  test("open, with options described by a second line", async () => {
+    const el = await openThemed(
+      '<wt-combobox label="Pedido por separado" search="never" value="staff"></wt-combobox>',
+      theme,
+      [
+        { value: "public", label: "Público", description: "Se puede pedir por sí solo." },
+        { value: "staff", label: "Solo personal", description: "Solo el personal puede pedirlo." },
+        { value: "plain", label: "Sin descripción" },
+      ],
+    );
+    // Without this the scan could pass on a list that drew no descriptions.
+    expect(el.shadowRoot!.querySelectorAll(".option-description")).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
   test("open, with groups", async () => {
     await openThemed('<wt-combobox label="Miembros"></wt-combobox>', theme, [
       { value: "ana", label: "Ana", group: "Personal" },

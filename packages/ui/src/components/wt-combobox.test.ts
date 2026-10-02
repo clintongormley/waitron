@@ -1546,6 +1546,100 @@ test("an option's icon is drawn before its label and hidden from screen readers"
   expect(withIcon!.textContent!.trim()).toBe("Vegan");
 });
 
+const DESCRIBED: ComboboxOption[] = [
+  { value: "public", label: "Public", description: "Can be ordered on its own." },
+  { value: "staff", label: "Staff only", description: "Only staff can order it on its own." },
+  { value: "plain", label: "Plain" },
+];
+
+test("an option's description is a second line under its label, inside the row, muted and small", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Ordering" value="staff"></wt-combobox>',
+    DESCRIBED,
+  );
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  host.style.setProperty("--wt-font-weight-bold", "800");
+  await userEvent.click(fieldParts(el).trigger);
+  const [, staff] = optionRows(el);
+  const label = staff!.querySelector<HTMLElement>(".option-label")!;
+  const description = staff!.querySelector<HTMLElement>(".option-description")!;
+  expect(description.textContent!.trim()).toBe("Only staff can order it on its own.");
+  const row = staff!.getBoundingClientRect();
+  const labelBox = label.getBoundingClientRect();
+  const lineBox = description.getBoundingClientRect();
+  expect(lineBox.top).toBeGreaterThanOrEqual(labelBox.bottom);
+  expect(lineBox.left).toBeCloseTo(labelBox.left, 0);
+  expect(lineBox.top).toBeGreaterThanOrEqual(row.top);
+  expect(lineBox.bottom).toBeLessThanOrEqual(row.bottom);
+  expect(getComputedStyle(description).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(description).fontSize).toBe("11px");
+  // The chosen row's label is bold; its description is not.
+  expect(getComputedStyle(label).fontWeight).toBe("800");
+  expect(getComputedStyle(description).fontWeight).toBe("400");
+  // The tick still ends the row.
+  expect(staff!.lastElementChild).toBe(staff!.querySelector('wt-icon[name="check"]'));
+});
+
+test("a screen reader names a described option by its label and reads the description with it", async () => {
+  const el = await mountWith('<wt-combobox label="Ordering"></wt-combobox>', DESCRIBED);
+  await userEvent.click(fieldParts(el).trigger);
+  const [, staff, plain] = optionRows(el);
+  await expect.element(page.elementLocator(staff!)).toHaveAccessibleName("Staff only");
+  await expect
+    .element(page.elementLocator(staff!))
+    .toHaveAccessibleDescription("Only staff can order it on its own.");
+  await expect.element(page.elementLocator(plain!)).toHaveAccessibleName("Plain");
+  await expect.element(page.elementLocator(plain!)).toHaveAccessibleDescription("");
+});
+
+test("an option without a description, or with an empty one, renders as it did before descriptions existed", async () => {
+  const el = await mountWith('<wt-combobox label="Ordering"></wt-combobox>', [
+    ...DESCRIBED,
+    { value: "blank", label: "Blank", description: "" },
+  ]);
+  await userEvent.click(fieldParts(el).trigger);
+  for (const row of optionRows(el).slice(2)) {
+    expect(row.querySelector(".option-description")).toBeNull();
+    expect(row.hasAttribute("aria-describedby")).toBe(false);
+    expect(row.hasAttribute("aria-labelledby")).toBe(false);
+    expect([...row.children].map((child) => child.className)).toEqual(["option-label"]);
+  }
+});
+
+test("the closed field shows the chosen option's label alone, without its description", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Ordering" value="public"></wt-combobox>',
+    DESCRIBED,
+  );
+  expect(fieldParts(el).value.textContent!.trim()).toBe("Public");
+  expect(fieldParts(el).trigger.hasAttribute("aria-describedby")).toBe(false);
+  // Closed, the list is not drawn, so its descriptions are not on screen either.
+  expect(fieldParts(el).popup.checkVisibility()).toBe(false);
+});
+
+test("a long description wraps inside the panel rather than widening it", async () => {
+  const { el, trigger, popup } = await mountCombobox(
+    '<wt-combobox label="Ordering" search="never"></wt-combobox>',
+  );
+  el.options = [
+    { value: "a", label: "A", description: "Only staff can order it on its own. ".repeat(4) },
+  ];
+  el.style.cssText = "position: fixed; left: 40px; top: 40px; width: 240px";
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const description = el.shadowRoot!.querySelector<HTMLElement>(".option-description")!;
+  expect(popup.getBoundingClientRect().width).toBeCloseTo(240, 0);
+  expect(description.getBoundingClientRect().right).toBeLessThanOrEqual(
+    popup.getBoundingClientRect().right,
+  );
+  expect(description.getClientRects().length).toBeGreaterThan(0);
+  expect(description.getBoundingClientRect().height).toBeGreaterThan(
+    2 * el.shadowRoot!.querySelector<HTMLElement>(".option-label")!.getBoundingClientRect().height,
+  );
+});
+
 const GROUPED: ComboboxOption[] = [
   { value: "ana", label: "Ana", group: "Staff" },
   { value: "luis", label: "Luis", group: "Staff" },
