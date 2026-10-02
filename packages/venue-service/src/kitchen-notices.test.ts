@@ -224,6 +224,7 @@ describe("recordKitchenNotices", () => {
         movedTo: null,
         direction: null,
         cancelledExtra: null,
+        reroutedTo: null,
         createdAt: expect.any(String),
       },
     ]);
@@ -538,6 +539,44 @@ describe("recordKitchenNotices", () => {
       },
     );
 
+    it("a rerouted notice without its destination station", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            order.orderId,
+            [item(order.burgerLineId, v.grill)],
+            "rerouted",
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "reroutedTo" } });
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
+    it("a destination station on a recalled notice", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            order.orderId,
+            [item(order.burgerLineId, v.grill)],
+            "recalled",
+            null,
+            null,
+            null,
+            "Grill",
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "reroutedTo" } });
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
     it("a direction other than added or removed", async () => {
       const v = await venue();
       const order = await seedOrder(v.locationId, 1, null);
@@ -695,6 +734,7 @@ describe("recordKitchenNotices", () => {
       movedTo: null,
       direction: null,
       cancelledExtra: "Gherkins",
+      reroutedTo: null,
       createdAt: expect.any(String),
     });
     expect(notices.map((notice) => notice.cancelledExtra)).toEqual(["Gherkins", null, null]);
@@ -736,9 +776,59 @@ describe("recordKitchenNotices", () => {
         movedTo: "Mesa 7",
         direction: null,
         cancelledExtra: null,
+        reroutedTo: null,
         createdAt: expect.any(String),
       },
     ]);
+  });
+
+  it("records and lists a rerouted notice with its destination station", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 10, null);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          {
+            workingOrderLineId: order.burgerLineId,
+            stationId: v.bar,
+            quantity: ONE,
+            wasStarted: true,
+          },
+        ],
+        "rerouted",
+        null,
+        null,
+        null,
+        "Grill",
+      ),
+    );
+    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).toEqual([
+      expect.objectContaining({
+        kind: "rerouted",
+        reroutedTo: "Grill",
+        stationId: v.bar,
+        lineName: "BRGR",
+      }),
+    ]);
+  });
+
+  it("the engine refuses a non-rerouted notice with a destination station", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 11, null);
+    await expect(
+      db.insert(kitchenNotices).values({
+        stationId: v.bar,
+        workingOrderId: order.orderId,
+        orderLabel: "#11",
+        kind: "void",
+        lineName: "BRGR",
+        quantity: 1000,
+        reroutedTo: "Grill",
+      }),
+    ).rejects.toThrow(/kitchen_notices_rerouted_to_ck/);
   });
 
   it("lists the notices one call records in the order it was given them", async () => {

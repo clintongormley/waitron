@@ -1590,6 +1590,27 @@ describe("extra maker resolution", () => {
 });
 
 describe("routingAt", () => {
+  it("answers station state from the snapshot opened before a hand closure", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const resolver = await routingAt(tx, f.cfg, fixedInstant);
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", fixedInstant);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      expect((await resolver.stations()).get(f.terraceBar)).toEqual({
+        open: true,
+        active: true,
+        isDefault: false,
+        name: "Terrace Bar",
+      });
+      expect((await resolver.stations()).get(f.switchedOff)).toMatchObject({ active: false });
+      expect((await resolver.stations()).get(f.bar)).toMatchObject({ isDefault: true });
+      expect(
+        (await (await routingAt(tx, f.cfg, fixedInstant)).stations()).get(f.terraceBar),
+      ).toMatchObject({ open: false });
+    }));
   it("answers an empty maker question without validating an unrelated zone", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);

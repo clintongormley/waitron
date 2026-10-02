@@ -239,6 +239,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
     es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
   },
+  "ticket.not_sent": {
+    en: "This dish has not gone to the kitchen yet. Choose where it is made before sending it",
+    es: "Este plato aún no ha ido a cocina. Elige dónde se prepara antes de enviarlo",
+  },
+  "ticket.made_here": {
+    en: "This dish is made here at the till, so it cannot be moved to a station",
+    es: "Este plato se prepara aquí en la caja, así que no se puede pasar a una estación",
+  },
+  "route.station_inactive": {
+    en: "That station has been switched off. Choose another",
+    es: "Esa estación se ha desactivado. Elige otra",
+  },
+  "station.not_found": {
+    en: "That station no longer exists. Choose another",
+    es: "Esa estación ya no existe. Elige otra",
+  },
   "ticket.already_fired": {
     en: "This item has already gone to the kitchen, and this venue does not allow changing items once sent. You can cancel it",
     es: "Este plato ya ha ido a cocina y en este local no se pueden cambiar los platos enviados. Puedes cancelarlo",

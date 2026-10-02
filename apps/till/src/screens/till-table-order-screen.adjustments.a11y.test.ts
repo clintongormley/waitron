@@ -36,6 +36,8 @@ const bill: PartyBill = {
 };
 
 const base: Omit<TabLine, "id" | "lineNo" | "name" | "unitPriceGross"> = {
+  stationId: null,
+  movable: false,
   groupId: null,
   productId: null,
   quantity: "1.000",

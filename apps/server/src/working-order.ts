@@ -19,6 +19,8 @@ import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
+import { rerouteHeldAtRelease, stillMovable } from "./station-move.js";
+import type { Rerouted } from "./station-move.js";
 import {
   bumpPartyRevision,
   checkAndBumpParty,
@@ -1172,11 +1174,17 @@ type FireableLine = {
   [K in keyof typeof fireableLineColumns]: GetColumnData<(typeof fireableLineColumns)[K]>;
 };
 
-export type RoutingOnce = (() => Promise<MakerResolver>) & { readonly at: Date };
+export type RoutingOnce = (() => Promise<MakerResolver>) & {
+  readonly at: Date;
+  readonly opened: () => Promise<MakerResolver> | undefined;
+};
 
 export function routingOnce(tx: Transaction, cfg: TillConfig, at: Date): RoutingOnce {
   let opened: Promise<MakerResolver> | undefined;
-  return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, cfg, at)), { at });
+  return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, cfg, at)), {
+    at,
+    opened: () => opened,
+  });
 }
 
 interface DishKitchenPlace {
@@ -1298,10 +1306,10 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
 
 /**
  * Every order routes by exceptions, folder claims and the active default station. Station and
- * course are snapshotted at fire time: later rule edits never move work already sent. A made-here
- * item is recorded and never printed. Extras are decided after their dish against the same routing
- * snapshot. An extra made elsewhere copies the dish's course and hold, unless made here: then it is
- * ready and fired at the send, even when its dish is held.
+ * course are chosen at fire time. A made-here item is recorded and never printed. Extras are
+ * decided after their dish against the same routing snapshot. An extra made elsewhere copies the
+ * dish's course and hold, unless made here: then it is ready and fired at the send, even when its
+ * dish is held.
  * An unroutable outcome refuses the send, unless payment uses `unroutable: "skip"` to leave
  * the dish unfired and unstamped and return it for the paid-order alert.
  */
@@ -1739,8 +1747,8 @@ export async function fireCourse(
   courseId: string,
   operatorId: string,
 ): Promise<void> {
-  await requireCourse(tx, cfg, courseId);
   const routing = routingOnce(tx, cfg, new Date());
+  await requireCourse(tx, cfg, courseId);
   await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId, routing);
   await releaseHeld(
     tx,
@@ -1779,10 +1787,6 @@ export async function fireOrderLines(
   );
 }
 
-/**
- * Stamp `fired_at` on the order's held ticket items `ticketScope` selects and release the no-route
- * lines `noRouteScope` selects, then {@link finishRelease}.
- */
 async function releaseHeld(
   tx: Transaction,
   cfg: TillConfig,
@@ -1793,6 +1797,7 @@ async function releaseHeld(
   routing = routingOnce(tx, cfg, new Date()),
 ): Promise<void> {
   const firedNow = routing.at.toISOString();
+  const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
   const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: firedNow })
@@ -1815,12 +1820,14 @@ async function releaseHeld(
     await isOpenOrder(tx, orderId),
     mark,
     routing,
+    rerouted,
   );
 }
 
 /**
  * The end of {@link fireCourse} and {@link sendLines}: refuse a sold-out line when
- * `refuseSoldOut`, stamp the released lines sent, print the items that fired now, and count the
+ * `refuseSoldOut`, stamp the released lines sent, print the items that fired now (with the old
+ * station's name for a re-routed dish), and count the
  * write if anything was released. `fired` must be exactly the items this release fired (an
  * update's `RETURNING` over `fired_at IS NULL`), so a re-send prints nothing.
  */
@@ -1834,6 +1841,7 @@ async function finishRelease(
   refuseSoldOut: boolean,
   mark?: "FIRE",
   routing = routingOnce(tx, cfg, new Date(at)),
+  rerouted: Rerouted = new Map(),
 ): Promise<void> {
   const released = [
     ...fired.map((item) => item.workingOrderLineId),
@@ -1854,18 +1862,26 @@ async function finishRelease(
     })),
     routing,
   );
-  await enqueueKitchenTickets(
-    tx,
-    cfg,
-    orderId,
-    [...fired, ...extras.filter((item) => item.firedAt !== null)],
-    { mark },
+  const ordinary = [...fired, ...extras.filter((item) => item.firedAt !== null)].filter(
+    (item) => !rerouted.has(item.workingOrderLineId),
   );
+  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
+  const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
+  for (const item of fired) {
+    const old = rerouted.get(item.workingOrderLineId);
+    if (old === undefined) continue;
+    const bucket = byOldStation.get(old.stationId) ?? { from: old.stationName, items: [] };
+    bucket.items.push(item);
+    byOldStation.set(old.stationId, bucket);
+  }
+  for (const { from, items } of byOldStation.values())
+    await enqueueKitchenTickets(tx, cfg, orderId, items, { from });
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
 /**
- * Send selected held lines of an open tab, refreshing queued_at when they fire.
+ * Send selected held lines of an open tab, considering dishes at stations that are not open for
+ * re-routing and refreshing queued_at when they fire.
  * The caller's transaction includes kitchen writes and their print jobs.
  */
 export async function sendLines(
@@ -1874,6 +1890,7 @@ export async function sendLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
+  const routing = routingOnce(tx, cfg, new Date());
   await assertPartyBillOpen(tx, cfg, tabId);
   const namedLines =
     lineNos.length === 0
@@ -1906,20 +1923,16 @@ export async function sendLines(
   // An empty list fires every HELD line of the tab outside a held group.
   const namedLineIds = namedLines.map((line) => line.id);
   // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
-  const firedNow = nowIso();
-  const routing = routingOnce(tx, cfg, new Date(firedNow));
+  const firedNow = routing.at.toISOString();
+  const ticketScope =
+    lineNos.length === 0
+      ? notInArray(ticketItems.workingOrderLineId, heldGroupLineIds)
+      : onDishesOrTheirExtras(tx, namedLineIds);
+  const rerouted = await rerouteHeldAtRelease(tx, cfg, tabId, ticketScope, routing);
   const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: firedNow, queuedAt: firedNow })
-    .where(
-      and(
-        eq(ticketItems.workingOrderId, tabId),
-        isNull(ticketItems.firedAt),
-        ...(lineNos.length === 0
-          ? [notInArray(ticketItems.workingOrderLineId, heldGroupLineIds)]
-          : [onDishesOrTheirExtras(tx, namedLineIds)]),
-      ),
-    )
+    .where(and(eq(ticketItems.workingOrderId, tabId), isNull(ticketItems.firedAt), ticketScope))
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
@@ -1945,7 +1958,18 @@ export async function sendLines(
     routing,
   );
   noRoute.lines = noRoute.lines.filter((line) => !heldGroupLineIdSet.has(line.id));
-  await finishRelease(tx, cfg, tabId, firedItems, noRoute, firedNow, true, undefined, routing);
+  await finishRelease(
+    tx,
+    cfg,
+    tabId,
+    firedItems,
+    noRoute,
+    firedNow,
+    true,
+    undefined,
+    routing,
+    rerouted,
+  );
 }
 
 /** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
@@ -3043,6 +3067,8 @@ export interface TabLine {
   firedAt: string | null;
   /** Null when the line has no ticket item. A following extra has none; a split-off extra has its own. */
   state: TicketState | null;
+  stationId: string | null;
+  movable: boolean;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved here from another party's bill. */
   groupId: string | null;
@@ -3079,10 +3105,14 @@ export async function readTabLines(
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       servedAt: workingOrderLines.servedAt,
+      servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
       sentAt: workingOrderLines.sentAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
+      stationId: ticketItems.stationId,
+      awayAt: ticketItems.awayAt,
+      madeHere: ticketItems.madeHere,
       groupId: workingOrderLines.groupId,
       note: workingOrderLines.note,
       listId: workingOrderLines.extraListId,
@@ -3121,6 +3151,10 @@ export async function readTabLines(
       sentAt: row.sentAt,
       firedAt: row.firedAt,
       state: row.state,
+      stationId: row.stationId,
+      movable:
+        row.state !== null &&
+        stillMovable({ state: row.state, awayAt: row.awayAt, madeHere: row.madeHere! }, row),
       groupId: row.groupId,
       note: row.note,
       listId: row.listId,
@@ -3922,6 +3956,7 @@ interface EditableLine {
     firedAt: string | null;
     state: TicketState;
     stationId: string;
+    stationChosenAt: string | null;
     courseId: string | null;
     madeHere: boolean;
     /** Thousandths. */
@@ -4132,6 +4167,7 @@ async function readEditableOrder(
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
+      stationChosenAt: ticketItems.stationChosenAt,
       ticketCourseId: ticketItems.courseId,
       madeHere: ticketItems.madeHere,
       firedQuantity,
@@ -4169,6 +4205,7 @@ async function readEditableOrder(
             firedAt: row.firedAt,
             state: row.state!,
             stationId: row.stationId!,
+            stationChosenAt: row.stationChosenAt,
             courseId: row.ticketCourseId,
             madeHere: row.madeHere!,
             firedQuantity: row.firedQuantity,
@@ -4441,11 +4478,14 @@ async function applyLineEdits(
               .map(({ child, perDish }) => ({ productId: child.productId!, quantity: perDish })),
           }))
         : (intent.extras.set as ExtraSelection[]);
+    const inheritMakeAt =
+      intent.makeAt === undefined ||
+      (intent.makeAt === null && parent.ticket?.stationChosenAt != null);
     const asOffered = (quantity: string): RequestedLine => ({
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
       quantity,
-      makeAt: intent.makeAt === undefined ? parent.makeAtStationId : intent.makeAt,
+      makeAt: inheritMakeAt ? parent.makeAtStationId : intent.makeAt,
       ...(intent.note === null ? {} : { note: intent.note }),
       frozenOptions: optionSnapshots,
       extras: picks,
@@ -4462,13 +4502,13 @@ async function applyLineEdits(
               kitchen: kitchenStateOf(parent),
               joins: parent,
               origin: parent,
-              inheritMakeAt: intent.makeAt === undefined,
+              inheritMakeAt,
             }
           : {
               kind: "line",
               kitchen: "fire",
               origin: parent,
-              inheritMakeAt: intent.makeAt === undefined,
+              inheritMakeAt,
             },
       );
     }

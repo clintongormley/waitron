@@ -26,7 +26,7 @@ export function row(
     servedQuantity: "0.000",
     servedAt: null,
     released: true,
-    kitchen: { state: "queued", firedAt: fired, awayAt: null },
+    kitchen: { stationId: null, movable: false, state: "queued", firedAt: fired, awayAt: null },
     note: null,
     extras: [],
     ...over,
@@ -44,24 +44,30 @@ export const salad = row("l-salad", "Salad", "1.000", {
   servedAt: "2026-09-28T20:05:00.000Z",
 });
 export const beer = row("l-beer", "Beer", "1.000", {
-  kitchen: { state: "ready", firedAt: fired, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "ready", firedAt: fired, awayAt: null },
 });
 export const bravas = row("l-bravas", "Bravas", "1.000", {
-  kitchen: { state: "ready", firedAt: fired, awayAt: "2026-09-28T20:10:00.000Z" },
+  kitchen: {
+    stationId: null,
+    movable: false,
+    state: "ready",
+    firedAt: fired,
+    awayAt: "2026-09-28T20:10:00.000Z",
+  },
 });
 export const steak = row("l-steak", "Steak", "1.000", { kitchen: null });
 export const fish = row("l-fish", "Fish", "1.000", {
-  kitchen: { state: "preparing", firedAt: fired, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "preparing", firedAt: fired, awayAt: null },
 });
 export const pulpo = row("l-pulpo", "Pulpo", "1.000", { workingOrderId: "wo-check" });
 export const flan = row("l-flan", "Flan", "2.000", {
   released: false,
-  kitchen: { state: "queued", firedAt: null, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "queued", firedAt: null, awayAt: null },
   extras: [{ lineId: "l-cream", name: "Cream", quantity: "2.000" }],
 });
 export const tarta = row("l-tarta", "Tarta", "1.000", {
   released: false,
-  kitchen: { state: "queued", firedAt: null, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "queued", firedAt: null, awayAt: null },
 });
 export const coffee = row("l-coffee", "Coffee", "1.000", { kitchen: null });
 

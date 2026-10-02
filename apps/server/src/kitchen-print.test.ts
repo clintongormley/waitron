@@ -4,6 +4,8 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
+  kitchenPrintJobLines,
+  kitchenPrintJobs,
   nowIso,
   orderGroups,
   parties,
@@ -42,6 +44,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,
   enqueueKitchenTickets,
+  enqueueStationMoved,
   orderTableLabel,
   reprintOrderTickets,
 } from "./kitchen-print.js";
@@ -128,6 +131,107 @@ function lineWidths(payload: Uint8Array): Set<number> {
 
 /** A basket line for a product at quantity 1. */
 const line = (productId: string) => ({ productId, quantity: "1" });
+
+describe("paper for a move to another station", () => {
+  it.each([
+    ["fired", false, false],
+    ["held", true, false],
+    ["printer off", false, true],
+  ] as const)(
+    "records the reroute and corrects %s work at the old station",
+    async (_case, held, printerOff) => {
+      const { cfg, catalogueId } = await setupVenue();
+      const result = await asApp(cfg, async (tx) => {
+        const bar = await createStation(tx, cfg, { name: "Bar", isDefault: true });
+        const grill = await createStation(tx, cfg, { name: "Grill", isDefault: false });
+        const barPrinter = await makePrinter(tx, cfg, "Bar printer", "station");
+        const grillPrinter = await makePrinter(tx, cfg, "Grill printer", "station");
+        await attachPrinterToStation(tx, { stationId: bar.id, printerId: barPrinter });
+        await attachPrinterToStation(tx, { stationId: grill.id, printerId: grillPrinter });
+        const dish = await makeProduct(tx, cfg, catalogueId, "Steak", { stationId: bar.id });
+        const orderId = await fireNewOrder(tx, cfg, [line(dish)]);
+        const [fired] = await tx
+          .select({ workingOrderLineId: ticketItems.workingOrderLineId })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, orderId));
+        const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+        if (printerOff) await deactivatePrinter(tx, printCfg(cfg), barPrinter);
+        await enqueueStationMoved(
+          tx,
+          cfg,
+          orderId,
+          [
+            {
+              workingOrderLineId: fired!.workingOrderLineId,
+              stationId: bar.id,
+              quantity: 1000,
+              wasStarted: false,
+              ...(held ? { group: 2 } : {}),
+            },
+          ],
+          "Grill",
+        );
+        return {
+          notices: await listStationNotices(tx, cfg, bar.id),
+          jobs: (await printJobsFor(tx)).filter((job) => !before.has(job.id)),
+          barPrinter,
+        };
+      });
+      expect(result.notices).toMatchObject([
+        { stationId: expect.any(String), kind: "rerouted", reroutedTo: "Grill", lineName: "Steak" },
+      ]);
+      expect(result.jobs.map((job) => job.printerId)).toEqual(
+        printerOff ? [] : [result.barPrinter],
+      );
+      if (!printerOff) {
+        const lines = printedLines(result.jobs[0]!.payload);
+        expect(lines[0]).toBe(held ? "*** HOLD CANCELLED ***" : "*** PASADO A GRILL ***");
+        if (held) expect(lines).toContain("GROUP 2");
+        expect(lines).toContain("1.000 x Steak");
+      }
+    },
+  );
+
+  it("prints the origin on the new station's linked ticket", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const result = await asApp(cfg, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Grill printer", "station");
+      await attachPrinterToStation(tx, { stationId: grill.id, printerId });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Steak", { stationId: grill.id });
+      const orderId = randomUUID();
+      await createOfferedOrder(tx, cfg, orderId, [line(dish)]);
+      const [row] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      await enqueueKitchenTickets(
+        tx,
+        cfg,
+        orderId,
+        [{ workingOrderLineId: row!.id, stationId: grill.id }],
+        { from: "Bar" },
+      );
+      return {
+        jobs: await printJobsFor(tx),
+        links: await tx.select().from(kitchenPrintJobs),
+        lines: await tx.select().from(kitchenPrintJobLines),
+        printerId,
+        stationId: grill.id,
+        lineId: row!.id,
+      };
+    });
+    expect(result.jobs).toHaveLength(1);
+    expect(result.jobs[0]!.printerId).toBe(result.printerId);
+    expect(printedLines(result.jobs[0]!.payload)).toContain("Viene de Bar");
+    expect(result.links).toMatchObject([
+      { printJobId: result.jobs[0]!.id, stationId: result.stationId },
+    ]);
+    expect(result.lines).toMatchObject([
+      { printJobId: result.jobs[0]!.id, workingOrderLineId: result.lineId },
+    ]);
+  });
+});
 
 describe("show the rest of the order", () => {
   it("adds other stations only to an enabled station ticket and refreshes the list on reprint", async () => {

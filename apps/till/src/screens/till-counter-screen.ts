@@ -18,6 +18,7 @@ import type {
   HeldOrderSummary,
   OrderFlow,
   ServiceZoneSummary,
+  Station,
   StationQueueGroup,
   TableState,
   TillActiveReader,
@@ -105,6 +106,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+  @property({ attribute: false }) makeAtStations: Station[] = [];
   /** A pay, place or hold of {@link store}'s order is out; see the basket's own. */
   @property({ type: Boolean }) orderInFlight = false;
   /** The grid shows the selected menu's offers; the allergen lookup screen keeps the full zone set. */
@@ -267,6 +269,7 @@ export class TillCounterScreen extends LitElement {
         .tab=${this.counterTab}
         .store=${this.store}
         .storedLines=${this.storedLines}
+        .makeAtStations=${this.makeAtStations}
         .orderInFlight=${this.orderInFlight}
         .products=${this.products}
         .menus=${this.menus}

@@ -510,6 +510,8 @@ export interface CurrentOrderKitchen {
   state: TicketState;
   firedAt: string | null;
   awayAt: string | null;
+  stationId: string | null;
+  movable: boolean;
 }
 
 /** A dish row of `GET /api/parties/:id/current-orders`, on any bill of the party but an abandoned
@@ -1135,6 +1137,7 @@ export interface Station {
   displayOrder: number;
   isDefault: boolean;
   active: boolean;
+  open: boolean;
 }
 
 /**
@@ -1240,9 +1243,8 @@ export interface ElsewhereItem {
   held: boolean;
 }
 
-/** What a kitchen notice tells a station: a line recalled, voided, changed or moved to another
- *  table after it was sent. */
-export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
+/** What a kitchen notice tells a station about sent work. */
+export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rerouted";
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
@@ -1265,6 +1267,8 @@ export interface KitchenNotice {
   wasStarted: boolean;
   /** On a `moved` notice, the table the work now belongs to. */
   movedTo: string | null;
+  /** On a `rerouted` notice, the station now making the dish. */
+  reroutedTo: string | null;
   /** On a `changed` notice, whether `quantity` was added to the work or taken from it. */
   direction: "added" | "removed" | null;
   /** On a `changed` notice, the extra taken off the dish. */
@@ -1741,6 +1745,8 @@ export interface TabLine {
   /** The row's id, which a group move names. A dish in an order group is listed by it in
    * {@link OrderGroup.lineIds}; a child extras row never is. */
   id: string;
+  stationId: string | null;
+  movable: boolean;
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live catalogue name. */
   name?: string;
@@ -2109,6 +2115,23 @@ export class TillApi {
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */
   listStations(): Promise<Station[]> {
     return this.#request<Station[]>("/api/stations", "GET");
+  }
+
+  moveDishStation(
+    orderId: string,
+    body: { submissionId: string; lineIds: string[]; stationId: string },
+    options: ReadOptions = {},
+  ): Promise<{
+    revision: number;
+    stationId: string;
+    moved: { workingOrderLineId: string; fromStationId: string }[];
+  }> {
+    return this.#request(
+      `/api/working-orders/${orderId}/lines/move-station`,
+      "POST",
+      body,
+      options.signal,
+    );
   }
 
   /**

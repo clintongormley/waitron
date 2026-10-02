@@ -46,6 +46,8 @@ const partlyPaid: PartyBill = { ...untouched, outstanding: "39.00", hasPayments:
 
 function line(over: Partial<TabLine>): TabLine {
   return {
+    stationId: null,
+    movable: false,
     id: `line-${over.lineNo}`,
     groupId: null,
     lineNo: 1,
@@ -215,7 +217,13 @@ describe("till-table-order-screen: items already paid for", () => {
           row("line-3", "Tiramisu", "1.000", {
             lineNo: 3,
             released: false,
-            kitchen: { state: "queued", firedAt: null, awayAt: null },
+            kitchen: {
+              stationId: null,
+              movable: false,
+              state: "queued",
+              firedAt: null,
+              awayAt: null,
+            },
           }),
         ]),
       ],

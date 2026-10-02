@@ -77,6 +77,7 @@ import type {
   OrderGroup,
   OrderLinePatch,
   SaleLine,
+  Station,
   DeadEndAnswer,
   PrintProblem,
   TabLine,
@@ -1102,6 +1103,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   /** The venue's ACTIVE kitchen courses, in `displayOrder`. */
   @property({ attribute: false }) courses: TillCourse[] = [];
+  @property({ attribute: false }) stations: Station[] = [];
   /** The party's order groups, read with {@link lines}. */
   @property({ attribute: false }) groups: OrderGroup[] = [];
   /** The party's Current orders; null until read, or when the read failed, which leaves the groups
@@ -1812,6 +1814,40 @@ export class TillTableOrderScreen extends LitElement {
     store.setLineCourse(store.lines.indexOf(line), courseId === "" ? undefined : courseId);
   }
 
+  #makeAtPicker(
+    store: WorkingOrderStore,
+    line: OrderLine,
+    index: number,
+    name: string,
+  ): TemplateResult {
+    const rules = "__make_at_rules__";
+    const options: ComboboxOption[] = [
+      { value: rules, label: t("move_station.rules") },
+      ...this.stations.map((station) => ({
+        value: station.id,
+        label: station.open
+          ? station.name
+          : t("dead_end.station_closed").replace("{station}", () => station.name),
+      })),
+    ];
+    return html`<wt-combobox
+      data-make-at=${index}
+      name="make-at"
+      label=${`${t("move_station.make_at")} · ${name}`}
+      hide-label
+      search="never"
+      .options=${options}
+      .value=${this.stations.some((station) => station.id === line.makeAt) ? line.makeAt! : rules}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        store.setLineMakeAt(
+          store.lines.indexOf(line),
+          event.detail.value === rules ? undefined : event.detail.value,
+        );
+      }}
+    ></wt-combobox>`;
+  }
+
   #setLineCourse(lineNo: number, courseId: string | null): void {
     this.dispatchEvent(
       new CustomEvent("set-line-course", {
@@ -1911,6 +1947,15 @@ export class TillTableOrderScreen extends LitElement {
         >
           ${t("table.recall_line")}
         </wt-button>`,
+      );
+    if (line.movable && this.orderId !== undefined)
+      actions.push(
+        this.#moveStationButton(line.lineNo, {
+          workingOrderId: this.orderId,
+          lineId: line.id,
+          name,
+          stationId: line.stationId,
+        }),
       );
     if (this.#canCancel(line))
       actions.push(
@@ -2023,6 +2068,20 @@ export class TillTableOrderScreen extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  #moveStationButton(
+    lineNo: number,
+    detail: { workingOrderId: string; lineId: string; name: string; stationId: string | null },
+  ): TemplateResult {
+    return html`<wt-button
+      size="sm"
+      variant="secondary"
+      data-move-station=${lineNo}
+      aria-label=${`${t("table.move_station")} · ${detail.name}`}
+      @click=${() => this.dispatchEvent(new CustomEvent("move-station", { detail, bubbles: true, composed: true }))}
+      >${t("table.move_station")}</wt-button
+    >`;
   }
 
   #openChange(line: TabLine): void {
@@ -2638,6 +2697,7 @@ export class TillTableOrderScreen extends LitElement {
               (courseId) => this.#pickCourse(store, line, courseId),
             ),
           ]),
+      ...(this.stations.length > 1 ? [this.#makeAtPicker(store, line, index, name)] : []),
       ...(splits
         ? [
             html`<wt-button
@@ -3505,7 +3565,16 @@ export class TillTableOrderScreen extends LitElement {
       </span>
       ${
         held === null
-          ? this.#serveActions(row)
+          ? html`${this.#serveActions(row)}${
+              row.kitchen?.movable && !this.#pending().some((line) => line.id === row.lineId)
+                ? this.#moveStationButton(row.lineNo, {
+                    workingOrderId: row.workingOrderId,
+                    lineId: row.lineId,
+                    name: row.name,
+                    stationId: row.kitchen.stationId,
+                  })
+                : nothing
+            }`
           : !this.#billOpen(row.workingOrderId)
             ? nothing
             : this.#heldRowActions(

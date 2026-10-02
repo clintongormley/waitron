@@ -85,6 +85,8 @@ const bill: PartyBill = {
 };
 
 const wine: TabLine = {
+  stationId: null,
+  movable: false,
   id: "line-1",
   name: "Wine",
   groupId: null,

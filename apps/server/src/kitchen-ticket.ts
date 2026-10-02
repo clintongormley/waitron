@@ -47,7 +47,11 @@ export interface OtherStationItem {
  * `firedAt` prints as local HH:MM. A `reprint` opens with `*** REPRINT ***`; a `mark` opens with
  * `*** HOLD ***` (held work printed in advance) or `*** FIRE ***` (that work released).
  */
-export type KitchenTicket = { reprint?: boolean; mark?: "HOLD" | "FIRE" } & (
+export type KitchenTicket = {
+  reprint?: boolean;
+  mark?: "HOLD" | "FIRE";
+  from?: { stationName: string; locale: string };
+} & (
   | {
       scope: "station";
       stationName: string;
@@ -199,6 +203,8 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   text(ticket.tableLabel);
   text(ticket.orderNumber);
   b.line(hhmm(ticket.firedAt));
+  if (ticket.from !== undefined)
+    text(`${kitchenWords(ticket.from.locale).from} ${ticket.from.stationName}`);
   if (onlyGroup !== undefined) b.line(`GROUP ${onlyGroup}`);
 
   if (ticket.scope === "station") {
@@ -230,6 +236,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
  * (now belongs to another table, `tableLabel`, where `movedFrom` names the table and order its ticket
  * had). For held work on a HOLD ticket: `HOLD CHANGED` (the item's quantity `added` to or `removed`
  * from its group) or `HOLD CANCELLED` (taken out of the order); these name the item's group.
+ * `TO STATION` names the station now responsible for fired work; the slip stays at the old station.
  * `EXTRA CANCELLED`: an extra taken off a dish the kitchen has, fired or `held` on a HOLD ticket,
  * printing the dish as it now stands and then the extra to take off. Its header word and cancel
  * line follow `locale`'s language (Spanish, else English); the `HOLD` prefix and `GROUP n` stay
@@ -246,12 +253,13 @@ export type CorrectionSlip = {
   | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
   | { kind: "HOLD CHANGED"; direction: "added" | "removed" }
   | { kind: "HOLD CANCELLED" }
+  | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
 );
 
-const EXTRA_CANCELLED_WORDS = {
-  en: { changed: "CHANGED", cancel: "CANCEL:" },
-  es: { changed: "CAMBIADO", cancel: "QUITAR:" },
+const KITCHEN_WORDS = {
+  en: { changed: "CHANGED", cancel: "CANCEL:", movedTo: "MOVED TO", from: "From" },
+  es: { changed: "CAMBIADO", cancel: "QUITAR:", movedTo: "PASADO A", from: "Viene de" },
 } as const;
 
 export type KitchenCrossRef =
@@ -281,13 +289,15 @@ function alsoOnOrderWords(locale: string) {
   return ALSO_ON_ORDER_WORDS[ticketLanguage(locale)];
 }
 
-function extraCancelledWords(locale: string) {
-  return EXTRA_CANCELLED_WORDS[ticketLanguage(locale)];
+function kitchenWords(locale: string) {
+  return KITCHEN_WORDS[ticketLanguage(locale)];
 }
 
 function slipHeader(slip: CorrectionSlip): string {
+  if (slip.kind === "TO STATION")
+    return `${kitchenWords(slip.locale).movedTo} ${slip.toStation.toLocaleUpperCase(slip.locale)}`;
   if (slip.kind !== "EXTRA CANCELLED") return slip.kind;
-  const { changed } = extraCancelledWords(slip.locale);
+  const { changed } = kitchenWords(slip.locale);
   return slip.held ? `HOLD ${changed}` : changed;
 }
 
@@ -321,7 +331,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   emitItem(b, slip.item, columns, sign);
   if (slip.kind === "EXTRA CANCELLED") {
-    const prefix = `  ${extraCancelledWords(slip.locale).cancel} `;
+    const prefix = `  ${kitchenWords(slip.locale).cancel} `;
     for (const line of wrapText(
       prepareText(`${prefix}${slip.cancelledExtra}`),
       columns,

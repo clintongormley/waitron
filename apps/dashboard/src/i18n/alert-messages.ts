@@ -200,6 +200,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no default station switched on, leaves a dish nowhere to go.",
     es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a cocina. Pásalos a cocina a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
   },
+  "route.released_at_closed_station": {
+    en: "Order {orderNumber}: {dishes} went to {station}, which is closed or switched off, and the prep station rules sent them nowhere else. If nobody is making them there, move them to another station from the till (Move to station…), or open {station} for today on the Prep stations page. Dishes left at a closed station later do not add to this alert while it is open, so there may be more.",
+    es: "Pedido {orderNumber}: {dishes} se enviaron a {station}, que está cerrada o desactivada, y las reglas de las estaciones de preparación no los enviaron a ningún otro sitio. Si nadie los está preparando allí, pásalos a otra estación desde el TPV (Cambiar de estación…) o abre {station} por hoy en la página de Estaciones de preparación. Los platos que queden más tarde en una estación cerrada no se añaden a esta alerta mientras esté abierta, así que puede haber más.",
+  },
   "agent.silent": {
     en: "Print agent “{agent}” has gone quiet — it has not checked in for several minutes. Printing may be affected.",
     es: "El agente de impresión «{agent}» está en silencio: lleva varios minutos sin dar señales. La impresión puede verse afectada.",

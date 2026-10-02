@@ -270,6 +270,7 @@ const baseNotice: KitchenNotice = {
   note: null,
   wasStarted: true,
   movedTo: null,
+  reroutedTo: null,
   direction: null,
   cancelledExtra: null,
   createdAt: "2026-08-17T10:10:00.000Z",
@@ -286,6 +287,7 @@ const notices: KitchenNotice[] = [
   },
   { ...baseNotice, id: "kn-changed", kind: "changed", wasStarted: false, note: "no onions" },
   { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
+  { ...baseNotice, id: "kn-rerouted", kind: "rerouted", wasStarted: false, reroutedTo: "Grill" },
   // A HOLD correction's two directions.
   { ...baseNotice, id: "kn-added", kind: "changed", wasStarted: false, direction: "added" },
   { ...baseNotice, id: "kn-removed", kind: "changed", wasStarted: false, direction: "removed" },

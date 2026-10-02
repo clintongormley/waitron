@@ -419,6 +419,8 @@ describe("Current orders in the Tab drawer", () => {
   it("without Current orders, shows this bill's rows and offers no serving", async () => {
     const lines: TabLine[] = [
       {
+        stationId: null,
+        movable: false,
         id: "l-beer",
         groupId: "g1",
         lineNo: 1,

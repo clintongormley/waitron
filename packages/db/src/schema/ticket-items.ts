@@ -23,8 +23,7 @@ import { workingOrderLines } from "./orders.js";
 export const ticketState = enumType(["queued", "preparing", "ready"]);
 
 /**
- * A per-line, per-station kitchen TICKET ITEM, recorded when a line is sent, with its
- * station SNAPSHOTTED so later routing changes never reroute food already sent. MUTABLE: it advances
+ * A per-line, per-station kitchen TICKET ITEM, recorded when a line is sent. MUTABLE: it advances
  * independently of the parent order's fiscal status (a settled order still has its lines cooked).
  * A `made_here` item was made on the spot at the sending device (design §5.11): it is never printed,
  * is left out of kitchen and expo screens, floor kitchen counts, and the overdue report, and is
@@ -64,6 +63,8 @@ export const ticketItems = table(
     // NULL = HELD: the item cannot advance until it is fired.
     firedAt: tsString("fired_at"),
     awayAt: tsString("away_at"),
+    // Set when a waiter moved this record to its station by hand; a release keeps it there while the station is switched on.
+    stationChosenAt: tsString("station_chosen_at"),
     note: label("note"),
     // The quantity fired. Null where an insert does not state it, and on every row older than
     // `0014_order_edit_columns.sql`.

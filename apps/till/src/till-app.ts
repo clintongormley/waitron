@@ -45,6 +45,8 @@ import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
+import "./widgets/station-choice-dialog.js";
+import { lineProductName } from "./widgets/product-name.js";
 import type {
   AdjustDetail,
   ChangeLineDetail,
@@ -466,6 +468,11 @@ const LINE_REFUSALS = new Set([
   "product.not_sold_separately",
   "ticket.already_started",
   "ticket.already_fired",
+  "ticket.not_sent",
+  "ticket.made_here",
+  "working_order.already_collected",
+  "route.station_inactive",
+  "station.not_found",
   "tab.serve_quantity_invalid",
   "group.not_held",
   "group.not_waiting",
@@ -1387,6 +1394,28 @@ export class TillApp extends LitElement {
    * before any load, or when they could not be read. */
   @state() private counterLines: StoredLines | null = null;
   @state() private stations: Station[] = [];
+  #stationsRead = 0;
+  #stationsLoaded = false;
+  #moveStationOpening: object | null = null;
+  #makeAtOpening: object | null = null;
+  #counterMoveSubmitting: object | null = null;
+  @state() private movingStation: {
+    workingOrderId: string;
+    lineId: string;
+    name: string;
+    stationId: string | null;
+    refusal: string | null;
+    busy: boolean;
+    counter?: boolean;
+    basketRevision?: number;
+    basketGeneration?: number;
+  } | null = null;
+  @state() private makingAt: {
+    index: number;
+    line: OrderLine;
+    orderId: string;
+    session: number;
+  } | null = null;
   /** The default station's queue. Prepay enqueues nothing automatically, so a prepay till never fetches it. */
   @state() private stationQueue: StationQueueGroup[] = [];
   /** Defaults to per-line, which is always correct, until boot answers. */
@@ -1811,12 +1840,47 @@ export class TillApp extends LitElement {
   }
 
   async #loadStationQueue(): Promise<() => void> {
+    await this.#loadStations(true);
     if (this.orderFlow === "prepay") return () => (this.stationQueue = []);
-    if (this.stations.length === 0) this.stations = await this.api.listStations();
     const defaultStation = this.stations.find((station) => station.isDefault);
     const queue =
       defaultStation === undefined ? [] : (await this.api.getStationQueue(defaultStation.id)).items;
     return () => (this.stationQueue = queue);
+  }
+
+  async #loadStations(throwOnFailure = false): Promise<void> {
+    const read = ++this.#stationsRead;
+    try {
+      const stations = await this.api.listStations();
+      if (read === this.#stationsRead) {
+        this.stations = stations;
+        this.#stationsLoaded = true;
+        this.#clearUnlistedDraftStations();
+        this.#clearUnlistedCounterStations();
+      }
+    } catch (error) {
+      if (throwOnFailure) throw error;
+    }
+  }
+
+  #clearUnlistedDraftStations(): void {
+    if (!this.#stationsLoaded) return;
+    const draft = this.#tableDraft();
+    if (draft === null) return;
+    const available = new Set(this.stations.map((station) => station.id));
+    draft.lines.forEach((line, index) => {
+      if (line.makeAt !== undefined && !available.has(line.makeAt))
+        draft.setLineMakeAt(index, undefined);
+    });
+  }
+
+  #clearUnlistedCounterStations(): void {
+    if (!this.#stationsLoaded) return;
+    const available = new Set(this.stations.map((station) => station.id));
+    this.#store.lines.forEach((line, index) => {
+      if (line.makeAt !== undefined && !available.has(line.makeAt))
+        this.#store.setLineMakeAt(index, undefined);
+    });
   }
 
   /**
@@ -2969,6 +3033,7 @@ export class TillApp extends LitElement {
       } else {
         await this.api.parkOrder({ id, lines, label });
       }
+      this.#dismissStationChoices();
       this.#store.clear();
       this.cardOutcome = undefined;
       await this.#refreshAfterWrite("held", "refresh.held_after_park");
@@ -3038,6 +3103,7 @@ export class TillApp extends LitElement {
     id: string,
     left?: () => boolean,
     signal?: AbortSignal,
+    stationChoiceOwner: object | null = null,
   ): Promise<boolean | undefined> {
     const [order, listed] = await Promise.all([
       signal === undefined
@@ -3046,13 +3112,22 @@ export class TillApp extends LitElement {
       this.#readStoredLines(id, signal),
     ]);
     if (left?.() === true) return undefined;
-    this.#loadIntoBasket(order, listed);
+    this.#loadIntoBasket(order, listed, stationChoiceOwner);
     this.stage = "order";
     return listed !== null;
   }
 
   /** Replaces the basket with `order`, rebuilt against today's live offer. */
-  #loadIntoBasket(order: HeldOrder, listed: StoredLines | null): void {
+  #loadIntoBasket(
+    order: HeldOrder,
+    listed: StoredLines | null,
+    stationChoiceOwner: object | null = null,
+  ): void {
+    // Only a counter Move's own reread keeps its refusal choice.
+    if (stationChoiceOwner === null || stationChoiceOwner !== this.#counterMoveSubmitting) {
+      this.#dismissStationChoices();
+      this.#counterMoveSubmitting = null;
+    }
     const lines: OrderLine[] = [];
     let droppedAProduct = false;
     let extraNotOffered = false;
@@ -3115,6 +3190,7 @@ export class TillApp extends LitElement {
     else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
+    this.#clearUnlistedCounterStations();
     this.counterLines = listed;
     this.cardOutcome = undefined;
     this.collectFlow = undefined;
@@ -3141,7 +3217,11 @@ export class TillApp extends LitElement {
    * meanwhile; an answer the basket has moved past (cleared, or loaded again, the same order
    * included) is dropped. `unread` when the order or its lines could not be read, or the answer was
    * dropped; `gone` when the order no longer exists and that has been said. */
-  async #reloadCounterOrder(orderId: string, session: number): Promise<Reread> {
+  async #reloadCounterOrder(
+    orderId: string,
+    session: number,
+    stationChoiceOwner: object | null = null,
+  ): Promise<Reread> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const unlock = this.#store.lockEdits();
     this.#endReloadLock = unlock;
@@ -3154,6 +3234,7 @@ export class TillApp extends LitElement {
         orderId,
         () => limit.signal.aborted || movedOn(),
         limit.signal,
+        stationChoiceOwner,
       );
       if (read !== undefined) load = this.#store.loadGeneration;
       if (read !== true) failure = "held.reread_failed";
@@ -3395,6 +3476,7 @@ export class TillApp extends LitElement {
 
   /** Clear the completed order and return home, retaining this browser tab's menu preference. */
   #onNewSale(): void {
+    this.#dismissStationChoices();
     this.#store.clear();
     this.ticketWorkingOrderId = undefined;
     this.originalReceiptAvailable = false;
@@ -3407,10 +3489,12 @@ export class TillApp extends LitElement {
     if (this.#inShell()) {
       const home = this.canvas?.tabs[0];
       this.#setActiveTab(home?.key, true);
+      if (home?.key === "counter") void this.#loadStations();
       this.#popDrill();
       if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
     } else {
       this.#setScreen("counter");
+      void this.#loadStations();
     }
   }
 
@@ -3485,8 +3569,10 @@ export class TillApp extends LitElement {
   #onTabSelect(key: string, fromHistory = false): void {
     const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);
     if (tab === undefined) return;
+    this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
     this.#setActiveTab(key, fromHistory, fromHistory);
+    if (key === "counter") void this.#loadStations();
     if (fromHistory) this.#restoreDestination();
     else if (this.drill !== undefined) this.#popDrill();
     const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
@@ -3522,6 +3608,10 @@ export class TillApp extends LitElement {
     ).detail;
     const offerRequest = ++this.#tableOfferRequest;
     this.#orderVisit++;
+    this.#moveStationOpening = null;
+    this.#makeAtOpening = null;
+    this.movingStation = null;
+    this.makingAt = null;
     this.#clearErrorKeepingLateChange();
     this.cancelOffer = null;
     this.#tableOpensPending++;
@@ -3630,6 +3720,7 @@ export class TillApp extends LitElement {
       // A late answer must not unlock a logged-out till.
       this.#setScreen("table-order");
     }
+    void this.#loadStations();
   }
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
@@ -3900,6 +3991,7 @@ export class TillApp extends LitElement {
   #showDraft(opened: OpenedDraft): void {
     if (opened === undefined || opened.sync !== this.#draftSync) return;
     this.#draftReady = opened.read;
+    if (opened.read) this.#clearUnlistedDraftStations();
     this.requestUpdate();
     if (!opened.read) this.errorKey = "table.draft_read_failed";
     else this.#reconcileDraft();
@@ -4576,6 +4668,178 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
+  async #onMoveStation(event: Event): Promise<void> {
+    const detail = (
+      event as CustomEvent<{
+        workingOrderId: string;
+        lineId: string;
+        name: string;
+        stationId: string | null;
+        counter?: boolean;
+      }>
+    ).detail;
+    if (
+      this.movingStation !== null ||
+      this.#moveStationOpening !== null ||
+      this.makingAt !== null ||
+      this.#makeAtOpening !== null ||
+      (detail.counter === true && this.#counterMoveSubmitting !== null)
+    )
+      return;
+    const opening = {};
+    this.#moveStationOpening = opening;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const orderId = detail.counter === true ? this.#store.id : this.activeTabId;
+    const revision = this.#store.revision;
+    const generation = this.#store.loadGeneration;
+    const counterEligible = () =>
+      detail.counter !== true ||
+      (detail.workingOrderId === orderId &&
+        generation === this.#store.loadGeneration &&
+        this.#counterStillAdjustable({ orderId: detail.workingOrderId, revision }) &&
+        this.counterLines?.lines.some((line) => line.id === detail.lineId && line.movable) ===
+          true);
+    try {
+      if (!counterEligible()) return;
+      await this.#loadStations();
+      if (
+        this.#moveStationOpening !== opening ||
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        orderId !== (detail.counter === true ? this.#store.id : this.activeTabId) ||
+        !counterEligible()
+      )
+        return;
+      this.movingStation = {
+        ...detail,
+        refusal: null,
+        busy: false,
+        ...(detail.counter === true
+          ? { basketRevision: revision, basketGeneration: generation }
+          : {}),
+      };
+    } finally {
+      if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
+    }
+  }
+
+  async #onOpenMakeAt(event: Event): Promise<void> {
+    if (
+      this.makingAt !== null ||
+      this.#makeAtOpening !== null ||
+      this.movingStation !== null ||
+      this.#moveStationOpening !== null ||
+      this.#counterMoveSubmitting !== null
+    )
+      return;
+    const index = (event as CustomEvent<number>).detail;
+    const orderId = this.#store.id;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const line = this.#store.lines[index];
+    if (line === undefined) return;
+    const opening = {};
+    this.#makeAtOpening = opening;
+    try {
+      await this.#loadStations();
+      if (
+        this.#makeAtOpening !== opening ||
+        this.movingStation !== null ||
+        orderId !== this.#store.id ||
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        this.#store.lines[index] !== line
+      )
+        return;
+      this.makingAt = { index, line, orderId, session };
+    } finally {
+      if (this.#makeAtOpening === opening) this.#makeAtOpening = null;
+    }
+  }
+
+  #onMakeAtChosen(event: Event, open: NonNullable<typeof this.makingAt>): void {
+    if (this.makingAt !== open) return;
+    const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
+    this.makingAt = null;
+    if (
+      open.orderId === this.#store.id &&
+      open.session === this.#operatorSession &&
+      this.#store.lines[open.index] === open.line
+    )
+      this.#store.setLineMakeAt(open.index, stationId ?? undefined);
+  }
+
+  async #onStationChosen(
+    event: Event,
+    open: NonNullable<typeof this.movingStation>,
+  ): Promise<void> {
+    if (this.movingStation !== open) return;
+    const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
+    if (open.busy || stationId === null || stationId === open.stationId) return;
+    if (
+      open.counter === true &&
+      (open.basketGeneration !== this.#store.loadGeneration ||
+        !this.#counterStillAdjustable({
+          orderId: open.workingOrderId,
+          revision: open.basketRevision!,
+        }) ||
+        this.counterLines?.lines.some((line) => line.id === open.lineId && line.movable) !== true)
+    ) {
+      this.movingStation = null;
+      return;
+    }
+    const body = { submissionId: crypto.randomUUID(), lineIds: [open.lineId], stationId };
+    const busy = { ...open, busy: true, refusal: null };
+    this.movingStation = busy;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const generation = this.#store.loadGeneration;
+    const counterSubmission = open.counter === true ? {} : null;
+    if (counterSubmission !== null) this.#counterMoveSubmitting = counterSubmission;
+    const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await resendUnanswered(
+        (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
+        limit.signal,
+        () => session === this.#operatorSession,
+      );
+      if (this.movingStation === busy) this.movingStation = null;
+      if (open.counter === true) {
+        if (
+          generation === this.#store.loadGeneration &&
+          session === this.#operatorSession &&
+          visit === this.#orderVisit
+        )
+          await this.#reloadCounterOrder(open.workingOrderId, session, counterSubmission);
+      } else await this.#loadTabLines();
+    } catch (error) {
+      const refusal = lineWriteError(error);
+      if (this.movingStation === busy)
+        this.movingStation = {
+          ...open,
+          busy: false,
+          refusal:
+            typeof refusal === "object" && "code" in refusal
+              ? refusal.code
+              : ((error as { code?: string }).code ?? "server.internal"),
+        };
+      if (open.counter === true) {
+        if (
+          generation === this.#store.loadGeneration &&
+          session === this.#operatorSession &&
+          visit === this.#orderVisit
+        )
+          await this.#reloadCounterOrder(open.workingOrderId, session, counterSubmission);
+      } else await this.#loadTabLines();
+    } finally {
+      limit.done();
+      unlock();
+      if (this.#counterMoveSubmitting === counterSubmission) this.#counterMoveSubmitting = null;
+    }
+  }
+
   /** Cancel, Give away or Discount pressed, or Cancel offered: the reasons are read, then the dialog
    * opens on the bill as the screen last read it. */
   async #onAdjust(event: Event): Promise<void> {
@@ -5171,6 +5435,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#store.id === orderId) {
+      this.#dismissStationChoices();
       this.#store.clear();
       this.cardOutcome = undefined;
     }
@@ -5846,6 +6111,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#dismissStationChoices();
     this.#endReloadLock();
     this.#menuPoll.stop();
     this.#tableZoneId = undefined;
@@ -6372,8 +6638,17 @@ export class TillApp extends LitElement {
     await this.#rereadPayingOrder(open, balance);
   }
 
+  /** A pending station read belongs to the basket, face, and session where its choice started. */
+  #dismissStationChoices(): void {
+    this.#makeAtOpening = null;
+    this.#moveStationOpening = null;
+    this.makingAt = null;
+    this.movingStation = null;
+  }
+
   /** Every face change goes through here, so the diagnostics trail records it. */
   #setScreen(screen: Screen): void {
+    if (screen !== this.screen) this.#dismissStationChoices();
     diag.record("info", "nav", { screen });
     this.screen = screen;
   }
@@ -6394,12 +6669,14 @@ export class TillApp extends LitElement {
       if (!this.#allowsDestination(drill.kind)) return;
       this.#url.write({ "till-view": drill.kind, "till-station": null });
     }
+    this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
     this.drill = drill;
   }
 
   /** Records the `nav` trail for the tab it returns to. */
   #popDrill(): void {
+    this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
       this.#url.write({ "till-view": null, "till-station": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
@@ -6419,8 +6696,12 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     if (this.#inShell()) {
       this.#setActiveTab("counter");
+      void this.#loadStations();
       this.#popDrill();
-    } else if (this.screen !== "lock") this.#setScreen("counter");
+    } else if (this.screen !== "lock") {
+      this.#setScreen("counter");
+      void this.#loadStations();
+    }
   }
 
   /**
@@ -6457,6 +6738,9 @@ export class TillApp extends LitElement {
     this.#url.write({ "till-zone": null }, true);
     this.#floorLoaded = false;
     this.errorKey = undefined;
+    this.#stationsRead++;
+    this.stations = [];
+    this.#stationsLoaded = false;
     this.#abandonListRefreshes();
     this.#setScreen("lock");
     this.#configureSessionActivity();
@@ -6571,6 +6855,7 @@ export class TillApp extends LitElement {
         .defaultReaderId=${this.defaultReaderId}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
+        .makeAtStations=${this.stations}
         .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;
     }
@@ -6580,6 +6865,8 @@ export class TillApp extends LitElement {
       .tab=${tab}
       .store=${this.#store}
       .storedLines=${this.#basketStoredLines()}
+      .makeAtStations=${tableTab ? [] : this.stations}
+      .stations=${this.stations}
       .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
       .permissions=${this.permissions}
@@ -6663,6 +6950,7 @@ export class TillApp extends LitElement {
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}
           .courses=${this.courses}
+          .stations=${this.stations}
           .fireControl=${this.fireControl}
           .tables=${this.tables}
           .orderId=${this.activeTabId}
@@ -6727,6 +7015,34 @@ export class TillApp extends LitElement {
     }
   }
 
+  #renderMoveStationDialog(open: NonNullable<typeof this.movingStation>) {
+    return html`<till-station-choice-dialog
+      mode="move"
+      .dishName=${open.name}
+      .stations=${this.stations}
+      .currentStationId=${open.stationId}
+      .busy=${open.busy}
+      .refusal=${open.refusal}
+      @station-chosen=${(event: Event) => void this.#onStationChosen(event, open)}
+      @close=${() => {
+        if (this.movingStation === open) this.movingStation = null;
+      }}
+    ></till-station-choice-dialog>`;
+  }
+
+  #renderMakeAtDialog(open: NonNullable<typeof this.makingAt>) {
+    return html`<till-station-choice-dialog
+      mode="make-at"
+      .dishName=${lineProductName(open.line.product)}
+      .stations=${this.stations}
+      .currentStationId=${open.line.makeAt ?? null}
+      @station-chosen=${(event: Event) => this.#onMakeAtChosen(event, open)}
+      @close=${() => {
+        if (this.makingAt === open) this.makingAt = null;
+      }}
+    ></till-station-choice-dialog>`;
+  }
+
   override render() {
     return html`
       <div
@@ -6783,6 +7099,8 @@ export class TillApp extends LitElement {
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
+        @move-station=${(event: Event) => void this.#onMoveStation(event)}
+        @open-make-at=${(event: Event) => void this.#onOpenMakeAt(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
@@ -6874,7 +7192,10 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
-        ${this.#renderCancelCrediting()} ${this.#renderEditDeadEnds()}
+        ${this.#renderCancelCrediting()}
+        ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
+        ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
+        ${this.#renderEditDeadEnds()}
         ${
           this.deadEndsQuestion === null
             ? nothing

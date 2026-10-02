@@ -15,8 +15,8 @@ import type {
 import type { TillStationQueue } from "../widgets/station-queue.js";
 
 const stations: Station[] = [
-  { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
-  { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
+  { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true, open: true },
+  { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true, open: true },
 ];
 
 // None of these tests are about ageing; they only need a valid shape.
@@ -1026,6 +1026,7 @@ describe("till-station-screen kitchen notices", () => {
     note: null,
     wasStarted: true,
     movedTo: null,
+    reroutedTo: null,
     direction: null,
     cancelledExtra: null,
     createdAt: "2026-08-17T10:10:00.000Z",
@@ -1222,6 +1223,7 @@ describe("till-station-screen 15-second refresh", () => {
         note: null,
         wasStarted: false,
         movedTo: null,
+        reroutedTo: null,
         direction: null,
         cancelledExtra: null,
         createdAt: "2026-08-17T10:20:00.000Z",
@@ -1778,6 +1780,7 @@ describe("till-station-screen out-of-date banner", () => {
         note: null,
         wasStarted: false,
         movedTo: null,
+        reroutedTo: null,
         direction: null,
         cancelledExtra: null,
         createdAt: "2026-08-17T10:20:00.000Z",

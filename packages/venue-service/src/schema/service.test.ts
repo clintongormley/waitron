@@ -174,6 +174,7 @@ const EXPECTED: Record<
       "kitchen_notices_kind_ck",
       "kitchen_notices_quantity_ck",
       "kitchen_notices_moved_to_ck",
+      "kitchen_notices_rerouted_to_ck",
       "kitchen_notices_direction_ck",
       "kitchen_notices_direction_kind_ck",
       "kitchen_notices_cancelled_extra_kind_ck",

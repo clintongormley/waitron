@@ -50,6 +50,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
+import { moveDishesToStation } from "./station-move.js";
 import { madeHereAnswer, madeHereSinkFor } from "./made-here.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
@@ -343,6 +344,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_settled": 409,
   "working_order.already_collected": 409,
   "ticket.not_fired": 409,
+  "ticket.not_sent": 409,
+  "ticket.made_here": 409,
   "working_order.reason_required": 400,
   "ticket.already_fired": 409,
   "ticket.invalid_transition": 409,
@@ -1485,7 +1488,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const stations = await withTransaction(deps.db, async (tx) => {
-        return listStations(tx, deps.cfg);
+        const listed = await listStations(tx, deps.cfg);
+        const states = await VENUE_SERVICE.stationStates(
+          tx,
+          { locationId: deps.cfg.locationId },
+          new Date(),
+        );
+        return listed.map((station) => ({
+          ...station,
+          open: states.get(station.id)?.open ?? false,
+        }));
       });
       return c.json(stations);
     }),
@@ -2339,6 +2351,35 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         editSentLines: await VENUE_SERVICE.readEditSentLines(tx),
       }));
       return c.json(tab);
+    }),
+  );
+
+  app.post("/api/working-orders/:id/lines/move-station", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const submissionId = submissionIdOf(body);
+      if (
+        !Array.isArray(body.lineIds) ||
+        body.lineIds.length === 0 ||
+        body.lineIds.length > 100 ||
+        !body.lineIds.every((lineId) => typeof lineId === "string")
+      )
+        throw invalid("lineIds");
+      const lineIds = body.lineIds as string[];
+      for (const lineId of lineIds)
+        if (!isUuid(lineId)) throw new AppError("tab.line_not_found", { tabId: id, lineId });
+      if (typeof body.stationId !== "string" || !isUuid(body.stationId))
+        throw new AppError("station.not_found", { stationId: String(body.stationId) });
+      const result = await withTransaction(deps.db, (tx) =>
+        moveDishesToStation(tx, deps.cfg, id, {
+          submissionId,
+          lineIds,
+          stationId: body.stationId as string,
+        }),
+      );
+      return c.json(result);
     }),
   );
 

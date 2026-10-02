@@ -24,6 +24,7 @@ import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
   ProductCatalogue,
+  Station,
   TabLine,
   TableState,
   TillApi,
@@ -87,6 +88,8 @@ const openTable: TableState = {
 const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([openTable]) });
 
 const tabLine: TabLine = {
+  stationId: null,
+  movable: false,
   id: "line-1",
   groupId: null,
   lineNo: 1,
@@ -530,6 +533,263 @@ describe("till-app table ordering: the table's menus", () => {
   });
 });
 
+it("moves a table dish with one submission id and reloads its current orders", async () => {
+  const listStations = vi.fn().mockResolvedValue([
+    { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
+    { id: "kitchen", name: "Kitchen", displayOrder: 1, isDefault: true, active: true, open: true },
+  ]);
+  const moveDishStation = vi.fn().mockResolvedValue({
+    revision: 1,
+    stationId: "kitchen",
+    moved: [{ workingOrderLineId: "line-1", fromStationId: "bar" }],
+  });
+  const readCurrentOrders = vi
+    .fn()
+    .mockResolvedValue({ revision: 1, reminder: null, groups: [], ungrouped: [] });
+  const { el } = await mountApp({
+    ...seatedFloor(),
+    listStations,
+    moveDishStation,
+    readCurrentOrders,
+  });
+  const screen = await toTableOrder(el);
+  const readsBefore = readCurrentOrders.mock.calls.length;
+  emit(screen, "move-station", {
+    workingOrderId: "wo-7",
+    lineId: "line-1",
+    name: "Café",
+    stationId: "bar",
+  });
+  await flush(el);
+  const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-station-choice-dialog")!;
+  expect(dialog).not.toBeNull();
+  emit(dialog, "station-chosen", { stationId: "kitchen" });
+  await flush(el);
+  expect(moveDishStation).toHaveBeenCalledOnce();
+  expect(moveDishStation).toHaveBeenCalledWith(
+    "wo-7",
+    {
+      submissionId: expect.any(String),
+      lineIds: ["line-1"],
+      stationId: "kitchen",
+    },
+    expect.any(Object),
+  );
+  expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+  expect(readCurrentOrders.mock.calls.length).toBeGreaterThan(readsBefore);
+});
+
+describe("opening a table station move while its station list is pending", () => {
+  const listed: Station[] = [
+    { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
+    { id: "kitchen", name: "Kitchen", displayOrder: 1, isDefault: true, active: true, open: true },
+  ];
+  const move = { workingOrderId: "wo-7", lineId: "line-1", name: "Café", stationId: "bar" };
+
+  it("does not reopen the dialog or repopulate stations after logout", async () => {
+    const listStations = vi.fn().mockResolvedValue(listed);
+    const { el } = await mountApp({ ...seatedFloor(), listStations });
+    const screen = await toTableOrder(el);
+    let answer!: (stations: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () => new Promise<Station[]>((resolve) => (answer = resolve)),
+    );
+    emit(screen, "move-station", move);
+    await flush(el);
+    emit(shell(el), "logout");
+    await flush(el);
+    answer(listed);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+    expect((el as unknown as { stations: Station[] }).stations).toEqual([]);
+  });
+
+  it("does not open the old dish's dialog after switching tables", async () => {
+    const otherTable: TableState = {
+      ...openTable,
+      id: "t3",
+      label: "3",
+      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+    };
+    const listStations = vi.fn().mockResolvedValue(listed);
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+      listStations,
+    });
+    const screen = await toTableOrder(el);
+    let answer!: (stations: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () => new Promise<Station[]>((resolve) => (answer = resolve)),
+    );
+    emit(screen, "move-station", move);
+    await flush(el);
+    emit(screen, "back-to-floor");
+    await flush(el);
+    await openFromFloor(el, otherTable);
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    answer(listed);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+  });
+
+  it("loads stations once for two rapid presses on the same dish", async () => {
+    const listStations = vi.fn().mockResolvedValue(listed);
+    const moveDishStation = vi.fn().mockResolvedValue({
+      revision: 1,
+      stationId: "kitchen",
+      moved: [{ workingOrderLineId: "line-1", fromStationId: "bar" }],
+    });
+    const { el } = await mountApp({ ...seatedFloor(), listStations, moveDishStation });
+    const screen = await toTableOrder(el);
+    const reads = listStations.mock.calls.length;
+    let answer!: (stations: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () => new Promise<Station[]>((resolve) => (answer = resolve)),
+    );
+    emit(screen, "move-station", move);
+    emit(screen, "move-station", move);
+    await flush(el);
+    expect(listStations.mock.calls.length).toBe(reads + 1);
+    answer(listed);
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("till-station-choice-dialog")).toHaveLength(1);
+    emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+      stationId: "kitchen",
+    });
+    await flush(el);
+    expect(moveDishStation).toHaveBeenCalledOnce();
+  });
+});
+
+it("clears a saved draft station missing from the station list", async () => {
+  drafts.drafts.push({
+    id: "draft-1",
+    partyId: "v-2",
+    ownerId: "p1",
+    ownerName: "Ana",
+    revision: 1,
+    takenOverFrom: null,
+    lines: [
+      {
+        id: "draft-line-1",
+        menuItemId: "menu-item-cafe-0",
+        variantId: null,
+        menuVersionId: null,
+        options: [],
+        extras: [],
+        note: null,
+        quantity: "1",
+        courseId: null,
+        makeAt: "switched-off",
+        noMerge: false,
+        unavailable: false,
+      },
+    ],
+  });
+  const { el } = await mountApp({
+    ...seatedFloor(),
+    listStations: vi.fn().mockResolvedValue([
+      {
+        id: "kitchen",
+        name: "Kitchen",
+        displayOrder: 0,
+        isDefault: true,
+        active: true,
+        open: true,
+      },
+    ]),
+  });
+  const screen = await toTableOrder(el);
+  expect(screen.draftStore!.lines[0]!.makeAt).toBeUndefined();
+});
+
+it("keeps the move dialog open with a raced start refusal and rereads the lines", async () => {
+  const moveDishStation = vi.fn().mockRejectedValue({ code: "ticket.already_started" });
+  const getTabLines = vi.fn().mockResolvedValue({
+    lines: [{ ...tabLine, movable: false, state: "preparing" }],
+    revision: 1,
+    editSentLines: true,
+  });
+  const { el } = await mountApp({
+    ...seatedFloor(),
+    moveDishStation,
+    getTabLines,
+    listStations: vi.fn().mockResolvedValue([
+      { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
+      {
+        id: "kitchen",
+        name: "Kitchen",
+        displayOrder: 1,
+        isDefault: true,
+        active: true,
+        open: true,
+      },
+    ]),
+  });
+  const screen = await toTableOrder(el);
+  const readsBefore = getTabLines.mock.calls.length;
+  emit(screen, "move-station", {
+    workingOrderId: "wo-7",
+    lineId: "line-1",
+    name: "Café",
+    stationId: "bar",
+  });
+  await flush(el);
+  emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+    stationId: "kitchen",
+  });
+  await flush(el);
+  const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-station-choice-dialog")!;
+  expect(dialog).not.toBeNull();
+  expect(dialog.shadowRoot!.querySelector("[role='alert']")?.textContent).toContain(
+    "se queda donde está",
+  );
+  expect(getTabLines.mock.calls.length).toBeGreaterThan(readsBefore);
+});
+
+it("reuses the submission id when a station move gets no answer", async () => {
+  const moveDishStation = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+    .mockResolvedValue({
+      revision: 1,
+      stationId: "kitchen",
+      moved: [{ workingOrderLineId: "line-1", fromStationId: "bar" }],
+    });
+  const { el } = await mountApp({
+    ...seatedFloor(),
+    moveDishStation,
+    listStations: vi.fn().mockResolvedValue([
+      { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
+      {
+        id: "kitchen",
+        name: "Kitchen",
+        displayOrder: 1,
+        isDefault: true,
+        active: true,
+        open: true,
+      },
+    ]),
+  });
+  const screen = await toTableOrder(el);
+  emit(screen, "move-station", {
+    workingOrderId: "wo-7",
+    lineId: "line-1",
+    name: "Café",
+    stationId: "bar",
+  });
+  await flush(el);
+  emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+    stationId: "kitchen",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  await flush(el);
+  expect(moveDishStation).toHaveBeenCalledTimes(2);
+  expect(moveDishStation.mock.calls[0]![1].submissionId).toBe(
+    moveDishStation.mock.calls[1]![1].submissionId,
+  );
+});
+
 describe("till-app table ordering: a handheld's Order tab with no table opened", () => {
   // The Order tab is reachable from the tab strip before any table is opened, so the table-order
   // screen can emit its actions while the app holds no tab (and no table) to apply them to.
@@ -802,6 +1062,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     return offers;
   })();
   const burgerLine: TabLine = {
+    stationId: null,
+    movable: false,
     id: "line-5",
     groupId: null,
     lineNo: 5,
@@ -891,12 +1153,17 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   it("hands them to the table screen a handheld mounts as a card too", async () => {
+    const stations: Station[] = [
+      { id: "bar", name: "Bar", displayOrder: 0, isDefault: true, active: true, open: true },
+      { id: "grill", name: "Grill", displayOrder: 1, isDefault: false, active: true, open: true },
+    ];
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
       listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
+      listStations: vi.fn().mockResolvedValue(stations),
       getTabLines: vi
         .fn()
         .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: false }),
@@ -910,6 +1177,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(screen.embedded).toBe(true);
     expect(screen.revision).toBe(7);
     expect(screen.editSentLines).toBe(false);
+    expect(screen.stations).toEqual(stations);
   });
 
   it("reloads the order and says so when another device changed it first", async () => {

@@ -41,6 +41,8 @@ const openBill: PartyBill = {
 
 function line(lineNo: number, over: Partial<TabLine>): TabLine {
   return {
+    stationId: null,
+    movable: false,
     id: `line-${lineNo}`,
     groupId: null,
     lineNo,

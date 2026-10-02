@@ -29,6 +29,7 @@ const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
   "notice-void": CROSS_ICON_PATH,
   "notice-changed": "M11.3 1.9 14.1 4.7 5.8 13H3V10.2ZM2 14.5H14V15.5H2Z",
   "notice-moved": "M2 7H10.6L7.3 3.7 8.7 2.3 14.4 8 8.7 13.7 7.3 12.3 10.6 9H2Z",
+  "notice-rerouted": "M2 7H10.6L7.3 3.7 8.7 2.3 14.4 8 8.7 13.7 7.3 12.3 10.6 9H2Z",
 };
 // Registered here rather than in main.ts: the icons are this widget's, and every surface that mounts it
 // needs them.
@@ -560,6 +561,7 @@ export class TillStationQueue extends LitElement {
       }
 
       .notice-moved,
+      .notice-rerouted,
       .notice-note {
         overflow-wrap: anywhere;
       }
@@ -766,12 +768,16 @@ export class TillStationQueue extends LitElement {
     const sign = notice.direction === null ? "" : notice.direction === "added" ? "+" : "\u2212";
     const line = `${sign}${dishLine(notice, notice.lineName)}`;
     const acknowledge = t("station.notice.acknowledge");
-    const { movedTo, cancelledExtra } = notice;
+    const { movedTo, reroutedTo, cancelledExtra } = notice;
     // A replacer function, so a `$` in the name is never read as a pattern.
     const extra =
       cancelledExtra === null
         ? null
         : t("station.notice.cancelled_extra").replace("{extra}", () => cancelledExtra);
+    const rerouted =
+      reroutedTo === null
+        ? null
+        : t("station.notice.rerouted_to").replace("{station}", () => reroutedTo);
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
       <span class="notice-kind"><wt-icon name=${`notice-${notice.kind}`}></wt-icon>${kind}</span>
       <span class="notice-body">
@@ -794,11 +800,12 @@ export class TillStationQueue extends LitElement {
                 }</span
               >`
         }
+        ${rerouted === null ? nothing : html`<span class="notice-rerouted">${rerouted}</span>`}
       </span>
       <wt-button
         data-acknowledge
         variant="secondary"
-        aria-label=${`${acknowledge}: ${kind} ${line}, ${extra === null ? "" : `${extra}, `}${notice.orderLabel}`}
+        aria-label=${`${acknowledge}: ${kind} ${line}, ${extra === null ? "" : `${extra}, `}${notice.orderLabel}${rerouted === null ? "" : `, ${rerouted}`}`}
         @click=${() => this.#acknowledge(notice)}
       >
         ${acknowledge}

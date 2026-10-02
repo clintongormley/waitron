@@ -97,8 +97,18 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       orderId: "wo-9",
       revision: 4,
       lines: [
-        { ...line, id: "l-1", lineNo: 1, sentAt: "2026-09-30T09:00:00.000Z", state: "queued" },
         {
+          stationId: null,
+          movable: false,
+          ...line,
+          id: "l-1",
+          lineNo: 1,
+          sentAt: "2026-09-30T09:00:00.000Z",
+          state: "queued",
+        },
+        {
+          stationId: null,
+          movable: false,
           ...line,
           id: "l-3",
           lineNo: 3,
@@ -109,6 +119,8 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
           unitPriceGross: "0.30",
         },
         {
+          stationId: null,
+          movable: false,
           ...line,
           id: "l-2",
           lineNo: 2,

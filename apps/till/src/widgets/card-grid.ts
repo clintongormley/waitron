@@ -28,6 +28,7 @@ import type {
   OrderFlow,
   OrderGroup,
   PrintProblem,
+  Station,
   StationQueueGroup,
   TableServiceStatus,
   TableState,
@@ -87,6 +88,8 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+  @property({ attribute: false }) makeAtStations: Station[] = [];
+  @property({ attribute: false }) stations: Station[] = [];
   /** A pay, place or hold of {@link store}'s order is out; see the basket's own. */
   @property({ type: Boolean }) orderInFlight = false;
   @property({ attribute: false }) products: TillProduct[] = [];
@@ -243,6 +246,7 @@ export class TillCardGrid extends LitElement {
         return html`<till-basket
           .store=${this.store}
           .storedLines=${this.storedLines}
+          .makeAtStations=${this.makeAtStations}
           .orderInFlight=${this.orderInFlight}
         ></till-basket>`;
       case "total":
@@ -320,6 +324,7 @@ export class TillCardGrid extends LitElement {
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}
           .courses=${this.courses}
+          .stations=${this.stations}
           .fireControl=${this.fireControl}
           .tables=${this.tables}
           .orderId=${this.orderId}

@@ -233,8 +233,8 @@ default the plan takes; approving the plan approves them.
   key points into the table, and `scripts/migration-upgrade.test.ts` passes through it. Any other
   shape of generated SQL is still a STOP and needs-owner-review.
 - **P11. Once a line has a kitchen record, a request's `makeAt` never changes or clears that line's
-  stored "make at"; and units added to such a dish keep the dish's "make at" even if the request says
-  `null`.** (Widened on re-check from "a SENT dish": 3b treats a held line, which has a record but no
+  stored "make at"; and units added to a manually moved dish keep the dish's "make at" even if the request says
+  `null`. An ordinary sent dish still routes explicitly cleared added units by the current rule.** (Widened on re-check from "a SENT dish": 3b treats a held line, which has a record but no
   `sent_at`, as not yet sent, where `null` clears, 3b plan:1161-1167. A move, not a "make at", is how
   a recorded dish changes station.) 3b's rule for `makeAt` on a write is "a string sets it, `null` clears it, an absent key
   leaves it" (3b plan:1160-1161), and units added to a sent dish go on a new line that copies the
@@ -242,11 +242,11 @@ default the plan takes; approving the plan approves them.
   line (3b plan:1168). A till holding a stale copy of the dish — another till, or this one
   before it re-read — would send `null` and undo P1, sending the added units back to the old station.
   So, for a line with a kitchen record (held or fired), the server ignores any `makeAt` the request
-  carries for that line, and on an edit that adds units to it, treats `makeAt: null` as absent for
+  carries for that line, and on an edit that adds units to a manually moved dish, treats `makeAt: null` as absent for
   the new line; only a station id overrides the copied value (which 3b's "the station has no replacement,
   ask again" retry still needs). A server rule, not a till fix, because a till fix cannot reach
   another till's stale copy. Cost: a waiter cannot ask for the added units "where the rules send
-  them" on a dish that has a make-at; they choose a station instead. **The remaining limit, for
+  them" on a manually moved dish; they choose a station instead. **The remaining limit, for
   approval:** the server cannot tell a stale STATION id from 3b's deliberate retry (which sends a
   station the waiter has just chosen), so an explicit station always overrides. Where that could
   bite, read 2026-10-01: the till that moves the dish reloads the order afterwards (Task 9), which
@@ -793,8 +793,8 @@ are still mapped after 3a and 3b (3a's plan deletes `route.station_inactive` fro
 **A recorded line's make-at stays put (P11).** In 3b's write paths for `makeAt` (`applyLineEdits`
 and the `OrderLinePatch` path): a line that has a kitchen record — held or fired — ignores any
 `makeAt` the request carries for it. And where units added to such a dish go on a new line that copies the dish's `make_at_station_id` (3b plan:1005-1011; today's
-new-line code is at `working-order.ts:3970-3978`, which copies `courseId`): when the request's
-`makeAt` for that line is `null`, keep the copied value; only a station id overrides it. Both entry
+new-line code is at `working-order.ts:3970-3978`, which copies `courseId`): when its ticket has a manual station choice and the request's
+`makeAt` for that line is `null`, keep the copied value. An ordinary sent dish honors explicit `null` and routes by the rule; only a station id overrides a manual choice. Both entry
 points reach it — `OrderLinePatch` (`PUT /api/working-orders/:id/lines/:lineNo`) and the counter's
 whole-order save (`PUT /api/working-orders/:id`, whose `SaleLine.makeAt` 3b writes the same way).
 A `makeAt` on a line with no kitchen record follows 3b's rule unchanged.
@@ -1182,10 +1182,10 @@ someone marks it handled, the next one records again. The wording says so. **Ref
 incidents table carries no trigger (its schema comment, `incidents.ts:14-16`), the dedup conflict is
 absorbed by the targeted clause, and `till_id` is the server's own till row — so, read and not run,
 none of the refusals `raiseDishesNotSent` catches (its catch `dish-not-sent-alert.ts:42-54`, the list
-`ALERT_REFUSALS` `:57`) is expected here. Copy its catch anyway (`isRefusal(error, ALERT_REFUSALS)` →
-swallow), for one reason only: an alert must never fail a release, even though no refusal is
-expected. Log nothing (the release
-paths carry no logger); state that in the function's description. The file must contain no other
+`ALERT_REFUSALS` `:57`) is expected here. Catch only unique and not-null insert refusals; result
+code 1811 alone cannot identify a trigger refusal (`CLAUDE.md` §3). Those listed refusals do not
+fail a release; other failures still propagate. Log
+nothing (the release paths carry no logger). The file must contain no other
 double-quoted dotted literal: `scripts/alert-codes.test.ts` reads every one in a listed file as a
 recorded code (`:84-90`).
 
@@ -1383,7 +1383,8 @@ whenever a table's order screen opens, the counter basket is shown, and a statio
   the table's Change patch sends `makeAt` only on 3b's dead-end retry, which names a station the
   waiter just chose. The counter does hold one (Task 9).
 - `LINE_REFUSALS` gains `ticket.not_sent`, `ticket.made_here`, `working_order.already_collected`, `route.station_inactive`,
-  `station.not_found` and `tab.line_not_found` (`working_order.not_open` already reaches the screen
+  `station.not_found`; the Move dialog handles `tab.line_not_found` itself so other table actions
+  retain their existing generic refusal (`working_order.not_open` already reaches the screen
   through `TABLE_REFUSALS`, `till-app.ts:265-287`). `codes.ts` gains, in both languages: `ticket.not_sent` ("This dish has not
   gone to the kitchen yet. Choose where it is made before sending it" / "Este plato aún no ha ido a
   cocina. Elige dónde se prepara antes de enviarlo"), `ticket.made_here` ("This dish is made here at
@@ -1459,8 +1460,8 @@ whenever a table's order screen opens, the counter basket is shown, and a statio
   reloading: Move to station… is offered only while the basket is unchanged (`adjustableListing`),
   so there is no unsaved edit to keep. A PAID counter order shows no line view, so
   it offers nothing (M9).
-- `ACTIONABLE_REFUSALS` gains the codes Task 8 added to `LINE_REFUSALS`, plus `ticket.already_started`;
-  the counter's dialog shows refusals through `counterError`'s code.
+- The counter's Move dialog shows refusals through its own map. `ACTIONABLE_REFUSALS` serves
+  counter pay, place and hold; it does not need move codes.
 
 - [ ] **Step 1: Write the failing tests**: the basket shows Make at… on an unsent row only with
   `makeAtStations` of two or more, shows the chosen station's name, and dispatches `open-make-at`;
@@ -1600,7 +1601,7 @@ coordinator's rulings on it, all applied:
 - **m1** M19 compares make-at with the record's own station; **m2** "not open" is
   `missing || !active || !open`; **m3** moot (no ongoing source); **m4** Task 10's grep no longer
   enumerates expected hits; **m5** `fireLines` is "the only place that ROUTES a new record"; **m6** the
-  Move dialog words five refusals itself, and `tab.line_not_found` joins `LINE_REFUSALS`; **m7** the
+  Move dialog words five refusals itself, including `tab.line_not_found`; **m7** the
   counter clears a stale make-at; **m8** P3 says a split-off extra on another presented bill has no
   button; **m9** fixture fan-out named in Tasks 6 and 7; **m10** `packages/migrations/src/apply.ts:69`
   cited; **m11** the Move dialog's empty option when the current station is not listed; **m12** a
@@ -1715,7 +1716,7 @@ held.) Changed then:
   checked before `ticket.already_started`. `stillMovable` takes the mark, so `movable` is false for
   one and the till never offers Move to station…. New cases for the refusal and the `movable` flag.
 - **Tasks 7 and 8:** English and Spanish wording for `ticket.made_here` in the Move dialog and the
-  till's code table; it joins `LINE_REFUSALS` (and so, through Task 9, `ACTIONABLE_REFUSALS`).
+  till's code table; it joins `LINE_REFUSALS`.
 - **Builds after:** 3c-1 is now required, not "most likely" — the amendment reads its column.
 
 ## Amended 2026-10-01 (owner, after approval) — second

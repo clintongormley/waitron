@@ -745,8 +745,8 @@ describe("TillApi", () => {
 
   it("listStations GETs the venue's active kitchen stations", async () => {
     const stations = [
-      { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
-      { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
+      { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true, open: true },
+      { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true, open: false },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stations));
 
@@ -757,6 +757,26 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(stations);
+  });
+
+  it("posts a dish station move and returns the moved lines", async () => {
+    const body = { submissionId: "sub-1", lineIds: ["line-1"], stationId: "station-2" };
+    const result = {
+      revision: 4,
+      stationId: "station-2",
+      moved: [{ workingOrderLineId: "line-1", fromStationId: "station-1" }],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
+    const answer = await new TillApi("", fetchStub).moveDishStation("order-1", body);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/order-1/lines/move-station",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify(body),
+      }),
+    );
+    expect(answer).toEqual(result);
   });
 
   it("getStationQueue GETs one station's queue grouped by order", async () => {
@@ -798,6 +818,7 @@ describe("TillApi", () => {
         note: "sin gambas",
         wasStarted: true,
         movedTo: null,
+        reroutedTo: null,
         direction: null,
         cancelledExtra: null,
         createdAt: "2026-08-17T10:05:00.000Z",
@@ -1561,6 +1582,8 @@ describe("TillApi", () => {
     // ticket item (`state: null`), naming its parent dish by `parentLineNo` and its list by `listId`.
     const lines: TabLine[] = [
       {
+        stationId: null,
+        movable: false,
         id: "line-1",
         lineNo: 1,
         productId: "cafe-large",
@@ -1578,6 +1601,8 @@ describe("TillApi", () => {
         groupId: "g1",
       },
       {
+        stationId: null,
+        movable: false,
         id: "line-2",
         lineNo: 2,
         productId: "agua",
