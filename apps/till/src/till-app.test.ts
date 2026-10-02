@@ -983,6 +983,9 @@ describe("till-app", () => {
     const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const { el } = await mountApp({
       updateWorkingOrder,
+      listStations: vi
+        .fn()
+        .mockResolvedValue([defaultStation, { ...defaultStation, id: "kitchen" }]),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         id: "wo-1",
         orderNumber: 5,
@@ -1080,6 +1083,13 @@ describe("till-app", () => {
           orderFlow: action === "Place" ? "ticket_then_pay" : "prepay",
           cardProvider: "simulator",
         }),
+        listStations: vi
+          .fn()
+          .mockResolvedValue([
+            defaultStation,
+            { ...defaultStation, id: "retired", active: false, open: false },
+            { ...defaultStation, id: "kitchen" },
+          ]),
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
           id: "wo-1",
           orderNumber: 5,
