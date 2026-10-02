@@ -37,15 +37,11 @@ export class ImageUpload extends LitElement {
         max-height: 16rem;
         border-radius: var(--wt-radius-md);
       }
-      .hint {
-        margin: var(--wt-space-2) 0 0;
-        color: var(--wt-color-text-muted);
-      }
     `,
   ];
   @property({ attribute: false }) api!: ImageUploader;
   @property() image: string | null = null;
-  /** The photo a blank `image` falls back to — a variant's parent's — shown as a hint, not stored. */
+  /** The photo a blank `image` falls back to — a variant's parent's — is not stored. */
   @property() inheritedImage: string | null = null;
   /** Marks Choose image invalid, so `focusFirstInvalid` lands on it. */
   @property({ type: Boolean }) invalid = false;
@@ -95,13 +91,12 @@ export class ImageUpload extends LitElement {
       ${this.image ? html`<img class="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.selectedNames : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
       ${
         !this.image && this.inheritedImage
-          ? html`<p class="hint" data-test="inherited-hint">${t("editor.inherited_image")}</p>
-              <img
-                class="preview"
-                data-test="inherited-preview"
-                src=${`/media/${encodeURIComponent(this.inheritedImage)}`}
-                alt=${t("editor.inherited_image_alt")}
-              />`
+          ? html`<img
+              class="preview"
+              data-test="inherited-preview"
+              src=${`/media/${encodeURIComponent(this.inheritedImage)}`}
+              alt=${t("editor.inherited_image_alt")}
+            />`
           : nothing
       }
       ${

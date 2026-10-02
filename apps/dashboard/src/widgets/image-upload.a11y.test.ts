@@ -34,14 +34,14 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
-  it("renders accessibly with the main product's photo as a hint", async () => {
+  it("renders accessibly with the inherited photo", async () => {
     const { el, host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",
       { api: stubApi(), inheritedImage: "parent.png" },
       theme,
     );
-    // Without this the scan could pass on a widget that drew no hint.
-    expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=inherited-preview]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
     await expectNoA11yViolations(host);
   });
 });
