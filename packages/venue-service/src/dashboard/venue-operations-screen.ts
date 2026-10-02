@@ -8,7 +8,6 @@ import { codeOf } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   focusFirstInvalid,
-  selectStyles,
   submitOnEnter,
   UrlStateController,
   type DataTableColumn,
@@ -54,7 +53,6 @@ type ServerFields = { fields?: Record<string, string>; codes?: Record<string, st
 export class VenueOperationsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -65,13 +63,6 @@ export class VenueOperationsScreen extends LitElement {
       }
       section {
         margin-block: var(--wt-space-3);
-      }
-      wt-data-table::part(till-zone-select) {
-        font-size: var(--wt-font-size-sm);
-        padding: var(--wt-space-1);
-        min-height: var(--wt-tap-min);
-        min-width: 0;
-        box-sizing: border-box;
       }
       .toolbar {
         display: flex;
@@ -89,19 +80,9 @@ export class VenueOperationsScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         max-width: var(--wt-field-max-width);
       }
-      input {
-        min-width: 0;
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
       input[type="checkbox"] {
         width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
       }
       .required,
       .field-error,
@@ -345,19 +326,29 @@ export class VenueOperationsScreen extends LitElement {
       : nothing;
   }
   #input(name: string, label: string, value = "", type = "text") {
-    const invalid = !!this.#errors()[name];
-    return html`<label
-      ><span>${label} <span class="required">*</span></span
-      ><input
-        name=${name}
-        type=${type}
-        .value=${value}
-        required
-        aria-invalid=${invalid}
-        aria-describedby=${invalid ? `error-${name}` : nothing}
-      />${this.#fieldError(name)}</label
-    >`;
+    return html`<wt-input
+      name=${name}
+      type=${type}
+      label=${label}
+      .value=${value}
+      required
+      error=${this.#errors()[name] ?? ""}
+    ></wt-input>`;
   }
+  #stepper(name: string, label: string, value: string) {
+    return html`<wt-number-stepper
+      name=${name}
+      label=${label}
+      .value=${value}
+      min="0"
+      required
+      error=${this.#errors()[name] ?? ""}
+      .decreaseLabel=${(text: string) => t("venue.decrease").replace("{label}", text)}
+      .increaseLabel=${(text: string) => t("venue.increase").replace("{label}", text)}
+    ></wt-number-stepper>`;
+  }
+  /** A value the choices do not hold starts on the first choice, as a native select would; the
+   * save reads what is shown. An empty first choice is also the text shown while it is chosen. */
   #select(
     name: string,
     label: string,
@@ -366,19 +357,21 @@ export class VenueOperationsScreen extends LitElement {
     required = true,
     disabled = false,
   ) {
-    const invalid = !!this.#errors()[name];
-    return html`<label
-      ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
-      ><select
-        name=${name}
-        ?required=${required}
-        ?disabled=${disabled}
-        aria-invalid=${invalid}
-        aria-describedby=${invalid ? `error-${name}` : nothing}
-      >
-        ${choices.map((choice) => html`<option value=${choice.id} ?selected=${choice.id === value}>${choice.name}</option>`)}</select
-      >${this.#fieldError(name)}</label
-    >`;
+    const first = choices[0];
+    const shown = choices.some((choice) => choice.id === value) ? value : (first?.id ?? "");
+    return html`<wt-combobox
+      name=${name}
+      label=${label}
+      search="auto"
+      placeholder=${first?.id === "" ? first.name : ""}
+      searchPlaceholder=${t("venue.search")}
+      noResultsLabel=${t("venue.no_results")}
+      .options=${choices.map((choice) => ({ value: choice.id, label: choice.name }))}
+      .value=${shown}
+      ?required=${required}
+      ?disabled=${disabled}
+      error=${this.#errors()[name] ?? ""}
+    ></wt-combobox>`;
   }
   #modes(inherited = false) {
     return [
@@ -703,28 +696,28 @@ export class VenueOperationsScreen extends LitElement {
             key: "startsIn",
             label: t("venue.starts_in"),
             cell: (device) =>
-              html`<select
-                aria-label=${`${device.label}: ${t("venue.starts_in")}`}
-                part="till-zone-select"
+              html`<wt-combobox
+                label=${`${device.label}: ${t("venue.starts_in")}`}
+                hide-label
+                search="auto"
+                placeholder=${t("venue.counter_zone")}
+                searchPlaceholder=${t("venue.search")}
+                noResultsLabel=${t("venue.no_results")}
+                .options=${[
+                  { value: "", label: t("venue.counter_zone") },
+                  ...model.zones.map((zone) => ({ value: zone.id, label: zone.name })),
+                ]}
                 .value=${live(model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId ?? "")}
                 ?disabled=${this.busy}
-                @change=${(event: Event) => {
-                  const zoneId = (event.currentTarget as HTMLSelectElement).value;
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  const zoneId = event.detail.value;
                   void this.#save(() =>
                     zoneId
                       ? this.api.setDeviceDefaultZone(device.id, zoneId)
                       : this.api.clearDeviceDefaultZone(device.id),
                   );
                 }}
-              >
-                <option
-                  value=""
-                  ?selected=${!model.deviceZones.some((row) => row.deviceId === device.id)}
-                >
-                  ${t("venue.counter_zone")}
-                </option>
-                ${model.zones.map((zone) => html`<option value=${zone.id} ?selected=${model.deviceZones.some((row) => row.deviceId === device.id && row.zoneId === zone.id)}>${zone.name}</option>`)}
-              </select>`,
+              ></wt-combobox>`,
           },
         ],
         (device) => device.id,
@@ -823,76 +816,59 @@ export class VenueOperationsScreen extends LitElement {
     </section>`;
   }
   /** Blank is off. A stored value the list does not offer, which setup can bring in, is offered too
-   * so the select never shows another. */
+   * so the dropdown never shows another. */
   #releaseReminder() {
     const stored = this.model!.releaseReminderMinutes;
     const choices =
       stored === null || REMINDER_MINUTES.includes(stored)
         ? REMINDER_MINUTES
         : [...REMINDER_MINUTES, stored].sort((a, b) => a - b);
-    const invalid = !!this.fieldErrors.releaseReminderMinutes;
-    return html`<label class="setting"
-        ><span>${t("venue.release_reminder")}</span
-        ><select
-          name="releaseReminderMinutes"
-          ?disabled=${this.busy}
-          aria-invalid=${invalid}
-          aria-describedby=${
-            invalid ? "release-reminder-hint error-releaseReminderMinutes" : "release-reminder-hint"
-          }
-          @change=${(event: Event) => {
-            const value = (event.target as HTMLSelectElement).value;
-            void this.#saveReleaseReminderMinutes(value === "" ? null : Number(value));
-          }}
-        >
-          <option value="" .selected=${live(stored === null)}>
-            ${t("venue.release_reminder.off")}
-          </option>
-          ${choices.map(
-            (minutes) =>
-              html`<option value=${minutes} .selected=${live(minutes === stored)}>
-                ${t("venue.release_reminder.minutes").replace("{n}", String(minutes))}
-              </option>`,
-          )}
-        </select></label
-      >
-      <p class="hint" id="release-reminder-hint" data-test="release-reminder-hint">
-        ${t("venue.release_reminder_hint")}
-      </p>
-      ${this.#fieldError("releaseReminderMinutes")}`;
+    return html`<wt-combobox
+      class="setting"
+      name="releaseReminderMinutes"
+      label=${t("venue.release_reminder")}
+      hint=${t("venue.release_reminder_hint")}
+      search="auto"
+      placeholder=${t("venue.release_reminder.off")}
+      searchPlaceholder=${t("venue.search")}
+      noResultsLabel=${t("venue.no_results")}
+      .options=${[
+        { value: "", label: t("venue.release_reminder.off") },
+        ...choices.map((minutes) => ({
+          value: String(minutes),
+          label: t("venue.release_reminder.minutes").replace("{n}", String(minutes)),
+        })),
+      ]}
+      .value=${live(stored === null ? "" : String(stored))}
+      ?disabled=${this.busy}
+      error=${this.fieldErrors.releaseReminderMinutes ?? ""}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        const value = event.detail.value;
+        void this.#saveReleaseReminderMinutes(value === "" ? null : Number(value));
+      }}
+    ></wt-combobox>`;
   }
   #kitchenTicketGrouping() {
     const stored = this.model!.kitchenTicketGrouping;
-    const invalid = !!this.fieldErrors.kitchenTicketGrouping;
-    return html`<label class="setting"
-        ><span>${t("venue.kitchen_ticket_grouping")}</span
-        ><select
-          name="kitchenTicketGrouping"
-          ?disabled=${this.busy}
-          aria-invalid=${invalid}
-          aria-describedby=${
-            invalid
-              ? "kitchen-ticket-grouping-hint error-kitchenTicketGrouping"
-              : "kitchen-ticket-grouping-hint"
-          }
-          @change=${(event: Event) => {
-            void this.#saveKitchenTicketGrouping(
-              (event.target as HTMLSelectElement).value as KitchenTicketGrouping,
-            );
-          }}
-        >
-          ${GROUPINGS.map(
-            (choice) =>
-              html`<option value=${choice} .selected=${live(choice === stored)}>
-                ${t(`venue.kitchen_ticket_grouping.${choice}`)}
-              </option>`,
-          )}
-        </select></label
-      >
-      <p class="hint" id="kitchen-ticket-grouping-hint" data-test="kitchen-ticket-grouping-hint">
-        ${t("venue.kitchen_ticket_grouping_hint")}
-      </p>
-      ${this.#fieldError("kitchenTicketGrouping")}`;
+    return html`<wt-combobox
+      class="setting"
+      name="kitchenTicketGrouping"
+      label=${t("venue.kitchen_ticket_grouping")}
+      hint=${t("venue.kitchen_ticket_grouping_hint")}
+      search="auto"
+      searchPlaceholder=${t("venue.search")}
+      noResultsLabel=${t("venue.no_results")}
+      .options=${GROUPINGS.map((choice) => ({
+        value: choice,
+        label: t(`venue.kitchen_ticket_grouping.${choice}`),
+      }))}
+      .value=${live(stored)}
+      ?disabled=${this.busy}
+      error=${this.fieldErrors.kitchenTicketGrouping ?? ""}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        void this.#saveKitchenTicketGrouping(event.detail.value as KitchenTicketGrouping);
+      }}
+    ></wt-combobox>`;
   }
   #hours(departmentId: string, omit?: number) {
     return this.model!.hours.filter(
@@ -1007,7 +983,7 @@ export class VenueOperationsScreen extends LitElement {
         );
         return {
           heading: t(assignment ? "venue.edit_assignment" : "venue.make_available"),
-          body: html`${this.#select("assignment-menu", t("venue.menu_name"), menus, editor.menuId, true, !!assignment)}${this.#input("assignment-order", t("venue.display_order"), String(assignment?.displayOrder ?? model.zoneMenus.filter((row) => row.zoneId === editor.zoneId).length), "number")}<label
+          body: html`${this.#select("assignment-menu", t("venue.menu_name"), menus, editor.menuId, true, !!assignment)}${this.#stepper("assignment-order", t("venue.display_order"), String(assignment?.displayOrder ?? model.zoneMenus.filter((row) => row.zoneId === editor.zoneId).length))}<label
               >${t("venue.default")}<input
                 type="checkbox"
                 name="assignment-default"
@@ -1080,8 +1056,6 @@ export class VenueOperationsScreen extends LitElement {
     const marked = Object.keys(this.#errors()).length > 0;
     const invalid = Object.keys(this.fieldErrors).length > 0;
     const recheck = (event: Event) => {
-      // A field that holds focus as the editor closes reports its change after the editor has gone.
-      if (this.editor !== editor) return;
       const name = (event.target as HTMLInputElement).name;
       if (Object.hasOwn(this.refusedFields, name)) {
         const refused = { ...this.refusedFields };
@@ -1106,7 +1080,7 @@ export class VenueOperationsScreen extends LitElement {
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
         }}
       >
-        <div class="form" @input=${recheck} @change=${recheck}>${content.body}</div>
+        <div class="form" @wt-change=${recheck}>${content.body}</div>
         <wt-form-actions
           slot="footer"
           .error=${[...(this.editorError ? [this.editorError] : []), ...(marked ? [t("venue.fix_fields")] : [])].join(" ")}
