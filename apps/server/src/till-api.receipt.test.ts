@@ -752,7 +752,7 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
     ]);
   });
 
-  it("refuses drawer.not_owner, writing nothing, at a till switched off, while the other till sharing the printer opens it", async () => {
+  it("refuses drawer.till_switched_off, writing nothing, at a till switched off, while the other till sharing the printer opens it", async () => {
     const { cfg, press } = await venueWithOpenPolicy();
     const on = await enrolDrawerTill(cfg);
     const off = await enrolDrawerTill(cfg);
@@ -766,7 +766,7 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
 
     expect(refused.status).toBe(400);
     expect(await refused.json()).toEqual({
-      error: { code: "drawer.not_owner", params: { printerId } },
+      error: { code: "drawer.till_switched_off", params: { tillId: off.tillId } },
     });
     expect(await printJobsFor(cfg)).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);

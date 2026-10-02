@@ -126,11 +126,11 @@ shows the switch only when the till's receipt printer has a drawer
 (`PATCH /management-api/tills/:id/opens-drawer`). Every automatic opening (cash, a hand-keyed
 card's slip, a collect, a bill payment or refund) and the Open drawer button read the setting
 through `resolveReceiptPrinter` (`apps/server/src/receipt-print.ts`); the button at a till switched
-off is refused `drawer.not_owner`. The Open drawer route (`POST /api/drawer/open`) needs an enrolled
+off is refused `drawer.till_switched_off`. The Open drawer route (`POST /api/drawer/open`) needs an enrolled
 device — with none it answers `device.unauthorized` — and reads that device's register; it refuses
 a handheld through `assertNotHandheld` and the device-capability check. The automatic paths open
 nothing on a handheld because each of their routes builds its configuration through the shared
-`deviceSaleCfg` (`apps/server/src/device-session.ts`), which allows a drawer only for a till form
+`deviceTillCfg` (`apps/server/src/device-session.ts`), which allows a drawer only for a till form
 factor; a configuration that leaves `allowCashDrawer` unset allows one, so a new route that reaches
 a drawer and builds its configuration another way lets a handheld open its register's drawer, and
 nothing guards that. Regressions: the shared-printer cases in `apps/server/src/receipt-print.test.ts`

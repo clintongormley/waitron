@@ -1927,7 +1927,7 @@ export class TillApi {
    * retries with `override: { personId, pin }` for the authorizing supervisor. The override travels
    * ONLY in this request's body, never a URL, and only when supplied. A wrong PIN rejects `pin.invalid`
    * (401); a till with no receipt printer `drawer.no_printer` (400); a till not set to open its
-   * printer's drawer `drawer.not_owner` (400).
+   * printer's drawer `drawer.till_switched_off` (400).
    */
   async openDrawer(override?: { personId: string; pin: string }): Promise<void> {
     await this.#request<void>("/api/drawer/open", "POST", override ? { override } : {});

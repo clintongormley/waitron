@@ -14,11 +14,7 @@ import {
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import {
-  assertDeviceCapability,
-  deviceSaleCfg as deviceTillCfg,
-  tryReadDevice,
-} from "./device-session.js";
+import { assertDeviceCapability, deviceTillCfg, tryReadDevice } from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {

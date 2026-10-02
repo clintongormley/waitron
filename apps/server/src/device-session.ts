@@ -298,7 +298,7 @@ export async function requireSaleTillId(
  * cash drawer only for a till form factor. Refuses as {@link requireSaleTillId} does. `device` as
  * there.
  */
-export async function deviceSaleCfg(
+export async function deviceTillCfg(
   deps: { db: Database; devMode?: boolean; cfg: TillConfig },
   c: Context,
   device?: DeviceBinding | null,

@@ -140,7 +140,7 @@ import {
 import {
   assertDeviceCapability,
   assertNotHandheld,
-  deviceSaleCfg,
+  deviceTillCfg,
   requireDevice,
   requireSaleTillId,
   tryReadDevice,
@@ -387,7 +387,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.inactive": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
-  "drawer.not_owner": 400,
+  "drawer.till_switched_off": 400,
   "adjustment_reason.not_found": 404,
   // 403, as `authorization.not_permitted` answers: the request is sound, the person may not alone.
   "adjustment.approval_required": 403,
@@ -1143,7 +1143,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
       const device = await tryReadDevice(deps, c);
       const saleCfg: TillConfig = {
-        ...(await deviceSaleCfg(deps, c, device)),
+        ...(await deviceTillCfg(deps, c, device)),
         sendingDeviceId: device?.deviceId,
         madeHereSink: madeHereSinkFor(c),
       };
@@ -1510,10 +1510,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "drawer_open", device);
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
-      const drawerCfg: TillConfig = {
-        ...deps.cfg,
-        tillId: await requireSaleTillId(deps, c, device),
-      };
+      const drawerCfg = await deviceTillCfg(deps, c, device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTransaction(deps.db, async (tx) => {
         const [loc] = await tx
@@ -1546,7 +1543,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           throw new AppError("drawer.not_attached", { printerId: printer.id });
         }
         if (!printer.tillOpensDrawer) {
-          throw new AppError("drawer.not_owner", { printerId: printer.id });
+          throw new AppError("drawer.till_switched_off", { tillId: drawerCfg.tillId });
         }
         await enqueueManualDrawerOpen(
           tx,
@@ -1569,7 +1566,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
-      const saleCfg = await deviceSaleCfg(deps, c);
+      const saleCfg = await deviceTillCfg(deps, c);
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,

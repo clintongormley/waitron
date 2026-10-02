@@ -623,7 +623,9 @@ function lateChangeMessage(late: LateChange): string {
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
 function drawerErrorKey(code: string | undefined): StringKey {
-  return code === "drawer.not_attached" || code === "drawer.not_owner" ? code : "drawer.error";
+  return code === "drawer.not_attached" || code === "drawer.till_switched_off"
+    ? code
+    : "drawer.error";
 }
 
 /** A banner's string key, a refusal shown through its code's own message, a save refused because

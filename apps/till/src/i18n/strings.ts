@@ -594,7 +594,7 @@ export const en = {
   "payment_slip.error": "Could not print the payment slip, try again",
   "drawer.error": "Could not open the cash drawer, try again",
   "drawer.not_attached": "No cash drawer is attached to this printer",
-  "drawer.not_owner":
+  "drawer.till_switched_off":
     "This till is not set to open the cash drawer — a manager can switch it on under Printing rules",
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
@@ -1414,7 +1414,7 @@ export const es: Record<StringKey, string> = {
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",
   "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
   "drawer.not_attached": "Esta impresora no tiene un cajón conectado",
-  "drawer.not_owner":
+  "drawer.till_switched_off":
     "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en Reglas de impresión",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",

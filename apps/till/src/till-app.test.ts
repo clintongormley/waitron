@@ -1777,7 +1777,7 @@ describe("till-app", () => {
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
     [
-      "drawer.not_owner",
+      "drawer.till_switched_off",
       "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en Reglas de impresión",
     ],
   ])(
@@ -1880,7 +1880,7 @@ describe("till-app", () => {
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
     [
-      "drawer.not_owner",
+      "drawer.till_switched_off",
       "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en Reglas de impresión",
     ],
   ])(

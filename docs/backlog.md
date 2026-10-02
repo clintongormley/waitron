@@ -5188,9 +5188,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       finds, because until now every till whose receipt printer had a drawer opened it; a second
       till sharing the printer is switched off by hand. Every automatic opening and the Open drawer
       button check it; the button now needs an enrolled device and reads its register, where it
-      read the box's configured till, and a till switched off is refused `drawer.not_owner`. Found on the way: once collect accepted a
+      read the box's configured till, and a till switched off is refused `drawer.till_switched_off`. Found on the way: once collect accepted a
       handheld, a handheld collecting in cash would have opened its register's drawer; collect now
-      builds its configuration through the same `deviceSaleCfg` as the sale and bill routes, which
+      builds its configuration through the same `deviceTillCfg` as the sale and bill routes, which
       allows a drawer only on a till. The dashboard's "Test open drawer"
       calibration (`POST /management-api/printers/:id/test-drawer`) still opens any active
       printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no till
