@@ -36,6 +36,7 @@ import {
   isReleased,
   priceTabRound,
   routingOnce,
+  type RoutingOnce,
   refusePaymentInFlight,
   splitLinesWithinOrder,
   type TabRoundLine,
@@ -262,7 +263,15 @@ export async function fireGroup(
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireHeldGroup(tx, partyId, groupId);
-      await releaseGroup(tx, cfg, partyId, groupId, args.operatorId, {});
+      await releaseGroup(
+        tx,
+        cfg,
+        partyId,
+        groupId,
+        args.operatorId,
+        {},
+        routingOnce(tx, cfg, new Date()),
+      );
       return { revision };
     },
     cfg.madeHereSink,
@@ -362,6 +371,7 @@ export async function fireHeldGroupsOfCourse(
   orderId: string,
   courseId: string,
   operatorId: string,
+  routing?: RoutingOnce,
 ): Promise<void> {
   const party = await partyRevisionOfOrder(tx, orderId);
   if (party === null) return;
@@ -387,10 +397,18 @@ export async function fireHeldGroupsOfCourse(
   if (groups.length === 0) return;
   await checkAndBumpParty(tx, partyId, party.revision, "open");
   for (const group of groups) {
-    await releaseGroup(tx, cfg, partyId, group.id, operatorId, {
-      courseId,
-      workingOrderId: orderId,
-    });
+    await releaseGroup(
+      tx,
+      cfg,
+      partyId,
+      group.id,
+      operatorId,
+      {
+        courseId,
+        workingOrderId: orderId,
+      },
+      routing,
+    );
   }
 }
 
@@ -429,6 +447,7 @@ async function releaseGroup(
   groupId: string,
   operatorId: string,
   detail: Record<string, unknown>,
+  routing = routingOnce(tx, cfg, new Date()),
 ): Promise<void> {
   const lines = await tx
     .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
@@ -447,11 +466,11 @@ async function releaseGroup(
   // The marker, not the setting: a group whose HOLD ticket was queued is fired by a FIRE slip.
   const mark = group!.holdPrintedAt === null ? undefined : "FIRE";
   for (const [orderId, lineIds] of byOrder) {
-    await fireOrderLines(tx, cfg, orderId, lineIds, mark);
+    await fireOrderLines(tx, cfg, orderId, lineIds, mark, routing);
   }
   await tx
     .update(orderGroups)
-    .set({ state: "fired", firedAt: nowIso(), firedBy: operatorId, remindAt: null })
+    .set({ state: "fired", firedAt: routing.at.toISOString(), firedBy: operatorId, remindAt: null })
     .where(eq(orderGroups.id, groupId));
   await recordGroupEvent(tx, { partyId, groupId, kind: "fired", actorId: operatorId, detail });
 }
@@ -1118,6 +1137,14 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       asc(workingOrderLines.lineNo),
     );
   const extras = new Map<string, CurrentOrderExtra[]>();
+  const heldExtras = new Set(
+    lines
+      .filter(
+        (line) =>
+          line.parentLineId !== null && line.ticketItemId !== null && line.ticketFiredAt === null,
+      )
+      .map((line) => line.parentLineId),
+  );
   for (const line of lines) {
     if (line.parentLineId === null) continue;
     extras.set(line.parentLineId, [
@@ -1153,7 +1180,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       unitPrecision: line.unitPrecision,
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
-      released: isReleased(line),
+      released: isReleased(line) && !heldExtras.has(line.id),
       kitchen:
         line.ticketState === null
           ? null

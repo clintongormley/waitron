@@ -31,6 +31,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { and, eq, exists, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import type { GetColumnData, SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   AppError,
   centsToDecimal,
@@ -170,6 +171,7 @@ import {
   readCancelledExtra,
 } from "./kitchen-print.js";
 import type { CancelledExtra, CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
+import { onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
@@ -1635,7 +1637,9 @@ async function heldNoRouteLines(
   cfg: TillConfig,
   orderId: string,
   scope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] } | "all",
-): Promise<string[]> {
+  routing: RoutingOnce,
+): Promise<{ zoneId: string | null; lines: { id: string; courseId: string | null }[] }> {
+  const empty = { zoneId: null, lines: [] };
   let inScope: SQL | undefined;
   if (scope !== "all") {
     const namedCourses = scope.courseIds.filter((id): id is string => id !== null);
@@ -1644,12 +1648,16 @@ async function heldNoRouteLines(
       ...(scope.courseIds.includes(null) ? [isNull(workingOrderLines.courseId)] : []),
       ...(scope.lineIds.length > 0 ? [inArray(workingOrderLines.id, [...scope.lineIds])] : []),
     ];
-    if (any.length === 0) return [];
+    if (any.length === 0) return empty;
     inScope = or(...any);
   }
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
   const candidates = await tx
-    .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+    .select({
+      id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
+      courseId: workingOrderLines.courseId,
+    })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(
@@ -1662,19 +1670,20 @@ async function heldNoRouteLines(
         inScope,
       ),
     );
-  const routes = await VENUE_SERVICE.resolveMakers(
-    tx,
-    cfg,
-    serviceContext?.zoneId ?? null,
-    [...new Set(candidates.map((line) => line.productId!))],
-    new Date(),
-  );
-  return candidates
-    .filter((line) => {
-      const outcome = routes.get(line.productId!);
-      return outcome?.kind === "made" && outcome.route.kind === "no_preparation";
-    })
-    .map((line) => line.id);
+  const zoneId = serviceContext?.zoneId ?? null;
+  if (candidates.length === 0) return { zoneId, lines: [] };
+  const routes = await (
+    await routing()
+  ).makers(zoneId, [...new Set(candidates.map((line) => line.productId!))]);
+  return {
+    zoneId,
+    lines: candidates
+      .filter((line) => {
+        const outcome = routes.get(line.productId!);
+        return outcome?.kind === "made" && outcome.route.kind === "no_preparation";
+      })
+      .map((line) => ({ id: line.id, courseId: line.courseId })),
+  };
 }
 
 /**
@@ -1731,11 +1740,20 @@ export async function fireCourse(
   operatorId: string,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
-  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId);
-  await releaseHeld(tx, cfg, orderId, eq(ticketItems.courseId, courseId), {
-    courseIds: [courseId],
-    lineIds: [],
-  });
+  const routing = routingOnce(tx, cfg, new Date());
+  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId, routing);
+  await releaseHeld(
+    tx,
+    cfg,
+    orderId,
+    eq(ticketItems.courseId, courseId),
+    {
+      courseIds: [courseId],
+      lineIds: [],
+    },
+    undefined,
+    routing,
+  );
 }
 
 /**
@@ -1748,14 +1766,16 @@ export async function fireOrderLines(
   orderId: string,
   lineIds: readonly string[],
   mark?: "FIRE",
+  routing?: RoutingOnce,
 ): Promise<void> {
   await releaseHeld(
     tx,
     cfg,
     orderId,
-    inArray(ticketItems.workingOrderLineId, [...lineIds]),
+    onDishesOrTheirExtras(tx, lineIds),
     { courseIds: [], lineIds },
     mark,
+    routing,
   );
 }
 
@@ -1770,8 +1790,9 @@ async function releaseHeld(
   ticketScope: SQL,
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
   mark?: "FIRE",
+  routing = routingOnce(tx, cfg, new Date()),
 ): Promise<void> {
-  const firedNow = nowIso();
+  const firedNow = routing.at.toISOString();
   const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: firedNow })
@@ -1781,7 +1802,7 @@ async function releaseHeld(
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
     });
-  const noRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope);
+  const noRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope, routing);
   // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
   // order's held work is committed.
   await finishRelease(
@@ -1793,6 +1814,7 @@ async function releaseHeld(
     firedNow,
     await isOpenOrder(tx, orderId),
     mark,
+    routing,
   );
 }
 
@@ -1807,15 +1829,38 @@ async function finishRelease(
   cfg: TillConfig,
   orderId: string,
   fired: FiredItem[],
-  noRoute: readonly string[],
+  noRoute: { zoneId: string | null; lines: { id: string; courseId: string | null }[] },
   at: string,
   refuseSoldOut: boolean,
   mark?: "FIRE",
+  routing = routingOnce(tx, cfg, new Date(at)),
 ): Promise<void> {
-  const released = [...fired.map((item) => item.workingOrderLineId), ...noRoute];
+  const released = [
+    ...fired.map((item) => item.workingOrderLineId),
+    ...noRoute.lines.map((line) => line.id),
+  ];
   if (refuseSoldOut) await assertSendable(tx, released);
   await stampSent(tx, orderId, released, at);
-  await enqueueKitchenTickets(tx, cfg, orderId, fired, { mark });
+  const extras = await insertSplitExtras(
+    tx,
+    cfg,
+    orderId,
+    noRoute.zoneId,
+    noRoute.lines.map((line) => ({
+      dishLineId: line.id,
+      stationId: null,
+      courseId: line.courseId,
+      firedAt: at,
+    })),
+    routing,
+  );
+  await enqueueKitchenTickets(
+    tx,
+    cfg,
+    orderId,
+    [...fired, ...extras.filter((item) => item.firedAt !== null)],
+    { mark },
+  );
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
@@ -1860,6 +1905,7 @@ export async function sendLines(
         ).map((line) => line.id);
   // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
   const firedNow = nowIso();
+  const routing = routingOnce(tx, cfg, new Date(firedNow));
   const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: firedNow, queuedAt: firedNow })
@@ -1869,7 +1915,7 @@ export async function sendLines(
         isNull(ticketItems.firedAt),
         ...(lineNos.length === 0
           ? [notInArray(ticketItems.workingOrderLineId, heldGroupLineIds)]
-          : [inArray(ticketItems.workingOrderLineId, namedLineIds)]),
+          : [onDishesOrTheirExtras(tx, namedLineIds)]),
       ),
     )
     .returning({
@@ -1880,24 +1926,24 @@ export async function sendLines(
     });
   // Sending everything held releases every held no-route line outside a held group. Sending named
   // lines releases the named ones, and a course's no-route lines once nothing routed in that course is still held.
-  const noRoute = (
-    await heldNoRouteLines(
-      tx,
-      cfg,
-      tabId,
-      lineNos.length === 0
-        ? "all"
-        : {
-            courseIds: await releasedCourses(
-              tx,
-              tabId,
-              firedItems.map((item) => item.courseId),
-            ),
-            lineIds: namedLineIds,
-          },
-    )
-  ).filter((id) => !heldGroupLineIdSet.has(id));
-  await finishRelease(tx, cfg, tabId, firedItems, noRoute, firedNow, true);
+  const noRoute = await heldNoRouteLines(
+    tx,
+    cfg,
+    tabId,
+    lineNos.length === 0
+      ? "all"
+      : {
+          courseIds: await releasedCourses(
+            tx,
+            tabId,
+            firedItems.map((item) => item.courseId),
+          ),
+          lineIds: namedLineIds,
+        },
+    routing,
+  );
+  noRoute.lines = noRoute.lines.filter((line) => !heldGroupLineIdSet.has(line.id));
+  await finishRelease(tx, cfg, tabId, firedItems, noRoute, firedNow, true, undefined, routing);
 }
 
 /** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
@@ -2433,13 +2479,16 @@ export async function setLineCourse(
   const [item] = await tx
     .select({ firedAt: ticketItems.firedAt })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderLineId, line.id));
+    .where(and(onDishesOrTheirExtras(tx, [line.id]), isNotNull(ticketItems.firedAt)));
   if (item !== undefined && item.firedAt != null) {
     throw new AppError("ticket.already_fired", { workingOrderId: tabId });
   }
   await tx.update(workingOrderLines).set({ courseId }).where(eq(workingOrderLines.id, line.id));
   // The held ticket item's course snapshot too; no row when the line has no item yet.
-  await tx.update(ticketItems).set({ courseId }).where(eq(ticketItems.workingOrderLineId, line.id));
+  await tx
+    .update(ticketItems)
+    .set({ courseId })
+    .where(onDishesOrTheirExtras(tx, [line.id]));
   await bumpRevision(tx, [tabId]);
 }
 
@@ -2456,6 +2505,7 @@ interface ServableLine {
   ticketItemId: string | null;
   ticketFiredAt: string | null;
   ticketMadeHere: boolean | null;
+  extraHeld: boolean;
 }
 
 /**
@@ -2469,6 +2519,8 @@ async function servableLines(
   where: SQL,
 ): Promise<ServableLine[]> {
   const family = await partyFamily(tx, partyId);
+  const extra = alias(workingOrderLines, "servable_extra");
+  const extraItem = alias(ticketItems, "servable_extra_item");
   return tx
     .select({
       id: workingOrderLines.id,
@@ -2482,6 +2534,13 @@ async function servableLines(
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
       ticketMadeHere: ticketItems.madeHere,
+      extraHeld: exists(
+        tx
+          .select({ one: sql`1` })
+          .from(extra)
+          .innerJoin(extraItem, eq(extraItem.workingOrderLineId, extra.id))
+          .where(and(eq(extra.parentLineId, workingOrderLines.id), isNull(extraItem.firedAt))),
+      ).mapWith(Boolean),
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
@@ -2559,7 +2618,7 @@ export async function ordersWithUnfiredDish(
 
 /** Serving needs released work ({@link isReleased}), else `group.line_held`. */
 function refuseUnreleased(line: ServableLine): void {
-  if (!isReleased(line)) {
+  if (!isReleased(line) || line.extraHeld) {
     throw new AppError("group.line_held", { tabId: line.workingOrderId, lineNo: line.lineNo });
   }
 }
