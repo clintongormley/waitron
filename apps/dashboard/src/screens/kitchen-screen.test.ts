@@ -320,3 +320,23 @@ describe("kitchen-screen remaining edges", () => {
     expect(q(el, "[role=alert]")).toBeNull();
   });
 });
+
+it("clears a failed load's message once the server answers again", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({
+      listCourses: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(COURSES.map((c) => ({ ...c }))),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+  await vi.waitFor(() =>
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+  );
+  liveData.refresh();
+  await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+  expect(q(el, "[data-test=course-row-c1]")).not.toBeNull();
+});

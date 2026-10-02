@@ -388,3 +388,25 @@ describe("purchases-screen — single-flight and dismissal", () => {
     expect(form(el).open).toBe(true);
   });
 });
+
+it("clears a failed load's message once the server answers again", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({
+      listPurchaseInvoices: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(invoices),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed", "es-ES"),
+    ),
+  );
+  liveData.refresh();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
+  expect(list(el)!.invoices).toEqual(invoices);
+});

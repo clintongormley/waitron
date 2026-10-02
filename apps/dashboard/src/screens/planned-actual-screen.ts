@@ -69,6 +69,9 @@ export class PlannedActualScreen extends LitElement {
     (error) => {
       this.errorKey = codeOf(error);
     },
+    (error) => {
+      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    },
   );
 
   @state() private locations: LocationSummary[] = [];

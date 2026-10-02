@@ -87,6 +87,9 @@ export class KitchenScreen extends LitElement {
     (error) => {
       this.errorKey = codeOf(error);
     },
+    (error) => {
+      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    },
   );
 
   @state() private submitting = false;

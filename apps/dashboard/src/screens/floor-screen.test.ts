@@ -837,3 +837,53 @@ it.each([
     expect(errorKey(el)).toBeNull();
   },
 );
+
+it("clears a failed load's message once the server answers again", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({
+      listZones: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(ZONES.map((z) => ({ ...z }))),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+  await vi.waitFor(() =>
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+  );
+  liveData.refresh();
+  await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+  expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull();
+  expect(q(el, "[data-test=table-row-t1]")).not.toBeNull();
+});
+
+it("keeps an unsaved, typed zone name through a failed read and its recovery", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull());
+  const innerInput = async (sel: string): Promise<HTMLInputElement> => {
+    const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(sel)!;
+    await control.updateComplete;
+    return control.shadowRoot!.querySelector("input")!;
+  };
+  const name = await innerInput("[data-test=zone-name-z1]");
+  name.value = "Salón";
+  name.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+
+  vi.mocked(api.listZones).mockRejectedValue({ code: "connection.failed" });
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+  );
+  vi.mocked(api.listZones).mockResolvedValue([{ ...ZONES[0]!, displayOrder: 3 }]);
+  liveData.refresh();
+  await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+
+  expect((await innerInput("[data-test=zone-order-z1]")).value).toBe("3");
+  expect((await innerInput("[data-test=zone-name-z1]")).value).toBe("Salón");
+  expect(api.updateZone).not.toHaveBeenCalled();
+});

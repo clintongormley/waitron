@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/client.js";
 import { PlannedActualScreen } from "./planned-actual-screen.js";
 import type { WtInput } from "@waitron/ui";
@@ -371,5 +372,54 @@ describe("planned-actual-screen week field", () => {
     );
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("loc-1", "2026-04-06", "2026-04-13");
+  });
+});
+
+describe("planned-actual-screen — recovery after the server answers again", () => {
+  const errorText = (el: PlannedActualScreen) =>
+    el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim();
+
+  it("clears a failed rows read's message once the server answers again", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getPlannedVsActual: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(rows),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    liveData.refresh();
+    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
+    expect(el.shadowRoot!.textContent).toContain("240");
+  });
+
+  it("reads the week's rows once the locations read that failed on opening succeeds", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getLocations: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(locations),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await vi.waitFor(() =>
+      expect((el as unknown as { errorKey: string | null }).errorKey).toBe("connection.failed"),
+    );
+    expect(api.getPlannedVsActual).not.toHaveBeenCalled();
+    liveData.refresh();
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("240"));
+    expect(el.shadowRoot!.textContent).toContain("Ana");
+    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
   });
 });
