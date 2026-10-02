@@ -171,7 +171,7 @@ import {
   readCancelledExtra,
 } from "./kitchen-print.js";
 import type { CancelledExtra, CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
-import { onDishesOrTheirExtras } from "./dish-kitchen.js";
+import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
@@ -2009,7 +2009,7 @@ export async function recallLines(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(inArray(ticketItems.workingOrderLineId, lineIds));
+    .where(onDishesOrTheirExtras(tx, lineIds));
   if (items.some((r) => r.sentAt !== null) && !(await VENUE_SERVICE.readEditSentLines(tx))) {
     throw new AppError("ticket.already_fired", { workingOrderId: tabId });
   }
@@ -2033,7 +2033,7 @@ export async function recallLines(
       and(
         eq(ticketItems.workingOrderId, tabId),
         eq(ticketItems.state, "queued"),
-        inArray(ticketItems.workingOrderLineId, lineIds),
+        onDishesOrTheirExtras(tx, lineIds),
       ),
     );
   await enqueueCorrectionSlips(tx, cfg, tabId, recalled, "RECALLED");
@@ -2231,8 +2231,8 @@ export interface VoidTarget {
  * and the party's revisions on. A line that had already fired records a VOID kitchen notice for what
  * was removed — marked started when the cook had started it — and gets a VOID correction slip where
  * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
- * notice for what was removed and gets a HOLD CANCELLED slip instead. An extra, which has no
- * kitchen item of its own, tells the kitchen about its dish ({@link tellKitchenOfCancelledExtra}).
+ * notice for what was removed and gets a HOLD CANCELLED slip instead. Cancelling an extra also
+ * tells the kitchen about its dish ({@link tellKitchenOfCancelledExtra}).
  */
 export async function removeFromLine(
   tx: Transaction,
@@ -2244,6 +2244,20 @@ export async function removeFromLine(
 ): Promise<void> {
   const wasStarted = isStarted(target.state);
   const extra = target.parentLineId === null ? null : await readCancelledExtra(tx, target.id);
+  const childItems =
+    target.parentLineId === null
+      ? ((await dishKitchenItems(tx, [target.id])).get(target.id) ?? []).filter(
+          (item) => item.extra,
+        )
+      : [];
+  const removedQuantity = (item: (typeof childItems)[number]) =>
+    removed === null
+      ? item.firedQuantity
+      : removed *
+        perDishOptionQuantity(
+          thousandthsToDecimal(item.lineQuantity),
+          thousandthsToDecimal(target.quantity),
+        );
   const voided =
     target.firedAt !== null
       ? [
@@ -2256,25 +2270,40 @@ export async function removeFromLine(
           },
         ]
       : [];
+  voided.push(
+    ...childItems
+      .filter((item) => item.firedAt !== null)
+      .map((item) => ({
+        workingOrderLineId: item.workingOrderLineId,
+        stationId: item.stationId,
+        quantity: removedQuantity(item),
+        wasStarted: isStarted(item.state),
+      })),
+  );
   // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
-  if (target.ticketItemId !== null && target.firedAt === null && target.groupId !== null) {
+  if (target.groupId !== null) {
     const group = (await printedHeldGroups(tx, [target.groupId])).get(target.groupId);
     if (group !== undefined) {
-      await correctHoldTickets(
-        tx,
-        cfg,
-        [
-          {
-            workingOrderId: tabId,
-            workingOrderLineId: target.id,
-            stationId: target.stationId!,
-            quantity: removed ?? target.firedQuantity,
-            group,
-          },
-        ],
-        { kind: "HOLD CANCELLED" },
-      );
+      const held = childItems
+        .filter((item) => item.firedAt === null)
+        .map((item) => ({
+          workingOrderId: tabId,
+          workingOrderLineId: item.workingOrderLineId,
+          stationId: item.stationId,
+          quantity: removedQuantity(item),
+          group,
+        }));
+      if (target.ticketItemId !== null && target.firedAt === null) {
+        held.unshift({
+          workingOrderId: tabId,
+          workingOrderLineId: target.id,
+          stationId: target.stationId!,
+          quantity: removed ?? target.firedQuantity,
+          group,
+        });
+      }
+      await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
     }
   }
   await bumpRevision(tx, [tabId]);
@@ -2423,6 +2452,12 @@ async function reduceLine(
     })
     .where(eq(workingOrderLines.id, target.id));
   await rescaleExtras(tx, children, remaining);
+  for (const { child, perDish } of children) {
+    await tx
+      .update(ticketItems)
+      .set({ quantity: decimalToThousandths(extraQuantityFor(perDish, remaining)) })
+      .where(eq(ticketItems.workingOrderLineId, child.id));
+  }
   await clampServed(tx, [target.id, ...children.map(({ child }) => child.id)]);
   if (target.ticketItemId !== null) {
     await tx
