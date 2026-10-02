@@ -2623,8 +2623,15 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
       space changes the screen's layout, so it is its own change. Likewise the till's
       `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
-      above the bottom edge, the room the old language footer took; decide whether it should drop
-      to the bottom edge.
+      above the bottom edge, the room the old bottom-right language button (later the footer)
+      took; decide whether it should drop to the bottom edge. On the dashboard, the language
+      chooser's menu is now a native popover in the top layer (A187), so it paints over the alert
+      pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`, which hangs below the
+      banner at its trailing edge with `z-index: 40`, a stacking order the top layer ignores): where
+      the two overlap, an alert arriving while the menu is open is hidden under it, and its
+      countdown keeps running,
+      since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
+      or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a

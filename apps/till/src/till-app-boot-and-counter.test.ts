@@ -1133,7 +1133,7 @@ function edgesOf(el: TillApp, screen: Element) {
   };
 }
 
-/** The language button is drawn, and wholly inside the page: neither above its top nor below its bottom. */
+/** The language button is drawn, and lies vertically inside the page: neither above its top nor below its bottom. */
 function expectChooserOnPage(chooser: DOMRect, pageBox: DOMRect): void {
   expect(chooser.height).toBeGreaterThan(0);
   expect(chooser.top).toBeGreaterThanOrEqual(pageBox.top);
