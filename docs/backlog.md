@@ -4677,7 +4677,8 @@ approved.
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, #1036).**
+- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, #1036; the two shipped migrations' comments followed in #1042).**
+  **#1042 needs every venue migrated before it reset** — the owner's box included (dev venues: `wa-wt reset demo <name>`): it changed the hashes of `packages/db/drizzle/0001_behavioural_triggers.sql` and `packages/media/drizzle/0001_image_references.sql`, so boot refuses such a venue with `provisioning.database_ahead`.
   Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites, which name
   no engine.
 
