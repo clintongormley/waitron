@@ -1757,12 +1757,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         deps.cfg,
         id,
         body.reason,
-        personId,
-        sessionId,
+        { personId, sessionId, attempts: overridePinAttempts(pinThrottle, tillId) },
         () => requireSaleTillId(deps, c, device),
-        override === undefined
-          ? undefined
-          : { ...override, attempts: overridePinAttempts(pinThrottle, tillId) },
+        override,
       );
       return c.body(null, 200);
     }),

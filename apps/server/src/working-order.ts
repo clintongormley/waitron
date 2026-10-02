@@ -4959,19 +4959,16 @@ export async function markOrderPlaced(
  * placed order is refused while an integrated card collection of it runs in this process.
  *
  * The credit needs `sale.rectify` from the operator or from `override`. Only when the operator lacks
- * it is the override's PIN checked, under `override.attempts` before the credit, so a wrong one
- * counts as it does on the other till overrides. `recordCorrection`'s own check, which counts
- * nothing, then passes the same override.
+ * it is the override's PIN checked, under `operator.attempts`, before the credit.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
   cfg: TillConfig,
   id: string,
   reason: string,
-  operatorId: string,
-  sessionId: string,
+  operator: { personId: string; sessionId: string; attempts: PinAttempts },
   saleTillId: () => Promise<TillId>,
-  override?: Override & { attempts: PinAttempts },
+  override?: Override,
 ): Promise<void> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
   // is a request-shape error, not the state conflict `not_placed` names.
@@ -5000,13 +4997,8 @@ export async function cancelPlacedOrder(
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
     }
     if (invoice !== undefined) {
-      const authz = {
-        sessionId,
-        ...(override === undefined
-          ? {}
-          : { override: { personId: override.personId, pin: override.pin } }),
-      };
-      await authorize(tx, { ...authz, permission: "sale.rectify" }, override?.attempts);
+      const authz = { sessionId: operator.sessionId, override };
+      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
       await creditWholeInvoice(tx, deps, cfg, invoice, authz, await saleTillId());
     }
 
@@ -5016,7 +5008,7 @@ export async function cancelPlacedOrder(
     await appendOrderAmendment(tx, {
       workingOrderId: id,
       kind: "order_cancelled",
-      actorId: operatorId,
+      actorId: operator.personId,
       reason,
       capturedByTillId: cfg.tillId,
       capturedByNodeId: cfg.nodeId,

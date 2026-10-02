@@ -1011,6 +1011,49 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 });
 
+describe("who may approve a cancel and credit (GET /api/cancel-credit-authorizers)", () => {
+  it("lists the active holders of sale.rectify, and no one else, by id and name only", async () => {
+    const [suspended] = await inTx(venue, (tx) =>
+      tx
+        .insert(persons)
+        .values({
+          displayName: "Suspendida",
+          pinHash: hashPin("5555"),
+          role: "manager",
+          status: "suspended",
+        })
+        .returning({ id: persons.id }),
+    );
+
+    const listed = await send(venue.app, venue.cookie, "GET", "/api/cancel-credit-authorizers");
+
+    expect(listed.status).toBe(200);
+    const people = listed.json as unknown as Record<string, unknown>[];
+    const ids = people.map((person) => person.personId);
+    expect(ids).toEqual(expect.arrayContaining([venue.adminId, supervisorId]));
+    expect(ids).not.toContain(venue.operatorId);
+    expect(ids).not.toContain(suspended!.id);
+    for (const person of people) expect(Object.keys(person)).toEqual(["personId", "displayName"]);
+  });
+
+  it("refuses a caller with no session, as the drawer's list does", async () => {
+    const credit = await send(venue.app, "", "GET", "/api/cancel-credit-authorizers");
+    const drawer = await send(venue.app, "", "GET", "/api/drawer/authorizers");
+
+    expect(credit).toMatchObject({ status: 401, json: { code: "session.required" } });
+    expect(credit.json).toEqual(drawer.json);
+  });
+
+  it("answers a caller with a session but no device as the drawer's list does", async () => {
+    const [sessionOnly] = venue.cookie.split("; ");
+    const credit = await send(venue.app, sessionOnly!, "GET", "/api/cancel-credit-authorizers");
+    const drawer = await send(venue.app, sessionOnly!, "GET", "/api/drawer/authorizers");
+
+    expect(credit.status).toBe(drawer.status);
+    if (drawer.status !== 200) expect(credit.json).toEqual(drawer.json);
+  });
+});
+
 /**
  * A reader provider that commits its `attempting` row before the card is asked, as the Stripe and
  * SumUp providers do, holds the card at the reader until `release`, then captures it.
@@ -1044,40 +1087,6 @@ class CardAtTheReader extends FakePaymentProvider {
     return { ...asked, state: "captured" as const, settledAt };
   }
 }
-
-describe("who may approve a cancel and credit (GET /api/cancel-credit-authorizers)", () => {
-  it("lists the active holders of sale.rectify, and no one else, by id and name only", async () => {
-    const [suspended] = await inTx(venue, (tx) =>
-      tx
-        .insert(persons)
-        .values({
-          displayName: "Suspendida",
-          pinHash: hashPin("5555"),
-          role: "manager",
-          status: "suspended",
-        })
-        .returning({ id: persons.id }),
-    );
-
-    const listed = await send(venue.app, venue.cookie, "GET", "/api/cancel-credit-authorizers");
-
-    expect(listed.status).toBe(200);
-    const people = listed.json as unknown as Record<string, unknown>[];
-    const ids = people.map((person) => person.personId);
-    expect(ids).toEqual(expect.arrayContaining([venue.adminId, supervisorId]));
-    expect(ids).not.toContain(venue.operatorId);
-    expect(ids).not.toContain(suspended!.id);
-    for (const person of people) expect(Object.keys(person)).toEqual(["personId", "displayName"]);
-  });
-
-  it("refuses a caller with no session, as the drawer's list does", async () => {
-    const credit = await send(venue.app, "", "GET", "/api/cancel-credit-authorizers");
-    const drawer = await send(venue.app, "", "GET", "/api/drawer/authorizers");
-
-    expect(credit).toMatchObject({ status: 401, json: { code: "session.required" } });
-    expect(credit.json).toEqual(drawer.json);
-  });
-});
 
 describe("cancelling an invoiced order while a card is paying it", () => {
   it("refuses while the card is at the reader, writing nothing, and the card then settles the invoice", async () => {
