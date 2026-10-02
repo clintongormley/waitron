@@ -40,14 +40,7 @@ export class CatalogueBrowser extends LitElement {
         display: block;
         min-width: 0;
       }
-      .toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-3);
-        margin-block-end: var(--wt-space-4);
-      }
-      .action-bar {
+      .actions {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -435,64 +428,7 @@ export class CatalogueBrowser extends LitElement {
     }
   }
   override render() {
-    return html`<div class="toolbar">
-        ${
-          !this.operation && (this.summaryLoading || this.operationBusy)
-            ? html`<wt-spinner></wt-spinner>`
-            : nothing
-        }
-        <wt-input
-          name="catalogue-search"
-          type="search"
-          label=${t("folders.search")}
-          .value=${this.search}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.search = event.detail.value;
-          }}
-        ></wt-input>
-        ${
-          this.selecting
-            ? html`<div class="action-bar">
-                <span data-test="selected-count" aria-live="polite"
-                  >${this.#plural("folders.selected", this.selected.length)}</span
-                >
-                <wt-button
-                  data-test="move"
-                  variant="secondary"
-                  .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
-                  @click=${() => this.#openMove()}
-                  >${t("folders.move")}</wt-button
-                >
-                <wt-button
-                  data-test="delete"
-                  variant="danger"
-                  .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
-                  @click=${() => void this.#openDelete()}
-                  >${t("action.delete")}</wt-button
-                >
-                <wt-button
-                  data-test="cancel-selection"
-                  variant="secondary"
-                  @click=${() => {
-                    this.selected = [];
-                    this.selecting = false;
-                  }}
-                  >${t("folders.cancel_selection")}</wt-button
-                >
-              </div>`
-            : html`<wt-button
-                  data-test="select"
-                  variant="secondary"
-                  @click=${() => (this.selecting = true)}
-                  >${t("folders.select")}</wt-button
-                >
-                <wt-button data-test="new-folder" @click=${() => this.#openForm(null)}
-                  >${t("folders.new")}</wt-button
-                >`
-        }
-      </div>
-      <dashboard-product-list
+    return html`<dashboard-product-list
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
           event.stopPropagation();
           void this.#drop(event.detail.keys, event.detail.folderId);
@@ -535,7 +471,64 @@ export class CatalogueBrowser extends LitElement {
           const value = this.categories.find(({ id }) => id === event.detail.folderId);
           if (value) this.#openForm(value);
         }}
-      ></dashboard-product-list>
+      >
+        <wt-input
+          slot="toolbar-start"
+          name="catalogue-search"
+          type="search"
+          label=${t("folders.search")}
+          .value=${this.search}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.search = event.detail.value;
+          }}
+        ></wt-input>
+        <div slot="toolbar-end" class="actions">
+          ${
+            !this.operation && (this.summaryLoading || this.operationBusy)
+              ? html`<wt-spinner></wt-spinner>`
+              : nothing
+          }
+          ${
+            this.selecting
+              ? html`<span data-test="selected-count" aria-live="polite"
+                    >${this.#plural("folders.selected", this.selected.length)}</span
+                  >
+                  <wt-button
+                    data-test="move"
+                    variant="secondary"
+                    .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
+                    @click=${() => this.#openMove()}
+                    >${t("folders.move")}</wt-button
+                  >
+                  <wt-button
+                    data-test="delete"
+                    variant="danger"
+                    .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
+                    @click=${() => void this.#openDelete()}
+                    >${t("action.delete")}</wt-button
+                  >
+                  <wt-button
+                    data-test="cancel-selection"
+                    variant="secondary"
+                    @click=${() => {
+                      this.selected = [];
+                      this.selecting = false;
+                    }}
+                    >${t("folders.cancel_selection")}</wt-button
+                  >`
+              : html`<wt-button
+                    data-test="select"
+                    variant="secondary"
+                    @click=${() => (this.selecting = true)}
+                    >${t("folders.select")}</wt-button
+                  >
+                  <wt-button data-test="new-folder" @click=${() => this.#openForm(null)}
+                    >${t("folders.new")}</wt-button
+                  >`
+          }
+        </div>
+      </dashboard-product-list>
       <dashboard-category-form
         .open=${this.folderForm !== null}
         .value=${this.folderForm?.value ?? null}

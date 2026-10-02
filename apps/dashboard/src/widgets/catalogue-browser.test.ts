@@ -373,7 +373,7 @@ it("refuses a folder over itself or its descendants but highlights a sibling", a
   const sibling = await nameCell(el, "folder:s");
   pointerEvent(sibling, "pointermove");
   expect(sibling.getAttribute("part")).toContain("drop-target");
-  pointerEvent(el.shadowRoot!.querySelector(".toolbar")!, "pointermove");
+  pointerEvent(el.shadowRoot!.querySelector('[name="catalogue-search"]')!, "pointermove");
   expect(sibling.getAttribute("part")).not.toContain("drop-target");
   pointerEvent(from, "pointercancel");
   pointerEvent(sibling, "pointermove");
@@ -1150,4 +1150,106 @@ it("passes whether products can be added to every menu", async () => {
       .shadowRoot!.querySelector('[data-test="add-product-root"]')!
       .hasAttribute("disabled"),
   ).toBe(false);
+});
+
+it("draws the search box, the filters, Expand all, Select and Columns on one line of one toolbar, in that order", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const search = el.shadowRoot!.querySelector<HTMLElement>('[name="catalogue-search"]')!;
+    const select = el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
+    expect(search.assignedSlot!.assignedSlot!.closest(".table-toolbar")).toBe(
+      table.shadowRoot!.querySelector(".table-toolbar"),
+    );
+    expect(select.parentElement!.assignedSlot!.assignedSlot!.closest(".table-end")).not.toBeNull();
+    const boxes = [
+      search,
+      table.shadowRoot!.querySelector(".table-filters")!,
+      table.shadowRoot!.querySelector(".expand-all")!,
+      select,
+      table.shadowRoot!.querySelector(".columns-trigger")!,
+    ].map((element) => element.getBoundingClientRect());
+    for (let index = 1; index < boxes.length; index++) {
+      expect(boxes[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(boxes[index - 1]!.right);
+      expect(boxes[index]!.top, `item ${index}`).toBeLessThan(boxes[0]!.bottom);
+    }
+    expect(el.shadowRoot!.querySelector(".toolbar")).toBeNull();
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("Expand all opens every category, and reads Collapse all until one is closed", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const button = () => table.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  expect(button().textContent!.trim()).toBe("Expand all");
+  button().click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual([
+    "folder:d",
+    "folder:b",
+    "cola",
+    "folder:f",
+    "burger",
+    "bread",
+  ]);
+  expect(button().textContent!.trim()).toBe("Collapse all");
+  await toggleCategory(el, "f");
+  expect(button().textContent!.trim()).toBe("Expand all");
+});
+
+it("Expand all leaves a product's variants closed, and still reads Collapse all", async () => {
+  const el = await mountBrowser({
+    products: [
+      {
+        ...PRODUCTS[0]!,
+        variants: [
+          {
+            id: "v",
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: null,
+            active: true,
+            available: true,
+            effective: { unitPrice: "2.00", vatClass: "reduced", primaryCategoryId: "d" },
+          },
+        ],
+      },
+      ...PRODUCTS.slice(1),
+    ],
+  });
+  const table = await tableOf(el);
+  const button = () => table.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  button().click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual([
+    "folder:d",
+    "folder:b",
+    "cola",
+    "folder:f",
+    "burger",
+    "bread",
+  ]);
+  expect(table.isExpanded("cola")).toBe(false);
+  expect(button().textContent!.trim()).toBe("Collapse all");
+});
+
+it("puts Select mode's count, Move to…, Delete and Cancel at the toolbar's end", async () => {
+  const el = await mountBrowser();
+  await press(el, "select");
+  const end = (await tableOf(el)).shadowRoot!.querySelector(".table-end")!;
+  for (const test of ["selected-count", "move", "delete", "cancel-selection"]) {
+    const control = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!;
+    expect(
+      control.closest('[slot="toolbar-end"]')!.assignedSlot!.assignedSlot!.closest(".table-end"),
+      test,
+    ).toBe(end);
+  }
 });

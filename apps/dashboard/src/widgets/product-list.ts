@@ -878,6 +878,8 @@ export class ProductList extends LitElement {
       sortDirection="ascending"
       collapseLabel=${t("categories.collapse")}
       expandLabel=${t("categories.expand")}
+      expandAllLabel=${t("folders.expand_all")}
+      collapseAllLabel=${t("folders.collapse_all")}
       initiallyCollapsed
       .searchTerm=${this.search}
       .selectable=${this.selecting}
@@ -892,6 +894,7 @@ export class ProductList extends LitElement {
             : ""}
       .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
       .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
+      .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
       .rowActivation=${(row: ListRow) =>
         row.kind === "folder" ? "toggle" : row.kind === "root" ? "none" : "click"}
       .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
@@ -913,6 +916,8 @@ export class ProductList extends LitElement {
       .rowParent=${(row: ListRow) => row.parentKey}
       @pointerdown=${this.#pointerDown}
       @wt-expand-change=${this.#expandChange}
+      ><slot name="toolbar-start" slot="toolbar-start"></slot
+      ><slot name="toolbar-end" slot="toolbar-end"></slot
     ></wt-data-table>`;
   }
 }
