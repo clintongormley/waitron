@@ -14,6 +14,8 @@ export const restoreEn = {
   "restore.recovery_key_help":
     "Enter the recovery key saved for this backup. It unlocks the encrypted backup.",
   "restore.recovery_key_missing": "Enter the recovery key.",
+  "restore.show_recovery_key": "Show recovery key",
+  "restore.hide_recovery_key": "Hide recovery key",
   "restore.environment": "Backup environment",
   "restore.environment_help_label": "Help with backup environment",
   "restore.environment_help":
@@ -144,6 +146,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.recovery_key_help":
     "Introduce la clave de recuperación guardada para esta copia. Es la que abre la copia cifrada.",
   "restore.recovery_key_missing": "Introduce la clave de recuperación.",
+  "restore.show_recovery_key": "Mostrar la clave de recuperación",
+  "restore.hide_recovery_key": "Ocultar la clave de recuperación",
   "restore.environment": "Entorno de la copia",
   "restore.environment_help_label": "Ayuda sobre el entorno de la copia",
   "restore.environment_help":

@@ -206,6 +206,16 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
   return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
 }
 
+/** The message under the field `data-test` names: a shared field's own `error`, or else the
+ * screen's `#<name>-error` paragraph. */
+function messageUnder(screen: HTMLElement, name: string): string | null {
+  const field = screen.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+    `:is(wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
+  );
+  if (field !== null) return field.error;
+  return screen.shadowRoot!.querySelector(`#${name}-error`)?.textContent ?? null;
+}
+
 /** The one message above a screen's primary action, or "" when it shows none. */
 async function bottomOf(host: HTMLElement): Promise<string> {
   const actions = host.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
@@ -3174,7 +3184,7 @@ describe("restoring a backup file whose old server may still be running", () => 
       const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
       expect(screen.invalidField).toBe(field);
       const id = field === "recoveryKey" ? "recovery-key" : field;
-      expect(screen.shadowRoot!.querySelector(`#${id}-error`)!.textContent).toBe(message);
+      expect(messageUnder(screen, id)).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
       const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
         disabled: boolean;
