@@ -990,7 +990,7 @@ on it, opens the option's edit form, while the drag handle, the Default radio an
 doing their own thing. The extras list form (`extra-list-form.ts`) draws the same kind of table;
 check it and give it the same if its rows open an editor.
 
-**Clicking a product's row on the Products screen opens it (A205, owner 2026-10-02) — OPEN.** The
+**Clicking a product's row on the Products screen opens it (A205, owner 2026-10-02) — FOLDED INTO A208** (the category tree spec builds it; kept here for the owner's words). The
 owner: _"clicking on a product row should open the edit screen"_. The Products table
 (`apps/dashboard/src/widgets/product-list.ts`) gives `wt-data-table` no `rowClick`, so a product
 opens only from Edit in its row menu; the Modifiers, Units and Orders screens already open a row on
@@ -1014,14 +1014,13 @@ form is kept. **First** reproduce it: the dashboard open on a few screens (a tab
 the Backups screen), restart the server, and note which ones stay stuck, and whether the live
 connection's return reaches them.
 
-**The Products screen's "Add a product" button is blue, like every other screen's Add button
-(A207, owner 2026-10-02) — OPEN.** The owner: _"on the product screen, the Add a product button is
-white, when on other screens it is blue"_. Its `wt-button` (`#renderAddProduct` in
-`apps/dashboard/src/screens/catalogue-screen.ts`) sets no `variant`, where the Staff, Menus and
-Purchases screens' Add buttons say `variant="primary"`. **Wanted:** it is the primary button, in
-the page's actions and in the empty table's box (A176) alike. Check every other screen's main Add
-button for the same omission (`grep -rn -A3 "<wt-button" apps/dashboard/src/screens`) and fix any
-found in the same change. LOOK in light and dark.
+**The Products screen as a category tree (A208, owner 2026-10-02) — OPEN, spec approved in
+conversation, written.** The owner, on two screenshots: _"this layout is messy, needs tidying"_,
+with folders that open in place, a clearer drag, adds from each category's ⋮ menu and prices that
+show their unit. Spec:
+[2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md).
+It builds A205 (a product row's click opens it) and replaces A207 (a blue Add product button in the
+header), which the owner cancelled: the header loses that button.
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — OPEN.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
