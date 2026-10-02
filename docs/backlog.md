@@ -813,7 +813,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
   languages; a table with no Add action keeps just the sentence.
 
-**An empty field's label is the same size as a typed value (A184, owner 2026-10-02) — DONE.** The
+**An empty field's label is the same size as a typed value (A184, owner 2026-10-02) — DONE (#1035).** The
 owner, on a screenshot of a form with Password and PIN empty: _"the fieldname inside the field is
 font size 16px when a filled value is 14px"_. The `--wt-field-label-rest-size` token (16px) is gone:
 a resting label now inherits the field box's font size, which is what the value inherits too
