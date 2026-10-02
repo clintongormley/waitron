@@ -1857,9 +1857,9 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Every sent line with a ticket item, a fired one, and every dish in a held group, a no-route one
    * included: whatever else a line offers, cancelling it always has a button. A held line outside a
-   * group keeps Send alone. An extra has no ticket item of its own, so it goes as its dish does. */
+   * group keeps Send alone. An extra without its own ticket item follows its dish. */
   #canCancel(line: TabLine): boolean {
-    if (this.#isChild(line)) {
+    if (this.#isChild(line) && line.state === null) {
       const dish = this.#lineByNo.get(line.parentLineNo!);
       return dish !== undefined && this.#canCancel(dish);
     }
@@ -2134,8 +2134,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** A FIRED line shows its course READ-ONLY: the server refuses to move it (`ticket.already_fired`). A
-   * CHILD extras row has no course of its own, and its null `firedAt` would otherwise paint an editable
-   * picker on it. */
+   * CHILD extras row has no course of its own, so it has no picker. */
   #lineCourse(line: TabLine): TemplateResult | typeof nothing {
     if (this.courses.length === 0 || this.#isChild(line)) return nothing;
     if (line.firedAt !== null) {

@@ -1957,6 +1957,25 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')).toBeNull();
     });
 
+    it("offers Cancel for a queued split-off extra when its no-preparation dish cannot be cancelled", async () => {
+      const dish: TabLine = {
+        ...pendingLine,
+        sentAt: pendingLine.sentAt,
+        firedAt: null,
+        state: null,
+      };
+      const chips: TabLine = {
+        ...childLine,
+        sentAt: pendingLine.sentAt,
+        firedAt: pendingLine.firedAt,
+        state: "queued",
+      };
+      const { el } = await mount({ lines: [dish, chips], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).not.toBeNull();
+    });
+
     it("paints a child extras row as belonging to its dish, never as a dish of its own", async () => {
       // A waiter scanning "Pendiente de servir" must not read a pick as another dish. The basket's
       // `.option` rule is the house shape for a pick: indented under its dish and muted. Measured

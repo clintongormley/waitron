@@ -38,4 +38,8 @@ describe("sendsAlone", () => {
   it("reads an absent parent as a dish", () => {
     expect(sendsAlone({ firedAt: null, state: "queued", groupId: null }, held)).toBe(true);
   });
+
+  it("does not send a held split-off extra alone", () => {
+    expect(sendsAlone({ ...dish, parentLineNo: 1 }, held)).toBe(false);
+  });
 });

@@ -72,6 +72,7 @@ import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup } from "./order-groups.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
@@ -707,6 +708,33 @@ describe("readTabLines", () => {
     expect(parent.state).toBe("queued");
     expect(child.firedAt).toBeNull();
     expect(child.state).toBeNull();
+  });
+
+  it("reads a split-off chips line's own fired time and kitchen state", async () => {
+    useSplitExtrasDb(db);
+    const venue = await setupSplitExtrasVenue();
+    await asApp(venue.cfg, (tx) =>
+      addTabRound(tx, venue.cfg, venue.party.tabId, [
+        {
+          menuItemId: venue.tables.offerFor(venue.products.water),
+          quantity: "1",
+          extras: [
+            {
+              listId: venue.lists.water,
+              picks: [{ productId: venue.products.chips, quantity: 1 }],
+            },
+          ],
+        },
+      ]),
+    );
+    const lines = await asApp(venue.cfg, (tx) => readTabLines(tx, venue.cfg, venue.party.tabId));
+    const water = lines.find((line) => line.productId === venue.products.water)!;
+    const chips = lines.find((line) => line.productId === venue.products.chips)!;
+    expect(chips.parentLineNo).toBe(water.lineNo);
+    expect(water.firedAt).toBeNull();
+    expect(water.state).toBeNull();
+    expect(chips.firedAt).not.toBeNull();
+    expect(chips.state).toBe("queued");
   });
 
   it("names a child extras line's parent by LINE NUMBER, and leaves the dish's own null", async () => {

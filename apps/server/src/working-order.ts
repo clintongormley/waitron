@@ -3027,10 +3027,10 @@ export interface TabLine {
   /** When the line was first released: fired, or for a no-preparation line, when it would have
    * fired. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
-  /** Null when the line is HELD or has no ticket item at all, which a parent line can lack too:
-   * `openTab` inserts its initial lines without firing them. */
+  /** Null when the line is HELD or has no ticket item at all. A following extra has none; a split-off
+   * extra has its own. A parent can lack one too: `openTab` inserts its initial lines without firing. */
   firedAt: string | null;
-  /** Null when the line has no ticket item (always, on a child). */
+  /** Null when the line has no ticket item. A following extra has none; a split-off extra has its own. */
   state: TicketState | null;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved here from another party's bill. */

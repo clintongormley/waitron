@@ -1766,10 +1766,11 @@ export interface TabLine {
   /** When the line was first released: fired, or for a no-preparation line, when it would have
    * fired; null if it never was. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
-  /** When the line's kitchen ticket item FIRED, or null while its course is still HELD. */
+  /** When the line's kitchen ticket item FIRED, or null while its course is still HELD or it has no
+   * ticket item. A following extra has none; a split-off extra has its own. */
   firedAt: string | null;
-  /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A child modifier
-   * line never has one; a parent line can lack one too, so null is not impossible for a parent. A
+  /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A following extra
+   * has none; a split-off extra has its own. A parent line can lack one too. A
    * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
