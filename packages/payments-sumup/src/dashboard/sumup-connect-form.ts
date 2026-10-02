@@ -1,7 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, selectStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
@@ -22,7 +23,6 @@ const MERCHANT_AMBIGUOUS = "payment.provider_merchant_ambiguous";
 export class SumUpConnectForm extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -42,22 +42,8 @@ export class SumUpConnectForm extends LitElement {
       .confirm {
         color: var(--wt-color-success, var(--wt-color-text));
       }
-      .merchant {
-        display: block;
-      }
-      .required,
-      .field-error {
-        color: var(--wt-color-danger);
-      }
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-      .field-error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-      select[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
+      .merchant-prompt {
+        margin: 0 0 var(--wt-space-2);
       }
     `,
   ];
@@ -91,9 +77,9 @@ export class SumUpConnectForm extends LitElement {
     this[field] = event.detail.value;
   }
 
-  #onMerchant(event: Event): void {
+  #onMerchant(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.merchantCode = (event.target as HTMLSelectElement).value;
+    this.merchantCode = event.detail.value;
   }
 
   #fieldErrors(): { apiKey: string; merchant: string } {
@@ -201,33 +187,22 @@ export class SumUpConnectForm extends LitElement {
       ${
         this.merchants !== null
           ? html`<div class="field">
-              <label class="merchant"
-                >${t("payments.sumup.merchant_prompt")}<span class="required" aria-hidden="true"
-                  >*</span
-                >
-                <select
-                  data-test="merchant"
-                  name="merchantCode"
-                  required
-                  aria-invalid=${errors.merchant !== "" ? "true" : "false"}
-                  aria-describedby=${errors.merchant !== "" ? "merchant-error" : nothing}
-                  @change=${(e: Event) => this.#onMerchant(e)}
-                >
-                  <option value="" .selected=${this.merchantCode === ""}></option>
-                  ${this.merchants.map(
-                    (m) =>
-                      html`<option value=${m.code} .selected=${m.code === this.merchantCode}>
-                        ${m.name}
-                      </option>`,
-                  )}
-                </select></label
-              >${
-                errors.merchant !== ""
-                  ? html`<p id="merchant-error" class="field-error" data-test="merchant-error">
-                      ${errors.merchant}
-                    </p>`
-                  : nothing
-              }
+              <p class="merchant-prompt" data-test="merchant-prompt">
+                ${t("payments.sumup.merchant_prompt")}
+              </p>
+              <wt-combobox
+                data-test="merchant"
+                name="merchantCode"
+                required
+                label=${t("payments.sumup.merchant")}
+                search="auto"
+                searchPlaceholder=${t("payments.sumup.search")}
+                noResultsLabel=${t("payments.sumup.no_results")}
+                .options=${this.merchants.map((m) => ({ value: m.code, label: m.name }))}
+                .value=${this.merchantCode}
+                error=${errors.merchant}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onMerchant(e)}
+              ></wt-combobox>
             </div>`
           : nothing
       }
