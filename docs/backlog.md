@@ -1650,6 +1650,12 @@ change shows the stored value again. **Existing tests changed** are the three ap
 listed in the pull request. **Seen, for the owner:** a chosen option whose value is empty — "Each"
 (no unit) on a product and in the variants table's heading, and every "Same as …" — is drawn in the
 placeholder's muted style, because `wt-combobox` shows an empty value as its placeholder.
+The decimal-places sentence, which a `hint` never shows on a field that always holds a value, is
+also behind a help button in the dropdown's `help` slot. `wt-combobox`'s open list is now at least
+as wide as its field and otherwise as wide as its longest row, inside the screen's margins, so the
+variants table's narrow unit dropdown no longer wraps "Add unit". **Seen, not changed:** once other
+fields in a purchase line show errors, its VAT-kind dropdown sits lower than its neighbours —
+`.line { align-items: flex-end }` in `purchase-form.ts`, from commit `6b299998ba` (2026-08-16).
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
