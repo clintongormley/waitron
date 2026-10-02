@@ -60,7 +60,7 @@ describe("loadTillConfig", () => {
 
   it("leaves localeOverride undefined when WAITRON_TILL_LOCALE is unset (while locale defaults to es-ES)", () => {
     // An unset `WAITRON_TILL_LOCALE` leaves `localeOverride` undefined, so the country-pack resolver
-    // falls through to geography, even as the fiscal `locale` defaults to `es-ES` beside it.
+    // falls through to geography, even as `locale` defaults to `es-ES` beside it.
     const config = loadTillConfig(base);
     expect(config.localeOverride).toBeUndefined();
     expect(config.locale).toBe("es-ES");

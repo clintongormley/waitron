@@ -1321,8 +1321,8 @@ export class TillApp extends LitElement {
   /** The working order that produced the ticket currently shown, a bill split off another included. */
   private ticketWorkingOrderId?: string;
   /**
-   * The receipt's language, kept apart from the operator UI locale so a fiscal locale the UI does not
-   * support never changes the printed ticket's language.
+   * The location's receipt language: the on-screen ticket's language for a result that names none, and
+   * the printed allergen sheet's. NEVER the operator-UI `currentLocale()`.
    */
   @state() private invoiceLocale = "es-ES";
   /**

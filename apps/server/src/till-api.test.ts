@@ -1122,8 +1122,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // `canvas` is the `till` form-factor default, even for this cookieless request.
     expect(body).toEqual({
       locale: "es-ES",
-      // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
-      // for this ES venue, but sourced from different fields — the decoupling test below drives them apart).
+      // The RECEIPT locale — the location's first `invoice_locales` entry, DISTINCT from the UI `locale`
+      // above (both es-ES for this ES venue, but sourced from different fields — the decoupling test below
+      // drives them apart).
       invoiceLocale: "es-ES",
       onboardingIntent: "prepare",
       venueName: "Test SL",
@@ -1200,7 +1201,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // Drive the location's saved receipt language, `cfg.locale` and `venueLocale` (display) APART to
     // prove the route reads each from its own source: the wire `locale` (UI) must follow
     // `venueLocale`, and `invoiceLocale` (the printed legal receipt's language) must follow the
-    // location's first `invoice_locales` entry — NEVER the venue default, and no longer `cfg.locale`.
+    // location's first `invoice_locales` entry — NEVER the venue default.
     // A supported `ca-ES` is dropped by the UI venue-default derivation to `es-ES`, so binding the
     // receipt to `venueLocale` would flip a Catalan receipt to Spanish. Restored in `finally`, as the
     // location is shared.
