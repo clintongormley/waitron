@@ -24,37 +24,17 @@ const run = createErrorBoundary(
 );
 
 /**
- * The orders at the location with a line the till can still write. Such a write is refused by
- * `working_order_lines_check_locales_update` once the line's language key no longer matches the
- * location, so a language change waits for every one of them. An order blocks while it is open or
- * placed; while it is paid and its party, or the party it was merged into, is still seated, as its
- * dishes can then be served, unserved or fired; and while it is paid with an unsent line and no
- * kitchen item, which `POST /api/working-orders/:id/prep` can still send (it refuses once any line
- * has one). No route writes a line of an abandoned bill, or of a paid bill whose party has left.
+ * The open orders at the location holding a line. The till can still split or move such a line, and
+ * the line triggers refuse a copy or a move of text keyed under a language the location no longer has.
  */
 async function ordersBlockingReceiptLanguage(tx: Transaction, locationId: string): Promise<number> {
   const { rows } = await tx.execute<{ count: number }>(sql`
-    with recursive seated(id) as (
-      select id from parties where state = 'open'
-      union
-      select p.id from parties p join seated s on p.merged_into_party_id = s.id
-    )
     select cast(count(*) as int) as count
     from working_orders wo
     join tills t on t.id = wo.till_id
     where t.location_id = ${locationId}
-      and (
-        wo.status in ('open', 'placed')
-        or (wo.status = 'settled' and wo.party_id in (select id from seated))
-        or (
-          wo.status = 'settled'
-          and exists (
-            select 1 from working_order_lines l
-            where l.working_order_id = wo.id and l.sent_at is null
-          )
-          and not exists (select 1 from ticket_items ti where ti.working_order_id = wo.id)
-        )
-      )`);
+      and wo.status = 'open'
+      and exists (select 1 from working_order_lines l where l.working_order_id = wo.id)`);
   return rows[0]!.count;
 }
 
