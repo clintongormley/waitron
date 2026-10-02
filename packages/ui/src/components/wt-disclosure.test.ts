@@ -88,7 +88,7 @@ function layout(el: HTMLElement) {
 
 test("the chevron follows the heading at desktop and phone widths", async () => {
   const el = await mount(
-    '<wt-disclosure heading="Customer-facing names" summary="ES Nombre"><p>body</p></wt-disclosure>',
+    '<wt-disclosure heading="Customer-facing names" summary="ES label"><p>body</p></wt-disclosure>',
   );
   for (const width of [600, 320]) {
     host.style.width = `${width}px`;
@@ -97,6 +97,19 @@ test("the chevron follows the heading at desktop and phone widths", async () => 
     expect(closed.chevronLeft - closed.headingRight).toBeLessThanOrEqual(24);
     expect(closed.rowRight).toBe(el.getBoundingClientRect().right);
   }
+});
+
+test("a long heading wraps before its chevron leaves a phone-width row", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Catalán · Idioma predeterminado · Obligatorio" summary="Nada sin traducir"><p>body</p></wt-disclosure>',
+  );
+  host.style.width = "320px";
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
+  expect(header.scrollWidth).toBe(header.clientWidth);
+  expect(chevron.getBoundingClientRect().right).toBeLessThanOrEqual(
+    el.getBoundingClientRect().right,
+  );
 });
 
 test("the heading and chevron stay where they are when the section opens, the header spans the host", async () => {

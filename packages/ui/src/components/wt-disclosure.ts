@@ -27,7 +27,7 @@ export class WtDisclosure extends LitElement {
          while closed, never moves either of them. */
       .header {
         display: grid;
-        grid-template-columns: max-content 1fr;
+        grid-template-columns: auto 1fr;
         grid-template-rows: minmax(var(--wt-tap-min), auto) auto;
         align-items: center;
         column-gap: var(--wt-space-3);
