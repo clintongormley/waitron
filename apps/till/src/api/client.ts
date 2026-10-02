@@ -992,20 +992,17 @@ export interface UnpaidDepartureResult {
   }[];
 }
 
-/** `GET /api/unpaid-departures`: one bill a party left unpaid whose invoice is still owed. */
-export interface UnpaidDeparture {
-  id: string;
+export interface BillLookupRow {
   workingOrderId: string;
-  billLabel: string | null;
-  /** The tables the party held when it left. */
-  tableLabels: string[];
-  saleId: string;
-  invoiceNumber: string;
-  amount: string;
-  reason: string;
-  recordedByName: string | null;
-  authorizedByName: string | null;
-  recordedAt: string;
+  orderNumber: number | null;
+  label: string | null;
+  partyName: string | null;
+  tables: string[];
+  invoiceNumber: string | null;
+  openedAt: string;
+  departedAt: string | null;
+  status: "waiting_for_payment" | "left_without_paying";
+  stillOwed: string;
 }
 
 /** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
@@ -2347,9 +2344,13 @@ export class TillApi {
     return this.#request<StaffMember[]>("/api/unpaid-departure-authorizers", "GET");
   }
 
-  /** The unpaid departures whose invoice is still owed, newest first → `GET /api/unpaid-departures`. */
-  listUnpaidDepartures(): Promise<UnpaidDeparture[]> {
-    return this.#request<UnpaidDeparture[]>("/api/unpaid-departures", "GET");
+  lookUpBills(q: string, options: ReadOptions = {}): Promise<{ bills: BillLookupRow[] }> {
+    return this.#request<{ bills: BillLookupRow[] }>(
+      `/api/bills/lookup?q=${encodeURIComponent(q)}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /** Free a table that needs clearing → `POST /api/tables/:tableId/cleared`. A table that does not

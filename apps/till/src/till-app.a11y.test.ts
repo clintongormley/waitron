@@ -87,7 +87,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     recordSale: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    listUnpaidDepartures: vi.fn().mockResolvedValue([]),
     listStations: vi
       .fn()
       .mockResolvedValue([

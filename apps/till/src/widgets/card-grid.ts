@@ -11,7 +11,6 @@ import "./total.js";
 import "./tender-pay.js";
 import "./held-orders.js";
 import "./counter-waiting.js";
-import "./unpaid-departures.js";
 import "./station-queue.js";
 import "../screens/till-floor-screen.js";
 import "../screens/till-expo-screen.js";
@@ -40,7 +39,6 @@ import type {
   TillProduct,
   TillZoneMenu,
   PartyBill,
-  UnpaidDeparture,
 } from "../api/client.js";
 import type { BumpMode, FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -96,7 +94,6 @@ export class TillCardGrid extends LitElement {
   /** Shown in the held-orders card, under the held orders. */
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
   /** Shown in the held-orders card, under the waiting orders. */
-  @property({ attribute: false }) unpaidDepartures: UnpaidDeparture[] = [];
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   @property({ attribute: false }) defaultStationId?: string;
   @property({ type: Boolean }) busy = false;
@@ -268,8 +265,7 @@ export class TillCardGrid extends LitElement {
             .orders=${this.heldOrders}
             .tables=${this.tables}
           ></till-held-orders
-          ><till-counter-waiting .orders=${this.counterWaiting}></till-counter-waiting
-          ><till-unpaid-departures .departures=${this.unpaidDepartures}></till-unpaid-departures>`;
+          ><till-counter-waiting .orders=${this.counterWaiting}></till-counter-waiting>`;
       case "prep-queue":
         return html`<till-station-queue
           .groups=${this.stationQueue}
@@ -358,9 +354,7 @@ export class TillCardGrid extends LitElement {
   #currentState(type: CardType): string | undefined {
     switch (type) {
       case "held-orders":
-        return this.heldOrders.length > 0 ||
-          this.counterWaiting.length > 0 ||
-          this.unpaidDepartures.length > 0
+        return this.heldOrders.length > 0 || this.counterWaiting.length > 0
           ? "has-parked"
           : "empty";
       case "prep-queue":

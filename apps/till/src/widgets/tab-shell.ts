@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-language-footer.js";
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
 
-export type ShellAffordance = "station" | "expo" | "schedule";
+export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
 
 /**
  * Presentational: `till-app` owns data, active-tab state and the drill-in stack; the shell only emits
@@ -160,6 +160,16 @@ export class TillTabShell extends LitElement {
                     )}
                   </nav>
                   <div class="session">
+                    ${
+                      this.affordances.includes("find-bill")
+                        ? html`<wt-button
+                            class="find-bill"
+                            variant="secondary"
+                            @click=${() => this.#emit("find-bill")}
+                            >${t("find_bill.open")}</wt-button
+                          >`
+                        : nothing
+                    }
                     ${
                       this.affordances.includes("station")
                         ? html`<wt-button

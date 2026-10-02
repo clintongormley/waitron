@@ -21,7 +21,6 @@ import {
   type TableServiceStatus,
   type TableState,
   type TillMenuOffer,
-  type UnpaidDeparture,
   type UnpaidDepartureRequest,
   type UnpaidDepartureResult,
 } from "./client.js";
@@ -2533,31 +2532,14 @@ describe("TillApi: a seated party", () => {
     expect(r).toEqual(roster);
   });
 
-  it("listUnpaidDepartures GETs the departures still owed", async () => {
-    const departures: UnpaidDeparture[] = [
-      {
-        id: "ud-1",
-        workingOrderId: "wo-1",
-        billLabel: null,
-        tableLabels: ["4", "5"],
-        saleId: "s-1",
-        invoiceNumber: "F-0007",
-        amount: "30.00",
-        reason: "Left without paying",
-        recordedByName: "Ana",
-        authorizedByName: "Luis",
-        recordedAt: "2026-10-01T21:30:00.000Z",
-      },
-    ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(departures));
-
-    const r = await new TillApi("", fetchStub).listUnpaidDepartures();
-
+  it("lookUpBills encodes the query in the till GET", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ bills: [] }));
+    const result = await new TillApi("", fetchStub).lookUpBills("A/12 & Ruiz");
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/unpaid-departures",
+      "/api/bills/lookup?q=A%2F12%20%26%20Ruiz",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(r).toEqual(departures);
+    expect(result).toEqual({ bills: [] });
   });
 
   it("markTableCleared POSTs to the table's /cleared route with no body (empty 204 body)", async () => {

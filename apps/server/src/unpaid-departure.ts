@@ -1,26 +1,12 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
-import {
-  diningTables,
-  invoiceSeries,
-  nowIso,
-  parties,
-  partyTables,
-  saleSettlements,
-  saleVoids,
-  sales,
-  unpaidDepartures,
-  workingOrders,
-} from "@waitron/db";
+import { nowIso, unpaidDepartures } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { formatInvoiceNumber } from "@waitron/core";
 import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
-import { authorize, persons } from "@waitron/identity";
+import { authorize } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
-import { AppError, decimalToCents, rawCentsToDecimal } from "@waitron/shared";
+import { AppError, decimalToCents } from "@waitron/shared";
 import type { Decimal, SaleId, TillId } from "@waitron/shared";
 import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
-import { correctionsCents, readIssuedSales } from "./sale-due.js";
+import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { settleIssuedOwingNothing } from "./till-sale.js";
@@ -207,90 +193,4 @@ async function insertDepartures(
       amount: due.get(workingOrderId)!,
     };
   });
-}
-
-/** One unpaid departure whose invoice is still owed, as the till lists it. */
-export interface UnpaidDepartureView {
-  id: string;
-  workingOrderId: string;
-  billLabel: string | null;
-  /** The tables the party held when it left, in the order they joined it. */
-  tableLabels: string[];
-  saleId: string;
-  invoiceNumber: string;
-  amount: string;
-  reason: string;
-  recordedByName: string | null;
-  authorizedByName: string | null;
-  recordedAt: string;
-}
-
-/**
- * The unpaid departures whose invoice is neither settled nor voided and still owes something, newest
- * first, each with what its invoice owes now: its total net of its credit notes, as collecting it
- * charges ({@link readIssuedSales}). An invoice a full invoice has since substituted stays listed:
- * `listOutstandingSales` (packages/core/src/list-outstanding-sales.ts) likewise leaves out only the
- * substitute.
- */
-export async function listUnpaidDepartures(tx: Transaction): Promise<UnpaidDepartureView[]> {
-  const recorder = alias(persons, "recorder");
-  const authorizer = alias(persons, "authorizer");
-  const rows = await tx
-    .select({
-      id: unpaidDepartures.id,
-      partyId: unpaidDepartures.partyId,
-      workingOrderId: unpaidDepartures.workingOrderId,
-      billLabel: workingOrders.label,
-      saleId: unpaidDepartures.saleId,
-      seriesCode: invoiceSeries.code,
-      invoiceNumber: sales.invoiceNumber,
-      amountDue: sql<string>`cast(${sales.total} + ${correctionsCents} as text)`,
-      reason: unpaidDepartures.reason,
-      recordedByName: recorder.displayName,
-      authorizedByName: authorizer.displayName,
-      recordedAt: unpaidDepartures.recordedAt,
-    })
-    .from(unpaidDepartures)
-    .innerJoin(workingOrders, eq(workingOrders.id, unpaidDepartures.workingOrderId))
-    .innerJoin(sales, eq(sales.id, unpaidDepartures.saleId))
-    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .leftJoin(saleSettlements, eq(saleSettlements.saleId, unpaidDepartures.saleId))
-    .leftJoin(saleVoids, eq(saleVoids.saleId, unpaidDepartures.saleId))
-    .leftJoin(recorder, eq(recorder.id, unpaidDepartures.recordedBy))
-    .leftJoin(authorizer, eq(authorizer.id, unpaidDepartures.authorizedBy))
-    .where(
-      and(
-        isNull(saleSettlements.id),
-        isNull(saleVoids.id),
-        sql`${sales.total} + ${correctionsCents} > 0`,
-      ),
-    )
-    .orderBy(desc(unpaidDepartures.recordedAt), desc(sql`${unpaidDepartures}.rowid`));
-  if (rows.length === 0) return [];
-
-  const partyIds = [...new Set(rows.map((row) => row.partyId))];
-  const tables = await tx
-    .select({ partyId: partyTables.partyId, label: diningTables.label })
-    .from(partyTables)
-    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .innerJoin(parties, eq(parties.id, partyTables.partyId))
-    // `closeParty` writes both `left_at` and `closed_at` from one timestamp.
-    .where(and(inArray(partyTables.partyId, partyIds), eq(partyTables.leftAt, parties.closedAt)))
-    .orderBy(partyTables.joinedAt, partyTables.id);
-  const tablesOf = new Map(partyIds.map((id) => [id, [] as string[]]));
-  for (const table of tables) tablesOf.get(table.partyId)!.push(table.label);
-
-  return rows.map((row) => ({
-    id: row.id,
-    workingOrderId: row.workingOrderId,
-    billLabel: row.billLabel,
-    tableLabels: tablesOf.get(row.partyId)!,
-    saleId: row.saleId,
-    invoiceNumber: formatInvoiceNumber(row.seriesCode, row.invoiceNumber),
-    amount: rawCentsToDecimal(row.amountDue),
-    reason: row.reason,
-    recordedByName: row.recordedByName,
-    authorizedByName: row.authorizedByName,
-    recordedAt: row.recordedAt,
-  }));
 }

@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   deviceProfiles,
   diningTables,
-  withTransaction,
   floorZones,
   invoiceSeries,
   partyTables,
@@ -16,14 +15,8 @@ import {
   saleSettlements,
   sales,
   unpaidDepartures,
-  workingOrders,
 } from "@waitron/db";
-import {
-  listOutstandingSales,
-  recordCorrection,
-  recordSubstitution,
-  recordVoid,
-} from "@waitron/core";
+import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -47,7 +40,6 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { listUnpaidDepartures } from "./unpaid-departure.js";
 import { cancelBody, giveAway } from "./testing/cancel-line.js";
 import "./errors.js";
 
@@ -252,21 +244,6 @@ function nextInvoiceNumbers(): { id: string; next: number }[] {
     sql`select id, next_number as next from invoice_series order by id`,
   );
 }
-
-// First in the file: every other case records a departure, and none can be deleted.
-describe("the list before any departure", () => {
-  it("answers an empty list from one read", async () => {
-    expect(venue.db.all(sql`select id from unpaid_departures`)).toEqual([]);
-
-    const reads = await withTransaction(venue.db, async (tx) => {
-      const select = vi.spyOn(tx, "select");
-      expect(await listUnpaidDepartures(tx)).toEqual([]);
-      return select.mock.calls.length;
-    });
-
-    expect(reads).toBe(1);
-  });
-});
 
 describe("recording that a table left without paying", () => {
   it("invoices the open bill in full, leaves it unpaid, records who and why, and frees the table", async () => {
@@ -1275,157 +1252,5 @@ describe("a merged party", () => {
     expect(await departuresOf(luis.tabId)).toEqual([expect.objectContaining({ amount: 2000 })]);
     expect(await tableHeldBy(ana.tableId)).toBeNull();
     expect(await tableHeldBy(luis.tableId)).toBeNull();
-  });
-});
-
-describe("the list of unpaid departures (GET /api/unpaid-departures)", () => {
-  type Listed = Record<string, unknown> & { id: string };
-  async function listed(): Promise<Listed[]> {
-    const answer = await send(venue.app, venue.cookie, "GET", "/api/unpaid-departures");
-    expect(answer.status).toBe(200);
-    return answer.json as unknown as Listed[];
-  }
-
-  it("shows a departure until its bill is collected in full, which settles the invoice", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
-    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
-    const [row] = await departuresOf(party.tabId);
-    const [issued] = await salesOf(party.tabId);
-    const [bill] = await inTx(venue, (tx) =>
-      tx
-        .select({ label: workingOrders.label })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, party.tabId)),
-    );
-    const [table] = await inTx(venue, (tx) =>
-      tx
-        .select({ label: diningTables.label })
-        .from(diningTables)
-        .where(eq(diningTables.id, party.tableId)),
-    );
-
-    const before = await listed();
-
-    expect(before[0]).toEqual({
-      id: row!.id,
-      workingOrderId: party.tabId,
-      billLabel: bill!.label,
-      tableLabels: [table!.label],
-      saleId: issued!.id,
-      invoiceNumber: expect.stringMatching(/^A/),
-      amount: "30.00",
-      reason: REASON,
-      recordedByName: "Sofía",
-      authorizedByName: "Sofía",
-      recordedAt: row!.recordedAt,
-    });
-
-    const collected = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/collect`,
-      { tender: { method: "cash", amount: "30.00" } },
-    );
-
-    expect(collected.status).toBe(200);
-    expect((await salesOf(party.tabId))[0]!.settledAt).not.toBeNull();
-    expect(registroCount(venue, party.tabId)).toBe(1);
-    expect((await listed()).map((entry) => entry.id)).not.toContain(row!.id);
-  });
-
-  it("leaves out a departure whose invoice has been voided", async () => {
-    const party = await seatedWith(venue, "Caña");
-    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
-    const [issued] = await salesOf(party.tabId);
-    expect((await listed()).map((entry) => entry.workingOrderId)).toContain(party.tabId);
-
-    await inTx(venue, async (tx) => {
-      const session = await loginWithPin(tx, {
-        tillId: venue.cfg.tillId,
-        personId: venue.adminId,
-        pin: "1234",
-      });
-      await recordVoid(tx, venue.backend, brandSaleId(issued!.id), "Error de cobro", {
-        sessionId: session.id,
-      });
-    });
-
-    expect((await listed()).map((entry) => entry.workingOrderId)).not.toContain(party.tabId);
-  });
-
-  it("answers what the invoice owes now after a credit note, and keeps what was recorded", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
-    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
-    await creditTwoEuros(party.tabId);
-
-    const entry = (await listed()).find(
-      (listedEntry) => listedEntry.workingOrderId === party.tabId,
-    );
-
-    expect(entry).toMatchObject({ amount: "27.58" });
-    expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
-  });
-
-  it("leaves out a departure whose invoice a credit note has brought to nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
-    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
-    expect((await listed()).map((entry) => entry.workingOrderId)).toContain(party.tabId);
-
-    await credit(party.tabId, "24.79", "-30.00");
-
-    expect((await listed()).map((entry) => entry.workingOrderId)).not.toContain(party.tabId);
-  });
-
-  it("keeps listing a departure whose invoice a full invoice has substituted, at what it owes", async () => {
-    const party = await seatedWith(venue, "Caña");
-    await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
-    const [issued] = await salesOf(party.tabId);
-
-    await inTx(venue, (tx) =>
-      recordSubstitution(tx, venue.backend, {
-        tillId: venue.cfg.tillId,
-        nodeId: venue.cfg.nodeId,
-        seriesId: venue.cfg.seriesId,
-        substitutedSaleIds: [brandSaleId(issued!.id)],
-        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
-        total: "3.00",
-        lines: [
-          {
-            lineNo: 1,
-            name: "Caña",
-            descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
-            quantity: "1",
-            unitPrice: "2.48",
-            vatRate: "21.00",
-            lineTotal: "2.48",
-          },
-        ],
-        locale: venue.cfg.locale,
-        invoiceLocales: venue.cfg.invoiceLocales,
-        clock: venue.clock,
-      }),
-    );
-
-    expect((await listed()).find((entry) => entry.workingOrderId === party.tabId)).toMatchObject({
-      saleId: issued!.id,
-      amount: "3.00",
-    });
-  });
-
-  it("lists the newest departure first", async () => {
-    const first = await seatedWith(venue, "Caña");
-    await depart(first.partyId, { expectedPartyRevision: first.revision, reason: "primera" });
-    const second = await seatedWith(venue, "Caña");
-    await depart(second.partyId, { expectedPartyRevision: second.revision, reason: "segunda" });
-
-    const ids = (await listed()).map((entry) => entry.workingOrderId);
-
-    expect(ids.indexOf(second.tabId)).toBeLessThan(ids.indexOf(first.tabId));
-  });
-
-  it("answers a caller with no session with session.required", async () => {
-    const answer = await send(venue.app, "", "GET", "/api/unpaid-departures");
-    expect(answer).toMatchObject({ status: 401, json: { code: "session.required" } });
   });
 });
