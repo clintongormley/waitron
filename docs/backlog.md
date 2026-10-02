@@ -903,7 +903,7 @@ kitchen display, which have no bar, hold it at the top right on their own. At 40
 shows the short code ("EN") and keeps the full name for screen readers; its menu opens downwards
 and names every language in full. `wt-language-footer` is gone.
 
-**In a demo, the dashboard's top bar links to the email inbox (A188, owner 2026-10-02) — DONE.**
+**In a demo, the dashboard's top bar links to the email inbox (A188, owner 2026-10-02) — DONE (#1067).**
 In a demo, the dashboard's banner shows an "Email inbox" link ("Bandeja de correo" in Spanish) just
 before the language chooser, to `/manage/email`, the address the setup wizard's done page uses:
 signed out always, and signed in only to a session that may open the Test inbox screen (a manager
