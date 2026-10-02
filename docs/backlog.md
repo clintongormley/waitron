@@ -1474,7 +1474,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, and A178b (the dashboard screens); A178c–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, and A178b (the dashboard screens) as #1012; A178c–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1613,7 +1613,7 @@ gutter" case presses the trigger near its chevron, because a resting label now c
 trigger's middle, and checks the list opened before its unchanged assertion. Both tap-target suites'
 "the interactive set is exactly …" lists gained `wt-textarea`.
 
-**A178b — DONE.** Every field spec §9.1 lists for `apps/dashboard/src/screens/` and
+**A178b — DONE (#1012).** Every field spec §9.1 lists for `apps/dashboard/src/screens/` and
 `apps/dashboard/src/dashboard-app.ts` is drawn by a primitive: native selects are `wt-combobox`
 (`search="auto"`), date, time and search inputs `wt-input`, whole-number inputs `wt-number-stepper`,
 the receipt footer `wt-textarea`; login's three hidden password-manager inputs stay. Also moved,
