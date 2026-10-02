@@ -1084,6 +1084,43 @@ compact `hide-label` box, the width-matching between two steppers side by side, 
 Name every test changed in the PR. LOOK at every screen that uses it
 (`grep -rln wt-number-stepper apps`), in both themes and at phone width.
 
+**An extra is a fixed portion: a product sold by weight is offered as, say, 50 g a pick (A203,
+owner 2026-10-02) — OPEN.** The owner: _"today you can add an extra sold eg per kg, but there is
+nowhere to put a quantity in there. i think extras should always be a fixed amount, so eg if i add
+Jamon @ 100€/kg, we should enter the base amount of (eg) 50g, and when you add it multiple times you
+get 50->100->150 etc"_. **Today, read from the code (not reproduced):** an extras list item holds
+only `productId`, `maxQuantity`, `preselected` and `price` (`packages/catalogue/src/schema/extras.ts`);
+the till offers a whole count; nothing on the extras path reads the extra product's unit
+(`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`; `buildLineExtras`,
+`apps/server/src/modifier-selection.ts`); and `grossBasketWithOptions`
+(`packages/catalogue/src/pricing.ts`) charges the item's price, or else the product's unit price, ×
+the count × the dish count. So a per-kg product offered with no price of its own is charged its
+whole per-kg price per pick, as if each pick were a kilo. The extras list editor shows the unit
+beside the price and checks nothing about it.
+
+**Decided (owner, 2026-10-02):**
+
+- an extras list item for a product whose unit is weighed (`hardwareUnit` set) or fractional
+  (`precision > 0`) has a required **portion**, e.g. 50 g, held to the unit's precision; an "each"
+  product's portion is one and the form asks for none;
+- each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
+  count does today;
+- the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
+  100 €/kg = 5 € a pick), shown as the price field's hint; filled in, it is that amount per pick;
+- the receipt and the kitchen ticket print the **total amount** — "+ Jamón 150 g" — not
+  "50 g ×3".
+
+**For the builder:** the portion is a new column on `extra_list_items` (quantity scale) and a
+field in `parseExtraListInput` and the editor; the till's picker and the server must compute one
+per-pick price the same way, rounded to the cent once, before it is multiplied, so they agree.
+The stored child line's quantity (`working_order_lines.quantity`, already thousandths) becomes
+picks × portion × dish count with the product's unit on it, so `editLineExtras` must divide by the
+portion as well as the dish quantity, and the receipt's `perDishOptionQuantity` (whole numbers)
+and the kitchen ticket's `extraLabel` must print an amount. Open, ask before building: how 0.150 kg
+is printed as "150 g" — a unit row has no conversion, only `hardwareUnit`; and what happens to a
+list item when its product's unit changes later (a variant inherits its parent's). The amounts
+reach a sale record, so this takes the full review path (risk trigger: fiscal invariants).
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
