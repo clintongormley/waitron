@@ -320,7 +320,7 @@ it("shows each option as text with a Default radio, an Unavailable lozenge only 
   ]);
 });
 
-it("folds the list's customer-facing and kitchen names into a closed section that counts them", async () => {
+it("folds the list's customer-facing and kitchen names into a closed section that lists them", async () => {
   const { el } = await mount({ value: { ...cooked, customerName: { es: "¿En qué punto?" } } });
   const section = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
     '[data-test="names-section"]',

@@ -785,7 +785,7 @@ function disclosure(el: ExtraListForm): HTMLElementTagNameMap["wt-disclosure"] {
   )!;
 }
 
-it("folds the customer-facing and kitchen names into a closed section that counts them", async () => {
+it("folds the customer-facing and kitchen names into a closed section that lists them", async () => {
   const { el } = await mount({
     value: { ...addons, customerName: { es: "Añádele algo" }, kitchenName: "ADD" },
   });
