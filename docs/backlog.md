@@ -1440,7 +1440,7 @@ and a new product's draft starts on General. A VAT, unit or price error opens th
 (`SECTION_FIELDS`).
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
-— DONE (#1069, and A220b for a variant's own description).** The owner: _"the Kitchen name, and
+— DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
 customer facing names aren't showing the internal name as the default value, at least when I add a variant and fill in
 the internal name the first time"_. A172 built the name hints (kitchen and customer-facing names, in
 all five editors, on a new variant and an existing one). This item added the description hints: in
@@ -1476,8 +1476,9 @@ default-language name as its hint, _"which is what we'd show on the menu anyway 
 name shows its hint too: the staff name, which is what `kitchenPresentationName` prints. A
 description field in a secondary language shows the default-language description as its hint.
 **Decided (owner, 2026-10-03, A220b):** on a variant's page whose own description has text, a
-blank language shows the variant's own default-language description as its hint, as a product's
-does; the parent's description is a hint only while the variant describes itself in no language.
+blank language other than the default shows the variant's own default-language description as its
+hint, where there is one, as a product's does; the parent's description is a hint only while the
+variant describes itself in no language.
 
 **Variants in the Products list look like part of their product (A221, owner 2026-10-02) — OPEN,
 designed.** The owner, on a screenshot of an opened "Cured pork loin" with its variant "More

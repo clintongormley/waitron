@@ -1018,9 +1018,10 @@ what will apply without a copy being stored. Leaving it empty keeps the fallback
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
 required. A translated field inherited as ONE value across its languages (a variant's description)
 shows the parent's text as its placeholder hints only while every language is blank; once any
-language has text, the record's own value applies and a blank language other than the default
-shows the record's own default-language text, as a product's does (owner decision 2026-10-03, A220b
-in `docs/backlog.md`). A blank description in a language other than the venue's default shows the
+language has text, the record's own value applies: a blank language other than the default shows
+the record's own default-language text where there is some, as a product's does, and no hint while
+the default language is blank (owner decision 2026-10-03, A220b in `docs/backlog.md`).
+A blank description in a language other than the venue's default shows the
 default language's description as its placeholder — a product's or a variant's own, as it is typed,
 or, on a variant still blank in every language, the parent's where the parent has none in that
 language (`defaultLanguageHint`, `apps/dashboard/src/widgets/form-fields.ts`). That hint is the owner's
