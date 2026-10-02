@@ -2281,7 +2281,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       attempt, and the spinner comes down once no card attempt is still running (`cardAttemptsOver`,
       `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
       request settled.
-    - **Done (C133) — the till's tabs fit one screen, with or without a notice above them.**
+    - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
       The page gives the till the screen less its padding (`apps/till/index.html`), and the error
       banner and the other notices above the tabs take their height from the tab shell, so the
       language button stays on screen. The lock and join screens fill at least the height left; a
