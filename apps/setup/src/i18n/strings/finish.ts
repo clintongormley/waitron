@@ -2,7 +2,8 @@
 
 export const finishEn = {
   "provisioning.heading": "Provisioning this server",
-  "provisioning.status": "Provisioning… this can take a moment. Keep this page open.",
+  "provisioning.setting_up": "Setting up {legalName}",
+  "provisioning.keep_open": "Keep this page open.",
   "provisioning.busy": "Provisioning…",
   "provisioning.failed_heading": "Provisioning",
   "provisioning.trust_help_before":
@@ -73,7 +74,8 @@ export const finishEn = {
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
   "provisioning.heading": "Configurando este servidor",
-  "provisioning.status": "Configurando… puede tardar un momento. Mantén esta página abierta.",
+  "provisioning.setting_up": "Configurando {legalName}",
+  "provisioning.keep_open": "Mantén esta página abierta.",
   "provisioning.busy": "Configurando…",
   "provisioning.failed_heading": "Configuración",
   "provisioning.trust_help_before":

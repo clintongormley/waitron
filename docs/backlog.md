@@ -863,12 +863,10 @@ of three mockups):**
 - Back and Provision move into `wt-form-actions`.
 
 **The setup wizard's provisioning page is a page of its own with a spinner (A186, owner
-2026-10-02) — OPEN.** Today `apps/setup/src/screens/provisioning-screen.ts` shows a status line and
-a disabled primary button reading "Provisioning…". **Decided (owner, 2026-10-02, option P1):** a
-centred spinner, the heading "Setting up <legal name>", the mode badge (Demo, Prepare or Live, as
-the done page shows it), and "Keep this page open"; no button. Provisioning is one request that
-reports no progress (`provision` in `apps/setup/src/api/client.ts`), so the page shows no steps.
-The failed state is unchanged.
+2026-10-02) — DONE.** While the request is pending, the page centres a spinner beneath "Setting up
+<legal name>" and a Demo, Preparation or Live badge, with "Keep this page open" and no button. The
+failed state keeps its retry, reset and reload actions. `provision` in
+`apps/setup/src/api/client.ts` reports no intermediate steps.
 
 **The language chooser moves to the top bar, in every app (A187, owner 2026-10-02) — OPEN.** The
 owner: _"instead of having the language chooser at the bottom, let's move it to the header on all

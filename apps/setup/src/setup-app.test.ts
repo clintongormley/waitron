@@ -950,7 +950,7 @@ describe("setup-app", () => {
     expect((host as unknown as { onboardingIntent: string }).onboardingIntent).toBe("prepare");
   });
 
-  it("shows the in-flight state with a DISABLED provision control while the POST is pending", async () => {
+  it("shows the in-flight spinner without a provision control while the POST is pending", async () => {
     let resolveProvision!: (value: unknown) => void;
     const provision = vi.fn().mockImplementation(
       () =>
@@ -963,9 +963,8 @@ describe("setup-app", () => {
     await el.updateComplete;
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=status]")).not.toBeNull();
-    expect(host.shadowRoot!.querySelector("[data-test=provision]")!.hasAttribute("disabled")).toBe(
-      true,
-    );
+    expect(host.shadowRoot!.querySelector("wt-spinner")).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=provision]")).toBeNull();
     resolveProvision({ provisioned: true, restarting: true });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
