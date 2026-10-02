@@ -188,6 +188,7 @@ type LanguageLaw = Pick<
 // que en derivin" in Catalan, and by the agency's reading that invoices are at least in Catalan and
 // till receipts ("tiquets de caixa") are owed in Catalan. Art. 32.3 is not the receipt's source:
 // putting invoices under it is the agency's reading, not the statute's.
+// A copy can print in another pack language (`printSaleReceipt`, apps/server/src/till-sale.ts).
 // Sources: docs/compliance/regional-language-rules.md, Catalonia table, "Receipts / invoices" rows.
 const CATALONIA: LanguageLaw = {
   requiredContentLocales: ["ca-ES", "es-ES"],

@@ -3055,8 +3055,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     ordinary size while the venue name and the TOTAL row are drawn larger; on the printed receipt
     every line of text is drawn at one size (read, not checked on paper).
 - **One receipt language per location (C113, owner 2026-09-30) — landed 2026-10-02 as #1014,
-  owner-approved.** A receipt prints in ONE language, never two, with no choice at print time, and
-  dish names print as they were saved. The language is the first entry of the location's saved list
+  owner-approved.** A receipt prints in ONE language, never two, with no choice when the original
+  prints, and dish names print as they were saved. The language is the first entry of the location's saved list
   (`locations.invoice_locales`), read in the transaction that files the sale (`readReceiptLanguage`,
   `packages/catalogue/src/operations.ts`); a reprint asked for without a language prints in the
   language the sale was filed in (`sales.locale`). The fixed words come from Spain's country pack
@@ -3072,9 +3072,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     answers print as the sale was filed. The copy is marked as one, files nothing and opens no
     drawer. `POST /api/sales/:id/reprint` takes an optional `language`, refused with
     `management.request_invalid` (`field: "language"`) unless it is one of the country pack's
-    receipt languages, which `GET /api/till` lists as `receiptLanguages`. Open for the owner: after a
-    location's language changes, the till starts the choice on the location's language, not the one
-    the sale was filed in.
+    receipt languages, which `GET /api/till` lists as `receiptLanguages`. A copy is offered in every
+    receipt language the pack has, even in Catalonia: a product choice, which includes Spanish, the
+    customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
+    [regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Open for the
+    owner: after a location's language changes, the till starts the choice on the location's
+    language, not the one the sale was filed in.
   - **Open, for the owner:**
     - **A change is refused while an open order at the location holds a line**
       (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core

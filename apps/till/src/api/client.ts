@@ -1936,8 +1936,8 @@ export class TillApi {
    * Reprint a FILED sale's customer receipt → `POST /api/sales/:id/reprint`, by the till's own
    * working-order id. Paper only: it files NOTHING and ignores the location's `receipt_print_mode`. An
    * id naming no filed sale, or a till with no active printer, is a 200 no-op. The copy's fixed words
-   * are in `language`, one of {@link TillInfo.receiptLanguages}, or without one in the language the
-   * sale was filed in.
+   * and formatting are in `language`, one of {@link TillInfo.receiptLanguages}, or without one in
+   * the language the sale was filed in.
    */
   async reprint(workingOrderId: string, language?: string): Promise<void> {
     await this.#request<void>(

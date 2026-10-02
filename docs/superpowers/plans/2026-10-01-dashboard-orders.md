@@ -61,6 +61,10 @@ without paying" list.
   both call one `enqueueReceiptCopy`, which lays out `readSettledTicket`'s receipt with
   `duplicate: true` and enqueues one `document` job. The dashboard route adds the
   `receipt_reprints` record in the same transaction (Task 1, Steps 9–11).
+  _(2026-10-02, C114: `enqueueReceiptReprint` now takes an optional `language`, so the till's copy
+  may print its fixed words and formatting in another of the country pack's receipt languages, with
+  names still in `sales.locale`; the split must carry it. This qualifies every statement below that the till's
+  copy prints in the language the sale was filed in. See `docs/backlog.md`, C113's entry.)_
 
 **Tech Stack:** TypeScript, Hono routes, Drizzle on SQLite (`node:sqlite`), Lit web components,
 Vitest (`useVenueDb` real databases for the server; real headless Chromium for the dashboard and
@@ -344,6 +348,9 @@ export async function enqueueReceiptCopy(
 // `enqueueReceiptReprint(tx, cfg, ticket, saleId)` keeps its signature: it resolves the till's
 // printer and, when there is one, calls `enqueueReceiptCopy`. A missing taxpayer skips that till copy;
 // the dashboard request fails without writing a job or audit row.
+// (2026-10-02, C114: both now also take an optional `language`, the copy's fixed words and
+// formatting in another of the pack's receipt languages, names still in `sales.locale`. The
+// Orders screen's copy passes none, so it prints in the language the sale was filed in.)
 
 // packages/db/src/schema/receipt-reprints.ts
 export const receiptReprints: /* table "receipt_reprints" */ {
@@ -1563,7 +1570,10 @@ describe("which index a read starts from", () => {
     returning `{ jobId }`; `enqueueReceiptReprint` resolves the till's printer as it does now, returns
     when there is none, and otherwise calls `enqueueReceiptCopy`. Narrow `buildReceiptBytes`'s `cfg`
     to `Pick<TillConfig, "practiceMode">`, the one field it reads. Keep the comment that the copy
-    never opens the drawer; add no drawer call.
+    never opens the drawer; add no drawer call. _(2026-10-02, C114: `enqueueReceiptReprint` and
+    `buildReceiptBytes` now also take an optional `language`, the copy's fixed words and formatting
+    in another of the pack's receipt languages, names still in `sales.locale`; the split must carry
+    it.)_
   - Create `apps/server/src/orders-reprint.ts`:
 
 ```ts

@@ -36,8 +36,9 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// A receipt is printed in its location's saved language (the first entry of
-// `locations.invoice_locales`), read when the sale is filed — never in `WAITRON_TILL_LOCALE`.
+// A receipt, and a copy that names no language, is printed in its location's saved language (the
+// first entry of `locations.invoice_locales`), read when the sale is filed — never in
+// `WAITRON_TILL_LOCALE`.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -281,7 +282,8 @@ describe("a receipt follows its location's saved language", () => {
     expect(sale.status).toBe(200);
     expect(sale.body.locale).toBe("gl-ES");
 
-    // A reprint is in the language the sale was filed in, whatever the location says now.
+    // A reprint that names no language is in the language the sale was filed in, whatever the
+    // location says now.
     await withTransaction(suite.db, (tx) =>
       tx
         .update(locations)

@@ -65,11 +65,7 @@ export async function resolveReceiptPrinter(
   return printer;
 }
 
-/**
- * Use the filed issuer where available and the current optional trim. The fixed words are in
- * `language`, else the language the sale was filed in; the goods names are always looked up in the
- * filed language.
- */
+/** Use the filed issuer where available and the current optional trim. */
 async function buildReceiptBytes(
   tx: Transaction,
   cfg: Pick<TillConfig, "practiceMode">,
@@ -136,7 +132,8 @@ export async function enqueueSaleReceipt(
 /**
  * The manual reprint of an already-filed sale: it files nothing, has no `receipt_print_mode` gate
  * (a reprint is always available), and never opens the drawer. No active printer means no job.
- * `language` prints the fixed words in another receipt language; the caller has checked it.
+ * `language` puts the fixed words and the formatting in another receipt language; the caller has
+ * checked it.
  */
 export async function enqueueReceiptReprint(
   tx: Transaction,

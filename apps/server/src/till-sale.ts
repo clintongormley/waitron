@@ -630,11 +630,7 @@ export async function readSettledTicket(
   };
 }
 
-/**
- * The action determines original versus duplicate; both only enqueue paper for an existing sale. A
- * duplicate's `language`, when given, must be one of the venue's receipt languages; without one it
- * prints in the language the sale was filed in.
- */
+/** The action determines original versus duplicate; both only enqueue paper for an existing sale. */
 export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
   cfg: TillConfig,
@@ -644,6 +640,8 @@ export async function printSaleReceipt(
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
     if (language !== undefined) {
+      // Any of the pack's languages, even where the region fixes one (`fixed`): the set includes
+      // Spanish, which a customer there may ask for (TC 88/2017).
       const { choices } = await readVenueReceiptLanguageRules(tx, { locationId: cfg.locationId });
       if (!choices.includes(language)) {
         throw new AppError("management.request_invalid", { field: "language" });
