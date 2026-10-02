@@ -62,6 +62,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     expect(row!.name).toBe("Cocina");
     expect(row!.isDefault).toBe(false);
     expect(row!.active).toBe(true);
+    expect(row!.showsRestOfOrder).toBe(false);
   });
 
   it("carries ordered timing thresholds with sane defaults (KDS order-timing alerts)", async () => {

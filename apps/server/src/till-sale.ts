@@ -5,6 +5,7 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
+import { replayPrepayMadeHere, storePrepayMadeHere } from "./made-here.js";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
   addDecimal,
@@ -567,6 +568,7 @@ export async function readSettledTicket(
   cfg: TillConfig,
   workingOrderId: string,
 ): Promise<TillSaleResult> {
+  await replayPrepayMadeHere(tx, cfg, workingOrderId);
   // `sales_working_order_id_key` allows at most one.
   const [issued] = await tx
     .select({
@@ -1400,6 +1402,7 @@ export async function fireDishesAtPayment(
     await unsentDishLines(tx, workingOrderId),
     { unroutable: "skip" },
   );
+  await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
   return unrouted.length === 0 ? null : { productIds: unrouted.map((line) => line.productId!) };
 }
 

@@ -26,6 +26,7 @@ import {
 } from "./till-api.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
+import { madeHereSinkFor } from "./made-here.js";
 import { isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
 
@@ -192,6 +193,8 @@ async function deviceSaleCfgOf(
     ...deps.cfg,
     tillId: await requireSaleTillId(deps, c, device),
     allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
+    sendingDeviceId: device?.deviceId,
+    madeHereSink: madeHereSinkFor(c),
   };
 }
 
@@ -207,10 +210,13 @@ export async function withSaleTillWhenIssuing<T>(
   c: Context,
   write: (saleCfg: TillConfig | null) => Promise<T>,
 ): Promise<T> {
+  const sink = madeHereSinkFor(c);
+  const before = new Set(sink);
   try {
     return await write(null);
   } catch (error) {
     if (!(error instanceof SaleTillRequired)) throw error;
+    for (const id of sink) if (!before.has(id)) sink.delete(id);
   }
   return write(await deviceSaleCfg(deps, c));
 }

@@ -467,6 +467,7 @@ export interface Station {
   displayOrder: number;
   isDefault: boolean;
   active: boolean;
+  showsRestOfOrder: boolean;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -483,6 +484,7 @@ export interface Course {
 
 export interface DeviceRow {
   id: string;
+  madeHereStationIds: string[];
   kind: string;
   stationId: string | null;
   label: string;
@@ -2121,6 +2123,7 @@ export class DashboardApi {
       name?: string;
       displayOrder?: number;
       active?: boolean;
+      showsRestOfOrder?: boolean;
       warmAfterMinutes?: number;
       overdueAfterMinutes?: number;
       forgottenAfterMinutes?: number;
@@ -2343,6 +2346,10 @@ export class DashboardApi {
     receiptPrinterId: string | null;
   }> {
     return this.#request(`/management-api/devices/${id}/hardware`, "PATCH", patch);
+  }
+
+  setDeviceMadeHere(id: string, stationIds: string[]): Promise<void> {
+    return this.#request<void>(`/management-api/devices/${id}/made-here`, "PUT", { stationIds });
   }
 
   // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────

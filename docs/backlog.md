@@ -254,9 +254,8 @@ dead end, and the till asks the waiter where to make such a dish, or to remove i
 taking payment), and down-printer and dark-screen alerts
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner on
 2026-10-01, lands on its own when green); 3c, in three plans (owner, 2026-10-01), each its own
-branch: 3c-1, "Show the rest of the order" and "Made here, no ticket"
-([plan](superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md), starts once 3a has
-landed, built beside 3b); 3c-2, extras made at their own station, with the dish's and the extra's
+branch: 3c-1, what a station's ticket shows: the rest of the order, and dishes made at the till
+([plan](superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md), built beside 3b); 3c-2, extras made at their own station, with the dish's and the extra's
 tickets naming each other ([plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md),
 starts once 3b has landed); 3c-3, "Make at" on any dish before sending, moving a dish that has not
 been started to another station (a slip at the old station whenever it was sent there), and
@@ -271,6 +270,12 @@ screens and printers attach to, each with its own Done, Away unchanged, and the 
 order" printer setting retired (owner, 2026-10-01); approved and queued as lane E's PF8, after
 3c-3 lands. After approval the owner ruled that a dish made at the till is never held and the till
 lists what to make ("Make now"); 3c-1, 3c-2, 3c-3 and 3d were amended to match.
+
+Three follow-ups remain for 3c-1:
+
+- The kitchen screen's column view has no per-order card, so it does not show the rest of the order. A station that needs that context uses the card view.
+- Units added to a discounted pay-first dish held in a group get a held kitchen record of their own while the dish has none. Review 3's probe F observed this on `main`; its history was not checked, and whether it is wanted remains open.
+- A device's made-here stations do not travel in configuration export. Devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up from an export sets them again on the Devices screen.
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside

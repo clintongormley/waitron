@@ -178,6 +178,21 @@ async function lineId(v: PartyVenue, billId: string, lineNo: number): Promise<st
 }
 
 describe("the floor's attention signals", () => {
+  it("does not signal a made-here drink as ready at Bar", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const bar = await withBar(v);
+    const mesa2 = await v.table("Mesa 2");
+    const { tabId } = await seat(v, mesa2);
+    await order(v, tabId, "Caña", "Burger");
+    await makeReady(v, tabId, "Caña");
+    await inTx(v, (tx) =>
+      tx
+        .update(ticketItems)
+        .set({ madeHere: true })
+        .where(and(eq(ticketItems.workingOrderId, tabId), eq(ticketItems.stationId, bar))),
+    );
+    expect((await floorRow(v, mesa2)).signals).toEqual([]);
+  });
   it("asks a just-seated party for its order, until a draft exists", async () => {
     const v = await setupPartyVenue(suite.db);
     const lucia = await person(v, "Lucía");

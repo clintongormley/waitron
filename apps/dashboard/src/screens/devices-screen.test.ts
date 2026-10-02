@@ -48,6 +48,7 @@ const stations: Station[] = [
     displayOrder: 0,
     isDefault: true,
     active: true,
+    showsRestOfOrder: false,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -58,6 +59,7 @@ const stations: Station[] = [
     displayOrder: 1,
     isDefault: false,
     active: true,
+    showsRestOfOrder: false,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -67,6 +69,7 @@ const stations: Station[] = [
 const devices: DeviceRow[] = [
   {
     id: "d1",
+    madeHereStationIds: [],
     kind: "kds_station",
     stationId: "s1",
     label: "Pantalla Cocina",
@@ -77,6 +80,7 @@ const devices: DeviceRow[] = [
   },
   {
     id: "d2",
+    madeHereStationIds: [],
     kind: "kds_station",
     stationId: null,
     label: "Pase revocado",
@@ -228,6 +232,159 @@ function pickSelect(el: DevicesScreen, testId: string, value: string): void {
 }
 
 describe("devices-screen", () => {
+  it("shows stored made-here choices on a till and no group on a kitchen screen", async () => {
+    const till: DeviceRow = {
+      ...devices[0]!,
+      id: "till",
+      kind: "till",
+      madeHereStationIds: ["s2"],
+    };
+    const api = stubApi({ listDevices: vi.fn().mockResolvedValue([till, devices[0]]) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    const group = q(el, '[data-test="made-here-till"]')!;
+    expect(group.textContent).toContain(t("devices.made_here", "es-ES"));
+    expect((group.querySelector('input[value="s2"]') as HTMLInputElement).checked).toBe(true);
+    expect(q(el, '[data-test="made-here-d1"]')).toBeNull();
+  });
+
+  it("saves the shown checked stations and restores the native checkbox after refusal", async () => {
+    const till: DeviceRow = { ...devices[0]!, id: "till", kind: "till", madeHereStationIds: [] };
+    const setDeviceMadeHere = vi.fn().mockRejectedValue({ code: "station.not_found" });
+    const api = stubApi({ listDevices: vi.fn().mockResolvedValue([till]), setDeviceMadeHere });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    const group = q(el, '[data-test="made-here-till"]')!;
+    const box = group.querySelector('input[value="s2"]') as HTMLInputElement;
+    box.click();
+    await flush(el);
+    expect(setDeviceMadeHere).toHaveBeenCalledWith("till", ["s2"]);
+    expect(box.checked).toBe(false);
+    expect(group.lastElementChild?.getAttribute("role")).toBe("alert");
+    expect(group.lastElementChild?.textContent).toContain(
+      codeMessage("station.not_found", "es-ES"),
+    );
+  });
+
+  it("keeps two rapid choices visible and saves them in change order", async () => {
+    const till: DeviceRow = { ...devices[0]!, id: "till", kind: "till", madeHereStationIds: [] };
+    const grill: Station = { ...stations[0]!, id: "grill", name: "Grill" };
+    let finishFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const setDeviceMadeHere = vi
+      .fn()
+      .mockImplementationOnce(() => first)
+      .mockResolvedValue(undefined);
+    const api = stubApi({
+      listDevices: vi.fn().mockResolvedValue([till]),
+      listStations: vi.fn().mockResolvedValue([...stations, grill]),
+      setDeviceMadeHere,
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    const group = q(el, '[data-test="made-here-till"]')!;
+    const bar = group.querySelector('input[value="s2"]') as HTMLInputElement;
+    const grillBox = group.querySelector('input[value="grill"]') as HTMLInputElement;
+    bar.click();
+    await flush(el);
+    expect(bar.checked).toBe(true);
+    grillBox.click();
+    await flush(el);
+    expect(bar.checked).toBe(true);
+    expect(grillBox.checked).toBe(true);
+    expect(setDeviceMadeHere).toHaveBeenCalledTimes(1);
+    expect(setDeviceMadeHere).toHaveBeenNthCalledWith(1, "till", ["s2"]);
+    finishFirst();
+    await vi.waitFor(() => expect(setDeviceMadeHere).toHaveBeenCalledTimes(2));
+    expect(setDeviceMadeHere).toHaveBeenNthCalledWith(2, "till", ["s2", "grill"]);
+    await flush(el);
+    expect(bar.checked).toBe(true);
+    expect(grillBox.checked).toBe(true);
+    expect(q(el, '[data-test="made-here-till"] [role="alert"]')).toBeNull();
+  });
+
+  it("rolls a pending second choice back to the stored list if the first save is refused", async () => {
+    const till: DeviceRow = { ...devices[0]!, id: "till", kind: "till", madeHereStationIds: [] };
+    let refuseFirst!: (error: unknown) => void;
+    const first = new Promise<void>((_, reject) => {
+      refuseFirst = reject;
+    });
+    const setDeviceMadeHere = vi
+      .fn()
+      .mockImplementationOnce(() => first)
+      .mockResolvedValue(undefined);
+    const api = stubApi({ listDevices: vi.fn().mockResolvedValue([till]), setDeviceMadeHere });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    const group = q(el, '[data-test="made-here-till"]')!;
+    const bar = group.querySelector('input[value="s2"]') as HTMLInputElement;
+    const kitchen = group.querySelector('input[value="s1"]') as HTMLInputElement;
+    bar.click();
+    kitchen.click();
+    await flush(el);
+    refuseFirst({ code: "station.not_found" });
+    await vi.waitFor(() => expect(group.querySelector('[role="alert"]')).toBeTruthy());
+    expect(setDeviceMadeHere).toHaveBeenCalledTimes(1);
+    expect(bar.checked).toBe(false);
+    expect(kitchen.checked).toBe(false);
+  });
+
+  it("lets another device save while one device's request is pending", async () => {
+    const first: DeviceRow = { ...devices[0]!, id: "first", kind: "till", madeHereStationIds: [] };
+    const second: DeviceRow = {
+      ...devices[0]!,
+      id: "second",
+      kind: "till",
+      madeHereStationIds: [],
+    };
+    let finishFirst!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const setDeviceMadeHere = vi
+      .fn()
+      .mockImplementation((id: string) => (id === "first" ? pending : Promise.resolve()));
+    const api = stubApi({
+      listDevices: vi.fn().mockResolvedValue([first, second]),
+      setDeviceMadeHere,
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    (q(el, '[data-test="made-here-first"] input[value="s2"]') as HTMLInputElement).click();
+    (q(el, '[data-test="made-here-second"] input[value="s1"]') as HTMLInputElement).click();
+    await flush(el);
+    expect(setDeviceMadeHere).toHaveBeenCalledWith("first", ["s2"]);
+    expect(setDeviceMadeHere).toHaveBeenCalledWith("second", ["s1"]);
+    expect(
+      (q(el, '[data-test="made-here-second"] input[value="s1"]') as HTMLInputElement).checked,
+    ).toBe(true);
+    finishFirst();
+    await flush(el);
+  });
+
+  it("omits a disabled stored station when saving a newly checked station", async () => {
+    const till: DeviceRow = {
+      ...devices[0]!,
+      id: "till",
+      kind: "till",
+      madeHereStationIds: ["s2", "switched-off"],
+    };
+    const grill: Station = { ...stations[0]!, id: "grill", name: "Grill" };
+    const setDeviceMadeHere = vi.fn().mockResolvedValue(undefined);
+    const api = stubApi({
+      listDevices: vi.fn().mockResolvedValue([till]),
+      listStations: vi.fn().mockResolvedValue([...stations, grill]),
+      setDeviceMadeHere,
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    (q(el, '[data-test="made-here-till"] input[value="grill"]') as HTMLInputElement).click();
+    await flush(el);
+    expect(setDeviceMadeHere).toHaveBeenCalledWith("till", ["s2", "grill"]);
+  });
+
   it("loads every feed the screen needs on connect and renders a row per device", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });

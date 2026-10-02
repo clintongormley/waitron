@@ -36,6 +36,10 @@ export interface TillConfig {
   practiceMode?: boolean;
   /** Request-derived drawer eligibility; a handheld's payments never open a linked till's drawer. */
   allowCashDrawer?: boolean;
+  /** The device that sent this work to the kitchen, when the request has one. */
+  sendingDeviceId?: string;
+  /** Line ids of made-here records this request writes, for its till answer. */
+  madeHereSink?: Set<string>;
   /**
    * Read from the till's location row by `readOrderFlow`, not the environment — which is why
    * `loadTillConfig` returns `Omit<TillConfig, "orderFlow">`: no placeholder mode can reach a dispatch.

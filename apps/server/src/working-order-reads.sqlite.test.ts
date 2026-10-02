@@ -21,6 +21,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { TillConfig } from "./till-config.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
@@ -71,8 +72,8 @@ beforeAll(async () => {
     id: lineId,
     workingOrderId: orderId,
     lineNo: 1,
-    name: "Café",
-    descriptions: { [LOCALE]: "Café" },
+    name: "Burger",
+    descriptions: { [LOCALE]: "Burger" },
     quantity: 1000,
     unitPriceGross: 121,
     vatClass: "general",
@@ -142,5 +143,94 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     // Opened in this suite's own setup, so the floored minute count is 0.
     expect(orders[0]!.openedMinutes).toBe(0);
     expect(orders[0]!.tableLabel).toBe("Mesa 1");
+  });
+
+  it("omits a made-here drink from kitchen and floor reads while retaining the burger", async () => {
+    const [order] = await db.select({ id: workingOrders.id }).from(workingOrders);
+    const [burger] = await db.select({ id: ticketItems.id }).from(ticketItems);
+    await db.update(ticketItems).set({ state: "queued" }).where(eq(ticketItems.id, burger!.id));
+    const drinkLine = randomUUID();
+    await db.insert(workingOrderLines).values({
+      id: drinkLine,
+      workingOrderId: order!.id,
+      lineNo: 2,
+      name: "Lager",
+      descriptions: { [LOCALE]: "Lager" },
+      quantity: 1000,
+      unitPriceGross: 121,
+      vatClass: "general",
+      lineTotal: 121,
+    });
+    await db.insert(ticketItems).values({
+      nodeId: cfg.nodeId,
+      workingOrderId: order!.id,
+      workingOrderLineId: drinkLine,
+      stationId,
+      state: "ready",
+      madeHere: true,
+      queuedAt: new Date(Date.now() - 20 * MINUTE_MS).toISOString(),
+      firedAt: nowIso(),
+    });
+
+    const [station, expo, floor] = await withTransaction(
+      db,
+      async (tx) =>
+        [
+          await listStationQueue(tx, stationId),
+          await listExpoQueue(tx, cfg),
+          await listTablesWithState(tx, cfg),
+        ] as const,
+    );
+    expect(station.flatMap((group) => group.items).map((item) => item.name)).toEqual(["Burger"]);
+    expect(expo).toHaveLength(1);
+    expect(expo[0]!.groups.flatMap((group) => group.items).map((item) => item.name)).toEqual([
+      "Burger",
+    ]);
+    expect(floor[0]).toMatchObject({ pendingToServe: 2, readyToServe: 0, timingBand: "fresh" });
+
+    await db
+      .update(ticketItems)
+      .set({ state: "ready", awayAt: nowIso() })
+      .where(eq(ticketItems.id, burger!.id));
+    const afterHandover = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
+    expect(afterHandover.map((order) => order.orderId)).not.toContain(order!.id);
+  });
+
+  it("removes an order with only a made-here item from expo", async () => {
+    const orderId = randomUUID();
+    await db.insert(workingOrders).values({
+      id: orderId,
+      tillId: cfg.tillId,
+      nodeId: cfg.nodeId,
+      orderNumber: 2,
+      status: "open",
+      deliveryTableId: tableId,
+    });
+    const lineId = randomUUID();
+    await db.insert(workingOrderLines).values({
+      id: lineId,
+      workingOrderId: orderId,
+      lineNo: 1,
+      name: "Lager",
+      descriptions: { [LOCALE]: "Lager" },
+      quantity: 1000,
+      unitPriceGross: 121,
+      vatClass: "general",
+      lineTotal: 121,
+    });
+    await db.insert(ticketItems).values({
+      nodeId: cfg.nodeId,
+      workingOrderId: orderId,
+      workingOrderLineId: lineId,
+      stationId,
+      state: "ready",
+      madeHere: true,
+      queuedAt: nowIso(),
+      firedAt: nowIso(),
+    });
+    const orders = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
+    expect(orders.map((order) => order.orderId)).not.toContain(orderId);
+    const [table] = await withTransaction(db, (tx) => listTablesWithState(tx, cfg));
+    expect(table).toMatchObject({ pendingDeliveries: 0 });
   });
 });

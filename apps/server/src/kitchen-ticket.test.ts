@@ -221,6 +221,115 @@ describe("formatKitchenTicket", () => {
   });
 });
 
+describe("the rest of the order on a station's ticket", () => {
+  const stationTicket = {
+    scope: "station" as const,
+    stationName: "Pantry",
+    tableLabel: "Table 4",
+    orderNumber: "A-17",
+    firedAt: new Date(2026, 7, 17, 14, 30),
+    items: [{ qty: 1, name: "Fish" }],
+  };
+
+  it("prints each other station's item after this station's work, in the given order", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          ...stationTicket,
+          alsoOnOrder: {
+            locale: "en-GB",
+            items: [
+              { qty: 2, name: "Burger", stationName: "Grill", held: false },
+              { qty: 1, name: "Chips", stationName: "Fryer", held: true },
+            ],
+          },
+        },
+        KITCHEN_80,
+      ),
+    );
+    const own = lines.indexOf("1 x Fish");
+    const burger = lines.indexOf("2 x Burger — Grill");
+    expect(lines.slice(own + 1, burger).join(" ")).toBe(
+      "-- Also on this order (not for this station) --",
+    );
+    expect(lines.slice(burger)).toEqual(["2 x Burger — Grill", "1 x Chips — Fryer (on hold)", ""]);
+  });
+
+  it.each([
+    ["es-ES", "-- También en este pedido (no para esta estación) --", "(en espera)"],
+    ["fr-FR", "-- Also on this order (not for this station) --", "(on hold)"],
+  ])("uses the expected wording for %s", (locale, heading, held) => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          ...stationTicket,
+          alsoOnOrder: {
+            locale,
+            items: [{ qty: 1, name: "Burger", stationName: "Grill", held: true }],
+          },
+        },
+        KITCHEN_80,
+      ),
+    );
+    const own = lines.indexOf("1 x Fish");
+    const burger = lines.indexOf(`1 x Burger — Grill ${held}`);
+    expect(lines.slice(own + 1, burger).join(" ")).toBe(heading);
+    expect(lines.slice(burger)).toEqual([`1 x Burger — Grill ${held}`, ""]);
+  });
+
+  it("prints a unit between the quantity and kitchen name", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          ...stationTicket,
+          alsoOnOrder: {
+            locale: "en",
+            items: [{ qty: "0.350", unit: "kg", name: "Steak", stationName: "Grill", held: false }],
+          },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toContain("0.350 kg x Steak — Grill");
+  });
+
+  it("omits the heading when there are no other items", () => {
+    const without = formatKitchenTicket(stationTicket, KITCHEN_80);
+    const withEmpty = formatKitchenTicket(
+      { ...stationTicket, alsoOnOrder: { locale: "en", items: [] } },
+      KITCHEN_80,
+    );
+    expect([...withEmpty]).toEqual([...without]);
+  });
+
+  it("wraps a long other-station item with its continuation under the kitchen name", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          ...stationTicket,
+          alsoOnOrder: {
+            locale: "en",
+            items: [
+              {
+                qty: "0.350",
+                unit: "kg",
+                name: "Extra long marinated steak with peppers",
+                stationName: "Grill",
+                held: false,
+              },
+            ],
+          },
+        },
+        KITCHEN_58,
+      ),
+    );
+    const itemLine = lines.findIndex((line) => line.startsWith("0.350 kg x "));
+    expect(itemLine).toBeGreaterThanOrEqual(0);
+    expect(lines[itemLine + 1]).toMatch(/^ {11}\S/);
+    expect(lines.slice(itemLine, -1).join(" ")).toContain("Grill");
+  });
+});
+
 describe("formatCorrectionSlip", () => {
   it("prints a VOID header, station, table, order, time, and the item via emitItem, ending in a cut", () => {
     const bytes = formatCorrectionSlip(

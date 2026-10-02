@@ -17,7 +17,7 @@ import { countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
-import { TillApi, isNetworkFailure } from "./api/client.js";
+import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
@@ -77,6 +77,7 @@ import {
   type AdjustTarget,
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
+import "./widgets/make-now.js";
 import type {
   PayLine,
   PayRefusal,
@@ -1040,6 +1041,87 @@ export class TillApp extends LitElement {
   /** From the boot probe: the lock screen's heading, and the key for the remembered-operator default. */
   @state() private deviceName?: string;
   @state() private deviceId?: string;
+  @state() private makeNow: MadeHereItem[] = [];
+
+  #makeNowKey(): string | null {
+    return this.deviceId === undefined ? null : `waitron.makeNow.${this.deviceId}`;
+  }
+
+  #saveMakeNow(): void {
+    const key = this.#makeNowKey();
+    if (key === null) return;
+    try {
+      if (this.makeNow.length === 0) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(this.makeNow));
+    } catch {
+      /* Site data may be blocked; the on-screen list remains in memory. */
+    }
+  }
+
+  #restoreMakeNow(): void {
+    const key = this.#makeNowKey();
+    if (key === null) return;
+    try {
+      const stored = localStorage.getItem(key);
+      const parsed: unknown = stored === null ? [] : JSON.parse(stored);
+      if (!Array.isArray(parsed)) return;
+      const textMap = (value: unknown): value is Record<string, string> =>
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.values(value).every((part) => typeof part === "string");
+      const optionSnapshot = (value: unknown): boolean =>
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        "listName" in value &&
+        textMap(value.listName) &&
+        "listCustomerName" in value &&
+        (value.listCustomerName === null || textMap(value.listCustomerName)) &&
+        "listKitchenName" in value &&
+        (value.listKitchenName === null || typeof value.listKitchenName === "string") &&
+        "labelName" in value &&
+        textMap(value.labelName) &&
+        "labelCustomerName" in value &&
+        (value.labelCustomerName === null || textMap(value.labelCustomerName)) &&
+        "labelKitchenName" in value &&
+        (value.labelKitchenName === null || typeof value.labelKitchenName === "string");
+      this.makeNow = parsed.filter(
+        (item): item is MadeHereItem =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof item.lineId === "string" &&
+          typeof item.name === "string" &&
+          typeof item.quantity === "string" &&
+          typeof item.soldInEach === "boolean" &&
+          (item.unitName === null || textMap(item.unitName)) &&
+          Array.isArray(item.optionSnapshots) &&
+          item.optionSnapshots.every(optionSnapshot) &&
+          Array.isArray(item.extras) &&
+          item.extras.every((extra: unknown) => typeof extra === "string") &&
+          (item.note === null || typeof item.note === "string"),
+      );
+    } catch {
+      /* A blocked or corrupt store leaves the in-memory list available. */
+    }
+  }
+
+  readonly #onMadeHere = (items: MadeHereItem[]): void => {
+    const seen = new Set(this.makeNow.map((item) => item.lineId));
+    const added: MadeHereItem[] = [];
+    for (const item of items) {
+      if (seen.has(item.lineId)) continue;
+      seen.add(item.lineId);
+      added.push(item);
+    }
+    this.makeNow = [...this.makeNow, ...added];
+    this.#saveMakeNow();
+  };
+
+  #dismissMakeNow(): void {
+    this.makeNow = [];
+    this.#saveMakeNow();
+  }
   /** Prefetched by the boot probe, so the station screen does not read `GET /api/device/station` again. */
   @state() private initialDeviceStation?: DeviceStation;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
@@ -1382,6 +1464,7 @@ export class TillApp extends LitElement {
   /** `handheldMode` is set after `canvas` in {@link #boot}, so a change to either recomputes the
    * affordances. */
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
     if (changed.has("canvas") || changed.has("handheldMode"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
@@ -1458,6 +1541,7 @@ export class TillApp extends LitElement {
     this.deviceMode = false;
     this.#deviceKind = "till";
     this.deviceName = undefined;
+    const previousDeviceId = this.deviceId;
     this.deviceId = undefined;
     this.frontDoor = undefined;
     this.devTab = readDevDeviceId() !== null;
@@ -1479,8 +1563,11 @@ export class TillApp extends LitElement {
     // answers `device.unauthorized` and gets the join screen, which is not a boot failure.
     try {
       const identity = await this.api.getDeviceIdentity();
+      if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
+        this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
+      this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
       this.#deviceKind = kind ?? "till";
       if (kind === "handheld") {
@@ -2561,12 +2648,14 @@ export class TillApp extends LitElement {
   }
 
   async #onSwitchDevice(): Promise<void> {
+    this.makeNow = [];
     clearDevDeviceId();
     await this.#boot();
   }
 
   /** A revoked device cookie: re-boot, which routes the device to the join screen. */
   async #onDeviceUnauthorized(): Promise<void> {
+    this.makeNow = [];
     await this.#boot();
   }
 
@@ -6058,6 +6147,7 @@ export class TillApp extends LitElement {
           close-label=${t("table.submitted_close")}
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
+        <till-make-now .items=${this.makeNow} @dismiss=${this.#dismissMakeNow}></till-make-now>
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
         ${this.#renderRefreshNotice("waiting")} ${this.#renderRefreshNotice("departures")}
         <!-- The waiting-for-promotion banner. On the shell surface (an operator

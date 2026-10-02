@@ -11,6 +11,7 @@ export interface PrepStation {
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
+  showsRestOfOrder: boolean;
 }
 export interface PrepStationsView {
   routing: RoutingModel;
@@ -102,7 +103,10 @@ export class PrepStationsApi {
   async createStation(input: StationInput): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);
   }
-  updateStation(id: string, input: StationInput): Promise<void> {
+  updateStation(
+    id: string,
+    input: Partial<StationInput & Pick<PrepStation, "showsRestOfOrder">>,
+  ): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", input);
   }
   deactivateStation(id: string): Promise<void> {

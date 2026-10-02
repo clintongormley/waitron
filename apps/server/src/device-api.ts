@@ -22,6 +22,7 @@ import { isUuid } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
+import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
 
 /**
  * `cfg` is the FULL `TillConfig` because the verbs this surface calls are typed on it; the routes
@@ -266,8 +267,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // The inner join always matches: `device_profile_id` is NOT NULL with a RESTRICT FK.
-      const rows = await gated(sessionId, (tx) =>
-        tx
+      const { rows, madeHere } = await gated(sessionId, async (tx) => ({
+        rows: await tx
           .select({
             id: devices.id,
             formFactor: deviceProfiles.formFactor,
@@ -281,9 +282,14 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .from(devices)
           .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
           .orderBy(desc(devices.enrolledAt)),
-      );
+        madeHere: await listMadeHereStations(tx),
+      }));
       return c.json(
-        rows.map(({ formFactor, ...row }) => ({ ...row, kind: kindOfFormFactor(formFactor) })),
+        rows.map(({ formFactor, ...row }) => ({
+          ...row,
+          kind: kindOfFormFactor(formFactor),
+          madeHereStationIds: madeHere.get(row.id) ?? [],
+        })),
       );
     }),
   );
@@ -364,6 +370,24 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       });
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.json(updated[0], 200);
+    }),
+  );
+
+  app.put("/management-api/devices/:id/made-here", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+      const body = await readJsonBody<{ stationIds?: unknown }>(c);
+      if (!Array.isArray(body.stationIds) || !body.stationIds.every(isUuid)) {
+        throw new AppError("management.request_invalid", { field: "stationIds" });
+      }
+      await gated(sessionId, async (tx) => {
+        const [device] = await tx.select({ id: devices.id }).from(devices).where(ownDeviceById(id));
+        if (device === undefined) throw new AppError("device.not_found", { deviceId: id });
+        await setMadeHereStations(tx, deps.cfg, id, body.stationIds as string[]);
+      });
+      return c.body(null, 204);
     }),
   );
 

@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, deviceProfiles, printers, withTransaction } from "@waitron/db";
+import { devices, deviceProfiles, kitchenStations, printers, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -186,7 +186,7 @@ function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
  *  `host` overrides the request `Host` header. */
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "PUT",
   path: string,
   opts: { body?: unknown; cookie?: string | null; host?: string } = {},
 ): Promise<Response> {
@@ -754,6 +754,35 @@ describe("Device API — the device-guarded routes", () => {
     });
   });
 
+  it("carries the rest of the order in an enabled kitchen device's station queue", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const other = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+    );
+    const { orderId, items } = await fireOrder(venue);
+    await moveItemToStation(items[1]!, other.id);
+    await suite.db
+      .update(kitchenStations)
+      .set({ showsRestOfOrder: true })
+      .where(eq(kitchenStations.id, venue.defaultStationId));
+    const { jar } = await enrolKds(app, venue, venue.defaultStationId);
+
+    const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      station: {
+        queue: {
+          orderId: string;
+          elsewhere?: { id: string; stationName: string; soldInEach: boolean }[];
+        }[];
+      };
+    };
+    expect(body.station.queue.find((group) => group.orderId === orderId)?.elsewhere).toEqual([
+      expect.objectContaining({ id: items[1], stationName: "Fría", soldInEach: true }),
+    ]);
+  });
+
   it("the device routes refuse a missing / malformed cookie with 401 device.unauthorized", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
@@ -964,6 +993,90 @@ describe("Device management routes (device.manage)", () => {
       );
       expect(malformed.status).toBe(404);
     });
+  });
+});
+
+describe("PUT /management-api/devices/:id/made-here (device.manage)", () => {
+  it("sets a device's list and includes it in the management GET", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue);
+    const bar = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Bar" }),
+    );
+    const path = `/management-api/devices/${deviceId}/made-here`;
+    const put = await send(app, "PUT", path, {
+      cookie: venue.managerCookie,
+      body: { stationIds: [bar.id] },
+    });
+    expect(put.status).toBe(204);
+    const get = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    expect(get.status).toBe(200);
+    expect(
+      ((await get.json()) as { id: string; madeHereStationIds: string[] }[]).find(
+        (d) => d.id === deviceId,
+      )?.madeHereStationIds,
+    ).toEqual([bar.id]);
+  });
+
+  it("refuses missing permission, malformed input, unknown device and switched-off station", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue);
+    const path = `/management-api/devices/${deviceId}/made-here`;
+    const cases: { path: string; cookie?: string; body: unknown; status: number; code: string }[] =
+      [
+        { path, body: { stationIds: [] }, status: 401, code: "management_session.required" },
+        {
+          path,
+          cookie: venue.staffCookie,
+          body: { stationIds: [] },
+          status: 403,
+          code: "authorization.not_permitted",
+        },
+        {
+          path: "/management-api/devices/bad/made-here",
+          cookie: venue.managerCookie,
+          body: { stationIds: [] },
+          status: 404,
+          code: "device.not_found",
+        },
+        {
+          path: `/management-api/devices/${randomUUID()}/made-here`,
+          cookie: venue.managerCookie,
+          body: { stationIds: [] },
+          status: 404,
+          code: "device.not_found",
+        },
+        ...[{}, { stationIds: null }, { stationIds: ["bad"] }].map((body) => ({
+          path,
+          cookie: venue.managerCookie,
+          body,
+          status: 400,
+          code: "management.request_invalid",
+        })),
+      ];
+    for (const one of cases) {
+      const res = await send(app, "PUT", one.path, { cookie: one.cookie, body: one.body });
+      expect(res.status).toBe(one.status);
+      expect(await res.json()).toMatchObject({
+        error: {
+          code: one.code,
+          ...(one.code === "management.request_invalid" ? { params: { field: "stationIds" } } : {}),
+        },
+      });
+    }
+    const off = await withTransaction(suite.db, async (tx) => {
+      const row = await createStation(tx, venue.cfg, { name: "Off" });
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, row.id));
+      return row;
+    });
+    const res = await send(app, "PUT", path, {
+      cookie: venue.managerCookie,
+      body: { stationIds: [off.id] },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "station.not_found" } });
   });
 });
 

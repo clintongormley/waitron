@@ -1196,6 +1196,19 @@ export interface StationQueueCourse {
   displayOrder: number;
 }
 
+/** One item of the order at another station, shown in this station's card. */
+export interface ElsewhereItem {
+  id: string;
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  unitPrecision: number | null;
+  soldInEach: boolean;
+  stationName: string;
+  state: TicketState;
+  held: boolean;
+}
+
 /** What a kitchen notice tells a station: a line recalled, voided, changed or moved to another
  *  table after it was sent. */
 export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
@@ -1252,6 +1265,8 @@ export interface StationQueueGroup {
    *  server's `JOBS_WAITING_MS`, or was given up on. */
   printProblem?: true;
   items: StationQueueItem[];
+  /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
+  elsewhere?: ElsewhereItem[];
   /** This station's order-timing thresholds. Every group from one call shares them; they ride
    *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
    *  (`classifyBand`, `@waitron/shared`). */
@@ -1733,7 +1748,23 @@ export interface TabTransfer {
   quantity?: string;
 }
 
+export interface MadeHereItem {
+  lineId: string;
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  optionSnapshots: OptionSnapshot[];
+  extras: string[];
+  note: string | null;
+}
+
 export class TillApi {
+  #madeHereListener?: (items: MadeHereItem[]) => void;
+
+  onMadeHere(listener: (items: MadeHereItem[]) => void): void {
+    this.#madeHereListener = listener;
+  }
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
   #serviceZoneId?: string;
@@ -2891,6 +2922,9 @@ export class TillApi {
       throw { ...params, code, status: res.status };
     }
     const text = await res.text();
-    return (text === "" ? undefined : JSON.parse(text)) as T;
+    const answer: unknown = text === "" ? undefined : JSON.parse(text);
+    if (isRecord(answer) && Array.isArray(answer.madeHere) && answer.madeHere.length > 0)
+      this.#madeHereListener?.(answer.madeHere as MadeHereItem[]);
+    return answer as T;
   }
 }

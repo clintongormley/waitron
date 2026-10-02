@@ -368,12 +368,46 @@ beforeEach(() => {
 const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
+  localStorage.removeItem("waitron.makeNow.till-dev");
   sessionStorage.removeItem("waitron.lastMenu");
   sessionStorage.removeItem("waitron.dietFilter");
   history.replaceState(null, "", initialUrl);
 });
 
 describe("till-app table ordering: the table's menus", () => {
+  it("shows Make now after a table Send reports a drink", async () => {
+    let receive: ((items: unknown[]) => void) | undefined;
+    const submitDraft = vi.fn(async (...args: Parameters<TillApi["submitDraft"]>) => {
+      const result = await drafts.submitDraft(args[0], args[1], args[2]);
+      receive!([
+        {
+          lineId: "table-lager",
+          name: "Lager",
+          quantity: "1.000",
+          unitName: null,
+          soldInEach: true,
+          optionSnapshots: [],
+          extras: [],
+          note: null,
+        },
+      ]);
+      return result;
+    });
+    const { el } = await mountApp({
+      onMadeHere: vi.fn((listener) => {
+        receive = listener;
+      }),
+      submitDraft,
+    });
+    const screen = await toTableOrder(el);
+    emit(screen, "submit-draft", await ringCafe(el, screen));
+    await flush(el);
+    expect(submitDraft).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
+      "Lager",
+    );
+  });
+
   it("falls back to the menu marked default when the table's zone names none", async () => {
     const { el } = await mountApp();
     const screen = await toTableOrder(el);

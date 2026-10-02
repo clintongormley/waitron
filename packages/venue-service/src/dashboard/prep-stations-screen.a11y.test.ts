@@ -27,6 +27,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
   it.each([
     "empty",
     "station",
+    "station-rest-on",
     "editor",
     "claim",
     "invalid",
@@ -72,6 +73,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                   warmAfterMinutes: 5,
                   overdueAfterMinutes: 10,
                   forgottenAfterMinutes: 15,
+                  showsRestOfOrder: state === "station-rest-on",
                 },
               ],
             },
@@ -80,6 +82,12 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     host.append(el);
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
+    if (state === "station" || state === "station-rest-on") {
+      const input = el
+        .shadowRoot!.querySelector('wt-switch[name="showsRestOfOrder"]')!
+        .shadowRoot!.querySelector<HTMLInputElement>('input[role="switch"]')!;
+      expect(input.checked).toBe(state === "station-rest-on");
+    }
     if (state === "editor" || state === "invalid") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!.click();
       await el.updateComplete;

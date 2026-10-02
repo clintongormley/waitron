@@ -35,6 +35,7 @@ import type { EscSetting, PaperWidth, PrintConfig, Resolution } from "@waitron/p
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
+import { readRestOfOrder } from "./rest-of-order.js";
 import { partyFamilies, partyFamily } from "./parties.js";
 import type { KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
@@ -77,7 +78,7 @@ function ticketName(text: Record<string, string>, locale: string): string {
  * An extras child as its dish's kitchen paper prints it: its frozen staff name — the picked
  * product's own — with ` x<n>` when the dish carries more than one of it each.
  */
-function extraLabel(name: string, quantity: Decimal, dishQuantity: Decimal): string {
+export function extraLabel(name: string, quantity: Decimal, dishQuantity: Decimal): string {
   const perDish = perDishOptionQuantity(quantity, dishQuantity);
   return perDish > 1 ? `${name} x${perDish}` : name;
 }
@@ -220,15 +221,19 @@ async function buildTicketItems(
   return byLine;
 }
 
-async function readStationNames(
+async function readStations(
   tx: Transaction,
   stationIds: string[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, { name: string; showsRestOfOrder: boolean }>> {
   const rows = await tx
-    .select({ id: kitchenStations.id, name: kitchenStations.name })
+    .select({
+      id: kitchenStations.id,
+      name: kitchenStations.name,
+      showsRestOfOrder: kitchenStations.showsRestOfOrder,
+    })
     .from(kitchenStations)
     .where(inArray(kitchenStations.id, stationIds));
-  return new Map(rows.map((row) => [row.id, row.name]));
+  return new Map(rows.map(({ id, ...station }) => [id, station]));
 }
 
 /** The order's table, as {@link orderTableLabels} names it. */
@@ -360,7 +365,13 @@ async function planKitchenTickets(
     reprint,
     mark,
     orderScopeAlsoAt = [],
-  }: { reprint: boolean; mark?: "HOLD" | "FIRE"; orderScopeAlsoAt?: readonly string[] },
+    restOfOrderExcept,
+  }: {
+    reprint: boolean;
+    mark?: "HOLD" | "FIRE";
+    orderScopeAlsoAt?: readonly string[];
+    restOfOrderExcept?: ReadonlySet<string>;
+  },
 ): Promise<KitchenJob[]> {
   if (firedItems.length === 0) return [];
 
@@ -373,7 +384,7 @@ async function planKitchenTickets(
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStationNames(tx, stationIds);
+  const stationNames = await readStations(tx, stationIds);
   const order = await readOrderHeader(tx, cfg, orderId);
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
@@ -393,9 +404,10 @@ async function planKitchenTickets(
   const groupOrder = (item: KitchenTicketItem) => item.group ?? 0;
   // Station names are unique per location, so the name alone orders them.
   const stations = [...stationNames.entries()]
-    .map(([id, name]) => ({
+    .map(([id, station]) => ({
       id,
-      name,
+      name: station.name,
+      showsRestOfOrder: station.showsRestOfOrder,
       items: arrangeTicketItems(
         itemsByStation
           .get(id)!
@@ -413,6 +425,19 @@ async function planKitchenTickets(
     orderScopeAlsoAt,
     mappingsByStation(mappingRows),
   );
+  const restRoutes = routes.filter(
+    (route) =>
+      route.station !== null &&
+      stationById.get(route.station)?.showsRestOfOrder &&
+      !restOfOrderExcept?.has(route.station),
+  );
+  const rest = restRoutes.length === 0 ? [] : (await readRestOfOrder(tx, [orderId])).get(orderId)!;
+  const eachByIdentity =
+    restRoutes.length === 0
+      ? new Set<string>()
+      : await VENUE_SERVICE.readLinesSoldInEach(tx, [
+          ...new Set(rest.map((item) => item.workingOrderLineId)),
+        ]);
   const head = {
     reprint,
     mark,
@@ -432,7 +457,31 @@ async function planKitchenTickets(
               items: each.items,
             })),
           }
-        : { ...head, scope: "station", stationName: station.name, items: station.items },
+        : {
+            ...head,
+            scope: "station",
+            stationName: station.name,
+            items: station.items,
+            ...(restRoutes.includes(route)
+              ? {
+                  alsoOnOrder: {
+                    locale: cfg.locale,
+                    items: rest
+                      .filter((item) => item.stationId !== route.station)
+                      .map((item) => ({
+                        qty: item.quantity,
+                        unit:
+                          item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
+                            ? undefined
+                            : ticketName(item.unitName, cfg.locale),
+                        name: item.name,
+                        stationName: item.stationName,
+                        held: item.held,
+                      })),
+                  },
+                }
+              : {}),
+          },
       route.printers[0]!,
     );
     const lineIds = [
@@ -543,6 +592,28 @@ type CorrectionChange =
 export type HoldCorrection =
   { kind: "HOLD CHANGED"; direction: "added" | "removed" } | { kind: "HOLD CANCELLED" };
 
+/** A made-here item has neither kitchen paper nor a station-screen line to correct. */
+async function withoutMadeHere<T extends { workingOrderLineId: string }>(
+  tx: Transaction,
+  items: readonly T[],
+): Promise<T[]> {
+  if (items.length === 0) return [];
+  const madeHere = await tx
+    .select({ lineId: ticketItems.workingOrderLineId })
+    .from(ticketItems)
+    .where(
+      and(
+        inArray(
+          ticketItems.workingOrderLineId,
+          items.map((item) => item.workingOrderLineId),
+        ),
+        eq(ticketItems.madeHere, true),
+      ),
+    );
+  const excluded = new Set(madeHere.map((item) => item.lineId));
+  return items.filter((item) => !excluded.has(item.workingOrderLineId));
+}
+
 /**
  * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link removeFromLine})
  * of a line that had already fired, then enqueue a correction slip per item where its station has
@@ -561,6 +632,7 @@ export async function enqueueCorrectionSlips(
   items: CorrectionItem[],
   kind: "VOID" | "RECALLED",
 ): Promise<void> {
+  items = await withoutMadeHere(tx, items);
   if (items.length === 0) return;
 
   await VENUE_SERVICE.recordKitchenNotices(
@@ -585,6 +657,8 @@ export async function enqueueHoldCorrections(
   items: (CorrectionItem & { group: number })[],
   change: HoldCorrection,
 ): Promise<void> {
+  items = await withoutMadeHere(tx, items);
+  if (items.length === 0) return;
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
@@ -670,6 +744,7 @@ export async function enqueueExtraCancelled(
   item: CorrectionItem,
   cancelledExtra: string,
 ): Promise<void> {
+  if ((await withoutMadeHere(tx, [item])).length === 0) return;
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
@@ -712,7 +787,7 @@ async function printCorrectionSlips(
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStationNames(tx, stationIds);
+  const stationNames = await readStations(tx, stationIds);
   const header = knownHeader ?? (await readOrderHeader(tx, cfg, orderId));
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();
@@ -739,7 +814,7 @@ async function printCorrectionSlips(
       const bytes = formatCorrectionSlip(
         {
           ...change,
-          stationName: stationNames.get(target.stationId)!,
+          stationName: stationNames.get(target.stationId)!.name,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
           at,
@@ -808,6 +883,7 @@ interface ItemOnOrder {
   stationId: string | null;
   state: TicketState;
   quantity: number;
+  madeHere: boolean;
 }
 
 /** The ticket items on each order, in line order, keyed by order. */
@@ -823,6 +899,7 @@ async function readTicketItemsOn(
       stationId: ticketItems.stationId,
       state: ticketItems.state,
       quantity: firedQuantity,
+      madeHere: ticketItems.madeHere,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -851,7 +928,7 @@ async function notifyMoved(
   splitFrom: ReadonlyMap<string, string>,
 ): Promise<void> {
   const moved: CorrectionItem[] = onOrder
-    .filter((item) => before.ticketItemIds.has(splitFrom.get(item.id) ?? item.id))
+    .filter((item) => !item.madeHere && before.ticketItemIds.has(splitFrom.get(item.id) ?? item.id))
     .map((item) => ({
       workingOrderLineId: item.workingOrderLineId,
       stationId: item.stationId!,
@@ -984,7 +1061,13 @@ async function readReprintParts(
       quantity: ticketItems.quantity,
     })
     .from(ticketItems)
-    .where(and(inArray(ticketItems.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)));
+    .where(
+      and(
+        inArray(ticketItems.workingOrderId, [...orderIds]),
+        isNotNull(ticketItems.firedAt),
+        eq(ticketItems.madeHere, false),
+      ),
+    );
   const held = await tx
     .select({
       workingOrderId: ticketItems.workingOrderId,
@@ -1085,6 +1168,7 @@ export async function reprintOrderTickets(
     reprint: true,
     mark: held.mark,
     orderScopeAlsoAt: held.orderScopeAlsoAt,
+    restOfOrderExcept: new Set(fired.items.map((item) => item.stationId)),
   });
   for (const hold of holdJobs) {
     const same = jobs.find(

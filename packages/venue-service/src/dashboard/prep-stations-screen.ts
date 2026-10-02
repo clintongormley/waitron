@@ -11,6 +11,7 @@ import {
 } from "@waitron/ui";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
+import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -18,6 +19,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import type {
   RouteTarget,
   ExceptionInput,
@@ -154,6 +156,8 @@ export class PrepStationsScreen extends LitElement {
   @state() private claimError = "";
   @state() private claimField = "";
   @state() private busy = false;
+  @state() private stationSwitchBusy = new Map<string, boolean>();
+  @state() private stationSwitchError: Record<string, { field: boolean; message: string }> = {};
   @state() private exceptionOrder: string[] = [];
   @state() private exceptionDraft: ExceptionInput = {
     zoneId: null,
@@ -430,6 +434,30 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
+  async #saveRestOfOrder(station: PrepStation, checked: boolean) {
+    if (this.stationSwitchBusy.has(station.id)) return;
+    this.stationSwitchBusy = new Map([...this.stationSwitchBusy, [station.id, checked]]);
+    const remaining = { ...this.stationSwitchError };
+    delete remaining[station.id];
+    this.stationSwitchError = remaining;
+    try {
+      await this.api.updateStation(station.id, { showsRestOfOrder: checked });
+      await this.#load();
+    } catch (error) {
+      const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
+      this.stationSwitchError = {
+        ...this.stationSwitchError,
+        [station.id]: {
+          field: codeOf(error) === "management.request_invalid" && field === "showsRestOfOrder",
+          message: t("prep.save_error"),
+        },
+      };
+    } finally {
+      const busy = new Map(this.stationSwitchBusy);
+      busy.delete(station.id);
+      this.stationSwitchBusy = busy;
+    }
+  }
   #exceptionText(exception?: RouteException): string {
     if (!exception || !this.view) return "";
     return exceptionSentence(exception, {
@@ -696,6 +724,18 @@ export class PrepStationsScreen extends LitElement {
         ${t("prep.screens")}: ${devices || t("prep.none")}
         <a href="/manage/devices">${t("prep.devices")}</a>
       </p>
+      <wt-switch
+        name="showsRestOfOrder"
+        label=${t("prep.shows_rest_of_order")}
+        .checked=${live(this.stationSwitchBusy.get(s.id) ?? s.showsRestOfOrder)}
+        .disabled=${this.stationSwitchBusy.has(s.id)}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          event.stopPropagation();
+          void this.#saveRestOfOrder(s, event.detail.checked);
+        }}
+      ></wt-switch>
+      ${this.stationSwitchError[s.id]?.field ? html`<p class="error" data-field-error="showsRestOfOrder" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}
+      <p class="muted">${t("prep.shows_rest_of_order_hint")}</p>
       ${this.#chips(s.id)}
       <div class="actions">
         <wt-button
@@ -717,7 +757,8 @@ export class PrepStationsScreen extends LitElement {
           @click=${() => void this.#act(() => this.api.deactivateStation(s.id))}
           >${t("prep.switch_off")}</wt-button
         >
-      </div></wt-card
+      </div>
+      ${this.stationSwitchError[s.id] && !this.stationSwitchError[s.id]!.field ? html`<p class="error" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}</wt-card
     >`;
   }
   #unassigned() {

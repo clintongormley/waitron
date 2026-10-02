@@ -19,6 +19,7 @@ import {
 } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
+import { madeHereSinkFor, replayPrepayMadeHere } from "./made-here.js";
 import {
   asObject,
   optionalMoney,
@@ -124,6 +125,7 @@ export function mountAdjustmentsApi(
             overridePinAttempts(pinThrottle, tillId),
           );
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+          await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
           return { ...applied, party: await partyRevisionOfOrder(tx, id) };
         }),
       );

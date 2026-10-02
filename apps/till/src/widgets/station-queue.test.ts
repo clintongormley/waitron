@@ -67,9 +67,116 @@ const groupB: StationQueueGroup = {
 
 const groups = [groupA, groupB];
 
+const withElsewhere: StationQueueGroup = {
+  ...groupA,
+  elsewhere: [
+    {
+      id: "other-burger",
+      name: "Burger",
+      quantity: "2.000",
+      unitName: null,
+      unitPrecision: null,
+      soldInEach: true,
+      stationName: "Grill",
+      state: "preparing",
+      held: false,
+    },
+    {
+      id: "other-fries",
+      name: "Fries",
+      quantity: "1.000",
+      unitName: null,
+      unitPrecision: null,
+      soldInEach: true,
+      stationName: "Fryer",
+      state: "queued",
+      held: true,
+    },
+    {
+      id: "other-steak",
+      name: "Steak",
+      quantity: "0.750",
+      unitName: { "en-GB": "lb", "es-ES": "kg" },
+      unitPrecision: 3,
+      soldInEach: false,
+      stationName: "Grill",
+      state: "ready",
+      held: false,
+    },
+  ],
+};
+
 afterEach(cleanupWidgets);
 
 describe("till-station-queue", () => {
+  it("rail shows other stations' dishes and their progress without bump controls", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [withElsewhere],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const section = el.shadowRoot!.querySelector('[data-elsewhere="wo-1"]')!;
+    expect(section.querySelector("h3")!.textContent).toBe(
+      "Also on this order (not for this station)",
+    );
+    const burger = section.querySelector('[data-elsewhere-item="other-burger"]')!;
+    expect(burger.textContent).toContain("2× Burger");
+    expect(burger.textContent).toContain("Grill");
+    expect(burger.textContent).toContain("Preparing");
+    const fries = section.querySelector('[data-elsewhere-item="other-fries"]')!;
+    expect(fries.textContent).toContain("On hold");
+    const steak = section.querySelector('[data-elsewhere-item="other-steak"]')!;
+    expect(steak.textContent).toContain("0.75 lb× Steak");
+    expect(steak.textContent).toContain("Ready");
+    expect(section.querySelector("button, wt-button")).toBeNull();
+  });
+
+  it("rail omits the other-stations section when its list is empty or absent", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...withElsewhere, elsewhere: [] }, groupB],
+      view: "rail",
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector(".elsewhere")).toBeNull();
+  });
+
+  it("kanban omits the other-stations section", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [withElsewhere],
+      view: "kanban",
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector(".elsewhere")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("Burger");
+  });
+
+  it("rail translates the other-stations heading and held state into Spanish", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withElsewhere],
+        view: "rail",
+        stationId: "st-1",
+      });
+      const section = el.shadowRoot!.querySelector(".elsewhere")!;
+      expect(section.querySelector("h3")!.textContent).toBe(
+        "También en este pedido (no para esta estación)",
+      );
+      expect(section.querySelector('[data-elsewhere-item="other-burger"]')!.textContent).toContain(
+        "Preparando",
+      );
+      expect(section.querySelector('[data-elsewhere-item="other-fries"]')!.textContent).toContain(
+        "En espera",
+      );
+      expect(section.querySelector('[data-elsewhere-item="other-steak"]')!.textContent).toContain(
+        "0.75 kg× Steak",
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("keeps dish and modifier receipt snapshots visible with an unrelated content default", async () => {
     const previousLocale = currentLocale();
     setLocale("en-GB");

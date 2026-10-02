@@ -25,6 +25,7 @@ export interface Station {
    *  Written only by {@link setDefaultStation} / {@link createStation}, never a plain update. */
   isDefault: boolean;
   active: boolean;
+  showsRestOfOrder: boolean;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -113,6 +114,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       displayOrder: kitchenStations.displayOrder,
       isDefault: kitchenStations.isDefault,
       active: kitchenStations.active,
+      showsRestOfOrder: kitchenStations.showsRestOfOrder,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -135,6 +137,7 @@ export async function updateStation(
     name?: string;
     displayOrder?: number;
     active?: boolean;
+    showsRestOfOrder?: boolean;
     warmAfterMinutes?: number;
     overdueAfterMinutes?: number;
     forgottenAfterMinutes?: number;
@@ -144,6 +147,7 @@ export async function updateStation(
     name?: string;
     displayOrder?: number;
     active?: boolean;
+    showsRestOfOrder?: boolean;
     warmAfterMinutes?: number;
     overdueAfterMinutes?: number;
     forgottenAfterMinutes?: number;
@@ -151,6 +155,7 @@ export async function updateStation(
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
   if (patch.active !== undefined) set.active = patch.active;
+  if (patch.showsRestOfOrder !== undefined) set.showsRestOfOrder = patch.showsRestOfOrder;
   if (patch.warmAfterMinutes !== undefined) set.warmAfterMinutes = patch.warmAfterMinutes;
   if (patch.overdueAfterMinutes !== undefined) set.overdueAfterMinutes = patch.overdueAfterMinutes;
   if (patch.forgottenAfterMinutes !== undefined)

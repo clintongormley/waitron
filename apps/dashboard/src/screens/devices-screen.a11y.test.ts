@@ -1,5 +1,5 @@
 import { expect, afterEach, describe, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
@@ -27,6 +27,7 @@ const stations: Station[] = [
     displayOrder: 0,
     isDefault: true,
     active: true,
+    showsRestOfOrder: false,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -37,6 +38,7 @@ const stations: Station[] = [
     displayOrder: 1,
     isDefault: false,
     active: true,
+    showsRestOfOrder: false,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -46,6 +48,7 @@ const stations: Station[] = [
 const devices: DeviceRow[] = [
   {
     id: "d1",
+    madeHereStationIds: [],
     kind: "kds_station",
     stationId: "s1",
     label: "Pantalla Cocina",
@@ -56,6 +59,7 @@ const devices: DeviceRow[] = [
   },
   {
     id: "d2",
+    madeHereStationIds: [],
     kind: "kds_station",
     stationId: null,
     label: "Pase",
@@ -170,6 +174,35 @@ async function flush(el: DevicesScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (theme) => {
+  it.each([390, 1280])(
+    "renders a till's made-here station group accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const till: DeviceRow = {
+        ...devices[0]!,
+        id: "till",
+        kind: "till",
+        madeHereStationIds: ["s2"],
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: {
+            ...stubApi(),
+            listDevices: vi.fn().mockResolvedValue([till]),
+          } as unknown as DashboardApi,
+        },
+        theme,
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector('[data-test="made-here-till"]')).toBeTruthy();
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.screenshot({ path: `__screenshots__/made-here-${theme}-${width}.png` });
+      await page.viewport(1280, 900);
+    },
+  );
+
   it("renders the list, per-row hardware editors and generate button accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",

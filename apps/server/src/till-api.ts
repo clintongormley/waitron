@@ -1,5 +1,5 @@
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { AppError, isAppError, isValidGuestCount, SUPPORTED_LOCALES } from "@waitron/shared";
@@ -37,6 +37,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
+import { madeHereAnswer, madeHereSinkFor } from "./made-here.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
   collectOrder,
@@ -145,6 +146,7 @@ import {
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
+import type { DeviceBinding } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
@@ -813,6 +815,16 @@ function mountCourseVerb(
   );
 }
 
+/** Resolve the sending device before a route opens its write transaction. */
+async function sendingCfg(
+  deps: TillApiDeps,
+  c: Context,
+  device?: DeviceBinding | null,
+): Promise<TillConfig> {
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  return { ...deps.cfg, sendingDeviceId: resolved?.deviceId, madeHereSink: madeHereSinkFor(c) };
+}
+
 /**
  * Mount the till routes with the shared error boundary. Handhelds can take orders and settle cash
  * or manual-card sales. Integrated card payment, drawer opening and receipt printing require their
@@ -820,6 +832,7 @@ function mountCourseVerb(
  * handheld restriction because they write the deferred-settlement or amendment workflow.
  */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+  app.use("/api/*", madeHereAnswer(deps.db));
   // Built once per mount so its in-memory state persists across requests.
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
@@ -1137,6 +1150,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...deps.cfg,
         tillId: await requireSaleTillId(deps, c, device),
         allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
+        sendingDeviceId: device?.deviceId,
+        madeHereSink: madeHereSinkFor(c),
       };
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
@@ -1176,7 +1191,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.readerId, "CardReaderId");
       }
       // Resolved after the capability firewall so its refusal keeps its status.
-      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
+      const saleCfg: TillConfig = {
+        ...deps.cfg,
+        tillId: await requireSaleTillId(deps, c, device),
+        sendingDeviceId: device?.deviceId,
+        madeHereSink: madeHereSinkFor(c),
+      };
 
       const { provider, reader } = await resolveCardCollector(
         deps,
@@ -1274,10 +1294,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
         revision?: unknown;
       }>(c);
+      const sendCfg = await sendingCfg(deps, c);
       const revision = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         updateHeldOrder(
           { db: deps.db },
-          deps.cfg,
+          sendCfg,
           id,
           {
             lines: body.lines,
@@ -1314,7 +1335,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const saleTillId = await requireSaleTillId(deps, c, device);
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
-        deps.cfg,
+        await sendingCfg(deps, c, device),
         id,
         personId,
         saleTillId,
@@ -1751,8 +1772,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const body = asObject(await readRawJsonBody<unknown>(c));
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
+        const sendCfg = await sendingCfg(deps, c);
         const result = await withTransaction(deps.db, (tx) =>
-          act(tx, deps.cfg, partyId, tableId, command),
+          act(tx, sendCfg, partyId, tableId, command),
         );
         return c.json(result);
       }),
@@ -1776,8 +1798,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         body.expectedPartyRevision,
         "expectedPartyRevision",
       );
+      const sendCfg = await sendingCfg(deps, c);
       const result = await withTransaction(deps.db, (tx) =>
-        splitTable(tx, deps.cfg, partyId, tableId.toLowerCase(), billId, {
+        splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
           expectedPartyRevision,
           operatorId: personId,
         }),
@@ -1835,8 +1858,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...joinGroupOf(body),
         ...billOf(body),
       };
+      const sendCfg = await sendingCfg(deps, c);
       const submitted = await withTransaction(deps.db, (tx) =>
-        submitGroups(tx, deps.cfg, partyId, input),
+        submitGroups(tx, sendCfg, partyId, input),
       );
       return c.json(submitted);
     }),
@@ -2022,8 +2046,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...joinGroupOf(body),
         ...billOf(body),
       };
+      const sendCfg = await sendingCfg(deps, c);
       const submitted = await withTransaction(deps.db, (tx) =>
-        submitDraft(tx, deps.cfg, partyId, draftId, input),
+        submitDraft(tx, sendCfg, partyId, draftId, input),
       );
       return c.json(submitted);
     }),
@@ -2052,9 +2077,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
+      const sendCfg = await sendingCfg(deps, c);
       const saved = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
-          const revision = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy, personId);
+          const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
           return { revision, party: await partyRevisionOfOrder(tx, id) };
         }),
@@ -2231,8 +2257,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const to = requireMoveTarget(body.to);
       const command = moveCommand(personId, body);
+      const sendCfg = await sendingCfg(deps, c);
       const result = await withTransaction(deps.db, (tx) =>
-        moveBill(tx, deps.cfg, billId, to, command),
+        moveBill(tx, sendCfg, billId, to, command),
       );
       return c.json(result);
     }),

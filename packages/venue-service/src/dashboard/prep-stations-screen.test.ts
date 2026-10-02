@@ -33,6 +33,7 @@ const view: PrepStationsView = {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      showsRestOfOrder: false,
     },
   ],
   categories: [
@@ -80,6 +81,123 @@ async function settle(el: PrepStationsScreen) {
   await el.updateComplete;
 }
 const q = (el: PrepStationsScreen, s: string) => el.shadowRoot!.querySelector<HTMLElement>(s);
+function restSwitch(el: PrepStationsScreen) {
+  const host = q(el, '[data-test="station-bar"] wt-switch[name="showsRestOfOrder"]')!;
+  return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
+}
+
+it("shows the stored rest-of-order choice and explanation on the default station", async () => {
+  setLocale("en");
+  const el = await mount(api());
+  const { host, input } = restSwitch(el);
+  expect(input.checked).toBe(false);
+  expect(host.shadowRoot!.querySelector("label")!.textContent).toBe("Show the rest of the order");
+  expect(q(el, '[data-test="station-bar"]')!.textContent).toContain(
+    "Its tickets and kitchen screen also list the order's dishes at other stations.",
+  );
+});
+
+it("shows the switch on another station with its stored on value", async () => {
+  const another: PrepStationsView = {
+    ...view,
+    stations: [
+      ...view.stations,
+      {
+        ...view.stations[0]!,
+        id: "grill",
+        name: "Grill",
+        isDefault: false,
+        showsRestOfOrder: true,
+      },
+    ],
+  };
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(another) }));
+  const card = q(el, '[data-test="station-grill"]')!;
+  const input = card.querySelector("wt-switch")!.shadowRoot!.querySelector("input")!;
+  expect(input.checked).toBe(true);
+});
+
+it("saves a switch change immediately and disables it while saving", async () => {
+  let finish!: () => void;
+  const updateStation = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+  const saved = { ...view, stations: [{ ...view.stations[0]!, showsRestOfOrder: true }] };
+  const el = await mount(
+    api({ updateStation, load: vi.fn().mockResolvedValueOnce(view).mockResolvedValue(saved) }),
+  );
+  restSwitch(el).input.click();
+  await settle(el);
+  expect(updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
+  expect(restSwitch(el).input.disabled).toBe(true);
+  expect(restSwitch(el).input.checked).toBe(true);
+  finish();
+  await settle(el);
+  expect(restSwitch(el).input.disabled).toBe(false);
+  expect(restSwitch(el).input.checked).toBe(true);
+});
+
+it("lets another station save while the first station's switch is pending", async () => {
+  const another: PrepStationsView = {
+    ...view,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "grill", name: "Grill", isDefault: false },
+    ],
+  };
+  const updateStation = vi
+    .fn()
+    .mockImplementationOnce(() => new Promise<void>(() => {}))
+    .mockResolvedValue(undefined);
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(another), updateStation }));
+  restSwitch(el).input.click();
+  await settle(el);
+  const grill = q(el, '[data-test="station-grill"] wt-switch')!;
+  expect(grill.shadowRoot!.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
+  grill.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+  await settle(el);
+  expect(updateStation).toHaveBeenCalledWith("grill", { showsRestOfOrder: true });
+});
+
+it("restores the native switch and puts an unnamed refusal at the card bottom", async () => {
+  const el = await mount(
+    api({ updateStation: vi.fn().mockRejectedValue({ code: "station.offline" }) }),
+  );
+  restSwitch(el).input.click();
+  await settle(el);
+  expect(restSwitch(el).input.checked).toBe(false);
+  const card = q(el, '[data-test="station-bar"]')!;
+  const alert = card.querySelector('[role="alert"]')!;
+  expect(alert.textContent).toContain("could not be saved");
+  expect(alert).toBe(card.lastElementChild);
+});
+
+it("puts a field-named refusal directly under the switch", async () => {
+  const el = await mount(
+    api({
+      updateStation: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "showsRestOfOrder" },
+      }),
+    }),
+  );
+  restSwitch(el).input.click();
+  await settle(el);
+  expect(restSwitch(el).input.checked).toBe(false);
+  const fieldError = q(el, '[data-test="station-bar"] [data-field-error="showsRestOfOrder"]')!;
+  expect(fieldError.getAttribute("role")).toBe("alert");
+  expect(fieldError.textContent).toContain("could not be saved");
+  expect(fieldError.previousElementSibling).toBe(restSwitch(el).host);
+});
+
+it("labels the switch and its explanation in Spanish", async () => {
+  setLocale("es");
+  const el = await mount(api());
+  expect(restSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
+    "Mostrar el resto del pedido",
+  );
+  expect(q(el, '[data-test="station-bar"]')!.textContent).toContain(
+    "Sus comandas y su pantalla de cocina también muestran los platos del pedido en otras estaciones.",
+  );
+});
 it("explains exceptions, claims, defaults, skipped rules and an unroutable product", async () => {
   setLocale("en");
   const a = api({

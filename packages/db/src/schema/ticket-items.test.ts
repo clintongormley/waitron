@@ -168,6 +168,23 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(row!.awayAt).not.toBeNull();
   });
 
+  it("defaults an item to not made here", async () => {
+    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
+    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const [row] = await suite.db
+      .select({ madeHere: ticketItems.madeHere })
+      .from(ticketItems)
+      .where(eq(ticketItems.id, id));
+    expect(row).toEqual({ madeHere: false });
+  });
+
+  it("indexes the items of an order", () => {
+    const indexes = suite.db.all<{ name: string }>(
+      sql`select name from pragma_index_list('ticket_items')`,
+    );
+    expect(indexes.map((row) => row.name)).toContain("ticket_items_order_idx");
+  });
+
   it("carries a nullable note column (spec §2/§3, NON-FISCAL)", async () => {
     const meta = suite.db
       .all<{ name: string; type: string; notnull: number }>(

@@ -2,6 +2,7 @@ import { check, index, unique } from "drizzle-orm/sqlite-core";
 import {
   enumCheck,
   enumType,
+  flag,
   id,
   label,
   newId,
@@ -22,9 +23,12 @@ import { workingOrderLines } from "./orders.js";
 export const ticketState = enumType(["queued", "preparing", "ready"]);
 
 /**
- * A per-line, per-station kitchen TICKET ITEM, inserted when a line is sent to the kitchen, with its
+ * A per-line, per-station kitchen TICKET ITEM, recorded when a line is sent, with its
  * station SNAPSHOTTED so later routing changes never reroute food already sent. MUTABLE: it advances
  * independently of the parent order's fiscal status (a settled order still has its lines cooked).
+ * A `made_here` item was made on the spot at the sending device (design §5.11): it is never printed,
+ * is left out of kitchen and expo screens, floor kitchen counts, and the overdue report, and is
+ * fired and `ready` from the moment it is recorded: it is never held.
  */
 export const ticketItems = table(
   "ticket_items",
@@ -64,12 +68,14 @@ export const ticketItems = table(
     // The quantity fired. Null where an insert does not state it, and on every row older than
     // `0014_order_edit_columns.sql`.
     quantity: quantity("quantity"),
+    madeHere: flag("made_here").notNull().default(false),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide rather
     // than silently duplicate the item.
     unique("ticket_items_working_order_line_id_key").on(t.workingOrderLineId),
     index("ticket_items_queue_idx").on(t.stationId, t.state),
+    index("ticket_items_order_idx").on(t.workingOrderId),
     check("ticket_items_state_ck", enumCheck(t.state)),
   ],
 );

@@ -114,6 +114,7 @@ export async function submitGroups(
       await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
       return placeGroups(tx, cfg, partyId, { ...input, revisionMoved: true });
     },
+    cfg.madeHereSink,
   );
 }
 
@@ -261,6 +262,7 @@ export async function fireGroup(
       await releaseGroup(tx, cfg, partyId, groupId, args.operatorId, {});
       return { revision };
     },
+    cfg.madeHereSink,
   );
 }
 
@@ -524,7 +526,6 @@ export async function snoozeReminder(
   minutes: number,
   args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
-  void cfg;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -543,6 +544,7 @@ export async function snoozeReminder(
         .where(eq(orderGroups.id, groupId));
       return { revision };
     },
+    cfg.madeHereSink,
   );
 }
 
@@ -557,7 +559,6 @@ export async function unsnoozeReminder(
   groupId: string,
   args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
-  void cfg;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -570,6 +571,7 @@ export async function unsnoozeReminder(
       await tx.update(orderGroups).set({ remindAt: null }).where(eq(orderGroups.id, groupId));
       return { revision };
     },
+    cfg.madeHereSink,
   );
 }
 
@@ -711,6 +713,7 @@ export async function moveLinesToGroup(
       await removeEmptiedHeldGroups(tx, partyId, [...sources], args.operatorId);
       return { revision };
     },
+    cfg.madeHereSink,
   );
 }
 
@@ -1097,6 +1100,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketItemId: ticketItems.id,
       ticketState: ticketItems.state,
       ticketFiredAt: ticketItems.firedAt,
+      ticketMadeHere: ticketItems.madeHere,
       awayAt: ticketItems.awayAt,
     })
     .from(workingOrderLines)
@@ -1412,6 +1416,7 @@ export async function groupArrivingDishes(
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketMadeHere: ticketItems.madeHere,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))

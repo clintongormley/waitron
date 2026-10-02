@@ -72,6 +72,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("nodes", "state", STATE),
   classify("tills", "state", STATE),
   classify("devices", "state", STATE),
+  classify("device_made_here_stations", "state", STATE),
   classify("device_profiles", "state", STATE),
   classify("invoice_series", "state", STATE),
   classify("catalogues", "state", STATE),
@@ -127,7 +128,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "service_commands",
     "state",
-    "the recorded result of each service command, so a retry after a lost reply is answered rather than repeated; copied to a standby with the parties and bills it answers for, never drained back",
+    "the recorded result of each service command and a bill's server-written made_here replay row; copied to a standby with the parties and bills they answer for, never drained back",
   ),
   classify(
     "order_groups",

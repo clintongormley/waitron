@@ -32,6 +32,9 @@ const en = {
   "prep.devices": "Devices",
   "prep.none": "None",
   "prep.thresholds": "Warm {warm} min · Overdue {overdue} min · Forgotten {forgotten} min",
+  "prep.shows_rest_of_order": "Show the rest of the order",
+  "prep.shows_rest_of_order_hint":
+    "Its tickets and kitchen screen also list the order's dishes at other stations.",
   "prep.name_required": "Enter a name.",
   "prep.name_taken": "This name is already in use.",
   "prep.order_invalid": "Enter a whole number of zero or more.",
@@ -213,6 +216,9 @@ const es: Record<keyof typeof en, string> = {
   "prep.devices": "Dispositivos",
   "prep.none": "Ninguno",
   "prep.thresholds": "Aviso {warm} min · Atraso {overdue} min · Olvido {forgotten} min",
+  "prep.shows_rest_of_order": "Mostrar el resto del pedido",
+  "prep.shows_rest_of_order_hint":
+    "Sus comandas y su pantalla de cocina también muestran los platos del pedido en otras estaciones.",
   "prep.name_required": "Escribe un nombre.",
   "prep.name_taken": "Este nombre ya está en uso.",
   "prep.order_invalid": "Escribe un número entero no negativo.",
