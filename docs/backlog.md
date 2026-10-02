@@ -3774,6 +3774,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `apps/server/src/receipt-ticket.ts`). No save path writes such a row today (product and variant
   saves refuse it), only a direct write. It shows under the default language in the Missing
   translations list.
+- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
+  (found 2026-10-02 by A172, not measured).** It calls `resolveSnapshotText(variant, locale,
+  locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
+  `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
+  language alphabetically rather than the default. The receipt fills the variant's text per
+  receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
+  surface shows the difference is unknown; reproduce before fixing.
 - **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
   C122; I believe this predates the branch).** `listContentTranslationGaps`
   (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
