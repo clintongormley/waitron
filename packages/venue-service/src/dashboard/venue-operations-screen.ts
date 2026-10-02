@@ -5,7 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
-import { codeOf } from "@waitron/dashboard-kit";
+import { codeOf, tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   focusFirstInvalid,
@@ -428,6 +428,7 @@ export class VenueOperationsScreen extends LitElement {
     key: string,
     viewKey: string,
     label: string,
+    empty: string,
     rows: readonly T[],
     columns: DataTableColumn<T>[],
     rowKey: (row: T) => string,
@@ -441,7 +442,8 @@ export class VenueOperationsScreen extends LitElement {
       .rows=${rows}
       .columns=${columns}
       .rowKey=${rowKey}
-      .emptyMessage=${t("venue.no_rows")}
+      .emptyMessage=${empty}
+      .noMatchesMessage=${tableNoMatches()}
       >${add && rows.length === 0 ? this.#tabAction(add, "empty-action") : nothing}</wt-data-table
     >`;
   }
@@ -545,6 +547,7 @@ export class VenueOperationsScreen extends LitElement {
         "departments",
         "waitron.venue.departments.table",
         t("venue.departments"),
+        t("venue.no_departments"),
         model.departments,
         [
           {
@@ -599,6 +602,7 @@ export class VenueOperationsScreen extends LitElement {
         "hours",
         "waitron.venue.hours.table",
         t("venue.hours"),
+        t("venue.no_hours"),
         model.hours,
         [
           {
@@ -663,6 +667,7 @@ export class VenueOperationsScreen extends LitElement {
         "zones",
         "waitron.venue.zones.table",
         t("venue.zones"),
+        t("venue.no_zones"),
         model.floorZones,
         [
           {
@@ -726,6 +731,7 @@ export class VenueOperationsScreen extends LitElement {
         "tills",
         "waitron.venue.tills.table",
         t("venue.tills"),
+        t("venue.no_tills"),
         model.devices.filter((device) => device.active && device.kind !== "kds_station"),
         [
           {
@@ -777,6 +783,7 @@ export class VenueOperationsScreen extends LitElement {
               "zone-menus",
               "waitron.venue.zone-menus.table",
               t("venue.menus"),
+              t("venue.no_zone_menus"),
               model.zoneMenus.filter((row) => row.zoneId === zone.id),
               [
                 {

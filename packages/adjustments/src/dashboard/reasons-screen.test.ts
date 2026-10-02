@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { setLocale } from "@waitron/dashboard-kit";
+import { setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import {
   chooseOption,
@@ -314,6 +314,25 @@ describe("the reasons list", () => {
     expect(find(el, '[data-test="deactivate-o"]')).toBeNull();
     expect(find(el, '[data-test="edit-o"]')).not.toBeNull();
   });
+
+  it.each(["en", "es"])(
+    "says the dashboard's one no-matches sentence when the status filter hides every reason (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue([complaint]) }));
+      await chooseOption(
+        table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+          'wt-combobox[data-filter="status"]',
+        )!,
+        "inactive",
+      );
+      await settle(el);
+      expect(rowKeys(el)).toEqual([]);
+      expect(table(el).shadowRoot!.querySelector(".message")!.textContent).toBe(
+        tableNoMatches(locale),
+      );
+    },
+  );
 
   it("reads the whole list, inactive reasons included, and later reads passively", async () => {
     const background = { listReasons: vi.fn().mockResolvedValue(reasons) };

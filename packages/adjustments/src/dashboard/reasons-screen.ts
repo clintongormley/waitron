@@ -3,7 +3,13 @@ import { customElement, property, state } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
-import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
+import {
+  QueryController,
+  codeMessage,
+  codeOf,
+  currentLocale,
+  tableNoMatches,
+} from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import {
   baseStyles,
@@ -954,6 +960,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               .columns=${this.#columns()}
               .rowKey=${(reason: AdjustmentReason) => reason.id}
               .emptyMessage=${t("adjustments.empty")}
+              .noMatchesMessage=${tableNoMatches()}
               >${this.reasons.length === 0 ? this.#renderAdd("empty-action") : nothing}</wt-data-table
             >`
           : nothing

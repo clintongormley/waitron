@@ -267,6 +267,56 @@ describe("venue operations screen", () => {
     expect(modal(el)!.getAttribute("heading")).toBe("Make available");
   });
 
+  const emptySentences = {
+    en: {
+      departments: "No departments yet.",
+      hours: "No opening hours yet.",
+      zones: "No zones yet.",
+      tills: "No tills yet.",
+      "zone-menus": "No menus in this zone yet.",
+    },
+    es: {
+      departments: "Todavía no hay departamentos.",
+      hours: "Todavía no hay horarios de apertura.",
+      zones: "Todavía no hay zonas de servicio.",
+      tills: "Todavía no hay cajas.",
+      "zone-menus": "Todavía no hay cartas en esta zona de servicio.",
+    },
+  };
+  function emptySentence(el: VenueOperationsScreen, name: string) {
+    return table(el, name).shadowRoot!.querySelector(".empty .message")!.textContent;
+  }
+
+  it.each(["en", "es"] as const)(
+    "names what each empty table is still waiting for (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const expected = emptySentences[locale];
+      const empty = await mount({
+        load: vi.fn().mockResolvedValue({
+          ...model,
+          departments: [],
+          hours: [],
+          floorZones: [],
+          devices: [],
+        }),
+      } as unknown as VenueServiceApi);
+      await selectTab(empty, "departments");
+      expect(emptySentence(empty, "departments")).toBe(expected.departments);
+      expect(emptySentence(empty, "hours")).toBe(expected.hours);
+      await selectTab(empty, "zones");
+      expect(emptySentence(empty, "zones")).toBe(expected.zones);
+      expect(emptySentence(empty, "tills")).toBe(expected.tills);
+
+      const noMenus = await mount({
+        load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
+      } as unknown as VenueServiceApi);
+      await selectTab(noMenus, "zones");
+      await action(noMenus, "zone-menus-z1");
+      expect(emptySentence(noMenus, "zone-menus")).toBe(expected["zone-menus"]);
+    },
+  );
+
   it("disables Make available when a floor zone has no service zone", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
