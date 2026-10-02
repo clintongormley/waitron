@@ -65,13 +65,18 @@ export async function resolveReceiptPrinter(
   return printer;
 }
 
-/** Use the filed issuer where available, current optional trim, and the language the sale was filed in. */
+/**
+ * Use the filed issuer where available and the current optional trim. The fixed words are in
+ * `language`, else the language the sale was filed in; the goods names are always looked up in the
+ * filed language.
+ */
 async function buildReceiptBytes(
   tx: Transaction,
   cfg: Pick<TillConfig, "practiceMode">,
   ticket: TillSaleResult,
   duplicate: boolean,
   printer: EscSetting,
+  language?: string,
 ): Promise<Uint8Array | undefined> {
   const taxpayer = await readTenant(tx);
   /* v8 ignore start */
@@ -86,7 +91,8 @@ async function buildReceiptBytes(
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
-    invoiceLocale: ticket.locale,
+    invoiceLocale: language ?? ticket.locale,
+    namesLocale: ticket.locale,
     printer,
     simulated: cfg.practiceMode,
     duplicate,
@@ -130,16 +136,18 @@ export async function enqueueSaleReceipt(
 /**
  * The manual reprint of an already-filed sale: it files nothing, has no `receipt_print_mode` gate
  * (a reprint is always available), and never opens the drawer. No active printer means no job.
+ * `language` prints the fixed words in another receipt language; the caller has checked it.
  */
 export async function enqueueReceiptReprint(
   tx: Transaction,
   cfg: TillConfig,
   ticket: TillSaleResult,
   saleId: string,
+  language?: string,
 ): Promise<void> {
   const printer = await resolveReceiptPrinter(tx, cfg);
   if (printer === undefined) return;
-  await enqueueReceiptCopy(tx, cfg, ticket, saleId, printer);
+  await enqueueReceiptCopy(tx, cfg, ticket, saleId, printer, language);
 }
 
 /** A receipt copy is a document job; the cash drawer has its own audited job. */
@@ -149,8 +157,9 @@ export async function enqueueReceiptCopy(
   ticket: TillSaleResult,
   saleId: string,
   printer: { id: string } & EscSetting,
+  language?: string,
 ): Promise<{ jobId: string } | undefined> {
-  const bytes = await buildReceiptBytes(tx, cfg, ticket, true, printer);
+  const bytes = await buildReceiptBytes(tx, cfg, ticket, true, printer, language);
   if (bytes === undefined) return undefined;
   return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", { saleId });
 }

@@ -6,6 +6,7 @@ import {
   deviceProfiles,
   locations,
   printJobs,
+  printers,
   sales,
   tills,
   withTransaction,
@@ -30,7 +31,7 @@ import type { TillConfig } from "./till-config.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
@@ -485,5 +486,156 @@ describe("a card-reader sale files and prints in the location's language", () =>
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
     expect(startsWith(receipt, "Tarjeta")).toBe(false);
+  });
+});
+
+/** Every row of the tables a sale writes or moves, so a reprint that changed one is seen. */
+const SALE_TABLES = [
+  "registros_facturacion",
+  "cadenas",
+  "envios",
+  "invoice_series",
+  "sales",
+  "sale_lines",
+  "tenders",
+  "sale_settlements",
+  "drawer_opens",
+] as const;
+
+function saleTables(db: Database): Record<string, unknown[]> {
+  return Object.fromEntries(
+    SALE_TABLES.map((name) => [name, db.all(sql.raw(`select * from ${name} order by rowid`))]),
+  );
+}
+
+interface Job {
+  kind: string;
+  saleId: string | null;
+  payload: Uint8Array;
+}
+
+/** The jobs printed so far, oldest first; then forgets them. */
+async function takeJobs(db: Database): Promise<Job[]> {
+  const jobs = await withTransaction(db, (tx) =>
+    tx
+      .select({ kind: printJobs.kind, saleId: printJobs.saleId, payload: printJobs.payload })
+      .from(printJobs)
+      .orderBy(printJobs.createdAt),
+  );
+  await withTransaction(db, (tx) => tx.delete(printJobs));
+  return jobs.map((job) => ({ ...job, payload: new Uint8Array(job.payload) }));
+}
+
+/** The QR image and the legend after it: the bytes a reprint must carry unchanged. */
+function qrAndLegend(payload: Uint8Array): Buffer[] {
+  const commands = printedCommands(payload);
+  const at = commands.findIndex((c) => c.name === "GS v 0" && c.text === undefined);
+  expect(at).toBeGreaterThan(0);
+  return commands.slice(at - 1, at + 2).map((c) => Buffer.from(c.bytes));
+}
+
+function reprint(v: Venue, saleId: string, body?: unknown): Promise<Response> {
+  return Promise.resolve(
+    v.app.request(`/api/sales/${saleId}/reprint`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: v.session },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
+}
+
+describe("an issued receipt reprinted in another receipt language", () => {
+  /** A Barcelona venue saved as Catalan whose receipt printer has a cash drawer, and one cash sale. */
+  async function catalanSale() {
+    const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
+    await withTransaction(suite.db, (tx) => tx.update(printers).set({ hasCashDrawer: true }));
+    const sale = await sell(v, { method: "cash", amount: "5.00" });
+    expect(sale.status).toBe(200);
+    expect(sale.body.locale).toBe("ca-ES");
+    const jobs = await takeJobs(suite.db);
+    // The control: this sale did open the drawer, so the reprint's lack of one means something.
+    expect(jobs.map((job) => job.kind).sort()).toEqual(["document", "drawer"]);
+    const original = jobs.find((job) => job.kind === "document")!;
+    return { v, sale, original };
+  }
+
+  it("prints Spanish fixed words on a Catalan sale, with its lines, totals, QR and legend, marked as a copy", async () => {
+    const { v, sale, original } = await catalanSale();
+    const before = saleTables(suite.db);
+    expect(before.registros_facturacion).toHaveLength(1);
+    expect(before.drawer_opens).toHaveLength(1);
+
+    const answer = await reprint(v, sale.id, { language: "es-ES" });
+    expect(answer.status).toBe(200);
+
+    const jobs = await takeJobs(suite.db);
+    expect(jobs.map((job) => job.kind)).toEqual(["document"]);
+    const copy = jobs[0]!;
+    expect(copy.saleId).toBe(original.saleId);
+    expect(saleTables(suite.db)).toEqual(before);
+
+    const catalan = printedLines(original.payload).map((line) => line.trim());
+    const spanish = printedLines(copy.payload).map((line) => line.trim());
+    for (const label of ["Factura", "Fecha", "IVA", "Efectivo", "Cambio"]) {
+      expect(startsWith(spanish, label), label).toBe(true);
+    }
+    expect(spanish).toContain("DUPLICADO");
+    for (const label of ["Data", "Efectiu", "Canvi", "Comanda", "DUPLICAT"]) {
+      expect(startsWith(spanish, label), label).toBe(false);
+    }
+    // The dish name is the one the sale was filed with, not the Spanish one the product also has.
+    expect(spanish.some((line) => line.includes("CLIENT-CA Pa amb tomàquet"))).toBe(true);
+    expect(spanish.some((line) => line.includes("CLIENT-ES"))).toBe(false);
+
+    // Line by line, only the copy marking and the fixed words differ.
+    const withoutMark = spanish.filter((line) => line !== "DUPLICADO");
+    expect(withoutMark).toHaveLength(catalan.length);
+    const differing = catalan.flatMap((line, i) =>
+      line === withoutMark[i] ? [] : [[line.split(/\s+/)[0], withoutMark[i]!.split(/\s+/)[0]]],
+    );
+    expect(differing).toEqual([
+      ["Comanda", "Pedido"],
+      ["Data", "Fecha"],
+      ["Efectiu", "Efectivo"],
+      ["Canvi", "Cambio"],
+    ]);
+    expect(qrAndLegend(copy.payload)).toEqual(qrAndLegend(original.payload));
+  });
+
+  it("prints in the language the sale was filed in when the body is empty or names no language", async () => {
+    const { v, sale } = await catalanSale();
+    for (const body of [{}, { language: undefined }]) {
+      expect((await reprint(v, sale.id, body)).status).toBe(200);
+    }
+    for (const receipt of await takePrinted(suite.db)) {
+      expect(startsWith(receipt, "Data"), "Data").toBe(true);
+      expect(receipt).toContain("DUPLICAT");
+    }
+  });
+
+  it.each([["en-GB"], [5], [null], [["es-ES"]]])(
+    "refuses a language %j outside the pack's receipt languages, printing nothing",
+    async (language) => {
+      const { v, sale } = await catalanSale();
+      const before = saleTables(suite.db);
+      const answer = await reprint(v, sale.id, { language });
+      expect([answer.status, await answer.json()]).toEqual([
+        400,
+        { error: { code: "management.request_invalid", params: { field: "language" } } },
+      ]);
+      expect(await takeJobs(suite.db)).toEqual([]);
+      expect(saleTables(suite.db)).toEqual(before);
+    },
+  );
+
+  it("offers the till the pack's receipt languages", async () => {
+    const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
+    const res = await v.app.request("/api/till", { headers: { cookie: v.till } });
+    expect(((await res.json()) as { receiptLanguages?: string[] }).receiptLanguages).toEqual([
+      "es-ES",
+      "ca-ES",
+      "gl-ES",
+      "eu-ES",
+    ]);
   });
 });

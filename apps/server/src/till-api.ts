@@ -172,6 +172,7 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
+import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
@@ -1012,6 +1013,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         });
         return {
           invoiceLocale: (await readReceiptLanguage(tx, deps.cfg.locationId)).locale,
+          receiptLanguages: (
+            await readVenueReceiptLanguageRules(tx, { locationId: deps.cfg.locationId })
+          ).choices,
           issuer:
             taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,
@@ -1042,6 +1046,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The location's receipt language, kept separate from the UI `locale`: the UI derivation
         // drops UI-unsupported codes, which must never reach the receipt.
         invoiceLocale: boot.invoiceLocale,
+        receiptLanguages: boot.receiptLanguages,
         onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
@@ -1621,7 +1626,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       await assertDeviceCapability(deps, c, "print-receipt", "reprint");
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await reprintSale({ db: deps.db, backend: deps.backend }, deps.cfg, id);
+      const { language } = await readJsonBody<{ language?: unknown }>(c);
+      if (language !== undefined && typeof language !== "string") {
+        throw new AppError("management.request_invalid", { field: "language" });
+      }
+      await reprintSale({ db: deps.db, backend: deps.backend }, deps.cfg, id, language);
       return c.body(null, 200);
     }),
   );

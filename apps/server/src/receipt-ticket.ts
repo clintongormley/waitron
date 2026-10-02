@@ -14,9 +14,10 @@
  *
  * The receipt is issued in the INVOICE locale, not the operator's UI language: its fixed words come
  * from the country pack's table for that locale (`receiptLabelsFor`), and money, discount
- * percentages, date and product names are formatted in it. The helpers shared with the till screen
- * are copied rather than imported, because `apps/server` must not depend on `apps/till`; keep them
- * in step.
+ * percentages and date are formatted in it. Product names are looked up in `namesLocale`, which a
+ * copy in another language sets to the language the sale was filed in. The helpers shared with the
+ * till screen are copied rather than imported, because `apps/server` must not depend on
+ * `apps/till`; keep them in step.
  */
 import {
   QR_QUIET_ZONE,
@@ -69,8 +70,10 @@ export interface FormatReceiptInput {
   issuer: ReceiptIssuer;
   /** The owner-authored non-fiscal header/footer trim; `{}` (or missing fields) prints no trim. */
   receipt: ReceiptTrim;
-  /** The locale the fixed words are printed in and the money, discount percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
+  /** The locale the fixed words are printed in and the money, discount percentages and date are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
+  /** The locale goods names, unit names and option answers are looked up in; defaults to `invoiceLocale`. */
+  namesLocale?: string;
   /** The receipt printer's settings: they set the image width, the column count and the QR dot size. */
   printer: EscSetting;
   /** Marks a Demo/Prepare transaction without changing any filed fiscal value. */
@@ -88,7 +91,7 @@ const QR_CAPTION = "QR tributario:";
 const QTY_BADGE = "×";
 
 /**
- * A filed line's goods name (art. 7.1.e): the invoice locale, then any description; "" only for an
+ * A filed line's goods name (art. 7.1.e): the names' locale, then any description; "" only for an
  * empty map, so a catalogue defect still prints rather than blocking the paper.
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
@@ -130,6 +133,7 @@ export function formatReceipt({
   issuer,
   receipt,
   invoiceLocale,
+  namesLocale = invoiceLocale,
   printer,
   simulated = false,
   duplicate = false,
@@ -185,26 +189,28 @@ export function formatReceipt({
     // invoice locales, so a unit map still carries the bare content-language keys it was stored
     // under ("es", not "es-ES") and an exact-key lookup would miss every one of them.
     const unit =
-      dish.unitName == null ? "" : ` ${resolveSnapshotText(dish.unitName, locale, locale)}`;
+      dish.unitName == null
+        ? ""
+        : ` ${resolveSnapshotText(dish.unitName, namesLocale, namesLocale)}`;
     const quantity = prepareText(`${dish.quantity}${unit}  `);
     // The name's continuation lines normally start under the name (indent = the quantity prefix width).
     // Cap that at 2 when the prefix is wider than half the paper: past there `wrapText`'s remaining room
     // shrinks to a few columns and the name wraps one glyph per line.
     const nameIndent = quantity.length > columns / 2 ? 2 : quantity.length;
     row(
-      `${quantity}${lineName(dish.descriptions, locale)}`,
+      `${quantity}${lineName(dish.descriptions, namesLocale)}`,
       formatMoney(dish.listGross ?? dish.gross, locale),
       nameIndent,
     );
     // The dish's frozen answers to its options lists, each under the dish it was asked about. An
     // extras pick is NOT here: it is its own priced child line, printed by the loop below.
-    for (const answer of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], locale)) {
+    for (const answer of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], namesLocale)) {
       text(`  ${answer}`, 2);
     }
     for (const option of options) {
       // No quantity prefix: an option is priced per dish. A "×N" badge shows a per-dish count above 1.
       const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
-      const name = lineName(option.descriptions, locale);
+      const name = lineName(option.descriptions, namesLocale);
       const caption = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
       row(caption, formatMoney(option.listGross ?? option.gross, locale), 2);
     }
