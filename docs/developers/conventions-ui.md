@@ -38,13 +38,15 @@ add to one or add one (owner, 2026-10-01, A178). Cost: a native `<select>`'s ope
 the browser and cannot take the approved look, and fields a screen drew itself did not follow
 changes to the shared ones, so A178 moved the fields screens drew in the dashboard, setup, the till and
 the module screens onto the primitives (#1012, #1015, #1016, #1017). Guard:
-`scripts/native-form-fields.test.ts`, weaker than its name — it reads text, so a field made with
-`document.createElement`, inserted with `unsafeHTML`, written in an `.html`, `.js` or `.mjs` file,
-or with its tag name split across a `${…}` is invisible to it; the field primitives' own files, and
-`wt-data-table`'s (its search box), are not read at all, so a second field added inside one
-passes; and three files are allowed by name (the two hidden username inputs for the browser's
-password manager, and the print agent's setup page), each held to the number of LINES it draws a
-field on, so a field added on a line that already has one passes. See design-system.md → Forms.
+`scripts/native-form-fields.test.ts`, weaker than its name — it reads text, and only the literals
+of non-test `.ts` files under `apps/` and `packages/`, so a field made with
+`document.createElement`, from markup no single literal holds (built at run time, or read from a
+file or a response), or with its tag name split across a `${…}` is invisible to it;
+the field primitives' own files, and `wt-data-table`'s (its search box), are not read at all, so a
+second field added inside one passes; and some files are allowed by name (the hidden username
+inputs for the browser's password manager, in two files, and the print agent's setup page), each
+held to the number of LINES it draws a field on, so a field swapped for another, a hidden input
+made visible, or a field added on a line that already has one passes. See design-system.md → Forms.
 
 ## A refusal reaches a field by what the error carries, not by one parameter name
 

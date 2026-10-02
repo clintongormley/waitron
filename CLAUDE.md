@@ -213,8 +213,8 @@ hook, or how tests are scheduled:
   `eslint.config.js` is not type-aware. Proven by mutation.
 - **Two TypeScript compilers are installed on purpose, and there is no `tsc` at the ROOT.** A
   package's `tsc` is version 7; the root resolves `typescript` to the version 6 API typescript-eslint
-  and three root scripts, `scripts/comments-only.mjs`, `scripts/apply-migrations-callers.test.ts`
-  and `scripts/pinned-actions-column.test.ts`, still need, and its only binary is `tsc6`. Cost: typescript-eslint
+  and the root scripts that import it, `scripts/comments-only.mjs`, `scripts/apply-migrations-callers.test.ts`,
+  `scripts/pinned-actions-column.test.ts` and `scripts/native-form-fields.test.ts`, still need, and its only binary is `tsc6`. Cost: typescript-eslint
   refuses version 7 by its major alone, before loading its parser, so raising the root to it makes `pnpm lint` refuse to start with
   no results at all — and version 7 rejected the one typechecked file reaching into another package by
   relative path (`TS6059`). See [ci-and-gates.md](docs/developers/ci-and-gates.md).
@@ -298,10 +298,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Cost:
   a native dropdown cannot take the approved look, and hand-drawn fields did not follow the shared
-  ones (A178). Guard: `scripts/native-form-fields.test.ts`, weaker than its name — it reads text,
-  so a field made with `createElement` or `unsafeHTML`, written in an `.html`, `.js` or `.mjs`
-  file, or with its tag name split across a `${…}` is unseen; the primitives' own files are not
-  read; and the three files it allows are held only to how many lines draw a field. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  ones (A178). Guard: `scripts/native-form-fields.test.ts`, weaker than its name — it reads the
+  literals of non-test `.ts` files under `apps/` and `packages/` only, so a field made with
+  `createElement`, from markup no single literal holds, or with its tag name split across a `${…}`
+  is unseen; the field components' files and `wt-data-table`'s are not read at all, so a field
+  added inside one passes; and the files it allows by name are held only to how many lines draw a
+  field, so a field swapped for another, a hidden input made visible, or one added on a line that
+  already has one passes. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
