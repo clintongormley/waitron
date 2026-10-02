@@ -4,7 +4,6 @@ export {
   baseStyles,
   disabledStyles,
   floorTrayStyles,
-  selectStyles,
   visuallyHiddenStyles,
 } from "./base-styles.js";
 export { floorChipStyles, renderFloorChips } from "./floor-chips.js";
