@@ -448,9 +448,17 @@ A table with no rows draws `emptyMessage` in a padded box with the table's own b
 background, centred, and under it whatever the screen puts in its `empty-action` slot: the screen's
 own Add button, rendered there only while its list is empty, so a screen whose Add button also
 sits above the table shows it twice while empty (owner, A176). A table with no Add action leaves the
-slot empty. When the first item made from the slotted button empties the slot, the screen moves
-focus to its other Add button rather than leaving it on the page. When rows exist but the
-search or filters hide them all, the same box holds `noMatchesMessage` and the slot is not drawn.
+slot empty. A widget that draws a table with an Add button for a screen passes the button through:
+`apps/dashboard/src/widgets/staff-list.ts` forwards the slot
+(`<slot name="empty-action" slot="empty-action">`), while `apps/dashboard/src/widgets/product-list.ts`
+takes an `emptyAction` render function, because the rows it lists are worked out inside
+`apps/dashboard/src/widgets/catalogue-browser.ts`, from the folder and view the screen passes in and
+the browser's own search box, so the screen cannot tell when the list is empty. The browser drops
+`emptyAction` while a search is typed, so a catalogue search that matches nothing shows the empty
+sentence without the button. When the first item made from the slotted button empties the slot,
+the screen moves focus to its other Add button rather than leaving it on the page. When rows exist
+but the table's own search or filters hide them all, the same box holds `noMatchesMessage` and the
+slot is not drawn.
 
 Table cells line up by their first line of text (`vertical-align: baseline`). A flex-row cell takes
 its line from its first item, so that item must carry text, or the row uses `align-items: baseline`.
@@ -1229,17 +1237,22 @@ or suspension controls.
 
 ### Empty slots don't reserve space
 
-`wt-card`'s `header` slot and `wt-dialog`'s `footer` slot only add their spacing/divider when
-something is actually projected into them — an unused slot must not leave a spurious gap or a bare
-bar in the layout. The two primitives get there differently:
+`wt-card`'s `header` slot, `wt-dialog`'s `footer` slot and `wt-data-table`'s `empty-action` slot
+only add their spacing/divider when something is actually projected into them — an unused slot must
+not leave a spurious gap or a bare bar in the layout. The three primitives get there differently:
 
 - `wt-card` does it in pure CSS: the header's `margin-bottom` lives on `.header ::slotted(*)`, so
   it only applies when there is slotted content for that selector to match.
 - `wt-dialog` does it imperatively: `updateHasFooter()` reads `assignedNodes({ flatten: true })`
   off the footer slot — once on first render, again on every `slotchange` — and toggles a
   `.has-content` class that the footer's padding and top border are conditioned on.
+- `wt-data-table`'s `empty-action` slot sits in a flex column whose spacing is its `gap`; the
+  slot has no fallback content and a `<slot>` is `display: contents` by default, so with nothing
+  assigned it adds no flex item and no gap. Guard: "an empty table whose screen puts nothing in the
+  empty-action slot draws a box the same height as the no-matches box" in
+  `packages/ui/src/components/wt-data-table.test.ts`.
 
-If you build a primitive with an optional slot that carries its own spacing, use one of these two
+If you build a primitive with an optional slot that carries its own spacing, use one of these
 patterns rather than reserving space unconditionally.
 
 ## Page composition
