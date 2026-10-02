@@ -981,7 +981,11 @@ describe("till-app integrated card collection", () => {
   it("sends the reader the operator picked", async () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "simulator" }),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "simulator",
+        capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+      }),
       pay,
     });
     const c = await toCounter(el);

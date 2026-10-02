@@ -2163,6 +2163,7 @@ describe("till-app: a bill payment on the card reader", () => {
     getTill: vi.fn().mockResolvedValue({
       ...till,
       cardProvider: "stripe_terminal",
+      capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
       activeReaders: readers,
       defaultReaderId: readers[0]!.id,
     }),
@@ -2355,6 +2356,34 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(sent()[0]!.entry).toBe("manual");
   });
 
+  it("offers no reader to a till whose profile lacks integrated card payment: its card is keyed on a separate terminal", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: ["print-receipt"] as CapabilityFlag[],
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: readers[0]!.id,
+      }),
+      previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
+      takeBillPayment: vi
+        .fn()
+        .mockResolvedValue(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        ),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+
+    expect(inDialog(el, 'input[name="reader"]')).toBeNull();
+    expect(inDialog(el, 'wt-input[name="externalRef"]')).not.toBeNull();
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[0]!.entry).toBe("manual");
+  });
+
   /** A handheld whose profile declares the integrated reader, taking a card on the second reader. */
   async function takeOnHandheldReader(takeBillPayment: unknown): Promise<TillApp> {
     const { el } = await mountApp({
@@ -2434,9 +2463,8 @@ describe("till-app: a bill payment on the card reader", () => {
   });
 
   it("tells a handheld the same as a till when the server refuses the device the reader", async () => {
-    const refused = { code: "device.forbidden_action", status: 403, params: { action: "pay" } };
-    // The till has no sentence of its own for this code, so it says the generic one.
-    const says = codeMessage("server.internal");
+    const refused = { code: "device.forbidden_action", status: 403, action: "pay" };
+    const says = t("card_reader.not_set_up");
     const onTill = await takeOnReader(vi.fn().mockRejectedValue(refused));
     expect(inDialog(onTill, "wt-form-actions")!.error).toBe(says);
     cleanupWidgets();
