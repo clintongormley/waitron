@@ -537,6 +537,43 @@ describe("till-app: counter station choice", () => {
     expect(counter(el).store.lines[0]!.quantity).toBe("2");
   });
 
+  it("lets a retrieved order choose Make at after a canceled Move on another order", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const answer = deferred<{ revision: number }>();
+    const other = { ...heldOrder(5), id: "wo-10" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi
+        .fn()
+        .mockImplementation((id: string) => Promise.resolve(id === "wo-10" ? listing(5) : lines)),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockImplementation((id: string) => Promise.resolve(id === "wo-10" ? other : heldOrder(4))),
+      moveDishStation: vi.fn(() => answer.promise),
+    });
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    const old = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    emit(old, "station-chosen", { stationId: "grill" });
+    await flush(el);
+    emit(old, "close");
+    emit(counter(el), "retrieve-order", { id: "wo-10" });
+    await flush(el);
+    expect(counter(el).store.id).toBe("wo-10");
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog");
+    expect(chooser?.getAttribute("mode")).toBe("make-at");
+    answer.reject({ code: "ticket.already_started" });
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("till-station-choice-dialog")).toHaveLength(1);
+    expect(chooser?.getAttribute("mode")).toBe("make-at");
+    emit(chooser!, "station-chosen", { stationId: "bar" });
+    await flush(el);
+    expect(counter(el).store.lines[1]!.makeAt).toBe("bar");
+  });
+
   it("does not replace an edit made after another read overtakes a submitted move", async () => {
     const lines = listing(4);
     lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
