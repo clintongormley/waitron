@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, LanguageTranslationGaps, TranslationGap } from "../api/client.js";
@@ -189,9 +190,7 @@ describe("required content languages", () => {
     q(el, "[data-test=add-language]")!.click();
     await flush(el);
     const add = dialog(el);
-    const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
-    select.value = "ca";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "ca");
     await add.updateComplete;
     add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     const saved = { defaultLanguage: "en", languages: ["en", "ca", "es"] };
@@ -433,9 +432,7 @@ describe("content languages screen", () => {
     await flush(el);
     const add = dialog(el);
     expect(add.open).toBe(true);
-    const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
-    select.value = "fr";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
     await add.updateComplete;
     add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     const saved = { defaultLanguage: "ca", languages: ["ca", "en", "de", "fr"] };
@@ -458,9 +455,7 @@ describe("content languages screen", () => {
     liveData.invalidate([{ type: "content_languages" }]);
     await vi.waitFor(() => expect(shown(el)).toContain("Italiano"));
     const add = dialog(el);
-    const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
-    select.value = "fr";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
     await add.updateComplete;
     add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     await vi.waitFor(() =>
@@ -561,9 +556,7 @@ describe("content languages screen", () => {
       q(el, "[data-test=add-language]")!.click();
       await flush(el);
       const add = dialog(el);
-      const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
-      select.value = "fr";
-      select.dispatchEvent(new Event("change"));
+      await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
       await add.updateComplete;
       add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
       await add.updateComplete;
