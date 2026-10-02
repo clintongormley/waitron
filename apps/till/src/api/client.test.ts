@@ -1069,6 +1069,23 @@ describe("TillApi", () => {
     );
   });
 
+  it.each([
+    [undefined, {}],
+    ["gl-ES", { language: "gl-ES" }],
+  ] as const)(
+    "reprint with language %s POSTs %j to the sale's /reprint route",
+    async (language, body) => {
+      const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+      await expect(new TillApi("", fetchStub).reprint("wo1", language)).resolves.toBeUndefined();
+
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/sales/wo1/reprint",
+        expect.objectContaining({ method: "POST", body: JSON.stringify(body) }),
+      );
+    },
+  );
+
   it("fireCourse POSTs an empty object to the order+course fire route — the kitchen-fire release (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

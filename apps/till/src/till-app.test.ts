@@ -2530,6 +2530,110 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  describe("reprint in another receipt language", () => {
+    const SPAIN = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+    const languageDialog = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement>("till-reprint-language-dialog");
+    const radio = (el: TillApp, language: string) =>
+      languageDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
+        `input[name="language"][value="${language}"]`,
+      )!;
+    const dialogButton = (el: TillApp, name: string) =>
+      languageDialog(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-reprint-${name}]`)!;
+
+    async function soldWith(
+      tillOverrides: Record<string, unknown>,
+      api: Record<string, unknown> = {},
+    ) {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, ...tillOverrides }),
+        ...api,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const workingOrderId = c.store.id;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      return { el, workingOrderId };
+    }
+
+    it("asks which language, starting on the location's, and reprints in the one chosen", async () => {
+      const { el, workingOrderId } = await soldWith({
+        invoiceLocale: "ca-ES",
+        receiptLanguages: SPAIN,
+      });
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+
+      expect(currentApi.reprint).not.toHaveBeenCalled();
+      expect(radio(el, "ca-ES").checked).toBe(true);
+      radio(el, "gl-ES").click();
+      dialogButton(el, "confirm").click();
+      await flush(el);
+
+      expect(vi.mocked(currentApi.reprint).mock.calls).toEqual([[workingOrderId, "gl-ES"]]);
+      expect(languageDialog(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it("reprints nothing when the language question is cancelled", async () => {
+      const { el } = await soldWith({ receiptLanguages: SPAIN });
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+      dialogButton(el, "cancel").click();
+      await flush(el);
+
+      expect(languageDialog(el)).toBeNull();
+      expect(currentApi.reprint).not.toHaveBeenCalled();
+    });
+
+    it("says so when the copy in the chosen language could not be printed", async () => {
+      const { el } = await soldWith(
+        { receiptLanguages: SPAIN },
+        { reprint: vi.fn().mockRejectedValue({ code: "server.internal" }) },
+      );
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+      dialogButton(el, "confirm").click();
+      await flush(el);
+
+      expect(currentApi.reprint).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+        t("reprint.error"),
+      );
+    });
+
+    it("closes the language question when the till locks, reprinting nothing", async () => {
+      const { el } = await soldWith({ receiptLanguages: SPAIN });
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+      expect(languageDialog(el)).not.toBeNull();
+      emit(ticket(el)!, "logout");
+      await flush(el);
+
+      expect(languageDialog(el)).toBeNull();
+      expect(currentApi.reprint).not.toHaveBeenCalled();
+    });
+
+    it("reprints at once, in the language the sale was filed in, when there is one receipt language", async () => {
+      const { el, workingOrderId } = await soldWith({
+        invoiceLocale: "en-GB",
+        receiptLanguages: ["en-GB"],
+      });
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+
+      expect(languageDialog(el)).toBeNull();
+      expect(vi.mocked(currentApi.reprint).mock.calls).toEqual([[workingOrderId]]);
+    });
+  });
+
   it.each(["on_request", "never"] as const)(
     "%s offers an original at completion and switches to duplicate reprint after it succeeds",
     async (receiptPrintMode) => {

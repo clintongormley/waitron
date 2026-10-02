@@ -3058,12 +3058,23 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   owner-approved.** A receipt prints in ONE language, never two, with no choice at print time, and
   dish names print as they were saved. The language is the first entry of the location's saved list
   (`locations.invoice_locales`), read in the transaction that files the sale (`readReceiptLanguage`,
-  `packages/catalogue/src/operations.ts`); a reprint prints in the language the sale was filed in
-  (`sales.locale`). The fixed words come from Spain's country pack
+  `packages/catalogue/src/operations.ts`); a reprint asked for without a language prints in the
+  language the sale was filed in (`sales.locale`). The fixed words come from Spain's country pack
   (`packages/country-es/src/receipt-labels.ts`). It is set on the **Receipts** page and on setup's
   venue screen; **in Catalonia it is fixed to Catalan**
   ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Server: `GET`
   and `PUT /management-api/receipt-language` (`apps/server/src/location-settings-api.ts`).
+  - **A copy can be printed in another receipt language (C114, 2026-10-02, branch
+    `feat/receipt-reprint-language`).** Where the till reprints an issued receipt (the finished
+    sale's Reprint and a paid bill's Receipt), a venue whose country offers more than one receipt
+    language asks which, starting on the location's; a country with one reprints at once. Only the
+    fixed words, money, date and percentages follow the choice; dish names, unit names and option
+    answers print as the sale was filed. The copy is marked as one, files nothing and opens no
+    drawer. `POST /api/sales/:id/reprint` takes an optional `language`, refused with
+    `management.request_invalid` (`field: "language"`) unless it is one of the country pack's
+    receipt languages, which `GET /api/till` lists as `receiptLanguages`. Open for the owner: after a
+    location's language changes, the till starts the choice on the location's language, not the one
+    the sale was filed in.
   - **Open, for the owner:**
     - **A change is refused while an open order at the location holds a line**
       (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core

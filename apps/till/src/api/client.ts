@@ -91,6 +91,8 @@ export interface TillInfo {
    * default derivation drops UI-unsupported codes, which must never reach the receipt.
    */
   invoiceLocale: string;
+  /** The venue's receipt languages, which a copy of an issued receipt may be printed in. */
+  receiptLanguages: string[];
   venueName: string;
   nif: string;
   orderFlow: OrderFlow;
@@ -1933,10 +1935,16 @@ export class TillApi {
   /**
    * Reprint a FILED sale's customer receipt → `POST /api/sales/:id/reprint`, by the till's own
    * working-order id. Paper only: it files NOTHING and ignores the location's `receipt_print_mode`. An
-   * id naming no filed sale, or a till with no active printer, is a 200 no-op.
+   * id naming no filed sale, or a till with no active printer, is a 200 no-op. The copy's fixed words
+   * are in `language`, one of {@link TillInfo.receiptLanguages}, or without one in the language the
+   * sale was filed in.
    */
-  async reprint(workingOrderId: string): Promise<void> {
-    await this.#request<void>(`/api/sales/${workingOrderId}/reprint`, "POST", {});
+  async reprint(workingOrderId: string, language?: string): Promise<void> {
+    await this.#request<void>(
+      `/api/sales/${workingOrderId}/reprint`,
+      "POST",
+      language === undefined ? {} : { language },
+    );
   }
 
   /** Print the ORIGINAL receipt offered at invoice issuance. */

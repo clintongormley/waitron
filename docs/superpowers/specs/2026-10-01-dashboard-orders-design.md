@@ -115,6 +115,9 @@ every screen it asks for resolves to its own schedule (`#permittedScreen`, `:136
   (#1014) still gets the original's language. No job is made when that till has no active receipt
   printer, and no row records who asked. Its sibling `POST /api/sales/:id/receipt`
   (`till-api.ts:1470-1482`) prints the unmarked original instead.
+  _(2026-10-02, C114: the route now takes an optional `language`, and the till asks for one when
+  the country offers several; a request naming none still prints in `sales.locale`. See
+  `docs/backlog.md`, C113's entry.)_
 - `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts:1096-1102`), the
   Printers screen's resend, gated on `print.resend`, sends a finished document job's stored bytes
   again to the same printer (`resendPrintJob`, `packages/printing/src/outbox.ts:72-84`). A
