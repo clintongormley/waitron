@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -61,6 +62,19 @@ export class WtDisclosure extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .summary-rows {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .summary-row {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--summary-row-lines);
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
+
       /* Points down when collapsed; rotates to point up when open, matching the direction the body
          reveals in. */
       .chevron {
@@ -81,6 +95,13 @@ export class WtDisclosure extends LitElement {
   /** The closed line as named values, each after its bold name; used instead of `summary` when it
    * holds any. */
   @property({ attribute: false }) summaryFields: readonly { label: string; value: string }[] = [];
+  /** The closed line as one row per named value, each cut with an ellipsis after its `lines`
+   * lines; used instead of `summaryFields` and `summary` when it holds any. */
+  @property({ attribute: false }) summaryRows: readonly {
+    label: string;
+    value: string;
+    lines: number;
+  }[] = [];
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
@@ -102,6 +123,17 @@ export class WtDisclosure extends LitElement {
   }
 
   private renderSummary() {
+    if (this.summaryRows.length)
+      return html`<span class="summary summary-rows"
+        >${this.summaryRows.map(
+          ({ label, value, lines }) =>
+            html`<span
+              class="summary-row"
+              style=${styleMap({ "--summary-row-lines": String(lines) })}
+              ><span class="summary-label">${label}:</span> ${value}</span
+            >`,
+        )}</span
+      >`;
     if (this.summaryFields.length)
       return html`<span class="summary"
         >${this.summaryFields.map(
