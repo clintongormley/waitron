@@ -2418,6 +2418,13 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       attempt, and the spinner comes down once no card attempt is still running (`cardAttemptsOver`,
       `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
       request settled.
+    - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
+      The page gives the till the screen less its padding (`apps/till/index.html`), and the error
+      banner and the other notices above the tabs take their height from the tab shell, so the
+      language button stays on screen. The lock and join screens fill at least the height left; a
+      staff list longer than the screen still makes the page scroll to reach the language button,
+      as it did before. Before, the page was taller than the screen even with no banner, by the
+      body's padding and the demo strip.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a

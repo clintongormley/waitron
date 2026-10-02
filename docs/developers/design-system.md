@@ -1802,11 +1802,9 @@ The production server serves app HTML for browser navigation under `/manage` and
 static assets keep their own responses; setup continues to use its existing root page.
 
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. The
-setup wizard and the dashboard end the page with `wt-language-footer`: a footer in the page's flow,
-below the content, with the chooser at its trailing edge and its menu opening upwards over the
-content above it. The footer takes its own place in the flow, so the page needs no extra bottom
-padding for it. The parent passes the page's language as `active` and decides what a pick means.
-The till still has its own chooser floating at the bottom right, with bottom padding so the last
-content and action buttons scroll clear of it, until it moves onto the footer (lane B's B18). A
-signed-in operator's choice uses the existing preference write; login, pairing and kitchen-display
-choices are local UI changes.
+setup wizard, the dashboard and the till end the page with `wt-language-footer`: a footer in the
+page's flow, below the content, with the chooser at its trailing edge and its menu opening upwards
+over the content above it. The footer takes its own place in the flow, so the page needs no extra
+bottom padding for it. The parent passes the page's language as `active` and decides what a pick
+means. A signed-in operator's choice uses the existing preference write; login, pairing and
+kitchen-display choices are local UI changes.

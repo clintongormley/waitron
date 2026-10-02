@@ -1,7 +1,9 @@
-import { currentContentLanguages } from "@waitron/ui";
+import { page } from "vitest/browser";
+import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import indexHtml from "../index.html?raw";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
@@ -1118,6 +1120,128 @@ describe("till-app shell navigation", () => {
     emit(lock(el)!, "check-again");
 
     expect(probeNow).toHaveBeenCalledOnce();
+  });
+});
+
+/** The bottom edges of the till, the screen it shows, and that screen's language button. */
+function bottoms(el: TillApp, screen: Element) {
+  const footer = screen.shadowRoot!.querySelector("wt-language-footer")!;
+  return {
+    app: el.getBoundingClientRect().bottom,
+    screen: screen.getBoundingClientRect().bottom,
+    footer: footer.getBoundingClientRect().bottom,
+  };
+}
+
+// The container stands in for the page: `index.html` gives the till one screen's height, less its own
+// padding, so the till must fill that box and no more.
+describe("till-app fits the page it is given", () => {
+  const PAGE_HEIGHT = 500;
+  /** A counter whose products fill far more than the page, as a real menu does, so the shell must
+   * shrink below its content rather than to it. */
+  const fullMenu = zoneOffers(
+    {
+      menus: [defaultMenu],
+      products: Array.from({ length: 40 }, (_, i) => ({
+        ...cafe,
+        id: `cafe-${i}`,
+        name: `Café ${i}`,
+      })),
+    },
+    "zone-counter",
+  );
+
+  it("keeps the tab shell's language button on the page while a refusal banner shows", async () => {
+    const { el, host } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "simulator",
+        capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+      }),
+      pay: vi.fn().mockRejectedValue({ code: "device.forbidden_action", status: 403 }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(fullMenu),
+    });
+    host.style.height = `${PAGE_HEIGHT}px`;
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(banner(el)).not.toBeNull();
+    const pageBottom = host.getBoundingClientRect().bottom;
+    const edges = bottoms(el, shell(el)!);
+    expect(edges.app).toBe(pageBottom);
+    expect(edges.screen).toBe(pageBottom);
+    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+  });
+
+  it("keeps the whole page within the screen, its padding included, while a refusal banner shows", async () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(1024, 768);
+    const style = document.createElement("style");
+    style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+    document.head.append(style);
+    applyTokens(document.documentElement);
+    const app = document.createElement("div");
+    app.id = "app";
+    document.body.append(app);
+    try {
+      api = stubApi({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "simulator",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay: vi.fn().mockRejectedValue({ code: "device.forbidden_action", status: 403 }),
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(fullMenu),
+      });
+      const el = Object.assign(document.createElement("till-app"), { api });
+      app.append(el);
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(banner(el)).not.toBeNull();
+      expect(document.documentElement.scrollHeight).toBe(window.innerHeight);
+    } finally {
+      app.remove();
+      style.remove();
+      document.documentElement.removeAttribute("data-wt-theme-root");
+      await page.viewport(width, height);
+    }
+  });
+
+  it("keeps the lock screen's language button on the page while its staff list is short", async () => {
+    const { el, host } = await mountApp();
+    host.style.height = `${PAGE_HEIGHT}px`;
+    await flush(el);
+
+    const pageBottom = host.getBoundingClientRect().bottom;
+    const edges = bottoms(el, lock(el)!);
+    expect(edges.app).toBe(pageBottom);
+    expect(edges.screen).toBe(pageBottom);
+    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+  });
+
+  it("keeps the join screen's language button on the page", async () => {
+    const { el, host } = await mountApp({
+      getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    host.style.height = `${PAGE_HEIGHT}px`;
+    await flush(el);
+
+    const join = el.shadowRoot!.querySelector("till-enrol-screen")!;
+    const pageBottom = host.getBoundingClientRect().bottom;
+    const edges = bottoms(el, join);
+    expect(edges.app).toBe(pageBottom);
+    expect(edges.screen).toBe(pageBottom);
+    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
   });
 });
 
