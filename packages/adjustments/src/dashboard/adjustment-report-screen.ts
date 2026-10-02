@@ -144,7 +144,7 @@ export class AdjustmentReportScreen extends LitElement {
         gap: var(--wt-space-4);
         margin-bottom: var(--wt-space-4);
       }
-      /* Sized by the date box, so the backwards-range message wraps under it rather than widening it. */
+      /* Sized by the date box, so a backwards range's message wraps under it rather than widening it. */
       .pickers wt-input {
         width: min-content;
       }
@@ -870,15 +870,13 @@ export class AdjustmentReportScreen extends LitElement {
   override render(): TemplateResult {
     const backwards = this.#backwards();
     const report = this.report;
-    // The sentence names the first day, so it sits under that field; the last day is marked only.
     const picker = (field: "from" | "to") =>
       html`<wt-input
         type="date"
         name=${field}
         label=${t(`adjustment_report.${field}`)}
         .value=${this[field] ?? ""}
-        .invalid=${backwards}
-        error=${backwards && field === "from" ? t("adjustment_report.range_backwards") : ""}
+        error=${backwards ? t("adjustment_report.range_backwards") : ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onDateChange(field, event)}
       ></wt-input>`;
     return html`<h1 data-test="heading">${t("adjustment_report.title")}</h1>

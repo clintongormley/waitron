@@ -420,15 +420,26 @@ describe("the range", () => {
     expect(day(el, "from").value).toBe("2026-09-01");
   });
 
-  it("marks the last day too while a range runs backwards, and says why once, under the first day", async () => {
+  it("explains a range that runs backwards beside both days, and clears both once it runs forwards", async () => {
     const el = await mount(fakeApi());
     await pick(el, "from", "2026-09-30");
-    expect(dayBox(el, "to").getAttribute("aria-invalid")).toBe("true");
-    expect(day(el, "to").error).toBe("");
+    const sentence = "Choose a first day on or before the last day.";
+    for (const field of ["from", "to"] as const) {
+      const box = dayBox(el, field);
+      expect(box.getAttribute("aria-invalid"), field).toBe("true");
+      expect(day(el, field).error, field).toBe(sentence);
+      expect(
+        day(el, field).shadowRoot!.getElementById(box.getAttribute("aria-describedby")!)!
+          .textContent,
+        field,
+      ).toBe(sentence);
+    }
     expect(part(el, "range-error")).toBeNull();
     await pick(el, "from", "2026-09-29");
-    expect(dayBox(el, "from").getAttribute("aria-invalid")).toBe("false");
-    expect(dayBox(el, "to").getAttribute("aria-invalid")).toBe("false");
+    for (const field of ["from", "to"] as const) {
+      expect(dayBox(el, field).getAttribute("aria-invalid"), field).toBe("false");
+      expect(day(el, field).error, field).toBe("");
+    }
   });
 
   it("names the days in Spanish", async () => {
