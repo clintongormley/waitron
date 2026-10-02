@@ -1629,7 +1629,7 @@ resolution". **Existing tests changed** are the three approved kinds (driving th
 backup screen's two retention steppers cut their labels to "Keep…" and "Dele…" (the approved
 §12 point 9 behaviour; the alternative is a box that widens to its label). **Seen, not changed:** a
 blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is on
-`main` before this change (`#save`'s `split(":")`); what the server does with it was not checked.
+`main` before this change (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
