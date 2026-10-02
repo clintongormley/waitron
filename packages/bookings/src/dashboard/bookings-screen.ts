@@ -2,9 +2,10 @@ import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t, bookingStatusName } from "./strings.js";
 import { codeMessage, codeOf } from "@waitron/dashboard-kit";
@@ -17,7 +18,6 @@ import type { Booking, BookingInput, BookingApi, DashboardTable } from "./client
 export class BookingsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -350,21 +350,20 @@ export class BookingsScreen extends LitElement {
       ${
         arming
           ? html`<div class="seat-prompt">
-              <label class="prompt">
-                ${t("booking.table")}
-                <select
-                  data-test=${`seat-table-${b.id}`}
-                  @change=${(e: Event) =>
-                    (this.seatTableId = (e.target as HTMLSelectElement).value)}
-                >
-                  ${this.tables.map(
-                    (table) =>
-                      html`<option value=${table.id} .selected=${table.id === this.seatTableId}>
-                        ${table.label}
-                      </option>`,
-                  )}
-                </select>
-              </label>
+              <wt-combobox
+                name="seat-table"
+                data-test=${`seat-table-${b.id}`}
+                label=${t("booking.table")}
+                search="auto"
+                searchPlaceholder=${t("booking.search")}
+                noResultsLabel=${t("booking.no_results")}
+                .options=${this.tables.map((table) => ({ value: table.id, label: table.label }))}
+                .value=${this.seatTableId}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                  e.stopPropagation();
+                  this.seatTableId = e.detail.value;
+                }}
+              ></wt-combobox>
               <wt-button
                 size="sm"
                 variant="primary"

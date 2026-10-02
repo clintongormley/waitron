@@ -1,8 +1,9 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "./strings.js";
 import { codeMessage } from "@waitron/dashboard-kit";
@@ -24,7 +25,6 @@ const POSITIVE_INT = /^\d+$/;
 export class BookingForm extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -84,9 +84,9 @@ export class BookingForm extends LitElement {
     if (this.validationError) this.validationError = null;
   }
 
-  #onTableChange(event: Event): void {
+  #onTableChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.tableId = (event.target as HTMLSelectElement).value;
+    this.tableId = event.detail.value;
   }
 
   #validate(): string | null {
@@ -196,18 +196,22 @@ export class BookingForm extends LitElement {
           .value=${this.notes}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "notes")}
         ></wt-input>
-        <label class="field"
-          >${t("booking.table")}
-          <select data-test="booking-table" @change=${(e: Event) => this.#onTableChange(e)}>
-            <option value="" .selected=${this.tableId === ""}>${t("booking.table_none")}</option>
-            ${this.tables.map(
-              (table) =>
-                html`<option value=${table.id} .selected=${table.id === this.tableId}>
-                  ${table.label}
-                </option>`,
-            )}
-          </select>
-        </label>
+        <wt-combobox
+          class="field"
+          name="table"
+          data-test="booking-table"
+          label=${t("booking.table")}
+          placeholder=${t("booking.table_none")}
+          search="auto"
+          searchPlaceholder=${t("booking.search")}
+          noResultsLabel=${t("booking.no_results")}
+          .options=${[
+            { value: "", label: t("booking.table_none") },
+            ...this.tables.map((table) => ({ value: table.id, label: table.label })),
+          ]}
+          .value=${this.tableId}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTableChange(e)}
+        ></wt-combobox>
 
         ${
           this.validationError

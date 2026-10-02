@@ -1,7 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { codeMessage } from "@waitron/dashboard-kit";
+import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { bookingStatusName } from "./strings.js";
 import { today } from "./date-utils.js";
 import type { Booking, BookingApi, DashboardTable } from "./client.js";
@@ -229,13 +230,84 @@ describe("bookings-screen", () => {
       "[data-test=seat-table-bk-late]",
     )!;
     expect(select).not.toBeNull();
-    select.value = "t-1";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "t-1");
     await el.updateComplete;
     await click(el, "confirm-seat-bk-late");
     await flush(el);
     expect(api.seatBooking).toHaveBeenCalledWith("bk-late", { tableId: "t-1" });
     expect(api.listBookings).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["en", "Table", "Search", "No results"],
+    ["es", "Mesa", "Buscar", "Sin resultados"],
+  ] as const)(
+    "asks for the table to seat at in the shared dropdown, starting on the first table (%s)",
+    async (locale, label, search, noResults) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi();
+        const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+        await flush(el);
+        await click(el, "seat-bk-late");
+        const table = el.shadowRoot!.querySelector<
+          HTMLElement & {
+            name: string;
+            label: string;
+            value: string;
+            search: string;
+            searchPlaceholder: string;
+            noResultsLabel: string;
+            options: { value: string; label: string }[];
+          }
+        >("wt-combobox[data-test=seat-table-bk-late]")!;
+        expect(table).not.toBeNull();
+        expect(table.name).toBe("seat-table");
+        expect(table.label).toBe(label);
+        expect(table.options).toEqual([
+          { value: "t-1", label: "Mesa 1" },
+          { value: "t-2", label: "Mesa 2" },
+        ]);
+        expect(table.value).toBe("t-1");
+        expect(table.search).toBe("auto");
+        expect(table.searchPlaceholder).toBe(search);
+        expect(table.noResultsLabel).toBe(noResults);
+        await click(el, "confirm-seat-bk-late");
+        await flush(el);
+        expect(api.seatBooking).toHaveBeenCalledWith("bk-late", { tableId: "t-1" });
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("keeps the seating table's change inside the screen", async () => {
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await click(el, "seat-bk-late");
+    const heard = vi.fn();
+    document.addEventListener("wt-change", heard);
+    try {
+      await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=seat-table]")!, "t-2");
+    } finally {
+      document.removeEventListener("wt-change", heard);
+    }
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it("seats at the table chosen in the dropdown", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    await click(el, "seat-bk-late");
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=seat-table]")!, "t-2");
+    await el.updateComplete;
+    await click(el, "confirm-seat-bk-late");
+    await flush(el);
+    expect(api.seatBooking).toHaveBeenCalledWith("bk-late", { tableId: "t-2" });
   });
 
   it("marks a no-show and reloads", async () => {
