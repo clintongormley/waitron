@@ -6,7 +6,11 @@ import { StaffScreen } from "./staff-screen.js";
 import { setLocale } from "../i18n/t.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 
-type Combobox = HTMLElement & { value: string; options: { value: string; label: string }[] };
+type Combobox = HTMLElement & {
+  value: string;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
 
 afterEach(() => {
   cleanupWidgets();
@@ -67,8 +71,13 @@ function shown(el: StaffScreen): PersonSummary[] {
 it("searches names, email and phone as the administrator types", async () => {
   const el = await screen();
   expect(shown(el).map((person) => person.displayName)).toEqual(["Ada", "Grace"]);
-  const search = el.shadowRoot!.querySelector<HTMLElement>("[data-test=search]")!;
-  await chooseOption(search, "222");
+  const search = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+    "[data-test=search]",
+  )!;
+  search.value = "222";
+  search.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "222" }, bubbles: true, composed: true }),
+  );
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]);
 });
@@ -107,7 +116,8 @@ it("marks the chosen role's option selected when the options re-render in a diff
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]);
   expect(role.value).toBe("manager");
-  expect(role.options.find((option) => option.value === role.value)!.label).toBe("Encargado");
+  await role.updateComplete;
+  expect(role.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim()).toBe("Encargado");
 });
 
 it("explains what current users are in a help tooltip beside the status filter", async () => {

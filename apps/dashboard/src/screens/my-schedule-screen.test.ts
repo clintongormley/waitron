@@ -519,12 +519,13 @@ describe("my-schedule-screen fields", () => {
 });
 
 describe("my-schedule-screen — dropdowns that keep their choice", () => {
-  function chosenText(el: MyScheduleScreen, dataTest: string): string | undefined {
-    const select = el.shadowRoot!.querySelector(`[data-test=${dataTest}]`) as unknown as {
-      options: { value: string; label: string }[];
-      value: string;
-    };
-    return select.options.find((o) => o.value === select.value)?.label.trim();
+  /** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+  async function chosenText(el: MyScheduleScreen, dataTest: string): Promise<string | undefined> {
+    const box = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      `[data-test=${dataTest}]`,
+    )!;
+    await box.updateComplete;
+    return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
   }
 
   it("keeps the chosen colleague when the roster refreshes in a different order", async () => {
@@ -541,7 +542,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
     liveData.invalidate([{ type: "persons", id: "col2" }]);
     await vi.waitFor(() => expect(api.getStaffRoster).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(chosenText(el, "cover-colleague")).toBe("Segunda");
+    expect(await chosenText(el, "cover-colleague")).toBe("Segunda");
   });
 
   it("keeps the chosen shift when my shifts refresh in a different order", async () => {
@@ -559,7 +560,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
     liveData.invalidate([{ type: "shifts", id: "s2" }]);
     await vi.waitFor(() => expect(api.listMyShifts).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(chosenText(el, "cover-shift")).toContain("cocina");
+    expect(await chosenText(el, "cover-shift")).toContain("cocina");
   });
 
   it.each([
@@ -599,7 +600,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
       liveData.invalidate([{ type, id }]);
       await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
       await flush(el);
-      expect(chosenText(el, `cover-${field}`)).toBe("—");
+      expect(await chosenText(el, `cover-${field}`)).toBe("—");
       const submit = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
         "[data-test=cover-submit]",
       )!;
@@ -622,6 +623,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
       "[data-test=abs-kind]",
     )!;
     expect(select.value).toBe("sick_leave");
+    expect(await chosenText(el, "abs-kind")).toBe(absenceKindName("sick_leave"));
   });
 });
 

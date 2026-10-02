@@ -216,6 +216,11 @@ async function flush(el: DevicesScreen): Promise<void> {
 }
 
 const q = (el: DevicesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+type Dropdown = HTMLElement & {
+  options: { value: string; label: string }[];
+  value: string;
+  updateComplete: Promise<unknown>;
+};
 const text = (el: DevicesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
 function pickSelect(el: DevicesScreen, testId: string, value: string): void {
@@ -666,14 +671,14 @@ describe("devices-screen", () => {
     expect(banner).toContain(codeMessage("device.not_found", "es-ES"));
   });
 
-  it("renders a per-row reassign select preselected to the device's current device profile", async () => {
+  it("renders a per-row reassign dropdown preselected to the device's current device profile", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
+    const select = q(el, "[data-test=reassign-d1]") as Dropdown;
     expect(select).toBeTruthy();
-    const options = (select as unknown as { options: { value: string; label: string }[] }).options;
+    const options = select.options;
     expect(options.map((o) => o.value)).toEqual(["", "dp1", "dp2", "dp3"]);
     expect(options[0]!.label.trim()).toBe(t("devices.device_profile_none", "es-ES"));
     expect(options[1]!.label.trim()).toBe("Counter till");
@@ -703,7 +708,7 @@ describe("devices-screen", () => {
     expect(api.reassignDeviceProfile).toHaveBeenCalledWith("d1", null);
   });
 
-  it("shows an error and snaps the reassign select back when a reassign is rejected", async () => {
+  it("shows an error and snaps the reassign dropdown back when a reassign is rejected", async () => {
     const api = stubApi({
       reassignDeviceProfile: vi.fn().mockRejectedValue({ code: "device.binding_invalid" }),
     });
@@ -714,7 +719,7 @@ describe("devices-screen", () => {
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.binding_invalid");
-    const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
+    const select = q(el, "[data-test=reassign-d1]") as Dropdown;
     expect(select.value).toBe("dp1");
   });
 
@@ -733,8 +738,7 @@ describe("devices-screen", () => {
     expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
       receiptPrinterId: "pr1",
     });
-    // The controls reflect what took: the reconciled select shows the saved value.
-    expect((q(el, "[data-test=hw-printer-d1]") as HTMLSelectElement).value).toBe("pr1");
+    expect((q(el, "[data-test=hw-printer-d1]") as Dropdown).value).toBe("pr1");
   });
 
   it("saves cleared hardware (nulls) when the editor is left at its defaults", async () => {
@@ -789,9 +793,9 @@ describe("devices-screen", () => {
     });
     await flush(el);
 
-    const select = q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement;
+    const select = q(el, "[data-test=hw-reader-d1]") as Dropdown;
     expect(select).toBeTruthy();
-    const options = (select as unknown as { options: { value: string; label: string }[] }).options;
+    const options = select.options;
     expect(options.map((o) => o.value)).toEqual(["", "r1", "r2"]); // r3 is retired — excluded
     expect(options[0]!.label.trim()).toBe(t("devices.default_reader_none", "es-ES"));
     expect(options[1]!.label.trim()).toBe("Front counter (Acme Pay)");
@@ -806,7 +810,7 @@ describe("devices-screen", () => {
     });
     await flush(el);
 
-    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("");
+    expect((q(el, "[data-test=hw-reader-d1]") as Dropdown).value).toBe("");
   });
 
   it("preselects the device's current default reader from the GET", async () => {
@@ -819,7 +823,7 @@ describe("devices-screen", () => {
     });
     await flush(el);
 
-    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r2");
+    expect((q(el, "[data-test=hw-reader-d1]") as Dropdown).value).toBe("r2");
   });
 
   it("sets a device's default reader as soon as one is picked (no separate Save)", async () => {
@@ -834,7 +838,7 @@ describe("devices-screen", () => {
     await flush(el);
 
     expect(api.setDeviceReader).toHaveBeenCalledWith("d1", "r1");
-    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r1");
+    expect((q(el, "[data-test=hw-reader-d1]") as Dropdown).value).toBe("r1");
   });
 
   it("clears a device's default reader when the none option is picked", async () => {
@@ -846,16 +850,16 @@ describe("devices-screen", () => {
       panels: PANELS,
     });
     await flush(el);
-    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r1");
+    expect((q(el, "[data-test=hw-reader-d1]") as Dropdown).value).toBe("r1");
 
     pickSelect(el, "hw-reader-d1", "");
     await flush(el);
 
     expect(api.setDeviceReader).toHaveBeenCalledWith("d1", null);
-    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("");
+    expect((q(el, "[data-test=hw-reader-d1]") as Dropdown).value).toBe("");
   });
 
-  it("shows an error and snaps the reader select back when setting the default is rejected", async () => {
+  it("shows an error and snaps the reader dropdown back when setting the default is rejected", async () => {
     const api = stubApi({
       getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
       setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
@@ -873,7 +877,7 @@ describe("devices-screen", () => {
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("reader.not_found", "es-ES"));
     // The rejected pick never took: the control shows the device's actual stored default again.
-    expect((q(el, "[data-test=hw-reader-d1]") as HTMLSelectElement).value).toBe("r1");
+    expect((q(el, "[data-test=hw-reader-d1]") as Dropdown).value).toBe("r1");
   });
 
   it("registers as a custom element", () => {
@@ -1062,11 +1066,7 @@ describe("devices-screen remaining edges", () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    const select = () =>
-      q(el, "[data-test=reassign-d1]") as unknown as {
-        options: { value: string }[];
-        value: string;
-      };
+    const select = () => q(el, "[data-test=reassign-d1]") as Dropdown;
     await vi.waitFor(() => expect(select()?.value).toBe("dp1"));
 
     vi.mocked(api.listDevices).mockResolvedValue([{ ...devices[0]!, deviceProfileId: null }]);
@@ -1075,7 +1075,10 @@ describe("devices-screen remaining edges", () => {
     await vi.waitFor(() =>
       expect(text(el, "[data-test=device-profile-d1]")).toBe(t("devices.device_profile_none")),
     );
-    expect(select().options.findIndex((o) => o.value === select().value)).toBe(0);
+    await select().updateComplete;
+    expect(select().shadowRoot!.querySelector(".trigger .value")!.textContent!.trim()).toBe(
+      t("devices.device_profile_none"),
+    );
     expect(select().value).toBe("");
   });
 

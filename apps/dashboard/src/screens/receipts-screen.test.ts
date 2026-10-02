@@ -685,10 +685,21 @@ describe("the Receipts page's paper width", () => {
   }
 
   const widthSelect = (el: ReceiptsScreen) =>
-    q<HTMLElement & { value: string; label: string; options: { value: string; label: string }[] }>(
-      el,
-      "wt-combobox[name=paperWidth]",
-    );
+    q<
+      HTMLElement & {
+        value: string;
+        label: string;
+        options: { value: string; label: string }[];
+        updateComplete: Promise<unknown>;
+      }
+    >(el, "wt-combobox[name=paperWidth]");
+
+  /** The label the closed dropdown shows, which is what the operator reads. */
+  async function shownWidth(el: ReceiptsScreen): Promise<string | undefined> {
+    const select = widthSelect(el)!;
+    await select.updateComplete;
+    return select.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+  }
 
   function choose(el: ReceiptsScreen, width: Width): void {
     void chooseOption(widthSelect(el)!, width);
@@ -703,7 +714,7 @@ describe("the Receipts page's paper width", () => {
       ["80mm", t("printers.paper_width_80")],
     ]);
     expect(select.value).toBe("80mm");
-    expect([select.value]).toEqual(["80mm"]);
+    expect(await shownWidth(el)).toBe(t("printers.paper_width_80"));
     expect(select.label).toContain(t("printers.paper_width"));
     const heading = q(el, ".preview h2")!;
     expect(heading.textContent).toBe(t("receipts.preview"));
@@ -775,7 +786,7 @@ describe("the Receipts page's paper width", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).not.toBeNull());
     const select = widthSelect(el)!;
     expect(select.value).toBe("58mm");
-    expect([select.value]).toEqual(["58mm"]);
+    expect(await shownWidth(el)).toBe(t("printers.paper_width_58"));
     expect(
       select.compareDocumentPosition(q(el, "[data-test=preview-error]")!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -797,7 +808,7 @@ describe("the Receipts page's paper width", () => {
     expect(paper(el)!.style.width).toBe("30ch");
     const select = widthSelect(el)!;
     expect(select.value).toBe("80mm");
-    expect([select.value]).toEqual(["80mm"]);
+    expect(await shownWidth(el)).toBe(t("printers.paper_width_80"));
   });
 
   it.each([

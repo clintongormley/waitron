@@ -321,7 +321,7 @@ describe("device-profiles-screen editor form", () => {
     );
   });
 
-  it("Edit → clearing the canvas select saves canvasId null (form-factor default)", async () => {
+  it("Edit → clearing the canvas dropdown saves canvasId null (form-factor default)", async () => {
     const api = stubApi();
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
@@ -601,6 +601,7 @@ type Combobox = HTMLElement & {
   search: string;
   disabled: boolean;
   error: string;
+  updateComplete: Promise<boolean>;
 };
 
 describe("device-profiles-screen fields", () => {
@@ -773,12 +774,17 @@ describe("device-profiles-screen home page layouts", () => {
     return el.shadowRoot!.querySelector<Combobox>(`wt-combobox[name="home-layout-${menuId}"]`);
   }
 
-  function options(el: DeviceProfilesScreen, menuId: string): [string, string, boolean][] {
+  async function options(
+    el: DeviceProfilesScreen,
+    menuId: string,
+  ): Promise<[string, string, boolean][]> {
     const box = picker(el, menuId)!;
+    await box.updateComplete;
+    const shown = box.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
     return box.options.map((option) => [
       option.value,
       option.label.trim(),
-      option.value === box.value,
+      option.value === box.value && option.label.trim() === shown,
     ]);
   }
 
@@ -802,7 +808,7 @@ describe("device-profiles-screen home page layouts", () => {
     expect(api.getDeviceHomeLayouts).toHaveBeenCalledWith("p1");
     expect(picker(el, "m-dinner")).toBeNull();
     const defaultHome = t("device_profiles.home_default").replace("{name}", "Home");
-    expect(options(el, "m-lunch")).toEqual([
+    expect(await options(el, "m-lunch")).toEqual([
       ["", defaultHome, true],
       ["l-counter", "Counter", false],
       ["l-terrace", "Terrace", false],
@@ -834,13 +840,13 @@ describe("device-profiles-screen home page layouts", () => {
   it("shows a choice whose layout was deleted as removed, with a reset that saves Default", async () => {
     const api = homeApi();
     const el = await edit(api);
-    expect(options(el, "m-bar")).toEqual([
+    expect(await options(el, "m-bar")).toEqual([
       ["", t("device_profiles.home_default").replace("{name}", "Bar home"), false],
       ["l-late", "Late", false],
       ["l-old", t("device_profiles.home_removed"), true],
     ]);
     // A deleted layout's id means nothing to a person, so it is never shown.
-    expect(options(el, "m-bar")[2]![1]).not.toContain("l-old");
+    expect((await options(el, "m-bar"))[2]![1]).not.toContain("l-old");
     expect(inHome(el, "[data-test=home-removed-m-bar]")!.textContent!.trim()).toBe(
       t("device_profiles.home_removed_note").replace("{menu}", "Bar"),
     );
@@ -853,7 +859,7 @@ describe("device-profiles-screen home page layouts", () => {
 
   it("shows a choice of the menu's current default by its name, apart from Default", async () => {
     const el = await edit(homeApi());
-    expect(options(el, "m-brunch")).toEqual([
+    expect(await options(el, "m-brunch")).toEqual([
       ["", t("device_profiles.home_default").replace("{name}", "Brunch home"), false],
       ["l-brunch", "Brunch home", true],
       ["l-kids", "Kids", false],
@@ -864,7 +870,7 @@ describe("device-profiles-screen home page layouts", () => {
     const menus = homeMenus();
     menus[2] = { ...menus[2]!, selectedLayoutId: "l-gone", selectedRemoved: true };
     const el = await edit(homeApi({ getDeviceHomeLayouts: vi.fn().mockResolvedValue(menus) }));
-    expect(options(el, "m-dinner").map(([value]) => value)).toEqual(["", "l-gone"]);
+    expect((await options(el, "m-dinner")).map(([value]) => value)).toEqual(["", "l-gone"]);
   });
 
   it("puts a refused choice beside its picker, and holds the picker while the choice is out", async () => {
@@ -961,7 +967,7 @@ describe("device-profiles-screen home page layouts", () => {
     const menus = homeMenus();
     menus[2] = { ...menus[2]!, layouts: [], selectedLayoutId: "l-gone", selectedRemoved: true };
     const el = await edit(homeApi({ getDeviceHomeLayouts: vi.fn().mockResolvedValue(menus) }));
-    expect(options(el, "m-dinner")[0]).toEqual([
+    expect((await options(el, "m-dinner"))[0]).toEqual([
       "",
       t("device_profiles.home_default_plain"),
       false,
@@ -1028,8 +1034,8 @@ describe("device-profiles-screen home page layouts", () => {
     renamed[3]!.layouts[1]!.name = "Bar counter";
     api.getDeviceHomeLayouts.mockResolvedValue(renamed);
     live.invalidate([{ type: "device_profile_home_layouts" }]);
-    await vi.waitFor(() =>
-      expect(options(el, "m-lunch").map(([, label]) => label)).toContain("Bar counter"),
+    await vi.waitFor(async () =>
+      expect((await options(el, "m-lunch")).map(([, label]) => label)).toContain("Bar counter"),
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
     await flush(el);
