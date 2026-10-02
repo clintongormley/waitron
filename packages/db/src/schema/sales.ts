@@ -197,8 +197,8 @@ export const saleLines = table(
     lineGross: money("line_gross"),
     classification: json<SaleLineClassification>("classification"),
     // On a corrective invoice's line, the line of the corrected invoice it reverses or adjusts;
-    // null on an ordinary sale's or a substitution's line, and on a corrective line that names
-    // none. The key accepts any `sale_lines` row: `recordCorrection` refuses a line not on the
+    // null on an ordinary sale's or a substitution's line, and on a partial correction's line that
+    // names none. The key accepts any `sale_lines` row: `recordCorrection` refuses a line not on the
     // corrected invoice, and `saleLineRows` stores null for any other sale.
     correctsLineId: id("corrects_line_id"),
   },

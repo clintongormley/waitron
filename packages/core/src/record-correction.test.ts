@@ -512,6 +512,15 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     };
   }
 
+  /** The id of the one line `sellMosto` (or a one-line `sell`) stored, for the credit to name. */
+  async function soldLineId(saleId: SaleId): Promise<string> {
+    const [row] = await suite.db
+      .select({ id: saleLines.id })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId));
+    return row!.id;
+  }
+
   /** Runs a correction expected to be refused inside a transaction that then commits, so a number
    * allocated before the refusal would stay allocated. */
   async function expectRefusedUnwritten(
@@ -536,8 +545,14 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
   it("stores and files the invoice's breakdown negated, where the lines would derive another", async () => {
     const backend = new FilesBreakdownsBackend(suite.db);
     const { saleId: originalId } = await sellMosto(backend);
+    const [reversed] = wholeCredit().lines;
+    const correctsLineId = await soldLineId(originalId);
 
-    const { saleId: correctiveId } = await correct(backend, originalId, wholeCredit());
+    const { saleId: correctiveId } = await correct(
+      backend,
+      originalId,
+      wholeCredit({ lines: [{ ...reversed!, correctsLineId }] }),
+    );
 
     const negated = [{ rate: "21.00", base: "-0.45", tax: "-0.10" }];
     expect(backend.filed).toEqual([negated]);
@@ -700,8 +715,13 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
       },
     });
     const [reversed] = wholeCredit().lines;
+    const correctsLineId = await soldLineId(originalId);
 
-    await correct(backend, originalId, wholeCredit({ lines: [{ ...reversed!, lineGross: null }] }));
+    await correct(
+      backend,
+      originalId,
+      wholeCredit({ lines: [{ ...reversed!, lineGross: null, correctsLineId }] }),
+    );
 
     expect(backend.filed).toEqual([[{ rate: "21.00", base: "-0.45", tax: "-0.10" }]]);
   });
@@ -1161,7 +1181,7 @@ describe("recordCorrection — a corrective line names the invoice line it rever
     expect(await linksOf(saleId)).toEqual([ids.get(1), ids.get(2)]);
   });
 
-  it("stores no link on a line that names none", async () => {
+  it("stores no link on a partial correction's line that names none", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 
@@ -1214,5 +1234,283 @@ describe("recordCorrection — a corrective line names the invoice line it rever
     await expect(
       correct(backend, originalId, { lines, authz: { sessionId: staffSessionId } }),
     ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+  });
+});
+
+describe("recordCorrection — a whole-invoice credit reverses each invoice line exactly once", () => {
+  /** Coffee with a free oat-milk extra (a child line at 0.00) and a water: 14.41 as `sell` sells
+   * it, so the credit's VAT split matches the invoice's and only the line rules are tested. */
+  const soldLines: RecordSaleInput["lines"] = [
+    {
+      lineNo: 1,
+      name: "Coffee",
+      descriptions: { "es-ES": "Coffee" },
+      quantity: "2",
+      unitPrice: "5.00",
+      vatRate: "21.00",
+      lineTotal: "10.00",
+      productId: "product-coffee",
+    },
+    {
+      lineNo: 2,
+      name: "Oat milk",
+      descriptions: { "es-ES": "Oat milk" },
+      quantity: "2",
+      unitPrice: "0.00",
+      vatRate: "21.00",
+      lineTotal: "0.00",
+      parentLineNo: 1,
+      productId: "product-oat",
+    },
+    {
+      lineNo: 3,
+      name: "Water",
+      descriptions: { "es-ES": "Water" },
+      quantity: "1",
+      unitPrice: "2.10",
+      vatRate: "10.00",
+      lineTotal: "2.10",
+      productId: "product-water",
+    },
+  ];
+
+  async function sellWithExtra(backend: FiscalBackend) {
+    const { saleId } = await sell(backend, { lines: soldLines });
+    const rows = await suite.db
+      .select({ id: saleLines.id, lineNo: saleLines.lineNo })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId));
+    const ids = new Map(rows.map((row) => [row.lineNo, row.id]));
+    return { originalId: saleId, idOf: (lineNo: number) => ids.get(lineNo)! };
+  }
+
+  /** Each sold line with its signs reversed, naming the line it reverses. */
+  function reversal(idOf: (lineNo: number) => string): RecordCorrectionInput["lines"] {
+    return soldLines.map((line) => ({
+      ...line,
+      quantity: `-${line.quantity}`,
+      lineTotal: line.lineTotal === "0.00" ? "0.00" : `-${line.lineTotal}`,
+      correctsLineId: idOf(line.lineNo),
+    }));
+  }
+
+  async function linksOf(saleId: SaleId) {
+    return suite.db
+      .select({
+        lineNo: saleLines.lineNo,
+        id: saleLines.id,
+        parentLineId: saleLines.parentLineId,
+        correctsLineId: saleLines.correctsLineId,
+      })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+  }
+
+  /** Refused inside a transaction that then commits, so a number allocated or a row written
+   * before the refusal would stay. */
+  async function expectRefusedUnwritten(
+    backend: FakeFiscalBackend,
+    originalId: SaleId,
+    lines: RecordCorrectionInput["lines"],
+    params: Record<string, unknown>,
+  ) {
+    const next = await rectSeriesNext();
+    const filed = (await backend.recordsFor(nodeId)).length;
+    const lineRows = await countRows("sale_lines");
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordCorrection(tx, backend, correctionInput(originalId, { wholeInvoice: true, lines })),
+      ).rejects.toMatchObject({
+        code: "sale.correction_line_not_reversed",
+        params: { saleId: originalId, ...params },
+      });
+    });
+    expect(await countCorrectives(originalId)).toBe(0);
+    expect(await rectSeriesNext()).toBe(next);
+    expect((await backend.recordsFor(nodeId)).length).toBe(filed);
+    expect(await countRows("sale_lines")).toBe(lineRows);
+  }
+
+  it("accepts a credit whose every line names the invoice line it exactly reverses, extras included", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+
+    const { saleId } = await correct(backend, originalId, {
+      wholeInvoice: true,
+      lines: reversal(idOf),
+    });
+
+    const stored = await linksOf(saleId);
+    expect(stored.map((row) => row.correctsLineId)).toEqual([idOf(1), idOf(2), idOf(3)]);
+    expect(stored[1]!.parentLineId).toBe(stored[0]!.id);
+  });
+
+  it("refuses a line that names no invoice line, writing nothing and using no number", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    const lines = reversal(idOf).map((line) =>
+      line.lineNo === 3 ? { ...line, correctsLineId: null } : line,
+    );
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "names_no_line",
+      lineNo: 3,
+      correctsLineId: null,
+    });
+  });
+
+  it("refuses two lines naming the same invoice line", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    // The reviewers' repro: the Water line names Coffee's line as well.
+    const lines = reversal(idOf).map((line) =>
+      line.lineNo === 3 ? { ...line, correctsLineId: idOf(1) } : line,
+    );
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "names_line_twice",
+      lineNo: 3,
+      correctsLineId: idOf(1),
+    });
+  });
+
+  it("refuses an exact reversal of one invoice line given twice, every line named", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    // Two exact reversals of the free extra, so the reversal rule alone cannot see it.
+    const lines = reversal(idOf);
+    lines.push({ ...lines[1]!, lineNo: 4 });
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "names_line_twice",
+      lineNo: 4,
+      correctsLineId: idOf(2),
+    });
+  });
+
+  it("refuses two lines whose links are swapped", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    const lines = reversal(idOf).map((line) =>
+      line.lineNo === 1
+        ? { ...line, correctsLineId: idOf(3) }
+        : line.lineNo === 3
+          ? { ...line, correctsLineId: idOf(1) }
+          : line,
+    );
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "not_exact_reversal",
+      lineNo: 1,
+      correctsLineId: idOf(3),
+    });
+  });
+
+  it("refuses a credit that leaves an invoice line unnamed", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    // The free extra's line is left out; every rate still sums to the invoice's.
+    const lines = reversal(idOf).filter((line) => line.lineNo !== 2);
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "leaves_line_unnamed",
+      lineNo: null,
+      correctsLineId: idOf(2),
+    });
+  });
+
+  it.each([
+    ["a quantity", { quantity: "-1" }],
+    ["a quantity past the third decimal place", { quantity: "-2.001" }],
+    ["a positive quantity", { quantity: "2" }],
+  ])("refuses %s that is not minus the invoice line's", async (_, change) => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    const lines = reversal(idOf).map((line) => (line.lineNo === 1 ? { ...line, ...change } : line));
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "not_exact_reversal",
+      lineNo: 1,
+      correctsLineId: idOf(1),
+    });
+  });
+
+  it("refuses a line total that is not minus the invoice line's, though the rate's total is", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    // A cent moved from Coffee to its extra: the 21% base still sums to -10.00.
+    const lines = reversal(idOf).map((line) =>
+      line.lineNo === 1
+        ? { ...line, lineTotal: "-9.99" }
+        : line.lineNo === 2
+          ? { ...line, lineTotal: "-0.01" }
+          : line,
+    );
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "not_exact_reversal",
+      lineNo: 1,
+      correctsLineId: idOf(1),
+    });
+  });
+
+  it.each([
+    ["another product", "product-tea"],
+    ["no product", null],
+  ])("refuses a line naming %s than the invoice line it names", async (_, productId) => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    const lines = reversal(idOf).map((line) => (line.lineNo === 3 ? { ...line, productId } : line));
+
+    await expectRefusedUnwritten(backend, originalId, lines, {
+      rule: "not_exact_reversal",
+      lineNo: 3,
+      correctsLineId: idOf(3),
+    });
+  });
+
+  it("still refuses a line naming a line of another invoice with its own code, before these rules", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    const { idOf: otherIdOf } = await sellWithExtra(backend);
+    // Line 1 breaks a whole-invoice rule; line 3 names another invoice's line.
+    const lines = reversal(idOf).map((line) =>
+      line.lineNo === 1
+        ? { ...line, correctsLineId: null }
+        : line.lineNo === 3
+          ? { ...line, correctsLineId: otherIdOf(3) }
+          : line,
+    );
+
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordCorrection(tx, backend, correctionInput(originalId, { wholeInvoice: true, lines })),
+      ).rejects.toMatchObject({
+        code: "sale.correction_line_not_on_invoice",
+        params: { saleId: originalId, lineNo: 3, correctsLineId: otherIdOf(3) },
+      });
+    });
+  });
+
+  it("keeps a partial correction free to leave a line unnamed and to name a line twice", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { originalId, idOf } = await sellWithExtra(backend);
+    const [coffee] = reversal(idOf);
+
+    const { saleId } = await correct(backend, originalId, {
+      total: "-2.42",
+      lines: [
+        { ...coffee!, quantity: "-1", lineTotal: "-1.00", correctsLineId: idOf(1) },
+        { ...coffee!, lineNo: 2, quantity: "-1", lineTotal: "-1.00", correctsLineId: idOf(1) },
+        { ...coffee!, lineNo: 3, quantity: "-1", lineTotal: "0.00", correctsLineId: null },
+      ],
+    });
+
+    expect((await linksOf(saleId)).map((row) => row.correctsLineId)).toEqual([
+      idOf(1),
+      idOf(1),
+      null,
+    ]);
   });
 });

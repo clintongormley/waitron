@@ -50,6 +50,7 @@ export interface RecordSaleLine {
   classification?: SaleLineClassification | null;
   /** The original invoice line this corrective line reverses or adjusts. Only `recordCorrection`
    * stores it (`recordSale` and `recordSubstitution` store null), and it refuses one that is not a
-   * line of the invoice it corrects. */
+   * line of the invoice it corrects. On a whole-invoice credit every line must name one, a
+   * different one each, and be it exactly reversed; on a partial correction it is optional. */
   correctsLineId?: string | null;
 }

@@ -166,9 +166,10 @@ The rules follow what the existing reports already do (`packages/reporting/src/b
     _(2026-10-02, C132: `sale_lines.corrects_line_id` now names, on a corrective line, the original
     line it reverses; the whole-order cancel fills it on every reversing line, and
     `recordCorrection` refuses a line naming one that is not on the invoice it corrects
-    (`sale.correction_line_not_on_invoice`). Neither mode requires it, nothing checks that the
-    named line is the one reversed (see the C132 entry in `docs/backlog.md`), and no report reads it
-    yet.)_
+    (`sale.correction_line_not_on_invoice`). A credit of the whole invoice must name every invoice
+    line once, each on a line that exactly reverses it (`sale.correction_line_not_reversed`); a
+    partial correction's lines may name one or not (see the C132 entry in `docs/backlog.md`). No
+    report reads it yet.)_
   - A delta line adding something new is classified when it is recorded.
   - Corrections count on the day they are issued, netting with their signed figures, as every
     existing report does.
