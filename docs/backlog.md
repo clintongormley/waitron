@@ -966,7 +966,7 @@ email (`POST /management-api/google/login` reads no body, `apps/server/src/manag
 and whether it shows depends only on the venue's settings, so the first page still shows everyone
 the same choices. The Google "G" (`apps/dashboard/src/assets/google-g.svg`) is the commonly
 reproduced four-colour mark; neither the drawing nor Google's branding terms were checked against
-Google's own sources. Sign in with Apple does not exist; the mockup only showed where it would go.
+Google's own sources. Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md`; and two races were reasoned about but not reproduced — pressing Continue with Google before the email page's passkey autofill has fully started could still let that autofill start while Google loads (a one-line fix: the autofill skips starting while the screen is busy), and after a failed Google start a failing restarted autofill's message replaces Google's.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
 2026-10-02) — OPEN.** The owner, on two screenshots of the Modifiers screen's "Search extras
