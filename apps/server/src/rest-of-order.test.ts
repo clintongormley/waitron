@@ -32,14 +32,12 @@ describe("rest of the order read", () => {
   it("returns other-station kitchen records in station and line order, excluding hidden and served work", async () => {
     await seedTenant(db);
     const locationId = randomUUID();
-    await db
-      .insert(locations)
-      .values({
-        id: locationId,
-        name: "Venue",
-        invoiceLocales: ["en"],
-        operationDescription: "Service",
-      });
+    await db.insert(locations).values({
+      id: locationId,
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Service",
+    });
     const tillId = randomUUID();
     await db.insert(tills).values({ id: tillId, locationId, name: "Till" });
     const nodeId = await seedNode(db, brandLocationId(locationId));
@@ -156,15 +154,13 @@ describe("rest of the order read", () => {
     }
     const result = await withTransaction(db, (tx) => readRestOfOrder(tx, [orderId]));
     expect(
-      result
-        .get(orderId)
-        ?.map(({ name, stationName, quantity, state, held }) => ({
-          name,
-          stationName,
-          quantity,
-          state,
-          held,
-        })),
+      result.get(orderId)?.map(({ name, stationName, quantity, state, held }) => ({
+        name,
+        stationName,
+        quantity,
+        state,
+        held,
+      })),
     ).toEqual([
       {
         name: "Kitchen fish",
