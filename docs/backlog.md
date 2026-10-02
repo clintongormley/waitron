@@ -1480,7 +1480,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, and A178d (setup and the till) as #TBD; A178e–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, and A178d (setup and the till) as #1016; A178e–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1658,7 +1658,7 @@ variants table's narrow unit dropdown no longer wraps "Add unit". **Seen, not ch
 fields in a purchase line show errors, its VAT-kind dropdown sits lower than its neighbours —
 `.line { align-items: flex-end }` in `purchase-form.ts`, from commit `6b299998ba` (2026-08-16).
 
-**A178d — DONE (#TBD).** Every field spec §9.3 and §9.4 list for setup and the till is drawn by a
+**A178d — DONE (#1016).** Every field spec §9.3 and §9.4 list for setup and the till is drawn by a
 primitive: the native selects are `wt-combobox` (`search="auto"`; the table order screen's two
 course boxes `hide-label`, at least `--wt-tap-min` tall), setup's recovery key is a password
 `wt-input` with its reveal button in the `end` slot as on the certificate screen, and the recovery
