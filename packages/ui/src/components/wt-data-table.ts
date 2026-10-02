@@ -35,6 +35,10 @@ export interface DataTableColumn<Row> {
 
 type SortDirection = "ascending" | "descending";
 
+/** The tree's box width, in px, at or below which each level indents `--wt-space-2` rather than
+ * `--wt-space-4` and stops deepening after four levels. */
+const NARROW_TREE_WIDTH = 440;
+
 @customElement("wt-data-table")
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
@@ -246,8 +250,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
         max-width: 100%;
       }
 
-      .columns-trigger {
+      .table-end {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
         margin-inline-start: auto;
+      }
+
+      .columns-trigger,
+      .expand-all {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
@@ -290,6 +302,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       .columns-trigger:focus-visible,
+      .expand-all:focus-visible,
       .column-choice input:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
@@ -317,9 +330,24 @@ export class WtDataTable<Row = unknown> extends LitElement {
         width: var(--wt-tap-min);
       }
 
+      .tree-arrow {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        font-size: var(--wt-font-size-lg);
+        line-height: 1;
+      }
+
       .tree-cell {
         display: inline-flex;
         align-items: baseline;
+        padding-inline-start: calc(var(--tree-depth, 0) * var(--wt-space-4));
+      }
+
+      :host([narrow]) .tree-cell {
+        padding-inline-start: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-2));
       }
     `,
   ];
@@ -329,11 +357,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) rowKey: (row: Row, index: number) => string = (_row, index) =>
     String(index);
   @property({ attribute: false }) rowParent?: (row: Row) => string | null;
-  /** When set (plain, non-tree tables only), each row becomes activatable: a stretched, focusable
-   * button covers the row and calls this on click. Per-row controls (the selection checkbox, the
-   * Edit/Delete menu) sit above the activator, so they are never swallowed. A tree table ignores it. */
+  /** Siblings sort by this number first, smallest first in either sort direction, and by the chosen
+   * column only within a group. */
+  @property({ attribute: false }) rowGroup?: (row: Row) => number;
+  /** In tree mode, a branch this returns false for is always open: it draws no toggle, is never seeded
+   * closed, and `setExpanded` cannot close it. */
+  @property({ attribute: false }) rowCollapsible: (row: Row) => boolean = () => true;
+  /** When set, each row becomes activatable: a stretched, focusable button covers the row and calls
+   * this on click. Per-row controls (the selection checkbox, the Edit/Delete menu) sit above the
+   * activator, so they are never swallowed. In a tree, `rowActivation` can give a row a toggle instead. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
+  /** In tree mode, what a click or Enter anywhere on a row does: "toggle" opens and closes a branch,
+   * "click" calls `rowClick`, "none" leaves the row to its own controls. Unset, every row clicks. */
+  @property({ attribute: false }) rowActivation?: (row: Row) => "toggle" | "click" | "none";
   @property({ type: Boolean }) loading = false;
   @property() loadingMessage = "Loading";
   @property() emptyMessage = "No results";
@@ -376,6 +413,21 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * key, and the browser's local storage remembers the chosen columns under `${viewKey}:columns`;
    * both are restored on the next visit. Search text is never persisted. */
   @property() viewKey?: string;
+  /** Narrows rows as a typed search would, for a table whose search box its consumer draws; ignored
+   * while `searchable` draws the table's own. */
+  @property() searchTerm = "";
+  /** In tree mode, the toolbar's button that opens every branch; it reads `collapseAllLabel` while
+   * every branch is open. Empty draws no button. */
+  @property() expandAllLabel = "";
+  @property() collapseAllLabel = "";
+  /** The branches Expand all and Collapse all open, close and count as open; unset, every branch. */
+  @property({ attribute: false }) expandAllIncludes?: (row: Row) => boolean;
+  /** With `initiallyCollapsed` and a `viewKey`, the browser's local storage keeps the branches a
+   * person opens, under `${viewKey}:expanded`, and opens them on the next visit. */
+  @property({ type: Boolean }) rememberExpanded = false;
+  /** In a tree, while a search is typed, holds open every row above a match, and keeps what passes
+   * the filters under a match reachable. Off, only a row kept solely to place a match is held open. */
+  @property({ type: Boolean }) searchOpensPath = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
    * `initial` option, or "all" when it has none, and "" is "all" chosen over an `initial` one. A
@@ -390,20 +442,73 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @query(".columns-panel") private chooserPanel!: HTMLElement;
   private readonly seededBranches = new Set<string>();
   #restored = false;
+  /** A CSS condition cannot read a token, so the width is compared here and the host carries the
+   * answer as `narrow`. */
+  readonly #scrollObserver = new ResizeObserver((entries) => {
+    for (const { contentRect } of entries)
+      this.toggleAttribute("narrow", contentRect.width <= NARROW_TREE_WIDTH);
+  });
+  #observedScroll: Element | null = null;
+  #remembered: Set<string> | null = null;
+
+  #rememberedOpen(): Set<string> {
+    if (this.#remembered) return this.#remembered;
+    let parsed: unknown = [];
+    if (this.rememberExpanded && this.viewKey) {
+      try {
+        parsed = JSON.parse(localStorage.getItem(`${this.viewKey}:expanded`) ?? "[]");
+      } catch {
+        // Blocked or malformed storage reads as nothing remembered.
+      }
+    }
+    this.#remembered = new Set(
+      Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === "string") : [],
+    );
+    return this.#remembered;
+  }
+
+  /** The indent follows the tree's own width, not the window's; a flat table is not watched. */
+  #observeScroll(): void {
+    const scroll = this.rowParent ? this.renderRoot.querySelector(".scroll") : null;
+    if (scroll === this.#observedScroll) return;
+    if (this.#observedScroll) this.#scrollObserver.unobserve(this.#observedScroll);
+    if (scroll) this.#scrollObserver.observe(scroll);
+    else this.removeAttribute("narrow");
+    this.#observedScroll = scroll;
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observeScroll();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#scrollObserver.disconnect();
+    this.#observedScroll = null;
+  }
+
+  protected override updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    this.#observeScroll();
+  }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("viewKey") || changed.has("rememberExpanded")) this.#remembered = null;
     if (
       this.initiallyCollapsed &&
       this.rowParent &&
       (changed.has("rows") || changed.has("rowParent") || changed.has("initiallyCollapsed"))
     ) {
-      const keys = new Set(this.rows.map((row, index) => this.rowKey(row, index)));
+      const byKey = this.#rowsByKey();
       const next = new Set(this.collapsed);
       let seeded = false;
       for (const row of this.rows) {
         const parent = this.rowParent(row);
-        if (parent === null || !keys.has(parent) || this.seededBranches.has(parent)) continue;
+        if (parent === null || !byKey.has(parent) || this.seededBranches.has(parent)) continue;
         this.seededBranches.add(parent);
+        if (!this.rowCollapsible(byKey.get(parent)!)) continue;
+        if (this.#rememberedOpen().has(parent)) continue;
         next.add(parent);
         seeded = true;
       }
@@ -648,11 +753,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     column: DataTableColumn<Row> | undefined,
     indexOf: ReadonlyMap<Row, number>,
   ): Row[] {
-    if (column?.sortValue === undefined) return [...rows];
+    const group = this.rowGroup;
+    if (column?.sortValue === undefined && group === undefined) return [...rows];
     const direction = this.sortDirection === "ascending" ? 1 : -1;
     return [...rows]
-      .map((row) => ({ row, index: indexOf.get(row)!, value: column.sortValue!(row) }))
+      .map((row) => ({
+        row,
+        index: indexOf.get(row)!,
+        group: group?.(row) ?? 0,
+        value: column?.sortValue?.(row),
+      }))
       .sort((left, right) => {
+        if (left.group !== right.group) return left.group - right.group;
         if (left.value == null && right.value == null) return left.index - right.index;
         if (left.value == null) return 1;
         if (right.value == null) return -1;
@@ -681,23 +793,35 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .toLocaleLowerCase();
   }
 
+  #term(): string {
+    return (this.searchable ? this.searchText : this.searchTerm).trim().toLocaleLowerCase();
+  }
+
   #passesSearch(row: Row): boolean {
-    const term = this.searchable ? this.searchText.trim().toLocaleLowerCase() : "";
+    const term = this.#term();
     return term === "" || this.#searchHaystack(row).includes(term);
   }
 
-  #visibleRows(): readonly Row[] {
-    const active = this.columns.flatMap((column) => {
+  #activeFilters(): { value: (row: Row) => string | readonly string[]; selected: string }[] {
+    return this.columns.flatMap((column) => {
       const selected = this.#activeFilter(column);
       return selected === "" ? [] : [{ value: column.filter!.value, selected }];
     });
-    return this.rows.filter(
-      (row) =>
-        active.every(({ value, selected }) => {
-          const held = value(row);
-          return typeof held === "string" ? held === selected : held.includes(selected);
-        }) && this.#passesSearch(row),
-    );
+  }
+
+  #passesFilters(
+    row: Row,
+    active: readonly { value: (row: Row) => string | readonly string[]; selected: string }[],
+  ): boolean {
+    return active.every(({ value, selected }) => {
+      const held = value(row);
+      return typeof held === "string" ? held === selected : held.includes(selected);
+    });
+  }
+
+  #visibleRows(): readonly Row[] {
+    const active = this.#activeFilters();
+    return this.rows.filter((row) => this.#passesFilters(row, active) && this.#passesSearch(row));
   }
 
   /** A hidden column sorts nothing, though `sortKey` still names it for when it is shown again. */
@@ -711,12 +835,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return this.#sortByColumn(rows, column, indexOf);
   }
 
-  /** In tree mode a matching row's ancestors must stay so it is not shown as a false top-level row.
-   * Takes the rows that passed the toolbar and returns the rows to render plus the set of keys
-   * present only as an ancestor of a match. */
+  /** In tree mode a match's ancestors stay, so it is not shown as a false top-level row. With
+   * `searchOpensPath` and a search typed, every ancestor is held open and what passes the filters
+   * under a match stays reachable; otherwise only an ancestor kept solely for a match is held open. */
   #treeVisible(visible: readonly Row[]): {
     rows: readonly Row[];
     ancestorOnly: ReadonlySet<string>;
+    heldOpen: ReadonlySet<string>;
   } {
     const parentOf = this.rowParent!;
     const keys = this.rows.map((row, index) => this.rowKey(row, index));
@@ -727,20 +852,45 @@ export class WtDataTable<Row = unknown> extends LitElement {
       if (!rowByKey.has(keys[index]!)) rowByKey.set(keys[index]!, row);
     });
     const matched = new Set(visible.map((row) => keyByRow.get(row)!));
-    const included = new Set(matched);
+    const ancestors = new Set<string>();
     this.rows.forEach((row, index) => {
       if (!matched.has(keys[index]!)) return;
       const visited = new Set<string>();
       let parentKey = parentOf(row);
       while (parentKey && !visited.has(parentKey)) {
         visited.add(parentKey);
-        included.add(parentKey);
+        ancestors.add(parentKey);
         const parent = rowByKey.get(parentKey);
         parentKey = parent ? parentOf(parent) : null;
       }
     });
-    const ancestorOnly = new Set([...included].filter((key) => !matched.has(key)));
-    return { rows: this.rows.filter((_row, index) => included.has(keys[index]!)), ancestorOnly };
+    const searching = this.searchOpensPath && this.#term() !== "";
+    const below = new Set<string>();
+    if (searching) {
+      const active = this.#activeFilters();
+      let grew = true;
+      while (grew) {
+        grew = false;
+        this.rows.forEach((row, index) => {
+          const key = keys[index]!;
+          const parent = parentOf(row);
+          if (matched.has(key) || below.has(key) || parent === null) return;
+          if (!matched.has(parent) && !below.has(parent)) return;
+          if (!this.#passesFilters(row, active)) return;
+          below.add(key);
+          grew = true;
+        });
+      }
+    }
+    const included = new Set([...matched, ...ancestors, ...below]);
+    const ancestorOnly = new Set(
+      [...ancestors].filter((key) => !matched.has(key) && !below.has(key)),
+    );
+    return {
+      rows: this.rows.filter((_row, index) => included.has(keys[index]!)),
+      ancestorOnly,
+      heldOpen: searching ? ancestors : ancestorOnly,
+    };
   }
 
   #treeRows(
@@ -767,18 +917,93 @@ export class WtDataTable<Row = unknown> extends LitElement {
         const key = keyOf(row, indexOf.get(row)!);
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
         out.push({ row, key, depth, hasChildren });
-        if (hasChildren && (!this.collapsed.has(key) || forcedOpen.has(key))) walk(key, depth + 1);
+        if (
+          hasChildren &&
+          (!this.collapsed.has(key) || forcedOpen.has(key) || !this.rowCollapsible(row))
+        )
+          walk(key, depth + 1);
       }
     };
     walk("", 0);
     return out;
   }
 
-  #toggle(key: string): void {
+  #rowsByKey(): Map<string, Row> {
+    const byKey = new Map<string, Row>();
+    this.rows.forEach((row, index) => {
+      const key = this.rowKey(row, index);
+      if (!byKey.has(key)) byKey.set(key, row);
+    });
+    return byKey;
+  }
+
+  #setOpen(keys: readonly string[], open: boolean): void {
     const next = new Set(this.collapsed);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+    const remembered = this.#rememberedOpen();
+    for (const key of keys) {
+      if (open) {
+        next.delete(key);
+        remembered.add(key);
+      } else {
+        next.add(key);
+        remembered.delete(key);
+      }
+    }
     this.collapsed = next;
+    if (!this.rememberExpanded || !this.viewKey) return;
+    try {
+      localStorage.setItem(`${this.viewKey}:expanded`, JSON.stringify([...remembered]));
+    } catch {
+      // The remembered branches are a convenience; the table works without them.
+    }
+  }
+
+  #toggle(key: string): void {
+    const expanded = this.collapsed.has(key);
+    this.#setOpen([key], expanded);
+    this.dispatchEvent(
+      new CustomEvent("wt-expand-change", {
+        detail: { key, expanded },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Whether a branch shows its children; a key the table has never closed reads as open. */
+  isExpanded(key: string): boolean {
+    return !this.collapsed.has(key);
+  }
+
+  /** Opens or closes one branch as its toggle would, without reporting it as a person's change. */
+  setExpanded(key: string, expanded: boolean): void {
+    const row = this.#rowsByKey().get(key);
+    if (!expanded && row !== undefined && !this.rowCollapsible(row)) return;
+    this.#setOpen([key], expanded);
+  }
+
+  /** The order the table draws these rows in when they share a parent. */
+  sortedSiblings(rows: readonly Row[]): Row[] {
+    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()));
+  }
+
+  /** Opens every closed branch above the row with this key, then scrolls the row into view. */
+  async revealRow(key: string): Promise<void> {
+    const byKey = this.#rowsByKey();
+    const closed: string[] = [];
+    const seen = new Set<string>();
+    const row = byKey.get(key);
+    let parent = row !== undefined && this.rowParent ? this.rowParent(row) : null;
+    while (parent !== null && byKey.has(parent) && !seen.has(parent)) {
+      seen.add(parent);
+      if (this.collapsed.has(parent)) closed.push(parent);
+      parent = this.rowParent!(byKey.get(parent)!);
+    }
+    if (closed.length > 0) this.#setOpen(closed, true);
+    await this.updateComplete;
+    this.shadowRoot!.querySelector(`tr[data-row-key="${CSS.escape(key)}"]`)?.scrollIntoView({
+      block: "nearest",
+    });
   }
 
   /** A pinned cell is layered above the row's activator, so a click on its empty space reaches the
@@ -887,11 +1112,50 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </td>`;
   }
 
+  #branchKeys(): string[] {
+    const byKey = this.#rowsByKey();
+    const parents = new Set<string>();
+    for (const row of this.rows) {
+      const parent = this.rowParent!(row);
+      if (parent === null || !byKey.has(parent)) continue;
+      const branch = byKey.get(parent)!;
+      if (this.rowCollapsible(branch) && (this.expandAllIncludes?.(branch) ?? true))
+        parents.add(parent);
+    }
+    return [...parents];
+  }
+
+  #renderExpandAll() {
+    if (!this.rowParent || this.expandAllLabel === "") return nothing;
+    const branches = this.#branchKeys();
+    const allOpen = branches.length > 0 && branches.every((key) => !this.collapsed.has(key));
+    return html`<button
+      type="button"
+      class="expand-all"
+      @click=${() => this.#setOpen(branches, !allOpen)}
+    >
+      ${allOpen ? this.collapseAllLabel : this.expandAllLabel}
+    </button>`;
+  }
+
   #renderToolbar() {
     const hasFilters = this.columns.some((column) => column.filter);
     const choosable = this.columns.filter((column) => column.choosable !== undefined);
-    if (!this.searchable && !hasFilters && choosable.length === 0) return nothing;
+    const slotted = (name: string) => this.querySelector(`:scope > [slot="${name}"]`) !== null;
+    const start = slotted("toolbar-start");
+    const end = slotted("toolbar-end");
+    const expandAll = this.#renderExpandAll();
+    if (
+      !this.searchable &&
+      !hasFilters &&
+      choosable.length === 0 &&
+      !start &&
+      !end &&
+      expandAll === nothing
+    )
+      return nothing;
     return html`<div class="table-toolbar">
+      <slot name="toolbar-start"></slot>
       ${
         this.searchable
           ? html`<input
@@ -954,7 +1218,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
             </div>`
           : nothing
       }
-      ${choosable.length > 0 ? this.#renderChooser(choosable) : nothing}
+      ${
+        expandAll !== nothing || end || choosable.length > 0
+          ? html`<div class="table-end">
+              ${expandAll}<slot name="toolbar-end"></slot>${
+                choosable.length > 0 ? this.#renderChooser(choosable) : nothing
+              }
+            </div>`
+          : nothing
+      }
     </div>`;
   }
 
@@ -1079,8 +1351,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
       `;
     }
 
-    const { rows: treeRows, ancestorOnly } = treeVisible!;
-    const entries = this.#treeRows(treeRows, ancestorOnly, sortColumn);
+    const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
+    const entries = this.#treeRows(treeRows, heldOpen, sortColumn);
     const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
     return html`
       ${this.#renderToolbar()}
@@ -1089,11 +1361,28 @@ export class WtDataTable<Row = unknown> extends LitElement {
           ${this.#renderHead(visibleKeys, shown)}
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
-              const expanded = !this.collapsed.has(key) || ancestorOnly.has(key);
+              const collapsible = this.rowCollapsible(row);
+              const held = heldOpen.has(key);
+              const expanded = !collapsible || !this.collapsed.has(key) || held;
               const cellContext = { ancestorOnly: ancestorOnly.has(key) };
+              const branch = hasChildren && collapsible && !held;
+              const mode = this.rowActivation?.(row) ?? "click";
+              const toggles = mode === "toggle" && branch;
+              const clicks = mode === "click" && this.rowClick !== undefined;
+              const toggleLabel = this.rowToggleLabel
+                ? this.rowToggleLabel(row, expanded)
+                : expanded
+                  ? this.collapseLabel
+                  : this.expandLabel;
+              const activate = toggles
+                ? () => this.#toggle(key)
+                : clicks
+                  ? () => this.rowClick!(row)
+                  : undefined;
               return html`<tr
                 data-row-key=${key}
                 role="row"
+                class=${classMap({ clickable: activate !== undefined })}
                 aria-level=${depth + 1}
                 aria-expanded=${hasChildren ? String(expanded) : nothing}
               >
@@ -1104,32 +1393,56 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       role="gridcell"
                       data-align=${column.align ?? "start"}
                       data-pinned=${column.pinned ?? nothing}
+                      data-row-activate=${column.activatesRow === false ? "false" : nothing}
+                      @click=${
+                        column.pinned && column.activatesRow !== false && activate !== undefined
+                          ? (event: Event) => {
+                              if (event.target === event.currentTarget) activate();
+                            }
+                          : nothing
+                      }
                     >
                       ${
                         ci === 0
-                          ? html`<span
-                              class="tree-cell"
-                              style=${`padding-inline-start: calc(${depth} * var(--wt-space-4))`}
-                            >
-                              ${
-                                hasChildren && !cellContext.ancestorOnly
+                          ? html`${
+                                toggles
                                   ? html`<button
-                                      class="tree-toggle"
-                                      aria-label=${
-                                        this.rowToggleLabel
-                                          ? this.rowToggleLabel(row, expanded)
-                                          : expanded
-                                            ? this.collapseLabel
-                                            : this.expandLabel
-                                      }
-                                      @click=${() => this.#toggle(key)}
-                                    >
-                                      ${expanded ? "▾" : "▸"}
-                                    </button>`
-                                  : html`<span class="tree-spacer"></span>`
-                              }
-                              ${column.cell(row, cellContext)}
-                            </span>`
+                                      class="row-activate"
+                                      aria-label=${toggleLabel}
+                                      aria-expanded=${String(expanded)}
+                                      @click=${(event: Event) => {
+                                        event.stopPropagation();
+                                        this.#toggle(key);
+                                      }}
+                                    ></button>`
+                                  : clicks
+                                    ? html`<button
+                                        class="row-activate"
+                                        aria-label=${this.rowClickLabel(row)}
+                                        @click=${() => this.rowClick!(row)}
+                                      ></button>`
+                                    : nothing
+                              }<span class="tree-cell" style=${`--tree-depth: ${depth}`}>
+                                ${
+                                  !branch
+                                    ? html`<span class="tree-spacer"></span>`
+                                    : toggles
+                                      ? html`<span class="tree-arrow" aria-hidden="true"
+                                          >${expanded ? "▾" : "▸"}</span
+                                        >`
+                                      : html`<button
+                                          class="tree-toggle"
+                                          aria-label=${toggleLabel}
+                                          @click=${(event: Event) => {
+                                            event.stopPropagation();
+                                            this.#toggle(key);
+                                          }}
+                                        >
+                                          ${expanded ? "▾" : "▸"}
+                                        </button>`
+                                }
+                                ${column.cell(row, cellContext)}
+                              </span>`
                           : column.cell(row, cellContext)
                       }
                     </td>`,

@@ -137,6 +137,7 @@ async function flush(el: CatalogueScreen): Promise<void> {
 }
 
 afterEach(cleanupWidgets);
+afterEach(() => localStorage.clear());
 
 describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (theme) => {
   it("renders accessibly with catalogues loaded", async () => {
@@ -185,7 +186,13 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
+    el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+      new CustomEvent("add-product", {
+        detail: { categoryId: null },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await el.updateComplete;
     el.shadowRoot!.querySelector("dashboard-product-editor")!.dispatchEvent(
       new CustomEvent("wt-submit", {

@@ -864,7 +864,7 @@ report's, a printer scan's, the Servers screen's and a list's "No products use t
 Screens that filter before the table (Orders, the catalogue browser while searching, Users and
 Payments while their filters hide what exists, and the Units delete dialog's products) show the
 no-matches sentence themselves. Not covered: empty sentences outside a `wt-data-table` (floor,
-kitchen, devices and others) still use "Aún no hay" and other shapes.
+kitchen, devices and others) still use "Aún no hay" and other shapes. (2026-10-02: since A208 the Products tree searches inside the table, so the catalogue browser no longer chooses its own empty sentence.)
 
 **An empty field's label is the same size as a typed value (A184, owner 2026-10-02) — DONE (#1035).** The
 owner, on a screenshot of a form with Password and PIN empty: _"the fieldname inside the field is
@@ -1030,16 +1030,7 @@ Edit does. A click elsewhere on the row, or Enter on the row, opens the option's
 while the drag handle, the Default radio and the row menu keep doing their own thing. The extras
 list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
 
-**Clicking a product's row on the Products screen opens it (A205, owner 2026-10-02) — FOLDED INTO A208** (the category tree spec builds it; kept here for the owner's words). The
-owner: _"clicking on a product row should open the edit screen"_. The Products table
-(`apps/dashboard/src/widgets/product-list.ts`) gives `wt-data-table` no `rowClick`, so a product
-opens only from Edit in its row menu; the Modifiers, Units and Orders screens already open a row on
-a click (`wt-data-table`'s row activation). **Wanted:** a click on a product's row, or Enter on it,
-does what Edit in that row's menu does — a variant's row opens that variant, as its own Edit does.
-The drag grip, the dragging of a row onto a folder, the selection checkbox and the row menu keep
-doing their own thing, and a drag that ends where it started opens nothing. Read as: a click on a
-folder's row opens the folder, as its name does today — ask if folder rows were meant to stay as
-they are. LOOK at 1280 and 390, light and dark.
+**Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
 **The dashboard recovers by itself when the server comes back after a restart (A206, owner
 2026-10-02) — DONE (#1052).** Reproduced with the server serving the built dashboard itself, as the box does
@@ -1079,14 +1070,9 @@ locations read fails.
 2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
 the dark banner; the running figure stays visible. Seen at 1280 wide on every screen.
 
-**The Products screen as a category tree (A208, owner 2026-10-02) — OPEN, spec and plan
-approved, queued in lane A.** The owner, on two screenshots: _"this layout is messy, needs tidying"_,
-with folders that open in place, a clearer drag, adds from each category's ⋮ menu and prices that
-show their unit. Spec:
-[2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md).
-Plan: [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
-It builds A205 (a product row's click opens it) and replaces A207 (a blue Add product button in the
-header), which the owner cancelled: the header loses that button.
+**The Products screen as a category tree (A208) — DONE.** Spec
+[2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md);
+plan [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
@@ -1274,12 +1260,11 @@ product has one category (`products.categoryId`). **Decided:** the Add category 
 `editor.add_category`. **Wanted:** the product's full path, "Drinks › Alcoholic drinks ›
 Cocktails", shown on the editor. **Open, ask before building:** whether the "Main category"
 dropdown goes too. Two things it does that dragging may not: a variant's empty category means its
-parent's, and the dropdown is where a variant is given a category of its own — check whether
-A208's tree can drag a variant on its own before dropping it; and a product made from "All
+parent's, and the dropdown is where a variant is given a category of its own — A208's tree
+cannot drag a variant on its own, because a press on a variant row starts no drag; and a product made from "All
 products" has no category until it is dragged. **Clash with A208:** its spec keeps the category
-form (`apps/dashboard/src/widgets/category-form.ts`) for one reason, this button, so if this
-lands after A208 the form has no caller left; if it lands before, A208's spec and plan change
-too.
+form (`apps/dashboard/src/widgets/category-form.ts`) for one reason, this button, so once this
+lands the form has no caller left.
 **Decided (owner, 2026-10-02, from mockups, choosing B of three):** the "Main category" field
 goes. Under the window's title the product's path reads "Drinks › Alcoholic drinks › Cocktails"
 with a small "Change" link after it; Change opens the category list as an indented tree, anchored
@@ -1368,9 +1353,7 @@ base", the new `editor.base_price`) while a variant is Active; with a unit, "per
 per kg" or "Base price per kg" as before. The same holds on a variant's own page; the variant
 window, which has no unit button, labels it "Price" (`unitShortLabel` and `renderPrice` in
 `apps/dashboard/src/widgets/product-editor.ts`, `editor.price` in
-`apps/dashboard/src/i18n/strings.ts`). Left open: the unbuilt A208 branch
-(`feat/products-category-tree`) has a comment in `product-list.ts` citing `unitShortLabel` as
-returning Each, which is no longer true; fix it when that branch is rebased.
+`apps/dashboard/src/i18n/strings.ts`).
 
 **The variants' status filter becomes a "Show inactive" link (A217) — DONE (#1065).** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
@@ -1504,8 +1487,8 @@ variant's unit, and variants holding a unit of their own are cleared (allowed be
 record, so this takes the full review path (risk trigger: fiscal invariants); trace every reader
 of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a variant's own unit
 ("or a parent's, which its variants without their own inherit") and gets simpler. The owner also
-noted the Products list shows no unit in its price column; A208's spec already has it ("€19.00
-each", "€48.00 / kg").
+noted the Products list shows no unit in its price column; A208 builds it ("€19.00 each",
+"€48.00 / kg").
 
 **A product with variants is not offered in an extras list's product dropdown (A223, owner
 2026-10-02) — DECIDED, ready to build.** Today the dropdown (`extra-list-form.ts`, `#itemsSection`) offers every

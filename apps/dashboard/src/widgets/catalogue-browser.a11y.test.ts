@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -48,7 +49,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
-  it.each(["top", "folder", "search", "all", "form", "selection", "move", "delete"])(
+  it.each(["top", "open", "search", "naming", "selection", "move", "delete"])(
     "renders %s accessibly",
     async (state) => {
       const { el, host } = await mountWidget<CatalogueBrowser>(
@@ -75,8 +76,6 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
             defaultStationId: null,
             stations: [],
           },
-          folderId: state === "folder" ? "b" : null,
-          view: state === "all" ? "all" : "folders",
         },
         theme,
       );
@@ -86,14 +85,30 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
         );
         await el.updateComplete;
       }
-      if (state === "form") {
-        el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-        await el.updateComplete;
-        await el.shadowRoot!.querySelector("dashboard-category-form")!.updateComplete;
-      }
       const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
       await list.updateComplete;
       await list.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      if (state === "naming") {
+        const table = list.shadowRoot!.querySelector("wt-data-table")!;
+        vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.invalid" });
+        table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-category-d"]')!.click();
+        await vi.waitFor(() =>
+          expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
+        );
+        await userEvent.keyboard("Juice{Enter}");
+        await vi.waitFor(() =>
+          expect(
+            table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error,
+          ).not.toBe(""),
+        );
+      }
+      if (state === "open") {
+        const table = list.shadowRoot!.querySelector("wt-data-table")!;
+        table
+          .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!
+          .click();
+        await table.updateComplete;
+      }
       if (["selection", "move", "delete"].includes(state)) {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
         await el.updateComplete;

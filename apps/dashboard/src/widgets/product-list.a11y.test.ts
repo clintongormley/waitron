@@ -153,7 +153,10 @@ const products: Product[] = [
 afterEach(cleanupWidgets);
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
 // a choice one test makes would otherwise be restored into the next one.
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
+});
 
 describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme) => {
   it("renders accessibly", async () => {
@@ -207,7 +210,77 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    table.shadowRoot!.querySelector("wt-row-actions")!.show();
+    table
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-p1"]',
+      )!
+      .show();
     await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with the All products menu open", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products, canAddProduct: true },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-root"]',
+      )!
+      .show();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with a category's menu open", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products,
+        categories: [{ id: "cat-1", name: "Comida", parentId: null }],
+        canAddProduct: true,
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-folder-cat-1"]',
+      )!
+      .show();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly mid-drag", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products, categories: [{ id: "drinks", name: "Bebidas", parentId: null }] },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const at = (element: Element, type: string) => {
+      const box = element.getBoundingClientRect();
+      element.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          composed: true,
+          pointerId: 1,
+          clientX: box.x + 8,
+          clientY: box.y + 8,
+        }),
+      );
+    };
+    const over = table.shadowRoot!.querySelector(
+      'tr[data-row-key="folder:drinks"] [part~="folder-cell"]',
+    )!;
+    at(table.shadowRoot!.querySelector('[part~="product-cell"]')!, "pointerdown");
+    at(over, "pointermove");
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    at(over, "pointercancel");
   });
 });

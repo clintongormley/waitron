@@ -827,6 +827,446 @@ test("a branch the person expanded stays open when the rows are refreshed", asyn
   expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
 });
 
+test("a smaller group sorts above a larger one among siblings, in both directions", async () => {
+  const groupOf = new Map([
+    ["zest", 0],
+    ["apple", 1],
+    ["bread", 1],
+  ]);
+  const rows: TreeRow[] = [
+    { id: "food", parent: null, name: "Food" },
+    { id: "apple", parent: "food", name: "Apple" },
+    { id: "zest", parent: "food", name: "Zest" },
+    { id: "bread", parent: "food", name: "Bread" },
+  ];
+  const el = await treeTable({ rows, rowGroup: (row: TreeRow) => groupOf.get(row.id) ?? 0 });
+  const sort = el.shadowRoot!.querySelector<HTMLButtonElement>("th button.sort")!;
+  sort.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "zest", "apple", "bread"]);
+  sort.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "zest", "bread", "apple"]);
+});
+
+test("groups order a flat table's rows even with no sort column", async () => {
+  const el = await table({ rowGroup: (row: Row) => (row.id === "a" ? 0 : 1) });
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
+});
+
+test("an always-open branch draws no toggle, starts open under initiallyCollapsed, and cannot be closed", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    rowCollapsible: (row: TreeRow) => row.id !== "food",
+  });
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  const food = el.shadowRoot!.querySelector('tr[data-row-key="food"]')!;
+  expect(food.querySelector("button.tree-toggle")).toBeNull();
+  expect(food.querySelector(".tree-spacer")).not.toBeNull();
+  expect(food.getAttribute("aria-expanded")).toBe("true");
+  expect(el.isExpanded("food")).toBe(true);
+  el.setExpanded("food", false);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  expect(el.isExpanded("food")).toBe(true);
+});
+
+test("a branch closed before it became always-open is drawn open, with no toggle", async () => {
+  const el = await treeTable({ initiallyCollapsed: true });
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  el.rowCollapsible = (row: TreeRow) => row.id !== "food";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  const food = el.shadowRoot!.querySelector('tr[data-row-key="food"]')!;
+  expect(food.querySelector("button.tree-toggle")).toBeNull();
+  expect(food.getAttribute("aria-expanded")).toBe("true");
+});
+
+test("setExpanded opens and closes a branch, isExpanded says which, and neither reports a person's change", async () => {
+  const el = await treeTable({ initiallyCollapsed: true });
+  const changes = vi.fn();
+  el.addEventListener("wt-expand-change", changes);
+  expect(el.isExpanded("food")).toBe(false);
+  el.setExpanded("food", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  expect(el.isExpanded("food")).toBe(true);
+  el.setExpanded("food", false);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  expect(el.isExpanded("food")).toBe(false);
+  expect(changes).not.toHaveBeenCalled();
+});
+
+test("a person's toggle reports the branch and whether it is now open, across shadow boundaries, and stops its click", async () => {
+  const el = (await mountInShadowRoot(
+    '<wt-data-table aria-label="Categories"></wt-data-table>',
+  )) as WtDataTable<TreeRow>;
+  Object.assign(el, {
+    rows: treeRows,
+    columns: treeColumns,
+    rowKey: (row: TreeRow) => row.id,
+    rowParent: (row: TreeRow) => row.parent,
+  });
+  await el.updateComplete;
+  const seen: unknown[] = [];
+  const record = (event: Event) => seen.push((event as CustomEvent).detail);
+  const clicks = vi.fn();
+  document.addEventListener("wt-expand-change", record);
+  document.addEventListener("click", clicks);
+  onTestFinished(() => {
+    document.removeEventListener("wt-expand-change", record);
+    document.removeEventListener("click", clicks);
+  });
+  const toggle = () =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] button.tree-toggle')!;
+  toggle().click();
+  await el.updateComplete;
+  toggle().click();
+  await el.updateComplete;
+  expect(seen).toEqual([
+    { key: "food", expanded: false },
+    { key: "food", expanded: true },
+  ]);
+  expect(clicks).not.toHaveBeenCalled();
+});
+
+test("sortedSiblings orders rows as the table draws siblings: by group, then by the sorted column", async () => {
+  const el = await treeTable({
+    sortKey: "name",
+    sortDirection: "descending",
+    rowGroup: (row: TreeRow) => (row.id === "drinks" ? 0 : 1),
+  });
+  const food = treeRows[0]!;
+  const drinks = treeRows[3]!;
+  expect(el.sortedSiblings([food, drinks]).map(({ id }) => id)).toEqual(["drinks", "food"]);
+  el.rowGroup = undefined;
+  expect(el.sortedSiblings([drinks, food]).map(({ id }) => id)).toEqual(["food", "drinks"]);
+});
+
+test("revealRow opens every closed branch above a row and scrolls the row into view", async () => {
+  const el = await treeTable({ initiallyCollapsed: true });
+  const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+  await el.revealRow("eggs");
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  expect(scrolled).toHaveBeenCalledExactlyOnceWith({ block: "nearest" });
+  expect(scrolled.mock.contexts[0]).toBe(el.shadowRoot!.querySelector('tr[data-row-key="eggs"]'));
+});
+
+test("revealRow of a key with no row opens nothing and scrolls nothing", async () => {
+  const el = await treeTable({ initiallyCollapsed: true });
+  const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+  await el.revealRow("missing");
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  expect(scrolled).not.toHaveBeenCalled();
+});
+
+test("revealRow on a flat table opens nothing and scrolls the row into view", async () => {
+  const el = await table();
+  const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+  await el.revealRow("a");
+  expect(scrolled).toHaveBeenCalledExactlyOnceWith({ block: "nearest" });
+  expect(scrolled.mock.contexts[0]).toBe(el.shadowRoot!.querySelector('tr[data-row-key="a"]'));
+});
+
+test("revealRow of a row whose parent is not in the table scrolls it into view", async () => {
+  const el = await treeTable({
+    rows: [...treeRows, { id: "stray", parent: "gone", name: "Stray" }],
+    initiallyCollapsed: true,
+  });
+  const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+  await el.revealRow("stray");
+  expect(treeKeys(el)).toEqual(["food", "drinks", "stray"]);
+  expect(scrolled).toHaveBeenCalledExactlyOnceWith({ block: "nearest" });
+  expect(scrolled.mock.contexts[0]).toBe(el.shadowRoot!.querySelector('tr[data-row-key="stray"]'));
+});
+
+test("revealRow stops at parents that point at each other", async () => {
+  const el = await treeTable({ rows: loopingRows });
+  await expect(el.revealRow("x")).resolves.toBeUndefined();
+});
+
+test("a tree row with rowClick opens from its stretched activator, and its arrow still only toggles", async () => {
+  const opened: string[] = [];
+  const el = await treeTable({
+    rowClick: (row: TreeRow) => opened.push(row.id),
+    rowClickLabel: (row: TreeRow) => `Open ${row.name}`,
+  });
+  const activator = el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="eggs"] .row-activate',
+  )!;
+  expect(activator.getAttribute("aria-label")).toBe("Open Eggs");
+  expect(activator.closest("tr")!.classList.contains("clickable")).toBe(true);
+  activator.click();
+  expect(opened).toEqual(["eggs"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(opened).toEqual(["eggs"]);
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("a toggling branch opens and closes from its row, says which it will do, and draws its arrow as a picture", async () => {
+  const opened: string[] = [];
+  const el = await treeTable({
+    rowActivation: (row: TreeRow) => (row.id === "eggs" ? "click" : "toggle"),
+    rowClick: (row: TreeRow) => opened.push(row.id),
+    rowToggleLabel: (row: TreeRow, expanded: boolean) =>
+      `${expanded ? "Close" : "Open"} ${row.name}`,
+  });
+  const activator = () =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="break"] .row-activate')!;
+  const arrow = () => el.shadowRoot!.querySelector('tr[data-row-key="break"] .tree-arrow')!;
+  expect(activator().getAttribute("aria-label")).toBe("Close Breakfast");
+  expect(activator().getAttribute("aria-expanded")).toBe("true");
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
+  expect(arrow().getAttribute("aria-hidden")).toBe("true");
+  expect(arrow().textContent!.trim()).toBe("▾");
+  activator().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  expect(activator().getAttribute("aria-label")).toBe("Open Breakfast");
+  expect(activator().getAttribute("aria-expanded")).toBe("false");
+  expect(arrow().textContent!.trim()).toBe("▸");
+  expect(opened).toEqual([]);
+  // A toggling row with nothing under it has nothing to do, so it is not clickable.
+  const drinks = el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!;
+  expect(drinks.querySelector(".row-activate")).toBeNull();
+  expect(drinks.classList.contains("clickable")).toBe(false);
+});
+
+test("a row whose activation is none draws no activator, even with rowClick set", async () => {
+  const el = await treeTable({
+    rowActivation: (row: TreeRow) => (row.id === "food" ? "none" : "click"),
+    rowClick: (row: TreeRow) => row.id,
+  });
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] .row-activate')).toBeNull();
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="drinks"] .row-activate')).not.toBeNull();
+});
+
+test("Enter on a toggling row opens and closes it, and reports each change once", async () => {
+  const el = await treeTable({ rowActivation: () => "toggle" });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-expand-change", (event) => seen.push((event as CustomEvent).detail));
+  const activator = () =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] .row-activate')!;
+  activator().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  activator().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  expect(seen).toEqual([
+    { key: "food", expanded: false },
+    { key: "food", expanded: true },
+  ]);
+});
+
+test("a real click on a control inside a toggling row does not toggle it", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [
+      ...treeColumns,
+      {
+        key: "action",
+        label: "Actions",
+        cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElement>('button[aria-label="Edit Food"]')!,
+  );
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+});
+
+test("a real click on a pinned cell's empty space toggles a toggling tree row once", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [
+      ...treeColumns,
+      {
+        key: "action",
+        label: "Actions",
+        pinned: "end",
+        cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  const cell = el.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="food"] td[data-pinned="end"]',
+  )!;
+  const box = cell.getBoundingClientRect();
+  await userEvent.click(cell, { position: { x: box.width - 2, y: 2 } });
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+/** A resize is reported after layout and before the next paint, so the table has seen a new width by
+ * the second frame. */
+async function frames(): Promise<void> {
+  for (let i = 0; i < 2; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+test("a phone-width tree indents each level half as far, and no deeper than four levels", async () => {
+  const ids = ["a", "b", "c", "d", "e", "f"];
+  const deep: TreeRow[] = ids.map((id, index) => ({
+    id,
+    parent: index === 0 ? null : ids[index - 1]!,
+    name: id.toUpperCase(),
+  }));
+  const el = await treeTable({ rows: deep });
+  host.style.setProperty("--wt-space-2", "8px");
+  host.style.setProperty("--wt-space-4", "16px");
+  const indent = (key: string) =>
+    getComputedStyle(
+      el.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
+    ).paddingInlineStart;
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+  expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "8px", "32px", "32px"]);
+  el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "16px", "64px", "80px"]);
+});
+
+// The width compared is the scroll box's inside its border, which is what clientWidth reports here.
+test("the phone indent starts at a 440px box, not at 441px, and a flat table never takes it", async () => {
+  const el = await treeTable();
+  host.style.setProperty("--wt-space-2", "8px");
+  host.style.setProperty("--wt-space-4", "16px");
+  const indent = () =>
+    getComputedStyle(
+      el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="break"] .tree-cell')!,
+    ).paddingInlineStart;
+  const box = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  el.style.width = "443px";
+  await frames();
+  expect(box.clientWidth).toBe(441);
+  expect(indent()).toBe("16px");
+  el.style.width = "442px";
+  await frames();
+  expect(box.clientWidth).toBe(440);
+  expect(indent()).toBe("8px");
+  cleanup();
+  const flat = await table();
+  flat.style.width = "360px";
+  await frames();
+  expect(flat.hasAttribute("narrow")).toBe(false);
+});
+
+test("a tree that becomes a flat table drops its phone indent", async () => {
+  const el = await treeTable();
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+  el.rowParent = undefined;
+  await el.updateComplete;
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+});
+
+test("a tree stops watching its width while it is out of the page, and watches again when it returns", async () => {
+  const el = await treeTable();
+  el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  el.remove();
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  el.style.width = "360px";
+  host.append(el);
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+});
+
+test("lines a toggling branch's name up with the text beside it", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [...treeColumns, { key: "id", label: "Key", cell: (r: TreeRow) => r.id }],
+  });
+  for (const row of el.shadowRoot!.querySelectorAll("tbody tr")) {
+    const [name, key] = row.querySelectorAll("td");
+    expect(
+      Math.abs(textBox(name!.querySelector(".tree-cell")!).bottom - textBox(key!).bottom),
+      row.getAttribute("data-row-key")!,
+    ).toBeLessThanOrEqual(1);
+  }
+});
+
+test("a tree without rowClick draws no activator on a row left to click", async () => {
+  const el = await treeTable();
+  expect(el.shadowRoot!.querySelector(".row-activate")).toBeNull();
+  expect(el.shadowRoot!.querySelector("tr.clickable")).toBeNull();
+});
+
+test("a toggling row's activator stops its click once it has toggled", async () => {
+  const el = await treeTable({ rowActivation: () => "toggle" });
+  const clicks = vi.fn();
+  el.addEventListener("click", clicks);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] .row-activate')!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  expect(clicks).not.toHaveBeenCalled();
+});
+
+test("a real click on a control inside a toggling tree row's pinned cell does not toggle it", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [
+      ...treeColumns,
+      {
+        key: "action",
+        label: "Actions",
+        pinned: "end",
+        cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElement>('button[aria-label="Edit Food"]')!,
+  );
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+});
+
+test.each([
+  { position: "unpinned", pinned: undefined },
+  { position: "pinned", pinned: "end" as const },
+])(
+  "a $position tree column can keep its blank space outside row activation",
+  async ({ pinned }) => {
+    const el = await treeTable({
+      rowActivation: () => "toggle",
+      columns: [
+        ...treeColumns,
+        {
+          key: "action",
+          label: "Actions",
+          pinned,
+          activatesRow: false,
+          cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+        },
+      ],
+    });
+    const cell = el.shadowRoot!.querySelector<HTMLElement>(
+      'tr[data-row-key="food"] td:last-child',
+    )!;
+    const box = cell.getBoundingClientRect();
+    expect(el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2)).toBe(cell);
+    await userEvent.click(cell, { position: { x: 2, y: 2 } });
+    await el.updateComplete;
+    expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  },
+);
+
 test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only", async () => {
   const treeRows: TreeRow[] = [
     { id: "food", parent: null, name: "Food" },
@@ -3066,4 +3506,475 @@ test("an empty table whose screen puts nothing in the empty-action slot draws a 
   expect(box(empty).width).toBeCloseTo(box(searched).width, 1);
   expect(box(empty).height).toBeGreaterThan(0);
   expect(box(empty).height).toBeCloseTo(box(searched).height, 1);
+});
+
+test("a tree's Expand all opens every branch, then reads Collapse all, which closes them", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+  });
+  const button = () => el.shadowRoot!.querySelector<HTMLButtonElement>(".table-end .expand-all")!;
+  expect(button().textContent!.trim()).toBe("Expand all");
+  button().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  expect(button().textContent!.trim()).toBe("Collapse all");
+  button().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  expect(button().textContent!.trim()).toBe("Expand all");
+});
+
+test("Expand all reads Expand all again once one branch is closed, and Collapse all leaves an always-open branch open", async () => {
+  const el = await treeTable({
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+    rowCollapsible: (row: TreeRow) => row.id !== "food",
+  });
+  const button = () => el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  expect(button().textContent!.trim()).toBe("Collapse all");
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="break"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(button().textContent!.trim()).toBe("Expand all");
+  button().click();
+  await el.updateComplete;
+  button().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+});
+
+test("draws no Expand all on a flat table, or on a tree given no label", async () => {
+  expect(
+    (await table({ expandAllLabel: "Expand all" })).shadowRoot!.querySelector(".expand-all"),
+  ).toBeNull();
+  cleanup();
+  expect((await treeTable()).shadowRoot!.querySelector(".expand-all")).toBeNull();
+});
+
+test("puts what its consumer slots at the toolbar's start, before the search box, and at its end, before the chooser", async () => {
+  const el = (await mount(
+    `<wt-data-table aria-label="Users"
+      ><button slot="toolbar-start" data-test="start">Find</button
+      ><button slot="toolbar-end" data-test="end">Select</button></wt-data-table
+    >`,
+  )) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns: choosable, rowKey: (row: Row) => row.id, searchable: true });
+  await el.updateComplete;
+  el.style.width = "1000px";
+  const start = el.querySelector<HTMLElement>('[data-test="start"]')!;
+  const end = el.querySelector<HTMLElement>('[data-test="end"]')!;
+  expect(start.assignedSlot!.closest(".table-toolbar")).not.toBeNull();
+  expect(end.assignedSlot!.closest(".table-end")).not.toBeNull();
+  const search = el.shadowRoot!.querySelector(".table-search")!.getBoundingClientRect();
+  expect(start.getBoundingClientRect().right).toBeLessThanOrEqual(search.left);
+  expect(end.getBoundingClientRect().right).toBeLessThanOrEqual(
+    trigger(el).getBoundingClientRect().left,
+  );
+});
+
+test("draws the toolbar for slotted controls alone", async () => {
+  const el = (await mount(
+    '<wt-data-table aria-label="Users"><button slot="toolbar-end">Select</button></wt-data-table>',
+  )) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns, rowKey: (row: Row) => row.id });
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector(".table-toolbar .table-end slot[name=toolbar-end]"),
+  ).not.toBeNull();
+});
+
+test("searchTerm narrows a table whose search box is off, keeping a tree match's ancestors", async () => {
+  const el = await treeTable({
+    rows: [...treeRows, { id: "cola", parent: "drinks", name: "Cola" }],
+    searchTerm: " EGGS ",
+  });
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks", "cola"]);
+});
+
+test("searchTerm is ignored while the table draws its own search box", async () => {
+  const el = await table({ searchable: true, searchTerm: "ada" });
+  expect(rowText(el)).toEqual(["Bea2Edit", "Ada10Edit"]);
+});
+
+const pathRows: TreeRow[] = [
+  { id: "food", parent: null, name: "Food" },
+  { id: "break", parent: "food", name: "Food at breakfast" },
+  { id: "eggs", parent: "break", name: "Eggs" },
+  { id: "drinks", parent: null, name: "Drinks" },
+];
+
+test("without searchOpensPath a search keeps today's rule: a matching branch stays as it was, and nothing under a match is kept", async () => {
+  const el = await treeTable({ initiallyCollapsed: true, rows: pathRows, searchTerm: "food" });
+  expect(treeKeys(el)).toEqual(["food"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
+});
+
+test("while searching, a branch that matches and holds a match is held open without a toggle", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    rows: pathRows,
+    searchTerm: "food",
+    searchOpensPath: true,
+  });
+  expect(treeKeys(el)).toEqual(["food", "break"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')).toBeNull();
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="break"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("while searching, what passes the filters under a match stays reachable, closed as it was", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    searchTerm: "breakfast",
+    searchOpensPath: true,
+  });
+  expect(treeKeys(el)).toEqual(["food", "break"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="break"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+});
+
+test("a filter alone holds open only a branch kept to place a match, not one that passes it", async () => {
+  const columns: DataTableColumn<TreeRow>[] = [
+    {
+      key: "name",
+      label: "Name",
+      cell: (row) => row.name,
+      sortValue: (row) => row.name,
+      filter: {
+        label: "Kind",
+        allLabel: "Any kind",
+        value: (row) => (row.id === "food" || row.id === "eggs" ? "keep" : "drop"),
+        options: [
+          { value: "keep", label: "Keep" },
+          { value: "drop", label: "Drop" },
+        ],
+        initial: "keep",
+      },
+    },
+  ];
+  const el = await treeTable({ columns, initiallyCollapsed: true });
+  expect(treeKeys(el)).toEqual(["food"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+});
+
+test("remembers the branches a person opens under the view key, and opens them on the next visit", async () => {
+  const props = { initiallyCollapsed: true, viewKey: "test.tree", rememberExpanded: true };
+  const first = await treeTable(props);
+  first
+    .shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] button.tree-toggle')!
+    .click();
+  await first.updateComplete;
+  expect(JSON.parse(localStorage.getItem("test.tree:expanded")!)).toEqual(["food"]);
+  cleanup();
+  const second = await treeTable(props);
+  expect(treeKeys(second)).toEqual(["food", "break", "drinks"]);
+  second
+    .shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] button.tree-toggle')!
+    .click();
+  await second.updateComplete;
+  expect(JSON.parse(localStorage.getItem("test.tree:expanded")!)).toEqual([]);
+});
+
+test("Expand all and Collapse all are remembered too", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    viewKey: "test.tree",
+    rememberExpanded: true,
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+  });
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.click();
+  await el.updateComplete;
+  expect(JSON.parse(localStorage.getItem("test.tree:expanded")!).sort()).toEqual(["break", "food"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.click();
+  await el.updateComplete;
+  expect(JSON.parse(localStorage.getItem("test.tree:expanded")!)).toEqual([]);
+});
+
+test("remembers nothing without rememberExpanded", async () => {
+  const el = await treeTable({ initiallyCollapsed: true, viewKey: "test.tree" });
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(localStorage.getItem("test.tree:expanded")).toBeNull();
+});
+
+test.each([
+  ["not JSON", "{"],
+  ["a number", "5"],
+  ["an object", '{"food":true}'],
+  ["a key with no row", '["gone"]'],
+])("a stored open list that is %s opens nothing", async (_label, stored) => {
+  localStorage.setItem("test.tree:expanded", stored);
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    viewKey: "test.tree",
+    rememberExpanded: true,
+  });
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("a stored open list keeps its keys and drops anything that is not one", async () => {
+  localStorage.setItem("test.tree:expanded", '[5, "food"]');
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    viewKey: "test.tree",
+    rememberExpanded: true,
+  });
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+});
+
+test("blocked local storage leaves every branch closed, and opening one still works", async () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    viewKey: "test.tree",
+    rememberExpanded: true,
+  });
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+});
+
+test("the Expand all button paints from the theme tokens and draws the focus ring", async () => {
+  const el = await treeTable({ expandAllLabel: "Expand all", collapseAllLabel: "Collapse all" });
+  host.style.setProperty("--wt-tap-min", "52px");
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  expect(getComputedStyle(button).borderColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(button).backgroundColor).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(button).color).toBe("rgb(10, 11, 12)");
+  expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  button.focus();
+  await userEvent.keyboard("{Tab}");
+  button.focus();
+  expect(button.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(button).outlineColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(button).outlineStyle).toBe("solid");
+});
+
+test("expandAllIncludes limits Expand all, Collapse all and the button's label to the branches it names", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+    expandAllIncludes: (row: TreeRow) => row.id === "food",
+  });
+  const button = () => el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  expect(button().textContent!.trim()).toBe("Expand all");
+  button().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  expect(button().textContent!.trim()).toBe("Collapse all");
+  el.setExpanded("break", true);
+  await el.updateComplete;
+  button().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  expect(button().textContent!.trim()).toBe("Expand all");
+  el.setExpanded("food", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+});
+
+test("while searching, a row under a match that the filters drop stays out", async () => {
+  const columns: DataTableColumn<TreeRow>[] = [
+    {
+      key: "name",
+      label: "Name",
+      cell: (row) => row.name,
+      sortValue: (row) => row.name,
+      filter: {
+        label: "Kind",
+        allLabel: "Any kind",
+        value: (row) => (row.id === "eggs" ? "drop" : "keep"),
+        options: [
+          { value: "keep", label: "Keep" },
+          { value: "drop", label: "Drop" },
+        ],
+        initial: "keep",
+      },
+    },
+  ];
+  const el = await treeTable({ columns, searchTerm: "breakfast", searchOpensPath: true });
+  expect(treeKeys(el)).toEqual(["food", "break"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
+});
+
+test("Collapse all never counts an always-open branch as closed", async () => {
+  const el = await treeTable({
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+    rowCollapsible: (row: TreeRow) => row.id !== "food",
+  });
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.click();
+  await el.updateComplete;
+  expect(el.isExpanded("food")).toBe(true);
+  expect(el.isExpanded("break")).toBe(false);
+});
+
+test("Expand all passes over a row whose parent is not in the table", async () => {
+  const el = await treeTable({
+    rows: [...treeRows, { id: "stray", parent: "gone", name: "Stray" }],
+    initiallyCollapsed: true,
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+    rowCollapsible: (row: TreeRow) => row.id !== "drinks",
+  });
+  const button = () => el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  button().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks", "stray"]);
+  expect(button().textContent!.trim()).toBe("Collapse all");
+});
+
+test("Expand all reads Expand all on a tree with no branch to open", async () => {
+  const el = await treeTable({
+    rows: [{ id: "food", parent: null, name: "Food" }],
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+  });
+  expect(el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.textContent!.trim()).toBe(
+    "Expand all",
+  );
+});
+
+test("draws the toolbar for a control slotted at its start alone", async () => {
+  const el = (await mount(
+    '<wt-data-table aria-label="Users"><button slot="toolbar-start">Find</button></wt-data-table>',
+  )) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns, rowKey: (row: Row) => row.id });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".table-toolbar slot[name=toolbar-start]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector(".table-end")).toBeNull();
+});
+
+test("rememberExpanded without a view key neither reads nor writes the browser's storage", async () => {
+  const read = vi.spyOn(Storage.prototype, "getItem");
+  const write = vi.spyOn(Storage.prototype, "setItem");
+  const el = await treeTable({ initiallyCollapsed: true, rememberExpanded: true });
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  expect(read).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+});
+
+test("a stored open list is not read without rememberExpanded", async () => {
+  localStorage.setItem("test.tree:expanded", '["food"]');
+  const el = await treeTable({ initiallyCollapsed: true, viewKey: "test.tree" });
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("a view key given after the first draw opens the branches remembered under it", async () => {
+  const el = await treeTable({ initiallyCollapsed: true, rememberExpanded: true });
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  localStorage.setItem("test.tree:expanded", '["drinks"]');
+  el.viewKey = "test.tree";
+  el.rows = [...treeRows, { id: "cola", parent: "drinks", name: "Cola" }];
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks", "cola"]);
+});
+
+test("writing the open list back drops what was stored that is not a key", async () => {
+  localStorage.setItem("test.tree:expanded", '[5, "food"]');
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    viewKey: "test.tree",
+    rememberExpanded: true,
+  });
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="break"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(JSON.parse(localStorage.getItem("test.tree:expanded")!)).toEqual(["food", "break"]);
+});
+
+test("while searching, a row under a branch that does not match stays out", async () => {
+  const el = await treeTable({
+    rows: [...treeRows, { id: "cola", parent: "drinks", name: "Cola" }],
+    searchTerm: "eggs",
+    searchOpensPath: true,
+  });
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+});
+
+test("while searching, rows two levels under a match stay reachable", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    searchTerm: "food",
+    searchOpensPath: true,
+  });
+  expect(treeKeys(el)).toEqual(["food"]);
+  for (const key of ["food", "break"]) {
+    el.shadowRoot!.querySelector<HTMLButtonElement>(
+      `tr[data-row-key="${key}"] button.tree-toggle`,
+    )!.click();
+    await el.updateComplete;
+  }
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+});
+
+test("while searching, a row that matches or sits under a match is not marked ancestor-only", async () => {
+  const seen: Record<string, boolean> = {};
+  const el = await treeTable({
+    rows: [
+      { id: "food", parent: null, name: "Food" },
+      { id: "break", parent: "food", name: "Breakfast" },
+      { id: "eggs", parent: "break", name: "Eggs with food" },
+    ],
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        sortValue: (row) => row.name,
+        cell: (row, context) => {
+          seen[row.id] = context.ancestorOnly;
+          return row.name;
+        },
+      },
+    ],
+    searchTerm: "food",
+    searchOpensPath: true,
+  });
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+  expect(seen).toEqual({ food: false, break: false, eggs: false });
 });

@@ -64,6 +64,9 @@ the line is added.
 
 ### 2.2 The products screen
 
+> 2026-10-02: the folder view became a category tree; see
+> [2026-10-02-products-category-tree-design.md](2026-10-02-products-category-tree-design.md).
+
 The products screen shows products and folders together.
 
 - **Folder view.** You open a folder and see its subfolders and products. A breadcrumb shows where

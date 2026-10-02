@@ -1,15 +1,17 @@
-import { html } from "lit";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { CatalogueBrowser } from "./catalogue-browser.js";
 import "./catalogue-browser.js";
+import { HOVER_OPEN_MS, ROOT_KEY } from "./product-list.js";
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -89,9 +91,30 @@ export async function tableOf(el: CatalogueBrowser) {
   return table;
 }
 export async function rowKeys(el: CatalogueBrowser) {
-  return [...(await tableOf(el)).shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
-    (row) => row.dataset.rowKey,
+  return [...(await tableOf(el)).shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")]
+    .map((row) => row.dataset.rowKey)
+    .filter((key) => key !== ROOT_KEY);
+}
+/** Opens or closes a category the way a click on its row does. */
+export async function toggleCategory(el: CatalogueBrowser, id: string) {
+  const table = await tableOf(el);
+  table
+    .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="folder:${id}"] .row-activate`)!
+    .click();
+  await table.updateComplete;
+}
+async function menuAction(el: CatalogueBrowser, test: string) {
+  (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+  await el.updateComplete;
+}
+async function nameBox(el: CatalogueBrowser) {
+  const table = await tableOf(el);
+  await vi.waitFor(() =>
+    expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
   );
+  return table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    'wt-input[name="category-name"]',
+  )!;
 }
 
 it("marks only folders without an active own or inherited routing claim and clears the mark when claimed", async () => {
@@ -123,12 +146,10 @@ it("marks only folders without an active own or inherited routing claim and clea
   expect(await marker("d")).toBeNull();
   expect(await marker("f")).not.toBeNull();
   expect((await marker("f"))?.getAttribute("title")).toBe(
-    "No kitchen routing rule covers this folder",
+    "No kitchen routing rule covers this category",
   );
-  el.folderId = "d";
-  await el.updateComplete;
+  await toggleCategory(el, "d");
   expect(await marker("b")).toBeNull();
-  el.folderId = null;
   el.routing = {
     ...routing,
     claims: [
@@ -146,13 +167,11 @@ it("marks only folders without an active own or inherited routing claim and clea
   };
   await el.updateComplete;
   expect(await marker("d")).not.toBeNull();
-  el.folderId = "d";
-  await el.updateComplete;
   expect(await marker("b")).not.toBeNull();
   setLocale("es");
   await el.updateComplete;
   expect((await marker("b"))?.getAttribute("title")).toBe(
-    "Ninguna regla de envío a cocina cubre esta carpeta",
+    "Ninguna regla de envío a cocina cubre esta categoría",
   );
 });
 
@@ -226,21 +245,26 @@ function capturedTouch(from: Element, type: string, over: Element) {
   );
 }
 
-it("moves a dragged product into a folder", async () => {
+it("a dragged product stays in place, faded, under a lifted copy, and moves on the drop", async () => {
   const el = await mountBrowser();
-  const cell = await nameCell(el, "bread");
+  const table = await tableOf(el);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const from = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="bread"]')!;
+  const before = from.getBoundingClientRect().top;
   const destination = await nameCell(el, "folder:f");
-  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "bread"), "pointerdown");
   pointerEvent(destination, "pointermove");
-  expect(cell.closest("tr")!.getAttribute("part")).toContain("dragging");
-  expect(cell.closest<HTMLElement>("tr")!.style.transform).toContain("translateY(");
-  expect(
-    Math.abs(parseFloat(cell.closest<HTMLElement>("tr")!.style.transform.slice(11))),
-  ).toBeGreaterThan(5);
-  expect(destination.getAttribute("part")).toContain("drop-target");
-  const draggedBox = cell.closest("tr")!.getBoundingClientRect();
-  const targetBox = destination.closest("tr")!.getBoundingClientRect();
-  expect(draggedBox.bottom <= targetBox.top || draggedBox.top >= targetBox.bottom).toBe(true);
+  await list.updateComplete;
+  expect(from.part.contains("dragging")).toBe(true);
+  expect(getComputedStyle(from).opacity).toBe("0.5");
+  expect(from.style.transform).toBe("");
+  expect(from.getBoundingClientRect().top).toBe(before);
+  expect(list.shadowRoot!.querySelector('[data-test="drag-ghost"]')!.textContent!.trim()).toBe(
+    "Bread",
+  );
+  const bar = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:f"] td')!;
+  expect(bar.part.contains("drop-target")).toBe(true);
+  expect(getComputedStyle(bar).borderInlineStartStyle).toBe("solid");
   pointerEvent(destination, "pointerup");
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
@@ -248,10 +272,21 @@ it("moves a dragged product into a folder", async () => {
       "f",
     ),
   );
+  await list.updateComplete;
+  expect(from.part.contains("dragging")).toBe(false);
+  expect(list.shadowRoot!.querySelector('[data-test="drag-ghost"]')).toBeNull();
 });
 it("real pointer drag moves a product into a folder", async () => {
   const el = await mountBrowser();
-  await userEvent.dragAndDrop(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  // The table turns narrow a frame after it is drawn in the 414 px test window and the rows move;
+  // a drag started before then often lost its press.
+  const table = await tableOf(el);
+  await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+  await userEvent.dragAndDrop(
+    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="bread"] .row-activate')!,
+    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="folder:f"] .row-activate')!,
+    { sourcePosition: { x: 4, y: 4 }, targetPosition: { x: 4, y: 4 } },
+  );
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
@@ -266,7 +301,7 @@ it("finds a folder under a captured touch pointer", async () => {
   const to = await nameCell(el, "folder:f");
   capturedTouch(grip, "pointerdown", grip);
   capturedTouch(grip, "pointermove", to);
-  expect(to.getAttribute("part")).toContain("drop-target");
+  expect(to.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
   capturedTouch(grip, "pointerup", to);
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
@@ -275,31 +310,18 @@ it("finds a folder under a captured touch pointer", async () => {
     ),
   );
 });
-it("finds a breadcrumb under a captured touch pointer", async () => {
-  const el = await mountBrowser({ folderId: "d" });
-  const from = await nameCell(el, "cola");
-  const grip = from.querySelector(".drag-grip")!;
-  const to = el.shadowRoot!.querySelector('[data-test="crumb-0"]')!;
-  capturedTouch(grip, "pointerdown", grip);
-  capturedTouch(grip, "pointermove", to);
-  expect(to.closest("li")!.classList.contains("drop-target")).toBe(true);
-  capturedTouch(grip, "pointerup", to);
-  await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
-      { productIds: ["cola"], categoryIds: [] },
-      null,
-    ),
-  );
-});
-it("a folder click still opens it without starting a drag", async () => {
+it("a click on a category's row opens it in place without starting a drag", async () => {
   const el = await mountBrowser();
-  const opened = vi.fn();
-  el.addEventListener("open-folder", opened);
-  await userEvent.click(
-    (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="open-d"]')!,
-  );
-  expect(opened).toHaveBeenCalledOnce();
-  expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ folderId: "d" });
+  const table = await tableOf(el);
+  const activator = table.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:d"] .row-activate',
+  )!;
+  pointerEvent(activator, "pointerdown");
+  pointerEvent(activator, "pointerup");
+  activator.click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
 it("a small pointer movement stays a click rather than lifting the row", async () => {
   const el = await mountBrowser();
@@ -325,20 +347,19 @@ it("a cancelled pointer over a valid folder does not move the product", async ()
   const to = await nameCell(el, "folder:f");
   pointerEvent(from, "pointerdown");
   pointerEvent(to, "pointermove");
-  expect(to.getAttribute("part")).toContain("drop-target");
+  expect(to.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
   pointerEvent(to, "pointercancel");
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
-it("a drag ending on a folder's button does not also open it", async () => {
+it("a drag that ends on a category's row does not also open it", async () => {
   const el = await mountBrowser();
-  const opened = vi.fn();
-  el.addEventListener("open-folder", opened);
-  const button = (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
-    '[data-test="open-d"]',
+  const table = await tableOf(el);
+  const activator = table.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:d"] .row-activate',
   )!;
-  const box = button.getBoundingClientRect();
-  pointerEvent(button, "pointerdown");
-  button.dispatchEvent(
+  const box = activator.getBoundingClientRect();
+  pointerEvent(activator, "pointerdown");
+  activator.dispatchEvent(
     new PointerEvent("pointermove", {
       bubbles: true,
       composed: true,
@@ -347,11 +368,12 @@ it("a drag ending on a folder's button does not also open it", async () => {
       clientY: box.y + 8,
     }),
   );
-  pointerEvent(button, "pointerup");
-  button.dispatchEvent(
+  pointerEvent(activator, "pointerup");
+  activator.dispatchEvent(
     new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
   );
-  expect(opened).not.toHaveBeenCalled();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
 });
 it("drags the whole selected group and clears selection after moving", async () => {
   const el = await mountBrowser();
@@ -371,68 +393,31 @@ it("refuses a folder over itself or its descendants but highlights a sibling", a
   for (const key of ["folder:d", "folder:b"]) {
     const target = await nameCell(el, key);
     pointerEvent(target, "pointermove");
-    expect(target.getAttribute("part")).not.toContain("drop-target");
+    expect(target.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
   }
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
   const sibling = await nameCell(el, "folder:s");
   pointerEvent(sibling, "pointermove");
-  expect(sibling.getAttribute("part")).toContain("drop-target");
-  pointerEvent(el.shadowRoot!.querySelector(".toolbar")!, "pointermove");
-  expect(sibling.getAttribute("part")).not.toContain("drop-target");
+  expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
+  pointerEvent(el.shadowRoot!.querySelector('[name="catalogue-search"]')!, "pointermove");
+  expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
   pointerEvent(from, "pointercancel");
   pointerEvent(sibling, "pointermove");
-  expect(sibling.getAttribute("part")).not.toContain("drop-target");
+  expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
 });
-it("moves a product to the top level through the first breadcrumb", async () => {
-  const el = await mountBrowser({ folderId: "d" });
-  drag(await nameCell(el, "cola"), el.shadowRoot!.querySelector('[data-test="crumb-0"]')!);
+it("moves a product to the top level by dropping it on All products", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const root = (await tableOf(el)).shadowRoot!;
+  drag(
+    await nameCell(el, "cola"),
+    root.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!,
+  );
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["cola"], categoryIds: [] },
       null,
     ),
-  );
-});
-it("refuses a dragged folder's ancestor or current breadcrumb when it is inside that folder", async () => {
-  const el = await mountBrowser({
-    folderId: "b",
-    products: [],
-    categories: [...CATEGORIES, folder("child", "Child", "b")],
-  });
-  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
-  list.dispatchEvent(
-    new CustomEvent("drag-items", {
-      detail: { keys: ["folder:d"] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  const crumbs = el.shadowRoot!.querySelectorAll("nav li");
-  for (const target of [crumbs[1]!, crumbs[2]!]) {
-    list.dispatchEvent(
-      new CustomEvent("pointer-drag-move", {
-        detail: { path: [target] },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    expect(target.classList.contains("drop-target")).toBe(false);
-  }
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
-  list.dispatchEvent(
-    new CustomEvent("pointer-drag-move", {
-      detail: { path: [crumbs[0]!] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  expect(crumbs[0]!.classList.contains("drop-target")).toBe(true);
-  list.dispatchEvent(
-    new CustomEvent("pointer-drag-end", {
-      detail: { cancelled: true },
-      bubbles: true,
-      composed: true,
-    }),
   );
 });
 it("shows a refused drop at the bottom and keeps the selection for correction", async () => {
@@ -450,6 +435,285 @@ it("shows a refused drop at the bottom and keeps the selection for correction", 
   expect(count(el)).toBe("1 selected");
   expect(el.shadowRoot!.lastElementChild!.getAttribute("role")).toBe("alert");
 });
+it("marks a dragged row inactive only while it is dragged, as its faded text is not read", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "bread");
+  const row = cell.closest("tr")!;
+  expect(row.hasAttribute("aria-disabled")).toBe(false);
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "folder:f"), "pointermove");
+  expect(row.getAttribute("aria-disabled")).toBe("true");
+  pointerEvent(cell, "pointercancel");
+  await table.updateComplete;
+  expect(row.hasAttribute("aria-disabled")).toBe(false);
+});
+
+it("opens a closed category after the hover delay, not before, and shows the gap where the product will land", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const cell = await nameCell(el, "bread");
+    pointerEvent(cell, "pointerdown");
+    pointerEvent(await nameCell(el, "folder:d"), "pointermove");
+    vi.advanceTimersByTime(HOVER_OPEN_MS - 1);
+    await table.updateComplete;
+    expect(await rowKeys(el)).not.toContain("cola");
+    vi.advanceTimersByTime(1);
+    await table.updateComplete;
+    expect(await rowKeys(el)).toContain("cola");
+    expect(
+      table
+        .shadowRoot!.querySelector('tr[data-row-key="cola"] td')!
+        .part.contains("drop-gap-before"),
+    ).toBe(true);
+    pointerEvent(cell, "pointercancel");
+  } finally {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  }
+});
+
+it("leaves a closed category closed when a drag crosses it without stopping", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const cell = await nameCell(el, "bread");
+    pointerEvent(cell, "pointerdown");
+    pointerEvent(await nameCell(el, "folder:d"), "pointermove");
+    vi.advanceTimersByTime(HOVER_OPEN_MS - 100);
+    pointerEvent(await nameCell(el, "folder:f"), "pointermove");
+    vi.advanceTimersByTime(200);
+    await table.updateComplete;
+    expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
+    vi.advanceTimersByTime(HOVER_OPEN_MS);
+    await table.updateComplete;
+    expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
+    pointerEvent(cell, "pointercancel");
+  } finally {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  }
+});
+
+it("dropping on a product files the dragged row into that product's category", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  drag(await nameCell(el, "bread"), await nameCell(el, "cola"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "d",
+    ),
+  );
+});
+
+it("shows the gap after the last row when the dragged row would land last", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "cola");
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(
+    table.shadowRoot!.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!,
+    "pointermove",
+  );
+  const last = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="bread"] td')!;
+  expect(last.part.contains("drop-gap-after")).toBe(true);
+  expect(getComputedStyle(last).borderBottomStyle).toBe("dashed");
+  pointerEvent(cell, "pointercancel");
+});
+
+it("Esc cancels a drag with nothing moved, and the click that ends it opens nothing", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const target = table.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:f"] .row-activate',
+  )!;
+  pointerEvent(await nameCell(el, "bread"), "pointerdown");
+  pointerEvent(target, "pointermove");
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="bread"]')!.part.contains("dragging"),
+  ).toBe(false);
+  // A person lets go of the button a moment after Esc, never within the same task.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  pointerEvent(target, "pointerup");
+  target.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("a drop where the drag started moves nothing and is never marked", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "bread");
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "folder:f"), "pointermove");
+  pointerEvent(cell, "pointermove");
+  expect(table.shadowRoot!.querySelector('[part~="drop-target"]')).toBeNull();
+  pointerEvent(cell, "pointerup");
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("a drop on the category the dragged row is already in moves nothing and is never marked", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const drops = vi.fn();
+  list.addEventListener("drop-items", drops);
+  const table = await tableOf(el);
+  pointerEvent(await nameCell(el, "cola"), "pointerdown");
+  pointerEvent(await nameCell(el, "folder:d"), "pointermove");
+  await list.updateComplete;
+  expect(table.shadowRoot!.querySelector('[part~="drop-target"]')).toBeNull();
+  pointerEvent(await nameCell(el, "folder:d"), "pointerup");
+  await el.updateComplete;
+  expect(drops).not.toHaveBeenCalled();
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("in Select mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  await selectKeys(el, ["cola", "burger"]);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const table = await tableOf(el);
+  pointerEvent(await nameCell(el, "cola"), "pointerdown");
+  pointerEvent(await nameCell(el, "folder:b"), "pointermove");
+  await list.updateComplete;
+  for (const key of ["cola", "burger"])
+    expect(
+      table.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.part.contains("dragging"),
+      key,
+    ).toBe(true);
+  expect(list.shadowRoot!.querySelector('[data-test="drag-ghost"]')!.textContent!.trim()).toBe(
+    "2 items",
+  );
+  pointerEvent(await nameCell(el, "folder:b"), "pointerup");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["cola", "burger"], categoryIds: [] },
+      "b",
+    ),
+  );
+  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+});
+
+it("in Select mode, a drop where the drag started moves nothing, even with rows selected from two categories", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  await selectKeys(el, ["cola", "burger"]);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const drops = vi.fn();
+  list.addEventListener("drop-items", drops);
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "cola");
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "folder:b"), "pointermove");
+  pointerEvent(cell, "pointermove");
+  await list.updateComplete;
+  expect(table.shadowRoot!.querySelector('[part~="drop-target"]')).toBeNull();
+  pointerEvent(cell, "pointerup");
+  await el.updateComplete;
+  expect(drops).not.toHaveBeenCalled();
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("no dragged row stays marked inactive after a drop that moves, Esc, or a drop where the drag started", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  await selectKeys(el, ["cola", "burger"]);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const table = await tableOf(el);
+  const inactive = () =>
+    [...table.shadowRoot!.querySelectorAll<HTMLElement>("tr[aria-disabled]")].map(
+      (row) => row.dataset.rowKey,
+    );
+  const lift = async () => {
+    pointerEvent(await nameCell(el, "cola"), "pointerdown");
+    pointerEvent(await nameCell(el, "folder:b"), "pointermove");
+    await list.updateComplete;
+    await table.updateComplete;
+    await vi.waitFor(() => expect(inactive()).toEqual(["cola", "burger"]));
+  };
+
+  await lift();
+  pointerEvent(await nameCell(el, "cola"), "pointermove");
+  pointerEvent(await nameCell(el, "cola"), "pointerup");
+  await table.updateComplete;
+  expect(inactive(), "after a drop where the drag started").toEqual([]);
+
+  await lift();
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+  await table.updateComplete;
+  expect(inactive(), "after Esc").toEqual([]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  pointerEvent(await nameCell(el, "cola"), "pointerup");
+
+  await lift();
+  pointerEvent(await nameCell(el, "folder:b"), "pointerup");
+  await vi.waitFor(() => expect(el.api.moveCatalogueItems).toHaveBeenCalledOnce());
+  await table.updateComplete;
+  expect(inactive(), "after a drop that moves").toEqual([]);
+});
+
+it("a selection holding a category and a product inside it moves the category alone, and the product goes with it", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["folder:d", "cola"]);
+  drag(await nameCell(el, "cola"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+});
+
+it("Move to… with a category and something inside it selected sends the category alone", async () => {
+  const el = await mountBrowser({ products: [...PRODUCTS, product("stout", "Stout", "b")] });
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "b");
+  await selectKeys(el, ["folder:d", "folder:b", "cola", "stout", "bread"]);
+  await press(el, "move");
+  expect(dialog(el)!.heading).toBe("Move 2 items");
+  await destination(el, "f");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+});
+
+it("dragging a row that is not selected moves only that row and keeps the selection", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["cola"]);
+  drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "f",
+    ),
+  );
+  await el.updateComplete;
+  expect(count(el)).toBe("1 selected");
+});
 export async function typeSearch(el: CatalogueBrowser, value: string) {
   el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -464,45 +728,93 @@ export async function chooseFilter(el: CatalogueBrowser, column: string, value: 
   await chooseOption(select, value);
   await table.updateComplete;
 }
-const crumbs = (el: CatalogueBrowser) =>
-  [...el.shadowRoot!.querySelectorAll("nav.breadcrumb li")].map((li) =>
-    li.textContent!.replace("›", "").trim(),
-  );
 it("shows top-level folders before unfiled products", async () => {
   expect(await rowKeys(await mountBrowser())).toEqual(["folder:d", "folder:f", "bread"]);
 });
-it("shows only direct children and breadcrumbs inside a folder", async () => {
-  const el = await mountBrowser({ folderId: "d" });
-  expect(await rowKeys(el)).toEqual(["folder:b", "cola"]);
-  expect(crumbs(el)).toEqual(["All products", "Drinks"]);
+it("nests each category's subcategories, then its products, under it once it is opened, and draws no breadcrumb", async () => {
+  const el = await mountBrowser();
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
+  await toggleCategory(el, "d");
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  const table = await tableOf(el);
+  const level = (key: string) =>
+    table.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.getAttribute("aria-level");
+  expect([ROOT_KEY, "folder:d", "folder:b", "cola", "bread"].map(level)).toEqual([
+    "1",
+    "2",
+    "3",
+    "3",
+    "2",
+  ]);
+  expect(el.shadowRoot!.querySelector("nav")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="view-all"]')).toBeNull();
 });
-it("keeps folders through both product filters", async () => {
-  const el = await mountBrowser({ folderId: "d" });
+it("keeps every category through both product filters", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
   await chooseFilter(el, "active", "inactive");
-  expect(await rowKeys(el)).toEqual(["folder:b"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
   await chooseFilter(el, "ordering", "staff_only");
-  expect(await rowKeys(el)).toEqual(["folder:b"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
 });
 it("sorts a numbered folder before products", async () => {
   expect(
     await rowKeys(await mountBrowser({ categories: [...CATEGORIES, folder("s", "5 Star", null)] })),
   ).toEqual(["folder:s", "folder:d", "folder:f", "bread"]);
 });
-it("falls back to the top level for a missing folder", async () => {
-  const el = await mountBrowser({ folderId: "gone" });
+it("opens nothing when the address names a category that does not exist", async () => {
+  const el = await mountBrowser({ categoryId: "gone" });
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
-  expect(crumbs(el)).toEqual(["All products"]);
 });
-it("searches globally and restores the previous folder when cleared", async () => {
-  const el = await mountBrowser({ folderId: "f" });
+
+it("opens the category the address names, and every category above it, and scrolls it into view", async () => {
+  const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+  onTestFinished(() => scrolled.mockRestore());
+  const el = await mountBrowser({
+    products: [...PRODUCTS, product("stout", "Stout", "b")],
+    categoryId: "b",
+  });
+  await vi.waitFor(async () =>
+    expect(await rowKeys(el)).toEqual([
+      "folder:d",
+      "folder:b",
+      "stout",
+      "cola",
+      "folder:f",
+      "bread",
+    ]),
+  );
+  expect(scrolled.mock.contexts.at(-1)).toBe(
+    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="folder:b"]'),
+  );
+});
+
+it("writes the category a person opens into the address, and its parent when they close it", async () => {
+  const el = await mountBrowser({ products: [...PRODUCTS, product("stout", "Stout", "b")] });
+  const sent: unknown[] = [];
+  el.addEventListener("open-category", (event) => sent.push((event as CustomEvent).detail));
+  await toggleCategory(el, "d");
+  el.categoryId = "d";
+  await toggleCategory(el, "b");
+  el.categoryId = "b";
+  await toggleCategory(el, "f");
+  el.categoryId = "f";
+  await toggleCategory(el, "b");
+  await toggleCategory(el, "f");
+  expect(sent).toEqual([
+    { categoryId: "d" },
+    { categoryId: "b" },
+    { categoryId: "f" },
+    { categoryId: null },
+  ]);
+});
+it("search keeps the categories above a match open, and clearing it restores what was open", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "f");
   await typeSearch(el, "COL");
-  expect(await rowKeys(el)).toEqual(["cola"]);
-  expect(
-    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="cola"]')!.textContent,
-  ).toContain("Drinks");
-  expect(crumbs(el)).toEqual([]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "cola"]);
   await typeSearch(el, "");
-  expect(await rowKeys(el)).toEqual(["burger"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
 });
 it("searches folder paths and product variant names", async () => {
   const el = await mountBrowser({
@@ -529,117 +841,110 @@ it("searches folder paths and product variant names", async () => {
     ],
   });
   await typeSearch(el, "drinks");
-  expect(await rowKeys(el)).toEqual(["folder:b", "folder:d", "sized", "cola"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "sized", "cola"]);
   await typeSearch(el, "cup");
-  expect(await rowKeys(el)).toEqual(["sized"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "sized"]);
 });
-it("lists all products with paths and no breadcrumb in all view", async () => {
-  const el = await mountBrowser({ view: "all" });
-  expect((await rowKeys(el)).sort()).toEqual(["bread", "burger", "cola"]);
-  expect(crumbs(el)).toEqual([]);
-});
-it("emits folder navigation once and offers accessible folder actions", async () => {
+it("opens and closes a category from its row, and says which it will do", async () => {
   const el = await mountBrowser();
-  const opened = vi.fn();
-  el.addEventListener("open-folder", opened);
-  const root = (await tableOf(el)).shadowRoot!;
-  root.querySelector<HTMLElement>('[data-test="open-d"]')!.click();
-  expect(opened).toHaveBeenCalledOnce();
-  expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ folderId: "d" });
-  expect(root.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+  const table = await tableOf(el);
+  const activator = () =>
+    table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!;
+  expect(activator().getAttribute("aria-label")).toBe("Open Drinks");
+  await toggleCategory(el, "d");
+  expect(activator().getAttribute("aria-label")).toBe("Close Drinks");
+  expect(await rowKeys(el)).toContain("cola");
+  await toggleCategory(el, "d");
+  expect(await rowKeys(el)).not.toContain("cola");
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="folder:d"] wt-icon[name="folder"]'),
+  ).not.toBeNull();
 });
-it("emits breadcrumb navigation and view changes", async () => {
-  const el = await mountBrowser({ folderId: "b" });
-  const opened = vi.fn();
-  const changed = vi.fn();
-  el.addEventListener("open-folder", opened);
-  el.addEventListener("view-change", changed);
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="crumb-0"]')!.click();
-  expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ folderId: null });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="view-all"]')!.click();
-  expect((changed.mock.calls[0]![0] as CustomEvent).detail).toEqual({ view: "all" });
-});
-it("creates a folder under the current folder and closes after save", async () => {
-  const el = await mountBrowser({ folderId: "d" });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Juice" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+it("Add category makes the typed category inside the category whose menu asked, and the box goes", async () => {
+  const el = await mountBrowser();
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  expect(await rowKeys(el)).toEqual([
+    "folder:d",
+    "folder:b",
+    "draft:new",
+    "cola",
+    "folder:f",
+    "bread",
+  ]);
+  await userEvent.keyboard("Juice{Enter}");
   await vi.waitFor(() =>
-    expect(el.api.createCategory).toHaveBeenCalledWith({ name: "Juice", parentId: "d" }),
+    expect(el.api.createCategory).toHaveBeenCalledExactlyOnceWith({ name: "Juice", parentId: "d" }),
   );
-  await vi.waitFor(() => expect(form.open).toBe(false));
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
 });
-it("renames a root folder without adopting the current folder", async () => {
-  const el = await mountBrowser({ folderId: "b" });
-  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
-  list.dispatchEvent(
-    new CustomEvent("rename-folder", { detail: { folderId: "d" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Beverages" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+it("renames a top-level category in place without adopting the addressed one", async () => {
+  const el = await mountBrowser({ categoryId: "b" });
+  await menuAction(el, "rename-d");
+  const box = await nameBox(el);
+  expect(box.value).toBe("Drinks");
+  await userEvent.keyboard("Beverages{Enter}");
   await vi.waitFor(() =>
-    expect(el.api.updateCategory).toHaveBeenCalledWith("d", { name: "Beverages", parentId: null }),
+    expect(el.api.updateCategory).toHaveBeenCalledWith("d", { name: "Beverages" }),
   );
 });
-it("keeps a refused folder save open with a field error", async () => {
-  const el = await mountBrowser({ folderId: "d" });
+it("a rename sends the name only, so renaming a category just dragged elsewhere keeps the move", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const target = await nameCell(el, "folder:f");
+  drag(await nameCell(el, "folder:b"), target);
+  // The click a released drag sends; the list swallows it, and would otherwise swallow the menu's.
+  target.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["b"] },
+      "f",
+    ),
+  );
+  await menuAction(el, "rename-b");
+  await nameBox(el);
+  await userEvent.keyboard("Beer{Enter}");
+  await vi.waitFor(() => expect(el.api.updateCategory).toHaveBeenCalledOnce());
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toEqual([["b", { name: "Beer" }]]);
+});
+it("keeps a refused name in its box with the refusal under it, and Enter tries again", async () => {
+  const el = await mountBrowser();
   vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.invalid" });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Juice" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  await vi.waitFor(() => expect(form.fieldErrors.name).toBeTruthy());
-  expect(form.open).toBe(true);
-  expect(form.shadowRoot!.querySelector("wt-form-actions")!.getAttribute("slot")).toBe("footer");
-  expect(form.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+  await menuAction(el, "add-category-d");
+  const box = await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await vi.waitFor(() => expect(box.error).toBe(codeMessage("category.invalid")));
+  expect(await rowKeys(el)).toContain("draft:new");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledTimes(2));
 });
 
-it("creates a top-level folder when the addressed folder is missing", async () => {
-  const el = await mountBrowser({ folderId: "gone" });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Juice" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+it("Add category on All products makes a top-level category", async () => {
+  const el = await mountBrowser({ categoryId: "gone" });
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
   await vi.waitFor(() =>
-    expect(el.api.createCategory).toHaveBeenCalledWith({ name: "Juice", parentId: null }),
+    expect(el.api.createCategory).toHaveBeenCalledExactlyOnceWith({
+      name: "Juice",
+      parentId: null,
+    }),
   );
 });
 
-it("shows the path only in global views and leaves folder product cells empty", async () => {
+it("shows each product's main category, and leaves a category row's other cells empty", async () => {
   const el = await mountBrowser();
-  let table = await tableOf(el);
+  await toggleCategory(el, "d");
+  const table = await tableOf(el);
   expect(table.shadowRoot!.querySelector('input[name="search"]')).toBeNull();
-  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(false);
-  const row = table.shadowRoot!.querySelector('tr[data-row-key="folder:d"]')!;
+  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(true);
+  const row = table.shadowRoot!.querySelector('tr[data-row-key="folder:b"]')!;
   expect(
     [...row.querySelectorAll("td")].slice(1, -1).every((cell) => cell.textContent!.trim() === ""),
   ).toBe(true);
-  await typeSearch(el, "beer");
-  table = await tableOf(el);
-  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(true);
-  expect(table.shadowRoot!.querySelector('tr[data-row-key="folder:b"]')!.textContent).toContain(
+  expect(table.shadowRoot!.querySelector('tr[data-row-key="cola"]')!.textContent).toContain(
     "Drinks",
   );
 });
@@ -667,11 +972,11 @@ it("keeps a variant match on its parent until the manager expands it", async () 
     ],
   });
   await typeSearch(el, "cup");
-  expect(await rowKeys(el)).toEqual(["coffee"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "coffee"]);
   const table = await tableOf(el);
   table.shadowRoot!.querySelector<HTMLElement>(".tree-toggle")!.click();
   await table.updateComplete;
-  expect(await rowKeys(el)).toEqual(["coffee", "coffee:large"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "coffee", "coffee:large"]);
 });
 
 it.each(["en-GB", "es-ES"])(
@@ -723,7 +1028,6 @@ export async function destination(el: CatalogueBrowser, value: string) {
 }
 it("selects folders and products but never variants", async () => {
   const el = await mountBrowser({
-    folderId: "d",
     products: [
       {
         ...PRODUCTS[0]!,
@@ -743,6 +1047,7 @@ it("selects folders and products but never variants", async () => {
       },
     ],
   });
+  await toggleCategory(el, "d");
   await selectKeys(el, ["folder:b", "cola"]);
   const table = await tableOf(el);
   table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="cola"] .tree-toggle')?.click();
@@ -759,7 +1064,7 @@ it("leaves selection mode on Cancel and restores the ordinary toolbar with no se
   await press(el, "cancel-selection");
   expect((await tableOf(el)).selectable).toBe(false);
   expect(count(el)).toBeUndefined();
-  for (const action of ["select", "new-folder", "view-folders", "view-all"])
+  for (const action of ["select"])
     expect(el.shadowRoot!.querySelector(`[data-test="${action}"]`), action).not.toBeNull();
   await press(el, "select");
   expect(count(el)).toBe("0 selected");
@@ -769,47 +1074,36 @@ it("leaves selection mode on Cancel and restores the ordinary toolbar with no se
     )!.checked,
   ).toBe(false);
 });
-it("draws its screen's empty action in an empty folder, and not when a search finds nothing", async () => {
-  const el = await mountBrowser({
-    products: [],
-    folderId: "b",
-    emptyAction: () => html`<button slot="empty-action">Add product</button>`,
-  });
-  const button = (await tableOf(el)).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
-  expect(button.assignedSlot).not.toBeNull();
-  await typeSearch(el, "nothing like this");
-  expect((await tableOf(el)).querySelector("[slot=empty-action]")).toBeNull();
-});
 async function tableSentence(el: CatalogueBrowser) {
   return (await tableOf(el)).shadowRoot!.querySelector(".empty .message")!.textContent;
 }
 it.each(["en-GB", "es"])(
-  "says the dashboard's one no-matches sentence when its search finds nothing, and its own sentence in an empty folder (%s)",
+  "says the dashboard's one no-matches sentence when its search finds nothing (%s)",
   async (locale) => {
     setLocale(locale);
-    const el = await mountBrowser({ products: [], folderId: "b" });
-    expect(await tableSentence(el)).toBe(t("catalogue.no_products"));
+    const el = await mountBrowser({ products: [] });
     await typeSearch(el, "nothing like this");
     expect(await rowKeys(el)).toEqual([]);
     expect(await tableSentence(el)).toBe(tableNoMatches(locale));
     await typeSearch(el, "");
-    expect(await tableSentence(el)).toBe(t("catalogue.no_products"));
+    expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
   },
 );
-it("says the dashboard's one no-matches sentence when a column filter hides every product", async () => {
+it("keeps the All products row and every category when a column filter hides every product", async () => {
   setLocale("es");
-  const el = await mountBrowser({ folderId: "f" });
+  const el = await mountBrowser();
   await chooseFilter(el, "active", "inactive");
-  expect(await rowKeys(el)).toEqual([]);
-  expect(await tableSentence(el)).toBe(tableNoMatches("es"));
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f"]);
+  expect(
+    (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${ROOT_KEY}"]`),
+  ).not.toBeNull();
+  expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
 });
-it.each(["folder", "view", "search", "filter"])(
+it.each(["search", "filter"])(
   "clears selection on %s and keeps selection mode on",
   async (trigger) => {
     const el = await mountBrowser();
     await selectKeys(el, ["bread"]);
-    if (trigger === "folder") el.folderId = "d";
-    if (trigger === "view") el.view = "all";
     if (trigger === "search") await typeSearch(el, "bread");
     if (trigger === "filter") await chooseFilter(el, "active", "inactive");
     await el.updateComplete;
@@ -897,7 +1191,7 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
   const el = await mountBrowser();
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 folder and 2 products"));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
   expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
   const radio = el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!;
   expect(el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.checked).toBe(
@@ -928,7 +1222,8 @@ it("deletes a folder through its own row action", async () => {
   );
 });
 it.each([1, 2])("confirms %i product deletion with inactive and sales wording", async (number) => {
-  const el = await mountBrowser({ view: "all" });
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
   await selectKeys(el, number === 1 ? ["bread"] : ["bread", "cola"]);
   await press(el, "delete");
   expect(dialog(el)!.heading).toBe(number === 1 ? "Delete 1 product?" : "Delete 2 products?");
@@ -989,7 +1284,7 @@ it("counts overlapping selected folders once in the delete consent", async () =>
   ]);
   await selectKeys(el, ["folder:d", "folder:b"]);
   await press(el, "delete");
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 folder and 2 products"));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
   expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
   await press(el, "confirm");
   await vi.waitFor(() =>
@@ -1112,4 +1407,298 @@ it("places dialog Cancel on the left and its primary action on the right", async
     2;
   expect(buttons[0]!.getBoundingClientRect().right).toBeLessThan(midpoint);
   expect(buttons[1]!.getBoundingClientRect().left).toBeGreaterThan(midpoint);
+});
+
+it.each([
+  ["English", en],
+  ["Spanish", es],
+] as const)(
+  "says category, never folder, in every Products-screen string (%s)",
+  (_name, strings) => {
+    const screen = Object.entries(strings).filter(
+      ([key]) =>
+        /^(folders|catalogue|categories)\./.test(key) || key === "product.filter_ordering_all",
+    );
+    expect(screen.length).toBeGreaterThan(40);
+    expect(screen.filter(([, text]) => /folder|carpeta/i.test(text))).toEqual([]);
+  },
+);
+
+it("Move to… on a category's menu opens the move dialog for that category alone", async () => {
+  const el = await mountBrowser();
+  (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="move-d"]')!.click();
+  await el.updateComplete;
+  expect(dialog(el)!.heading).toBe("Move 1 item");
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
+    { value: "top", label: "All products (top level)" },
+    { value: "f", label: "Food" },
+  ]);
+  await destination(el, "f");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+});
+
+it("Esc, or leaving the box blank, adds nothing", async () => {
+  const el = await mountBrowser();
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Tea{Escape}");
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("{Tab}");
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  expect(el.api.createCategory).not.toHaveBeenCalled();
+});
+
+it("makes one category from Enter pressed twice, or Enter then leaving the box", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}{Enter}{Tab}");
+  finish(folder("j", "Juice", null));
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  expect(el.api.createCategory).toHaveBeenCalledOnce();
+});
+
+it("leaves a box opened while an earlier name was saving", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await menuAction(el, "rename-f");
+  await nameBox(el);
+  finish(folder("j", "Juice", "d"));
+  await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const table = await tableOf(el);
+  expect(
+    table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'tr[data-row-key="folder:f"] wt-input[name="category-name"]',
+    )!.value,
+  ).toBe("Food");
+});
+
+it("saves a second name, and its box answers Enter, Esc and leaving it, while an earlier name is still saving", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const table = await tableOf(el);
+  const boxGone = () =>
+    vi.waitFor(() =>
+      expect(table.shadowRoot!.querySelector('wt-input[name="category-name"]')).toBeNull(),
+    );
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await menuAction(el, "rename-f");
+  await nameBox(el);
+  await userEvent.keyboard("{Escape}");
+  await boxGone();
+  await menuAction(el, "rename-f");
+  await nameBox(el);
+  await userEvent.keyboard("Fresh{Enter}");
+  await boxGone();
+  expect(el.api.updateCategory).toHaveBeenCalledExactlyOnceWith("f", { name: "Fresh" });
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Tea{Tab}");
+  await boxGone();
+  finish(folder("j", "Juice", "d"));
+  await vi.waitFor(() =>
+    expect(vi.mocked(el.api.createCategory).mock.calls).toEqual([
+      [{ name: "Juice", parentId: "d" }],
+      [{ name: "Tea", parentId: null }],
+    ]),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(el.api.updateCategory).toHaveBeenCalledOnce();
+  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+});
+
+it("shows a refused name at the bottom, not under a box opened since", async () => {
+  const el = await mountBrowser();
+  let refuse!: (reason: unknown) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        refuse = reject;
+      }),
+  );
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await menuAction(el, "rename-f");
+  const box = await nameBox(el);
+  refuse({ code: "category.invalid" });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+      codeMessage("category.invalid"),
+    ),
+  );
+  expect(box.error).toBe("");
+});
+
+it("Add category clears a typed search, so its name box shows", async () => {
+  const el = await mountBrowser();
+  await typeSearch(el, "cola");
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="catalogue-search"]')!
+      .value,
+  ).toBe("");
+});
+
+it("keeps the old name, and sends nothing more, when a refused rename is left with Esc", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.updateCategory).mockRejectedValueOnce({ code: "category.invalid" });
+  await menuAction(el, "rename-d");
+  const box = await nameBox(el);
+  await userEvent.keyboard("Beverages{Enter}");
+  await vi.waitFor(() => expect(box.error).not.toBe(""));
+  await userEvent.keyboard("{Escape}");
+  const table = await tableOf(el);
+  await vi.waitFor(() =>
+    expect(table.shadowRoot!.querySelector('wt-input[name="category-name"]')).toBeNull(),
+  );
+  expect(el.api.updateCategory).toHaveBeenCalledOnce();
+  expect(table.shadowRoot!.querySelector('tr[data-row-key="folder:d"] strong')!.textContent).toBe(
+    "Drinks",
+  );
+});
+
+it("passes whether products can be added to every menu", async () => {
+  const el = await mountBrowser({ canAddProduct: true });
+  expect(
+    (await tableOf(el))
+      .shadowRoot!.querySelector('[data-test="add-product-root"]')!
+      .hasAttribute("disabled"),
+  ).toBe(false);
+});
+
+it("draws the search box, the filters, Expand all, Select and Columns on one line of one toolbar, in that order", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const search = el.shadowRoot!.querySelector<HTMLElement>('[name="catalogue-search"]')!;
+    const select = el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
+    expect(search.assignedSlot!.assignedSlot!.closest(".table-toolbar")).toBe(
+      table.shadowRoot!.querySelector(".table-toolbar"),
+    );
+    expect(select.parentElement!.assignedSlot!.assignedSlot!.closest(".table-end")).not.toBeNull();
+    const boxes = [
+      search,
+      table.shadowRoot!.querySelector(".table-filters")!,
+      table.shadowRoot!.querySelector(".expand-all")!,
+      select,
+      table.shadowRoot!.querySelector(".columns-trigger")!,
+    ].map((element) => element.getBoundingClientRect());
+    for (let index = 1; index < boxes.length; index++) {
+      expect(boxes[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(boxes[index - 1]!.right);
+      expect(boxes[index]!.top, `item ${index}`).toBeLessThan(boxes[0]!.bottom);
+    }
+    expect(el.shadowRoot!.querySelector(".toolbar")).toBeNull();
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("Expand all opens every category, and reads Collapse all until one is closed", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const button = () => table.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  expect(button().textContent!.trim()).toBe("Expand all");
+  button().click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual([
+    "folder:d",
+    "folder:b",
+    "cola",
+    "folder:f",
+    "burger",
+    "bread",
+  ]);
+  expect(button().textContent!.trim()).toBe("Collapse all");
+  await toggleCategory(el, "f");
+  expect(button().textContent!.trim()).toBe("Expand all");
+});
+
+it("Expand all leaves a product's variants closed, and still reads Collapse all", async () => {
+  const el = await mountBrowser({
+    products: [
+      {
+        ...PRODUCTS[0]!,
+        variants: [
+          {
+            id: "v",
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: null,
+            active: true,
+            available: true,
+            effective: { unitPrice: "2.00", vatClass: "reduced", primaryCategoryId: "d" },
+          },
+        ],
+      },
+      ...PRODUCTS.slice(1),
+    ],
+  });
+  const table = await tableOf(el);
+  const button = () => table.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  button().click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual([
+    "folder:d",
+    "folder:b",
+    "cola",
+    "folder:f",
+    "burger",
+    "bread",
+  ]);
+  expect(table.isExpanded("cola")).toBe(false);
+  expect(button().textContent!.trim()).toBe("Collapse all");
+});
+
+it("puts Select mode's count, Move to…, Delete and Cancel at the toolbar's end", async () => {
+  const el = await mountBrowser();
+  await press(el, "select");
+  const end = (await tableOf(el)).shadowRoot!.querySelector(".table-end")!;
+  for (const test of ["selected-count", "move", "delete", "cancel-selection"]) {
+    const control = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!;
+    expect(
+      control.closest('[slot="toolbar-end"]')!.assignedSlot!.assignedSlot!.closest(".table-end"),
+      test,
+    ).toBe(end);
+  }
 });

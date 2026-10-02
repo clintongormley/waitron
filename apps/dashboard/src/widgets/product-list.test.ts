@@ -1,12 +1,12 @@
-import { page } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
-import type { Product } from "../api/client.js";
+import type { Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
-import { ProductList } from "./product-list.js";
+import { ProductList, ROOT_KEY } from "./product-list.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -16,6 +16,7 @@ afterEach(() => setLocale("es"));
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.removeItem("waitron.products.table:columns");
+  localStorage.removeItem("waitron.products.table:expanded");
 });
 
 async function tableRoot(el: ProductList): Promise<ShadowRoot> {
@@ -24,10 +25,16 @@ async function tableRoot(el: ProductList): Promise<ShadowRoot> {
   return table.shadowRoot!;
 }
 
+function productRows(root: ShadowRoot): HTMLElement[] {
+  return [
+    ...root.querySelectorAll<HTMLElement>(
+      `tbody tr[data-row-key]:not([data-row-key="${ROOT_KEY}"])`,
+    ),
+  ];
+}
+
 function rowKeys(root: ShadowRoot): string[] {
-  return [...root.querySelectorAll("tr[data-row-key]")].map((row) =>
-    row.getAttribute("data-row-key")!,
-  );
+  return productRows(root).map((row) => row.getAttribute("data-row-key")!);
 }
 
 /** The one cell of `rowKey` under the column whose header starts with `header` — found by header text
@@ -40,6 +47,59 @@ function cellUnder(root: ShadowRoot, rowKey: string, header: string): HTMLElemen
   const row = root.querySelector(`tr[data-row-key="${rowKey}"]`)!;
   return [...row.querySelectorAll("td")][index]!;
 }
+
+const drinks = { id: "d", name: "Drinks", parentId: null };
+const beer = { id: "b", name: "Beer", parentId: "d" };
+const food = { id: "f", name: "Food", parentId: null };
+
+function treeProducts(): Product[] {
+  return [
+    product({ id: "cola", name: "Cola", primaryCategoryId: "d" }),
+    product({ id: "ale", name: "Ale", primaryCategoryId: "d", active: false }),
+    product({ id: "lager", name: "Lager", primaryCategoryId: "b" }),
+    product({ id: "bread", name: "Bread", primaryCategoryId: null }),
+  ];
+}
+
+async function mountTree(props: Partial<ProductList> = {}) {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    categories: [drinks, beer, food],
+    products: treeProducts(),
+    ...props,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  return { el, table, root: await tableRoot(el) };
+}
+
+/** Clicks a category row's own activator, as a click anywhere on the row does. */
+async function openRow(el: ProductList, key: string): Promise<void> {
+  const root = await tableRoot(el);
+  root.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!.click();
+  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+}
+
+const focusedName = (el: ProductList) =>
+  el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.activeElement?.getAttribute("name");
+
+const counted = (categories: number, products: number) =>
+  [
+    ...(categories
+      ? [
+          t(categories === 1 ? "folders.count_one" : "folders.count").replace(
+            "{count}",
+            String(categories),
+          ),
+        ]
+      : []),
+    ...(products || !categories
+      ? [
+          t(products === 1 ? "folders.product_count_one" : "folders.product_count").replace(
+            "{count}",
+            String(products),
+          ),
+        ]
+      : []),
+  ].join(", ");
 
 async function choose(el: ProductList, column: string, value: string): Promise<void> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -161,7 +221,7 @@ describe("product-list", () => {
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const rows = (await tableRoot(el)).querySelectorAll("tbody tr");
+    const rows = productRows(await tableRoot(el));
     expect(rows.length).toBe(3);
   });
 
@@ -174,7 +234,7 @@ describe("product-list", () => {
       }),
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const row = (await tableRoot(el)).querySelector("tbody tr")!;
+    const row = productRows(await tableRoot(el))[0]!;
     expect(row.textContent).toContain("Croquetas");
     expect(row.textContent).not.toContain("Croquetas caseras");
     expect(row.textContent).not.toContain("Ham croquettes");
@@ -260,7 +320,7 @@ describe("product-list", () => {
       }),
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const rows = [...(await tableRoot(el)).querySelectorAll("tbody tr")];
+    const rows = productRows(await tableRoot(el));
     expect(rows[0]!.textContent).toContain(euros("12,50"));
     expect(rows[1]!.textContent).toContain(`${euros("4,00")}–${euros("7,50")}`);
   });
@@ -371,17 +431,23 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe(
-      `${euros("4,00")}–${euros("5,50")}`,
-    );
+    expect(
+      cellUnder(root, "wine", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(`${euros("4,00")}–${euros("5,50")}`);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe(
-      euros("4,00"),
-    );
-    expect(cellUnder(root, "wine:w175", t("product.price")).textContent!.trim()).toBe(
-      euros("5,50"),
-    );
+    expect(
+      cellUnder(root, "wine:w125", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("4,00"));
+    expect(
+      cellUnder(root, "wine:w175", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("5,50"));
   });
 
   // The Modifiers column names the lists a manager attached through `Product.modifiers`. Two things
@@ -411,6 +477,7 @@ describe("product-list", () => {
       ],
     });
     const root = await tableRoot(el);
+    await openRow(el, "folder:reporting");
     const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
     expect(headers.some((header) => header.startsWith(t("product.name")))).toBe(true);
     expect(headers).toContain(t("editor.main_category"));
@@ -458,7 +525,7 @@ describe("product-list", () => {
       extraLists: [],
       optionLists: [],
     });
-    const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
+    const text = productRows(await tableRoot(el))[0]!.textContent!;
     expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(2);
   });
 
@@ -623,10 +690,10 @@ describe("product-list", () => {
     expect(table.searchable).toBe(false);
     expect(table.rowParent).toBeDefined();
     const root = await tableRoot(el);
-    expect(root.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(productRows(root)).toHaveLength(1);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    const rows = [...root.querySelectorAll("tbody tr")];
+    const rows = productRows(root);
     expect(rows).toHaveLength(3);
     expect(rows.slice(1).map((row) => row.textContent)).toEqual(
       expect.arrayContaining([expect.stringContaining("Small"), expect.stringContaining("Large")]),
@@ -773,10 +840,16 @@ describe("product-list", () => {
       ],
     });
     const root = await tableRoot(el);
-    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe(
-      `${euros("4,50")}–${euros("5,50")}`,
-    );
-    expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe(euros("3,00"));
+    expect(
+      cellUnder(root, "wine", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(`${euros("4,50")}–${euros("5,50")}`);
+    expect(
+      cellUnder(root, "beer", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("3,00"));
   });
 
   // Every field differs between Wine 175 and its product, and its three names differ from one
@@ -814,7 +887,8 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await openRow(el, "folder:food");
+    root.querySelector<HTMLElement>('tr[data-row-key="wine"] .tree-toggle')!.click();
     await table.updateComplete;
     const cell = (header: string) => cellUnder(root, "wine:w175", header);
     expect(cell(t("product.name")).textContent!.trim()).toBe("Wine 175");
@@ -876,9 +950,11 @@ describe("product-list", () => {
       ["wine:w125", "Wine 125"],
     ] as const)
       expect(cellUnder(root, rowKey, t("product.name")).textContent!.trim()).toBe(name);
-    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe(
-      euros("4,00"),
-    );
+    expect(
+      cellUnder(root, "wine:w125", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("4,00"));
     // Cell markup lives in the table's shadow root, so only ::part reaches it.
     const style = getComputedStyle(note("wine:w175")!);
     expect(style.display).toBe("block");
@@ -1064,7 +1140,82 @@ describe("product-list", () => {
 
   it("renders no rows for an empty products list", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products: [] });
-    expect((await tableRoot(el)).querySelectorAll("tbody tr").length).toBe(0);
+    expect(productRows(await tableRoot(el)).length).toBe(0);
+  });
+
+  it.each([
+    ["en-GB", "Any ordering"],
+    ["es-ES", "Cualquier pedido por separado"],
+  ])(
+    "names the ordering filter's empty choice like the status filter's (%s)",
+    async (locale, label) => {
+      setLocale(locale);
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: [product()],
+      });
+      const select = (await tableRoot(el)).querySelector<WtCombobox>(
+        'wt-combobox[data-filter="ordering"]',
+      )!;
+      expect(select.options[0]).toEqual({ value: "", label });
+    },
+  );
+
+  const kilo: Unit = {
+    id: "kg",
+    name: { en: "Kilogram", es: "Kilogramo" },
+    abbreviation: { en: "kg", es: "kg" },
+    precision: 3,
+  };
+
+  // \s+ also folds the no-break space Spanish writes before the sign.
+  it.each([
+    { locale: "en-GB", language: "en", each: "€19.00 each", weighed: "€48.00 / kg" },
+    { locale: "es-ES", language: "es", each: "19,00 € la unidad", weighed: "48,00 € / kg" },
+  ])("names the unit after each price in $locale", async ({ locale, language, each, weighed }) => {
+    setLocale(locale);
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "plate", unitPrice: "19.00" }),
+        product({ id: "ham", name: "Jamón", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
+      ],
+      units: [kilo],
+      unitLanguage: language,
+    });
+    const root = await tableRoot(el);
+    const price = (key: string) =>
+      cellUnder(root, key, t("product.price")).textContent!.replace(/\s+/g, " ").trim();
+    expect(price("plate")).toBe(each);
+    expect(price("ham")).toBe(weighed);
+  });
+
+  it("names a stored unit with no abbreviation by its name, and a variant by its product's unit", async () => {
+    const tray: Unit = { id: "tray", name: { es: "bandeja" }, abbreviation: {}, precision: 0 };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun", unitId: "tray", unit: tray, variants: [bunVariant] })],
+      units: [tray],
+      unitLanguage: "es",
+    });
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    const unit = (key: string) =>
+      cellUnder(root, key, t("product.price"))
+        .querySelector('[data-test="price-unit"]')!
+        .textContent!.trim();
+    expect(unit("bun")).toBe("/ bandeja");
+    expect(unit("bun:small")).toBe("/ bandeja");
+  });
+
+  it("draws the unit quietly, in the muted colour and the small size", async () => {
+    const { el, host } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product()],
+    });
+    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-font-size-sm", "11px");
+    const unit = (await tableRoot(el)).querySelector<HTMLElement>('[data-test="price-unit"]')!;
+    expect(unit.getAttribute("part")).toBe("price-unit");
+    expect(getComputedStyle(unit).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(unit).fontSize).toBe("11px");
   });
 });
 
@@ -1277,7 +1428,7 @@ describe("the product list at phone width", () => {
           products: phoneProducts(),
         });
         await tableRoot(el);
-        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 2);
+        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 3);
       } finally {
         setLocale(before);
         await page.viewport(width, height);
@@ -1306,5 +1457,516 @@ describe("the product list at phone width", () => {
       const price = cellUnder(root, key, t("product.price")).querySelector('[data-test="price"]')!;
       expect(Math.abs(bottom(name) - bottom(price)), key).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("the product list as a tree", () => {
+  it("puts every category and product under an All products row that has no arrow, cannot be selected, and counts the catalogue", async () => {
+    const { root } = await mountTree({ selecting: true });
+    const top = root.querySelector<HTMLElement>(`tr[data-row-key="${ROOT_KEY}"]`)!;
+    expect(root.querySelector("tbody tr")).toBe(top);
+    expect(top.getAttribute("aria-level")).toBe("1");
+    expect(top.getAttribute("aria-expanded")).toBe("true");
+    expect(top.querySelector(".tree-toggle, .tree-arrow, .row-activate")).toBeNull();
+    expect(top.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(top.textContent).toContain(t("folders.all_products"));
+    expect(top.querySelector('[data-test="count-root"]')!.textContent!.trim()).toBe(counted(3, 3));
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
+    expect(root.querySelector('tr[data-row-key="bread"]')!.getAttribute("aria-level")).toBe("2");
+  });
+
+  it("nests a category's subcategories, then its products, under it, whichever column sorts the table", async () => {
+    const { el, root, table } = await mountTree();
+    await openRow(el, "folder:d");
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+    expect(root.querySelector('tr[data-row-key="folder:b"]')!.getAttribute("aria-level")).toBe("3");
+    root.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:f", "folder:d", "folder:b", "cola", "bread"]);
+    root.querySelector<HTMLButtonElement>('button[data-sort="price"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  });
+
+  it("names what a category holds: its subcategories and its Active products", async () => {
+    const { root } = await mountTree();
+    const count = (id: string) =>
+      root.querySelector(`[data-test="count-${id}"]`)!.textContent!.trim();
+    expect(count("d")).toBe(counted(1, 1));
+    expect(count("f")).toBe(counted(0, 0));
+  });
+
+  it("opens and closes a category from a click or Enter on its row, saying which it will do", async () => {
+    const { el, root, table } = await mountTree();
+    const activator = () =>
+      root.querySelector<HTMLButtonElement>('tr[data-row-key="folder:d"] .row-activate')!;
+    expect(activator().getAttribute("aria-label")).toBe(
+      t("folders.open_named").replace("{name}", "Drinks"),
+    );
+    await openRow(el, "folder:d");
+    expect(rowKeys(root)).toContain("cola");
+    expect(activator().getAttribute("aria-label")).toBe(
+      t("folders.close_named").replace("{name}", "Drinks"),
+    );
+    activator().focus();
+    await userEvent.keyboard("{Enter}");
+    await table.updateComplete;
+    expect(rowKeys(root)).not.toContain("cola");
+    expect(root.querySelector('tr[data-row-key="folder:d"] .tree-arrow')!.textContent!.trim()).toBe(
+      "▸",
+    );
+  });
+
+  it("reports a person opening or closing a category, and nothing for a product's variants", async () => {
+    const { el, root, table } = await mountTree({
+      products: [
+        ...treeProducts(),
+        product({ id: "bun", name: "Bun", primaryCategoryId: null, variants: [bunVariant] }),
+      ],
+    });
+    const toggles: unknown[] = [];
+    el.addEventListener("category-toggle", (event) => toggles.push((event as CustomEvent).detail));
+    const raw = vi.fn();
+    el.addEventListener("wt-expand-change", raw);
+    await openRow(el, "folder:d");
+    await openRow(el, "folder:d");
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(toggles).toEqual([
+      { categoryId: "d", open: true },
+      { categoryId: "d", open: false },
+    ]);
+    expect(raw).not.toHaveBeenCalled();
+  });
+
+  it("remembers which categories are open when the list is drawn again", async () => {
+    const first = await mountTree();
+    await openRow(first.el, "folder:d");
+    cleanupWidgets();
+    const second = await mountTree();
+    expect(rowKeys(second.root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  });
+
+  it("lifts nothing for a press on a row's own control, on the All products row, or outside every row", async () => {
+    const { el, root } = await mountTree();
+    const offered: string[][] = [];
+    el.addEventListener("drag-items", (event) =>
+      offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+    );
+    const press = (target: Element, pointerId: number) => {
+      for (const [type, clientY] of [
+        ["pointerdown", 0],
+        ["pointermove", 40],
+        ["pointercancel", 40],
+      ] as const)
+        target.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, composed: true, pointerId, clientY }),
+        );
+    };
+    press(root.querySelector('[data-test="actions-bread"]')!, 1);
+    press(root.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!, 2);
+    press(root.querySelector("thead th")!, 3);
+    expect(offered).toEqual([]);
+    press(root.querySelector('tr[data-row-key="bread"] [part~="product-cell"]')!, 4);
+    expect(offered).toEqual([["bread"], []]);
+  });
+
+  it("opens the category it is asked to reveal, and every category above it", async () => {
+    const { el, root } = await mountTree();
+    await el.revealCategory("b");
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager", "cola", "folder:f", "bread"]);
+  });
+
+  it("a search keeps the categories above a match open, finds a product by a variant's name, and clearing it restores what was open", async () => {
+    const { el, root, table } = await mountTree({
+      products: [
+        ...treeProducts(),
+        product({
+          id: "bun",
+          name: "Bun",
+          primaryCategoryId: "b",
+          variants: [{ ...bunVariant, name: "Large cup" }],
+        }),
+      ],
+    });
+    await openRow(el, "folder:d");
+    el.search = "cup";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "bun"]);
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "bun", "bun:small"]);
+    el.search = "";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  });
+
+  const menuItems = (menu: Element) =>
+    [...menu.children].map((child) => (child.localName === "hr" ? "—" : child.textContent!.trim()));
+
+  it("opens a product from a click or Enter on its row, and a variant from its own row", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun", variants: [bunVariant] })],
+    });
+    const opened: string[] = [];
+    el.addEventListener("edit-product", (event) =>
+      opened.push((event as CustomEvent<{ productId: string }>).detail.productId),
+    );
+    const root = await tableRoot(el);
+    const activator = (key: string) =>
+      root.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!;
+    expect(activator("bun").getAttribute("aria-label")).toBe(
+      `${t("action.edit")}: Croquetas de jamón`,
+    );
+    activator("bun").click();
+    activator("bun").focus();
+    await userEvent.keyboard("{Enter}");
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    activator("bun:small").click();
+    expect(opened).toEqual(["bun", "bun", "small"]);
+  });
+
+  it("opens nothing from a click on a product's grip, its menu button or its selection box", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun" })],
+      selecting: true,
+    });
+    const opened = vi.fn();
+    el.addEventListener("edit-product", opened);
+    const row = (await tableRoot(el)).querySelector('tr[data-row-key="bun"]')!;
+    await userEvent.click(row.querySelector<HTMLElement>(".drag-grip")!);
+    await userEvent.click(row.querySelector<HTMLElement>("wt-row-actions")!);
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(row.querySelector<HTMLElement>('input[type="checkbox"]')!);
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("opens nothing when a drag of a product is released on its own row", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun" }), product({ id: "roll", name: "Roll" })],
+    });
+    const opened = vi.fn();
+    el.addEventListener("edit-product", opened);
+    const root = await tableRoot(el);
+    const own = root.querySelector<HTMLElement>('tr[data-row-key="bun"] .row-activate')!;
+    const other = root.querySelector<HTMLElement>('tr[data-row-key="roll"] .row-activate')!;
+    const at = (target: HTMLElement, from: HTMLElement, type: string) => {
+      const box = from.getBoundingClientRect();
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          composed: true,
+          pointerId: 1,
+          clientX: box.x + 4,
+          clientY: box.y + 4,
+        }),
+      );
+    };
+    at(own, own, "pointerdown");
+    at(own, other, "pointermove");
+    at(own, own, "pointermove");
+    at(own, own, "pointerup");
+    own.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }));
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("offers Add product and Add category on All products, and those, a divider, Rename, Move to… and Delete on a category", async () => {
+    const { root } = await mountTree();
+    const all = root.querySelector('[data-test="actions-root"]')!;
+    expect(all.getAttribute("label")).toBe(`${t("staff.actions")}: ${t("folders.all_products")}`);
+    expect(menuItems(all)).toEqual([t("catalogue.add_product"), t("folders.add_category")]);
+    expect(menuItems(root.querySelector('[data-test="actions-folder-d"]')!)).toEqual([
+      t("catalogue.add_product"),
+      t("folders.add_category"),
+      "—",
+      t("folders.rename"),
+      t("folders.move"),
+      t("action.delete"),
+    ]);
+  });
+
+  it("asks for a product or a category inside the row whose menu was used", async () => {
+    const { el, root } = await mountTree({ canAddProduct: true });
+    const asked: unknown[] = [];
+    for (const name of ["add-product", "add-category", "move-folder"])
+      el.addEventListener(name, (event) => asked.push([name, (event as CustomEvent).detail]));
+    for (const test of [
+      "add-product-root",
+      "add-category-root",
+      "add-product-d",
+      "add-category-d",
+      "move-d",
+    ])
+      root.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+    expect(asked).toEqual([
+      ["add-product", { categoryId: null }],
+      ["add-category", { parentId: null }],
+      ["add-product", { categoryId: "d" }],
+      ["add-category", { parentId: "d" }],
+      ["move-folder", { folderId: "d" }],
+    ]);
+  });
+
+  it("keeps every Add product disabled, and sends nothing, while products cannot be added yet", async () => {
+    const { el, root, table } = await mountTree();
+    const asked = vi.fn();
+    el.addEventListener("add-product", asked);
+    const items = () => [...root.querySelectorAll<HTMLElement>('[data-test^="add-product-"]')];
+    expect(items().map((item) => item.hasAttribute("disabled"))).toEqual([true, true, true]);
+    items()[0]!.click();
+    expect(asked).not.toHaveBeenCalled();
+    el.canAddProduct = true;
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(items().map((item) => item.hasAttribute("disabled"))).toEqual([false, false, false]);
+  });
+
+  it("puts focus on a row's menu button when asked", async () => {
+    const { el, root } = await mountTree();
+    el.focusRowMenu("d");
+    expect(root.activeElement).toBe(root.querySelector('[data-test="actions-folder-d"]'));
+    el.focusRowMenu(null);
+    expect(root.activeElement).toBe(root.querySelector('[data-test="actions-root"]'));
+  });
+
+  it("reveals a product by opening every category above it", async () => {
+    const { el, root } = await mountTree();
+    await el.revealProduct("lager");
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager", "cola", "folder:f", "bread"]);
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps every row's menu on screen and uncovered at 390 px, three categories deep (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b" }],
+          products: [
+            product({
+              id: "keg",
+              name: "Cerveza-de-barril-artesana-de-temporada-con-nombre-largo",
+              primaryCategoryId: "k",
+            }),
+          ],
+        });
+        await el.revealCategory("k");
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        expectRowMenusOnScreen(table, 5);
+        // The table learns its width from a ResizeObserver, which reports after the next layout.
+        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+        // The phone indent: half a step a level, measured where a 390 px screen puts the list.
+        const indent = (key: string) =>
+          getComputedStyle(
+            table.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
+          ).paddingInlineStart;
+        expect(["folder:d", "folder:k", "keg"].map(indent)).toEqual(["8px", "24px", "32px"]);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  it("puts a new category's name box inside the category it is added to, opened, holding the cursor", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "create", parentId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(rowKeys(root)).toEqual([
+      "folder:d",
+      "folder:b",
+      "draft:new",
+      "cola",
+      "folder:f",
+      "bread",
+    ]);
+    expect(root.querySelector('tr[data-row-key="draft:new"]')!.getAttribute("aria-level")).toBe(
+      "3",
+    );
+    const box = root.querySelector('tr[data-row-key="draft:new"] wt-input')!;
+    expect(box.getAttribute("part")).toBe("name-box");
+    expect(box.getAttribute("label")).toBe(t("folders.name"));
+  });
+
+  it("lines a new category's folder icon up with its sibling categories' icons", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    const iconLeft = (key: string) =>
+      root
+        .querySelector(`tr[data-row-key="${key}"] wt-icon[name="folder"]`)!
+        .getBoundingClientRect().left;
+    expect(iconLeft("draft:new")).toBe(iconLeft("folder:d"));
+    expect(iconLeft("draft:new")).toBe(iconLeft("folder:f"));
+  });
+
+  it("sends the typed name, trimmed, on Enter or on leaving the box, and a cancel on Esc or on leaving it blank", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    const start = async (parentId: string | null) => {
+      el.nameDraft = null;
+      await el.updateComplete;
+      el.nameDraft = { kind: "create", parentId };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    };
+    await start(null);
+    await userEvent.keyboard("  Juice  {Enter}");
+    await start(null);
+    await userEvent.keyboard("Tea{Tab}");
+    await start("d");
+    await userEvent.keyboard("Tea{Escape}");
+    await start("d");
+    await userEvent.keyboard("{Tab}");
+    expect(sent).toEqual([{ name: "Juice" }, { name: "Tea" }, "cancel", "cancel"]);
+  });
+
+  it("sends a name once, shows a refusal under the box, and then lets Enter send again", async () => {
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice{Enter}{Enter}");
+    expect(sent).toEqual([{ name: "Juice" }]);
+    el.nameError = "That name is taken.";
+    await el.updateComplete;
+    const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    )!;
+    await box.updateComplete;
+    expect(box.shadowRoot!.querySelector("[data-error]")!.textContent).toBe("That name is taken.");
+    await userEvent.keyboard("{Enter}");
+    expect(sent).toEqual([{ name: "Juice" }, { name: "Juice" }]);
+  });
+
+  it("turns a category's name into the box, holding its name, for a rename", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    expect(row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.value).toBe("Drinks");
+    expect(row.querySelector("strong")).toBeNull();
+    expect(row.querySelector(".row-activate")).toBeNull();
+  });
+
+  it("sends a cancel on Enter in a blank box, and nothing more once a name is sent", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("   {Enter}");
+    el.nameDraft = null;
+    await el.updateComplete;
+    el.nameDraft = { kind: "create", parentId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice{Enter}{Escape}{Tab}");
+    expect(sent).toEqual(["cancel", { name: "Juice" }]);
+  });
+
+  it("sends nothing for a box that loses the cursor because another box replaced it", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(sent).toEqual([]);
+  });
+
+  it("closes a category's menu when Rename is chosen from it", async () => {
+    const { el, root } = await mountTree();
+    const renames: unknown[] = [];
+    el.addEventListener("rename-folder", (event) => renames.push((event as CustomEvent).detail));
+    const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-folder-d"]',
+    )!;
+    menu.show();
+    const popup = menu.shadowRoot!.querySelector("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(true);
+    root.querySelector<HTMLElement>('[data-test="rename-d"]')!.click();
+    expect(renames).toEqual([{ folderId: "d" }]);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("a rename's box sends a cancel on Esc, and on leaving it blank", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    const rename = async () => {
+      el.nameDraft = null;
+      await el.updateComplete;
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    };
+    await rename();
+    await userEvent.keyboard("Beverages{Escape}");
+    await rename();
+    await userEvent.keyboard("{Backspace}{Tab}");
+    expect(sent).toEqual(["cancel", "cancel"]);
+  });
+
+  it("opens the All products menu, without moving focus, when the catalogue loads empty, and only that once", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    onTestFinished(() => outside.remove());
+    outside.focus();
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [],
+      categories: [],
+      loaded: true,
+    });
+    const menu = (await tableRoot(el)).querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-root"]',
+    )!;
+    const popup = () => menu.shadowRoot!.querySelector("[popover]")!;
+    await vi.waitFor(() => expect(popup().matches(":popover-open")).toBe(true));
+    expect(document.activeElement).toBe(outside);
+    menu.hide();
+    el.products = [];
+    await el.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(popup().matches(":popover-open")).toBe(false);
+  });
+
+  it("leaves the menu closed before the catalogue has loaded, and for one with something in it", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [],
+      categories: [],
+    });
+    const popup = async () =>
+      (await tableRoot(el))
+        .querySelector('[data-test="actions-root"]')!
+        .shadowRoot!.querySelector("[popover]")!;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect((await popup()).matches(":popover-open")).toBe(false);
+    el.products = [product()];
+    el.loaded = true;
+    await el.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect((await popup()).matches(":popover-open")).toBe(false);
   });
 });

@@ -1,35 +1,39 @@
-# Product folders
+# Product categories
 
-To find products and keep each sale counted once, organise products into folders on the Products
-screen at `/manage/catalogue`. Each folder is a reporting category with one internal name. It
-has no translations, image or colour. A product belongs to at most one folder; an unfiled product
-appears at the top level. Labels and the separate Categories screen are retired.
+To find products and keep each sale counted once, organise products into categories on the Products
+screen at `/manage/catalogue`. Each category is a reporting category with one internal name, shown
+on the Products screen as a row of its tree. It has no translations, image or colour. A product
+belongs to at most one category; one in none sits directly under **All products**. Labels and the
+separate Categories screen are retired.
 
-Open Drinks to see its direct subfolders and products. Use the breadcrumb to go back up. Choose
-**All products** to see every product with its folder path, or search by product name, variant
-name or folder path across the catalogue. Status and ordering filters affect products; folders
-remain available for navigation. **New folder** creates a folder at the current level, and a
-folder's row menu offers Rename and Delete.
+The screen is one tree. Its first row, **All products**, holds every category and every product
+filed in none; each category opens in place, with its subcategories above its products. A click or
+Enter on a category's row opens or closes it, and the categories a person opens are remembered in
+that browser. Search finds products by name, variant name or category path and opens every category
+on the way to a match; clearing it restores what was open. Status and ordering filters affect
+products; categories stay. The address names the category last opened, as
+`/manage/catalogue/category/<id>`; closing that category, or one above it, names the closed
+category's parent.
 
-A folder has at most one parent, stored in `category_details.parent_id`. A save that would make
-it its own ancestor is refused with `category.parent_cycle`. A product's folder is
-`products.category_id`. When this is null, the product is Uncategorised, which is not a folder
+A category has at most one parent, stored in `category_details.parent_id`. A save that would make
+it its own ancestor is refused with `category.parent_cycle`. A product's category is
+`products.category_id`. When this is null, the product is Uncategorised, which is not a category
 row you can rename or delete.
 
-A red asterisk beside a folder means no active kitchen routing rule covers the folder or its
-parent folders. Its tooltip explains the warning. Set a claim or an exception that covers the
-folder in every service zone on Prep Stations to route those dishes before they fall through to
+A red asterisk beside a category means no active kitchen routing rule covers the category or its
+parent categories. Its tooltip explains the warning. Set a claim or an exception that covers the
+category in every service zone on Prep Stations to route those dishes before they fall through to
 the default station.
 
 A variant reads its own reporting category when set, and its product's otherwise. You edit that
-choice in the product editor. In the browser, variants sit under their product and move with it;
+choice in the product editor. In the tree, variants sit under their product and move with it;
 you cannot select or drag a variant on its own.
 
 Reports can use the classification recorded with each sale, or today's catalogue classification.
-Moving a product or renaming a folder does not rewrite recorded sale lines. See
+Moving a product or renaming a category does not rewrite recorded sale lines. See
 [the two report modes](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md#5-the-two-report-modes).
 
-The prep-station rules walk a product's folder ancestors, using the nearest claimed folder after
+The prep-station rules walk a product's category ancestors, using the nearest claimed category after
 ordered exceptions. See
 [the approved design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
 
@@ -215,31 +219,40 @@ switches silently otherwise (`apps/till/src/till-app.ts`).
 
 ## Moving and deleting
 
-Use **Select**, tick products and folders, and choose **Move to…**. Pick a destination folder or
-**All products (top level)**. A selected folder and its descendants are excluded as destinations,
-and the server also refuses such a move with `category.parent_cycle`. On a pointer device you
-can drag a product, folder or selection onto a folder or breadcrumb. Touch and keyboard users use
-the same selection actions.
+Use **Select**, tick products and categories, and choose **Move to…**. Pick a destination category or
+**All products (top level)**. A selected category and its descendants are excluded as destinations,
+and the server also refuses such a move with `category.parent_cycle`. Anything selected inside a
+selected category moves with that category rather than being filed beside it.
 
-Navigating, searching or changing a filter clears the selection, so actions do not reach items you
-have hidden. **Cancel** clears it and restores the ordinary toolbar. A Delete you already
-requested keeps its captured selection, including while the folder summary is being read.
+On a pointer device you can drag a product, a category, or in Select mode every selected row,
+onto a category, onto a product (to file beside it) or onto **All products** (to file in no
+category). The row stays in place, faded, while a copy follows the pointer; the target shows a bar
+on its left edge and a dashed gap where the row will land in the current sort; a closed category
+opens after `HOVER_OPEN_MS` (600 ms, `apps/dashboard/src/widgets/product-list.ts`) of hovering.
+Esc, or a drop where the drag started, moves nothing. A mouse drags from anywhere on the row; a
+finger drags only from the row's grip, so the rest of the row still scrolls. A keyboard does not
+drag: keyboard users, and touch users who prefer it, use the same selection actions.
+
+Searching or changing a filter clears the selection, so actions do not reach items you have hidden.
+Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
+closed category is still selected. **Cancel** clears it and restores the ordinary toolbar. A Delete you already
+requested keeps its captured selection, including while the category summary is being read.
 
 **Delete** makes selected products Inactive. Their rows and previous sales remain, and you can
-restore the products later. Before deleting a non-empty folder, choose what happens to its contents:
+restore the products later. Before deleting a non-empty category, choose what happens to its contents:
 
-- **Move it up to the parent folder** keeps the products active and moves the folder's direct
-  products and subfolders to its parent. For a top-level folder they move to the top level.
+- **Move it up to the parent category** keeps the products active and moves the category's direct
+  products and subcategories to its parent. For a top-level category they move to **All products**.
 - **Delete it too** removes the subtree and makes its products Inactive. The summary shows the
-  numbers of subfolders, products and routing rules removed (folder claims and exceptions).
+  numbers of subcategories, products and routing rules removed (category claims and exceptions).
 
-An empty folder is deleted without confirmation. A folder's row-menu Delete uses the same path.
+An empty category is deleted without confirmation. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
 to approve unknown contents. A refused action keeps its dialog open with a message at the bottom.
-Deleting a folder removes its station claim and every exception naming it, because both tables
+Deleting a category removes its station claim and every exception naming it, because both tables
 have a cascading foreign key to `categories`. The summary counts those removed rules; it does
 not list products whose station would change. **Move to…** also has no routing preview. Check
-Prep Stations' tester after changing the folder tree. A variant whose own category is cleared
+Prep Stations' tester after changing the category tree. A variant whose own category is cleared
 uses its product's category for claims.
 
 ## API
@@ -259,9 +272,9 @@ a non-string name is `management.request_invalid` (400).
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents }`; 204 |
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, routes }[]` |
 
-Both ID arrays are required and contain distinct UUIDs. `to` is a folder ID or null. `contents`
+Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. For example, once you have created Cocktails and your products, use their
-returned IDs to move two products and a folder together:
+returned IDs to move two products and a category together:
 
 ```http
 POST /management-api/folders/move
@@ -275,13 +288,13 @@ Content-Type: application/json
 ```
 
 The successful response is `204 No Content`. A missing product or variant ID is `product.not_found`
-(404); a missing folder is `category.not_found` (404); a folder move into itself or its descendants
+(404); a missing category is `category.not_found` (404); a category move into itself or its descendants
 is `category.parent_cycle` (409). Malformed arrays or repeated IDs are `management.request_invalid`
-(400), and a malformed UUID is `shared.invalid_id` (400). Folder-summary counts cover each complete
+(400), and a malformed UUID is `shared.invalid_id` (400). Category-summary counts cover each complete
 subtree; the browser counts selected roots when ancestors and descendants are selected together.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
-folder selection operations above. The product editor still saves `primaryCategoryId`; a body
+category selection operations above. The product editor still saves `primaryCategoryId`; a body
 sending the removed `categoryIds` or `labelIds` is refused with `product.invalid`.
 
 ## Storage and development reset
