@@ -26,7 +26,8 @@ import {
   madeHereAnswer,
   madeHereSinkFor,
 } from "./made-here.js";
-import { createOpenOrder, fireCourse, fireLines } from "./working-order.js";
+import { createOpenOrder, fireCourse, fireLines, listStationQueue } from "./working-order.js";
+import { reprintOrderTickets } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 
@@ -99,6 +100,61 @@ async function deviceAt(
 }
 
 describe("device made-here stations", () => {
+  it("releases a made-here later-course drink immediately and never prints it on course fire or reprint", async () => {
+    const venue = await setupVenue(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const grill = await createStation(tx, venue.cfg, { name: "Grill" });
+      await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
+      const barPrinter = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
+      const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
+      const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
+      const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
+      const deviceId = await deviceAt(
+        tx,
+        venue.cfg.locationId,
+        venue.cfg.tillId,
+        venue.defaultStationId,
+      );
+      const cfg = { ...venue.cfg, sendingDeviceId: deviceId };
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
+      const drink = await rawLine(tx, orderId, venue.cafeId, 2, second.id);
+      await fireLines(tx, cfg, orderId, [burger, drink]);
+      const [made] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, drink.id));
+      expect(made).toMatchObject({ madeHere: true, state: "ready", firedAt: expect.any(String) });
+      expect(await listStationQueue(tx, venue.defaultStationId)).toEqual([]);
+      const barBefore = await tx
+        .select()
+        .from(printJobs)
+        .where(eq(printJobs.printerId, barPrinter));
+      await fireCourse(tx, venue.cfg, orderId, second.id, randomUUID());
+      await reprintOrderTickets(tx, venue.cfg, orderId);
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
+      ).toHaveLength(barBefore.length);
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, grillPrinter)),
+      ).toHaveLength(2);
+      const [after] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, drink.id));
+      expect(after).toEqual(made);
+      const allMade = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      for (const item of allMade.filter((item) => item.madeHere)) {
+        expect(item.firedAt).toEqual(expect.any(String));
+        expect(item.state).toBe("ready");
+      }
+    });
+  });
+
   it("adds committed items to JSON while retaining the cookie and leaves text untouched", async () => {
     const venue = await setupVenue(suite.db);
     let lineId = "";
@@ -342,6 +398,8 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
       await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
+      const barPrinter = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
+      const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(
@@ -362,14 +420,24 @@ describe("device made-here stations", () => {
       expect(initial.find((item) => item.workingOrderLineId === drink.id)).toMatchObject({
         madeHere: true,
         state: "ready",
+        firedAt: expect.any(String),
       });
       expect(initial.find((item) => item.workingOrderLineId === burger.id)!.firedAt).toBeNull();
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
+      ).toHaveLength(0);
       await fireCourse(tx, venue.cfg, orderId, second.id, randomUUID());
       const [released] = await tx
         .select()
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, burger.id));
       expect(released!.firedAt).toEqual(expect.any(String));
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
+      ).toHaveLength(0);
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, grillPrinter)),
+      ).toHaveLength(1);
     });
   });
 

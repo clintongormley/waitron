@@ -592,6 +592,28 @@ type CorrectionChange =
 export type HoldCorrection =
   { kind: "HOLD CHANGED"; direction: "added" | "removed" } | { kind: "HOLD CANCELLED" };
 
+/** A made-here item has neither kitchen paper nor a station-screen line to correct. */
+async function withoutMadeHere<T extends { workingOrderLineId: string }>(
+  tx: Transaction,
+  items: readonly T[],
+): Promise<T[]> {
+  if (items.length === 0) return [];
+  const madeHere = await tx
+    .select({ lineId: ticketItems.workingOrderLineId })
+    .from(ticketItems)
+    .where(
+      and(
+        inArray(
+          ticketItems.workingOrderLineId,
+          items.map((item) => item.workingOrderLineId),
+        ),
+        eq(ticketItems.madeHere, true),
+      ),
+    );
+  const excluded = new Set(madeHere.map((item) => item.lineId));
+  return items.filter((item) => !excluded.has(item.workingOrderLineId));
+}
+
 /**
  * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link removeFromLine})
  * of a line that had already fired, then enqueue a correction slip per item where its station has
@@ -610,6 +632,7 @@ export async function enqueueCorrectionSlips(
   items: CorrectionItem[],
   kind: "VOID" | "RECALLED",
 ): Promise<void> {
+  items = await withoutMadeHere(tx, items);
   if (items.length === 0) return;
 
   await VENUE_SERVICE.recordKitchenNotices(
@@ -634,6 +657,8 @@ export async function enqueueHoldCorrections(
   items: (CorrectionItem & { group: number })[],
   change: HoldCorrection,
 ): Promise<void> {
+  items = await withoutMadeHere(tx, items);
+  if (items.length === 0) return;
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
@@ -719,6 +744,7 @@ export async function enqueueExtraCancelled(
   item: CorrectionItem,
   cancelledExtra: string,
 ): Promise<void> {
+  if ((await withoutMadeHere(tx, [item])).length === 0) return;
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
@@ -857,6 +883,7 @@ interface ItemOnOrder {
   stationId: string | null;
   state: TicketState;
   quantity: number;
+  madeHere: boolean;
 }
 
 /** The ticket items on each order, in line order, keyed by order. */
@@ -872,6 +899,7 @@ async function readTicketItemsOn(
       stationId: ticketItems.stationId,
       state: ticketItems.state,
       quantity: firedQuantity,
+      madeHere: ticketItems.madeHere,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -900,7 +928,7 @@ async function notifyMoved(
   splitFrom: ReadonlyMap<string, string>,
 ): Promise<void> {
   const moved: CorrectionItem[] = onOrder
-    .filter((item) => before.ticketItemIds.has(splitFrom.get(item.id) ?? item.id))
+    .filter((item) => !item.madeHere && before.ticketItemIds.has(splitFrom.get(item.id) ?? item.id))
     .map((item) => ({
       workingOrderLineId: item.workingOrderLineId,
       stationId: item.stationId!,
@@ -1033,7 +1061,13 @@ async function readReprintParts(
       quantity: ticketItems.quantity,
     })
     .from(ticketItems)
-    .where(and(inArray(ticketItems.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)));
+    .where(
+      and(
+        inArray(ticketItems.workingOrderId, [...orderIds]),
+        isNotNull(ticketItems.firedAt),
+        eq(ticketItems.madeHere, false),
+      ),
+    );
   const held = await tx
     .select({
       workingOrderId: ticketItems.workingOrderId,

@@ -1100,6 +1100,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketItemId: ticketItems.id,
       ticketState: ticketItems.state,
       ticketFiredAt: ticketItems.firedAt,
+      ticketMadeHere: ticketItems.madeHere,
       awayAt: ticketItems.awayAt,
     })
     .from(workingOrderLines)
@@ -1415,6 +1416,7 @@ export async function groupArrivingDishes(
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketMadeHere: ticketItems.madeHere,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))

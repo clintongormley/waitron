@@ -28,7 +28,7 @@ export const ticketState = enumType(["queued", "preparing", "ready"]);
  * independently of the parent order's fiscal status (a settled order still has its lines cooked).
  * A `made_here` item was made on the spot at the sending device (design §5.11): it is never printed,
  * is left out of kitchen and expo screens, floor kitchen counts, and the overdue report, and is
- * `ready` from the moment it fires.
+ * fired and `ready` from the moment it is recorded: it is never held.
  */
 export const ticketItems = table(
   "ticket_items",

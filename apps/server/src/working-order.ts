@@ -1555,7 +1555,7 @@ export async function sendLines(
   lineNos: number[],
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
-  // A held group's lines are released only by firing the group.
+  // A made-here line in a held group was made at its send; the remaining lines wait for the group.
   const heldGroupLines = await tx
     .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
     .from(workingOrderLines)
@@ -2181,6 +2181,7 @@ interface ServableLine {
   groupState: "held" | "fired" | "removed" | null;
   ticketItemId: string | null;
   ticketFiredAt: string | null;
+  ticketMadeHere: boolean | null;
 }
 
 /**
@@ -2206,6 +2207,7 @@ async function servableLines(
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketMadeHere: ticketItems.madeHere,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
@@ -2228,13 +2230,17 @@ async function servableLines(
 }
 
 /**
- * Whether a dish line is released work, which is what serving needs: a line in a held group, or
- * whose kitchen item has not fired, is not, nor is a line with neither an item nor a group that was
- * never sent.
+ * Whether a dish line is released work, which is what serving needs. A made-here line is released
+ * at its send, even in a held group. Other held-group and unfired lines wait; an ungrouped line
+ * with no kitchen item needs a sent time.
  */
 export function isReleased(
-  line: Pick<ServableLine, "groupState" | "ticketItemId" | "ticketFiredAt" | "sentAt">,
+  line: Pick<
+    ServableLine,
+    "groupState" | "ticketItemId" | "ticketFiredAt" | "ticketMadeHere" | "sentAt"
+  >,
 ): boolean {
+  if (line.ticketMadeHere === true) return true;
   return line.groupState === "held"
     ? false
     : line.ticketItemId !== null
@@ -2259,6 +2265,7 @@ export async function ordersWithUnfiredDish(
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketMadeHere: ticketItems.madeHere,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -3060,7 +3067,7 @@ export async function carveOffLines(
 
 /**
  * Refuse `group.held_leaves_party` for the lowest-numbered of these lines whose group is held: a
- * group belongs to its party (D1), so held work leaves only once fired.
+ * group belongs to its party (D1). A made-here line in it was made at its send.
  */
 export async function refuseHeldLeavingParty(
   tx: Transaction,
@@ -3532,9 +3539,9 @@ interface EditableOrder {
   parents: EditableParent[];
   maxLineNo: number;
   /**
-   * What a line the edit adds gets from the kitchen: `fire` where some line of the order was sent,
-   * as a round's line would; `hold` where nothing was sent but the kitchen holds items or a group
-   * holds lines, so they are released together; `none` where the order has no ticket item, no
+   * What a line the edit adds gets from the kitchen: `fire` where some line of the order was sent
+   * outside a held group, as a round's line would; a sent made-here line in a held group counts
+   * as held work. `hold` where the kitchen holds items or a group holds lines; `none` where the order has no ticket item, no
    * grouped line and nothing sent, as a parked counter order, whose lines are fired when it is
    * placed.
    */
@@ -3714,6 +3721,7 @@ async function readEditableOrder(
       courseId: workingOrderLines.courseId,
       sentAt: workingOrderLines.sentAt,
       groupId: workingOrderLines.groupId,
+      groupState: orderGroups.state,
       creditedTo: workingOrderLines.creditedTo,
       ticketId: ticketItems.id,
       firedAt: ticketItems.firedAt,
@@ -3725,6 +3733,7 @@ async function readEditableOrder(
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, orderId))
     .orderBy(workingOrderLines.lineNo);
@@ -3776,14 +3785,19 @@ async function readEditableOrder(
     lines,
     parents,
     maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
-    newWork: lines.some((line) => line.sentAt !== null)
+    newWork: rows.some(
+      (line) => line.sentAt !== null && (!line.madeHere || line.groupState !== "held"),
+    )
       ? "fire"
       : lines.some((line) => line.ticket !== null || line.groupId !== null)
         ? "hold"
         : "none",
     firedCourseIds: new Set(
       lines
-        .filter((line) => line.ticket?.firedAt != null && line.ticket.courseId !== null)
+        .filter(
+          (line) =>
+            line.ticket?.firedAt != null && !line.ticket.madeHere && line.ticket.courseId !== null,
+        )
         .map((line) => line.ticket!.courseId!),
     ),
   };
@@ -5366,6 +5380,7 @@ export async function listStationQueue(
     .where(
       and(
         eq(ticketItems.stationId, stationId),
+        eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
       ),

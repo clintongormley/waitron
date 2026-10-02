@@ -135,6 +135,7 @@ interface Row {
   sentAt: string | null;
   ticketItemId: string | null;
   ticketFiredAt: string | null;
+  ticketMadeHere: boolean | null;
   stationId: string | null;
   ticketState: TicketState | null;
   firedQuantity: number;
@@ -207,6 +208,7 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketMadeHere: ticketItems.madeHere,
       stationId: ticketItems.stationId,
       ticketState: ticketItems.state,
       firedQuantity,
