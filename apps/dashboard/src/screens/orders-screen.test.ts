@@ -1,0 +1,255 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
+import type { DashboardApi, OrderRowDto, OrdersPageDto } from "../api/client.js";
+import "./orders-screen.js";
+import type { OrdersScreen } from "./orders-screen.js";
+
+const ROW: OrderRowDto = {
+  kind: "bill",
+  id: "0f8fad5b-d9cb-469f-a165-70867728950e",
+  at: "2026-09-30T12:00:00.000Z",
+  orderNumber: 12,
+  label: "Lunch",
+  partyId: null,
+  partyName: null,
+  tables: ["Mesa 5"],
+  counter: false,
+  saleId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  invoiceNumber: "A/12",
+  creditNotes: ["R/2"],
+  status: "left_without_paying",
+  credited: "in_part",
+  invoiceNotCredited: false,
+  total: "30.00",
+  stillOwed: "15.00",
+  staff: [{ id: "person-1", name: "Ana" }],
+  departedAt: "2026-09-30T13:00:00.000Z",
+};
+const PAGE: OrdersPageDto = { rows: [ROW], next: "cursor", from: "2026-09-30", to: "2026-09-30" };
+
+function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
+  const api = {
+    listOrderPages: vi.fn().mockResolvedValue(PAGE),
+    listOrderStaff: vi.fn().mockResolvedValue({ staff: [{ id: "person-1", name: "Ana" }] }),
+    getOrder: vi.fn().mockResolvedValue({
+      row: ROW,
+      lines: [],
+      invoices: [],
+      tenders: [],
+      payments: [],
+      party: null,
+      departure: null,
+      reprints: [],
+    }),
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+    reprintOrder: vi.fn().mockResolvedValue({ jobId: "job-1" }),
+    liveData: new LiveData(),
+    ...overrides,
+  };
+  return {
+    ...api,
+    background: {
+      ...api,
+      listOrderPages: vi.fn().mockResolvedValue(PAGE),
+      getOrder: vi.fn().mockResolvedValue({
+        row: ROW,
+        lines: [],
+        invoices: [],
+        tenders: [],
+        payments: [],
+        party: null,
+        departure: null,
+        reprints: [],
+      }),
+    },
+  } as unknown as DashboardApi;
+}
+
+async function loaded(api = stubApi(), permissions: string[] = ["report.view"]) {
+  const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api, permissions });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
+  );
+  return { el, api };
+}
+
+beforeEach(() => {
+  setLocale("en-GB");
+  history.replaceState(null, "", "/manage/orders");
+  sessionStorage.removeItem("waitron.orders.table");
+  localStorage.removeItem("waitron.orders.table:columns");
+});
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("es-ES");
+});
+
+describe("dashboard Orders", () => {
+  it("keeps the status and staff choices readable in the filter bar", async () => {
+    const { el } = await loaded();
+    for (const name of ["status", "staff"]) {
+      const choice = el.shadowRoot!.querySelector<HTMLElement>(`wt-combobox[name=${name}]`)!;
+      expect(choice.getBoundingClientRect().width).toBeGreaterThan(140);
+    }
+  });
+
+  it("shows a debt's status, credit mark and still owed, with the row menu pinned", async () => {
+    const { el } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.columns.find((column) => column.key === "actions")?.pinned).toBe("end");
+    expect(table.shadowRoot!.textContent).toContain("Left without paying");
+    expect(table.shadowRoot!.textContent).toContain("Credited in part");
+    expect(table.shadowRoot!.textContent).toContain("€15.00");
+  });
+
+  it("keeps dates when choosing Unpaid and writes them into the address", async () => {
+    const { el, api } = await loaded();
+    const choose = (name: string, value: string) =>
+      el
+        .shadowRoot!.querySelector(`[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    choose("from", "2026-09-01");
+    choose("to", "2026-09-02");
+    choose("status", "unpaid");
+    await vi.waitFor(() =>
+      expect(location.pathname).toBe("/manage/orders/status/unpaid/from/2026-09-01/to/2026-09-02"),
+    );
+    expect(
+      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0],
+    ).toMatchObject({
+      status: "unpaid",
+      from: "2026-09-01",
+      to: "2026-09-02",
+    });
+  });
+
+  it("offers finished statuses to staff because the server limits them to today", async () => {
+    history.replaceState(null, "", "/manage/orders/status/paid");
+    const { el, api } = await loaded(stubApi(), []);
+    const status = el.shadowRoot!.querySelector<
+      HTMLElement & { options: { value: string }[]; value: string }
+    >("wt-combobox[name=status]")!;
+    expect(status.options.map((option) => option.value)).toContain("paid");
+    expect(status.value).toBe("paid");
+    expect((api.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0].status).toBe("paid");
+  });
+
+  it("loads another page when Show more is chosen", async () => {
+    const { el, api } = await loaded();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-more]")!.click();
+    await vi.waitFor(() =>
+      expect((api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[1]).toBe(
+        2,
+      ),
+    );
+  });
+
+  it("opens a bill's detail when its row is chosen", async () => {
+    const { el, api } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
+    await vi.waitFor(() =>
+      expect(api.getOrder as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(ROW.id),
+    );
+    expect(el.shadowRoot!.querySelector("dashboard-order-detail-dialog")?.orderId).toBe(ROW.id);
+  });
+
+  it("places a table-filter refusal under Table and says to fix the filter bar", async () => {
+    const api = stubApi({
+      listOrderPages: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", params: { field: "table" } }),
+    });
+    const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", {
+      api,
+      permissions: ["report.view"],
+    });
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=table]")
+          ?.error,
+      ).toContain("100"),
+    );
+    expect(el.shadowRoot!.querySelector("wt-data-table")?.errorMessage).toBe(
+      "Correct the highlighted fields to continue.",
+    );
+  });
+
+  it("refreshes changed bills through the passive API", async () => {
+    const { api } = await loaded();
+    api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);
+    await vi.waitFor(() => expect(api.background.listOrderPages).toHaveBeenCalled());
+    expect(api.listOrderPages).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a printer picker from a bill's detail", async () => {
+    const { el, api } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
+    const detail = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
+    await vi.waitFor(() => expect(detail.shadowRoot!.querySelector("wt-button")).not.toBeNull());
+    detail.shadowRoot!.querySelector<HTMLElement>("wt-button")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")?.row?.id).toBe(ROW.id),
+    );
+    expect(api.getOrderPrinters).toHaveBeenCalled();
+  });
+
+  it("shows statuses and table headings in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.textContent).toContain("Se fueron sin pagar");
+    expect(table.shadowRoot!.textContent).toContain("Pendiente");
+  });
+
+  it("waits for a pause before searching a table name", async () => {
+    const { el, api } = await loaded();
+    el.shadowRoot!.querySelector("wt-input[name=table]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Mesa 5" }, bubbles: true, composed: true }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(api.listOrderPages).toHaveBeenCalledTimes(1);
+    expect(api.background.listOrderPages).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(
+        (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0].table,
+      ).toBe("Mesa 5"),
+    );
+  });
+
+  it("shows a backwards range under To without sending the invalid range", async () => {
+    const { el, api } = await loaded();
+    const choose = (name: string, value: string) =>
+      el
+        .shadowRoot!.querySelector(`[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    choose("from", "2026-09-30");
+    choose("to", "2026-09-01");
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=to]")?.error,
+      ).toContain("on or after"),
+    );
+    expect(api.background.listOrderPages).not.toHaveBeenCalled();
+  });
+
+  it("keeps a paid bill's earlier departure visible", async () => {
+    const paid = { ...ROW, status: "paid" as const, stillOwed: null };
+    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [paid] }) });
+    const { el } = await loaded(api);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.textContent).toContain("Left without paying on");
+  });
+});

@@ -1,5 +1,10 @@
 # The dashboard's Orders screen — design
 
+> **Update, 2026-10-02 (B27b):** The owner's later C126 decision supersedes the "Invoice not
+> credited" mark below. C126 is to credit an invoiced bill in full when cancelled, so the Orders
+> screen shows Cancelled and its credit note without that mark. The earlier paragraphs record the
+> design before this decision; Task 2's screen follows the later rule.
+
 **Status:** approved by the owner on 2026-10-02 (~07:50, relayed by the supervising watcher), with
 answers to the seven choices; section 12 records them, and each is also stated at its site as
 "Owner, 2026-10-02". Two answers left something for this document to recommend: what a person

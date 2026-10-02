@@ -41,6 +41,7 @@ import type { ProfileScreen } from "./screens/profile-screen.js";
 import "./screens/my-schedule-screen.js";
 import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
+import "./screens/orders-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
 import "./screens/modifiers-screen.js";
@@ -89,6 +90,7 @@ const CORE_SCREENS = [
   "my-schedule",
   "overview",
   "sales",
+  "orders",
   "staff",
   "catalogue",
   "modifiers",
@@ -149,6 +151,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { screen: "overview", labelKey: "nav.overview" },
       { screen: "sales", labelKey: "nav.sales" },
+      { screen: "orders", labelKey: "nav.orders" },
     ],
   },
   {
@@ -213,8 +216,8 @@ const NAV_GROUPS: NavGroup[] = [
 
 /**
  * Owns session discovery, permitted URL navigation and language preferences.
- * The login screen stays visible until getMe confirms a session. Staff have their own
- * schedule and profile; other roles can restore a destination from their visible sidebar entries.
+ * The login screen stays visible until getMe confirms a session. Staff can open My schedule and
+ * Orders; other roles can restore a destination from their visible sidebar entries.
  *
  * A locale change recreates the screen subtree so translated text updates. Disconnect guards
  * prevent late responses from changing browser history or the shared locale after teardown.
@@ -1162,7 +1165,7 @@ export class DashboardApp extends LitElement {
         </div>
       `;
     }
-    const hasNav = this.sessionRole !== "staff";
+    const hasNav = true;
     return html`
       <div
         class="shell"
@@ -1184,7 +1187,7 @@ export class DashboardApp extends LitElement {
           ></wt-toast>
         </div>
         <div class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}>
-          <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
+          <!-- At desktop width the sidebar is in-flow; below the
                breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
                off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nav buttons
                leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
@@ -1196,8 +1199,8 @@ export class DashboardApp extends LitElement {
                 </aside>`
               : nothing
           }
-          <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open
-               (and only a non-staff session can open one); the drawer is force-closed on the transition
+          <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open;
+               the drawer is force-closed on the transition
                to desktop (#onBreakpointChange), so this never renders at desktop width.
                aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
           ${
@@ -1361,7 +1364,7 @@ export class DashboardApp extends LitElement {
 
   /** The module permission check here matches the one `#activate` applies to the nav. */
   #permittedScreen(requested: string | null): ScreenId {
-    if (this.sessionRole === "staff") return "my-schedule";
+    if (this.sessionRole === "staff") return requested === "orders" ? "orders" : "my-schedule";
     if (requested === "alerts") return "alerts";
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
       (entry) => entry.screen === requested,
@@ -1429,6 +1432,16 @@ export class DashboardApp extends LitElement {
   /** The pages this person may open, group by group in nav order, each labelled in the current
    * language; `pages` is undefined for a group the search hides whole. */
   #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
+    if (this.sessionRole === "staff")
+      return [
+        {
+          group: NAV_GROUPS[0]!,
+          pages: [
+            { screen: "my-schedule", label: t("nav.my_schedule") },
+            { screen: "orders", label: t("nav.orders") },
+          ],
+        },
+      ];
     const term = foldForSearch(this.navSearch.trim());
     return NAV_GROUPS.map((group) => {
       const permitted: NavPage[] = [
@@ -1476,18 +1489,22 @@ export class DashboardApp extends LitElement {
     const noMatch = searching && sections.every((section) => section.pages === undefined);
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
-        <wt-input
-          type="search"
-          name="nav-search"
-          autocomplete="off"
-          data-test="nav-search"
-          label=${t("nav.search")}
-          hide-label
-          placeholder=${t("nav.search")}
-          .value=${live(this.navSearch)}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => (this.navSearch = e.detail.value)}
-          @keydown=${(e: KeyboardEvent) => this.#onNavSearchKeydown(e)}
-        ></wt-input>
+        ${
+          this.sessionRole === "staff"
+            ? nothing
+            : html`<wt-input
+                type="search"
+                name="nav-search"
+                autocomplete="off"
+                data-test="nav-search"
+                label=${t("nav.search")}
+                hide-label
+                placeholder=${t("nav.search")}
+                .value=${live(this.navSearch)}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => (this.navSearch = e.detail.value)}
+                @keydown=${(e: KeyboardEvent) => this.#onNavSearchKeydown(e)}
+              ></wt-input>`
+        }
         ${sections.map(({ group, pages }) => {
           if (pages === undefined) return nothing;
           // A search shows its matches open without touching `collapsedGroups`, and its headers
@@ -1536,9 +1553,13 @@ export class DashboardApp extends LitElement {
             </div>
           `;
         })}
-        <p class="nav-search-empty" role="status" data-test="nav-search-empty">
-          ${noMatch ? t("nav.no_matches") : nothing}
-        </p>
+        ${
+          this.sessionRole === "staff"
+            ? nothing
+            : html`<p class="nav-search-empty" role="status" data-test="nav-search-empty">
+                ${noMatch ? t("nav.no_matches") : nothing}
+              </p>`
+        }
       </nav>
     `;
   }
@@ -1608,6 +1629,11 @@ export class DashboardApp extends LitElement {
         ></dashboard-my-schedule-screen>`;
       case "sales":
         return html`<dashboard-sales-screen .api=${this.api}></dashboard-sales-screen>`;
+      case "orders":
+        return html`<dashboard-orders-screen
+          .api=${this.api}
+          .permissions=${this.#sessionPermissions}
+        ></dashboard-orders-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
           .api=${this.api}
