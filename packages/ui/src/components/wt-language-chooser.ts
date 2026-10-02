@@ -45,7 +45,6 @@ export class WtLanguageChooser extends LitElement {
         inset: auto;
         margin: 0;
         margin-block-start: var(--wt-space-1);
-        max-width: calc(100vw - 2 * var(--wt-space-3));
         padding: var(--wt-space-1);
         flex-direction: column;
         gap: var(--wt-space-1);
@@ -191,18 +190,23 @@ export class WtLanguageChooser extends LitElement {
     window.addEventListener("resize", this.#place);
   }
 
-  /** Below the trigger, trailing edges aligned, and never past either side of the viewport. */
+  /** Below the trigger, trailing edges aligned, and 8px clear of both sides of the viewport. */
   #place = (): void => {
     const menu = this.#menu();
     if (menu === null) return;
     const trigger = this.#trigger().getBoundingClientRect();
+    // A popover's default fit-content width would be measured against the left written by the
+    // previous placement, so after a resize the labels would wrap into the room that left allows.
+    menu.style.width = "max-content";
     menu.style.minWidth = `${trigger.width}px`;
+    // From clientWidth rather than 100vw, which counts a scrollbar the clamp below must not.
+    const room = document.documentElement.clientWidth;
+    menu.style.maxWidth = `${room - 16}px`;
     menu.style.top = `${trigger.bottom}px`;
     const width = menu.getBoundingClientRect().width;
     const wanted =
       getComputedStyle(this).direction === "rtl" ? trigger.left : trigger.right - width;
-    const room = document.documentElement.clientWidth;
-    menu.style.left = `${Math.max(0, Math.min(wanted, room - width))}px`;
+    menu.style.left = `${Math.max(8, Math.min(wanted, room - width - 8))}px`;
   };
 
   #menu(): HTMLElement | null {

@@ -252,7 +252,7 @@ describe("wt-language-chooser", () => {
   it("at the trailing end of a top bar, opens its menu downwards, aligned to the trigger's trailing edge, on screen, over what follows", async () => {
     await page.viewport(390, 844);
     await mount(
-      '<div><header style="display: flex; justify-content: space-between; align-items: center"><span>Waitron</span><wt-language-chooser active="en-GB"></wt-language-chooser></header><main style="position: relative; height: 400px; background: var(--wt-color-bg)"><button>Below</button></main></div>',
+      '<div><header style="display: flex; justify-content: space-between; align-items: center; padding-inline: var(--wt-space-3)"><span>Waitron</span><wt-language-chooser active="en-GB"></wt-language-chooser></header><main style="position: relative; height: 400px; background: var(--wt-color-bg)"><button>Below</button></main></div>',
     );
     const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
     el.loadLocales = twoLocales;
@@ -399,7 +399,7 @@ describe("wt-language-chooser", () => {
 
   it("follows its trigger when the part of the page holding it scrolls while the menu is open", async () => {
     await mount(
-      '<div class="scroller" style="height: 400px; overflow: auto"><div style="height: 3000px"><div style="height: 200px"></div><div style="display: flex; justify-content: flex-end"><wt-language-chooser active="en-GB"></wt-language-chooser></div></div></div>',
+      '<div class="scroller" style="height: 400px; overflow: auto"><div style="height: 3000px"><div style="height: 200px"></div><div style="display: flex; justify-content: flex-end; padding-inline: var(--wt-space-3)"><wt-language-chooser active="en-GB"></wt-language-chooser></div></div></div>',
     );
     const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
     el.loadLocales = twoLocales;
@@ -476,7 +476,7 @@ describe("wt-language-chooser", () => {
     expect(menuOf(el)).not.toBeNull();
   });
 
-  it("a menu wider than the room before its trigger stays on screen", async () => {
+  it("a menu wider than the room before its trigger stays on screen, 8px clear of its edges", async () => {
     await page.viewport(390, 844);
     await mount('<wt-language-chooser active="en-GB"></wt-language-chooser>');
     const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
@@ -488,9 +488,68 @@ describe("wt-language-chooser", () => {
     const trigger = triggerOf(el).getBoundingClientRect();
     const menu = menuOf(el)!.getBoundingClientRect();
     expect(menu.width).toBeGreaterThan(trigger.right);
-    expect(menu.left).toBeGreaterThanOrEqual(0);
-    expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(menu.left).toBeCloseTo(8, 0);
+    expect(menu.right).toBeLessThanOrEqual(window.innerWidth - 8);
     expect(menu.top).toBeGreaterThanOrEqual(trigger.bottom);
+  });
+
+  it("a trigger flush with the screen's right edge leaves its menu 8px clear of it", async () => {
+    await page.viewport(390, 844);
+    await mount(
+      '<div style="display: flex; justify-content: flex-end"><wt-language-chooser active="en-GB"></wt-language-chooser></div>',
+    );
+    const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = twoLocales;
+    await open(el);
+    const trigger = triggerOf(el).getBoundingClientRect();
+    const menu = menuOf(el)!.getBoundingClientRect();
+    // The precondition: lined up with the trigger, the menu would touch the screen's right edge.
+    expect(trigger.right).toBeCloseTo(window.innerWidth, 0);
+    expect(menu.right).toBeCloseTo(window.innerWidth - 8, 0);
+  });
+
+  it("in a right-to-left page, a trigger flush with the screen's left edge leaves its menu 8px clear of it", async () => {
+    await page.viewport(390, 844);
+    await mount(
+      '<div dir="rtl" style="position: fixed; top: 0; left: 0"><wt-language-chooser active="en-GB"></wt-language-chooser></div>',
+    );
+    const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = twoLocales;
+    await open(el);
+    const trigger = triggerOf(el).getBoundingClientRect();
+    const menu = menuOf(el)!.getBoundingClientRect();
+    // The precondition: lined up with the trigger, the menu would touch the screen's left edge.
+    expect(trigger.left).toBeCloseTo(0, 0);
+    expect(menu.left).toBeCloseTo(8, 0);
+  });
+
+  it("keeps its width and its trailing edge on the trigger's when the viewport narrows while it is open", async () => {
+    await page.viewport(844, 844);
+    await mount(
+      '<div style="display: flex; justify-content: flex-end; padding-inline: var(--wt-space-3)"><wt-language-chooser active="en-GB"></wt-language-chooser></div>',
+    );
+    const el = host.querySelector<WtLanguageChooser>("wt-language-chooser")!;
+    el.loadLocales = async () => [
+      { code: "es-ES", label: "A language with a long name" },
+      { code: "en-GB", label: "English" },
+    ];
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await open(el);
+    const wide = menuOf(el)!.getBoundingClientRect();
+    expect(Math.abs(wide.right - triggerOf(el).getBoundingClientRect().right)).toBeLessThanOrEqual(
+      1,
+    );
+
+    await page.viewport(390, 844);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const trigger = triggerOf(el).getBoundingClientRect();
+    const narrow = menuOf(el)!.getBoundingClientRect();
+    // The precondition: the trigger moved with the viewport's right edge, so the menu was re-placed.
+    expect(trigger.right).toBeLessThan(wide.right - 100);
+    expect(narrow.width).toBeCloseTo(wide.width, 0);
+    expect(narrow.height).toBeCloseTo(wide.height, 0);
+    expect(Math.abs(narrow.right - trigger.right)).toBeLessThanOrEqual(1);
   });
 
   it("in a right-to-left page, lines its menu up with the trigger's trailing edge, which is the left one", async () => {
