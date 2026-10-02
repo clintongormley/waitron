@@ -1,4 +1,4 @@
-import type { PreparationRoute } from "@waitron/module";
+import type { ExtraMakerOutcome, PreparationRoute } from "@waitron/module";
 export type { ExceptionInput, RoutingModel, RouteExplanation } from "./routing-types.js";
 
 /** What a claim or an exception sends work to. */
@@ -204,6 +204,33 @@ export function chooseMaker(
     };
   }
   return { route: null, decidedBy: null, fallbacks: [], noReplacement: false };
+}
+
+export interface ExtraChoice {
+  readonly outcome: ExtraMakerOutcome;
+  readonly decidedBy: RoutingDecision | null;
+  readonly fallbacks: readonly FallbackStep[];
+}
+
+export function chooseExtraMaker(
+  rules: RoutingRules,
+  extra: ProductFacts,
+  zoneId: string | null,
+  moment: RoutingMoment | null,
+  dishStationId: string | null,
+): ExtraChoice {
+  const choice = chooseMaker(rules, extra, zoneId, moment);
+  const outcome: ExtraMakerOutcome =
+    choice.decidedBy === null || choice.decidedBy.kind === "default"
+      ? { kind: "follows_dish", why: "no_rule" }
+      : choice.route === null
+        ? { kind: "follows_dish", why: "no_replacement" }
+        : choice.route.kind === "no_preparation"
+          ? { kind: "follows_dish", why: "no_preparation" }
+          : choice.route.stationId === dishStationId
+            ? { kind: "follows_dish", why: "same_station" }
+            : { kind: "made", stationId: choice.route.stationId };
+  return { outcome, decidedBy: choice.decidedBy, fallbacks: choice.fallbacks };
 }
 
 export function unreachableExceptions(rules: RoutingRules): Set<string> {

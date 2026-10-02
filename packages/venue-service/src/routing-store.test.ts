@@ -32,6 +32,8 @@ import {
   previewRoutingChange,
   removeClaim,
   resolveMakers,
+  resolveExtraMakers,
+  routingAt,
   stationStates,
   reorderExceptions,
   routingModel,
@@ -1374,3 +1376,192 @@ it("explains now with today's manual closure", async () =>
       fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
     });
   }));
+
+const fixedInstant = new Date("2026-10-02T18:30:00Z");
+async function extrasFixture(tx: Transaction) {
+  const f = await fixture(tx);
+  await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+  const [grill, fryer] = await tx
+    .insert(kitchenStations)
+    .values([
+      { ...f.cfg, name: "Grill" },
+      { ...f.cfg, name: "Fryer" },
+    ])
+    .returning();
+  const extras = (await createCategory(tx, { name: "Extras" })).id;
+  const sides = (await createCategory(tx, { name: "Sides", parentId: extras })).id;
+  const toppings = (await createCategory(tx, { name: "Toppings", parentId: extras })).id;
+  const menu = await createCatalogue(tx, { name: "Extras menu" });
+  const product = async (name: string, categoryId: string) =>
+    (
+      await createProduct(tx, {
+        catalogueId: menu.id,
+        name,
+        categoryId,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      })
+    ).id;
+  const chips = await product("Chips", sides);
+  const cheese = await product("Cheese", toppings);
+  const [variant] = await tx
+    .insert(products)
+    .values({ catalogueId: menu.id, parentId: chips, name: "Large chips", categoryId: null })
+    .returning();
+  await setClaim(tx, f.cfg, sides, { kind: "station", stationId: fryer!.id });
+  return {
+    ...f,
+    sides,
+    chips,
+    cheese,
+    chipsVariant: variant!.id,
+    grill: grill!.id,
+    fryer: fryer!.id,
+  };
+}
+
+describe("extra maker resolution", () => {
+  it("splits claimed extras while unclaimed extras follow their dish", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      expect(
+        await resolveExtraMakers(
+          tx,
+          f.cfg,
+          null,
+          [
+            { key: "a", productId: f.chips, dishStationId: f.grill },
+            { key: "b", productId: f.cheese, dishStationId: f.grill },
+            { key: "c", productId: f.chips, dishStationId: f.fryer },
+          ],
+          fixedInstant,
+        ),
+      ).toEqual(
+        new Map([
+          ["a", { kind: "made", stationId: f.fryer }],
+          ["b", { kind: "follows_dish", why: "no_rule" }],
+          ["c", { kind: "follows_dish", why: "same_station" }],
+        ]),
+      );
+    }));
+  it("rejects an unknown extra product", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const id = randomUUID();
+      await expect(
+        resolveExtraMakers(
+          tx,
+          f.cfg,
+          null,
+          [{ key: "missing", productId: id, dishStationId: f.grill }],
+          fixedInstant,
+        ),
+      ).rejects.toMatchObject({
+        code: "route.subject_not_found",
+        params: { subject: "product", id },
+      });
+    }));
+  it("answers an empty list without checking its zone or reading product facts", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const resolver = await routingAt(tx, f.cfg, fixedInstant);
+      const read = vi.spyOn(tx, "select");
+      try {
+        expect(await resolveExtraMakers(tx, f.cfg, randomUUID(), [], fixedInstant)).toEqual(
+          new Map(),
+        );
+        expect(await resolver.extraMakers(randomUUID(), [])).toEqual(new Map());
+        expect(read).not.toHaveBeenCalled();
+      } finally {
+        read.mockRestore();
+      }
+    }));
+  it("follows the dish when the extra's station is closed with no fallback", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      await setStationToday(tx, f.cfg, f.fryer, "closed", fixedInstant);
+      expect(
+        await resolveExtraMakers(
+          tx,
+          f.cfg,
+          null,
+          [{ key: "a", productId: f.chips, dishStationId: f.grill }],
+          fixedInstant,
+        ),
+      ).toEqual(new Map([["a", { kind: "follows_dish", why: "no_replacement" }]]));
+    }));
+  it("uses canonical product spellings and effective variant folders while preserving every pick key", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      expect(
+        await resolveExtraMakers(
+          tx,
+          f.cfg,
+          null,
+          [
+            { key: "a", productId: f.chipsVariant.toUpperCase(), dishStationId: f.grill },
+            { key: "b", productId: f.chipsVariant, dishStationId: null },
+          ],
+          fixedInstant,
+        ),
+      ).toEqual(
+        new Map([
+          ["a", { kind: "made", stationId: f.fryer }],
+          ["b", { kind: "made", stationId: f.fryer }],
+        ]),
+      );
+    }));
+});
+
+describe("routingAt", () => {
+  it("answers both questions exactly as their wrappers do", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const extras = [
+        { key: "a", productId: f.chips, dishStationId: f.grill },
+        { key: "b", productId: f.cheese, dishStationId: f.grill },
+      ];
+      const resolver = await routingAt(tx, f.cfg, fixedInstant);
+      expect(resolver.at).toEqual(fixedInstant);
+      expect(await resolver.makers(null, [f.chips, f.cheese])).toEqual(
+        await resolveMakers(tx, f.cfg, null, [f.chips, f.cheese], fixedInstant),
+      );
+      expect(await resolver.extraMakers(null, extras)).toEqual(
+        await resolveExtraMakers(tx, f.cfg, null, extras, fixedInstant),
+      );
+    }));
+  it("refuses an unknown zone before an unknown product in both questions", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const resolver = await routingAt(tx, f.cfg, fixedInstant);
+      const zone = randomUUID(),
+        productId = randomUUID();
+      await expect(resolver.makers(zone, [productId])).rejects.toMatchObject({
+        code: "service_zone.not_found",
+      });
+      await expect(
+        resolver.extraMakers(zone, [{ key: "a", productId, dishStationId: f.grill }]),
+      ).rejects.toMatchObject({ code: "service_zone.not_found" });
+    }));
+  it("keeps the opening rules for both questions after a claim changes", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const resolver = await routingAt(tx, f.cfg, fixedInstant);
+      await setClaim(tx, f.cfg, f.sides, { kind: "station", stationId: f.grill });
+      const extras = [{ key: "a", productId: f.chips, dishStationId: f.grill }];
+      expect(await resolver.extraMakers(null, extras)).toEqual(
+        new Map([["a", { kind: "made", stationId: f.fryer }]]),
+      );
+      expect(await resolver.makers(null, [f.chips])).toEqual(
+        new Map([[f.chips, { kind: "made", route: { kind: "station", stationId: f.fryer } }]]),
+      );
+      const fresh = await routingAt(tx, f.cfg, fixedInstant);
+      expect(await fresh.extraMakers(null, extras)).toEqual(
+        new Map([["a", { kind: "follows_dish", why: "same_station" }]]),
+      );
+      expect(await fresh.makers(null, [f.chips])).toEqual(
+        new Map([[f.chips, { kind: "made", route: { kind: "station", stationId: f.grill } }]]),
+      );
+    }));
+});
