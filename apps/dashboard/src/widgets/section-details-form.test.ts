@@ -1,8 +1,9 @@
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, customSquarePixels, mountWidget } from "./test-helpers.js";
 import "./section-details-form.js";
+import "./option-label-form.js";
 afterEach(cleanupWidgets);
 it("marks the required internal name and refuses a blank submission", async () => {
   const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-section-details-form"]>(
@@ -326,3 +327,41 @@ it("paints the custom colour and rings it only when a colour is set", async () =
   expect(none.row[0]).toEqual(none.borderColor);
   expect(none.borderColor).not.toEqual(none.ringColor);
 });
+
+it.each([
+  ["en-GB", "Customer-facing names", "Customer-facing name"],
+  ["es-ES", "Nombres para el cliente", "Nombre para el cliente"],
+])(
+  "heads the names with the option window's group label, worded alike (%s)",
+  async (locale, headingText, fieldLabel) => {
+    setLocale(locale);
+    try {
+      const el = await detailsForm();
+      const heading = el.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="customer-names-heading"]',
+      )!;
+      expect(heading.textContent!.trim()).toBe(headingText);
+      expect(field(el, "names-en").label).toBe(`${fieldLabel} (en)`);
+      expect(field(el, "names-es").label).toBe(`${fieldLabel} (es)`);
+
+      const { el: optionWindow } = await mountWidget<
+        HTMLElementTagNameMap["dashboard-option-label-form"]
+      >("dashboard-option-label-form", {
+        open: true,
+        value: null,
+        languages: { defaultLanguage: "en", languages: ["en", "es"] },
+      });
+      const optionHeading = optionWindow.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="customer-names-heading"]',
+      )!;
+      expect(optionHeading.textContent!.trim()).toBe(headingText);
+      const style = getComputedStyle(heading);
+      const optionStyle = getComputedStyle(optionHeading);
+      expect(style.textTransform).toBe("uppercase");
+      for (const property of ["textTransform", "fontWeight", "fontSize", "color"] as const)
+        expect(style[property], property).toBe(optionStyle[property]);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);

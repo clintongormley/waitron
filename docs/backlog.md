@@ -707,8 +707,12 @@ name in its row is now a button, drawn as the name's text, that opens its "Edit 
 Default radio button and the row menu keep their own clicks, and closing a window the name opened
 puts focus back on the name. The window (`apps/dashboard/src/widgets/option-label-form.ts`) has no folding section:
 Name, then Kitchen name (A171's decision for this window), then the customer-facing names under a
-plain "Customer-facing names" heading, then Available, the same on Add and Edit (owner,
-2026-10-01, mockup D2 of [the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)).
+"Customer-facing names" heading drawn as a small bold capitals group label, then Available, the
+same on Add and Edit (owner, 2026-10-01, mockup D2 of
+[the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)). The menu section form
+(`apps/dashboard/src/widgets/section-details-form.ts`) now heads its names the same way and with
+the same words (owner, 2026-10-02): "Customer-facing names" / "Nombres para el cliente", no
+"(optional)", and each field labelled "Customer-facing name (en)" and so on.
 
 **The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171,
 owner 2026-10-01: "i think we should separate kitchen name from customer facing names
