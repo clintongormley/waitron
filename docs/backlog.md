@@ -779,18 +779,23 @@ Each hint follows the field it copies as the owner types: change Name and the bl
 change with it.
 
 **An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
-— OPEN.** The owner, on the Extras tab with no lists: _"The "No extras lists to show" could be
-inset a bit. How could we improve the styling?"_ Today, when a table has no rows at all,
-`wt-data-table` stops drawing the table — no header row, no border — and leaves the message as a
-bare muted paragraph flush with the left edge (`render()`, the `rows.length === 0` branch, and the
-`.message` rule, `packages/ui/src/components/wt-data-table.ts`). **Decided (owner, 2026-10-01,
-choosing the second of two looks offered):** when nothing exists yet, the table draws a padded box
-with the table's own border and corners, holding the screen's empty sentence (A177) and the
-screen's Add button under it, centred. The table does not know a screen's Add button today, so it
-needs a place for the screen to put one (a slot or similar), in the shared table so every screen
-gets it. With A174 the same Add button also sits on the tab row; showing it in both places on an
-empty screen is intended. The "nothing matches" case (A177) keeps the table's toolbar and gets the
-same padded box without a button.
+— DONE.** `wt-data-table` draws a table with no rows as a padded box with the
+table's own border, corners and background, the sentence centred and, under it, whatever the
+screen puts in the new `empty-action` slot; the "nothing matches" case keeps the toolbar and gets
+the same box without the slot. Every dashboard table whose screen has an Add action for its own
+rows renders that Add button into the slot while its list is empty (Units, the Extras and Options
+lists, Menus, Printers and print agents, Staff, Products, Adjustment reasons, and Venue operations'
+departments, hours and a zone's menus), except the two left open below; a table with no Add action
+keeps just the sentence. The till and setup draw no `wt-data-table`, so
+nothing changed there. The empty case still shows the toolbar when the table has one, as before.
+Left open: the Payments screen's readers table gets no button, because "Add reader" sits beside
+each connected provider (none, one or several), so there is no single Add to put there, and the
+list is pre-filtered by status; and the menu prices table on a menu's Prices tab gets none either,
+because its rows come from "Add several products" on the Structure tab, shown for whichever menu or
+section is open. Found while building it, and fixed in the same change: on the
+Venue operations screen, adding a department, hours or a zone's menu from the top Add button left
+keyboard focus on the page, because the screen tried to focus the button while it was still
+greyed out (saving); it now waits until the list has reloaded.
 
 **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177, owner
 2026-10-01) — OPEN.** `wt-data-table` already separates two cases: nothing exists (`emptyMessage`)
@@ -1071,8 +1076,8 @@ owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is w
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
 
-**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029)
-and A169 (#1026) are done; next A170–A172 and A176–A177, built in the new style rather than
+**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
+A169 (#1026) and A176 are done; next A170–A172 and A177, built in the new style rather than
 restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a

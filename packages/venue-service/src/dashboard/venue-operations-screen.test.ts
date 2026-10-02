@@ -219,6 +219,54 @@ describe("venue operations screen", () => {
     expect(tabs.querySelector('[slot="zones"] [data-test="new-assignment-z1"]')).toBeNull();
   });
 
+  it("puts Add department and Add hours under their empty tables' sentence, each opening its editor", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({ ...model, departments: [], hours: [] }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    const department = table(el, "departments").querySelector<HTMLElement>(
+      ":scope > [slot=empty-action]",
+    )!;
+    expect(department.assignedSlot).not.toBeNull();
+    expect(department.textContent!.trim()).toBe("Add department");
+    const hours = table(el, "hours").querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(hours.assignedSlot).not.toBeNull();
+    expect(hours.textContent!.trim()).toBe("Add hours");
+    expect(hours.hasAttribute("disabled")).toBe(true);
+    department.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add department");
+  });
+
+  it("opens the hours editor from the empty hours table's Add hours", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({ ...model, hours: [] }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    expect(table(el, "departments").querySelector("[slot=empty-action]")).toBeNull();
+    const hours = table(el, "hours").querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(hours.hasAttribute("disabled")).toBe(false);
+    hours.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add hours");
+  });
+
+  it("puts Make available under a zone's empty menu table, opening the menu editor", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    const button = table(el, "zone-menus").querySelector<HTMLElement>(
+      ":scope > [slot=empty-action]",
+    )!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.textContent!.trim()).toBe("Make available");
+    button.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Make available");
+  });
+
   it("disables Make available when a floor zone has no service zone", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1560,6 +1608,254 @@ it("returns focus to the row that opened an editor, or to the tabs once that row
   await vi.waitFor(() => expect(column(el, "departments", 0)).toEqual(["Restaurant and bar"]));
   await action(el, "cancel-editor");
   expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("wt-tabs"));
+});
+
+it("returns focus to a row's menu after an edit opened from it is saved", async () => {
+  const el = await mount({
+    load: vi.fn().mockResolvedValue(model),
+    liveData: new LiveData(),
+    updateDepartment: vi.fn().mockResolvedValue(undefined),
+  } as unknown as VenueServiceApi);
+  await selectTab(el, "departments");
+  await action(el, "edit-department-d1");
+  await action(el, "save-editor");
+  await vi.waitFor(() => expect(modal(el)).toBeNull());
+  await vi.waitFor(() => {
+    const menu = table(el, "departments").shadowRoot!.activeElement as HTMLElement | null;
+    expect(menu?.getAttribute("label")).toBe("Actions: Restaurant and bar");
+    expect(menu!.shadowRoot!.activeElement).toBe(menu!.shadowRoot!.querySelector("button"));
+  });
+});
+
+describe("where focus goes after a change that saves at once", () => {
+  const withTill: VenueServiceView = {
+    ...model,
+    zoneMenus: [
+      ...model.zoneMenus,
+      { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
+    ],
+    devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+    deviceZones: [],
+  };
+  /** Waits until the save has reloaded the screen (`load` cleared before the change) and handed
+   * its controls back. */
+  async function saved(el: VenueOperationsScreen, load: ReturnType<typeof vi.fn>) {
+    await vi.waitFor(() => expect(load).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(find(el, '[data-test="new-assignment-z1"]')!.hasAttribute("disabled")).toBe(false),
+    );
+    await settle(el);
+  }
+
+  it("leaves focus on a till's starting zone after it is changed, though Make available opened an editor earlier", async () => {
+    const load = vi.fn().mockResolvedValue(structuredClone(withTill));
+    const el = await mount({
+      load,
+      liveData: new LiveData(),
+      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    await action(el, "new-assignment-z1");
+    await action(el, "cancel-editor");
+    const makeAvailable = find(el, '[data-test="new-assignment-z1"]')!;
+    expect(el.shadowRoot!.activeElement).toBe(makeAvailable);
+    load.mockClear();
+    load.mockResolvedValue({
+      ...structuredClone(withTill),
+      deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
+    });
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    await userEvent.click(selector.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    const row = [...selector.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (option) => option.textContent!.trim() === "Dining room",
+    )!;
+    await userEvent.click(row);
+    await saved(el, load);
+    expect(el.shadowRoot!.activeElement).not.toBe(makeAvailable);
+    expect(table(el, "tills").shadowRoot!.activeElement).toBe(selector);
+  });
+
+  it("leaves focus on a zone menu's row menu after Make default", async () => {
+    const load = vi.fn().mockResolvedValue(structuredClone(withTill));
+    const el = await mount({
+      load,
+      liveData: new LiveData(),
+      allowMenu: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    await action(el, "new-assignment-z1");
+    await action(el, "cancel-editor");
+    const menu = table(el, "zone-menus").shadowRoot!.querySelector<HTMLElement>(
+      'wt-row-actions[label="Actions: Deli takeaway"]',
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+    load.mockClear();
+    await userEvent.click(find(el, '[data-test="default-assignment-m2"]')!);
+    await saved(el, load);
+    expect(el.shadowRoot!.activeElement).not.toBe(find(el, '[data-test="new-assignment-z1"]'));
+    const focused = table(el, "zone-menus").shadowRoot!.activeElement as HTMLElement | null;
+    expect(focused?.getAttribute("label")).toBe("Actions: Deli takeaway");
+    expect(focused!.shadowRoot!.activeElement).toBe(focused!.shadowRoot!.querySelector("button"));
+  });
+});
+
+describe("where focus goes when an editor opened from an Add button closes", () => {
+  /** An api whose writes change what the next load returns, as the server's do. */
+  function writingApi(start: Partial<VenueServiceView>) {
+    const view: VenueServiceView = { ...structuredClone(model), ...start };
+    return {
+      load: vi.fn(async () => structuredClone(view)),
+      liveData: new LiveData(),
+      createDepartment: vi.fn(async () => {
+        const made = {
+          id: "d3",
+          name: "Events",
+          tradingName: "Casa Events",
+          defaultServiceMode: "prepay" as const,
+          active: true,
+        };
+        view.departments = [...view.departments, made];
+        return made;
+      }),
+      replaceHours: vi.fn(
+        async (
+          departmentId: string,
+          hours: { weekday: number; opensAt: string; closesAt: string }[],
+        ) => {
+          view.hours = [
+            ...view.hours.filter((row) => row.departmentId !== departmentId),
+            ...hours.map((row) => ({
+              departmentId,
+              weekday: row.weekday,
+              opensAt: `${row.opensAt}:00`,
+              closesAt: `${row.closesAt}:00`,
+            })),
+          ];
+        },
+      ),
+      allowMenu: vi.fn(
+        async (
+          zoneId: string,
+          menuId: string,
+          input: { displayOrder: number; makeDefault: boolean },
+        ) => {
+          view.zoneMenus = [
+            ...view.zoneMenus.filter((row) => row.zoneId !== zoneId || row.menuId !== menuId),
+            { zoneId, menuId, displayOrder: input.displayOrder, isDefault: input.makeDefault },
+          ];
+        },
+      ),
+    };
+  }
+  const tables: {
+    table: string;
+    add: string;
+    empty: Partial<VenueServiceView>;
+    write: "createDepartment" | "replaceHours" | "allowMenu";
+    show: (el: VenueOperationsScreen) => Promise<void>;
+    fill: (el: VenueOperationsScreen) => void;
+  }[] = [
+    {
+      table: "departments",
+      add: "new-department",
+      empty: { departments: [], hours: [] },
+      write: "createDepartment",
+      show: (el: VenueOperationsScreen) => selectTab(el, "departments"),
+      fill: (el: VenueOperationsScreen) => {
+        field(el, "department-name").value = "Events";
+        field(el, "trading-name").value = "Casa Events";
+      },
+    },
+    {
+      table: "hours",
+      add: "new-hours",
+      empty: { hours: [] },
+      write: "replaceHours",
+      show: (el: VenueOperationsScreen) => selectTab(el, "departments"),
+      fill: (el: VenueOperationsScreen) => {
+        field(el, "hours-opens").value = "09:00";
+        field(el, "hours-closes").value = "17:00";
+      },
+    },
+    {
+      table: "zone-menus",
+      add: "new-assignment-z1",
+      empty: { zoneMenus: [] },
+      write: "allowMenu",
+      show: async (el: VenueOperationsScreen) => {
+        await selectTab(el, "zones");
+        await action(el, "zone-menus-z1");
+      },
+      fill: () => {},
+    },
+  ];
+  function top(el: VenueOperationsScreen, add: string) {
+    const button = el.shadowRoot!.querySelector<HTMLElement>(
+      `wt-tabs > [slot="actions"] [data-test="${add}"]`,
+    );
+    expect(button, add).not.toBeNull();
+    return button!;
+  }
+  function inBox(el: VenueOperationsScreen, name: string) {
+    return table(el, name).querySelector<HTMLElement>(":scope > [slot=empty-action]");
+  }
+
+  it.each(tables)(
+    "returns focus to the top Add after the first row is made from the empty $table table's button",
+    async ({ table: name, add, empty, write, show, fill }) => {
+      const api = writingApi(empty);
+      const el = await mount(api as unknown as VenueServiceApi);
+      await show(el);
+      inBox(el, name)!.click();
+      await settle(el);
+      fill(el);
+      await action(el, "save-editor");
+      expect(api[write]).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(inBox(el, name)).toBeNull());
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(top(el, add)));
+    },
+  );
+
+  it.each(tables)(
+    "returns focus to the empty $table table's button after Cancel",
+    async ({ table: name, empty, show }) => {
+      const el = await mount(writingApi(empty) as unknown as VenueServiceApi);
+      await show(el);
+      const button = inBox(el, name)!;
+      button.click();
+      await settle(el);
+      await action(el, "cancel-editor");
+      expect(modal(el)).toBeNull();
+      expect(el.shadowRoot!.activeElement).toBe(button);
+    },
+  );
+
+  it.each(tables)(
+    "keeps focus on the top Add after it adds to the $table table when it already has rows",
+    async ({ add, write, show, fill }) => {
+      const api = writingApi({});
+      const el = await mount(api as unknown as VenueServiceApi);
+      await show(el);
+      const button = top(el, add);
+      button.click();
+      await settle(el);
+      fill(el);
+      await action(el, "save-editor");
+      expect(api[write]).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(button));
+    },
+  );
+
+  it("draws no button in the hours or a zone's menu table once they have rows", async () => {
+    const el = await mount(writingApi({}) as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    expect(inBox(el, "hours")).toBeNull();
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    expect(inBox(el, "zone-menus")).toBeNull();
+  });
 });
 
 describe("the setting that allows changes to items already sent to the kitchen", () => {

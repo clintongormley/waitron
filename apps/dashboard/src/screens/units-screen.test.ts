@@ -152,6 +152,60 @@ describe("units-screen", () => {
     expect(el.shadowRoot!.querySelector(".toolbar")).toBeNull();
   });
 
+  it("puts the create button under the empty table's sentence, opening the same editor", async () => {
+    const el = await mountWith([]);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.textContent!.trim()).toBe(t("units.create"));
+    button.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("dashboard-unit-form")!.open).toBe(true);
+  });
+
+  it("draws no create button in the table once units exist", async () => {
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.querySelector(":scope > [slot=empty-action]")).toBeNull();
+  });
+
+  it("returns focus to the header's create button after the first unit is made from the empty table", async () => {
+    const made: Unit = { id: "u3", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 };
+    const api = stubApi({ listUnits: vi.fn().mockResolvedValue([]) });
+    (api.background.listUnits as ReturnType<typeof vi.fn>).mockResolvedValue([made]);
+    const el = await mount(api);
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .querySelector<HTMLElement>(":scope > [slot=empty-action]")!
+      .click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("dashboard-unit-form")!.dispatchEvent(
+      new CustomEvent("wt-submit", {
+        detail: { value: { name: { es: "caja" }, precision: 0 } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector(".header-actions [data-test=create]"),
+    );
+  });
+
+  it("returns focus to the empty table's create button after Cancel", async () => {
+    const el = await mountWith([]);
+    const button = el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    button.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("dashboard-unit-form")!.dispatchEvent(
+      new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }),
+    );
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(el.shadowRoot!.activeElement).toBe(button);
+  });
+
   it("makes the units table searchable", async () => {
     const el = await mount();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

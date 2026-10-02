@@ -2,6 +2,7 @@ import type { ContentLanguages } from "@waitron/shared";
 import { baseStyles, setContentLanguages } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { LitElement, css, html, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property, state } from "lit/decorators.js";
 import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -139,6 +140,16 @@ export class UnitsScreen extends LitElement {
     }
   }
 
+  #renderCreate(slot?: "empty-action") {
+    return html`<wt-button
+      data-test="create"
+      slot=${ifDefined(slot)}
+      variant="primary"
+      @click=${this.#openCreate}
+      >${t("units.create")}</wt-button
+    >`;
+  }
+
   #openCreate(event: Event): void {
     event.stopPropagation();
     this.focusTarget = event.currentTarget as HTMLElement;
@@ -160,7 +171,13 @@ export class UnitsScreen extends LitElement {
   #closeEditor(): void {
     this.editorOpen = false;
     this.editing = null;
-    requestAnimationFrame(() => this.focusTarget?.focus());
+    requestAnimationFrame(() => {
+      // The empty table's create button is gone once the unit it made is listed.
+      const header = this.shadowRoot!.querySelector<HTMLElement>(
+        ".header-actions [data-test=create]",
+      );
+      (this.focusTarget?.isConnected ? this.focusTarget : header)?.focus();
+    });
   }
 
   async #save(event: CustomEvent<{ value: UnitInput }>): Promise<void> {
@@ -407,11 +424,7 @@ export class UnitsScreen extends LitElement {
     return html`
       <div class="heading">
         <h1>${t("units.title")}</h1>
-        <div class="header-actions">
-          <wt-button data-test="create" variant="primary" @click=${this.#openCreate}
-            >${t("units.create")}</wt-button
-          >
-        </div>
+        <div class="header-actions">${this.#renderCreate()}</div>
       </div>
       <p class="description">${t("units.description")}</p>
       ${
@@ -443,7 +456,8 @@ export class UnitsScreen extends LitElement {
         .rowClickLabel=${(unit: Unit) => `${t("units.delete_unit")}: ${localizedName(unit.name)}`}
         .loading=${this.loading}
         emptyMessage=${t("units.empty")}
-      ></wt-data-table>
+        >${this.units.length === 0 ? this.#renderCreate("empty-action") : nothing}</wt-data-table
+      >
       <dashboard-unit-form
         .open=${this.editorOpen}
         .busy=${this.busy}

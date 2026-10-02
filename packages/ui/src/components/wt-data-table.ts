@@ -203,6 +203,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-danger);
       }
 
+      .empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--wt-space-4);
+        padding: var(--wt-space-6);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        text-align: center;
+      }
+
       .table-toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -995,7 +1007,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const visible = this.#visibleRows();
     if (this.rows.length === 0)
       return html`${this.#renderToolbar()}
-        <p class="message" role="status">${this.emptyMessage}</p>`;
+        <div class="empty">
+          <p class="message" role="status">${this.emptyMessage}</p>
+          <slot name="empty-action"></slot>
+        </div>`;
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;
@@ -1005,7 +1020,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
       return html`${this.#renderToolbar()}
-        <p class="message" role="status">${this.noMatchesMessage}</p>`;
+        <div class="empty"><p class="message" role="status">${this.noMatchesMessage}</p></div>`;
 
     const shown = this.#shownColumns();
     const sortColumn = this.#sortColumn(shown);

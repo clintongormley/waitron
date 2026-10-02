@@ -1,5 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import {
   focusFirstInvalid,
   submitOnEnter,
@@ -585,6 +586,7 @@ export class PrintersScreen extends LitElement {
   #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
+  #addOpener?: HTMLElement;
   /** A retained printer Add again switched on so its calibration can print; closing the wizard
    * without saving switches it off again. */
   #readdingId?: string;
@@ -1774,7 +1776,8 @@ export class PrintersScreen extends LitElement {
         .loading=${this.loading}
         .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_agents")}
-      ></wt-data-table>
+        >${this.agents.length === 0 ? this.#renderAddAgent("empty-action") : nothing}</wt-data-table
+      >
     </section>`;
   }
 
@@ -1784,7 +1787,10 @@ export class PrintersScreen extends LitElement {
       data-test="new-agent-modal"
       heading=${t("printers.add_agent")}
       .open=${true}
-      @wt-close=${() => this.#stopAgentModal()}
+      @wt-close=${() => {
+        this.#stopAgentModal();
+        this.#refocusAdd("open-add-agent");
+      }}
     >
       ${this.#renderRefreshError()}
       <p class="hint">${t("printers.agent_setup_hint")}</p>
@@ -2168,41 +2174,57 @@ export class PrintersScreen extends LitElement {
         .columns=${columns}
         .rowKey=${(p: Printer) => p.id}
         .emptyMessage=${t("printers.no_printers")}
-      ></wt-data-table>
+        >${this.printers.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
+      >
     </section>`;
   }
 
   #renderTabActions(): TemplateResult {
-    return html`<div slot="actions">
-      <wt-button
-        ?hidden=${this.view !== "agents"}
-        variant="primary"
-        data-test="open-add-agent"
-        @click=${() => this.#openAgentModal()}
-        >${t("printers.add_agent")}</wt-button
-      >
-      <wt-button
-        ?hidden=${this.view !== "printers"}
-        variant="primary"
-        data-test="open-add-printer"
-        @click=${() => {
-          this.formAttempted = false;
-          this.errorKey = null;
-          this.addingPrinter = true;
-          this.probeHost = "";
-          this.probePort = "9100";
-          this.probeAttempted = false;
-          this.probeRefused = {};
-          this.probeErrorKey = null;
-          this.#registeredDevices.clear();
-          this.discoveredNames = {};
-          this.addedPrinterName = null;
-          this.showAllBluetooth = false;
-          void this.#scan();
-        }}
-        >${t("printers.add_printer")}</wt-button
-      >
-    </div>`;
+    return html`<div slot="actions">${this.#renderAddAgent()}${this.#renderAddPrinter()}</div>`;
+  }
+
+  #renderAddAgent(slot?: "empty-action"): TemplateResult {
+    return html`<wt-button
+      ?hidden=${this.view !== "agents"}
+      slot=${ifDefined(slot)}
+      variant="primary"
+      data-test="open-add-agent"
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        this.#openAgentModal();
+      }}
+      >${t("printers.add_agent")}</wt-button
+    >`;
+  }
+
+  #renderAddPrinter(slot?: "empty-action"): TemplateResult {
+    return html`<wt-button
+      ?hidden=${this.view !== "printers"}
+      slot=${ifDefined(slot)}
+      variant="primary"
+      data-test="open-add-printer"
+      @click=${(event: Event) => {
+        this.#addOpener = event.currentTarget as HTMLElement;
+        this.#openAddPrinter();
+      }}
+      >${t("printers.add_printer")}</wt-button
+    >`;
+  }
+
+  #openAddPrinter(): void {
+    this.formAttempted = false;
+    this.errorKey = null;
+    this.addingPrinter = true;
+    this.probeHost = "";
+    this.probePort = "9100";
+    this.probeAttempted = false;
+    this.probeRefused = {};
+    this.probeErrorKey = null;
+    this.#registeredDevices.clear();
+    this.discoveredNames = {};
+    this.addedPrinterName = null;
+    this.showAllBluetooth = false;
+    void this.#scan();
   }
 
   #renderJobsSection(): TemplateResult {
@@ -2328,6 +2350,17 @@ export class PrintersScreen extends LitElement {
       : undefined;
   }
 
+  /** A closing dialog hands focus back to the Add button that opened it; the empty table's one is
+   * gone once the row it made is listed, so focus is lost once the dialog leaves the page. */
+  #refocusAdd(key: "open-add-printer" | "open-add-agent"): void {
+    void this.updateComplete.then(() => {
+      if (this.#addOpener?.isConnected === false && this.shadowRoot!.activeElement === null)
+        this.renderRoot
+          .querySelector<HTMLElement>(`[slot="actions"] [data-test="${key}"]`)
+          ?.focus();
+    });
+  }
+
   #restoreEditFocus(): void {
     // The action that opened the editor is hidden when its popover closes.
     this.#editTrigger?.focus();
@@ -2425,6 +2458,7 @@ export class PrintersScreen extends LitElement {
         this.editingPrinter = null;
         this.#closeTest();
         this.#restoreEditFocus();
+        this.#refocusAdd("open-add-printer");
         if (this.#readdingId === p.id) {
           this.#readdingId = undefined;
           void this.#deactivatePrinter(p.id);
