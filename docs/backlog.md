@@ -830,7 +830,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
   languages; a table with no Add action keeps just the sentence.
 
-**Form fields after A178 (#1010 to #1019).** Done: A178g, a stepper's box widens to fit its
+**Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Queued: A178h ("Each" drawn as a normal choice), in lane A's queue. **Seen while building,
 not changed:**
