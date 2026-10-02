@@ -5150,10 +5150,9 @@ it("sends only an offered reset and leaves the replacement variant set untouched
   const client = api();
   const el = await mountPrices(client);
   await openOffer(el, "mi-lemonade");
-  const select = pricesModal(el).querySelector<HTMLSelectElement>('select[name="offered"]');
+  const select = pricesModal(el).querySelector('wt-combobox[name="offered"]');
   expect(select).not.toBeNull();
-  select!.value = "";
-  select!.dispatchEvent(new Event("change"));
+  await chooseOption(select!, "");
   await prices(el).updateComplete;
   await inOffer(el, "offer-save");
   await vi.waitFor(() =>
