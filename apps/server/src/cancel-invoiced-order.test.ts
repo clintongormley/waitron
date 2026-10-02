@@ -481,6 +481,14 @@ describe("cancelling a placed order whose invoice was issued", () => {
     const departure = await readDeparture();
     expect(departure).toHaveLength(1);
     const original = await invoiceOf(party.tabId);
+    const listedBills = async () => {
+      const listed = await send(venue.app, venue.cookie, "GET", "/api/unpaid-departures");
+      expect(listed.status).toBe(200);
+      return (listed.json as unknown as { workingOrderId: string }[]).map(
+        (row) => row.workingOrderId,
+      );
+    };
+    expect(await listedBills()).toContain(party.tabId);
 
     const answer = await cancel(party.tabId);
 
@@ -489,6 +497,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     const credits = await creditsOf(original.id);
     expect(credits.map((credit) => credit.total)).toEqual([-original.total]);
     expect(await readDeparture()).toEqual(departure);
+    expect(await listedBills()).not.toContain(party.tabId);
   });
 
   it("refuses an invoiced order cancelled with no session to authorise the credit, writing nothing", async () => {
