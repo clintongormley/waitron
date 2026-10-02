@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { WtCombobox } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { localIsoDate, scheduleWindow } from "./till-schedule-screen.js";
 import { t } from "../i18n/t.js";
@@ -102,10 +104,8 @@ function root(el: TillScheduleScreen): ShadowRoot {
   return el.shadowRoot!;
 }
 
-function setSelect(el: TillScheduleScreen, selector: string, value: string): void {
-  const select = root(el).querySelector<HTMLSelectElement>(selector)!;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+async function setSelect(el: TillScheduleScreen, selector: string, value: string): Promise<void> {
+  await chooseOption(root(el).querySelector(selector)!, value);
 }
 
 function setInput(el: TillScheduleScreen, selector: string, value: string): void {
@@ -176,8 +176,8 @@ describe("till-schedule-screen", () => {
   it("Request cover offers the chosen shift to the chosen colleague (toShiftId null)", async () => {
     const api = stubApi();
     const { el } = await mount(api);
-    setSelect(el, "select.cover-shift", "s1");
-    setSelect(el, "select.cover-colleague", "col1");
+    await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
+    await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
     await el.updateComplete;
     root(el).querySelector<HTMLElement>("wt-button.cover-submit")!.click();
     await flush(el);
@@ -188,11 +188,61 @@ describe("till-schedule-screen", () => {
     });
   });
 
+  it("picks the shift, the colleague and the kind of absence from the shared dropdowns", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    const dropdown = (name: string) =>
+      root(el).querySelector<WtCombobox>(`wt-combobox[name="${name}"]`);
+    const shift = dropdown("cover-shift");
+    const colleague = dropdown("cover-colleague");
+    const kind = dropdown("absence-kind");
+    for (const box of [shift, colleague, kind]) {
+      expect(box).not.toBeNull();
+      expect(box!.getAttribute("search")).toBe("auto");
+      expect(box!.searchPlaceholder).toBe(t("form.combobox_search"));
+      expect(box!.noResultsLabel).toBe(t("form.combobox_no_results"));
+    }
+    expect(shift!.label).toBe(t("schedule.cover_shift"));
+    expect(shift!.placeholder).toBe("—");
+    expect(shift!.options).toEqual([
+      { value: "", label: "—" },
+      { value: "s1", label: "2026-05-04 09:00–17:00 · bar" },
+    ]);
+    expect(shift!.value).toBe("");
+    expect(colleague!.label).toBe(t("schedule.cover_colleague"));
+    expect(colleague!.placeholder).toBe("—");
+    expect(colleague!.options).toEqual([
+      { value: "", label: "—" },
+      { value: "col1", label: "Colega" },
+    ]);
+    expect(kind!.label).toBe(t("schedule.absence_kind"));
+    expect(kind!.options).toEqual(
+      ["holiday", "sick_leave", "leave", "unpaid"].map((value) => ({
+        value,
+        label: t(`schedule.kind.${value}` as Parameters<typeof t>[0]),
+      })),
+    );
+    expect(kind!.value).toBe("holiday");
+
+    await chooseOption(shift!, "s1");
+    await chooseOption(colleague!, "col1");
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>("wt-button.cover-submit")!.click();
+    await flush(el);
+    expect(api.requestSwap).toHaveBeenCalledWith({
+      fromShiftId: "s1",
+      toPersonId: "col1",
+      toShiftId: null,
+    });
+    expect(shift!.value).toBe("");
+    expect(colleague!.value).toBe("");
+  });
+
   it("excludes the operator from the colleague picker (you cannot offer to yourself)", async () => {
     const { el } = await mount(stubApi());
-    const options = [
-      ...root(el).querySelectorAll<HTMLOptionElement>("select.cover-colleague option"),
-    ].map((o) => o.value);
+    const options = root(el)
+      .querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!
+      .options.map((o) => o.value);
     expect(options).toContain("col1");
     expect(options).not.toContain("me");
   });
@@ -200,7 +250,7 @@ describe("till-schedule-screen", () => {
   it("Request time off submits the kind, dates and note", async () => {
     const api = stubApi();
     const { el } = await mount(api);
-    setSelect(el, "select.abs-kind", "leave");
+    await setSelect(el, 'wt-combobox[name="absence-kind"]', "leave");
     setInput(el, "wt-input.abs-from", "2026-07-01");
     setInput(el, "wt-input.abs-to", "2026-07-05");
     setInput(el, "wt-input.abs-note", "Boda");
@@ -246,12 +296,12 @@ describe("till-schedule-screen", () => {
     const api = stubApi();
     const { el } = await mount(api);
     const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
-    setSelect(el, "select.cover-shift", "s1");
+    await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
     await el.updateComplete;
     expect(submit.hasAttribute("disabled")).toBe(true);
     submit.click();
-    setSelect(el, "select.cover-shift", "");
-    setSelect(el, "select.cover-colleague", "col1");
+    await setSelect(el, 'wt-combobox[name="cover-shift"]', "");
+    await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
     await el.updateComplete;
     expect(submit.hasAttribute("disabled")).toBe(true);
     submit.click();

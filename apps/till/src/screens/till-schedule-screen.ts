@@ -1,9 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { type ComboboxOption, submitOnEnter, baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { selectStyles } from "../select-styles.js";
 import type {
   AbsenceKind,
   MyAbsence,
@@ -17,6 +17,8 @@ import type {
 const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave", "unpaid"];
 
 const WINDOW_DAYS = 14;
+
+const NONE: ComboboxOption = { value: "", label: "—" };
 
 /**
  * `date`'s LOCAL calendar day as `YYYY-MM-DD`. The till sits at the venue, and the server compares the
@@ -55,7 +57,6 @@ function wallClock(iso: string, offsetMinutes: number): { date: string; time: st
 export class TillScheduleScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -128,22 +129,6 @@ export class TillScheduleScreen extends LitElement {
         flex-wrap: wrap;
         align-items: flex-end;
         gap: var(--wt-space-3);
-      }
-
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-
-      .field label {
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
-      select {
-        /* The shared 7 declarations come from selectStyles; the schedule pickers add a min-width. */
-        min-width: var(--wt-tap-min);
       }
     `,
   ];
@@ -348,34 +333,26 @@ export class TillScheduleScreen extends LitElement {
     return html`<section class="cover">
       <h2>${t("schedule.cover_title")}</h2>
       <div class="form">
-        <div class="field">
-          <label for="cover-shift">${t("schedule.cover_shift")}</label>
-          <select
-            id="cover-shift"
-            class="cover-shift"
-            .value=${this.coverShiftId}
-            @change=${(e: Event) => (this.coverShiftId = (e.target as HTMLSelectElement).value)}
-          >
-            <option value="">—</option>
-            ${shifts.map(
-              (shift) => html`<option value=${shift.id}>${this.#shiftLabel(shift)}</option>`,
-            )}
-          </select>
-        </div>
-        <div class="field">
-          <label for="cover-colleague">${t("schedule.cover_colleague")}</label>
-          <select
-            id="cover-colleague"
-            class="cover-colleague"
-            .value=${this.coverColleagueId}
-            @change=${(e: Event) => (this.coverColleagueId = (e.target as HTMLSelectElement).value)}
-          >
-            <option value="">—</option>
-            ${colleagues.map(
-              (person) => html`<option value=${person.personId}>${person.displayName}</option>`,
-            )}
-          </select>
-        </div>
+        ${this.#dropdown(
+          "cover-shift",
+          t("schedule.cover_shift"),
+          [NONE, ...shifts.map((shift) => ({ value: shift.id, label: this.#shiftLabel(shift) }))],
+          this.coverShiftId,
+          (value) => (this.coverShiftId = value),
+        )}
+        ${this.#dropdown(
+          "cover-colleague",
+          t("schedule.cover_colleague"),
+          [
+            NONE,
+            ...colleagues.map((person) => ({
+              value: person.personId,
+              label: person.displayName,
+            })),
+          ],
+          this.coverColleagueId,
+          (value) => (this.coverColleagueId = value),
+        )}
         <wt-button
           class="cover-submit"
           variant="primary"
@@ -386,6 +363,30 @@ export class TillScheduleScreen extends LitElement {
         </wt-button>
       </div>
     </section>`;
+  }
+
+  /** A dropdown shows no row's text for the empty value, so a NONE row's text is also its placeholder. */
+  #dropdown(
+    name: string,
+    label: string,
+    options: ComboboxOption[],
+    value: string,
+    onPick: (value: string) => void,
+  ) {
+    return html`<wt-combobox
+      name=${name}
+      label=${label}
+      search="auto"
+      searchPlaceholder=${t("form.combobox_search")}
+      noResultsLabel=${t("form.combobox_no_results")}
+      placeholder=${options[0] === NONE ? NONE.label : ""}
+      .options=${options}
+      .value=${value}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+        e.stopPropagation();
+        onPick(e.detail.value);
+      }}
+    ></wt-combobox>`;
   }
 
   #absencesSection() {
@@ -415,20 +416,13 @@ export class TillScheduleScreen extends LitElement {
     return html`<section class="request-absence">
       <h2>${t("schedule.absence_title")}</h2>
       <div class="form">
-        <div class="field">
-          <label for="abs-kind">${t("schedule.absence_kind")}</label>
-          <select
-            id="abs-kind"
-            class="abs-kind"
-            .value=${this.absKind}
-            @change=${(e: Event) =>
-              (this.absKind = (e.target as HTMLSelectElement).value as AbsenceKind)}
-          >
-            ${ABSENCE_KINDS.map(
-              (kind) => html`<option value=${kind}>${t(`schedule.kind.${kind}`)}</option>`,
-            )}
-          </select>
-        </div>
+        ${this.#dropdown(
+          "absence-kind",
+          t("schedule.absence_kind"),
+          ABSENCE_KINDS.map((kind) => ({ value: kind, label: t(`schedule.kind.${kind}`) })),
+          this.absKind,
+          (value) => (this.absKind = value as AbsenceKind),
+        )}
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-from"
