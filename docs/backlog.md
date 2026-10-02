@@ -787,20 +787,6 @@ third changes all five.
 Each hint follows the field it copies as the owner types: change Name and the blank fields' hints
 change with it.
 
-**A dropdown's arrow touches its right-hand border (A173, owner 2026-10-01) — OPEN.** Seen on a
-table's filter dropdown (the "Active" status filter), whose arrow sits against the border with no
-gap. The filter is a native `<select class="table-filter">` drawn by `wt-data-table`
-(`packages/ui/src/components/wt-data-table.ts`), styled by the shared `selectStyles`
-(`packages/ui/src/base-styles.ts`), which gives it `padding: var(--wt-space-2)` (8px) on every side
-and leaves the arrow to the browser. Not yet checked whether every dashboard dropdown using
-`selectStyles` shows the same thing, or only the filter — the till's own select styles
-(`apps/till/src/select-styles.ts`) are separate and use 12px side padding (_2026-10-02: A178d
-deleted that file; the till's dropdowns are now `wt-combobox`_; _2026-10-02: A178e made the filter
-a `wt-combobox`, which draws its own arrow; A178f closes this_). **Next action:**
-reproduce in the dashboard on Chromium and Safari, then give the shared select room at the
-right-hand end for its arrow (more end padding, or draw the arrow ourselves so its position is
-ours rather than the browser's), and look at a couple of other screens' dropdowns afterwards.
-
 **Search fields are pill-shaped; they should only round their corners (A175, owner 2026-10-01:
 "all the search fields have too much rounding they just need the corners rounded, not a
 semicircle") — OPEN.** One search box still uses `border-radius: var(--wt-radius-full)` (9999px,
@@ -843,7 +829,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, A178d (setup and the till) as #1016, and A178e (the module screens, the table filter and the floor-plan zone name) as #1017; A178f to come.**
+DONE 2026-10-02: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, A178d (setup and the till) as #1016, A178e (the module screens, the table filter and the floor-plan zone name) as #1017, and A178f (the guard, the clean-up and the rule) as #1019.**
 The look the owner approved on 2026-10-01 ([the mockups](https://claude.ai/artifact/6qKuHL4qWPJAqFeL1CpWcz))
 is specified in `docs/superpowers/specs/2026-10-01-filled-form-fields-design.md` and built by
 `docs/superpowers/plans/2026-10-01-filled-form-fields.md`, both approved by the owner the same day:
@@ -851,10 +837,9 @@ one dropdown primitive (`wt-combobox`, extended, with the keyboard of a select),
 `wt-textarea`, the till following, every hand-drawn field moved onto a primitive file by file, the
 new tokens, and a closing guard. **The change lives in the shared primitives** (owner, 2026-10-01),
 and a screen does not draw its own form field — it uses a primitive, or a primitive is added
-(owner, 2026-10-01). **A178f, still to land:** the root guard that fails on a native `<select>`,
-`<textarea>` or text `<input>` in screen code outside the primitives (stating its own blind spots),
-deleting `selectStyles` (`packages/ui/src/base-styles.ts`), the standing rule in
-`docs/developers/design-system.md` → Forms, and the plan's Task 12. Queued after A178: A178g (a
+(owner, 2026-10-01); A178f made that a rule with a guard, `scripts/native-form-fields.test.ts`, and
+deleted `selectStyles`. A173 (a dropdown's arrow touching its border) went with the native
+dropdowns. Queued after A178: A178g (a
 stepper's box widens to fit its label) and A178h ("Each" drawn as a normal choice), both in lane A's
 queue. **Seen while building, not changed:**
 
@@ -885,9 +870,8 @@ owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is w
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
 
-**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178 first; then A169–A172
-and A175–A177, built in the new style rather than restyled twice. A173 disappears if A178 has
-replaced the native dropdown.
+**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178 is done; next
+A169–A172 and A175–A177, built in the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
@@ -2748,7 +2732,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   design still needs to decide where custom roles belong in that check.
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
   says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
-  is the one dropdown, and after A178b–e every native select in product code is one. Still open:
+  is the one dropdown, and after A178b–e every native select in product code is one;
+  `scripts/native-form-fields.test.ts` fails on a new native one written in a screen's `.ts` source
+  (A178f). Still open:
   `wt-combobox` does not sort its options, and `wt-data-table`'s `localeCompare` takes no locale.
 - **The till's schedule screen still has three defects the dashboard's My Schedule fixed** (C16,
   #751; found 2026-09-27 by reading `apps/till/src/screens/till-schedule-screen.ts`, not run): its
@@ -4605,7 +4591,8 @@ decisions across and re-baseline, or change the sentence to say what it is.
   typescript-eslint tracks the work in its issue 10940, and the message it prints today names
   version **7.1** as the target. When a release supports it, the root entry goes back to a plain
   `^7` range and the alias disappears. `scripts/comments-only.mjs`,
-  `scripts/apply-migrations-callers.test.ts` and `scripts/pinned-actions-column.test.ts` parse with
+  `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts` and
+  `scripts/native-form-fields.test.ts` parse with
   the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them,
   before that move. The arrangement is in [ci-and-gates.md](developers/ci-and-gates.md) → *Two
   TypeScript compilers are installed, and that is deliberate*.
