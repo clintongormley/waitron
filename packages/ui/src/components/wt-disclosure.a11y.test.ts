@@ -52,8 +52,8 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
       theme,
     )) as WtDisclosure;
     el.summaryRows = [
-      { label: "Nombre", value: "EN: Beef tenderloin · ES: Solomillo de ternera", lines: 1 },
-      { label: "Descripción", value: "EN: Seared · ES: Sellado", lines: 2 },
+      { label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera", lines: 1 },
+      { label: "Description", value: "EN: Seared · ES: Sellado", lines: 2 },
     ];
     await el.updateComplete;
     // Without this the scan could pass on a header that drew no rows.
