@@ -216,6 +216,26 @@ function messageUnder(screen: HTMLElement, name: string): string | null {
   return screen.shadowRoot!.querySelector(`#${name}-error`)?.textContent ?? null;
 }
 
+/** The kit and environment are shared fields, whose invalid marking is inside their own shadow roots,
+ * where a `[aria-invalid=true]` query of the screen cannot see it. */
+async function expectBucketSharedFieldsUnmarked(screen: HTMLElement): Promise<void> {
+  for (const [field, control] of [
+    ["kit", "textarea"],
+    ["environment", ".trigger"],
+  ] as const) {
+    const box = screen.shadowRoot!.querySelector<
+      HTMLElement & { error: string; invalid: boolean; updateComplete: Promise<unknown> }
+    >(`[data-test=${field}]`)!;
+    await box.updateComplete;
+    expect({ field, error: box.error, invalid: box.invalid }).toEqual({
+      field,
+      error: "",
+      invalid: false,
+    });
+    expect(box.shadowRoot!.querySelector(control)!.getAttribute("aria-invalid")).toBe("false");
+  }
+}
+
 /** The one message above a screen's primary action, or "" when it shows none. */
 async function bottomOf(host: HTMLElement): Promise<string> {
   const actions = host.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
@@ -2936,6 +2956,7 @@ describe("restore from my bucket", () => {
       });
       expect(await bottomOf(screen)).toBe(message);
       expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+      await expectBucketSharedFieldsUnmarked(screen);
     },
   );
 
@@ -2981,6 +3002,7 @@ describe("restore from my bucket", () => {
       "The server rejected the details. Check your entries, then try again.",
     );
     expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+    await expectBucketSharedFieldsUnmarked(screen);
   });
 
   // Review Focus 5, the wizard's half.

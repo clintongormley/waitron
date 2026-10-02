@@ -51,6 +51,23 @@ function controlOf(el: SetupRestoreBucketScreen, field: "kit" | "environment"): 
 }
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
+/** The kit and environment are shared fields, whose invalid marking is inside their own shadow roots,
+ * where a `[aria-invalid=true]` query of the screen cannot see it. */
+async function expectSharedFieldsUnmarked(el: SetupRestoreBucketScreen): Promise<void> {
+  for (const field of ["kit", "environment"] as const) {
+    const box = q<
+      HTMLElement & { error: string; invalid: boolean; updateComplete: Promise<unknown> }
+    >(el, `[data-test=${field}]`)!;
+    await box.updateComplete;
+    expect({ field, error: box.error, invalid: box.invalid }).toEqual({
+      field,
+      error: "",
+      invalid: false,
+    });
+    expect(controlOf(el, field).getAttribute("aria-invalid")).toBe("false");
+  }
+}
+
 const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
 
 describe("SetupRestoreBucketScreen", () => {
@@ -111,6 +128,7 @@ describe("SetupRestoreBucketScreen", () => {
       {},
     );
     host.style.setProperty("--wt-font-family-mono", "fantasy");
+    host.style.setProperty("--wt-font-size-sm", "11px");
     const kit = q<HTMLElement & { label: string; required: boolean; rows: number }>(
       el,
       'wt-textarea[name="recovery-kit"]',
@@ -126,7 +144,8 @@ describe("SetupRestoreBucketScreen", () => {
       spellcheck: control.spellcheck,
       autocapitalize: control.getAttribute("autocapitalize"),
       font: getComputedStyle(control).fontFamily,
-    }).toEqual({ spellcheck: false, autocapitalize: "off", font: "fantasy" });
+      size: getComputedStyle(control).fontSize,
+    }).toEqual({ spellcheck: false, autocapitalize: "off", font: "fantasy", size: "11px" });
     expect(kit!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
       "Help with the recovery kit",
     );
@@ -520,6 +539,7 @@ describe("SetupRestoreBucketScreen", () => {
         expect(q(el, `[data-test=${box}]`)).toBeNull();
         expect(await bottomOf(el)).toBe("");
         expect(q(el, "[aria-invalid=true]")).toBeNull();
+        await expectSharedFieldsUnmarked(el);
       },
     );
 
@@ -540,6 +560,7 @@ describe("SetupRestoreBucketScreen", () => {
         expect(fieldMessages(el)).toEqual([]);
         expect(await bottomOf(el)).toBe("");
         expect(q(el, "[aria-invalid=true]")).toBeNull();
+        await expectSharedFieldsUnmarked(el);
       },
     );
 
@@ -557,6 +578,7 @@ describe("SetupRestoreBucketScreen", () => {
         await el.updateComplete;
         expect(await bottomOf(el)).toBe("");
         expect(q(el, "[aria-invalid=true]")).toBeNull();
+        await expectSharedFieldsUnmarked(el);
       },
     );
   });
