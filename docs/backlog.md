@@ -362,11 +362,13 @@ the 2026-09-30 folders design; what remains:
   (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5),
   but no route calls it: its only callers under `apps/` are three scripts in
   `apps/server/scripts/` (`daily-close-demo.ts`, `modelo-303-demo.ts`, `settle-invoice-first.ts`)
-  and tests. **The owner's points for when this is designed (2026-09-29):** (1) the amount staff
-  enter is what the customer gets back, VAT included — a €2.00 correction at 10% is €1.82 base plus
-  €0.18 VAT; (2) whether a correction should instead cancel the original and issue a new invoice
-  (`TipoRectificativa` "S", where today's path files by differences, "I", in
-  `packages/fiscal-verifactu/src/backend.ts`) — asked as asesor Q31 (2026-09-30), not decided.
+  and tests. _(2026-10-02, C126: the whole-order cancel route now calls it, for a credit of the
+  whole invoice only; no route issues a correction for part of one.)_ **The owner's points for
+  when this is designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
+  VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
+  should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
+  today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
+  asesor Q31 (2026-09-30), not decided.
 - **The till's menu reads (Task 7, #719).** Every `/api/menu-state` poll waits its turn in the
   write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
   inside `withTransaction`; reading outside a transaction would skip the queue but give
@@ -2213,7 +2215,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       counter's held-orders card, which those layouts lack; since B31 a handheld whose layout adds
       a held-orders card loads and shows it. The owner kept the counter list as a stopgap and wants
       the dashboard Orders screen (B27s; B27a's server routes and B27b's screen are built; B27c's
-      till lookup remains queued; the cancel-and-credit change is lane C's C126).
+      till lookup remains queued; the till-cancel question was C126, now built: see its entry below).
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
       amount, so staff confirm a debt the server does not record.** The dialog lists each bill at
       what `GET /api/parties/:id/bills` says it owes, which reads no credit note (`#departingBills`
@@ -2269,13 +2271,51 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     recording which element has focus just before the Escape; then press a real Escape during a
     save on each form tried only with a hand-built event or not at all, and move the ones that close
     to `dismissible`.
+  - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
+    decided without the asesor).** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
+    `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) now issues
+    an R5 corrective invoice, by differences, for the whole invoice in the same transaction, settles
+    the original at nothing owed and abandons the order; an order with no invoice is abandoned with
+    nothing filed.
+    It needs `sale.rectify` from the signed-in person and an enrolled device, whose till the credit
+    note is filed on, and refuses a bill holding a payment or with one in flight. Any placed order,
+    invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
+    at the reader in this process. No till screen calls the route. The owner dropped the dashboard
+    Orders screen's "Invoice not credited" mark (2026-10-02 ~12:05): such a bill is to show as Cancelled
+    with its credit note. B27a landed first (#1027) with the mark — `invoiceNotCredited` in
+    `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
+    landing second, removes them and updates those cases (owner-approved), and checks an
+    abandoned bill before Paid in `BILL_STATUS`, since the cancel settles the invoice. Open:
+    - **Whether the cancel should accept a manager-PIN override is a question for the owner, not
+      a decision.** As built it takes none, so a waiter cancelling an invoiced order is refused 403
+      with no way round it, while the sibling till actions accept one: an unpaid departure
+      (`apps/server/src/unpaid-departure.ts`), a bill refund (`apps/server/src/bill-refunds.ts`)
+      and opening the drawer (`POST /api/drawer/open`, `apps/server/src/till-api.ts`).
+    - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
+      negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
+      Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
+      0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.
+    - **An invoice that already has a correction cannot be cancelled.** One that lowered it leaves
+      less than the whole credit takes back, so the cancel is refused
+      `sale.correction_exceeds_total`; one that raised it is refused `sale.correction_not_whole`,
+      because a whole credit must be the invoice's first correction. Both are cases in
+      `apps/server/src/cancel-invoiced-order.test.ts`. No route issues a credit note other than this
+      one.
+    - **The credit note is not printed** for the customer (asesor Q32 (b)).
+    - **A placed order with no invoice is not checked against stored card payments.** Its cancel
+      sees a card running at the reader in this process, but not a stored payment its provider has
+      not resolved, nor one captured and not yet filed; the cancel had no payment check at all
+      before C126.
   - **Asesor questions to send:**
     [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
     (money before the invoice, then a split; printing the invoice first),
     [Q28](compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
     (unpaid departure; built on the owner's decision, asked to confirm) and
     [Q29](compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
-    (how a discount or comp appears on the invoice). Q19 stays open.
+    (how a discount or comp appears on the invoice), and
+    [Q32](compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
+    (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
+    open.
 
   Owner decisions (2026-09-26), each in the spec where it applies:
   - groups replace named courses, and who may release a held group stays a venue setting;
@@ -5157,7 +5197,8 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
    filters by `cfg.locationId`, falling back to `cfg.orderFlow` when that finds none;
    `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's
-   till and node; `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
+   till and node and, for an order whose invoice was issued, to give the credit note its node and
+   series (its till is the requesting device's); `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
    it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`, which the filing sites in
    `till-sale.ts` and `working-order.ts` call.
 2. **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
@@ -6190,7 +6231,8 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
 | Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17) | **send now** — Q28 to confirm the owner's 2026-10-01 decision |
-| Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it | needs advisor before the correction screen is designed |
+| Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit)_ | needs advisor before the correction screen is designed |
+| Q32 (how a cancelled order's already-issued simplified invoice is undone) | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126) | built on the owner's 2026-10-02 decision; needs advisor to confirm |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;

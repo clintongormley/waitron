@@ -1231,6 +1231,10 @@ describe("cross-till end-to-end", () => {
   });
 });
 
+/** A cancel of an order with no invoice files nothing, so it reads neither a session nor a till. */
+const UNUSED_SESSION = "unused";
+const noSaleTill = () => Promise.reject(new Error("a cancel with no invoice resolves no till"));
+
 // Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
 // freezes composition (for free — a placed order's lines are already frozen by require_open_parent;
 // `OPEN_PARENT_REFUSAL`'s comment, packages/db/src/trigger-refusals.ts, lists what still changes);
@@ -1320,7 +1324,15 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
-    await cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, id, "customer left", OPERATOR);
+    await cancelPlacedOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      id,
+      "customer left",
+      OPERATOR,
+      UNUSED_SESSION,
+      noSaleTill,
+    );
 
     expect(await orderState(id)).toEqual({ status: "abandoned", settledAtSet: false });
 
@@ -1354,7 +1366,15 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     // because the order genuinely IS placed here (a false label is the §1 defect class).
     for (const reason of ["", "   "]) {
       await expect(
-        cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, id, reason, OPERATOR),
+        cancelPlacedOrder(
+          { db: suite.db, backend, clock },
+          cfg,
+          id,
+          reason,
+          OPERATOR,
+          UNUSED_SESSION,
+          noSaleTill,
+        ),
       ).rejects.toMatchObject({
         code: "working_order.reason_required",
         params: { workingOrderId: id },
@@ -1380,7 +1400,15 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await expect(
-      cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, openId, "changed mind", OPERATOR),
+      cancelPlacedOrder(
+        { db: suite.db, backend, clock },
+        cfg,
+        openId,
+        "changed mind",
+        OPERATOR,
+        UNUSED_SESSION,
+        noSaleTill,
+      ),
     ).rejects.toMatchObject({
       code: "working_order.not_placed",
       params: { workingOrderId: openId },
@@ -1396,7 +1424,15 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       tender: { method: "cash", amount: "5.00" },
     });
     await expect(
-      cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, settledId, "changed mind", OPERATOR),
+      cancelPlacedOrder(
+        { db: suite.db, backend, clock },
+        cfg,
+        settledId,
+        "changed mind",
+        OPERATOR,
+        UNUSED_SESSION,
+        noSaleTill,
+      ),
     ).rejects.toMatchObject({
       code: "working_order.not_placed",
       params: { workingOrderId: settledId },
@@ -1405,7 +1441,15 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     // An ABSENT id — the status read returns no row (the undefined branch), same fail-closed code.
     const missing = randomUUID();
     await expect(
-      cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, missing, "changed mind", OPERATOR),
+      cancelPlacedOrder(
+        { db: suite.db, backend, clock },
+        cfg,
+        missing,
+        "changed mind",
+        OPERATOR,
+        UNUSED_SESSION,
+        noSaleTill,
+      ),
     ).rejects.toMatchObject({
       code: "working_order.not_placed",
       params: { workingOrderId: missing },
@@ -2049,7 +2093,15 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
     // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
     // `ticket_items`), but `listStationQueue`'s `status != 'abandoned'` join retires it.
-    await cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, id2, "customer left", OPERATOR);
+    await cancelPlacedOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      id2,
+      "customer left",
+      OPERATOR,
+      UNUSED_SESSION,
+      noSaleTill,
+    );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
   });

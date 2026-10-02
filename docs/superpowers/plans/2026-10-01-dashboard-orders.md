@@ -32,6 +32,15 @@
 > | 6. Cancelled bills                       | listed when sent or holding lines, as recommended       | Task 1, as written (`LISTED_BILL`).                                                                                               |
 > | 7. A sent bill cancelled with its invoice | Cancelled, marked Invoice not credited; the till's cancel is C126 | Task 1 and Task 2, as written. This plan does not change the cancel: lane C's C126 measures and decides it.            |
 >
+> _(2026-10-02, C126: built in lane B — the cancel now credits an issued invoice in full and needs
+> `sale.rectify`, so row 7's three cancel cases in Task 1 Step 2 no longer yield what they expect as
+> written; the pointer at that step says what each yields. Owner, 2026-10-02 ~12:05: the Invoice
+> not credited mark is dropped: such a bill reads Cancelled with its credit note. B27a landed
+> first (#1027) with the mark — `invoiceNotCredited` in `apps/server/src/orders-list.ts` and its
+> cases in `apps/server/src/orders-list.test.ts`. C126, landing second, removes them and updates
+> those cases (owner-approved). The mark's text below is kept as written, with a pointer back
+> here.)_
+>
 > The owner confirmed the append-only reprint record and amended the scope, voided-copy and
 > permission choices on 2026-10-02 ~09:50. The code and tests in B27a carry those decisions.
 >
@@ -125,6 +134,10 @@ the reply that delivered the plan.
    till should refuse that cancel, or credit the invoice as it cancels, is lane C's C126, not this
    plan. If C126 lands first and the till refuses the cancel, the three cancel cases in Task 1
    Step 2 cannot be produced through the till: report it rather than inserting rows by hand.
+   _(2026-10-02, C126 built the other option: the cancel credits the whole invoice and needs
+   `sale.rectify`, which staff do not hold, so a cancel case run with a staff session is refused
+   and one run with a supervisor's yields Cancelled with Credited in full.)_ _(The mark, and
+   "keep the mark" above, were dropped by the owner 2026-10-02 ~12:05; see the banner.)_
 9. **A bare number in the search also finds the bill with that order number**
    (`working_orders.order_number`, spec §4.3), on the dashboard and in the till's Find a bill. Order
    numbers repeat over time, so a bare-number search can return several bills.
@@ -595,6 +608,26 @@ export async function billlessSale(venue: OrderVenue): Promise<string> {
 - [ ] **Step 2: Write the failing list tests.** Create `apps/server/src/orders-list.test.ts`. Rows
   are read one at a time through the detail route, so cases do not depend on how many bills earlier
   cases left behind (`resetPerTest: false`, as `unpaid-departure.test.ts:72` does):
+
+  _(2026-10-02, C126 — run on the C126 branch after B27a landed as #1027, with
+  `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/orders-list.test.ts src/orders-list.reads.test.ts src/orders-api.test.ts src/orders-reprint.test.ts src/cancel-invoiced-order.test.ts`.
+  The three cancel cases below cancel with `venue.cookie`, the staff operator Ana's till session,
+  which is now refused for an invoiced bill: 403, `authorization.not_permitted`, because the credit
+  needs `sale.rectify`. With a supervisor's till session (`venue.supervisorTill`), "reads a sent
+  bill cancelled at the till…" and "reads a debt cancelled at the till afterwards…" credited the
+  invoice in full but the row read Paid, not Cancelled: the cancel leaves the credited invoice
+  owing nothing, and B27a's `BILL_STATUS` (`apps/server/src/orders-list.ts`) checked for a
+  settlement before it looked at an abandoned bill. C126 adds
+  `when wo.status = 'abandoned' then 'cancelled'` after the Voided check; both cases now read
+  Cancelled, credited in full, with one `R/n` credit note. The `invoiceNotCredited` field they
+  asserted no longer exists (dropped by the owner 2026-10-02 ~12:05, see the banner). "drops the
+  Invoice not credited mark…" credits −3.00 on the 3.00 invoice first and then cancels; the run
+  showed the cancel refused 409 `sale.correction_exceeds_total`, and in
+  `apps/server/src/orders-list.test.ts` it is now "refuses to cancel a bill whose credit notes
+  already bring its invoice to nothing, leaving its row as it was". By reading only, not run: each
+  of the other paths that abandon a bill refuses or skips a bill that is not open —
+  `mergeCheckedBills` in `apps/server/src/bill-actions.ts`, `closeParty` in
+  `apps/server/src/parties.ts` and `abandonHeldOrder` in `apps/server/src/working-order.ts`.)_
 
 ```ts
 import { randomUUID } from "node:crypto";
@@ -1681,6 +1714,10 @@ export async function reprintOrderReceipt(
   at this spec: "Task 1, the Orders routes and the dashboard reprint, is on
   `feat/orders-list-routes`"), then:
 
+  _(The commit message's sentence on the Invoice not credited mark, and the `invoiceNotCredited`
+  field in this task's Interfaces and `listOrders`, were dropped by the owner 2026-10-02
+  ~12:05, see the banner.)_
+
 ```bash
 git add apps/server/src/orders-list.ts apps/server/src/orders-api.ts apps/server/src/orders-reprint.ts \
   apps/server/src/testing/order-venue.ts apps/server/src/orders-list.test.ts apps/server/src/orders-list.reads.test.ts \
@@ -1762,7 +1799,7 @@ export interface OrderRowDto {
   kind: "bill" | "sale"; id: string; at: string; orderNumber: number | null; label: string | null;
   partyId: string | null; partyName: string | null; tables: string[]; counter: boolean;
   saleId: string | null; invoiceNumber: string | null; creditNotes: string[]; status: OrderStatus;
-  credited: "in_full" | "in_part" | null; invoiceNotCredited: boolean; total: string; stillOwed: string | null;
+  credited: "in_full" | "in_part" | null; total: string; stillOwed: string | null;
   staff: { id: string; name: string | null }[]; departedAt: string | null;
 }
 export interface OrdersPageDto { rows: OrderRowDto[]; next: string | null; from: string | null; to: string | null }
@@ -2854,7 +2891,8 @@ so there is never a till with no way to see a debt."
 ## Self-review notes
 
 - **Spec coverage.** §4.1 rows (Task 1 `rowsSql`, decisions 2 and 3); §4.2 statuses and Credited mark
-  (Task 1 `BILL_STATUS`, decision 1; the Invoice not credited mark, decision 8, with C126 named);
+  (Task 1 `BILL_STATUS`, decision 1; the Invoice not credited mark, decision 8, with C126 named —
+  the mark was dropped by the owner 2026-10-02 ~12:05, see the banner);
   §4.3 filters and search (Task 1 `filterClauses`; Unpaid keeps the dates, Task 2 `withStatus`;
   Location is hidden and not built, §8); §4.4 columns (Task 2 `#columns`); §4.5 detail (Task 1
   `readOrderDetail`, Task 2 dialog; adjustments per decision 5) and reprint (Task 1 Steps 9–11,

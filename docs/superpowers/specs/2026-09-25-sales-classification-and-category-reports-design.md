@@ -157,6 +157,11 @@ The rules follow what the existing reports already do (`packages/reporting/src/b
   `recordCorrection` from a route.
   - When corrections are wired to a route, a delta line that reverses or adjusts an original line
     MUST name that line and copy its identity and classification.
+    _(2026-10-02, C126: the whole-order cancel route is the first route to call
+    `recordCorrection`. Its reversing lines (`reversedLines`, `apps/server/src/cancel-credit.ts`)
+    copy each original line's `classification`, `productId`, `parentProductId`, `menuId`,
+    `menuVersionId` and names, but name no original line: `sale_lines` has no column for it.
+    Whether the "name that line" half is still owed is an open question for the owner.)_
   - A delta line adding something new is classified when it is recorded.
   - Corrections count on the day they are issued, netting with their signed figures, as every
     existing report does.

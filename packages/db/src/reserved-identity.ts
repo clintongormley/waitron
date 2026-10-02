@@ -65,33 +65,45 @@ export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endor
 }
 
 /**
- * The id of a node's LIVE standard-purpose invoice series, inside the caller's transaction.
+ * The id of a node's LIVE invoice series of `purpose`, inside the caller's transaction.
  * Reads only `retired_at IS NULL` rows — a retired series is history, never the one to number from.
- * Caps the read at TWO rows and fails LOUD on a second live standard series rather than picking one
- * silently: nothing enforces one standard series per node (the natural key is `(node_id,
- * code)`, not purpose), and two would make the invoice number non-deterministic. Reachable only by a
- * corrupt write; a plain `Error`, not a code, because it is a programming-level invariant.
+ * Caps the read at TWO rows and fails LOUD on a second live series of the purpose rather than
+ * picking one silently: nothing enforces one series per purpose per node (the natural key is
+ * `(node_id, code)`, not purpose), and two would make the invoice number non-deterministic.
+ * Reachable only by a corrupt write; a plain `Error`, not a code, because it is a programming-level
+ * invariant.
  */
-export async function readStandardSeriesIdTx(tx: Transaction, nodeId: string): Promise<string> {
+export async function readLiveSeriesIdTx(
+  tx: Transaction,
+  nodeId: string,
+  purpose: "standard" | "rectificative",
+): Promise<string> {
   const rows = await tx
     .select({ id: invoiceSeries.id })
     .from(invoiceSeries)
     .where(
       and(
         eq(invoiceSeries.nodeId, nodeId),
-        eq(invoiceSeries.purpose, "standard"),
+        eq(invoiceSeries.purpose, purpose),
         isNull(invoiceSeries.retiredAt),
       ),
     )
     .limit(2);
   const [row, extra] = rows;
   if (row === undefined) {
-    throw new AppError("series.no_standard_for_node", { nodeId });
+    throw purpose === "standard"
+      ? new AppError("series.no_standard_for_node", { nodeId })
+      : new AppError("series.no_rectificative_for_node", { nodeId });
   }
   if (extra !== undefined) {
-    throw new Error(`invoice_series: node ${nodeId} has more than one standard series`);
+    throw new Error(`invoice_series: node ${nodeId} has more than one ${purpose} series`);
   }
   return row.id;
+}
+
+/** {@link readLiveSeriesIdTx} for the node's standard series. */
+export function readStandardSeriesIdTx(tx: Transaction, nodeId: string): Promise<string> {
+  return readLiveSeriesIdTx(tx, nodeId, "standard");
 }
 
 /** {@link readStandardSeriesIdTx} under its own `withTransaction`. */

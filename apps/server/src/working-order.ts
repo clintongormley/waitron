@@ -170,8 +170,10 @@ import type { TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
+import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
+import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
@@ -4946,6 +4948,12 @@ export async function markOrderPlaced(
 /**
  * Cancel a placed order and append its reasoned amendment in one transaction. A second cancel reads
  * `abandoned` and is refused `working_order.not_placed`.
+ *
+ * An order whose invoice was issued has the whole invoice credited, on the till `saleTillId`
+ * resolves, and settled owing nothing in the same transaction ({@link creditWholeInvoice}). It is
+ * refused, writing nothing, while its bill holds a payment, or while a card payment of the invoice
+ * is unresolved or captured and not yet filed. `saleTillId` is called only for such an order. Any
+ * placed order is refused while an integrated card collection of it runs in this process.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
@@ -4953,6 +4961,8 @@ export async function cancelPlacedOrder(
   id: string,
   reason: string,
   operatorId: string,
+  sessionId: string,
+  saleTillId: () => Promise<TillId>,
 ): Promise<void> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
   // is a request-shape error, not the state conflict `not_placed` names.
@@ -4967,6 +4977,21 @@ export async function cancelPlacedOrder(
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: id });
+    }
+
+    const invoice = await readOrderInvoice(tx, id);
+    // Before the in-flight check, so the answer names the money already on the bill.
+    if (invoice !== undefined) await refuseBillWithPayments(tx, id);
+    // A placed order's card collection writes no mark, and its provider may write no payment row
+    // until the card resolves, so only this process's own record of the attempt shows it.
+    if (
+      paymentAttemptIsLive(deps.db, id) ||
+      (invoice !== undefined && (await ordersWithUnfiledPayment(tx, [id])).has(id))
+    ) {
+      throw new AppError("order.payment_in_flight", { workingOrderId: id });
+    }
+    if (invoice !== undefined) {
+      await creditWholeInvoice(tx, deps, cfg, invoice, sessionId, await saleTillId());
     }
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));

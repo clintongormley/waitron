@@ -1347,7 +1347,6 @@ export interface OrderRowDto {
   creditNotes: string[];
   status: OrderStatus;
   credited: "in_full" | "in_part" | null;
-  invoiceNotCredited: boolean;
   total: string;
   stillOwed: string | null;
   staff: { id: string; name: string | null }[];

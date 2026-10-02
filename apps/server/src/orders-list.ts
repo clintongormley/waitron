@@ -78,7 +78,6 @@ export interface OrderRow {
   creditNotes: string[];
   status: OrderStatus;
   credited: "in_full" | "in_part" | null;
-  invoiceNotCredited: boolean;
   total: Decimal;
   stillOwed: Decimal | null;
   staff: { id: string; name: string | null }[];
@@ -98,12 +97,13 @@ const LISTED_BILL = sql`(wo.status <> 'abandoned'
   or exists (select 1 from working_order_lines l where l.working_order_id = wo.id))`;
 
 /**
- * A void does not change the bill status, so it wins before Waiting for payment. A cancelled
- * departure is Cancelled because Left without paying requires a placed bill.
+ * A void does not change the bill status, so it wins before Waiting for payment. A cancel settles
+ * the invoice it credits, so an abandoned bill wins before Paid.
  */
 const BILL_STATUS = sql`case
   when wo.status = 'open' then 'open'
   when sv.id is not null then 'voided'
+  when wo.status = 'abandoned' then 'cancelled'
   when ud.id is not null and ss.id is null and wo.status = 'placed' then 'left_without_paying'
   when wo.status = 'placed' and ss.id is null then 'waiting_for_payment'
   when wo.status = 'settled' or ss.id is not null then 'paid'
@@ -361,9 +361,6 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
       status: row.status,
       credited:
         row.credited === 1 ? (compareDecimal(net, ZERO) === 0 ? "in_full" : "in_part") : null,
-      // Voided rows were classified earlier, so a Cancelled invoice still stands.
-      invoiceNotCredited:
-        row.status === "cancelled" && row.sale_id !== null && compareDecimal(net, ZERO) !== 0,
       total,
       stillOwed: owed !== null && compareDecimal(owed, ZERO) > 0 ? owed : null,
       staff:

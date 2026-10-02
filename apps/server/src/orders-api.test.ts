@@ -67,9 +67,15 @@ describe("Orders routes", () => {
     const cancelled = await placedInvoiceFirst(venue, "Caña");
     expect(
       (
-        await send(venue.app, venue.cookie, "POST", `/api/working-orders/${cancelled}/cancel`, {
-          reason: "Error",
-        })
+        await send(
+          venue.app,
+          venue.supervisorTill,
+          "POST",
+          `/api/working-orders/${cancelled}/cancel`,
+          {
+            reason: "Error",
+          },
+        )
       ).status,
     ).toBe(200);
     const sale = await billlessSale(venue);
@@ -107,6 +113,14 @@ describe("Orders routes", () => {
     );
     expect((staffPaid.json as { rows: { id: string }[] }).rows.map((row) => row.id)).not.toContain(
       oldPaid,
+    );
+    expect((staffPaid.json as { rows: { id: string }[] }).rows.map((row) => row.id)).not.toContain(
+      cancelled,
+    );
+    const staffCancelled = await get(venue.staffDashboard, "?status=cancelled&anyDate=true");
+    expect(staffCancelled.status).toBe(200);
+    expect((staffCancelled.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(
+      cancelled,
     );
     expect((await get(venue.staffDashboard, "?status=unpaid&anyDate=true")).status).toBe(200);
     expect((await get(venue.staffDashboard, "/staff")).status).toBe(200);

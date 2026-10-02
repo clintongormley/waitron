@@ -136,9 +136,10 @@ depends on the permissions of the person using the handheld. But a cash register
 opened by the device it is assigned to."_ And 2026-10-02: _"When we add a printer with a drawer to a
 till, we can specify whether it should control the till or not. So even if the printer is shared
 between tills, any till that says it should control it, does."_ (B29). A handheld places, collects
-and cancels like a till; the operator's permissions decide. Placing and cancelling check no
-permission, only a signed-in operator; collecting, like every route that takes a payment, needs
-`sale.take_payment` (C128), which every role holds. Guard:
+and cancels like a till; the operator's permissions decide. Placing, and cancelling an order with
+no invoice, check no permission, only a signed-in operator; cancelling an order whose invoice was
+issued needs `sale.rectify` (C126), which staff do not hold; collecting, like every route that takes
+a payment, needs `sale.take_payment` (C128), which every role holds. Guard:
 `apps/server/src/take-payment-permission.test.ts`, weaker than its name — it covers only the four
 routes it names, so a fifth payment route that does not ask for the permission is seen by nothing;
 and since every role holds the permission, it makes the refusal by wrapping `authorize`, so no real

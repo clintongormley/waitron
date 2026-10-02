@@ -21,7 +21,6 @@ const ROW: OrderRowDto = {
   creditNotes: ["R/2"],
   status: "left_without_paying",
   credited: "in_part",
-  invoiceNotCredited: false,
   total: "30.00",
   stillOwed: "15.00",
   staff: [{ id: "person-1", name: "Ana" }],

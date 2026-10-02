@@ -127,36 +127,42 @@ describe("each status, from the product's own write paths", () => {
   });
 
   const cancel = (id: string) =>
-    send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, { reason: "Error" });
+    send(venue.app, venue.supervisorTill, "POST", `/api/working-orders/${id}/cancel`, {
+      reason: "Error",
+    });
 
-  it("reads a sent bill cancelled at the till as Cancelled, keeping its invoice, marked Invoice not credited", async () => {
+  it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its credit note", async () => {
     const id = await placedInvoiceFirst(venue, "Caña");
     expect((await cancel(id)).status).toBe(200);
     expect(await rowOf(id)).toMatchObject({
       status: "cancelled",
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
+      creditNotes: [expect.stringMatching(/^R\/\d+$/)],
+      credited: "in_full",
       stillOwed: null,
-      invoiceNotCredited: true,
     });
   });
 
-  it("drops the Invoice not credited mark once credit notes bring the invoice to nothing", async () => {
+  it("refuses to cancel a bill whose credit notes already bring its invoice to nothing, leaving its row as it was", async () => {
     const id = await placedInvoiceFirst(venue, "Caña");
     await credit(venue, id, "2.48", "-3.00");
-    expect((await cancel(id)).status).toBe(200);
-    expect(await rowOf(id)).toMatchObject({
-      status: "cancelled",
-      credited: "in_full",
-      invoiceNotCredited: false,
+    const before = await rowOf(id);
+    expect(before).toMatchObject({ credited: "in_full", creditNotes: [expect.any(String)] });
+    expect(await cancel(id)).toMatchObject({
+      status: 409,
+      json: { code: "sale.correction_exceeds_total" },
     });
+    expect(await rowOf(id)).toEqual(before);
   });
 
-  it("reads a debt cancelled at the till afterwards as Cancelled, not Left without paying", async () => {
+  it("reads a debt cancelled at the till afterwards as Cancelled and credited in full, not Left without paying", async () => {
     const party = await departed(venue, "Caña");
     expect((await cancel(party.tabId)).status).toBe(200);
     expect(await rowOf(party.tabId)).toMatchObject({
       status: "cancelled",
-      invoiceNotCredited: true,
+      creditNotes: [expect.stringMatching(/^R\/\d+$/)],
+      credited: "in_full",
+      stillOwed: null,
       departedAt: expect.any(String),
     });
   });
@@ -190,7 +196,6 @@ describe("each status, from the product's own write paths", () => {
     expect(await rowOf(id)).toMatchObject({
       status: "voided",
       stillOwed: null,
-      invoiceNotCredited: false,
     });
   });
 

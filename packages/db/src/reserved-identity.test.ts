@@ -9,6 +9,7 @@ import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
   readMembershipTrustSet,
+  readLiveSeriesIdTx,
   readNodeEndorsement,
   readStandardSeriesId,
   retireNodeSeriesTx,
@@ -177,6 +178,54 @@ describe("reserved-identity accessors", () => {
     await expect(readStandardSeriesId(suite.db, node)).rejects.toThrow(
       /more than one standard series/,
     );
+  });
+
+  it("readLiveSeriesIdTx reads the node's live rectificative series, not the standard", async () => {
+    const node = await seedNode(suite.db, locationId);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { nodeId: node, code: "F-7", purpose: "standard" },
+        { nodeId: node, code: "R-7", purpose: "rectificative" },
+        { nodeId: node, code: "R-6", purpose: "rectificative" },
+      ]),
+    );
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date() })
+      .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, "R-6")));
+    const id = await withTransaction(suite.db, (tx) =>
+      readLiveSeriesIdTx(tx, node, "rectificative"),
+    );
+    const [row] = await suite.db
+      .select({ code: invoiceSeries.code })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, id));
+    expect(row?.code).toBe("R-7");
+  });
+
+  it("readLiveSeriesIdTx throws series.no_rectificative_for_node when the node has no live one", async () => {
+    const node = await seedNode(suite.db, locationId);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [{ nodeId: node, code: "F-8", purpose: "standard" }]),
+    );
+    const err = await captureError(() =>
+      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "rectificative")),
+    );
+    expect(isAppError(err) && err.code).toBe("series.no_rectificative_for_node");
+    expect(isAppError(err) && err.params).toEqual({ nodeId: node });
+  });
+
+  it("readLiveSeriesIdTx is LOUD on two live rectificative series", async () => {
+    const node = await seedNode(suite.db, locationId);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { nodeId: node, code: "R-9", purpose: "rectificative" },
+        { nodeId: node, code: "R-10", purpose: "rectificative" },
+      ]),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "rectificative")),
+    ).rejects.toThrow(/more than one rectificative series/);
   });
 
   it("retireNodeSeriesTx retires every LIVE series of the node and only those", async () => {

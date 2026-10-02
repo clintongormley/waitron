@@ -2279,10 +2279,8 @@ export class TillApi {
   }
 
   /**
-   * Cancel a PLACED order → `POST /api/working-orders/:id/cancel` (`placed → abandoned`), logging an
-   * `order_cancelled` amendment carrying `reason`. A blank reason rejects
-   * `working_order.reason_required` before any transition; a non-placed or absent id
-   * `working_order.not_placed`.
+   * Cancel a PLACED order → `POST /api/working-orders/:id/cancel`. What it writes and refuses is
+   * `cancelPlacedOrder`'s (`apps/server/src/working-order.ts`).
    */
   async cancelOrder(id: string, reason: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/cancel`, "POST", { reason });

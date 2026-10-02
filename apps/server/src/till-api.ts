@@ -333,6 +333,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.out_of_date": 409,
   "order.payment_in_flight": 409,
   "working_order.not_placed": 409,
+  "series.no_rectificative_for_node": 409,
+  "sale.correction_not_whole": 409,
+  // A record built from the invoice as stored, or from the server's own pricing, disagrees with
+  // itself: nothing the request sent, and permanent for the same invoice or basket.
+  "sale.correction_lines_mismatch": 409,
+  "sale.total_mismatch": 409,
+  "sale.correction_exceeds_total": 409,
+  "sale.voided": 409,
+  "sale.already_settled": 409,
   "working_order.not_settled": 409,
   "working_order.already_collected": 409,
   "ticket.not_fired": 409,
@@ -1724,15 +1733,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId, sessionId } = await requireSession(deps, c);
+      const device = await tryReadDevice(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ reason: string }>(c);
+      // The device's till reaches the credit note only, as placing's reaches its invoice; the
+      // `order_cancelled` amendment keeps `cfg.tillId`.
       await cancelPlacedOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         deps.cfg,
         id,
         body.reason,
         personId,
+        sessionId,
+        () => requireSaleTillId(deps, c, device),
       );
       return c.body(null, 200);
     }),
