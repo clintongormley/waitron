@@ -3253,16 +3253,20 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** Both the
   printed receipt (`apps/server/src/receipt-ticket.ts`) and the till's on-screen ticket
   (`apps/till/src/screens/till-ticket-view.ts`) print the caption, in Spanish whatever the receipt
-  language, on its own line directly above the QR. Open:
-  - Queued as C123 (owner, 2026-10-01: move the caption, the QR and the VERI\*FACTU line to the
-    start of the invoice). AEAT's «Detalle de las especificaciones técnicas del código «QR» de la
-    factura…», version 0.5.0 of 10/12/2025, section 3, also says «El código «QR» se situará al
+  language, on its own line directly above the QR. Follow-ups:
+  - **The caption, the QR and the VERI\*FACTU line open the invoice — done (2026-10-02, C123, this
+    branch; owner, 2026-10-01).** AEAT's «Detalle de las especificaciones técnicas del código «QR»
+    de la factura…», version 0.5.0 of 10/12/2025, section 3, says «El código «QR» se situará al
     principio de la factura, antes de que empiece el contenido de ésta generado por el sistema
     informático de facturación, a menos que se justifique la existencia de algún obstáculo para
     ello, en cuyo caso, deberá quedar siempre bien visible y estar claramente separado y
     diferenciado –de forma que destaque– del resto de contenidos y otros posibles «QR», ocupando un
-    lugar preeminente.» Waitron prints the QR near the END of the receipt, just above the
-    VERI\*FACTU line, and shows it there on the till's screen too.
+    lugar preeminente.» The printed receipt and the till's on-screen ticket now start with the
+    caption, the QR and the VERI\*FACTU line, then a blank line (on screen, a dividing line), then
+    the venue's name and the rest in the order they had. A practice (Demo or Prepare) ticket still
+    starts with its practice warning, above the QR, because that warning says the whole ticket is
+    not a real invoice. A sale with no QR is unchanged: its VERI\*FACTU line still comes after the
+    payment lines.
   - Left as it is (owner, 2026-10-01: "leave it"): the same section asks for the caption and the
     VERI\*FACTU line in a readable typeface and size, equal to or larger than the rest of the
     invoice's data. On the till's screen (read from its styles, not measured) both take the ticket's
