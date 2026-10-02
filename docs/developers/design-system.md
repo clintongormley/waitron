@@ -1048,21 +1048,21 @@ somebody actually changes most days get lost in it. Fold the optional detail awa
 frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is the pattern's first home —
 Name, Category, Available, Standalone ordering, Variants and Modifiers stay on screen; Kitchen,
-Descriptors and Nutritional info fold; Pricing stays on screen until an Active variant sells at its
-base price, and then folds too, with the base price and VAT on its closed line as named values
+Descriptors and Nutritional info fold; Pricing stays on screen until the product has an Active
+variant, and then folds too, with the base price and VAT on its closed line as named values
 (`summaryFields`).
 
 Three rules make the fold safe rather than merely tidy.
 
-**Every collapsed section carries a summary of what is inside it**, passed as `summary`, so
-nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
-empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Drinks` (kitchen name
-and course). An empty summary means an empty section, which is a useful signal in itself. A names
-section (the Options and Extras editors' "Customer-facing names") puts each language's
-customer-facing name after its upper-case code — `ES ¿Cómo la quiere hecha? · EN How would you like
-it cooked?` — leaving blank names out, so a section with every name blank shows no line. It is
-built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`). Those two editors keep the
-kitchen name out of the section, as a field of its own directly under Name.
+**Every collapsed section carries a summary of what is inside it**, passed as `summary`, or as named
+values in `summaryFields`, so nothing a person has filled in becomes invisible. Build it from the
+values themselves, skipping the empty ones, joined with a middot: the Kitchen section reads `Café
+c/leche · Drinks` (kitchen name and course). An empty summary means an empty section, which is a
+useful signal in itself. A names section (the Options and Extras editors' "Customer-facing names")
+puts each language's customer-facing name after its upper-case code — `ES ¿Cómo la quiere hecha? ·
+EN How would you like it cooked?` — leaving blank names out, so a section with every name blank
+shows no line. It is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`). Those two
+editors keep the kitchen name out of the section, as a field of its own directly under Name.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
 stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the
@@ -1070,10 +1070,10 @@ header click does nothing and the chevron stops presenting itself as a live cont
 an invalid submission can point at a field nobody can see. Clearing `has-error` does not re-collapse
 the section — the person is left looking at the field they just corrected.
 
-**Sections always start collapsed, and open/closed state is not remembered.** A remembered fold is a
-second piece of per-person state to get wrong, and it makes two people describing the same screen
-disagree about what is on it. One exception: the product editor's Pricing fold starts open on a
-product never saved, whose price and VAT are still being set (owner, 2026-10-02, A219).
+**Sections start collapsed, and open/closed state is not remembered.** A remembered fold is a second
+piece of per-person state to get wrong, and it makes two people describing the same screen disagree
+about what is on it. In the product editor, the Pricing fold starts open on a product never saved,
+whose price and VAT are still being set (owner, 2026-10-02, A219).
 
 A disclosure draws no border and no lines in either state; spacing above and below sets the section
 apart (owner, 2026-10-01, A169). The heading and chevron stay exactly where they are when it opens,

@@ -389,7 +389,6 @@ it("renders the sections in the designed order, with the price above the VAT rat
   ]);
   const tax = el.shadowRoot!.querySelector("[name=tax]")!;
   const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
-  // DOCUMENT_POSITION_FOLLOWING: the VAT dropdown comes after the price field, never before it.
   expect(price.compareDocumentPosition(tax) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const pricing = section(el, "price");
   expect(pricing.querySelector(".group-label")?.textContent).toBe(t("editor.pricing"));

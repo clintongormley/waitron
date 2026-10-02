@@ -1114,8 +1114,6 @@ export class ProductEditor extends LitElement {
     return this.draft.variants.some((variant) => variant.active);
   }
 
-  /** The folded Pricing section's closed line: the base price, then VAT. A blank price, or a VAT
-   * class this form does not offer, is left out. */
   private pricingSummary(amount: string, unitLabel: string) {
     const price = amount.trim();
     const tax = this.taxes.find((tax) => tax.id === this.draft.vatClass);
@@ -1134,8 +1132,6 @@ export class ProductEditor extends LitElement {
     ];
   }
 
-  /** Price, then VAT. Once an active variant sells at it, the price is a base price and the section
-   * folds, so the variants below it are what the editor shows first. */
   private renderPrice() {
     const unitLabel = this.unitShortLabel;
     const parent = this.inherited;

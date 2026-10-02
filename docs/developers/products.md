@@ -459,22 +459,21 @@ photo that exists was accepted.
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a summary of what is inside it, so nothing filled in is invisible while
-collapsed. Top to bottom: Name, Category, Available, Standalone ordering (absent on a
-variant's page), ▸ Kitchen, ▸ Descriptors,
-▸ Nutritional info, Price (and the variants table, if there are variants), Modifiers, then Cancel and
-Save. An Inactive product's editor also opens with a line saying so, and offers Restore beside
-Save. Opened on a variant, the same form is the variant's own page: it has no Standalone ordering, Modifiers or
-Variants section, and each field the variant may leave blank to take the parent's value shows that value as
-its hint.
+collapsed. Top to bottom: Name, Category, Available, Standalone ordering (absent on a variant's
+page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active),
+Variants, Modifiers, then Cancel and Save. An Inactive product's editor also opens with a line
+saying so, and offers Restore beside Save. Opened on a variant, the same form is the variant's own
+page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
+leave blank to take the parent's value shows that value as its hint.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
 naming the list's plain STAFF name and which kind it is.
 
-Sections always start collapsed; open and closed state is not remembered. A section holding a
-validation error opens itself and cannot be collapsed until the error is fixed — that is
-`wt-disclosure`'s `has-error`, described in
-[the design system](design-system.md).
+Sections start collapsed, and open and closed state is not remembered. Pricing is the exception: it
+does not fold at all while no variant is Active, and its fold starts open on a product never saved.
+A section holding a validation error opens itself and cannot be collapsed until the error is fixed —
+that is `wt-disclosure`'s `has-error`, described in [the design system](design-system.md).
 
 The main category is chosen in the editor itself, through the single-choice picker in
 `apps/dashboard/src/widgets/classification-fields.ts`.

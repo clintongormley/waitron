@@ -1104,6 +1104,8 @@ in the summary's usual muted text. (C, the field names in full-strength text rat
 the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give
 the primitive a way to take the parts (a slot, or name/value pairs) rather than building markup in
 each screen. Since A171 the line holds only the customer-facing names, so it has no "Kitchen:" part.
+(2026-10-02: `summaryFields`, built for A219, is that way; the product editor's Kitchen and
+Descriptors lines and `namesLine` still pass plain strings.)
 
 **The product editor's folded sections follow the same pattern, with real values (owner,
 2026-10-02):** _"regarding products, i think we should include the field values not just the fact
@@ -1327,11 +1329,11 @@ Seeds, edit"). The product picker offers no "may contain" today (only the ingred
 `allergen-picker.ts` does), and the draft keeps each allergen's stored presence when the list
 changes; keep that. A variant's hints of its parent's values (`nutritionHints`) stay meaningful.
 
-**No box around Pricing (A214) — DONE (this branch).** The owner: _"Pricing also doesn't need the
-box around it"_. Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the
-same upper-case muted group label as Classification and Modifiers, or, once A219 folds it, a
-`wt-disclosure` headed like Kitchen. `.bordered-group` had no other user and is gone, with its
-comment about the variants table widening the fieldset: the table now sits in its own section.
+**No box around Pricing (A214) — DONE.** The owner: _"Pricing also doesn't need the box around it"_.
+Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the same upper-case
+muted group label as Classification and Modifiers, or, once A219 folds it, a `wt-disclosure` headed
+like Kitchen. `.bordered-group` had no other user and is gone, with its comment about the variants
+table widening the fieldset: the table now sits in its own section.
 
 **Clicking a variant's row opens its edit window (A215) — DONE (#1049).** The owner: _"variants when
 clicked should open the edit modal"_. In `variant-table.ts` a click anywhere on a row, or Enter on
@@ -1354,9 +1356,9 @@ window, which has no unit button, labels it "Price" (`unitShortLabel` and `rende
 (`feat/products-category-tree`) has a comment in `product-list.ts` citing `unitShortLabel` as
 returning Each, which is no longer true; fix it when that branch is rebased.
 
-**The variants' status filter becomes a "Show inactive" link (A217) — DONE (this branch).** The owner:
+**The variants' status filter becomes a "Show inactive" link (A217) — DONE.** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
-(`variant-status`, `variant-table.ts`) stands alone between the base price and the table. Offer
+(`variant-status`, `variant-table.ts`) stood alone between the base price and the table. Offer
 mockups: for example in the table's header row, beside the Add variant button, or shown only once
 some variant is inactive. Keep its rule that a reported problem or a variant just added never sits
 on a hidden row.
@@ -1386,12 +1388,12 @@ group headings (`wt-combobox`'s existing `group`), and each group ends with its 
 choice, "+ New extras list…" and "+ New options list…", drawn in the primary blue so it does not
 read as a list. No divider is needed.
 
-**With variants, Pricing folds and Variants becomes its own section (A219) — DONE (this branch).**
+**With variants, Pricing folds and Variants becomes its own section (A219) — DONE.**
 The owner: _"when we have variants the vat and base price and status filter are overwhelming.
 they overshadow the variants, which are the interesting bits. perhaps they should be collapsed?"_.
 Once a product has an active variant, the base price is the price each variant falls back to
 (the label switches to `editor.base_price`, or `editor.base_price_unit` with a unit), and VAT and
-the base price fill the top of the Pricing section above the table. **Wanted:** with variants, VAT
+the base price filled the top of the Pricing section above the table. **Wanted:** with variants, VAT
 and the base price fold into one line above the table, in A211's pattern (e.g. "**VAT:** Reduced
 (10%) · **Base price:** €38.00 each"), opened by a click; the variants table and Add variant are
 what the section shows. Without variants nothing changes: VAT and the price stay open, since they
