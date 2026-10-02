@@ -1757,6 +1757,8 @@ describe("the product list as a tree", () => {
         await el.revealCategory("k");
         const table = el.shadowRoot!.querySelector("wt-data-table")!;
         expectRowMenusOnScreen(table, 5);
+        // The table learns its width from a ResizeObserver, which reports after the next layout.
+        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
         // The phone indent: half a step a level, measured where a 390 px screen puts the list.
         const indent = (key: string) =>
           getComputedStyle(
