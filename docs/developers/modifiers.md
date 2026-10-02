@@ -179,6 +179,10 @@ the basket resolved, and decides what is stored:
   version froze it for that product, and taxed at that class's rate on the day the invoice is
   issued.
   The child's stored quantity is dish quantity × pick quantity.
+  If its routing rule sends it to another station, that child also gets its own kitchen record at
+  that station. Its `+` line on the dish becomes a cross-reference, retaining the extra's allergen
+  and dietary marks; paper prints cross-references on `> ` lines (`readQueueSubItems`,
+  `apps/server/src/working-order.ts`; `buildTicketItems`, `apps/server/src/kitchen-print.ts`).
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than its `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
   malformed pick is `extras.invalid` naming the field.
@@ -351,9 +355,10 @@ Six things it is worth knowing about that payload:
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
   them. Each is the product's own or, where a variant leaves it blank, its parent's —
   except the names, which are always the variant's own. The two declaration fields take the names
-  a CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`, the field
-  names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens — because a
-  pick is what becomes such a line. That kitchen read took the product's RAW columns until #537
+  a following CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`,
+  the field names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens —
+  because a pick is what becomes such a line. A split-off child puts those same marks on the
+  dish's cross-reference. That kitchen read took the product's RAW columns until #537
   (variants Task 5), so before it an extra that is a variant inheriting its parent's declarations
   showed none there. Shown beside the dish's own, never folded
   into them.

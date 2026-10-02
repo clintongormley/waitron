@@ -2545,8 +2545,7 @@ interface ServableLine {
 
 /**
  * The dish lines `where` selects on the bills of the party and of every party merged into it that
- * Current orders shows ({@link onShownBill}), bill by bill in the order the bills were opened. An
- * extras line is never one: it follows its dish.
+ * Current orders shows ({@link onShownBill}), bill by bill in the order the bills were opened.
  */
 async function servableLines(
   tx: Transaction,

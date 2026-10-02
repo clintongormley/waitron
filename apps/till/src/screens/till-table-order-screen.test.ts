@@ -1919,7 +1919,7 @@ describe("till-table-order-screen", () => {
     const readyLine: TabLine = { ...pendingLine, lineNo: 1, state: "ready" };
     // A CHILD EXTRAS line, in the shape the tab wire really sends one: it carries the PICKED product
     // and names its parent dish by line number, which is the ONLY field telling the two
-    // apart. It has no ticket item of its own, so firedAt AND state are both null — the shape whose
+    // apart. This following extra has no ticket item, so firedAt AND state are both null — the shape whose
     // null firedAt would wrongly fall into the HELD/Send branch, and whose held shape would paint an
     // editable course picker, if the child guard were absent. A fixture with `productId: null` would
     // pass against a screen that still read a null product as "child", so it carries one on purpose.

@@ -3868,7 +3868,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      // Café with TWO picked extras — each a child line, never its own ticket item.
       const grande = await addExtra(tx, catalogueId, cafeId, "Grande");
       const avena = await addExtra(tx, catalogueId, cafeId, "Leche avena");
       const { id: orderId } = await placeOrderWith(tx, cfg, [

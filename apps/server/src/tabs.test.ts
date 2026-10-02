@@ -349,7 +349,7 @@ describe("addTabRound (append-only, no re-price)", () => {
     ]);
   });
 
-  it("appends a round with extras as parent + child lines, firing ONLY the parent", async () => {
+  it("appends a round with unclaimed extras as parent + child lines, firing only the parent", async () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     // Two different products, so an assertion about which one a row carries can fail.
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
@@ -684,7 +684,7 @@ describe("readTabLines", () => {
     expect(agua.state).toBe("queued");
   });
 
-  it("carries state: null for an extra's child line, which has no ticket item of its own", async () => {
+  it("carries state: null for an unclaimed extra's child line", async () => {
     // Distinct from a held parent, which has a ticket item in state "queued".
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));

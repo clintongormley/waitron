@@ -1311,7 +1311,6 @@ describe("dish extras on kitchen tickets", () => {
     expect(ticket).toContain("Cortado");
     expect(ticket).toContain("+ Nata");
     expect(ticket).toContain("+ Leche avena");
-    // A cook reads the staff name, never the diner's wording.
     expect(ticket).not.toContain("Nata montada");
     expect(ticket).not.toContain("Bebida de avena");
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Nata"));
