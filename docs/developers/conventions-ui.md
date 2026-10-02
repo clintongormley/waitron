@@ -332,8 +332,7 @@ the test `a restored filter's dropdown shows the restored choice` in
 
 One that avoids it, marking each mapped option `.selected` and binding no `.value` on the `<select>`
 at all, which is the shape this rule recommends: `wt-data-table`'s filter dropdown
-(`packages/ui/src/components/wt-data-table.ts`). Nothing guards the rule; the dropdowns a text
-scan found still binding `.value` alone over mapped options are listed in `docs/backlog.md`.
+(`packages/ui/src/components/wt-data-table.ts`). Nothing guards the rule.
 
 **Printing and hardware**
 

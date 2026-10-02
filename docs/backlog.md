@@ -2905,8 +2905,8 @@ refused backup-file and recovery-key inputs, and on the bucket restore screen th
 kit text box, get no red outline — both screens' own styles have no rule for an invalid input or
 text box (seen in screenshots of the refused state; only the dropdown was in A151's scope).
 _2026-10-02: A178d moved the recovery key to `wt-input` and the recovery kit to `wt-textarea`,
-which draw their own invalid state, so the open part is now the backup-file input alone._ Four
-stylesheets that already include `selectStyles` still carry their own identical
+which draw their own invalid state (read, not run), so the open part is now the backup-file input
+alone._ Four stylesheets that already include `selectStyles` still carry their own identical
 `select[aria-invalid="true"]` rule — `reasons-screen.ts` (adjustments), `sumup-connect-form.ts`
 (payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard). They were left because none of their own test
 files asserts a border colour, so removing them would go unchecked.
@@ -7857,8 +7857,8 @@ ongoing overhaul listed at the top of Track A.
 - **The till's schedule screen still has the My Schedule defects the dashboard fixed.**
   _2026-10-02: the dropdown half below is retired — A178d made the three dropdowns (shift,
   colleague, absence kind) `wt-combobox`es, and the counter screen no longer has a `<select>`; the
-  other three defects stay open._ Its three dropdowns bind `.value` alone over options from a list
-  (found 2026-09-14 by a text scan; re-checked 2026-09-27):
+  other three defects stay open; read, not run._ Its three dropdowns bind `.value` alone over
+  options from a list (found 2026-09-14 by a text scan; re-checked 2026-09-27):
   `apps/till/src/screens/till-schedule-screen.ts:356`, `:370`, `:423`. Each binds `.value` on a
   `<select>` whose options come from a `.map(…)` and marks no option
   `selected` — the shape that showed "Downstairs bar" on the till while it sold from Deli counter,
@@ -7876,10 +7876,10 @@ ongoing overhaul listed at the top of Track A.
   reuses options by position, and accepting a swap adds a shift. Units' list was fixed by #382. The
   same screen also still carries the other defects the dashboard's branch fixed, found 2026-09-27 by
   reading `apps/till/src/screens/till-schedule-screen.ts`, not run: its failed-load catch
-  (`:193`-`:198`) fills the lists with `[]`, so the sections say "none" (`:303`, `:324`, `:397`)
-  beside the load-failed alert (`:289`); its loading line (`:284`) has no `role="status"`; and a
+  (`:187`-`:193`) fills the lists with `[]`, so the sections say "none" (`:297`, `:318`, `:407`)
+  beside the load-failed alert (`:283`); its loading line (`:278`) has no `role="status"`; and a
   chosen shift or colleague that a reload removes stays chosen (`coverShiftId` and
-  `coverColleagueId` are cleared only after a cover request is sent, `:228`-`:229`). **Next
+  `coverColleagueId` are cleared only after a cover request is sent, `:222`-`:223`). **Next
   action:** fix those three defects the way the dashboard screen now does.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
@@ -7894,7 +7894,9 @@ ongoing overhaul listed at the top of Track A.
   A device's default is set only through `PUT
   /management-api/venue-service/devices/:deviceId/default-zone` (`packages/venue-service/src/routes.ts`),
   and nothing in the tree calls that route — grepped across `apps/` and `packages/` on 2026-09-24,
-  which found only the route and its tests — so no screen sets one today.
+  which found only the route and its tests — so no screen sets one today. _2026-10-02: no longer
+  true — since #1004 the dashboard's venue operations screen sets a device's default zone through
+  that route (`packages/venue-service/src/dashboard/client.ts`)._
 - **The built-in doneness picker is gone; doneness is a modifier the venue adds itself — DONE as Task
   10**: the demo seed's steak carries a cooking options list, the till offers it (Task 12), and an
   options answer prints on the kitchen ticket as an indented
