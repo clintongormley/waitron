@@ -7928,6 +7928,14 @@ ongoing overhaul listed at the top of Track A.
   below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
   roles would name their permissions (the roles design is not written yet), so a rename after that
   has to rewrite those rows as well.
+  **Restated by the owner 2026-10-02: "review all permissions and the roles they're assigned to"** —
+  the review covers BOTH halves: every permission, and which of the built-in roles holds each. Two
+  role questions from that morning's dashboard Orders screen answers (B27s, lane C questions.md
+  2026-10-02 ~09:40 and ~09:50) belong in it: the staff role holds no `report.view`, so the Orders
+  screen gave staff a narrower view of their own (unfinished bills plus today's finished ones) rather
+  than the permission deciding; and `print.resend`, held only by managers and admins, was the name
+  that first came up for the dashboard's DUPLICADO copy until it was settled that the copy uses the
+  till copy's own permission — two permissions for one kind of print is a merge candidate.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
   the schema. The owner restated it on 2026-09-28 ("especially because I want roles to be definable
