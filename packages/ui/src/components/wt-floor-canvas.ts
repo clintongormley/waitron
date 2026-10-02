@@ -15,6 +15,7 @@ import {
   snapRotation,
   snapToGrid,
 } from "../floor.js";
+import "./wt-input.js";
 import "./wt-table-token.js";
 
 export interface FloorCanvasCopy {
@@ -159,24 +160,6 @@ export class WtFloorCanvas extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .zone {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
-      .zone input {
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
-
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -221,6 +204,9 @@ export class WtFloorCanvas extends LitElement {
   @query(".canvas") private canvasEl!: HTMLElement;
 
   #drag: DragState | null = null;
+
+  /** The zone typed into the box and not yet sent, and the table it was typed for. */
+  #zoneDraft: { tableId: string; value: string } | null = null;
 
   /**
    * Memoised per `this.tables` reference, so a drag writing `draft` on every pointermove does not make
@@ -328,13 +314,19 @@ export class WtFloorCanvas extends LitElement {
             `,
           )}
         </div>
-        <label class="zone">
-          ${copy.zone}
-          <input
-            .value=${t.zoneId ?? ""}
-            @change=${(e: Event) => this.#onZone(t, (e.target as HTMLInputElement).value)}
-          />
-        </label>
+        <wt-input
+          name="zone"
+          label=${copy.zone}
+          .value=${t.zoneId ?? ""}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => {
+            e.stopPropagation();
+            this.#zoneDraft = { tableId: t.id, value: e.detail.value };
+          }}
+          @keydown=${(e: KeyboardEvent) => {
+            if (e.key === "Enter") this.#commitZone(t);
+          }}
+          @focusout=${() => this.#commitZone(t)}
+        ></wt-input>
         <div class="actions">
           <button type="button" class="chip rotate" @click=${() => this.#onRotate(t)}>
             ${copy.rotate}
@@ -461,8 +453,14 @@ export class WtFloorCanvas extends LitElement {
     });
   }
 
-  #onZone(t: FloorTable, value: string): void {
-    const trimmed = value.trim();
+  /** Sends the typed zone once, on Enter or on leaving the box, as the native input's `change` did,
+   * because the parent saves every placement change it hears. */
+  #commitZone(t: FloorTable): void {
+    const draft = this.#zoneDraft;
+    // Typed for a table that is no longer the one shown, so it is not this table's zone.
+    if (draft?.tableId !== t.id) return;
+    this.#zoneDraft = null;
+    const trimmed = draft.value.trim();
     this.#emitPlacement({ ...this.#placementOf(t), zoneId: trimmed === "" ? null : trimmed });
   }
 
