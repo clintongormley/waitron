@@ -1326,7 +1326,7 @@ are lifted above it and keep their own clicks. Left open from its review: a clic
 Available switch's round knob does not flip it — the run-it reviewer reported the same on `main`
 before the branch, so it is in the shared `wt-switch`, not the row; not measured further.
 
-**The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE.** The owner:
+**The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE (#1057).** The owner:
 _"I don't like "per Each", it should either be "Each" or "per Unit""_. **Decided (owner,
 2026-10-02):** "Each" with no unit, "per <unit>" with one. Built: with no unit the price
 field's button says "Each" ("Unidad") and its label "Price" ("Precio"), or "Base price" ("Precio
@@ -1334,7 +1334,9 @@ base", the new `editor.base_price`) while a variant is Active; with a unit, "per
 per kg" or "Base price per kg" as before. The same holds on a variant's own page; the variant
 window, which has no unit button, labels it "Price" (`unitShortLabel` and `renderPrice` in
 `apps/dashboard/src/widgets/product-editor.ts`, `editor.price` in
-`apps/dashboard/src/i18n/strings.ts`).
+`apps/dashboard/src/i18n/strings.ts`). Left open: the unbuilt A208 branch
+(`feat/products-category-tree`) has a comment in `product-list.ts` citing `unitShortLabel` as
+returning Each, which is no longer true; fix it when that branch is rebased.
 
 **The variants' status filter becomes a "Show inactive" link (A217) — DECIDED, ready to build.** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
