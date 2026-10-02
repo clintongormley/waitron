@@ -24,6 +24,22 @@ export const ALERT_MESSAGES: Readonly<
     en: "One of Waitron's checks could not run. It will try again in a minute.",
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
   },
+  "station.printer_down": {
+    en: "{station}'s printer {printer} has printed nothing since something sent to it got stuck, so {station}'s tickets may not be reaching it. Fix the printer; while {station} is open, closing it on the Prep stations page sends its new work elsewhere (the page shows where).",
+    es: "La impresora {printer} de {station} no ha impreso nada desde que se atascó algo que se le envió, así que puede que las comandas de {station} no le lleguen. Arregla la impresora; mientras {station} esté abierta, cerrarla en la página de Estaciones de preparación envía su trabajo nuevo a otro sitio (la página indica adónde).",
+  },
+  "station.default_printer_down": {
+    en: "{printer}, the printer of the default station {station}, has printed nothing since something sent to it got stuck. The default station cannot be closed: fix the printer, and until then read {station}'s tickets on its kitchen screen or on the till's station view.",
+    es: "La impresora {printer} de la estación predeterminada {station} no ha impreso nada desde que se atascó algo que se le envió. La estación predeterminada no se puede cerrar: arregla la impresora y, mientras tanto, consulta las comandas de {station} en su pantalla de cocina o en la vista de estación del TPV.",
+  },
+  "station.screens_dark": {
+    en: "{station} has dishes waiting, and none of its kitchen screens has checked in for over three minutes. Check the screen; until then, read its tickets on the till's station view. Closing {station} on the Prep stations page sends new work elsewhere, but does not move the dishes already waiting.",
+    es: "{station} tiene platos pendientes y ninguna de sus pantallas de cocina se ha conectado en más de tres minutos. Revisa la pantalla; mientras tanto, consulta sus comandas en la vista de estación del TPV. Cerrar {station} en la página de Estaciones de preparación envía el trabajo nuevo a otro sitio, pero no mueve los platos que ya esperan.",
+  },
+  "station.default_screens_dark": {
+    en: "{station}, the default station, has dishes waiting, and none of its kitchen screens has checked in for over three minutes. Check the screen; until then, read its tickets on the till's station view.",
+    es: "{station}, la estación predeterminada, tiene platos pendientes y ninguna de sus pantallas de cocina se ha conectado en más de tres minutos. Revisa la pantalla; mientras tanto, consulta sus comandas en la vista de estación del TPV.",
+  },
   "backup.destination_overdue": {
     en: "Backups to “{destination}” are overdue — no recent good backup. Check the destination on the Backups page.",
     es: "Las copias de seguridad en «{destination}» están atrasadas: no hay ninguna correcta reciente. Revisa el destino en la página de Copias.",

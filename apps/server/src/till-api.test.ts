@@ -8,6 +8,9 @@ import {
   floorZones,
   kitchenCourses,
   locations,
+  printers,
+  printJobs,
+  stationPrinters,
   tenantReceipts,
   tills,
   withTransaction,
@@ -2448,9 +2451,31 @@ describe("KDS-1 station-display operate routes", () => {
     const cocina = await defaultStation(app, cookie);
     expect(cocina.name).toBe("Cocina");
 
+    const [printer] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: cfg.locationId,
+        name: `KDS ${randomUUID()}`,
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      })
+      .returning({ id: printers.id });
+    await suite.db.insert(stationPrinters).values({ stationId: cocina.id, printerId: printer!.id });
+    await suite.db.insert(printJobs).values({
+      locationId: cfg.locationId,
+      printerId: printer!.id,
+      payload: Uint8Array.of(1),
+      status: "failed",
+      attempts: 5,
+      createdAt: "2026-10-02T18:00:00.000Z",
+    });
+
     // 2. Read its queue → the order's group carries one queued line.
     const q1 = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
     expect(q1.status).toBe(200);
+    expect(
+      ((await q1.clone().json()) as { printersDown: { printerId: string }[] }).printersDown,
+    ).toMatchObject([{ printerId: printer!.id }]);
     const { items: groups1 } = (await q1.json()) as {
       items: {
         orderId: string;

@@ -1462,11 +1462,18 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
+  it("lets a manager read both station output lists", async () => {
+    const res = await req("/stations/outputs-down", { method: "GET" }, managerCookie);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ printersDown: [], screensDark: [] });
+  });
+
   it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
     // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
     const cases = [
       req("/stations", { method: "GET" }, staffCookie),
+      req("/stations/outputs-down", { method: "GET" }, staffCookie),
       req(
         "/stations",
         { method: "POST", body: JSON.stringify({ name: unique("N") }) },
@@ -1491,6 +1498,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     const someId = randomUUID();
     const cases = [
       req("/stations", { method: "GET" }, undefined),
+      req("/stations/outputs-down", { method: "GET" }, undefined),
       req("/stations", { method: "POST", body: JSON.stringify({ name: "N" }) }, undefined),
       req(
         `/stations/${someId}`,

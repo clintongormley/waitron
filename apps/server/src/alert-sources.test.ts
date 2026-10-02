@@ -6,6 +6,8 @@ import {
   printAgents,
   printJobs,
   printers,
+  kitchenStations,
+  stationPrinters,
   type Database,
   withTransaction,
 } from "@waitron/db";
@@ -35,6 +37,7 @@ import {
   BATTERY_WARN,
   firstStartAlertSource,
   printingAlertSource,
+  stationOutputAlertSource,
   recordBackupOutcome,
   sealedStateAlertSource,
   STREAM_BEHIND_AFTER_MS,
@@ -553,6 +556,44 @@ describe("printingAlertSource — agent.silent", () => {
     });
     await seedAgent({ locationId, name: "Never", lastSeenAt: null });
     expect(await readAlerts()).toEqual([]);
+  });
+});
+
+describe("stationOutputAlertSource", () => {
+  it("alerts an open default station's stopped printer and stays quiet while it is closed without waiting dishes", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const [station] = await suite.db
+      .insert(kitchenStations)
+      .values({
+        locationId,
+        name: "Cocina",
+        isDefault: true,
+      })
+      .returning({ id: kitchenStations.id });
+    const printerId = await seedPrinter({ locationId, name: "Epson" });
+    await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(3), status: "failed", attempts: 5 });
+    let open = true;
+    const source = stationOutputAlertSource({
+      locationId,
+      stationStates: async () =>
+        new Map([[station!.id, { open, isDefault: true, active: true, name: "Cocina" }]]),
+    });
+    expect(source.area).toBe("kitchen");
+    expect(source.permission).toBe("venue_service.manage");
+    expect(await withTransaction(suite.db, (tx) => source.read({ tx, now: NOW }))).toEqual([
+      {
+        key: `station.printer_down:${station!.id}:${printerId}`,
+        code: "station.default_printer_down",
+        params: { station: "Cocina", printer: "Epson" },
+        severity: "error",
+        since: minsAgo(3),
+        screen: "prep-stations",
+      },
+    ]);
+    open = false;
+    expect(await withTransaction(suite.db, (tx) => source.read({ tx, now: NOW }))).toEqual([]);
   });
 });
 

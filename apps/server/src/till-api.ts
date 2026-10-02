@@ -174,6 +174,7 @@ import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
+import { stationPrintersDown } from "./station-outputs-down.js";
 
 export interface TillApiDeps {
   db: Database;
@@ -1494,6 +1495,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const queue = await withTransaction(deps.db, async (tx) => ({
         items: await listStationQueue(tx, id),
         notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
+        printersDown: (await stationPrintersDown(tx, deps.cfg.locationId, new Date(), id)).map(
+          ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
+        ),
       }));
       return c.json(queue);
     }),

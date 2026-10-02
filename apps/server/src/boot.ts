@@ -57,6 +57,7 @@ import {
   ALL_MODULE_PERMISSIONS,
   enabledAlertSources,
   enabledFloorAnnotators,
+  VENUE_SERVICE,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
@@ -93,6 +94,7 @@ import {
   type BackupOutcomeHolder,
   batteryAlertSource,
   printingAlertSource,
+  stationOutputAlertSource,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
@@ -1660,6 +1662,11 @@ async function bootServer(
     firstStartAlertSource(firstStart),
     awaitingCertAlertSource(awaitingFiscalCert),
     printingAlertSource(),
+    stationOutputAlertSource({
+      locationId: till.locationId,
+      stationStates: (tx, at) =>
+        VENUE_SERVICE.stationStates(tx, { locationId: till.locationId }, at),
+    }),
     batteryAlertSource({
       providers: CARD_PROVIDERS,
       runtimeDeps: cardRuntimeDeps,
