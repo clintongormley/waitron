@@ -28,9 +28,6 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
-    drawerTillId: null,
-    drawerOwnerTillId: null,
-    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -48,9 +45,6 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
-    drawerTillId: null,
-    drawerOwnerTillId: null,
-    locationId: "loc-1",
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -84,8 +78,8 @@ const stations: Station[] = [
 ];
 
 const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
-  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
+  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1", opensDrawer: true },
+  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null, opensDrawer: true },
 ];
 const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
 
@@ -100,6 +94,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listTills: vi.fn().mockResolvedValue(tills),
     getLocations: vi.fn().mockResolvedValue(locations),
     setTillReceiptPrinter: vi.fn().mockResolvedValue(undefined),
+    setTillOpensDrawer: vi.fn().mockResolvedValue(undefined),
     setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
     setDrawerOpenPolicy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -564,6 +559,25 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
     );
     await expectNoA11yViolations(host);
   });
+
+  it.each([true, false])(
+    "renders a till's drawer switch accessibly, switched %s",
+    async (opensDrawer) => {
+      const { el, host } = await mountWidget<PrintingRulesScreen>(
+        "dashboard-printing-rules-screen",
+        {
+          api: stubApi({
+            listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }]),
+            listTills: vi.fn().mockResolvedValue([{ ...tills[0]!, opensDrawer }]),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      expect(q(el, "[data-test=till-opens-drawer-t1]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
 });
 
 it("uses named shared switches for ticket scope and station routing", async () => {
@@ -616,4 +630,126 @@ it("ignores a second change while a save is still in flight", async () => {
     expect((q(el, "[data-test=till-receipt-printer-t1]") as Dropdown).disabled).toBe(false),
   );
   expect(api.setTillReceiptPrinter).toHaveBeenCalledTimes(1);
+});
+
+describe("a till's switch for opening its receipt printer's cash drawer", () => {
+  /** p1 with a drawer attached; t1 prints there with its switch as given, t2 prints nowhere. */
+  function drawerApi(opensDrawer: boolean, overrides: Partial<DashboardApi> = {}): DashboardApi {
+    return stubApi({
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }, printers[1]!]),
+      listTills: vi.fn().mockResolvedValue([{ ...tills[0]!, opensDrawer }, tills[1]!]),
+      ...overrides,
+    });
+  }
+  const opensDrawer = "[data-test=till-opens-drawer-t1]";
+
+  it("shows a named switch, reflecting the stored setting, only for a till whose receipt printer has a drawer", async () => {
+    for (const stored of [true, false]) {
+      const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+        api: drawerApi(stored),
+      });
+      await flush(el);
+
+      const control = q(el, opensDrawer)!;
+      expect(control.tagName).toBe("WT-SWITCH");
+      expect(control.getAttribute("label")).toBe(t("printers.opens_drawer"));
+      expect(control.shadowRoot!.querySelector("input")!.name).toBe("opensDrawer");
+      expect(switchChecked(el, opensDrawer)).toBe(stored);
+      expect(q(el, "[data-test=till-opens-drawer-t2]")).toBeNull();
+      cleanupWidgets();
+    }
+  });
+
+  it("shows no switch when the till's receipt printer has no drawer", async () => {
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+
+    expect(q(el, "[data-test=till-row-t1]")).not.toBeNull();
+    expect(q(el, opensDrawer)).toBeNull();
+  });
+
+  it("shows no switch when the till's receipt printer is switched off", async () => {
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api: stubApi({
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true, active: false }]),
+      }),
+    });
+    await flush(el);
+
+    expect(q(el, opensDrawer)).toBeNull();
+  });
+
+  it("switching it off saves false for that till, then reloads", async () => {
+    const api = drawerApi(true);
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+
+    toggleSwitch(el, opensDrawer, false);
+    await flush(el);
+
+    expect(api.setTillOpensDrawer).toHaveBeenCalledWith("t1", false);
+    expect(api.listTills).toHaveBeenCalledTimes(2);
+  });
+
+  it("switching it on saves true", async () => {
+    const api = drawerApi(false);
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+
+    toggleSwitch(el, opensDrawer, true);
+    await flush(el);
+
+    expect(api.setTillOpensDrawer).toHaveBeenCalledWith("t1", true);
+  });
+
+  it("is disabled while the change is saving", async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const api = drawerApi(true, { setTillOpensDrawer: vi.fn().mockReturnValueOnce(pending) });
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+
+    toggleSwitch(el, opensDrawer, false);
+    await el.updateComplete;
+    expect((q(el, opensDrawer) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    release();
+    await vi.waitFor(() =>
+      expect((q(el, opensDrawer) as HTMLElement & { disabled: boolean }).disabled).toBe(false),
+    );
+  });
+
+  it("goes back to the stored setting and shows the refusal when the change is refused", async () => {
+    const api = drawerApi(true, {
+      setTillOpensDrawer: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "tillId" },
+      }),
+    });
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+
+    toggleSwitch(el, opensDrawer, false);
+    await flush(el);
+
+    expect(q(el, "[role=alert]")?.textContent).toContain(
+      codeMessage("management.request_invalid", "es-ES"),
+    );
+    expect(switchChecked(el, opensDrawer)).toBe(true);
+  });
 });

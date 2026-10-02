@@ -97,7 +97,9 @@ const deviceProfiles: DeviceProfile[] = [
   },
 ];
 
-const tills: Till[] = [{ id: "t1", label: "Caja 1", locationId: "l1", receiptPrinterId: null }];
+const tills: Till[] = [
+  { id: "t1", label: "Caja 1", locationId: "l1", receiptPrinterId: null, opensDrawer: true },
+];
 
 const pending: JoinRequestRow[] = [
   { id: "j1", kind: "device", label: "Pantalla pase", createdAt: "2026-09-08T10:02:00.000Z" },
@@ -121,9 +123,6 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
-    drawerTillId: null,
-    drawerOwnerTillId: null,
-    locationId: "loc-1",
     active: true,
   },
 ];

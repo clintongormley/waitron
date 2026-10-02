@@ -214,6 +214,7 @@ export class PrintingRulesScreen extends LitElement {
   }
   #renderTillPicker(till: Till): TemplateResult {
     const options = this.printers.filter((p) => p.active);
+    const receiptPrinter = options.find((p) => p.id === till.receiptPrinterId);
     return html`<li data-test="till-row-${till.id}">
       <wt-card>
         <div class="row">
@@ -240,6 +241,23 @@ export class PrintingRulesScreen extends LitElement {
             }}
           ></wt-combobox>
         </div>
+        ${
+          receiptPrinter?.hasCashDrawer
+            ? html`<div class="row">
+                <wt-switch
+                  label=${t("printers.opens_drawer")}
+                  name="opensDrawer"
+                  data-test="till-opens-drawer-${till.id}"
+                  .checked=${live(till.opensDrawer)}
+                  .disabled=${this.saving}
+                  @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                    const checked = event.detail.checked;
+                    void this.#mutate(() => this.api.setTillOpensDrawer(till.id, checked));
+                  }}
+                ></wt-switch>
+              </div>`
+            : nothing
+        }
       </wt-card>
     </li>`;
   }

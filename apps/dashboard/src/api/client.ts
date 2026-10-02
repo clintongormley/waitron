@@ -760,7 +760,6 @@ export interface Printer {
   pendingJobs: number;
   lastPrintAt: string | null;
   id: string;
-  locationId: string;
   name: string;
   transport: PrintTransport;
   host: string | null;
@@ -771,10 +770,6 @@ export interface Printer {
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
-  /** The register named as the drawer's owner, or null. */
-  drawerTillId: string | null;
-  /** The register whose till may open the drawer, or null when none may. */
-  drawerOwnerTillId: string | null;
   active: boolean;
 }
 
@@ -840,7 +835,6 @@ export interface PrinterPatch {
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
-  drawerTillId?: string | null;
   active?: boolean;
 }
 
@@ -898,6 +892,8 @@ export interface Till {
   label: string;
   locationId: string;
   receiptPrinterId: string | null;
+  /** Whether this till opens its receipt printer's cash drawer. */
+  opensDrawer: boolean;
 }
 
 // ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
@@ -2543,6 +2539,12 @@ export class DashboardApi {
   setTillReceiptPrinter(tillId: string, printerId: string | null): Promise<void> {
     return this.#request<void>(`/management-api/tills/${tillId}/receipt-printer`, "PATCH", {
       printerId,
+    });
+  }
+
+  setTillOpensDrawer(tillId: string, opensDrawer: boolean): Promise<void> {
+    return this.#request<void>(`/management-api/tills/${tillId}/opens-drawer`, "PATCH", {
+      opensDrawer,
     });
   }
 
