@@ -691,7 +691,7 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   colour too, beside the ringed swatch (pinned in `category-form.test.ts`). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
-**The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE.** `wt-disclosure`
+**The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE (#1026).** `wt-disclosure`
 (`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
 heading and chevron in place when it opens (chevron at the row's end), and shows its summary under
 the heading only while closed. The Options and Extras editors' "Customer and kitchen
