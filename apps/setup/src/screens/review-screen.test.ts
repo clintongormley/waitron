@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { VENUE_SETUP_COUNTRY_PACKS } from "@waitron/country-packs";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./review-screen.js";
@@ -45,6 +47,141 @@ function fullDraft(): DeepPartial<ProvisionBody> {
 afterEach(cleanupWidgets);
 
 describe("setup-review-screen", () => {
+  it("groups the summary by setup step and edits the collected details", async () => {
+    const { el, host } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    const groups = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]")];
+    expect(groups.map((group) => group.getAttribute("data-group"))).toEqual([
+      "business",
+      "location",
+      "invoicing",
+      "account",
+    ]);
+    expect(groups.map((group) => group.querySelector("h2")?.textContent?.trim())).toEqual([
+      "Business",
+      "Location",
+      "Invoicing",
+      "Your account",
+    ]);
+    expect(q(el, "[data-test=summary-legalName]")!.closest("[data-group]")).toBe(groups[0]);
+    expect(q(el, "[data-test=summary-invoiceLocales]")!.closest("[data-group]")).toBe(groups[1]);
+    expect(q(el, "[data-test=summary-seriesCode]")!.closest("[data-group]")).toBe(groups[2]);
+    expect(q(el, "[data-test=summary-admin-email]")!.closest("[data-group]")).toBe(groups[3]);
+    const destinations: string[] = [];
+    host.addEventListener("setup-goto", (event) =>
+      destinations.push((event as CustomEvent<{ screen: string }>).detail.screen),
+    );
+    for (const group of groups) group.querySelector<HTMLElement>("[data-test=edit]")!.click();
+    expect(destinations).toEqual(["venue", "venue", "venue", "admin"]);
+    expect(groups[2].querySelector<HTMLElement>("[data-test=edit-cert]")).not.toBeNull();
+    groups[2].querySelector<HTMLElement>("[data-test=edit-cert]")!.click();
+    expect(destinations.at(-1)).toBe("cert");
+  });
+
+  it("shows a single mode badge with demo context and uses form actions", async () => {
+    const draft = fullDraft();
+    draft.mode = "demo";
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+    expect(text(el, "[data-test=mode-badge]")).toBe("Demo");
+    expect(el.shadowRoot!.querySelectorAll("[data-test=demo-defaults]")).toHaveLength(1);
+    expect(q(el, "[data-test=summary-mode]")).toBeNull();
+    expect(q(el, "[data-test=summary-cert]")).toBeNull();
+    const actions = q(el, "wt-form-actions")!;
+    expect(actions.querySelector("[data-test=back]")!.getAttribute("slot")).toBe("cancel");
+    expect(actions.querySelector("[data-test=provision]")).not.toBeNull();
+  });
+
+  it("names receipt languages and hides a display name identical to the account name", async () => {
+    const draft = fullDraft();
+    draft.venue!.location!.invoiceLocales = ["ca-ES", "es-ES"];
+    draft.venue!.admin!.displayName = "Alba Ramos";
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+    expect(text(el, "[data-test=summary-invoiceLocales]")).toContain("Català");
+    expect(text(el, "[data-test=summary-invoiceLocales]")).not.toContain("ca-ES");
+    expect(q(el, "[data-test=summary-admin]")).toBeNull();
+  });
+
+  it("names every receipt language offered by the setup country packs", async () => {
+    for (const pack of VENUE_SETUP_COUNTRY_PACKS) {
+      const draft = fullDraft();
+      draft.venue!.location!.invoiceLocales = [...pack.invoiceLocales];
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+      const shown = text(el, "[data-test=summary-invoiceLocales]")!;
+      for (const locale of pack.invoiceLocales) expect(shown).not.toContain(locale);
+    }
+  });
+
+  it("explains every group and the values that need context", async () => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    const groupHelp = [
+      "These details identify the legal business on invoices and tax records.",
+      "These details describe the place where sales are made and receipts are issued.",
+      "These settings control invoice numbering and the details printed on invoices.",
+      "This account signs in to manage the venue after setup.",
+    ];
+    const groups = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]");
+    expect(
+      [...groups].map((group) =>
+        group.querySelector(".group-header wt-help-tooltip")?.textContent?.trim(),
+      ),
+    ).toEqual(groupHelp);
+    const rowHelp = [
+      ["summary-invoiceLocales", "Receipts use this language for their fixed words."],
+      ["summary-dayCutover", "Sales after this time belong to the next business day."],
+      ["summary-tillName", "This is the name of the first till at this location."],
+      ["summary-seriesCode", "Every invoice number starts with this: FS-000001, FS-000002…"],
+      ["summary-rectificativeSeriesCode", "Credit notes use this separate numbering series."],
+      [
+        "summary-operationDescription",
+        "This description appears on invoices for sales at this location.",
+      ],
+      [
+        "summary-cert",
+        "The certificate lets Waitron submit live invoice records to the tax agency.",
+      ],
+    ];
+    for (const [field, explanation] of rowHelp) {
+      const value = q(el, `[data-test=${field}]`)!;
+      const label = value.closest("dd")?.previousElementSibling;
+      expect(label?.querySelector("wt-help-tooltip")?.textContent?.trim()).toBe(explanation);
+    }
+  });
+
+  it("names each help control for the setting it explains", async () => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    const business = q(el, '[data-group="business"] .group-header wt-help-tooltip')!;
+    const series = q(el, '[data-test="summary-seriesCode"]')!.previousElementSibling!;
+    expect(business.getAttribute("aria-label")).toBe("About Business");
+    expect(series.querySelector("wt-help-tooltip")?.getAttribute("aria-label")).toBe(
+      "About Invoice series",
+    );
+  });
+
+  it("centres a value beside a taller label with a help control", async () => {
+    const original = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+        draft: fullDraft(),
+      });
+      const value = q(el, '[data-test="summary-seriesCode"]')!;
+      const label = value.previousElementSibling!;
+      const labelBox = label.getBoundingClientRect();
+      const text = document.createRange();
+      text.selectNodeContents(value);
+      const valueBox = text.getBoundingClientRect();
+      expect(
+        Math.abs((labelBox.top + labelBox.bottom) / 2 - (valueBox.top + valueBox.bottom) / 2),
+      ).toBeLessThan(2);
+    } finally {
+      await page.viewport(original.width, original.height);
+    }
+  });
   it("names the country in the wizard's language", async () => {
     setLocale("es-ES");
     try {
@@ -61,7 +198,7 @@ describe("setup-review-screen", () => {
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
       draft: fullDraft(),
     });
-    expect(text(el, "[data-test=summary-mode]")).toBe("live");
+    expect(text(el, "[data-test=mode-badge]")).toBe("Live");
     expect(text(el, "[data-test=summary-country]")).toBe("Spain");
     expect(text(el, "[data-test=summary-taxId]")).toBe("B12345678");
     expect(text(el, "[data-test=summary-legalName]")).toBe("Deli del Sol SL");
@@ -99,13 +236,13 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-cert]")).toBe("not attached");
   });
 
-  it("renders a dash for every field still missing from a bare draft", async () => {
+  it("renders missing fields as dashes and omits an unset display name", async () => {
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft: {} });
-    expect(text(el, "[data-test=summary-mode]")).toBe("—");
+    expect(text(el, "[data-test=mode-badge]")).toBe("—");
     expect(text(el, "[data-test=summary-country]")).toBe("—");
     expect(text(el, "[data-test=summary-location]")).toBe("—");
     expect(text(el, "[data-test=summary-admin-name]")).toBe("—");
-    expect(text(el, "[data-test=summary-admin]")).toBe("—");
+    expect(q(el, "[data-test=summary-admin]")).toBeNull();
     expect(text(el, "[data-test=summary-admin-email]")).toBe("—");
     expect(text(el, "[data-test=summary-cert]")).toBe("not attached");
   });
@@ -177,9 +314,11 @@ describe("setup-review-screen in Spanish", () => {
       draft: fullDraft(),
     });
     expect(text(el, "h1")).toBe("Revisar y configurar");
-    const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((dt) => dt.textContent);
+    const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((dt) =>
+      dt.textContent?.replace(dt.querySelector("wt-help-tooltip")?.textContent ?? "", "").trim(),
+    );
     expect(labels).toContain("Razón social");
-    expect(labels).toContain("Serie rectificativa");
+    expect(labels).toContain("Serie de correcciones");
     expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
     expect(text(el, "[data-test=provision]")).toBe("Configurar este servidor");
     expect(text(el, "[data-test=back]")).toBe("Volver");
@@ -188,16 +327,16 @@ describe("setup-review-screen in Spanish", () => {
   it("names each mode in Spanish, and shows an unknown mode as it came", async () => {
     setLocale("es-ES");
     const expected: Record<string, string> = {
-      demo: "demostración",
-      prepare: "preparación",
-      live: "en vivo",
+      demo: "Demostración",
+      prepare: "Preparación",
+      live: "En vivo",
       someday: "someday",
     };
     for (const [mode, shown] of Object.entries(expected)) {
       const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
         draft: { ...fullDraft(), mode } as DeepPartial<ProvisionBody>,
       });
-      expect(text(el, "[data-test=summary-mode]")).toBe(shown);
+      expect(text(el, "[data-test=mode-badge]")).toBe(shown);
     }
   });
 

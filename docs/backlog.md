@@ -837,11 +837,11 @@ size with the value's, then changes `--wt-font-size-md` and checks both follow. 
 question below is about a field's TEXT, not its label, so this does not touch it.
 
 **The setup wizard's review page is grouped, explained and readable (A185, owner 2026-10-02) —
-OPEN.** The owner, on a screenshot of "Review and provision": _"This layout looks really messy"_.
-Today `apps/setup/src/screens/review-screen.ts` is one flat list of sixteen label/value rows, shows
-the receipt language as a code (`ca-ES`), says demo twice (a Mode row and a paragraph), and keeps
-the old `.actions` button row, so Provision sits beside Back rather than at the trailing edge as
-Next does on the earlier steps (`wt-form-actions`). **Decided (owner, 2026-10-02, choosing layout A
+DONE.** The owner, on a screenshot of "Review and provision": _"This layout looks really messy"_.
+The former `apps/setup/src/screens/review-screen.ts` was one flat list of sixteen label/value rows,
+showed the receipt language as a code (`ca-ES`), said demo twice (a Mode row and a paragraph), and
+kept the old `.actions` button row, so Provision sat beside Back rather than at the trailing edge
+as Next does on the earlier steps (`wt-form-actions`). **Decided (owner, 2026-10-02, choosing layout A
 of three mockups):**
 
 - the rows sit in boxed groups named as the steps that collect them — Business (legal name, tax
@@ -857,8 +857,8 @@ of three mockups):**
   needs explaining has its own saying what that value does (e.g. the series: "Every invoice number
   starts with this: FS-000001, FS-000002…"). The owner: the tooltips float over the text and close
   when focus moves, and use the existing primitive, not a dark box. `wt-help-tooltip` is a popover,
-  so it floats and closes on an outside click or Escape; whether it closes when focus TABS away was
-  not checked — check, and add it to the primitive if not;
+  so it floats and closes on an outside click or Escape; the primitive now also closes it when focus
+  moves away;
 - Back and Provision move into `wt-form-actions`.
 
 **The setup wizard's provisioning page is a page of its own with a spinner (A186, owner

@@ -68,13 +68,16 @@ export class WtHelpTooltip extends LitElement {
     this.open = event.newState === "open";
     if (this.open) {
       document.addEventListener("keydown", this.onDocumentKeydown, { capture: true });
+      document.addEventListener("focusin", this.onDocumentFocusin, { capture: true });
     } else {
       document.removeEventListener("keydown", this.onDocumentKeydown, { capture: true });
+      document.removeEventListener("focusin", this.onDocumentFocusin, { capture: true });
     }
   }
 
   override disconnectedCallback(): void {
     document.removeEventListener("keydown", this.onDocumentKeydown, { capture: true });
+    document.removeEventListener("focusin", this.onDocumentFocusin, { capture: true });
     super.disconnectedCallback();
   }
 
@@ -101,6 +104,10 @@ export class WtHelpTooltip extends LitElement {
     event.stopPropagation();
     this.popup.hidePopover();
     this.trigger.focus();
+  };
+
+  private readonly onDocumentFocusin = (event: FocusEvent): void => {
+    if (!event.composedPath().includes(this)) this.popup.hidePopover();
   };
 
   /** Pixel margins live here rather than in CSS because the arithmetic is viewport-relative. */

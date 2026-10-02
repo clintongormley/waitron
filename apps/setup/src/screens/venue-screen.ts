@@ -22,6 +22,7 @@ import { countryName } from "../country-name.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { RECEIPT_LANGUAGES } from "../receipt-languages.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -126,13 +127,6 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   tillName: "venue.field.till_name",
   seriesCode: "venue.field.series_code",
   rectificativeSeriesCode: "venue.field.rectificative_series_code",
-};
-
-const LOCALE_LABELS: Readonly<Record<string, StringKey>> = {
-  "es-ES": "venue.locale.es_es",
-  "ca-ES": "venue.locale.ca_es",
-  "gl-ES": "venue.locale.gl_es",
-  "eu-ES": "venue.locale.eu_es",
 };
 
 /** The one receipt language a venue starts with: its region's fixed one, else the country's. */
@@ -679,7 +673,7 @@ export class SetupVenueScreen extends LitElement {
                         ?disabled=${fixed !== undefined}
                         @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
                       />
-                      ${LOCALE_LABELS[locale] === undefined ? locale : t(LOCALE_LABELS[locale])}
+                      ${RECEIPT_LANGUAGES[locale] === undefined ? locale : t(RECEIPT_LANGUAGES[locale].selectionLabel)}
                     </label>`,
                 )}
                 ${errors.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${errors.get("invoiceLocales")}</p>` : nothing}
