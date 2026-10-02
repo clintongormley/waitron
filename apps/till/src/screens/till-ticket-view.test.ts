@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { formatMoney } from "@waitron/shared";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
@@ -799,5 +800,167 @@ describe("till-ticket-view: a line given away or discounted (service plan Task 1
     expect(
       bill[0]!.compareDocumentPosition(firstVat) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+});
+
+describe("till-ticket-view: the sale's own language", () => {
+  const rows = (el: TillTicketView, selector: string): string[] =>
+    [...el.shadowRoot!.querySelectorAll(selector)].map((row) =>
+      norm(row.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
+  // Browsers carry no Galician or Basque number data and write those amounts their own way, so a
+  // Basque or Galician row's amount is computed the way the view computes it.
+  const eu = (amount: string) => norm(formatMoney(amount, "eu-ES"));
+  const catalan: Partial<TillSaleResult> = {
+    locale: "ca-ES",
+    lines: [
+      { descriptions: { "ca-ES": "Cafè" }, quantity: "2", gross: "3.00" },
+      { descriptions: { "ca-ES": "Pernil" }, quantity: "1", gross: "6.40" },
+    ],
+  };
+
+  it("prints its fixed words in the language the sale was filed in, not the till's boot language", async () => {
+    const { el } = await mount(catalan);
+    const t = text(el);
+
+    expect(rows(el, ".meta-row")[0]).toBe("Factura A/1");
+    expect(rows(el, ".meta-row")[1]).toBe(
+      `Data ${norm(
+        new Intl.DateTimeFormat("ca-ES", { dateStyle: "medium", timeStyle: "short" }).format(
+          new Date(result.issuedAt),
+        ),
+      )}`,
+    );
+    expect(rows(el, ".order-group")).toEqual(["Mesa 6 · Comanda 41"]);
+    expect(rows(el, ".lines > li")).toEqual(["Cafè 2 3,00 €", "Pernil 1 6,40 €"]);
+    expect(rows(el, ".vat-row")).toEqual([
+      "Base 21.00% 2,48 €",
+      "IVA 21.00% 0,52 €",
+      "Base 10.00% 5,82 €",
+      "IVA 10.00% 0,58 €",
+    ]);
+    expect(rows(el, ".total-row")).toEqual(["TOTAL 9,40 €"]);
+    expect(rows(el, ".tender .tender-row")).toEqual(["Efectiu 10,00 €", "Canvi 0,60 €"]);
+    for (const spanish of ["Fecha", "Pedido", "Efectivo", "Cambio"]) {
+      expect(t).not.toContain(spanish);
+    }
+  });
+
+  it("keeps the VERI*FACTU legend and AEAT's QR caption word for word", async () => {
+    const { el } = await mount(catalan);
+
+    expect(el.shadowRoot!.querySelector(".legend")!.textContent).toBe("VERI*FACTU");
+    expect(el.shadowRoot!.querySelector(".qr-caption")!.textContent).toBe("QR tributario:");
+  });
+
+  it("names a card, its reference, tip and charge in the sale's language", async () => {
+    const { el } = await mount({
+      locale: "eu-ES",
+      tender: { method: "card", charged: "9.90", tip: "0.50", reference: "4471" },
+    });
+
+    expect(rows(el, ".tender .tender-row")).toEqual([
+      "Txartela",
+      "Erref. 4471",
+      `Eskupekoa ${eu("0.50")}`,
+      `Kobratua ${eu("9.90")}`,
+    ]);
+  });
+
+  it("names each payment of a bill paid in parts, and its refund, in the sale's language", async () => {
+    const { el } = await mount({
+      locale: "eu-ES",
+      total: "21.00",
+      tender: { method: "cash", change: "10.00" },
+      payments: [
+        {
+          method: "cash",
+          amount: "10.00",
+          tip: "0.00",
+          tendered: "20.00",
+          change: "10.00",
+          refunds: [],
+        },
+        {
+          method: "card",
+          amount: "11.00",
+          tip: "1.00",
+          reference: "OP-9",
+          refunds: [{ amount: "2.00", tip: "0.00" }],
+        },
+      ],
+    });
+
+    expect(rows(el, ".tender .tender-row")).toEqual([
+      `Eskudirua ${eu("20.00")}`,
+      `Itzulia ${eu("10.00")}`,
+      `Txartela ${eu("13.00")}`,
+      "Erref. OP-9",
+      `Eskupekoa ${eu("1.00")}`,
+      `Itzulketa ${eu("-2.00")}`,
+    ]);
+  });
+
+  it("names a comp and a discount in the sale's language", async () => {
+    const { el } = await mount({
+      locale: "ca-ES",
+      lines: [
+        {
+          descriptions: { "ca-ES": "Hamburguesa" },
+          quantity: "1",
+          gross: "0.00",
+          listGross: "12.00",
+          adjustments: [{ kind: "comp", amount: "12.00" }],
+        },
+        {
+          descriptions: { "ca-ES": "Rioja" },
+          quantity: "1",
+          gross: "24.00",
+          listGross: "30.00",
+          adjustments: [{ kind: "discount", percentBp: 2000, amount: "6.00" }],
+        },
+      ],
+      billAdjustments: [{ kind: "discount", amount: "1.00" }],
+    });
+
+    expect(rows(el, ".lines > li")).toEqual([
+      "Hamburguesa 1 12,00 €",
+      "Invitació -12,00 €",
+      "Rioja 1 30,00 €",
+      "Descompte 20% -6,00 €",
+      "Descompte -1,00 €",
+    ]);
+  });
+
+  it("marks a practice receipt in the sale's language, with the screen's long dash", async () => {
+    const practice = (over: Partial<TillSaleResult>) =>
+      mountWidget<TillTicketView>("till-ticket-view", {
+        result: { ...result, ...over },
+        issuer,
+        invoiceLocale: "es-ES",
+        simulated: true,
+      });
+    const notice = (el: TillTicketView) =>
+      el.shadowRoot!.querySelector("[data-test=simulation-notice]")!.textContent!.trim();
+
+    expect(notice((await practice({ locale: "ca-ES" })).el)).toBe("PROVA — SENSE COBRAMENT REAL");
+    expect(notice((await practice({})).el)).toBe("PRUEBA — SIN COBRO REAL");
+  });
+
+  it("falls back to the till's boot language when the result names none", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: {
+        ...result,
+        lines: [{ descriptions: { "gl-ES": "Café" }, quantity: "1", gross: "9.40" }],
+        tender: { method: "card", charged: "9.40", tip: "0.00", reference: null },
+      },
+      issuer,
+      invoiceLocale: "gl-ES",
+    });
+
+    expect(rows(el, ".vat-row")).toContain(`IVE 21.00% ${norm(formatMoney("0.52", "gl-ES"))}`);
+    expect(rows(el, ".tender .tender-row")).toEqual(["Tarxeta"]);
   });
 });

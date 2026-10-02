@@ -127,6 +127,25 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on a practice receipt filed in Catalan", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        result: {
+          ...result,
+          locale: "ca-ES",
+          lines: [{ descriptions: { "ca-ES": "Cafè" }, quantity: "2", gross: "3.00" }],
+          tender: { method: "card", charged: "9.90", tip: "0.50", reference: "4471" },
+        },
+        issuer,
+        invoiceLocale: "es-ES",
+        simulated: true,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   // Tipped and manual-reference card branches render different markup, so each gets its own pass.
   it("has no violations on a tipped card receipt", async () => {
     const { host } = await mountWidget<TillTicketView>(
