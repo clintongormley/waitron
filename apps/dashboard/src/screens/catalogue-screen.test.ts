@@ -21,7 +21,7 @@ import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { CatalogueBrowser } from "../widgets/catalogue-browser.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
@@ -640,7 +640,7 @@ describe("catalogue-screen", () => {
       precision: 2,
     });
     expect(form.open).toBe(true);
-    expect(form.shadowRoot!.querySelector("#precision-error")?.textContent).toBe(
+    expect(errorBeside(form, "wt-combobox[name=precision]")).toBe(
       codeMessage("unit.precision_invalid"),
     );
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
@@ -651,7 +651,7 @@ describe("catalogue-screen", () => {
       codeMessage("unit.translation_required"),
     );
     expect(errorBeside(form, "[data-test=name-es]")).toBe("");
-    expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
+    expect(errorBeside(form, "wt-combobox[name=precision]")).toBe("");
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
 
@@ -701,19 +701,17 @@ describe("catalogue-screen", () => {
     });
     const save =
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=submit]")!;
-    expect(form.shadowRoot!.querySelector("#precision-error")).not.toBeNull();
+    expect(errorBeside(form, "wt-combobox[name=precision]")).not.toBe("");
     expect(save.disabled).toBe(false);
 
-    const precision = form.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=precision]")!;
-    precision.value = "1";
-    precision.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(form.shadowRoot!.querySelector("wt-combobox[name=precision]")!, "1");
     await form.updateComplete;
-    expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
+    expect(errorBeside(form, "wt-combobox[name=precision]")).toBe("");
     // The screen redrawing for its own reasons does not bring the dismissed refusal back.
     el.requestUpdate();
     await el.updateComplete;
     await form.updateComplete;
-    expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
+    expect(errorBeside(form, "wt-combobox[name=precision]")).toBe("");
   });
 
   it("puts a nested category create's missing parent beside the parent it chose", async () => {

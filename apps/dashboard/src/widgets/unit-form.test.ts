@@ -1,7 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitForm } from "./unit-form.js";
@@ -10,9 +10,8 @@ afterEach(cleanupWidgets);
 
 function change(el: UnitForm, testId: string, value: string): void {
   const field = el.shadowRoot!.querySelector(`[data-test=${testId}]`)!;
-  if (field instanceof HTMLSelectElement) {
-    field.value = value;
-    field.dispatchEvent(new Event("change", { bubbles: true }));
+  if (field.localName === "wt-combobox") {
+    void chooseOption(field, value);
   } else {
     field.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -31,16 +30,70 @@ const errorOf = (el: UnitForm, testId: string): string | null =>
 const saveOf = (el: UnitForm): HTMLElementTagNameMap["wt-button"] =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=submit]")!;
 
+type PrecisionBox = HTMLElement & {
+  value: string;
+  label: string;
+  hint: string;
+  error: string;
+  search: string;
+  required: boolean;
+  disabled: boolean;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const precisionBox = (el: UnitForm): PrecisionBox =>
+  el.shadowRoot!.querySelector<PrecisionBox>('wt-combobox[name="precision"]')!;
+
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownPrecision(el: UnitForm): Promise<string | undefined> {
+  const box = precisionBox(el);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
 describe("unit-form", () => {
+  it("picks the precision from a required shared dropdown, its help text as the hint", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: { id: "u1", name: { en: "kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+    });
+    const box = precisionBox(el);
+    expect(box).not.toBeNull();
+    expect(box.label).toBe(t("units.precision"));
+    expect(box.required).toBe(true);
+    expect(box.search).toBe("auto");
+    expect(box.hint).toBe(t("units.precision_help"));
+    expect(box.options).toEqual([
+      { value: "0", label: "0" },
+      { value: "1", label: "1" },
+      { value: "2", label: "2" },
+      { value: "3", label: "3" },
+    ]);
+    expect(box.value).toBe("3");
+    expect(await shownPrecision(el)).toBe("3");
+    expect(box.error).toBe("");
+
+    await chooseOption(box, "1");
+    await el.updateComplete;
+    expect(await shownPrecision(el)).toBe("1");
+    const submitted = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
+    );
+    saveOf(el).click();
+    expect((await submitted).detail.value.precision).toBe(1);
+  });
+
   it("offers precision as exactly 0, 1, 2 or 3", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["en"],
     });
 
-    const precision = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=precision]")!;
+    const precision = precisionBox(el);
     expect(precision).not.toBeNull();
-    expect([...precision.options].map((option) => option.value)).toEqual(["0", "1", "2", "3"]);
+    expect(precision.options.map((option) => option.value)).toEqual(["0", "1", "2", "3"]);
   });
 
   it("shows an existing unit's precision in the dropdown", async () => {
@@ -55,9 +108,8 @@ describe("unit-form", () => {
       },
     });
 
-    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=precision]")!.value).toBe(
-      "3",
-    );
+    expect(precisionBox(el).value).toBe("3");
+    expect(await shownPrecision(el)).toBe("3");
   });
 
   it("returns a canonical input without mutating the supplied unit", async () => {
@@ -115,9 +167,7 @@ describe("unit-form", () => {
       expect(el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error")).toBe(
         message,
       );
-    expect(el.shadowRoot!.querySelector("#precision-error")!.textContent).toBe(
-      t("units.precision_invalid"),
-    );
+    expect(precisionBox(el).error).toBe(t("units.precision_invalid"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=name-es]")!.hasAttribute("required")).toBe(
@@ -447,17 +497,17 @@ describe("unit-form", () => {
       value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
       fieldErrors: unitRefusalErrors({ code: "unit.precision_invalid", params: {} }),
     });
-    expect(el.shadowRoot!.querySelector("#precision-error")!.textContent).toBe(message);
+    expect(precisionBox(el).error).toBe(message);
     expect(saveOf(el).disabled).toBe(false);
 
     change(el, "name-es", "caja grande");
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("#precision-error")!.textContent).toBe(message);
+    expect(precisionBox(el).error).toBe(message);
     expect(saveOf(el).disabled).toBe(false);
 
     change(el, "precision", "1");
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("#precision-error")).toBeNull();
+    expect(precisionBox(el).error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
