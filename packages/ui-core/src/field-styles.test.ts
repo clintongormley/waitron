@@ -21,7 +21,7 @@ test("the stylesheet floats a resting label while the browser has autofilled its
       rule instanceof CSSStyleRule && rule.selectorText.includes('[data-label="rest"]'),
   );
   expect(rest?.selectorText).toContain(":not(:has(:autofill))");
-  expect(rest?.style.fontSize).toBe("var(--wt-field-label-rest-size)");
+  expect(rest?.style.fontSize).toBe("inherit");
 });
 
 test("a date or time type floats the label whatever the case it is written in, as the browser reads it", () => {

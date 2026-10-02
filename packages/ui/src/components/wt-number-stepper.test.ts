@@ -475,10 +475,22 @@ function box(el: Element): HTMLElement {
   return el.shadowRoot!.querySelector<HTMLElement>(".field")!;
 }
 
+test("an empty stepper's resting label, and the hidden copy that widens its box, are drawn at the size its number is drawn at", async () => {
+  const el = await mount('<wt-number-stepper label="Q"></wt-number-stepper>');
+  const { input, label } = parts(el);
+  expect(box(el).getAttribute("data-label")).toBe("rest");
+  expect(getComputedStyle(label!).fontSize).toBe(getComputedStyle(input).fontSize);
+  expect(getComputedStyle(box(el), "::before").fontSize).toBe(getComputedStyle(input).fontSize);
+  host.style.setProperty("--wt-font-size-md", "15px");
+  expect(getComputedStyle(input).fontSize).toBe("15px");
+  expect(getComputedStyle(label!).fontSize).toBe("15px");
+  expect(getComputedStyle(box(el), "::before").fontSize).toBe("15px");
+});
+
 test("the number sits in a filled field box between the buttons, its label resting large inside it while empty", async () => {
   const el = await mount('<wt-number-stepper label="Q"></wt-number-stepper>');
   host.style.setProperty("--wt-field-height", "70px");
-  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-md", "17px");
   host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
   host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
   host.style.setProperty("--wt-field-line-width", "1px");

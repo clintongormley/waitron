@@ -233,6 +233,9 @@ relative-luminance formula (a short Python script, 2026-10-01) and agree with th
 | `--wt-field-line-width-active` | `2px` |
 | `--wt-dropdown-row-height` | `48px` |
 
+(2026-10-02: `--wt-field-label-rest-size` was removed — a resting label now takes the value's size;
+A184, design-system.md → Forms.)
+
 The focused label needs its own colour because `--wt-color-primary` as 12px text on the fill is
 4.10:1 in light and 4.49:1 in dark, under the 4.5:1 small text needs; the focused LINE uses
 `--wt-color-primary` itself, which as a non-text mark needs only 3:1.

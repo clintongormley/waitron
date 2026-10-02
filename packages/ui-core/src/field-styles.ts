@@ -60,7 +60,7 @@ export const fieldStyles = css`
   .field[data-label="rest"]:not(:focus-within):not(:has(:autofill)) .field-label {
     top: 50%;
     transform: translateY(-50%);
-    font-size: var(--wt-field-label-rest-size);
+    font-size: inherit;
   }
   .field-control {
     width: 100%;

@@ -335,10 +335,22 @@ test("the placeholder paints from the muted-text token", async () => {
   expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });
 
+for (const type of ["text", "password"]) {
+  test(`an empty ${type} field's resting label is drawn at the size its typed value is drawn at`, async () => {
+    const el = await mount(`<wt-input label="Name" type="${type}"></wt-input>`);
+    const { field, label, input } = parts(el);
+    expect(field.getAttribute("data-label")).toBe("rest");
+    expect(getComputedStyle(label).fontSize).toBe(getComputedStyle(input).fontSize);
+    host.style.setProperty("--wt-font-size-md", "15px");
+    expect(getComputedStyle(input).fontSize).toBe("15px");
+    expect(getComputedStyle(label).fontSize).toBe("15px");
+  });
+}
+
 test("a labelled empty field with no hint is the field height tall, its label resting large and centred", async () => {
   const el = await mount('<wt-input label="Name"></wt-input>');
   host.style.setProperty("--wt-field-height", "70px");
-  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-md", "17px");
   const { field, label, input } = parts(el);
   expect(field.getBoundingClientRect().height).toBe(70);
   expect(field.getAttribute("data-label")).toBe("rest");
@@ -375,7 +387,7 @@ for (const [what, attrs] of [
 
 test("focusing an empty field floats its label and draws the focus line and label colour", async () => {
   const el = await mount('<wt-input label="Name"></wt-input>');
-  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-md", "17px");
   host.style.setProperty("--wt-font-size-sm", "11px");
   host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");

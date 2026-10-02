@@ -103,9 +103,19 @@ test("the value starts where a one-line field's value does", async () => {
   expect(areaTop).toBe(lineTop);
 });
 
+test("an empty textarea's resting label is drawn at the size its typed value is drawn at", async () => {
+  const el = await mount('<wt-textarea label="Note"></wt-textarea>');
+  const { field, label, textarea } = parts(el);
+  expect(field.getAttribute("data-label")).toBe("rest");
+  expect(getComputedStyle(label).fontSize).toBe(getComputedStyle(textarea).fontSize);
+  host.style.setProperty("--wt-font-size-md", "15px");
+  expect(getComputedStyle(textarea).fontSize).toBe("15px");
+  expect(getComputedStyle(label).fontSize).toBe("15px");
+});
+
 test("a labelled empty textarea rests its label large, centred on the first field-height band", async () => {
   const el = await mount('<wt-textarea label="Note" rows="6"></wt-textarea>');
-  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-md", "17px");
   host.style.setProperty("--wt-field-height", "70px");
   const { field, label } = parts(el);
   expect(field.getAttribute("data-label")).toBe("rest");
@@ -144,7 +154,7 @@ test("a value set from code after the first render floats the label", async () =
 
 test("focusing an empty textarea floats its label and draws the focus line and label colour", async () => {
   const el = await mount('<wt-textarea label="Note"></wt-textarea>');
-  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-md", "17px");
   host.style.setProperty("--wt-font-size-sm", "11px");
   host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");

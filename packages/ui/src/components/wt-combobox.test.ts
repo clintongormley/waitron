@@ -1264,10 +1264,20 @@ function optionRows(el: WtCombobox): HTMLElement[] {
   return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
 }
 
+test("an empty dropdown's resting label is drawn at the size its chosen value is drawn at", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { field, label, value } = fieldParts(el);
+  expect(field.getAttribute("data-label")).toBe("rest");
+  expect(getComputedStyle(label!).fontSize).toBe(getComputedStyle(value).fontSize);
+  host.style.setProperty("--wt-font-size-md", "15px");
+  expect(getComputedStyle(value).fontSize).toBe("15px");
+  expect(getComputedStyle(label!).fontSize).toBe("15px");
+});
+
 test("the trigger is the control of a filled field box, with the label resting while nothing is chosen", async () => {
   const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
   host.style.setProperty("--wt-field-height", "70px");
-  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-md", "17px");
   const { field, label, trigger } = fieldParts(el);
   expect(field.getAttribute("part")).toBe("field");
   expect(field.contains(trigger)).toBe(true);
