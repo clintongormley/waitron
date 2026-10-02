@@ -656,7 +656,9 @@ describe("till-table-order-screen", () => {
     await (basket as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     basket.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-0"]')!.click();
     await (basket as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-    const note = basket.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+    const note = basket
+      .shadowRoot!.querySelector('[data-test="line-note"]')!
+      .shadowRoot!.querySelector("textarea")!;
     note.value = "table 4 — no ice";
     note.dispatchEvent(new Event("input"));
     await el.updateComplete;
@@ -2053,7 +2055,9 @@ describe("till-table-order-screen", () => {
     const editor = (el: TillTableOrderScreen) =>
       el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
     const noteBox = (picker: TillModifierPicker) =>
-      picker.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+      picker
+        .shadowRoot!.querySelector('[data-test="line-note"]')!
+        .shadowRoot!.querySelector("textarea")!;
     async function typeNote(picker: TillModifierPicker, text: string): Promise<void> {
       const box = noteBox(picker);
       box.value = text;

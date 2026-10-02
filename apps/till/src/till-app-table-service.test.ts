@@ -862,7 +862,9 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await screen.updateComplete;
     const picker = screen.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
     await picker.updateComplete;
-    const note = picker.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+    const note = picker
+      .shadowRoot!.querySelector('[data-test="line-note"]')!
+      .shadowRoot!.querySelector("textarea")!;
     note.value = "no onions";
     note.dispatchEvent(new Event("input"));
     await picker.updateComplete;

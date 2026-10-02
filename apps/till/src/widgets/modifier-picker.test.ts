@@ -12,7 +12,8 @@ import {
   type TillProduct,
   type TillZoneMenu,
 } from "../api/client.js";
-import { currentLocale } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import type { WtTextarea } from "@waitron/ui";
 
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
@@ -897,13 +898,29 @@ describe("till-modifier-picker", () => {
   describe("per-line note", () => {
     /** The note textarea inside the picker, or null when absent. */
     function noteBox(picker: TillModifierPicker): HTMLTextAreaElement | null {
-      return picker.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
+      return (
+        picker
+          .shadowRoot!.querySelector('[data-test="line-note"]')
+          ?.shadowRoot?.querySelector("textarea") ?? null
+      );
     }
 
     it("shows a note textarea for every product the picker opens over", async () => {
       const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
       expect(noteBox(picker)).not.toBeNull();
       expect(noteBox(picker)!.maxLength).toBe(200);
+    });
+
+    it("takes the note in the shared multi-line field, capped at the server's 200 characters", async () => {
+      const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+      const field = picker.shadowRoot!.querySelector<WtTextarea>(
+        'wt-textarea[data-test="line-note"]',
+      );
+      expect(field).not.toBeNull();
+      expect(field!.name).toBe("note");
+      expect(field!.label).toBe(t("line.note.label"));
+      expect(field!.placeholder).toBe(t("line.note.placeholder"));
+      expect(field!.maxlength).toBe(200);
     });
 
     it("carries the typed note on Add (through to the rung line)", async () => {

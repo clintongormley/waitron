@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { setContentLanguages } from "@waitron/ui";
+import { type WtTextarea, setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
@@ -790,7 +790,11 @@ describe("till-basket", () => {
     return el.shadowRoot!.querySelector<HTMLElement>(`[data-test="line-note-button-${index}"]`);
   }
   function noteBox(el: TillBasket): HTMLTextAreaElement | null {
-    return el.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
+    return (
+      el
+        .shadowRoot!.querySelector('[data-test="line-note"]')
+        ?.shadowRoot?.querySelector("textarea") ?? null
+    );
   }
   const steak: TillProduct = {
     ...cafe,
@@ -829,6 +833,28 @@ describe("till-basket", () => {
     expect(note.maxLength).toBe(200);
     note.value = "extra hot";
     note.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+    expect(store.lines[0]!.note).toBe("extra hot");
+  });
+
+  it("takes the kitchen note in the shared multi-line field, capped at the server's 200 characters", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1", { note: "no foam" });
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    noteButton(el, 0)!.click();
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<WtTextarea>('wt-textarea[data-test="line-note"]');
+    expect(field).not.toBeNull();
+    expect(field!.name).toBe("note");
+    expect(field!.label).toBe(t("line.note.label"));
+    expect(field!.placeholder).toBe(t("line.note.placeholder"));
+    expect(field!.maxlength).toBe(200);
+    expect(field!.value).toBe("no foam");
+    await field!.updateComplete;
+    const control = field!.shadowRoot!.querySelector("textarea")!;
+    expect(control.maxLength).toBe(200);
+    control.value = "extra hot";
+    control.dispatchEvent(new Event("input"));
     await el.updateComplete;
     expect(store.lines[0]!.note).toBe("extra hot");
   });
@@ -1176,7 +1202,9 @@ describe("till-basket: the note editor keeps to its line", () => {
   const flan: TillProduct = { ...cafe, id: "flan", name: "Flan" };
 
   async function typeNote(el: TillBasket, text: string): Promise<void> {
-    const box = el.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+    const box = el
+      .shadowRoot!.querySelector('[data-test="line-note"]')!
+      .shadowRoot!.querySelector("textarea")!;
     box.value = text;
     box.dispatchEvent(new Event("input"));
     await el.updateComplete;
