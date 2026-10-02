@@ -2548,11 +2548,82 @@ it("hints a parent's allergens not yet reviewed as that, never as none", async (
   );
 });
 
+it("names a parent's course or unit missing from the lists as unavailable, never as none", async () => {
+  const el = await mountVariant({
+    ...glass,
+    inherited: { ...parentValues, courseId: "gone", unitId: "gone" },
+  });
+  await openUnits(el);
+  for (const name of ["product-course", "unit"]) {
+    expect(combobox(el, name)!.placeholder, name).toBe(t("editor.missing_choice"));
+    expect(firstOption(el, name), name).toEqual({ value: "", label: t("editor.missing_choice") });
+  }
+  expect(control<{ unit: string }>(el, "unit-price").unit).toBe(
+    t("editor.per_unit").replace("{unit}", t("editor.missing_choice")),
+  );
+});
+
+it.each([
+  {
+    locale: "en-GB",
+    unit: "Each",
+    category: "Uncategorised",
+    course: "— none —",
+    allergens: "Allergens: None",
+    dietary: "Dietary preferences: None",
+    unreviewed: "Allergens: Not yet reviewed",
+  },
+  {
+    locale: "es-ES",
+    unit: "Unidad",
+    category: "Sin categoría",
+    course: "— ninguno —",
+    allergens: "Alérgenos: Ninguno",
+    dietary: "Preferencias dietéticas: Ninguna",
+    unreviewed: "Alérgenos: Sin revisar todavía",
+  },
+])(
+  "in $locale, hints what a variant will use where its parent names nothing",
+  async ({ locale, unreviewed, ...expected }) => {
+    setLocale(locale);
+    try {
+      const el = await mountVariant({
+        ...glass,
+        inherited: {
+          ...parentValues,
+          unitId: null,
+          primaryCategoryId: null,
+          courseId: null,
+          allergens: {},
+          dietaryDeclarations: [],
+        },
+      });
+      await openUnits(el);
+      expect(combobox(el, "unit")!.placeholder).toBe(expected.unit);
+      expect(firstOption(el, "unit")).toEqual({ value: "", label: expected.unit });
+      expect(combobox(el, "primary")!.placeholder).toBe(expected.category);
+      expect(combobox(el, "product-course")!.placeholder).toBe(expected.course);
+      expect(hint(el, "allergens-hint")).toBe(expected.allergens);
+      expect(hint(el, "dietary-hint")).toBe(expected.dietary);
+      cleanupWidgets();
+      const unreviewedEl = await mountVariant({
+        ...glass,
+        inherited: { ...parentValues, allergens: null },
+      });
+      expect(hint(unreviewedEl, "allergens-hint")).toBe(unreviewed);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
 it("draws a variant's inherited allergens and dietary hints in grey italic, like a field's hint", async () => {
   const el = await mountVariant();
+  el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   for (const name of ["allergens-hint", "dietary-hint"]) {
     const shown = el.shadowRoot!.querySelector(`[data-test="${name}"]`)!;
     expect(getComputedStyle(shown).fontStyle, name).toBe("italic");
+    expect(getComputedStyle(shown).color, name).toBe("rgb(7, 8, 9)");
   }
 });
 

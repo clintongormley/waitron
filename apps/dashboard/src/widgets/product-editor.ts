@@ -618,8 +618,9 @@ export class ProductEditor extends LitElement {
   /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
   private get unitShortLabel(): string {
     const unitId = this.draft.unitId ?? this.inherited?.unitId ?? null;
+    if (!unitId) return "";
     const unit = this.units.find((unit) => unit.id === unitId);
-    if (!unit) return "";
+    if (!unit) return t("editor.missing_choice");
     return this.text(unit.abbreviation) || this.text(unit.name);
   }
   /** The unit dropdown is a chooser behind the price field's button. It also has to be on screen
@@ -828,8 +829,8 @@ export class ProductEditor extends LitElement {
     choices: ProductRoutingChoice[],
     parentId: string | null | undefined,
   ): string {
-    if (this.inherited === null) return none;
-    return choices.find(({ id }) => id === parentId)?.name ?? none;
+    if (this.inherited === null || !parentId) return none;
+    return choices.find(({ id }) => id === parentId)?.name ?? t("editor.missing_choice");
   }
 
   private renderRouting(
@@ -1078,12 +1079,12 @@ export class ProductEditor extends LitElement {
    * offered: it would read as one thing and save as another. */
   private renderUnit() {
     const parent = this.inherited;
-    const parentUnit = parent && this.units.find((unit) => unit.id === parent.unitId);
-    const blank = parent
-      ? parentUnit
+    const parentUnit = this.units.find((unit) => unit.id === parent?.unitId);
+    const blank = !parent?.unitId
+      ? t("editor.unit_each")
+      : parentUnit
         ? this.unitLabel(parentUnit)
-        : t("editor.unit_each")
-      : t("editor.unit_each");
+        : t("editor.missing_choice");
     const none = parent ? "" : EACH_CHOICE;
     return html`<wt-combobox
         name="unit"
