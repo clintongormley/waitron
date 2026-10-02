@@ -3518,6 +3518,82 @@ describe.each([
   );
 });
 
+describe("the banner's email inbox link", () => {
+  const inboxLink = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<HTMLAnchorElement>(
+      "[data-test=brand-banner] [data-test=email-inbox-link]",
+    );
+  const withIntent = (signedIn: boolean, intent: string | undefined) =>
+    signedIn
+      ? stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, onboardingIntent: intent }) })
+      : stubApi({
+          getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+          getLocales: vi.fn().mockResolvedValue({
+            locales: [{ code: "es-ES", label: "Español" }],
+            venueDefault: "es-ES",
+            loginDefault: "es-ES",
+            venueName: "Deli Test SL",
+            onboardingIntent: intent,
+          }),
+        });
+
+  it.each([
+    ["signed in", true],
+    ["signed out", false],
+  ] as const)(
+    "in a demo, %s, links to the inbox just before the language chooser",
+    async (_state, signedIn) => {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: withIntent(signedIn, "demo"),
+      });
+      await flush(el);
+      expect(login(el) === null).toBe(signedIn);
+      const link = inboxLink(el)!;
+      expect(link.tagName).toBe("A");
+      expect(link.getAttribute("href")).toBe("/manage/email");
+      expect(link.textContent!.trim()).toBe("Bandeja de correo");
+    },
+  );
+
+  it.each([
+    ["signed in", "prepare", true],
+    ["signed in", "live", true],
+    ["signed in", undefined, true],
+    ["signed out", "prepare", false],
+    ["signed out", "live", false],
+    ["signed out", undefined, false],
+  ] as const)("shows no inbox link %s when the intent is %s", async (_state, intent, signedIn) => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: withIntent(signedIn, intent),
+    });
+    await flush(el);
+    expect(login(el) === null).toBe(signedIn);
+    expect(el.shadowRoot!.querySelector("[data-test=language-chooser]")).not.toBeNull();
+    expect(inboxLink(el)).toBeNull();
+  });
+
+  it.each([
+    ["staff", false],
+    ["supervisor", false],
+    ["manager", true],
+    ["admin", true],
+  ] as const)(
+    "in a demo signed in as %s, shows the inbox link only to a session that may open the inbox",
+    async (role, shown) => {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, onboardingIntent: "demo" }),
+          listStaff: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(login(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=mode-indicator]")).not.toBeNull();
+      expect(inboxLink(el) !== null).toBe(shown);
+    },
+  );
+});
+
 it("starts live updates after authentication and stops them on logout and disconnect", async () => {
   const liveUpdates = { start: vi.fn(), stop: vi.fn() };
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi(), liveUpdates });
@@ -3597,6 +3673,12 @@ describe("alerts in the shell", () => {
     await toast(el).updateComplete;
     return { el, host, liveData };
   }
+
+  const tapMin = (el: DashboardApp): number => {
+    const value = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+    expect(value, "--wt-tap-min resolves to a length").toBeGreaterThan(0);
+    return value;
+  };
 
   /** Runs `body` at a real viewport size inside the real page's outer margin (`index.html` pads the
    * body by 24px), then restores the size. */
@@ -3692,6 +3774,123 @@ describe("alerts in the shell", () => {
         );
         expect(chooser!.box.top, "the language chooser shares the lockup's row").toBeLessThan(
           logo!.box.bottom,
+        );
+      });
+    },
+  );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "in a demo in %s at 1280px, puts the email inbox link on the lockup's row just before the language chooser",
+    async (locale) => {
+      const api = alertsApi({
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: "demo" }),
+        listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
+      });
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      await atViewport(host, 1280, async () => {
+        const box = (selector: string) =>
+          el.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
+        const link = box("[data-test=email-inbox-link]");
+        const chooser = box("[data-test=language-chooser]");
+        const pill = box("[data-test=mode-indicator]");
+        expect(link.width).toBeGreaterThan(0);
+        expect(link.left, "the inbox link follows the mode pill").toBeGreaterThan(pill.right);
+        expect(link.right, "the inbox link ends before the chooser").toBeLessThanOrEqual(
+          chooser.left,
+        );
+        expect(
+          chooser.left - link.right,
+          "nothing fits between the link and the chooser",
+        ).toBeLessThanOrEqual(8);
+        expect(
+          Math.abs((link.top + link.bottom) / 2 - (chooser.top + chooser.bottom) / 2),
+          "the inbox link is centred on the chooser",
+        ).toBeLessThanOrEqual(1);
+        expect(link.height, "the inbox link meets the minimum tap size").toBeGreaterThanOrEqual(
+          tapMin(el),
+        );
+      });
+    },
+  );
+
+  it.each([
+    ["en-GB", 360],
+    ["en-GB", 390],
+    ["en-GB", 480],
+    ["es-ES", 360],
+    ["es-ES", 390],
+    ["es-ES", 480],
+  ] as const)(
+    "in a demo in %s, fits every banner item without overlap at %ipx, the email inbox link included",
+    async (locale, width) => {
+      const api = alertsApi({
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: "demo" }),
+        listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1", "error")] }),
+      });
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      await atViewport(host, width, async () => {
+        const banner = brandBanner(el)!;
+        const items = [
+          "[data-test=nav-toggle]",
+          ".brand-logo",
+          "[data-test=venue-name]",
+          "[data-test=mode-indicator]",
+          "[data-test=email-inbox-link]",
+          "[data-test=language-chooser]",
+          "[data-test=alerts-bell]",
+          "[data-test=account-menu]",
+        ].map((selector) => ({
+          selector,
+          box: el.shadowRoot!.querySelector(selector)!.getBoundingClientRect(),
+        }));
+        const outer = banner.getBoundingClientRect();
+        for (const { selector, box } of items) {
+          expect(box.width, `${selector} is visible`).toBeGreaterThan(0);
+          expect(box.left, `${selector} starts inside the banner`).toBeGreaterThanOrEqual(
+            outer.left,
+          );
+          expect(box.right, `${selector} ends inside the banner`).toBeLessThanOrEqual(outer.right);
+        }
+        for (const [i, a] of items.entries()) {
+          for (const b of items.slice(i + 1)) {
+            const overlapX = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
+            const overlapY = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
+            expect(overlapX > 0.5 && overlapY > 0.5, `${a.selector} overlaps ${b.selector}`).toBe(
+              false,
+            );
+          }
+        }
+        expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
+        const logo = items[1]!.box;
+        const pill = items[3]!.box;
+        const link = items[4]!.box;
+        expect(logo.width, "the lockup keeps a readable width").toBeGreaterThanOrEqual(60);
+        expect(link.top, "the inbox link takes the second row").toBeGreaterThanOrEqual(logo.bottom);
+        expect(link.left, "the inbox link follows the mode pill").toBeGreaterThan(pill.right);
+        expect(
+          Math.abs((link.top + link.bottom) / 2 - (pill.top + pill.bottom) / 2),
+          "the inbox link is centred on the mode pill",
+        ).toBeLessThanOrEqual(1);
+        expect(link.height, "the inbox link meets the minimum tap size").toBeGreaterThanOrEqual(
+          tapMin(el),
+        );
+        const chooser = items[5]!.box;
+        const menu = items[7]!.box;
+        expect(menu.top, "the account menu shares the lockup's row").toBeLessThan(logo.bottom);
+        expect(chooser.top, "the language chooser shares the lockup's row").toBeLessThan(
+          logo.bottom,
         );
       });
     },

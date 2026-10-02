@@ -903,11 +903,13 @@ kitchen display, which have no bar, hold it at the top right on their own. At 40
 shows the short code ("EN") and keeps the full name for screen readers; its menu opens downwards
 and names every language in full. `wt-language-footer` is gone.
 
-**In a demo, the dashboard's top bar links to the email inbox (A188, owner 2026-10-02) — OPEN.**
-The setup wizard's done page already links to the demo's email inbox; the dashboard does not, so a
-demo user cannot find the emails the dashboard sends. **Wanted:** an "Email inbox" link in the
-dashboard banner, beside the language chooser (A187), shown only in a demo, to the same address the
-done page uses.
+**In a demo, the dashboard's top bar links to the email inbox (A188, owner 2026-10-02) — DONE.**
+In a demo, the dashboard's banner shows an "Email inbox" link ("Bandeja de correo" in Spanish) just
+before the language chooser, to `/manage/email`, the address the setup wizard's done page uses:
+signed out always, and signed in only to a session that may open the Test inbox screen (a manager
+or an admin). Outside a demo there is no link. At 48rem wide or less it moves to the banner's second
+row, after the mode pill, because on the first row it squeezed the Waitron lockup to nothing at
+360px wide.
 
 **The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — DONE
 (#1048).** On every sign-in step after the email, on the passkey offer after sign-in, and on the

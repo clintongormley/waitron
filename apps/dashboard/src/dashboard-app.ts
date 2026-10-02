@@ -412,10 +412,26 @@ export class DashboardApp extends LitElement {
         height: auto;
       }
 
+      .venue-row {
+        display: contents;
+      }
+
       .venue {
         display: flex;
         align-items: center;
         gap: var(--wt-space-3);
+      }
+
+      .inbox-link {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        margin-inline-start: auto;
+        color: var(--wt-color-primary);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        white-space: nowrap;
       }
 
       .venue-name {
@@ -489,9 +505,9 @@ export class DashboardApp extends LitElement {
          apps/till/src/screens/till-counter-screen.ts:111. */
       @media (max-width: 48rem) {
         /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
-           one line, so the name and pill take a second row and the trailing controls stay at the
-           trailing edge of the first. The lockup's column is the one that shrinks, so the trailing
-           controls keep the first row. */
+           one line, so the name, the pill and a demo's inbox link take a second row and the
+           trailing controls stay at the trailing edge of the first. The lockup's column is the one
+           that shrinks, so the trailing controls keep the first row. */
         .brand-banner {
           display: grid;
           grid-template-columns: auto minmax(0, max-content) 1fr auto;
@@ -516,8 +532,17 @@ export class DashboardApp extends LitElement {
           grid-area: actions;
           margin-inline-start: var(--wt-space-2);
         }
-        .venue {
+        .venue-row {
           grid-area: venue;
+          display: flex;
+          align-items: center;
+          gap: var(--wt-space-3);
+        }
+        .inbox-link {
+          flex: 0 1 auto;
+          justify-content: flex-end;
+          white-space: normal;
+          text-align: end;
         }
         .venue-name {
           padding-inline-start: 0;
@@ -1247,14 +1272,23 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
-        <span class="venue">
-          <span class="venue-name" data-test="venue-name">${this.venueName}</span>
+        <span class="venue-row">
+          <span class="venue">
+            <span class="venue-name" data-test="venue-name">${this.venueName}</span>
+            ${
+              this.onboardingIntent === undefined
+                ? nothing
+                : html`<span class="mode-indicator" data-test="mode-indicator">
+                    ${t(`mode.${this.onboardingIntent}`)}
+                  </span>`
+            }
+          </span>
           ${
-            this.onboardingIntent === undefined
-              ? nothing
-              : html`<span class="mode-indicator" data-test="mode-indicator">
-                  ${t(`mode.${this.onboardingIntent}`)}
-                </span>`
+            this.onboardingIntent === "demo" && (!authenticated || this.#canOpenScreen("email"))
+              ? html`<a class="inbox-link" data-test="email-inbox-link" href="/manage/email"
+                  >${t("nav.email_inbox")}</a
+                >`
+              : nothing
           }
         </span>
       </div>

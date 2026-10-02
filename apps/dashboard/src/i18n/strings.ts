@@ -545,6 +545,7 @@ export const en = {
   "nav.backup": "Backups",
   "nav.servers": "Servers",
   "nav.email": "Test inbox",
+  "nav.email_inbox": "Email inbox",
   "nav.payments": "Card payments",
   "email.title": "Account email",
   "email.local_capture":
@@ -2585,6 +2586,7 @@ export const es: Record<StringKey, string> = {
   "nav.backup": "Copias de seguridad",
   "nav.servers": "Servidores",
   "nav.email": "Bandeja de pruebas",
+  "nav.email_inbox": "Bandeja de correo",
   "nav.payments": "Pagos con tarjeta",
   "email.title": "Correo de cuentas",
   "email.local_capture":

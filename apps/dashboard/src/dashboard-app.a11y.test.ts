@@ -126,6 +126,43 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it.each([
+    ["signed in", true],
+    ["signed out", false],
+  ] as const)(
+    "a demo's banner, with its email inbox link, renders accessibly %s",
+    async (_state, signedIn) => {
+      const api = signedIn
+        ? stubApi({
+            getMe: vi.fn().mockResolvedValue({
+              personId: "p1",
+              role: "manager",
+              locale: null,
+              venueLocale: "es-ES",
+              sessionDefault: "es-ES",
+              venueName: "Deli Test SL",
+              onboardingIntent: "demo",
+              permissions: [],
+              modules: [],
+            }),
+          })
+        : stubApi({
+            getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+            getLocales: vi.fn().mockResolvedValue({
+              locales: [{ code: "es-ES", label: "Español" }],
+              venueDefault: "es-ES",
+              loginDefault: "es-ES",
+              venueName: "Deli Test SL",
+              onboardingIntent: "demo",
+            }),
+          });
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=email-inbox-link]")).toBeTruthy();
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("the staff self-service screen renders accessibly with a single, well-ordered heading", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
