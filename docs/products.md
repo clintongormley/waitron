@@ -125,9 +125,10 @@ and which settings still need your decision.
 
 ## Declare allergens and dietary suitability directly
 
-The allergen and dietary sections show only declarations you selected. Choose **Add allergen** or
-**Add dietary declaration** to find another entry. An empty reviewed allergen list means you checked
-the product and declared none; a pending declaration means it has not been reviewed.
+**Nutritional info** shows two lines, **Allergens** and **Dietary preferences**, each followed by
+what you have chosen, or "None specified". Click a line, or press Enter on it, to choose from the
+full list; press Escape or move on when you are done. An empty reviewed allergen list means you
+checked the product and declared none; a pending declaration means it has not been reviewed.
 
 Each product states its own dietary suitability — a positive `suitableFor` list over vegan,
 vegetarian, halal and kosher — and its own allergens. An extra you can add to a dish is itself a
