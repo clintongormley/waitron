@@ -1,9 +1,9 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { createRef, ref } from "lit/directives/ref.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
@@ -35,7 +35,6 @@ export function refusedField(code: string | null, paramsField: string | null): s
 export class PersonForm extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       hr {
         width: 100%;
@@ -47,10 +46,6 @@ export class PersonForm extends LitElement {
       .field {
         display: block;
         margin-bottom: var(--wt-space-4);
-      }
-      .required {
-        margin-inline-start: var(--wt-space-1);
-        color: var(--wt-color-danger);
       }
     `,
   ];
@@ -70,8 +65,6 @@ export class PersonForm extends LitElement {
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
 
-  #roleSelect = createRef<HTMLSelectElement>();
-
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("error")) this.dismissed = new Set();
     if (changed.has("open") && this.open) {
@@ -81,7 +74,6 @@ export class PersonForm extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
-    if (this.#roleSelect.value) this.#roleSelect.value.value = this.selectedRole;
     if (changed.has("error") && refusedField(this.error, this.errorField) !== undefined)
       void focusFirstInvalid(this.shadowRoot!);
   }
@@ -199,20 +191,21 @@ export class PersonForm extends LitElement {
         ${this.#input("email", "email", t("person.email"), this.email, true, errors, "email")}
         ${this.#input("telephone", "tel", t("person.telephone"), this.telephone, false, errors, "tel")}
         <hr />
-        <label class="field">
-          ${t("person.role")}<span class="required" aria-hidden="true">*</span>
-          <select
-            name="role"
-            required
-            ${ref(this.#roleSelect)}
-            @change=${(event: Event) => {
-              event.stopPropagation();
-              this.selectedRole = (event.target as HTMLSelectElement).value as PersonRole;
-            }}
-          >
-            ${rolesByName().map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
-          </select>
-        </label>
+        <wt-combobox
+          class="field"
+          name="role"
+          label=${t("person.role")}
+          required
+          search="auto"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${rolesByName().map((role) => ({ value: role, label: roleName(role) }))}
+          .value=${this.selectedRole}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.selectedRole = event.detail.value as PersonRole;
+          }}
+        ></wt-combobox>
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"

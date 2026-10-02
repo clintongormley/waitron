@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
@@ -49,13 +49,59 @@ async function fillRequired(el: PersonForm): Promise<void> {
   await el.updateComplete;
 }
 
+type RoleBox = HTMLElement & {
+  value: string;
+  label: string;
+  required: boolean;
+  search: string;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const roleBox = (el: PersonForm): RoleBox =>
+  el.shadowRoot!.querySelector<RoleBox>('wt-combobox[name="role"]')!;
+
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownRole(el: PersonForm): Promise<string | undefined> {
+  const box = roleBox(el);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
 describe("person-form", () => {
+  it("picks the role from a required shared dropdown, starting on staff", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await openedDialog(el);
+    const box = roleBox(el);
+    expect(box).not.toBeNull();
+    expect(box.label).toBe(t("person.role", "es-ES"));
+    expect(box.required).toBe(true);
+    expect(box.search).toBe("auto");
+    expect(box.options).toEqual(
+      ["admin", "staff", "manager", "supervisor"].map((role) => ({
+        value: role,
+        label: roleName(role, "es-ES"),
+      })),
+    );
+    expect(box.value).toBe("staff");
+    expect(await shownRole(el)).toBe(roleName("staff", "es-ES"));
+    await fillRequired(el);
+    await chooseOption(box, "supervisor");
+    const created = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("create-person", (event) => resolve(event as CustomEvent), {
+        once: true,
+      }),
+    );
+    confirmOf(el).click();
+    expect((await created).detail.role).toBe("supervisor");
+  });
+
   it("stacks contact fields above a divider and the role selector", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await openedDialog(el);
     const fields = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".field")];
     expect(
-      fields.map((field) => field.getAttribute("data-test") ?? field.querySelector("select")!.name),
+      fields.map((field) => field.getAttribute("data-test") ?? field.getAttribute("name")),
     ).toEqual(["first-names", "last-names", "display-name", "email", "telephone", "role"]);
     for (let i = 1; i < fields.length; i++) {
       expect(fields[i]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -64,7 +110,7 @@ describe("person-form", () => {
     }
     const divider = el.shadowRoot!.querySelector("hr")!;
     expect(divider.previousElementSibling!.getAttribute("data-test")).toBe("telephone");
-    expect(divider.nextElementSibling!.querySelector("select")!.name).toBe("role");
+    expect(divider.nextElementSibling!.getAttribute("name")).toBe("role");
   });
 
   it("opens only when requested and offers every role", async () => {
@@ -73,14 +119,14 @@ describe("person-form", () => {
     el.open = true;
     await el.updateComplete;
     expect((await openedDialog(el)).open).toBe(true);
-    const options = [...el.shadowRoot!.querySelectorAll("option")];
+    const options = roleBox(el).options;
     expect(options.map((option) => option.value)).toEqual([
       "admin",
       "staff",
       "manager",
       "supervisor",
     ]);
-    expect(options.map((option) => option.textContent?.trim())).toEqual(
+    expect(options.map((option) => option.label)).toEqual(
       ["admin", "staff", "manager", "supervisor"].map((role) => roleName(role, "es-ES")),
     );
   });
@@ -88,10 +134,10 @@ describe("person-form", () => {
   it("starts a new person as staff even though another role is listed first", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await openedDialog(el);
-    const select = el.shadowRoot!.querySelector("select")!;
+    const select = roleBox(el);
     expect(select.options[0]!.value).not.toBe("staff");
     expect(select.value).toBe("staff");
-    expect(select.selectedOptions[0]!.textContent?.trim()).toBe(roleName("staff", "es-ES"));
+    expect(await shownRole(el)).toBe(roleName("staff", "es-ES"));
   });
 
   it("emits trimmed account details without asking the administrator for a PIN", async () => {
@@ -101,9 +147,7 @@ describe("person-form", () => {
     change(el, "display-name", " Ada ");
     change(el, "email", " ADA@example.com ");
     change(el, "telephone", " +44 20 1234 ");
-    const select = el.shadowRoot!.querySelector("select")!;
-    select.value = "manager";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(roleBox(el), "manager");
     await el.updateComplete;
 
     const created = new Promise<CustomEvent>((resolve) =>
