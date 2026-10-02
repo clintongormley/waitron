@@ -3,11 +3,12 @@ import { deviceProfiles } from "./device-profiles.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { printers } from "./printers.js";
 import { locations, tills } from "./tenants.js";
+import { watchers } from "./watchers.js";
 
 /**
  * An always-on trusted device: a screen that joins once and then authenticates with an httpOnly
  * cookie, with no per-person login. Its profile's form factor decides whether it binds a kitchen
- * station (kds) or a till (every other form factor), enforced by the `device_binding_rule_insert` /
+ * station or watcher (kds) or a till (every other form factor), enforced by the `device_binding_rule_insert` /
  * `_update` triggers rather than by per-column NOT NULLs.
  *
  * Revoke by setting `active = false`, never a hard DELETE: a device is a durable identity other
@@ -22,6 +23,9 @@ export const devices = table("devices", {
   /* v8 ignore stop */
   /* v8 ignore start */
   stationId: id("station_id").references(() => kitchenStations.id),
+  /* v8 ignore stop */
+  /* v8 ignore start */
+  watcherId: id("watcher_id").references(() => watchers.id),
   /* v8 ignore stop */
   /* v8 ignore start */
   tillId: id("till_id").references(() => tills.id, { onDelete: "restrict" }),

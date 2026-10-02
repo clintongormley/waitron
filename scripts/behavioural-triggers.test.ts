@@ -36,7 +36,7 @@ import {
  * against a database the PRODUCT migrated: a settlement's tender coverage, a tender
  * after settlement, a working order's status transitions, lines written against an order that is
  * not open, a line's description maps matching the venue's invoice locales, a device profile's form
- * factor while an active device uses it, and a device's station-or-register binding against its
+ * factor while an active device uses it, and a device's station, watcher or register binding against its
  * profile's form factor. A trigger cannot be declared in the TypeScript schema, so a regenerated
  * migration set does not carry it.
  *
@@ -1494,6 +1494,40 @@ describe("working_orders_release_main_bill", () => {
 });
 
 describe("device_binding_rule_insert", () => {
+  it("accepts a kds device bound to a watcher and no station", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, watcher_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-watcher-ok', 'loc', 'dp-bind-kds', 'watcher', 'Pass', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBeUndefined();
+    expect(
+      connection.prepare("select watcher_id from devices where id = 'dev-watcher-ok'").get()
+        ?.watcher_id,
+    ).toBe("watcher");
+  });
+
+  it("refuses a kds device bound to a station and a watcher", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, station_id, watcher_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-watcher-both', 'loc', 'dp-bind-kds', 'station', 'watcher', 'Pass', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(KDS_BINDING_REFUSAL);
+  });
+
+  it("refuses a non-kds device bound to a register and a watcher", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, till_id, watcher_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-register-watcher', 'loc', 'dp-bind-till', 'till', 'watcher', 'Till', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(REGISTER_BINDING_REFUSAL);
+  });
+
   it("refuses a kds device that binds no station", () => {
     expect(
       refusalFor(
@@ -1579,6 +1613,35 @@ describe("device_binding_rule_insert", () => {
 });
 
 describe("device_binding_rule_update", () => {
+  it("refuses a watcher added to a station-bound kds device", () => {
+    connection.exec(
+      `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) values ('dev-add-watcher', 'loc', 'dp-bind-kds', 'station', 'Pass', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    );
+    expect(
+      refusalFor(
+        connection,
+        `update devices set watcher_id = 'watcher' where id = 'dev-add-watcher'`,
+      ),
+    ).toBe(KDS_BINDING_REFUSAL);
+  });
+
+  it("accepts moving a kds device from station to watcher in one update", () => {
+    connection.exec(
+      `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) values ('dev-move-watcher', 'loc', 'dp-bind-kds', 'station', 'Pass', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    );
+    expect(
+      refusalFor(
+        connection,
+        `update devices set station_id = null, watcher_id = 'watcher' where id = 'dev-move-watcher'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      connection
+        .prepare("select station_id, watcher_id from devices where id = 'dev-move-watcher'")
+        .get(),
+    ).toMatchObject({ station_id: null, watcher_id: "watcher" });
+  });
+
   it("refuses a stray station added to a register device", () => {
     expect(
       refusalFor(connection, `update devices set station_id = 'station' where id = 'dev-rebind'`),
