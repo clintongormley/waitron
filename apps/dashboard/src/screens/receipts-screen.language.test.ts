@@ -92,11 +92,9 @@ async function shown(el: ReceiptsScreen): Promise<string | undefined> {
 }
 const paperText = (el: ReceiptsScreen) => q(el, ".paper")?.textContent ?? "";
 const warning = (el: ReceiptsScreen) => q(el, "[data-test=receipt-language-warning]");
-/** The refusal under the language: the dropdown's own error line, or the fixed area's. */
+/** The refusal under the language dropdown. */
 const languageError = (el: ReceiptsScreen) =>
-  (
-    select(el)?.shadowRoot!.querySelector("[data-error]") ?? q(el, "#receipt-language-error")
-  )?.textContent?.trim() ?? "";
+  select(el)?.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 async function bottomOf(el: ReceiptsScreen): Promise<string> {
   const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
   return actions.error;
@@ -413,6 +411,45 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     await vi.waitFor(() => expect(select(el)!.value).toBe("eu-ES"));
     expect(await shown(el)).toBe("Basque");
     await vi.waitFor(() => expect(paperText(el)).toContain("Idioma eu-ES"));
+  });
+
+  it("drops a refused pick when the region comes to fix the language, so Save still saves the rest", async () => {
+    const liveData = new LiveData();
+    const background = stubApi(barcelona("es-ES"));
+    const api = Object.assign(
+      stubApi(madrid(), undefined, {
+        putReceiptLanguage: vi
+          .fn()
+          .mockRejectedValueOnce({
+            code: "receipt.language_orders_open",
+            params: { field: "receiptLanguage", count: 1 },
+          })
+          .mockRejectedValue({
+            code: "receipt.language_fixed",
+            params: { field: "receiptLanguage" },
+          }),
+      }),
+      { liveData, background },
+    );
+    const el = await mount(api);
+    pick(el, "gl-ES");
+    await save(el);
+    expect(languageError(el)).toBe(codeMessage("receipt.language_orders_open"));
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() => expect(select(el)).toBeNull());
+    expect(q(el, "#receipt-language-error")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    await vi.waitFor(() =>
+      expect(vi.mocked(background.previewReceipt).mock.calls.at(-1)).toEqual([{}]),
+    );
+    q(el, "wt-input[name=operationDescription]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Comida" }, bubbles: true, composed: true }),
+    );
+    await save(el);
+    expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
+    expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Comida");
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[role=status]")!.textContent).toBe(t("receipts.saved"));
   });
 
   it("reports a failed read of the receipt language and offers retry", async () => {

@@ -98,12 +98,6 @@ export class ReceiptsScreen extends LitElement {
       .use-fixed {
         margin-top: var(--wt-space-2);
       }
-      .field-error {
-        display: block;
-        margin-top: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-danger);
-      }
       wt-form-actions {
         margin-top: var(--wt-space-4);
       }
@@ -262,7 +256,13 @@ export class ReceiptsScreen extends LitElement {
             this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
           this.receiptLanguage = value;
           this.languageLoadFailed = false;
-          if (savedElsewhere && this.receiptLoaded && this.pickedLanguage === null)
+          // A fixed language has no dropdown left to take back a pick or show its refusal.
+          const droppedPick = value.fixed !== null && this.pickedLanguage !== null;
+          if (value.fixed !== null) {
+            this.pickedLanguage = null;
+            this.languageRefusal = "";
+          }
+          if ((savedElsewhere || droppedPick) && this.receiptLoaded && this.pickedLanguage === null)
             this.#redrawInSavedLanguage();
         },
       );
@@ -596,16 +596,11 @@ export class ReceiptsScreen extends LitElement {
     const { fixed, language: stored } = receiptLanguage;
     if (fixed !== null) {
       const fixedName = receiptLanguageName(fixed.locale, false);
-      const errorLine =
-        error !== ""
-          ? html`<span id="receipt-language-error" class="field-error">${error}</span>`
-          : nothing;
       return html`<div data-test="receipt-language">
         <span class="field-label">${t("receipts.language")}</span>
         <span class="field-value" data-test="receipt-language-value"
           >${receiptLanguageName(stored)}</span
         >
-        ${errorLine}
         <p class="reason" data-test="receipt-language-reason">
           ${resolveContentText(fixed.reason, currentLocale(), "en")}
         </p>
