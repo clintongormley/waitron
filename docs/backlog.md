@@ -2520,7 +2520,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
     landing second, removes them and updates those cases (owner-approved), and checks an
     abandoned bill before Paid in `BILL_STATUS`, since the cancel settles the invoice. Open:
-    - **Done (B33, this branch, `feat/service-cancel-credit-pin`; needs owner review): the PIN of
+    - **Done (B33, #1041; needs owner review): the PIN of
       someone holding `sale.rectify` (a supervisor, manager or admin) lets someone without it cancel and
       credit an invoiced order.** The cancel's
       body may carry `override: { personId, pin }`, checked as an unpaid departure, a bill refund
