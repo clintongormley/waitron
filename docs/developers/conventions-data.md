@@ -1323,6 +1323,19 @@ copy, the upgrade test found it empty; recorded in the commit "Photos keep only 
 text and labels from the image table"), so the copy aside and the copy back sit in the same file as
 the rebuild and no migration step ends with the bytes gone.
 
+## Editing a shipped migration file, even a comment, needs a venue reset
+
+Drizzle records a hash of each migration file's whole text in the database's journal table, and
+`assertNotAhead` (`packages/provisioning/src/schema-ahead.ts`) treats a recorded hash the image does
+not ship as a migration from a NEWER image, refusing the start with `provisioning.database_ahead`.
+`packages/migrations/src/journal-hashes.test.ts` pins how drizzle computes the hash. Measured
+2026-10-02 with drizzle's own `readMigrationFiles` (`drizzle-orm@0.45.3`): editing only comment
+lines in `packages/db/drizzle/0001_behavioural_triggers.sql` and
+`packages/media/drizzle/0001_image_references.sql` changed exactly those two files' hashes, index 1
+of 68 and index 1 of 8. So such an edit ships only with a reset of every venue already migrated,
+said in the pull request's first line. Cost: #1036 had to restore both files byte for byte; the
+owner then chose to edit them and reset the venues.
+
 ## Drizzle picks what to apply from `max(created_at)` alone
 
 Never from a position in the journal file, so an entry whose `when` sits AT OR BELOW one the database

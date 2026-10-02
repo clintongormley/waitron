@@ -1243,10 +1243,6 @@ plans to retire the editor.
 **Variants as products (#511–#556) — what is left open.** How the model works is in
 [products.md](developers/products.md), under _Variants_.
 
-- **The header of the shipped `packages/media/drizzle/0001_image_references.sql` is stale** — its
-  counts of `products`' columns, keys and checks, and its description of `product_variants.image`,
-  a dropped table. It stays unedited, because editing a shipped migration changes the hash
-  `packages/migrations/src/journal-hashes.ts` compares.
 - **Reopening a held order still removes a sold-out extra on the first edit.** The owner chose
   option A on 2026-09-23 (lane B question Q1): keep a sold-out line in held work, flag it on the
   till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
@@ -4507,10 +4503,6 @@ approved.
     `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
     reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
   - Found by #585's review in files outside `packages/db/src/schema`, not changed there:
-    the shipped migration `packages/db/drizzle/0001_behavioural_triggers.sql:348` says
-    `requireDevice` touches `last_seen_at` "on every authenticated request", which the review found
-    too wide (the migration cannot be edited). Stale line pointer: the shipped migration's line 378
-    points at history deleted from `device-profiles.trigger.test.ts`.
     `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
     dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
     making them static imports is a small code follow-up.
@@ -5868,15 +5860,6 @@ real `sh`.
 - **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test
   helpers, and production functions (`apps/server/src/working-order.ts` holds several) that take
   `cfg` and discard it.
-- **Pointers in shipped `drizzle/` SQL are left on purpose** (such as
-  `packages/media/drizzle/0001_image_references.sql` and
-  `packages/db/drizzle/0001_behavioural_triggers.sql`, which still points at `origin/main` for the
-  originals): editing a shipped migration, even a comment, changes its hash, and the boot path's
-  ahead check would then read an already-migrated box as ahead. For the same reason both files keep
-  their PostgreSQL comparisons, including, in both, the false claim that SQLite's `raise` takes only
-  a fixed message: measured 2026-10-02 on `node:sqlite` (Node v26.7.0, SQLite 3.53.4), a trigger's
-  `raise(abort, 'row ' || new.a || ' refused')` refused an insert of 7 with `row 7 refused`, errcode
-  1811.
 - **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
   5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
   that writes another attached database, so either `change_log` is reclassified to the file its
