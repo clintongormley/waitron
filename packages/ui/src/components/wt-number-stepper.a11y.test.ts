@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import { registerIcons } from "./wt-icon.js";
@@ -49,6 +50,11 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
       theme,
     );
     await expectNoA11yViolations(host);
+    const button = host.querySelector("wt-number-stepper")!.shadowRoot!.querySelector("button")!;
+    const style = getComputedStyle(button);
+    expect(contrastRatio(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(3);
+    await userEvent.hover(button);
+    expect(contrastRatio(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(3);
   });
 
   test("at min", async () => {

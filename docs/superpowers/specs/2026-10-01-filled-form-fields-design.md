@@ -1,5 +1,8 @@
 # Form fields in the "filled" style, with the label inside the field (A178) — design
 
+**2026-10-02 update:** A202 changed the number stepper's button placement and colours. Its earlier
+placement here is historical; the current contract is in `docs/developers/design-system.md`.
+
 **Status:** draft for the owner's review, 2026-10-01. Written by the lane A campaign runner from the
 A178 entry in `docs/backlog.md` and the owner-approved mockups linked there. Section 3 is what the
 owner has already decided; every other section is this document's proposal. Section 12 lists the
