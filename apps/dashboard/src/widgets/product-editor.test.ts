@@ -2380,6 +2380,44 @@ it("shows no description hint on a variant that already describes itself in one 
   expect(placeholders(el)).toEqual(["", ""]);
 });
 
+it("hints a product's blank description in another language with the default-language one, as it is typed", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  expect(placeholders(el)).toEqual(["", "Freshly roasted"]);
+  await input(el, "description-en", "Dark roast");
+  expect(placeholders(el)).toEqual(["", "Dark roast"]);
+  await input(el, "description-en", "");
+  expect(placeholders(el)).toEqual(["", ""]);
+});
+
+it("leaves a product's default-language description unhinted when only another language has one", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, description: { es: "Recién tostado" } },
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  expect(control<HTMLTextAreaElement>(el, "description-en").placeholder).toBe("");
+});
+
+it("hints a variant's description in a language its parent left blank with the parent's default-language one", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...glass, inherited: { ...parentValues, description: { en: "Roasted in house" } } },
+    locales: ["en", "es"],
+    units: [unit, litre],
+    taxChoices: taxes,
+    categories,
+  });
+  expect(placeholders(el)).toEqual(["Roasted in house", "Roasted in house"]);
+});
+
 it("saves a variant's description as null once every language is blanked again", async () => {
   const el = await mountBilingualVariant({ en: "Served in a glass", es: "Servido en vaso" });
   await input(el, "description-en", "");
