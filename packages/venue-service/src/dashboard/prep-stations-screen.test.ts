@@ -153,6 +153,28 @@ it.each([
   expect(q(el, '[data-test="close-today-bar"]')).toBeNull();
 });
 
+it.each([
+  ["management.request_invalid", { field: "showsRestOfOrder" }, true],
+  ["station.not_found", {}, false],
+] as const)(
+  "shows a %s refusal without changing the station switch",
+  async (code, params, fieldError) => {
+    const a = api({ updateStation: vi.fn().mockRejectedValue({ code, params }) });
+    const el = await mount(a);
+    const card = q(el, '[data-test="station-bar"]')!;
+    const toggle = card.querySelector<HTMLElement>('wt-switch[name="showsRestOfOrder"]')!;
+    toggle.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+    await settle(el);
+    expect(a.updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
+    expect(card.querySelector('wt-switch[name="showsRestOfOrder"]')!.hasAttribute("checked")).toBe(
+      false,
+    );
+    const error = card.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(error.textContent).toContain("could not be saved");
+    expect(error.hasAttribute("data-field-error")).toBe(fieldError);
+  },
+);
+
 it("confirms a by-hand closure and clears it back to the schedule", async () => {
   setLocale("en");
   const a = api({

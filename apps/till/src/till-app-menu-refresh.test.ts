@@ -450,7 +450,7 @@ describe("a basket that spans a publish", () => {
     expect(payButton(el).disabled).toBe(false);
     await pay(el);
     expect(api.recordSale.mock.calls[0]![0]).toEqual([
-      { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" },
+      { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1", makeAt: null },
     ]);
   });
 
@@ -480,8 +480,8 @@ describe("a basket that spans a publish", () => {
     add(el, "Lemonade");
     await pay(el);
     expect(api.recordSale.mock.calls[0]![0]).toEqual([
-      { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" },
-      { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" },
+      { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1", makeAt: null },
+      { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1", makeAt: null },
     ]);
   });
 
@@ -629,8 +629,8 @@ describe("a pay refused because the menu changed", () => {
 
     expect(api.listZoneOffers).toHaveBeenCalledOnce();
     expect(api.recordSale.mock.calls.map((call) => call[0])).toEqual([
-      [{ menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" }],
-      [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" }],
+      [{ menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1", makeAt: null }],
+      [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1", makeAt: null }],
     ]);
     expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
   });
@@ -681,8 +681,8 @@ describe("a pay refused because the menu changed", () => {
     await flush(el);
 
     expect(api.parkOrder.mock.calls.map((call) => call[0].lines)).toEqual([
-      [{ menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" }],
-      [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" }],
+      [{ menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1", makeAt: null }],
+      [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1", makeAt: null }],
     ]);
     expect(counter(el).store.lines).toHaveLength(0);
   });

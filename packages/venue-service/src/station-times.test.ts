@@ -65,6 +65,29 @@ async function fixture(tx: Transaction) {
 }
 
 describe("station times", () => {
+  it("shows an empty routing model before the venue adds its first prep station", async () => {
+    await db.transaction(async (tx) => {
+      const [venue] = await tx
+        .insert(locations)
+        .values({
+          name: "New venue",
+          invoiceLocales: ["en-GB"],
+          operationDescription: "Hospitality",
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00:00",
+        })
+        .returning();
+      const model = await routingModel(
+        tx,
+        { locationId: locationId(venue!.id) },
+        new Date("2026-10-02T18:00:00Z"),
+      );
+      expect(model.stations).toEqual([]);
+      expect(model.stationTimes).toEqual([]);
+      expect(model.defaultStationId).toBeNull();
+    });
+  });
+
   it("replaces a station's whole week and refuses another venue's station", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
@@ -81,6 +104,21 @@ describe("station times", () => {
       await expect(replaceStationHours(tx, f.cfg, f.otherStation, [])).rejects.toMatchObject({
         code: "station.not_found",
       });
+    });
+  });
+
+  it("clears the weekly schedule when its last interval is removed", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await replaceStationHours(tx, f.cfg, f.upstairs, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      await replaceStationHours(tx, f.cfg, f.upstairs, []);
+      const row = (
+        await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))
+      ).stationTimes.find((station) => station.stationId === f.upstairs);
+      expect(row?.hours).toEqual([]);
+      expect(row?.status).toEqual({ open: true, why: "no_hours" });
     });
   });
 
