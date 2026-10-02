@@ -295,6 +295,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   sign-in's refusal, which marks no field (below). A field's hint is its placeholder, not a line
   under it (owner, 2026-09-30); a placeholder set as well wins, leaving the hint to screen readers
   (design-system.md → Forms). Every input has a semantic `name`, never a generated widget id.
+- **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
+  comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Cost:
+  a native dropdown cannot take the approved look, and hand-drawn fields did not follow the shared
+  ones (A178). Guard: `scripts/native-form-fields.test.ts`, weaker than its name — it reads text,
+  so a field made with `createElement` or `unsafeHTML`, written in an `.html`, `.js` or `.mjs`
+  file, or with its tag name split across a `${…}` is unseen, and the primitives' own files are not
+  read. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
@@ -363,10 +370,6 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   nothing and the element renders unstyled while every attribute assertion still passes. Cost: the
   categories screen's colour swatches, thumbnails and ancestor-row muting never rendered at all,
   through review and a green suite. See [design-system.md](docs/developers/design-system.md).
-- **A Lit `<select>` whose `<option>`s come from a `${…}` expression marks the chosen option with
-  `.selected`; a `.value` binding alone runs before those options exist and the dropdown shows its
-  first option.** Nothing guards it. Cost: a restored `wt-data-table` filter hid rows while its
-  dropdown read "all". See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Every colour, spacing, radius and font reads a `--wt-*` token.** No hex, no named colours, no
   `rem`/`em`. Guard: `packages/ui/src/no-hardcoded-chrome.test.ts`, which scans `packages/ui`
   components; [design-system.md](docs/developers/design-system.md) states the rule for any component
