@@ -1091,6 +1091,22 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=agent-last-seen-a2]")).toBe(t("printers.last_seen_never", "es-ES"));
   });
 
+  it("words both tables' status filters' search in the dashboard's language", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const wording = (testId: string) => {
+      const filter = q(el, `[data-test=${testId}]`)!.shadowRoot!.querySelector<
+        HTMLElementTagNameMap["wt-combobox"]
+      >('[name="status-filter"]')!;
+      return [filter.searchPlaceholder, filter.noResultsLabel];
+    };
+    expect(wording("printers-table")).toEqual(["Buscar", "Sin resultados"]);
+    await selectTab(el, "agents");
+    expect(wording("agents-table")).toEqual(["Buscar", "Sin resultados"]);
+  });
+
   it("filters print agents by status and remembers the choice independently", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

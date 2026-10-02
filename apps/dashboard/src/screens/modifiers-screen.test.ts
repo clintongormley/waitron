@@ -174,6 +174,8 @@ type Table = HTMLElement & {
   searchable: boolean;
   searchLabel: string;
   noMatchesMessage: string;
+  filterSearchPlaceholder: string;
+  filterNoResultsLabel: string;
   emptyMessage: string;
   viewKey: string;
   sortKey: string;
@@ -446,6 +448,10 @@ it("makes each tab's table searchable with a status filter", async () => {
     expect(found.searchable).toBe(true);
     expect(found.searchLabel).toBe(label);
     expect(found.columns.find((column) => column.key === "status")?.filter).toBeTruthy();
+    expect([found.filterSearchPlaceholder, found.filterNoResultsLabel]).toEqual([
+      "Buscar",
+      "Sin resultados",
+    ]);
   }
 });
 

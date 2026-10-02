@@ -426,6 +426,8 @@ export class UnitsScreen extends LitElement {
           : nothing
       }
       <wt-data-table
+        filterSearchPlaceholder=${t("categories.combobox_search")}
+        filterNoResultsLabel=${t("categories.combobox_no_results")}
         aria-label=${t("units.title")}
         searchable
         searchLabel=${t("units.search")}

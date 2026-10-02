@@ -511,6 +511,7 @@ describe("product-list", () => {
     });
     const root = await tableRoot(el);
     const select = root.querySelector<WtCombobox>('wt-combobox[data-filter="ordering"]')!;
+    expect([select.searchPlaceholder, select.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
     expect(select.options.map((option) => [option.value, option.label])).toEqual([
       ["", t("product.filter_ordering_all")],
       ["public", t("product.ordering_public")],

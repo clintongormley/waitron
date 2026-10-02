@@ -564,6 +564,8 @@ export class ModifiersScreen extends LitElement {
   #renderTab(kind: Kind) {
     const row = kind === "extras" ? "extra" : "option";
     return html`<wt-data-table
+      filterSearchPlaceholder=${t("categories.combobox_search")}
+      filterNoResultsLabel=${t("categories.combobox_no_results")}
       data-test=${`${row}-lists`}
       aria-label=${t(`${kind}.title`)}
       searchable

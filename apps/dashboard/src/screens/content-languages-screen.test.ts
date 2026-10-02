@@ -943,6 +943,10 @@ describe("missing translations", () => {
       ],
       reason: ["partial", "absent"],
     });
+    const kind = table(el, "ca")!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      'wt-combobox[data-filter="kind"]',
+    )!;
+    expect([kind.searchPlaceholder, kind.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
   });
 
   it("opens a product's editor inside the dashboard rather than reloading the page", async () => {

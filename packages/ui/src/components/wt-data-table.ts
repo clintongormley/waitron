@@ -354,6 +354,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
   @property() searchPlaceholder = "";
   @property() noMatchesMessage = "No matches";
+  /** The placeholder of a column filter's search box, which a filter shows above seven rows, its all row included. */
+  @property() filterSearchPlaceholder = "Search";
+  /** What a column filter's open list says when its search matches no option. */
+  @property() filterNoResultsLabel = "No results";
   /** The column chooser's button text and the accessible name of its list. */
   @property() columnsLabel = "Columns";
   /** When set, the tab's session storage remembers this table's sort and filter choices under this
@@ -906,6 +910,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       hide-label
                       search="auto"
                       placeholder=${column.filter.allLabel}
+                      searchPlaceholder=${this.filterSearchPlaceholder}
+                      noResultsLabel=${this.filterNoResultsLabel}
                       .options=${[
                         { value: "", label: column.filter.allLabel },
                         ...column.filter.options,
@@ -913,8 +919,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       .value=${active}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
-                        const next = { ...this.filterSelections };
                         const value = event.detail.value;
+                        // The combobox sends a change for a click on its already-chosen row too.
+                        if (value === this.#activeFilter(column)) return;
+                        const next = { ...this.filterSelections };
                         if (value === "" && column.filter!.initial === undefined)
                           delete next[column.key];
                         else next[column.key] = value;

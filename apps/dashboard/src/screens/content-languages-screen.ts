@@ -536,6 +536,8 @@ export class ContentLanguagesScreen extends LitElement {
                   ${t("content_gaps.complete").replace("{language}", names.of(language)!)}
                 </p>`
               : html`<wt-data-table
+                  filterSearchPlaceholder=${t("categories.combobox_search")}
+                  filterNoResultsLabel=${t("categories.combobox_no_results")}
                   data-test=${`gaps-table-${language}`}
                   aria-label=${t("content_gaps.table").replace("{language}", names.of(language)!)}
                   searchable

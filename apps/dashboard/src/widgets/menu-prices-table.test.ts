@@ -1,5 +1,6 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type {
   CategorySummary,
   SectionDetails,
@@ -424,6 +425,26 @@ it("filters by a section, keeping every product reached through it, and offers t
   expect(shown(el)).toEqual(["mi-lager"]);
   await choose(el, "placements", "s-fav");
   expect(shown(el)).toEqual(["mi-lemonade"]);
+});
+
+it("a category filter long enough to search shows its search box and empty list in Spanish", async () => {
+  setLocale("es-ES");
+  const many = Array.from({ length: 8 }, (_, index) => ({
+    id: `c-${index}`,
+    name: `Categoría ${index}`,
+    parentId: null,
+  }));
+  const el = await mount({ categories: many });
+  const filter = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[data-filter="category"]',
+  )!;
+  await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  await filter.updateComplete;
+  const search = filter.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  expect(search.placeholder).toBe("Buscar");
+  await userEvent.type(search, "zzz");
+  await filter.updateComplete;
+  expect(text(filter.shadowRoot!.querySelector(".empty"))).toBe("Sin resultados");
 });
 
 it("filters by a reporting category, including the categories inside it", async () => {

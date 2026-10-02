@@ -1032,6 +1032,8 @@ export class MenuPricesTable extends LitElement {
 
   override render() {
     return html`${this.#summary()}<wt-data-table
+        filterSearchPlaceholder=${t("categories.combobox_search")}
+        filterNoResultsLabel=${t("categories.combobox_no_results")}
         aria-label=${t("menu_prices.label").replace("{menu}", this.menuName)}
         viewKey="waitron.menus.prices"
         searchable

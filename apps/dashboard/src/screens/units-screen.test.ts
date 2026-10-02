@@ -189,6 +189,7 @@ describe("units-screen", () => {
     )!;
     const optionLabels = filter.options.map((o) => o.label);
     expect(optionLabels).toEqual([t("units.filter_precision_all"), "0", ",000"]);
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
     await chooseOption(filter, "3");
     await el.updateComplete;
     await table.updateComplete;

@@ -1650,6 +1650,82 @@ test("a filter with an initial choice starts on it, and its dropdown shows it", 
   expect(statusSelect(el).value).toBe("active");
 });
 
+/** Eight statuses and the all row: more than a filter's list shows without a search box. */
+const manyStatuses = statusOffering(
+  Array.from({ length: 8 }, (_, index) => ({ value: `s${index}`, label: `Status ${index}` })),
+);
+
+/** Opens the filter's list, reads its search box's placeholder, then searches for text no row has
+ * and reads the list's empty text. */
+async function filterSearchWording(filter: WtCombobox): Promise<[string, string]> {
+  await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  await filter.updateComplete;
+  const search = filter.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  const placeholder = search.placeholder;
+  await userEvent.type(search, "zzz");
+  await filter.updateComplete;
+  return [placeholder, filter.shadowRoot!.querySelector(".empty")!.textContent!.trim()];
+}
+
+test("a long filter's search box and empty list read the table's filter wording", async () => {
+  const el = await tableS({
+    columns: manyStatuses,
+    filterSearchPlaceholder: "Buscar",
+    filterNoResultsLabel: "Sin resultados",
+  });
+  expect(await filterSearchWording(statusSelect(el))).toEqual(["Buscar", "Sin resultados"]);
+});
+
+test("a long filter's search box and empty list read English wording by default", async () => {
+  const el = await tableS({ columns: manyStatuses });
+  expect(await filterSearchWording(statusSelect(el))).toEqual(["Search", "No results"]);
+});
+
+/** Opens the filter's list and clicks the row labelled `label`, as a person would. */
+async function clickFilterRow(filter: WtCombobox, label: string): Promise<void> {
+  await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  await filter.updateComplete;
+  const row = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent!.trim() === label,
+  )!;
+  await userEvent.click(row);
+  await filter.updateComplete;
+}
+
+test("clicking the all row while nothing is chosen reports nothing and remembers nothing", async () => {
+  const el = await tableS({ viewKey: "test.reclick-all", columns: withStatus });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  await clickFilterRow(statusSelect(el), "Any status");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.reclick-all")).toBeNull();
+});
+
+test("clicking the row of a filter's initial choice reports nothing and remembers nothing", async () => {
+  const el = await tableS({ viewKey: "test.reclick-initial", columns: initiallyActive });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  await clickFilterRow(statusSelect(el), "Active");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.reclick-initial")).toBeNull();
+  expect(rowKeysS(el)).toEqual(["1"]);
+});
+
+test("clicking the row of a restored filter choice reports nothing and leaves the stored view alone", async () => {
+  sessionStorage.setItem("test.reclick-restored", JSON.stringify({ filters: { status: "off" } }));
+  const el = await tableS({ viewKey: "test.reclick-restored", columns: withStatus });
+  const stored = sessionStorage.getItem("test.reclick-restored");
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  await clickFilterRow(statusSelect(el), "Inactive");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.reclick-restored")).toBe(stored);
+  expect(rowKeysS(el)).toEqual(["2"]);
+});
+
 test("choosing the all option over an initial choice shows every row, and is remembered", async () => {
   const el = await tableS({ viewKey: "test.initial-all", columns: initiallyActive });
   await chooseOption(statusSelect(el), "");

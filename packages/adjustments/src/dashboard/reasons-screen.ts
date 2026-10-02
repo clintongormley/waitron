@@ -937,6 +937,8 @@ export class AdjustmentReasonsScreen extends LitElement {
       ${
         this.reasons
           ? html`<wt-data-table
+              filterSearchPlaceholder=${t("adjustments.combobox_search")}
+              filterNoResultsLabel=${t("adjustments.combobox_no_results")}
               data-test="reasons"
               aria-label=${t("adjustments.title")}
               viewKey="waitron.adjustments.reasons.table"

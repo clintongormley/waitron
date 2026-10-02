@@ -298,6 +298,10 @@ describe("the reasons list", () => {
     expect(text).toContain("Hasta un 50% de un artículo");
     expect(text).toContain("Hasta 30,00\u00a0€ de una cuenta");
     expect(text).toContain("Aprueba: Encargado");
+    const filter = table(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      'wt-combobox[data-filter="status"]',
+    )!;
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
   });
 });
 
