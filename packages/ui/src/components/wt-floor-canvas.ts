@@ -15,6 +15,7 @@ import {
   snapRotation,
   snapToGrid,
 } from "../floor.js";
+import type { WtInput } from "./wt-input.js";
 import "./wt-input.js";
 import "./wt-table-token.js";
 
@@ -208,6 +209,9 @@ export class WtFloorCanvas extends LitElement {
   /** The zone typed into the box and not yet sent, and the table it was typed for. */
   #zoneDraft: { tableId: string; value: string } | null = null;
 
+  /** The box's text when it took focus or last sent, which a send must differ from. */
+  #zoneCommitted = "";
+
   /**
    * Memoised per `this.tables` reference, so a drag writing `draft` on every pointermove does not make
    * Lit rebind every token's listeners each frame.
@@ -324,6 +328,9 @@ export class WtFloorCanvas extends LitElement {
           }}
           @keydown=${(e: KeyboardEvent) => {
             if (e.key === "Enter") this.#commitZone(t);
+          }}
+          @focusin=${(e: FocusEvent) => {
+            this.#zoneCommitted = (e.currentTarget as WtInput).value;
           }}
           @focusout=${() => this.#commitZone(t)}
         ></wt-input>
@@ -460,6 +467,8 @@ export class WtFloorCanvas extends LitElement {
     // Typed for a table that is no longer the one shown, so it is not this table's zone.
     if (draft?.tableId !== t.id) return;
     this.#zoneDraft = null;
+    if (draft.value === this.#zoneCommitted) return;
+    this.#zoneCommitted = draft.value;
     const trimmed = draft.value.trim();
     this.#emitPlacement({ ...this.#placementOf(t), zoneId: trimmed === "" ? null : trimmed });
   }

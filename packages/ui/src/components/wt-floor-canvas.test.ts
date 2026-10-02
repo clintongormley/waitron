@@ -266,6 +266,30 @@ test("visiting the zone box without typing re-homes nothing", async () => {
   expect(placements).toEqual([]);
 });
 
+test("typing and then deleting back to the zone re-homes nothing, on leaving or on Enter", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: "terrace" })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("s{Backspace}");
+  zoneControl(el).blur();
+  zoneControl(el).focus();
+  await userEvent.keyboard("s{Backspace}{Enter}");
+  expect(placements).toEqual([]);
+});
+
+test("after Enter sends a zone, typing back to that zone and leaving sends nothing more", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: null })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("patio{Enter}s{Backspace}");
+  zoneControl(el).blur();
+  expect(placements.map((p) => p.zoneId)).toEqual(["patio"]);
+});
+
 test("a zone typed for one table is not given to the next table the box shows", async () => {
   const el = await mountCanvas(
     [oneTable("t1", { zoneId: null }), oneTable("t2", { zoneId: null })],
