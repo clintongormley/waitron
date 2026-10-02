@@ -2860,7 +2860,7 @@ describe("restore from my bucket", () => {
     if (field === undefined) {
       expect(await bottomOf(screen)).toBe(message);
     } else {
-      expect(screen.shadowRoot!.querySelector(`#${field}-error`)!.textContent).toBe(message);
+      expect(messageUnder(screen, field)).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
       const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
         disabled: boolean;
@@ -2875,9 +2875,7 @@ describe("restore from my bucket", () => {
       params: { field: "environment" },
       status: 400,
     });
-    expect(screen.shadowRoot!.querySelector("#environment-error")!.textContent).toBe(
-      "Check the environment.",
-    );
+    expect(messageUnder(screen, "environment")).toBe("Check the environment.");
     expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
   });
 
