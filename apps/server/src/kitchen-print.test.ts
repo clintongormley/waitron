@@ -1048,10 +1048,14 @@ describe("ordering modifiers on the kitchen ticket", () => {
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       // Neither extra has a claim, so both follow their dish instead of the default.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
-        { name: "Nata" },
-        { name: "Leche avena" },
-      ]);
+      const { listId, productIds } = await addExtras(
+        tx,
+        cfg,
+        catalogueId,
+        cortado,
+        [{ name: "Nata" }, { name: "Leche avena" }],
+        { staffNameOnly: true },
+      );
 
       const orderId = await fireNewOrder(tx, cfg, [
         {
@@ -1148,10 +1152,17 @@ describe("ordering modifiers on the kitchen ticket", () => {
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
-        { name: "Nata", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
-        { name: "Leche avena" }, // single pick (cap 1)
-      ]);
+      const { listId, productIds } = await addExtras(
+        tx,
+        cfg,
+        catalogueId,
+        cortado,
+        [
+          { name: "Nata", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
+          { name: "Leche avena" }, // single pick (cap 1)
+        ],
+        { staffNameOnly: true },
+      );
       const [nata, avena] = productIds;
 
       await fireNewOrder(tx, cfg, [
@@ -1187,7 +1198,9 @@ describe("ordering modifiers on the kitchen ticket", () => {
     const { stationId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
-      const { productIds } = await addExtras(tx, cfg, catalogueId, cafe, [{ name: "Nata" }]);
+      const { productIds } = await addExtras(tx, cfg, catalogueId, cafe, [{ name: "Nata" }], {
+        staffNameOnly: true,
+      });
 
       const orderId = await fireContextlessDish(tx, cfg, cafe, [productIds[0]!]);
       const ticketItemRows = await tx

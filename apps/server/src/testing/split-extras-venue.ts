@@ -264,22 +264,49 @@ export async function fireNewOrder(
 
 /** Offer one optional, uncapped extras list on `dishId`, returning the list id and the offered
  *  products' ids in order. Callers choose whether these products have a folder claim. */
+type ExtraItem = {
+  name: string;
+  customerName?: string;
+  kitchenName?: string;
+  maxQuantity?: number;
+  categoryId?: string;
+};
+type NamedExtraItem = ExtraItem & { customerName: string; kitchenName: string };
+
+export function addExtras(
+  tx: Transaction,
+  cfg: TillConfig,
+  catalogueId: string,
+  dishId: string,
+  items: NamedExtraItem[],
+): Promise<{ listId: string; productIds: string[] }>;
+/** Use only when a kitchen-print case asserts the fixture's exact staff name on paper. */
+export function addExtras(
+  tx: Transaction,
+  cfg: TillConfig,
+  catalogueId: string,
+  dishId: string,
+  items: ExtraItem[],
+  options: { staffNameOnly: true },
+): Promise<{ listId: string; productIds: string[] }>;
 export async function addExtras(
   tx: Transaction,
   cfg: TillConfig,
   catalogueId: string,
   dishId: string,
-  items: {
-    name: string;
-    customerName?: string;
-    kitchenName?: string;
-    maxQuantity?: number;
-    categoryId?: string;
-  }[],
+  items: ExtraItem[],
+  options?: { staffNameOnly: true },
 ): Promise<{ listId: string; productIds: string[] }> {
   const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
   const productIds: string[] = [];
   for (const item of items) {
+    if (
+      options?.staffNameOnly !== true &&
+      (item.customerName === undefined ||
+        item.kitchenName === undefined ||
+        new Set([item.name, item.customerName, item.kitchenName]).size !== 3)
+    )
+      throw new Error("addExtras: three distinct names required");
     const { id } = await createProduct(tx, {
       catalogueId,
       categoryId: item.categoryId ?? null,

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
   deviceProfiles,
@@ -49,6 +49,21 @@ let db: Database;
 beforeAll(() => {
   db = suite.db;
   useSplitExtrasDb(db);
+});
+afterEach(async () => {
+  const rows = await db
+    .select({
+      name: products.name,
+      customerName: products.customerName,
+      kitchenName: products.kitchenName,
+    })
+    .from(products);
+  for (const row of rows) {
+    expect(row.kitchenName).not.toBeNull();
+    const customer = Object.values(row.customerName ?? {})[0];
+    expect(customer).toBeDefined();
+    expect(new Set([row.name, customer, row.kitchenName]).size).toBe(3);
+  }
 });
 
 async function recordsFor(tx: Transaction, orderId: string) {
@@ -100,6 +115,30 @@ async function sendWithHold(
 }
 
 describe("sending split-off extras", () => {
+  it("requires three distinct names for new split-extra products", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const burger = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
+        pricingUnit: "each",
+        unitPrice: "10.00",
+        vatClass: "general",
+      });
+      await expect(
+        addExtras(tx, cfg, catalogueId, burger.id, [{ name: "Chips" } as never]),
+      ).rejects.toThrow("three distinct names");
+      await expect(
+        addExtras(tx, cfg, catalogueId, burger.id, [
+          { name: "Chips", customerName: "Chips", kitchenName: "CHIPS" },
+        ]),
+      ).rejects.toThrow("three distinct names");
+    });
+  });
+
   it("builds the named reusable venue with separate kitchen, customer and staff names", async () => {
     const venue = await splitVenue.setupSplitExtrasVenue();
     expect(venue).toMatchObject({
@@ -300,6 +339,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -307,7 +348,9 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [cheese],
-      } = await addExtras(tx, cfg, catalogueId, burger.id, [{ name: "Cheese" }]);
+      } = await addExtras(tx, cfg, catalogueId, burger.id, [
+        { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO" },
+      ]);
       const orderId = await fireNewOrder(tx, cfg, [
         {
           productId: burger.id,
@@ -340,6 +383,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: drinks.id,
         name: "Water",
+        customerName: { "es-ES": "Agua mineral" },
+        kitchenName: "AGUA",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -348,7 +393,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, water.id, [
-        { name: "Chips", kitchenName: "CHIPS", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const orderId = await fireNewOrder(tx, cfg, [
         {
@@ -379,6 +429,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: drinks.id,
         name: "Water",
+        customerName: { "es-ES": "Agua mineral" },
+        kitchenName: "AGUA",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -386,7 +438,9 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [cheese],
-      } = await addExtras(tx, cfg, catalogueId, water.id, [{ name: "Cheese" }]);
+      } = await addExtras(tx, cfg, catalogueId, water.id, [
+        { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO" },
+      ]);
       const orderId = await fireNewOrder(tx, cfg, [
         {
           productId: water.id,
@@ -438,6 +492,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: drinks.id,
         name: "Water",
+        customerName: { "es-ES": "Agua mineral" },
+        kitchenName: "AGUA",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -448,7 +504,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, water.id, [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const { orderId, lines } = await sendWithHold(tx, cfg, water.id, listId, chips!, true);
       expect((await recordsFor(tx, orderId))[0]!.courseId).toBe(later.id);
@@ -482,7 +543,7 @@ describe("sending split-off extras", () => {
         .from(printJobs)
         .where(eq(printJobs.printerId, printer.id));
       expect(jobs).toHaveLength(1);
-      expect(decodeTicket(jobs[0]!.payload)).toContain("Chips");
+      expect(decodeTicket(jobs[0]!.payload)).toContain("CHIPS");
       expect(
         records.find((row) => row.lineId === lines.find((line) => line.parentLineId !== null)!.id)!
           .stationId,
@@ -501,6 +562,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -509,7 +572,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const opened = vi.spyOn(VENUE_SERVICE, "routingAt");
       const dishes = vi.spyOn(VENUE_SERVICE, "resolveMakers");
@@ -545,6 +613,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: burgers.id,
         name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -553,7 +623,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const order = () =>
         fireNewOrder(tx, cfg, [
@@ -586,6 +661,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -594,7 +671,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const sendAt = async (stationId: string) => {
         const orderId = randomUUID();
@@ -635,6 +717,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -643,7 +727,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const orderId = randomUUID();
       await createOfferedOrder(tx, cfg, orderId, [
@@ -678,6 +767,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: burgers.id,
         name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -686,7 +777,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const orderId = randomUUID();
       await createOfferedOrder(tx, cfg, orderId, [
@@ -720,7 +816,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, venue.cfg, burger!.catalogueId, venue.productId("Burger"), [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       await republishMenus(tx);
       const line = {
@@ -813,6 +914,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
+        customerName: { "es-ES": "Hamburguesa clásica" },
+        kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -821,7 +924,12 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [chips],
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
-        { name: "Chips", categoryId: sides.id },
+        {
+          name: "Chips",
+          customerName: "Patatas fritas",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
       ]);
       const [profile] = await tx
         .insert(deviceProfiles)
