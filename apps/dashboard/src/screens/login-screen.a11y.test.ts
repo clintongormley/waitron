@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./login-screen.js";
 import type { LoginScreen } from "./login-screen.js";
@@ -18,7 +18,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function stubApi(): DashboardApi {
+function stubApi(googleConfigured = false): DashboardApi {
   return {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     passkeyAuthOptions: vi
@@ -31,7 +31,7 @@ function stubApi(): DashboardApi {
     getLocales: vi
       .fn()
       .mockResolvedValue({ locales: [{ code: "en-GB", label: "English" }], venueDefault: "es-ES" }),
-    getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
+    getGoogleConfig: vi.fn().mockResolvedValue({ configured: googleConfigured }),
   } as unknown as DashboardApi;
 }
 
@@ -70,6 +70,24 @@ describe.each(["light", "dark"] as const)("login-screen a11y (%s theme)", (theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=change-account]")!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
+  });
+
+  it("renders every way in accessibly when Google is set up", async () => {
+    const { el, host } = await mountWidget<LoginScreen>(
+      "dashboard-login-screen",
+      { api: stubApi(true) },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=google-login]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+
+    for (const step of ["password", "passkey", "google"]) {
+      Object.assign(el as unknown as Record<string, string>, { email: "owner@example.com", step });
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-test=google-login]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    }
   });
 
   it("renders account setup accessibly", async () => {

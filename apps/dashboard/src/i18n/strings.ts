@@ -637,6 +637,7 @@ export const en = {
   "login.with_passkey": "Log in with passkey",
   "login.use_password": "Use your password",
   "login.with_google": "Continue with Google",
+  "login.or": "or",
   "login.google_hint": "Use a Google account you have already linked in your profile.",
   "login.passkey_hint": "Use a passkey saved on this device or another nearby device.",
   "login.passkey_unknown":
@@ -2684,6 +2685,7 @@ export const es: Record<StringKey, string> = {
   "login.with_passkey": "Entrar con passkey",
   "login.use_password": "Usar tu contraseña",
   "login.with_google": "Continuar con Google",
+  "login.or": "o",
   "login.google_hint": "Usa una cuenta de Google que ya hayas vinculado en tu perfil.",
   "login.passkey_hint": "Usa una passkey guardada en este dispositivo o en otro cercano.",
   "login.passkey_unknown":
