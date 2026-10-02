@@ -16,14 +16,20 @@
 
   --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   --wt-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Google's sign-in button: developers.google.com/identity/branding-guidelines */
+  --wt-font-family-google: "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --wt-font-size-sm: 12px;
   --wt-font-size-md: 14px;
   --wt-font-size-lg: 18px;
   --wt-font-size-xl: 22px;
   --wt-font-weight-normal: 400;
+  --wt-font-weight-medium: 500;
   --wt-font-weight-bold: 600;
 
   --wt-tap-min: 44px;
+
+  --wt-google-mark-size: 20px;
+  --wt-google-mark-gap: 10px;
 
   --wt-field-height: 56px;
   --wt-field-line-width: 1px;

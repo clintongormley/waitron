@@ -223,3 +223,32 @@ describe.each(["light", "dark"] as const)("primary text (%s)", (theme) => {
     expect(fromPreference).toBe(token(mount(theme), "--wt-color-primary-text"));
   });
 });
+
+// Google's sign-in branding guidelines give the custom button's fill, stroke and text per theme.
+const GOOGLE_BUTTON = {
+  light: {
+    "--wt-color-google-button-fill": "#ffffff",
+    "--wt-color-google-button-line": "#747775",
+    "--wt-color-google-button-text": "#1f1f1f",
+  },
+  dark: {
+    "--wt-color-google-button-fill": "#131314",
+    "--wt-color-google-button-line": "#8e918f",
+    "--wt-color-google-button-text": "#e3e3e3",
+  },
+} as const;
+
+describe.each(["light", "dark"] as const)("Google button tokens (%s)", (theme) => {
+  const tokens = (el: HTMLElement) =>
+    Object.fromEntries(Object.keys(GOOGLE_BUTTON[theme]).map((name) => [name, token(el, name)]));
+
+  test("data-theme gives Google's colours whatever the OS prefers", async () => {
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    expect(tokens(mount(theme))).toEqual(GOOGLE_BUTTON[theme]);
+  });
+
+  test("the OS preference gives Google's colours when data-theme is absent", async () => {
+    await commands.emulateColorScheme(theme);
+    expect(tokens(mount())).toEqual(GOOGLE_BUTTON[theme]);
+  });
+});

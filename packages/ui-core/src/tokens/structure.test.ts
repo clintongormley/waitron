@@ -33,6 +33,10 @@ test("defines the structural contract", () => {
     "--wt-radius-full",
     "--wt-font-family",
     "--wt-font-family-mono",
+    "--wt-font-family-google",
+    "--wt-font-weight-medium",
+    "--wt-google-mark-size",
+    "--wt-google-mark-gap",
     "--wt-font-size-sm",
     "--wt-font-size-md",
     "--wt-font-size-lg",
@@ -72,6 +76,23 @@ test("the type scale is 12px small, 14px body, 18px large and 22px extra large",
   expect(size("--wt-font-size-md")).toBe("14px");
   expect(size("--wt-font-size-lg")).toBe("18px");
   expect(size("--wt-font-size-xl")).toBe("22px");
+});
+
+test("the Google button sets Google Sans Medium, with a 20px mark 10px from its label", () => {
+  const el = mount();
+  const probe = document.createElement("span");
+  probe.style.display = "block";
+  probe.style.fontFamily = "var(--wt-font-family-google)";
+  probe.style.fontWeight = "var(--wt-font-weight-medium)";
+  probe.style.width = "var(--wt-google-mark-size)";
+  probe.style.columnGap = "var(--wt-google-mark-gap)";
+  el.appendChild(probe);
+  const style = getComputedStyle(probe);
+  expect(style.fontFamily).toMatch(/^"Google Sans", /);
+  expect(style.fontFamily.replace(/^"Google Sans", /, "")).toBe(token(el, "--wt-font-family"));
+  expect(style.fontWeight).toBe("500");
+  expect(style.width).toBe("20px");
+  expect(style.columnGap).toBe("10px");
 });
 
 test("dialog max width is 48rem, capped at 90% of the viewport", () => {
