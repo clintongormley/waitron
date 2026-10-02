@@ -157,9 +157,11 @@ and approving the plan approves them.
   the dish is first sent on hold, and releasing it later prints there even if that station has
   closed in between, because the HOLD ticket may already have printed at that station (research
   note `slice3b-research-reachability.md` §4). **Slice 3c changes this (owner, 2026-10-01):** a
-  held dish released after its station closed is re-routed by the rules, with a "moved" slip at
-  the old station when its HOLD ticket printed there; and any waiter can send a single dish to
-  another station from the till, closed stations included — when sending, or after.
+  held dish at a closed station is checked against the rules at release unless a hand-chosen station
+  remains switched on. That choice stays even when closed, without an alert. Otherwise, a different
+  destination gets a "moved" slip at the old station when its HOLD ticket printed there; without a
+  replacement, the dish stays and raises an alert. Any waiter can send a single dish to another
+  station from the till, closed stations included — when sending, or after.
   _2026-10-01: [slice 3c-3](2026-10-01-moving-dishes-slice-3c3.md) implements this change._
 - **S11. Opening and closing by hand is on the dashboard only (owner).** The till gets it later,
   through a backlog entry.
@@ -273,7 +275,8 @@ and approving the plan approves them.
 - The one fire point stays `fireLines` (`apps/server/src/working-order.ts`). The station is chosen
   and recorded when the work is sent. Neither a rule change nor a station closing moves work already
   sent. _2026-10-01: [slice 3c-3](2026-10-01-moving-dishes-slice-3c3.md) lets a waiter move a sent
-  dish and re-routes held work when its station has closed at release._
+  dish and checks held work against the current rules when its station is not open at release, while
+  preserving a hand-chosen station that remains switched on._
 - Module boundary: core code reaches venue-service only through the `VENUE_SERVICE` seat
   (`apps/server/src/modules.ts`, contract `packages/module/src/module.ts`). Core dashboard code never
   calls `/management-api/venue-service/*`. venue-service never imports `apps/server` or

@@ -204,8 +204,9 @@ approves them.
   — the five CLAUDE.md §3 names — plus `scripts/migration-upgrade.test.ts`.
 - The one fire point stays `fireLines`. A station is chosen and recorded when the work is sent; a rule
   change alone never moves work already sent (3a and 3b Global Constraints). _2026-10-01:
-  [slice 3c-3](2026-10-01-moving-dishes-slice-3c3.md) lets a waiter move a sent dish and re-routes
-  held work when its station has closed at release._
+  [slice 3c-3](2026-10-01-moving-dishes-slice-3c3.md) lets a waiter move a sent dish and checks held
+  work against the current rules when its station is not open at release, while preserving a
+  hand-chosen station that remains switched on._
 - Module boundary: core reaches venue-service only through `VENUE_SERVICE` (`apps/server/src/modules.ts`,
   contract `packages/module/src/module.ts`). The venue-service dashboard imports only TYPES from
   `../routing.js`.

@@ -16,8 +16,9 @@ import "./errors.js";
 
 export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: string }>;
 
-/** Before release, re-route held dishes whose station is not open against its one routing snapshot.
- * The ticket item's station moves without writing its line's make-at, including on paid bills. */
+/** A held dish at a station that is not open follows the release's routing snapshot unless a
+ * hand-chosen station remains active. Its ticket can move even on a paid bill; its line's make-at
+ * stays unchanged. */
 export async function rerouteHeldAtRelease(
   tx: Transaction,
   cfg: TillConfig,

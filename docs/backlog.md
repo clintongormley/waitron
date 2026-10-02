@@ -230,9 +230,11 @@ selected folders contain products or subfolders. Each dev venue needs `wa-wt res
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
 older build before using the new published document. **Slice 3c-3 is built on PF7**: "Make at" on
 any dish before sending, moving a dish the kitchen has not started (with a slip at the old station
-when its ticket printed there), and re-routing a held dish whose station closed before release. With
-no replacement, the dish stays at its old station and raises an alert. A dish made at the till is
-never moved or re-routed ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md); add the PR
+when its ticket printed there), and checking a held dish whose station closed or switched off before
+release against the current rules. A station chosen by hand stays while switched on, even if closed,
+without an alert. Otherwise, with no replacement, the dish stays at its old station and raises an
+alert. A dish made at the till is never moved or re-routed
+([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md); add the PR
 number when it lands). What is left:
 - **3d**, watchers ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): named watchers on
   Prep Stations that screens and printers attach to, each with its own Done, Away unchanged, and

@@ -1877,8 +1877,8 @@ async function finishRelease(
 }
 
 /**
- * Send selected held lines of an open tab, re-routing dishes whose station is not open and
- * refreshing queued_at when they fire.
+ * Send selected held lines of an open tab, considering dishes at stations that are not open for
+ * re-routing and refreshing queued_at when they fire.
  * The caller's transaction includes kitchen writes and their print jobs.
  */
 export async function sendLines(
