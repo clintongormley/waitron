@@ -1229,6 +1229,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     note: null,
     wasStarted: false,
     movedTo: null,
+    reroutedTo: null,
     direction: null,
     cancelledExtra: null,
     createdAt: "2026-08-17T10:10:00.000Z",
@@ -1420,6 +1421,69 @@ describe("till-station-queue — kitchen notices strip", () => {
     });
     expect(rows(el)[0]!.querySelector(".notice-moved")!.textContent!.trim()).toBe(
       t("station.notice.moved_to").split("{table}").join(label),
+    );
+  });
+
+  it.each([
+    ["en-GB", "Moved station", "Moved to Grill"],
+    ["es-ES", "Cambio de estación", "Pasado a Grill"],
+  ])(
+    "shows a rerouted notice in %s and acknowledges its destination",
+    async (locale, kind, moved) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups,
+          stationId: "st-1",
+          notices: [
+            notice({ id: "kn-rerouted", kind: "rerouted", reroutedTo: "Grill" }),
+            notice({ id: "kn-moved", kind: "moved", movedTo: "Mesa 9" }),
+          ],
+        });
+        const row = rows(el)[0]!;
+        expect(row.querySelector(".notice-kind")!.textContent!.trim()).toBe(kind);
+        const icon = row.querySelector("wt-icon")!;
+        await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(icon.getAttribute("name")).toBe("notice-rerouted");
+        expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
+        const movedIcon = rows(el)[1]!.querySelector("wt-icon")!;
+        await (movedIcon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(icon.shadowRoot!.querySelector("path")!.getAttribute("d")).toBe(
+          movedIcon.shadowRoot!.querySelector("path")!.getAttribute("d"),
+        );
+        expect(row.querySelector(".notice-rerouted")!.textContent!.trim()).toBe(moved);
+        const button = row.querySelector<HTMLElement>("[data-acknowledge]")!;
+        expect(button.getAttribute("aria-label")).toContain(kind);
+        expect(button.getAttribute("aria-label")).toContain(moved);
+        const handler = vi.fn();
+        document.addEventListener("acknowledge-notice", handler);
+        try {
+          button.click();
+        } finally {
+          document.removeEventListener("acknowledge-notice", handler);
+        }
+        expect((handler.mock.calls[0]![0] as CustomEvent).detail).toEqual({
+          noticeId: "kn-rerouted",
+        });
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it("shows a rerouted station name exactly as typed, `$` sequences included", async () => {
+    const name = "Grill $& $` $'";
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [notice({ kind: "rerouted", reroutedTo: name })],
+    });
+    expect(rows(el)[0]!.querySelector(".notice-rerouted")!.textContent!.trim()).toBe(
+      `Moved to ${name}`,
+    );
+    expect(rows(el)[0]!.querySelector("[data-acknowledge]")!.getAttribute("aria-label")).toContain(
+      `Moved to ${name}`,
     );
   });
 

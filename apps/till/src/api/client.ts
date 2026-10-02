@@ -1240,9 +1240,8 @@ export interface ElsewhereItem {
   held: boolean;
 }
 
-/** What a kitchen notice tells a station: a line recalled, voided, changed or moved to another
- *  table after it was sent. */
-export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
+/** What a kitchen notice tells a station about sent work. */
+export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rerouted";
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
@@ -1265,6 +1264,8 @@ export interface KitchenNotice {
   wasStarted: boolean;
   /** On a `moved` notice, the table the work now belongs to. */
   movedTo: string | null;
+  /** On a `rerouted` notice, the station now making the dish. */
+  reroutedTo: string | null;
   /** On a `changed` notice, whether `quantity` was added to the work or taken from it. */
   direction: "added" | "removed" | null;
   /** On a `changed` notice, the extra taken off the dish. */

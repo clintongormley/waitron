@@ -165,9 +165,11 @@ export const en = {
   "station.notice.void": "Void",
   "station.notice.changed": "Changed",
   "station.notice.moved": "Moved",
+  "station.notice.rerouted": "Moved station",
   "station.notice.started": "Started",
   // `{table}` is substituted at the call site.
   "station.notice.moved_to": "Moved to {table}",
+  "station.notice.rerouted_to": "Moved to {station}",
   // `{extra}` is substituted at the call site.
   "station.notice.cancelled_extra": "Cancel: {extra}",
   "station.notice.acknowledge": "Got it",
@@ -1073,8 +1075,10 @@ export const es: Record<StringKey, string> = {
   "station.notice.void": "Anulado",
   "station.notice.changed": "Cambiado",
   "station.notice.moved": "Movido",
+  "station.notice.rerouted": "Cambio de estación",
   "station.notice.started": "Empezado",
   "station.notice.moved_to": "Movido a {table}",
+  "station.notice.rerouted_to": "Pasado a {station}",
   "station.notice.cancelled_extra": "Quitar: {extra}",
   "station.notice.acknowledge": "Entendido",
   "station.acknowledge_error": "No se pudo quitar el aviso, inténtalo de nuevo",

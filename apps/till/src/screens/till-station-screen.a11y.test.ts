@@ -110,6 +110,7 @@ const baseNotice: KitchenNotice = {
   note: null,
   wasStarted: true,
   movedTo: null,
+  reroutedTo: null,
   direction: null,
   cancelledExtra: null,
   createdAt: "2026-08-17T10:10:00.000Z",
