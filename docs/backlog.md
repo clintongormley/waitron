@@ -801,7 +801,7 @@ keyboard focus on the page, because the screen tried to focus the button while i
 greyed out (saving); it now waits until the list has reloaded.
 
 **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177, owner
-2026-10-01) — DONE (#PR).** Every `wt-data-table` on the dashboard and in the modules' screens now
+2026-10-01) — DONE (#1037).** Every `wt-data-table` on the dashboard and in the modules' screens now
 passes `tableNoMatches()` from `@waitron/dashboard-kit` as its no-matches sentence ("Nothing
 matches your search or filters." / "Nada coincide con tu búsqueda ni con tus filtros."), which is
 also the table's own English default; the tables' per-screen `*.no_matches` strings and
@@ -1228,7 +1228,7 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033) and A177 (#PR) are done; next A170–A172, built in the new style rather
+A169 (#1026), A176 (#1033) and A177 (#1037) are done; next A170–A172, built in the new style rather
 than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
