@@ -70,8 +70,7 @@ export class CatalogueScreen extends LitElement {
       :host {
         display: block;
       }
-      .header,
-      .actions {
+      .header {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -125,7 +124,8 @@ export class CatalogueScreen extends LitElement {
   @state() private placementFailures: PlacementFailure[] = [];
   @state() private placementBusy = false;
   #editorGeneration = 0;
-  #addOpener: HTMLElement | null = null;
+  /** The category whose menu started the open add, or null for All products; undefined while none is. */
+  #addFrom: string | null | undefined = undefined;
   #linkedProduct: string | null = null;
   /** The parent the last nested category create named, to place a `category.not_found` about it. */
   #submittedParent: string | null = null;
@@ -273,23 +273,8 @@ export class CatalogueScreen extends LitElement {
   @state() private categoryId: string | null = null;
   @state() private newCategoryId: string | null = null;
 
-  #renderAddProduct() {
-    const locales = this.contentLanguages?.languages ?? [];
-    return html`<wt-button
-      data-test="add-product"
-      ?disabled=${!locales.length || !this.units.length}
-      @click=${(event: Event) => {
-        this.#addOpener = event.currentTarget as HTMLElement;
-        this.#openCreate();
-      }}
-      >${t("catalogue.add_product")}</wt-button
-    >`;
-  }
-
-  #openCreate(): void {
-    this.newCategoryId = this.categories.some(({ id }) => id === this.categoryId)
-      ? this.categoryId
-      : null;
+  #openCreate(categoryId: string | null): void {
+    this.newCategoryId = this.categories.some(({ id }) => id === categoryId) ? categoryId : null;
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
@@ -418,6 +403,10 @@ export class CatalogueScreen extends LitElement {
       this.#closeEditor();
       if (created) void this.#openPlacement(created);
       await this.#reloadProducts();
+      if (created) {
+        await this.updateComplete;
+        await this.#browser()?.revealProduct(created.id);
+      }
     } catch (error) {
       const fieldErrors = this.#rejectedField(error, event.detail.value);
       this.editorFieldErrors = fieldErrors;
@@ -474,11 +463,15 @@ export class CatalogueScreen extends LitElement {
     else this.#closePlacement();
   }
 
-  /** The Add to menus step follows a create, so its closing dialog hands focus back to the Add product that started it. */
+  #browser() {
+    return this.shadowRoot?.querySelector("dashboard-catalogue-browser") ?? null;
+  }
+
+  /** An add hands focus back to the ⋮ of the row it started from once its last window closes. */
   #refocusAdd(): void {
-    if (this.#addOpener?.isConnected === false)
-      this.renderRoot.querySelector<HTMLElement>(".actions [data-test=add-product]")?.focus();
-    this.#addOpener = null;
+    const from = this.#addFrom;
+    this.#addFrom = undefined;
+    if (from !== undefined) this.#browser()?.focusRowMenu(from);
   }
 
   #closePlacement(): void {
@@ -615,7 +608,6 @@ export class CatalogueScreen extends LitElement {
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
-        <div class="actions">${this.catalogues.length ? this.#renderAddProduct() : nothing}</div>
       </div>
       ${
         this.catalogues.length
@@ -635,6 +627,12 @@ export class CatalogueScreen extends LitElement {
               .optionLists=${this.optionLists}
               .units=${this.units}
               .unitLanguage=${this.contentLanguages?.languages[0] ?? "en"}
+              .canAddProduct=${locales.length > 0 && this.units.length > 0}
+              @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
+                event.stopPropagation();
+                this.#addFrom = event.detail.categoryId;
+                this.#openCreate(event.detail.categoryId);
+              }}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId);
@@ -656,6 +654,9 @@ export class CatalogueScreen extends LitElement {
           : nothing
       }
       <dashboard-product-editor
+        @wt-close=${() => {
+          if (!this.editorOpen && this.placing === null) this.#refocusAdd();
+        }}
         .open=${this.editorOpen}
         .busy=${this.busy}
         .childOpen=${this.#child.kind !== null}

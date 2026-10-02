@@ -146,6 +146,12 @@ export class ProductList extends LitElement {
       wt-data-table::part(context) {
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(menu-divider) {
+        align-self: stretch;
+        margin: var(--wt-space-1) 0;
+        border: 0;
+        border-block-start: 1px solid var(--wt-color-border);
+      }
       wt-data-table::part(count) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -184,6 +190,8 @@ export class ProductList extends LitElement {
   @property() unitLanguage = "en";
   /** The search box's text; while it lasts, the table holds every category above a match open. */
   @property() search = "";
+  /** Whether a product can be made yet: the editor needs a content language and a unit. */
+  @property({ type: Boolean }) canAddProduct = false;
 
   #listNames: ReadonlyMap<string, string> = new Map();
   #rowByKey = new Map<string, ListRow>();
@@ -672,6 +680,26 @@ export class ProductList extends LitElement {
     );
   }
 
+  #addItems(categoryId: string | null) {
+    const test = categoryId ?? ROOT_KEY;
+    return html`<wt-button
+        align="start"
+        variant="secondary"
+        data-test=${`add-product-${test}`}
+        ?disabled=${!this.canAddProduct}
+        @click=${() => {
+          if (this.canAddProduct) this.#send("add-product", { categoryId });
+        }}
+        >${t("catalogue.add_product")}</wt-button
+      ><wt-button
+        align="start"
+        variant="secondary"
+        data-test=${`add-category-${test}`}
+        @click=${() => this.#send("add-category", { parentId: categoryId })}
+        >${t("folders.add_category")}</wt-button
+      >`;
+  }
+
   #columns(): DataTableColumn<ListRow>[] {
     return this.#productColumns().map((column) => ({
       key: column.key,
@@ -681,13 +709,21 @@ export class ProductList extends LitElement {
       pinned: column.pinned,
       cell: (row, context) => {
         if (row.kind === "product") return column.cell(row, context);
-        if (row.kind === "root")
-          return column.key === "name"
-            ? html`<span part="folder-cell"
-                ><wt-icon name="folder"></wt-icon><strong>${t("folders.all_products")}</strong
-                ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
-              >`
-            : nothing;
+        if (row.kind === "root") {
+          if (column.key === "name")
+            return html`<span part="folder-cell"
+              ><wt-icon name="folder"></wt-icon><strong>${t("folders.all_products")}</strong
+              ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+            >`;
+          if (column.key === "actions")
+            return html`<wt-row-actions
+              align="end"
+              data-test="actions-root"
+              label=${`${t("staff.actions")}: ${t("folders.all_products")}`}
+              >${this.#addItems(null)}</wt-row-actions
+            >`;
+          return nothing;
+        }
         const { folder } = row;
         if (column.key === "name")
           return html`<span part="folder-cell"
@@ -718,12 +754,20 @@ export class ProductList extends LitElement {
             align="end"
             label=${`${t("staff.actions")}: ${folder.name}`}
             data-test=${`actions-folder-${folder.id}`}
-            ><wt-button
+            >${this.#addItems(folder.id)}
+            <hr part="menu-divider" />
+            <wt-button
               align="start"
               variant="secondary"
               data-test=${`rename-${folder.id}`}
               @click=${(event: Event) => this.#emitFolder(event, "rename-folder", folder.id)}
               >${t("folders.rename")}</wt-button
+            ><wt-button
+              align="start"
+              variant="secondary"
+              data-test=${`move-${folder.id}`}
+              @click=${() => this.#send("move-folder", { folderId: folder.id })}
+              >${t("folders.move")}</wt-button
             ><wt-button
               align="start"
               variant="danger"
@@ -800,6 +844,24 @@ export class ProductList extends LitElement {
     await table.revealRow(`folder:${id}`);
   }
 
+  /** Opens every category above a product and scrolls it into view. */
+  async revealProduct(id: string): Promise<void> {
+    await this.updateComplete;
+    const table = this.#table();
+    if (!table) return;
+    await table.updateComplete;
+    await table.revealRow(id);
+  }
+
+  focusRowMenu(categoryId: string | null): void {
+    const key = categoryId === null ? ROOT_KEY : `folder:${categoryId}`;
+    this.#table()
+      ?.shadowRoot?.querySelector<HTMLElement>(
+        `tr[data-row-key="${CSS.escape(key)}"] wt-row-actions`,
+      )
+      ?.focus();
+  }
+
   override render() {
     const rows = this.#rows();
     this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
@@ -839,6 +901,12 @@ export class ProductList extends LitElement {
               row.folder.name,
             )
           : t(expanded ? "categories.collapse" : "categories.expand")}
+      .rowClick=${(row: ListRow) => {
+        if (row.kind === "product")
+          this.#send("edit-product", { productId: (row.variant ?? row.product).id });
+      }}
+      .rowClickLabel=${(row: ListRow) =>
+        row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
       .rows=${rows}
       .columns=${this.#columns()}
       .rowKey=${(row: ListRow) => row.key}

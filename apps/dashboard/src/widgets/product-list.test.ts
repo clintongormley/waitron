@@ -1425,7 +1425,7 @@ describe("the product list at phone width", () => {
           products: phoneProducts(),
         });
         await tableRoot(el);
-        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 2);
+        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 3);
       } finally {
         setLocale(before);
         await page.viewport(width, height);
@@ -1599,4 +1599,174 @@ describe("the product list as a tree", () => {
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
   });
+
+  const menuItems = (menu: Element) =>
+    [...menu.children].map((child) => (child.localName === "hr" ? "—" : child.textContent!.trim()));
+
+  it("opens a product from a click or Enter on its row, and a variant from its own row", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun", variants: [bunVariant] })],
+    });
+    const opened: string[] = [];
+    el.addEventListener("edit-product", (event) =>
+      opened.push((event as CustomEvent<{ productId: string }>).detail.productId),
+    );
+    const root = await tableRoot(el);
+    const activator = (key: string) =>
+      root.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!;
+    expect(activator("bun").getAttribute("aria-label")).toBe(
+      `${t("action.edit")}: Croquetas de jamón`,
+    );
+    activator("bun").click();
+    activator("bun").focus();
+    await userEvent.keyboard("{Enter}");
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    activator("bun:small").click();
+    expect(opened).toEqual(["bun", "bun", "small"]);
+  });
+
+  it("opens nothing from a click on a product's grip, its menu button or its selection box", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun" })],
+      selecting: true,
+    });
+    const opened = vi.fn();
+    el.addEventListener("edit-product", opened);
+    const row = (await tableRoot(el)).querySelector('tr[data-row-key="bun"]')!;
+    await userEvent.click(row.querySelector<HTMLElement>(".drag-grip")!);
+    await userEvent.click(row.querySelector<HTMLElement>("wt-row-actions")!);
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(row.querySelector<HTMLElement>('input[type="checkbox"]')!);
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("opens nothing when a drag of a product is released on its own row", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun" }), product({ id: "roll", name: "Roll" })],
+    });
+    const opened = vi.fn();
+    el.addEventListener("edit-product", opened);
+    const root = await tableRoot(el);
+    const own = root.querySelector<HTMLElement>('tr[data-row-key="bun"] .row-activate')!;
+    const other = root.querySelector<HTMLElement>('tr[data-row-key="roll"] .row-activate')!;
+    const at = (target: HTMLElement, from: HTMLElement, type: string) => {
+      const box = from.getBoundingClientRect();
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          composed: true,
+          pointerId: 1,
+          clientX: box.x + 4,
+          clientY: box.y + 4,
+        }),
+      );
+    };
+    at(own, own, "pointerdown");
+    at(own, other, "pointermove");
+    at(own, own, "pointermove");
+    at(own, own, "pointerup");
+    own.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }));
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("offers Add product and Add category on All products, and those, a divider, Rename, Move to… and Delete on a category", async () => {
+    const { root } = await mountTree();
+    const all = root.querySelector('[data-test="actions-root"]')!;
+    expect(all.getAttribute("label")).toBe(`${t("staff.actions")}: ${t("folders.all_products")}`);
+    expect(menuItems(all)).toEqual([t("catalogue.add_product"), t("folders.add_category")]);
+    expect(menuItems(root.querySelector('[data-test="actions-folder-d"]')!)).toEqual([
+      t("catalogue.add_product"),
+      t("folders.add_category"),
+      "—",
+      t("folders.rename"),
+      t("folders.move"),
+      t("action.delete"),
+    ]);
+  });
+
+  it("asks for a product or a category inside the row whose menu was used", async () => {
+    const { el, root } = await mountTree({ canAddProduct: true });
+    const asked: unknown[] = [];
+    for (const name of ["add-product", "add-category", "move-folder"])
+      el.addEventListener(name, (event) => asked.push([name, (event as CustomEvent).detail]));
+    for (const test of [
+      "add-product-root",
+      "add-category-root",
+      "add-product-d",
+      "add-category-d",
+      "move-d",
+    ])
+      root.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+    expect(asked).toEqual([
+      ["add-product", { categoryId: null }],
+      ["add-category", { parentId: null }],
+      ["add-product", { categoryId: "d" }],
+      ["add-category", { parentId: "d" }],
+      ["move-folder", { folderId: "d" }],
+    ]);
+  });
+
+  it("keeps every Add product disabled, and sends nothing, while products cannot be added yet", async () => {
+    const { el, root, table } = await mountTree();
+    const asked = vi.fn();
+    el.addEventListener("add-product", asked);
+    const items = () => [...root.querySelectorAll<HTMLElement>('[data-test^="add-product-"]')];
+    expect(items().map((item) => item.hasAttribute("disabled"))).toEqual([true, true, true]);
+    items()[0]!.click();
+    expect(asked).not.toHaveBeenCalled();
+    el.canAddProduct = true;
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(items().map((item) => item.hasAttribute("disabled"))).toEqual([false, false, false]);
+  });
+
+  it("puts focus on a row's menu button when asked", async () => {
+    const { el, root } = await mountTree();
+    el.focusRowMenu("d");
+    expect(root.activeElement).toBe(root.querySelector('[data-test="actions-folder-d"]'));
+    el.focusRowMenu(null);
+    expect(root.activeElement).toBe(root.querySelector('[data-test="actions-root"]'));
+  });
+
+  it("reveals a product by opening every category above it", async () => {
+    const { el, root } = await mountTree();
+    await el.revealProduct("lager");
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager", "cola", "folder:f", "bread"]);
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps every row's menu on screen and uncovered at 390 px, three categories deep (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b" }],
+          products: [
+            product({
+              id: "keg",
+              name: "Cerveza-de-barril-artesana-de-temporada-con-nombre-largo",
+              primaryCategoryId: "k",
+            }),
+          ],
+        });
+        await el.revealCategory("k");
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        expectRowMenusOnScreen(table, 5);
+        // The phone indent: half a step a level, measured where a 390 px screen puts the list.
+        const indent = (key: string) =>
+          getComputedStyle(
+            table.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
+          ).paddingInlineStart;
+        expect(["folder:d", "folder:k", "keg"].map(indent)).toEqual(["8px", "24px", "32px"]);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

@@ -210,7 +210,47 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    table.shadowRoot!.querySelector("wt-row-actions")!.show();
+    table
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-p1"]',
+      )!
+      .show();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with the All products menu open", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products, canAddProduct: true },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-root"]',
+      )!
+      .show();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with a category's menu open", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products,
+        categories: [{ id: "cat-1", name: "Comida", parentId: null }],
+        canAddProduct: true,
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-folder-cat-1"]',
+      )!
+      .show();
     await expectNoA11yViolations(host);
   });
 });

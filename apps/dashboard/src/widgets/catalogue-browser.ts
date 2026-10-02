@@ -90,8 +90,10 @@ export class CatalogueBrowser extends LitElement {
   @property() unitLanguage = "en";
   /** The category the address names; the browser opens it, and every category above it, once. */
   @property({ attribute: false }) categoryId: string | null = null;
+  @property({ type: Boolean }) canAddProduct = false;
   @state() private search = "";
-  @state() private folderForm: { value: CategorySummary | null } | null = null;
+  @state() private folderForm: { value: CategorySummary | null; parentId: string | null } | null =
+    null;
   @state() private formBusy = false;
   @state() private formErrors: Record<string, string> = {};
 
@@ -148,6 +150,16 @@ export class CatalogueBrowser extends LitElement {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
   }
 
+  /** Opens every category above a product, once the browser has drawn the list that holds it. */
+  async revealProduct(id: string): Promise<void> {
+    await this.updateComplete;
+    await this.#list()?.revealProduct(id);
+  }
+
+  focusRowMenu(categoryId: string | null): void {
+    this.#list()?.focusRowMenu(categoryId);
+  }
+
   /** The address follows the category a person opens; closing it, or one above it, names its parent. */
   #categoryToggled(event: CustomEvent<{ categoryId: string; open: boolean }>): void {
     event.stopPropagation();
@@ -177,10 +189,10 @@ export class CatalogueBrowser extends LitElement {
       categoryIds: keys.filter((key) => key.startsWith("folder:")).map((key) => key.slice(7)),
     };
   }
-  #openMove(): void {
+  #openMove(keys = this.selected): void {
     if (this.operationBusy || this.summaryLoading) return;
     this.summaryFailed = false;
-    this.operationSelection = this.#selection();
+    this.operationSelection = this.#selection(keys);
     this.destination = "";
     this.operationError = "";
     this.operation = "move";
@@ -399,9 +411,12 @@ export class CatalogueBrowser extends LitElement {
   #emit(name: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  #openForm(value: CategorySummary | null): void {
+  #openForm(
+    value: CategorySummary | null,
+    parentId = value ? value.parentId : this.#addressed(),
+  ): void {
     this.formErrors = {};
-    this.folderForm = { value };
+    this.folderForm = { value, parentId };
   }
   async #save(event: CustomEvent<{ value: CategoryInput }>): Promise<void> {
     event.stopPropagation();
@@ -497,6 +512,15 @@ export class CatalogueBrowser extends LitElement {
           void this.#openDelete([`folder:${event.detail.folderId}`]);
         }}
         @category-toggle=${this.#categoryToggled}
+        .canAddProduct=${this.canAddProduct}
+        @move-folder=${(event: CustomEvent<{ folderId: string }>) => {
+          event.stopPropagation();
+          this.#openMove([`folder:${event.detail.folderId}`]);
+        }}
+        @add-category=${(event: CustomEvent<{ parentId: string | null }>) => {
+          event.stopPropagation();
+          this.#openForm(null, event.detail.parentId);
+        }}
         .categories=${this.categories}
         .products=${this.products}
         .search=${this.search}
@@ -515,7 +539,7 @@ export class CatalogueBrowser extends LitElement {
       <dashboard-category-form
         .open=${this.folderForm !== null}
         .value=${this.folderForm?.value ?? null}
-        .defaultParentId=${this.#addressed()}
+        .defaultParentId=${this.folderForm?.parentId ?? null}
         .categories=${this.categories}
         .busy=${this.formBusy}
         .fieldErrors=${this.formErrors}

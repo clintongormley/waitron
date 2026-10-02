@@ -257,9 +257,9 @@ it("moves a dragged product into a folder", async () => {
 it("real pointer drag moves a product into a folder", async () => {
   const el = await mountBrowser();
   await userEvent.dragAndDrop(
-    await nameCell(el, "bread"),
+    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="bread"] .row-activate')!,
     (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="folder:f"] .row-activate')!,
-    { targetPosition: { x: 4, y: 4 } },
+    { sourcePosition: { x: 4, y: 4 }, targetPosition: { x: 4, y: 4 } },
   );
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
@@ -1112,3 +1112,42 @@ it.each([
     expect(screen.filter(([, text]) => /folder|carpeta/i.test(text))).toEqual([]);
   },
 );
+
+it("Move to… on a category's menu opens the move dialog for that category alone", async () => {
+  const el = await mountBrowser();
+  (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="move-d"]')!.click();
+  await el.updateComplete;
+  expect(dialog(el)!.heading).toBe("Move 1 item");
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
+    { value: "top", label: "All products (top level)" },
+    { value: "f", label: "Food" },
+  ]);
+  await destination(el, "f");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+});
+
+it("Add category on a category's menu opens the category form inside it", async () => {
+  const el = await mountBrowser();
+  (await tableOf(el))
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="add-category-f"]')!
+    .click();
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+  expect(form.open).toBe(true);
+  expect(form.defaultParentId).toBe("f");
+});
+
+it("passes whether products can be added to every menu", async () => {
+  const el = await mountBrowser({ canAddProduct: true });
+  expect(
+    (await tableOf(el))
+      .shadowRoot!.querySelector('[data-test="add-product-root"]')!
+      .hasAttribute("disabled"),
+  ).toBe(false);
+});
