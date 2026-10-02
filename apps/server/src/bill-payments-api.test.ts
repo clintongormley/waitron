@@ -2784,12 +2784,10 @@ describe("refund first (design §4.3, §6a)", () => {
     const printed = tickets[0]!;
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed[start]).toBe("TOTAL 40,00 €");
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 2),
-    ).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €"]);
+    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
+      "Efectivo 50,00 €",
+      "Devolución -10,00 €",
+    ]);
   });
 });
 

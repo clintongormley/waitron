@@ -1268,17 +1268,13 @@ describe("a bill paid in parts before its invoice", () => {
     const printed = lines();
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 5),
-    ).toEqual([
+    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
       "Tarjeta 11,90 €",
       "Ref. OP-9",
       "Propina 1,00 €",
+      TRIM.footerMessage!,
     ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
@@ -1320,12 +1316,12 @@ describe("a bill payment partly given back before its invoice", () => {
     ).map((line) => line.trim().replace(/\s+/g, " "));
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 3),
-    ).toEqual(["Efectivo 50,00 €", "Devolución -6,00 €", "Devolución -4,00 €"]);
+    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
+      "Efectivo 50,00 €",
+      "Devolución -6,00 €",
+      "Devolución -4,00 €",
+      TRIM.footerMessage!,
+    ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
 
@@ -1356,12 +1352,12 @@ describe("a bill payment partly given back before its invoice", () => {
     ).map((line) => line.trim().replace(/\s+/g, " "));
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 3),
-    ).toEqual(["Tarjeta 20,00 €", "Ref. OP-3", "Devolución -5,00 €"]);
+    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
+      "Tarjeta 20,00 €",
+      "Ref. OP-3",
+      "Devolución -5,00 €",
+      TRIM.footerMessage!,
+    ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
 });
