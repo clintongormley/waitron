@@ -1365,8 +1365,8 @@ existing one too.
 **Decided (owner, 2026-10-02):** a customer-name field in another language shows the
 default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
 (the owner's account of the menu; check it against the reader before relying on it). The kitchen
-name shows its hint too (read as: the staff name, which is what `kitchenPresentationName` prints;
-ask if the default-language customer name was meant). **And descriptions:** a description field
+name shows its hint too: the staff name (owner, 2026-10-02), which is what
+`kitchenPresentationName` prints. **And descriptions:** a description field
 in a secondary language shows the default-language description as its hint (owner). Today the
 description fields hint only on a variant's page, with the PARENT's text
 (`descriptionHints`, `renderDescriptors`); decide which hint wins on a variant whose parent has a
