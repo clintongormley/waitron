@@ -39,9 +39,10 @@ you are editing, not what is stored: nothing is sent until you save the list its
 Give the list a staff name in plain text — what you and your staff call it. A **Customer-facing
 name**, with one field per content language, and a **Kitchen name** are both optional and fall back
 to the staff name when you leave them blank. They sit in a **Customer and kitchen names** section
-that stays folded until you open it; its heading says how many are filled in, and it opens by
-itself when one of them needs correcting. An option carries the same three names, in the same
-folded section of its own window. See [content languages](content-and-images.md).
+that stays folded until you open it; while it is folded, the names you have filled in show under
+its heading, and it opens by itself when one of them needs correcting. An option carries the same
+three names, in the same folded section of its own window. See
+[content languages](content-and-images.md).
 
 Each list has an **Active** switch, and the list's **Status** column reads **Active** or
 **Inactive**. An active list needs something to answer it with, so the form refuses to save an

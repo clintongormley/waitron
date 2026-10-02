@@ -693,8 +693,8 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
 
 **The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE.** `wt-disclosure`
 (`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
-heading and chevron in place when it opens (chevron at the row's end), and shows its summary on a
-line under the heading only while closed. The Options and Extras editors' "Customer and kitchen
+heading and chevron in place when it opens (chevron at the row's end), and shows its summary under
+the heading only while closed. The Options and Extras editors' "Customer and kitchen
 names" line lists the names themselves (`ES … · EN … · Kitchen …`) instead of a count. The rule in
 `docs/developers/design-system.md` is rewritten to match.
 

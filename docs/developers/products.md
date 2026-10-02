@@ -445,7 +445,7 @@ migration, whose hash changed although the count did not", `packages/provisionin
 
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
-section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
+section that shows a summary of what is inside it, so nothing filled in is invisible while
 collapsed. Top to bottom: Name, Category, Available, Standalone ordering (absent on a
 variant's page), ▸ Kitchen, ▸ Descriptors,
 ▸ Nutritional info, Price (and the variants table, if there are variants), Modifiers, then Cancel and

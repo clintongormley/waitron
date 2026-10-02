@@ -368,7 +368,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
-| `wt-disclosure` | `heading`, `summary` (a one-line summary shown under the heading while the section is closed), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
+| `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
@@ -1000,7 +1000,7 @@ Nutritional info fold.
 
 Three rules make the fold safe rather than merely tidy.
 
-**Every collapsed section carries a one-line summary of what is inside it**, passed as `summary`, so
+**Every collapsed section carries a summary of what is inside it**, passed as `summary`, so
 nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
 empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Drinks` (kitchen name
 and course). An empty summary means an empty section, which is a useful signal in itself. A names
@@ -1022,7 +1022,7 @@ disagree about what is on it.
 
 A disclosure draws no border and no lines in either state; spacing above and below sets the section
 apart (owner, 2026-10-01, A169). The heading and chevron stay exactly where they are when it opens,
-the chevron at the right-hand end of the row. Closed, the summary sits on its own line under the
+the chevron at the right-hand end of the row. Closed, the summary sits under the
 heading; open, the body shows in its place and the summary is not drawn.
 
 The body is a plain default slot, so the section's content is ordinary form markup and every rule
