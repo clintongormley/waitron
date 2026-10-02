@@ -563,6 +563,23 @@ it("a drop where the drag started moves nothing and is never marked", async () =
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
 
+it("a drop on the category the dragged row is already in moves nothing and is never marked", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const drops = vi.fn();
+  list.addEventListener("drop-items", drops);
+  const table = await tableOf(el);
+  pointerEvent(await nameCell(el, "cola"), "pointerdown");
+  pointerEvent(await nameCell(el, "folder:d"), "pointermove");
+  await list.updateComplete;
+  expect(table.shadowRoot!.querySelector('[part~="drop-target"]')).toBeNull();
+  pointerEvent(await nameCell(el, "folder:d"), "pointerup");
+  await el.updateComplete;
+  expect(drops).not.toHaveBeenCalled();
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
 it("in Select mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
