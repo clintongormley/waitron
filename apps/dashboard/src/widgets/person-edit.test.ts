@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { roleName } from "../i18n/domain.js";
+import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { setLocale, t } from "../i18n/t.js";
 import { PersonEdit } from "./person-edit.js";
 
@@ -45,14 +45,79 @@ async function saveDisabled(el: PersonEdit): Promise<boolean> {
   return button.shadowRoot!.querySelector("button")!.disabled;
 }
 
+type Box = HTMLElement & {
+  value: string;
+  label: string;
+  required: boolean;
+  disabled: boolean;
+  search: string;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const box = (el: PersonEdit, name: "role" | "status"): Box =>
+  el.shadowRoot!.querySelector<Box>(`wt-combobox[name="${name}"]`)!;
+
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shown(el: PersonEdit, name: "role" | "status"): Promise<string | undefined> {
+  const found = box(el, name);
+  await found.updateComplete;
+  return found.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
 describe("person-edit", () => {
+  it("picks the role and the status from required shared dropdowns showing the person's own", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    const role = box(el, "role");
+    const status = box(el, "status");
+    expect(role).not.toBeNull();
+    expect(status).not.toBeNull();
+    expect(role.label).toBe(t("person.role", "es-ES"));
+    expect(status.label).toBe(t("person.status_label", "es-ES"));
+    for (const found of [role, status]) {
+      expect(found.required).toBe(true);
+      expect(found.search).toBe("auto");
+    }
+    expect(role.options).toEqual(
+      rolesByName("es-ES").map((value) => ({ value, label: roleName(value, "es-ES") })),
+    );
+    expect(status.options).toEqual([
+      { value: "active", label: statusName("active", "es-ES") },
+      { value: "suspended", label: statusName("suspended", "es-ES") },
+    ]);
+    expect(role.value).toBe("manager");
+    expect(await shown(el, "role")).toBe(roleName("manager", "es-ES"));
+    expect(status.value).toBe("active");
+    expect(await shown(el, "status")).toBe(statusName("active", "es-ES"));
+    // The fixture's telephone fails the form's own check.
+    change(el, "edit-telephone", "+44 20 7946 0958");
+    await chooseOption(role, "supervisor");
+    await chooseOption(status, "suspended");
+    await el.updateComplete;
+    const saved = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("save-person", (event) => resolve(event as CustomEvent), { once: true }),
+    );
+    saveOf(el).click();
+    expect((await saved).detail).toMatchObject({ role: "supervisor", status: "suspended" });
+  });
+
+  it("locks the status dropdown when the person is the one signed in", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person,
+      currentPersonId: person.personId,
+      open: true,
+    });
+    expect(box(el, "status").disabled).toBe(true);
+    expect(box(el, "role").disabled).toBe(false);
+  });
+
   it("uses the shared modal with one field per row, the same field-list shape as the profile screen's own edit form", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     const modal = el.shadowRoot!.querySelector("wt-modal");
     expect(modal).not.toBeNull();
     await modal!.updateComplete;
     // One shared grid gap, not a per-field margin — so every row (wt-input as well as the
-    // role/status <label>s) stacks without overlapping.
+    // role/status dropdowns) stacks without overlapping.
     const rows = [...el.shadowRoot!.querySelector(".fields")!.children] as HTMLElement[];
     expect(rows.length).toBeGreaterThan(0);
     for (let i = 1; i < rows.length; i++) {
@@ -60,10 +125,11 @@ describe("person-edit", () => {
         rows[i - 1]!.getBoundingClientRect().bottom,
       );
     }
-    for (const name of ["role", "status"]) {
-      const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`select[name=${name}]`)!;
+    for (const name of ["role", "status"] as const) {
+      const select = box(el, name);
+      await select.updateComplete;
       expect(select.required).toBe(true);
-      expect(select.parentElement!.textContent).toContain("*");
+      expect(select.shadowRoot!.querySelector("[data-required]")!.textContent).toContain("*");
     }
     // No <hr> divider ahead of role/status — one continuous field list instead.
     expect(el.shadowRoot!.querySelector("hr")).toBeNull();
@@ -72,11 +138,12 @@ describe("person-edit", () => {
   it("lists the roles alphabetically in the current language, keeping the person's own role chosen", async () => {
     setLocale("en-GB");
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
-    const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
-    expect([...role.options].map((option) => option.textContent?.trim())).toEqual(
+    const role = box(el, "role");
+    expect(role.options.map((option) => option.label)).toEqual(
       ["admin", "manager", "staff", "supervisor"].map((value) => roleName(value, "en-GB")),
     );
     expect(role.value).toBe("manager");
+    expect(await shown(el, "role")).toBe(roleName("manager", "en-GB"));
   });
 
   it("presents one populated form and emits the full edit through one Save", async () => {
@@ -84,25 +151,18 @@ describe("person-edit", () => {
       person,
       open: true,
     });
-    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!.value).toBe(
-      "manager",
-    );
-    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!.value).toBe(
+    expect(box(el, "role").value).toBe("manager");
+    expect(await shown(el, "role")).toBe(roleName("manager", "es-ES"));
+    expect(box(el, "status").value).toBe("active");
+    expect(await shown(el, "status")).toBe(statusName("active", "es-ES"));
+    expect(box(el, "status").options.map((option) => option.value)).toEqual([
       "active",
-    );
-    expect(
-      [...el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!.options].map(
-        (option) => option.value,
-      ),
-    ).toEqual(["active", "suspended"]);
+      "suspended",
+    ]);
     change(el, "edit-first-names", "Ada Augusta Byron");
     change(el, "edit-telephone", "+44 20 7946 0958");
-    const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
-    role.value = "admin";
-    role.dispatchEvent(new Event("change"));
-    const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!;
-    status.value = "suspended";
-    status.dispatchEvent(new Event("change"));
+    await chooseOption(box(el, "role"), "admin");
+    await chooseOption(box(el, "status"), "suspended");
     await el.updateComplete;
     const saved = new Promise<CustomEvent>((resolve) =>
       el.addEventListener("save-person", (event) => resolve(event as CustomEvent), { once: true }),
@@ -204,8 +264,8 @@ describe("person-edit", () => {
       person: inactive,
       open: true,
     });
-    const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-status]")!;
-    expect([...status.options].map((option) => option.value)).toEqual(["suspended"]);
+    const status = box(el, "status");
+    expect(status.options.map((option) => option.value)).toEqual(["suspended"]);
   });
 
   it("Cancel discards edits and secret actions never retain an entered credential", async () => {
