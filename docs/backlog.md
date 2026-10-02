@@ -3176,13 +3176,33 @@ approved.
   there is no way back — an older image then refuses to start with `provisioning.database_ahead`
   (`deploy/README.md`, "It can migrate the box's database one way"). Wanted: the box upgrades
   itself, in this order:
-  1. take a copy of the database and the rest of the state a restore needs;
+  1. stop the app and take a snapshot of the box's state;
   2. start the new image and let it migrate, with sales refused;
   3. check that it started properly;
-  4. only then take orders. If the check fails, put back the copy and the old image.
+  4. only then take orders. If the check fails, put back the snapshot and the old image, and
+     report the failure.
 
-  The point of no return is the first order taken on the new version, not the restart: rolling
-  back after that would lose the order. Questions to settle in the brainstorm:
+  **Rolling back is not a fix** (owner, 2026-10-02): it keeps the venue trading on the version that
+  worked while the failed upgrade is reported and fixed. The point of no return is the first order
+  taken on the new version, not the restart: rolling back after that would lose the order.
+
+  **The snapshot is a filesystem snapshot where the disk allows it** (owner, 2026-10-02). Debian's
+  default filesystem, ext4, has none; btrfs (in Debian's own kernel) and LVM thin volumes do. ZFS
+  does too but is built outside Debian's kernel because of its licence. The B3 installer lays the
+  disk out, so it can put the folder holding Docker's volumes on btrfs. What it should buy, none of
+  it measured yet: taking and restoring a snapshot costs about the same whatever the size of
+  `venue.db`, which holds the product photos, where a file copy grows with it; and it takes every
+  volume at once, so nobody keeps a list of the files a restore needs (the hand-kept list already
+  went stale once — B2's whole-state-volume bullet). What it does not cover:
+  - the old image, which is kept by its tag, not in the snapshot;
+  - a box whose disk the installer did not lay out (ext4), which needs a fallback copy;
+  - the failed attempt's own logs, which a rollback of the logs volume would erase — keep them out
+    of the rollback, or send the report before rolling back.
+
+  Questions to settle in the brainstorm:
+  - **Where the failure is reported.** To the owner, as a dashboard alert once the old version is
+    back; to Waitron as well, which needs the one-touch bug report (A9, Logging Slice 2) or
+    something like it.
   - **What counts as "started properly".** `/health` returning 200 says the duty loop runs; that
     may be too little — every module opened, the fiscal chain read back and checked, the till able
     to load its menu.
@@ -3195,8 +3215,8 @@ approved.
     container, since it replaces that container (a timer on the host running `waitron.sh`, or a
     small updater with access to Docker). Where the box learns a release exists is B3's open
     question, "unattended updates for a box we did not sell".
-  - **Depends on upgrade testing above**: rolling back hides a failed migration; it does not
-    prevent one.
+  - **Upgrade testing above still comes first**: a rollback keeps the venue trading through a
+    failed migration; it does not prevent one.
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.**
   `conventions-data.md` holds the list, and it is longer than what CLAUDE.md §3 names — it adds a
