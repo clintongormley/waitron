@@ -3,14 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  billPaymentLines,
-  billPaymentRefunds,
-  floorZones,
-  saleLines,
-  sales,
-  withTransaction,
-} from "@waitron/db";
+import { billPaymentLines, billPaymentRefunds, floorZones, saleLines, sales } from "@waitron/db";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -172,7 +165,7 @@ function holderOf(tableId: string): string | null {
 }
 
 async function freeTable(): Promise<string> {
-  const { id } = await withTransaction(venue.db, (tx) =>
+  const { id } = await inTx(venue, (tx) =>
     createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
   return id;
