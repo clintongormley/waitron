@@ -1,5 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./venue-screen.js";
@@ -42,11 +43,17 @@ async function bottomAlertOf(el: SetupVenueScreen): Promise<Element | null> {
 
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
+type Dropdown = HTMLElement & { options: { value: string; label: string }[]; error: string };
+const dropdown = (el: SetupVenueScreen, field: "country" | "province") =>
+  q(el, `[data-test=${field}]`) as Dropdown;
+/** A dropdown's own control, which carries its invalid state. */
+const dropdownControl = (el: SetupVenueScreen, field: "country" | "province") =>
+  dropdown(el, field).shadowRoot!.querySelector<HTMLElement>(".trigger")!;
+
 async function type(el: SetupVenueScreen, field: string, value: string): Promise<void> {
   const target = q(el, `[data-test=${field}]`)!;
-  if (target instanceof HTMLSelectElement) {
-    target.value = value;
-    target.dispatchEvent(new Event("change"));
+  if (target.tagName === "WT-COMBOBOX") {
+    await chooseOption(target, value);
   } else {
     target.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -124,10 +131,8 @@ describe("setup-venue-screen", () => {
     setLocale("es-ES");
     try {
       const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
-      const countries = [
-        ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=country] option"),
-      ];
-      expect(countries.map((option) => option.textContent?.trim())).toEqual(["España"]);
+      const countries = dropdown(el, "country").options;
+      expect(countries.map((option) => option.label.trim())).toEqual(["España"]);
     } finally {
       setLocale("en-GB");
     }
@@ -147,26 +152,91 @@ describe("setup-venue-screen", () => {
 
   it("renders onboarding-ready countries and all Spanish provinces as stable-code choices", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
-    const countries = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=country] option"),
-    ];
+    const countries = dropdown(el, "country").options;
     expect(countries.map(({ value }) => value)).toEqual(["ES"]);
-    expect(countries.map((option) => option.textContent?.trim())).toEqual(["Spain"]);
-    const provinces = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=province] option"),
-    ];
-    expect(provinces).toHaveLength(53);
-    expect({ value: provinces[1]!.value, label: provinces[1]!.textContent?.trim() }).toEqual({
+    expect(countries.map((option) => option.label.trim())).toEqual(["Spain"]);
+    // The empty "Select province" row is the dropdown's placeholder, not an option.
+    const provinces = dropdown(el, "province").options;
+    expect(provinces).toHaveLength(52);
+    expect({ value: provinces[0]!.value, label: provinces[0]!.label.trim() }).toEqual({
       value: "01",
       label: "Araba/Álava",
     });
     expect({
       value: provinces.at(-1)!.value,
-      label: provinces.at(-1)!.textContent?.trim(),
+      label: provinces.at(-1)!.label.trim(),
     }).toEqual({
       value: "52",
       label: "Melilla",
     });
+  });
+
+  it("picks the country and the province from the shared dropdowns, with their help beside the box", async () => {
+    type Box = HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      required: boolean;
+      label: string;
+      search: string;
+      placeholder: string;
+    };
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const country = q(el, 'wt-combobox[name="country"]') as Box | null;
+    const province = q(el, 'wt-combobox[name="province"]') as Box | null;
+    expect(country).not.toBeNull();
+    expect(province).not.toBeNull();
+    const shape = (box: Box) => ({
+      label: box.label,
+      required: box.required,
+      search: box.search,
+      placeholder: box.placeholder,
+      value: box.value,
+    });
+    expect(shape(country!)).toEqual({
+      label: "Country",
+      required: true,
+      search: "auto",
+      placeholder: "",
+      value: "ES",
+    });
+    expect(country!.options).toEqual([{ value: "ES", label: "Spain" }]);
+    expect(shape(province!)).toEqual({
+      label: "Province",
+      required: true,
+      search: "auto",
+      placeholder: "Select province",
+      value: "",
+    });
+    expect(province!.options.some(({ value }) => value === "")).toBe(false);
+    expect(country!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
+      "Help with country",
+    );
+    expect(province!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
+      "Help with province",
+    );
+
+    await chooseOption(province!, "08");
+    await el.updateComplete;
+    expect(province!.value).toBe("08");
+    expect(q(el, "[data-test=timeZone]")!.textContent).toBe("Time zone: Europe/Madrid");
+    expect(ticked(el)).toEqual(["es-ES", "ca-ES"]);
+  });
+
+  it("labels the province dropdown's search in the wizard's language", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+      const province = q(el, 'wt-combobox[name="province"]') as unknown as {
+        searchPlaceholder: string;
+        noResultsLabel: string;
+      };
+      expect({
+        search: province.searchPlaceholder,
+        none: province.noResultsLabel,
+      }).toEqual({ search: "Buscar", none: "Sin resultados" });
+    } finally {
+      setLocale("en-GB");
+    }
   });
 
   it("derives the province from a valid Spanish postcode", async () => {
@@ -583,9 +653,9 @@ describe("setup-venue-screen form errors", () => {
     await fillValid(el, { province: "" });
     next(el).click();
     await el.updateComplete;
-    const province = q(el, "[data-test=province]")!;
-    expect(province.getAttribute("aria-invalid")).toBe("true");
-    expect(getComputedStyle(province).borderColor).toBe("rgb(4, 5, 6)");
+    expect(dropdownControl(el, "province").getAttribute("aria-invalid")).toBe("true");
+    const box = dropdown(el, "province").shadowRoot!.querySelector("[part=field]")!;
+    expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
   });
 
   it("re-checks the selects and the language group too, not only the text fields", async () => {
@@ -594,12 +664,14 @@ describe("setup-venue-screen form errors", () => {
     await toggleLocale(el, "es-ES", false);
     next(el).click();
     await el.updateComplete;
-    expect(q(el, "[data-test=province]")!.getAttribute("aria-invalid")).toBe("true");
+    expect(dropdownControl(el, "province").getAttribute("aria-invalid")).toBe("true");
     expect(q(el, "fieldset.locales")!.getAttribute("aria-invalid")).toBe("true");
 
     await type(el, "province", "28");
     await toggleLocale(el, "es-ES", true);
-    expect(q(el, "[data-test=province]")!.getAttribute("aria-invalid")).toBe("false");
+    await (dropdown(el, "province") as Dropdown & { updateComplete: Promise<unknown> })
+      .updateComplete;
+    expect(dropdownControl(el, "province").getAttribute("aria-invalid")).toBe("false");
     expect(q(el, "fieldset.locales")!.getAttribute("aria-invalid")).toBe("false");
     expect(await bottomOf(el)).toBe("");
     expect(next(el).hasAttribute("disabled")).toBe(false);
@@ -861,7 +933,7 @@ it("explains an unsupported Demo province instead of asking to reload defaults",
   q(el, "[data-test=next]")!.click();
   await el.updateComplete;
   expect(events).toEqual([]);
-  expect(q(el, "#province-error")!.textContent).toContain("not available");
+  expect(dropdown(el, "province").error).toContain("not available");
   expect(q(el, "[data-test=retry-defaults]")).toBeNull();
 });
 
@@ -1009,8 +1081,9 @@ it("refuses a draft country that has no venue-setup pack and derives nothing fro
   q(el, "[data-test=next]")!.click();
   await el.updateComplete;
   expect(events).toEqual([]);
-  expect(q(el, "#country-error")!.textContent).toBe("Check the country.");
-  expect(q(el, "[data-test=country]")!.getAttribute("aria-invalid")).toBe("true");
+  expect(dropdown(el, "country").error).toBe("Check the country.");
+  await (dropdown(el, "country") as Dropdown & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(dropdownControl(el, "country").getAttribute("aria-invalid")).toBe("true");
 });
 
 const SPARSE_PACK: CountryPack = {

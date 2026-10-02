@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { focusFirstInvalid, submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
@@ -12,6 +12,7 @@ import {
 import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/country-packs";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { countryName } from "../country-name.js";
@@ -152,7 +153,6 @@ function defaultInvoiceLocales(
 export class SetupVenueScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,
@@ -164,13 +164,6 @@ export class SetupVenueScreen extends LitElement {
       h2 {
         margin: var(--wt-space-4) 0 var(--wt-space-2);
         font-size: var(--wt-font-size-lg);
-      }
-
-      .field.select > span {
-        display: block;
-        margin-bottom: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
       }
 
       fieldset.locales {
@@ -363,9 +356,9 @@ export class SetupVenueScreen extends LitElement {
     this.values = { ...this.values, [key]: value };
   }
 
-  #onCountry(event: Event): void {
+  #onCountry(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const country = (event.target as HTMLSelectElement).value;
+    const country = event.detail.value;
     const pack = getVenueSetupCountryPack(country);
     this.values = { ...this.values, country, postalCode: "", province: "" };
     if (pack !== undefined) {
@@ -374,11 +367,11 @@ export class SetupVenueScreen extends LitElement {
     }
   }
 
-  #onProvince(event: Event): void {
+  #onProvince(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const pack = this.#pack();
     if (pack === undefined) return;
-    const area = findAdministrativeArea(pack, (event.target as HTMLSelectElement).value);
+    const area = findAdministrativeArea(pack, event.detail.value);
     this.values = { ...this.values, province: area?.name ?? "" };
     if (area === undefined) return;
     if (this.#invoiceLocalesFollowAreaDefault) {
@@ -613,29 +606,25 @@ export class SetupVenueScreen extends LitElement {
           : nothing
       }
       <h2>${this.#demo ? t("venue.section.location") : t("venue.section.business")}</h2>
-      <label class="field select">
-        <span>${t("venue.label.country")} * ${this.#help("country")}</span>
-        <select
-          name="country"
-          required
-          data-test="country"
-          ?invalid=${errors.has("country")}
-          aria-invalid=${errors.has("country") ? "true" : "false"}
-          aria-describedby="country-error"
-          @change=${(event: Event) => this.#onCountry(event)}
-        >
-          ${VENUE_SETUP_COUNTRY_PACKS.map(
-            (country) =>
-              html`<option
-                value=${country.countryCode}
-                .selected=${country.countryCode === pack?.countryCode}
-              >
-                ${countryName(country.countryCode, currentLocale())}
-              </option>`,
-          )}
-        </select>
-        <span class="error" id="country-error">${errors.get("country") ?? ""}</span>
-      </label>
+      <wt-combobox
+        class="field"
+        label=${t("venue.label.country")}
+        name="country"
+        required
+        search="auto"
+        searchPlaceholder=${t("venue.combobox_search")}
+        noResultsLabel=${t("venue.combobox_no_results")}
+        data-test="country"
+        ?invalid=${errors.has("country")}
+        error=${errors.get("country") ?? ""}
+        .options=${VENUE_SETUP_COUNTRY_PACKS.map((country) => ({
+          value: country.countryCode,
+          label: countryName(country.countryCode, currentLocale()),
+        }))}
+        .value=${pack?.countryCode ?? ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onCountry(event)}
+        >${this.#help("country")}</wt-combobox
+      >
       ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}`}
       ${this.#demo ? nothing : html`<h2>${t("venue.section.location")}</h2>`}
       ${this.#field(t("venue.label.location_name"), "name")}
@@ -679,27 +668,26 @@ export class SetupVenueScreen extends LitElement {
       ${this.#field(t("venue.label.city"), "city")}
       ${
         pack !== undefined && pack.administrativeAreas.length > 0
-          ? html`<label class="field select">
-              <span>${t("venue.label.province")} * ${this.#help("province")}</span>
-              <select
-                name="province"
-                required
-                aria-describedby="province-error"
-                data-test="province"
-                ?invalid=${errors.has("province")}
-                aria-invalid=${errors.has("province") ? "true" : "false"}
-                @change=${(event: Event) => this.#onProvince(event)}
-              >
-                <option value="" .selected=${area === undefined}>${selectProvince}</option>
-                ${pack.administrativeAreas.map(
-                  (candidate) =>
-                    html`<option value=${candidate.code} .selected=${candidate.code === area?.code}>
-                      ${candidate.name}
-                    </option>`,
-                )}
-              </select>
-              <span class="error" id="province-error">${errors.get("province") ?? ""}</span>
-            </label>`
+          ? html`<wt-combobox
+              class="field"
+              label=${t("venue.label.province")}
+              name="province"
+              required
+              search="auto"
+              placeholder=${selectProvince}
+              searchPlaceholder=${t("venue.combobox_search")}
+              noResultsLabel=${t("venue.combobox_no_results")}
+              data-test="province"
+              ?invalid=${errors.has("province")}
+              error=${errors.get("province") ?? ""}
+              .options=${pack.administrativeAreas.map((candidate) => ({
+                value: candidate.code,
+                label: candidate.name,
+              }))}
+              .value=${area?.code ?? ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onProvince(event)}
+              >${this.#help("province")}</wt-combobox
+            >`
           : this.#field(t("venue.label.province_region"), "province")
       }
       <p data-test="fiscalTerritory">${fiscalTerritory}</p>

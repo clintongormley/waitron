@@ -29,6 +29,8 @@ export const venueEn = {
   "venue.label.rectificative_series_code": "Rectificative series code",
 
   "venue.select_province": "Select province",
+  "venue.combobox_search": "Search",
+  "venue.combobox_no_results": "No results",
   "venue.fiscal_territory": "Fiscal territory: {territory}",
   "venue.time_zone": "Time zone: {zone}",
   "venue.invoice_locales_help_label": "Help with invoice languages",
@@ -211,6 +213,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.label.rectificative_series_code": "Código de la serie rectificativa",
 
   "venue.select_province": "Elige la provincia",
+  "venue.combobox_search": "Buscar",
+  "venue.combobox_no_results": "Sin resultados",
   "venue.fiscal_territory": "Territorio fiscal: {territory}",
   "venue.time_zone": "Zona horaria: {zone}",
   "venue.invoice_locales_help_label": "Ayuda sobre los idiomas de factura",
