@@ -335,7 +335,7 @@ describe("image-upload as a thumbnail", () => {
   it("offers no Remove in the library window when there is no photo of its own", async () => {
     for (const props of [{}, { inheritedImage: "parent.png" }]) {
       const { el } = await thumbnail(props);
-      await open(el);
+      expect(await open(el)).not.toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).toBeNull();
       cleanupWidgets();
     }

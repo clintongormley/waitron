@@ -29,6 +29,7 @@ import { categoryPath } from "./category-form.js";
 import { categoryField } from "./classification-fields.js";
 import {
   defaultLanguageHint,
+  namesLine,
   nonBlankNames,
   optionalTextFields,
   priceLabel,
@@ -832,16 +833,12 @@ export class ProductEditor extends LitElement {
     ></wt-combobox>`;
   }
 
-  /** Each language's text after its upper-case code, in the venue's language order, blanks left
-   * out. */
   private languagesLine(value: LocalizedText | null): string {
-    return this.locales
-      .filter((locale) => value?.[locale]?.trim())
-      .map((locale) => `${locale.toUpperCase()}: ${value![locale]!.trim()}`)
+    return namesLine(this.locales, value ?? {})
+      .map(({ label, value: text }) => `${label}: ${text}`)
       .join(SUMMARY_SEPARATOR);
   }
 
-  /** Name, with the photo beside it when the editor can reach the image library. */
   private renderName(fields: FieldContext) {
     const name = textField(
       fields,
