@@ -1480,7 +1480,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, and A178d (setup and the till) as #1016; A178e–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, A178d (setup and the till) as #1016, and A178e (the module screens, the table filter and the floor-plan zone name) as #TBD; A178f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1675,6 +1675,29 @@ kit lost `autocomplete="off"`, which `wt-textarea` does not offer; and the till'
 a product with no `unit` (`productUnit`, `apps/till/src/widgets/product-name.ts`) names itself in
 English only, so a Spanish till drawing such a product shows the unit's id — seen only with test
 products; whether the server ever sends a product without a unit was not checked.
+
+**A178e — DONE (#TBD).** Every field spec §9.5 lists for the module screens
+(`packages/*/src/dashboard/`) and §9.6 lists inside the primitives is drawn by a primitive: the
+native selects are `wt-combobox` (`search="auto"`), the adjustment report's two days are date
+`wt-input`s, and the venue operations screen's names and times are `wt-input` and its display
+order a `wt-number-stepper`. Also moved, though spec §9.5 did not list it: the "Starts in" dropdown
+in the venue operations Tills table, now a compact `wt-combobox` named "<till>: Starts in", whose
+empty first row, "The venue's counter zone", is also its placeholder. Each `wt-data-table` column
+filter is a compact `wt-combobox` (`hide-label`) whose "all" row is its placeholder; the table's
+search box stays as it was (A175). The floor plan's zone name is a `wt-input` that sends its change
+once, on Enter or on leaving the field, not at every key, because the dashboard and the till save
+every placement change they hear. On the adjustment report a backwards range puts its sentence
+under the first day and marks the last day without repeating it. SumUp's merchant dropdown is
+labelled "Merchant", with the sentence that was its label ("This key covers more than one
+merchant…") shown above it. The image library's sort dropdowns take a minimum width, so a short
+choice no longer cuts the label. `selectStyles` (`packages/ui/src/base-styles.ts`) is no longer used
+by any screen; A178f deletes it. **Existing tests changed** are the three approved kinds, each listed
+in the pull request. **Seen, for the owner:** the venue operations kitchen tab's two dropdown
+explanations ("Applies to new kitchen tickets and to reprints." and the release reminder's) are now
+each dropdown's `hint`, which a field that always holds a value never shows, so they are read only
+by screen readers while the two switches beside them keep visible lines; and the menu assignment
+editor's display order stepper cuts its label to "Displ…" ("Orde…" in Spanish), the approved §12 point 9
+behaviour.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
