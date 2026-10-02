@@ -26,10 +26,12 @@ describe("VENUE_SERVICE", () => {
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",
+      "resolveExtraMakers",
       "resolveMakers",
       "resolveNewOrderZone",
       "resolveZoneContext",
       "retargetOrderContext",
+      "routingAt",
       "stationStates",
     ]);
   });
