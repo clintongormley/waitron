@@ -118,8 +118,9 @@ export const workingOrders = table(
  * price without a re-price (grossLockedLines, @waitron/catalogue), at its class's rate on the day the
  * invoice is issued.
  *
- * `descriptions` is a locale→string map holding EXACTLY the venue's configured
- * locales, checked by trigger against locations.invoice_locales.
+ * `descriptions` is a locale→string map holding exactly the location's invoice locales as they
+ * were when the line was written or last moved, checked by trigger against
+ * locations.invoice_locales.
  */
 export const workingOrderLines = table(
   "working_order_lines",
@@ -134,7 +135,7 @@ export const workingOrderLines = table(
     // PICKED product.
     productId: id("product_id"),
     variantName: label("variant_name"),
-    // Holds EXACTLY the venue's configured invoice locales, checked by trigger like `descriptions`.
+    // Keyed like `descriptions`, and checked by trigger the same way.
     // Null = the variant has no customer name.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),
     variantKitchenName: label("variant_kitchen_name"),

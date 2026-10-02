@@ -29,7 +29,10 @@ export const TRANSITION_REFUSAL = "working order cannot make that transition";
  */
 export const OPEN_PARENT_REFUSAL = "lines may only be written while the order is open";
 
-/** `working_order_lines_check_locales_*`: `descriptions` is not exactly the venue's invoice locales. */
+/**
+ * `working_order_lines_check_locales_*`: `descriptions` is not exactly the venue's invoice locales,
+ * checked on insert and on an update that changes the map or moves the line.
+ */
 export const LOCALES_REFUSAL = "descriptions must carry exactly the venue locales";
 
 /** `working_order_lines_check_variant_locales_*`: the same, for the optional variant map. */
