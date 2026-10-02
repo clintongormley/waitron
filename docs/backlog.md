@@ -988,6 +988,17 @@ on it, opens the option's edit form, while the drag handle, the Default radio an
 doing their own thing. The extras list form (`extra-list-form.ts`) draws the same kind of table;
 check it and give it the same if its rows open an editor.
 
+**Clicking a product's row on the Products screen opens it (A205, owner 2026-10-02) — OPEN.** The
+owner: _"clicking on a product row should open the edit screen"_. The Products table
+(`apps/dashboard/src/widgets/product-list.ts`) gives `wt-data-table` no `rowClick`, so a product
+opens only from Edit in its row menu; the Modifiers, Units and Orders screens already open a row on
+a click (`wt-data-table`'s row activation). **Wanted:** a click on a product's row, or Enter on it,
+does what Edit in that row's menu does — a variant's row opens that variant, as its own Edit does.
+The drag grip, the dragging of a row onto a folder, the selection checkbox and the row menu keep
+doing their own thing, and a drag that ends where it started opens nothing. Read as: a click on a
+folder's row opens the folder, as its name does today — ask if folder rows were meant to stay as
+they are. LOOK at 1280 and 390, light and dark.
+
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — OPEN.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
 until one name is long enough to push it left: _"the drag handle column shouldn't auto-expand, so
