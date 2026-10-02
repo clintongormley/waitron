@@ -87,6 +87,15 @@ it("stores a category's name as one trimmed string", async () => {
   const renamed = await app((tx) => updateCategory(tx, created.id, { name: " Bar " }));
   expect(renamed.name).toBe("Bar");
 });
+it("a name-only update keeps a nested category's parent", async () => {
+  const { a, b } = await fixture();
+  await app((tx) => updateCategory(tx, b.id, { parentId: a.id }));
+  await app((tx) => updateCategory(tx, b.id, { name: "Beer" }));
+  expect(await app((tx) => readCategory(tx, b.id))).toMatchObject({
+    name: "Beer",
+    parentId: a.id,
+  });
+});
 it("refuses a blank category name", async () => {
   await seedTenant(suite.db);
   await expect(app((tx) => createCategory(tx, { name: "   " }))).rejects.toMatchObject({

@@ -893,6 +893,7 @@ it("a rename sends the name only, so renaming a category just dragged elsewhere 
   await toggleCategory(el, "d");
   const target = await nameCell(el, "folder:f");
   drag(await nameCell(el, "folder:b"), target);
+  // The click a released drag sends; the list swallows it, and would otherwise swallow the menu's.
   target.dispatchEvent(
     new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
   );
