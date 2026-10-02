@@ -626,8 +626,8 @@ export async function billlessSale(venue: OrderVenue): Promise<string> {
   `apps/server/src/orders-list.test.ts` it is now "refuses to cancel a bill whose credit notes
   already bring its invoice to nothing, leaving its row as it was". By reading only, not run: each
   of the other paths that abandon a bill refuses or skips a bill that is not open —
-  `apps/server/src/bill-actions.ts:197`, `apps/server/src/parties.ts:513` and `abandonHeldOrder` in
-  `apps/server/src/working-order.ts`.)_
+  `mergeCheckedBills` in `apps/server/src/bill-actions.ts`, `closeParty` in
+  `apps/server/src/parties.ts` and `abandonHeldOrder` in `apps/server/src/working-order.ts`.)_
 
 ```ts
 import { randomUUID } from "node:crypto";
