@@ -3,11 +3,16 @@ import type { LiveData, ObservedResource, ResourceQuery } from "./live-data.js";
 
 export class QueryController implements ReactiveController {
   #slots = new Map<string, () => void>();
+  #failing = new Set<string>();
+  #lastError: unknown = undefined;
 
+  /** `recovered` is called once every slot whose failure reached `error` has applied a value again,
+   * with the last error passed to `error`, so the view can clear the message it showed for it. */
   constructor(
     host: ReactiveControllerHost,
     private readonly data: () => LiveData | undefined,
     private readonly error: (error: unknown) => void,
+    private readonly recovered?: (error: unknown) => void,
   ) {
     host.addController(this);
   }
@@ -30,7 +35,11 @@ export class QueryController implements ReactiveController {
       };
       this.#slots.set(slot, release);
       const reject = (error: unknown): void => {
-        if (active) this.error(error);
+        if (active) {
+          this.#failing.add(slot);
+          this.#lastError = error;
+          this.error(error);
+        }
         if (initial && active) rejectInitial(error);
         else resolve();
         initial = false;
@@ -43,6 +52,8 @@ export class QueryController implements ReactiveController {
             reject(error);
             return;
           }
+          if (this.#failing.delete(slot) && this.#failing.size === 0)
+            this.recovered?.(this.#lastError);
         }
         initial = false;
         resolve();
@@ -66,10 +77,12 @@ export class QueryController implements ReactiveController {
   release(slot: string): void {
     this.#slots.get(slot)?.();
     this.#slots.delete(slot);
+    this.#failing.delete(slot);
   }
 
   hostDisconnected(): void {
     for (const release of this.#slots.values()) release();
     this.#slots.clear();
+    this.#failing.clear();
   }
 }

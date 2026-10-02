@@ -202,3 +202,158 @@ describe("query controller without a live-data session", () => {
     expect(error).not.toHaveBeenCalled();
   });
 });
+
+describe("query controller recovery", () => {
+  const outage = { code: "connection.failed" };
+  function failing(key: string) {
+    let down = true;
+    return {
+      query: {
+        key,
+        dependencies: [{ type: key }],
+        read: vi.fn(async () => {
+          if (down) throw outage;
+          return key;
+        }),
+      },
+      up: () => {
+        down = false;
+      },
+    };
+  }
+
+  it("tells the view once a failed read has applied a value again", async () => {
+    const data = new LiveData();
+    const order: string[] = [];
+    const recovered = vi.fn(() => order.push("recovered"));
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    const jobs = failing("jobs");
+    await expect(
+      controller.watch("jobs", jobs.query, (value) => {
+        order.push(`apply ${value}`);
+      }),
+    ).rejects.toEqual(outage);
+    expect(recovered).not.toHaveBeenCalled();
+    jobs.up();
+    data.refresh();
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledWith(outage));
+    expect(order).toEqual(["apply jobs", "recovered"]);
+    data.refresh();
+    await vi.waitFor(() => expect(order).toEqual(["apply jobs", "recovered", "apply jobs"]));
+    expect(recovered).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for every failed slot before telling the view", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    const jobs = failing("jobs");
+    const printers = failing("printers");
+    await expect(controller.watch("jobs", jobs.query, () => {})).rejects.toEqual(outage);
+    await expect(controller.watch("printers", printers.query, () => {})).rejects.toEqual(outage);
+    jobs.up();
+    data.refresh();
+    await vi.waitFor(() => expect(jobs.query.read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(printers.query.read).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+    expect(recovered).not.toHaveBeenCalled();
+    printers.up();
+    data.refresh();
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+  });
+
+  it("never tells the view about applies that followed no failure", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    const read = vi.fn(async () => 1);
+    await controller.watch("jobs", { key: "jobs", dependencies: [], read }, () => {});
+    data.refresh();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+    expect(recovered).not.toHaveBeenCalled();
+  });
+
+  it("counts a view's own apply failure, and recovers when a later apply succeeds", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const error = vi.fn();
+    const controller = new QueryController(host(), () => data, error, recovered);
+    const refused = new Error("apply refused");
+    let refuse = true;
+    await expect(
+      controller.watch("jobs", { key: "jobs", dependencies: [], read: async () => 1 }, () => {
+        if (refuse) throw refused;
+      }),
+    ).rejects.toBe(refused);
+    expect(error).toHaveBeenCalledWith(refused);
+    refuse = false;
+    data.refresh();
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledWith(refused));
+  });
+
+  it("recovers through a replacement watch of the same slot", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    const old = failing("jobs?status=failed");
+    await expect(controller.watch("jobs", old.query, () => {})).rejects.toEqual(outage);
+    await controller.watch(
+      "jobs",
+      { key: "jobs?status=all", dependencies: [], read: async () => 2 },
+      () => {},
+    );
+    expect(recovered).toHaveBeenCalledWith(outage);
+  });
+
+  it("forgets a released slot's failure, so the others' recovery is still reported", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    const jobs = failing("jobs");
+    const printers = failing("printers");
+    await expect(controller.watch("jobs", jobs.query, () => {})).rejects.toEqual(outage);
+    await expect(controller.watch("printers", printers.query, () => {})).rejects.toEqual(outage);
+    controller.release("jobs");
+    printers.up();
+    data.refresh();
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+  });
+
+  it("forgets every failure when the view disconnects", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const owner = host();
+    const controller = new QueryController(owner, () => data, vi.fn(), recovered);
+    const jobs = failing("jobs");
+    await expect(controller.watch("jobs", jobs.query, () => {})).rejects.toEqual(outage);
+    owner.disconnect();
+    const printers = failing("printers");
+    await expect(controller.watch("printers", printers.query, () => {})).rejects.toEqual(outage);
+    printers.up();
+    data.refresh();
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+  });
+
+  it("reports the most recent failure it showed the view", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    const first = { code: "connection.failed" };
+    const second = { code: "server.internal" };
+    let next: unknown = first;
+    const read = vi.fn(async () => {
+      if (next !== undefined) throw next;
+      return 1;
+    });
+    await expect(
+      controller.watch("jobs", { key: "jobs", dependencies: [], read }, () => {}),
+    ).rejects.toBe(first);
+    next = second;
+    data.refresh();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    next = undefined;
+    data.refresh();
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledWith(second));
+  });
+});
