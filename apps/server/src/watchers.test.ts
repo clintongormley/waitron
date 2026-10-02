@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { floorZones, kitchenStations, locations, printers, watcherPrinters } from "@waitron/db";
+import {
+  floorZones,
+  kitchenStations,
+  locations,
+  printers,
+  stationPrinters,
+  watcherPrinters,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createStation } from "./kitchen.js";
@@ -11,6 +18,7 @@ import {
   listWatchers,
   readWatcher,
   removeWatcher,
+  setPrinterWatcher,
   updateWatcher,
   watcherSees,
   type WatcherInput,
@@ -19,6 +27,96 @@ import {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 describe("watcher configuration", () => {
+  it("attaches, moves and detaches a printer without a station mapping", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const input: WatcherInput = {
+      name: "Pass",
+      everyStation: true,
+      stationIds: [],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: false,
+    };
+    const first = await inTx(v, (tx) => createWatcher(tx, v.cfg, input));
+    const second = await inTx(v, (tx) => createWatcher(tx, v.cfg, { ...input, name: "Runner" }));
+    const [printer] = await inTx(v, (tx) =>
+      tx
+        .insert(printers)
+        .values({
+          locationId: v.cfg.locationId,
+          name: "Watcher copy",
+          transport: "network_tcp",
+          host: "10.0.0.8",
+        })
+        .returning({ id: printers.id }),
+    );
+    await inTx(v, (tx) => setPrinterWatcher(tx, v.cfg, printer!.id, first.id));
+    expect((await inTx(v, (tx) => readWatcher(tx, v.cfg, first.id)))?.printerIds).toEqual([
+      printer!.id,
+    ]);
+    await inTx(v, (tx) => setPrinterWatcher(tx, v.cfg, printer!.id, second.id));
+    expect((await inTx(v, (tx) => readWatcher(tx, v.cfg, first.id)))?.printerIds).toEqual([]);
+    expect((await inTx(v, (tx) => readWatcher(tx, v.cfg, second.id)))?.printerIds).toEqual([
+      printer!.id,
+    ]);
+    await inTx(v, (tx) => setPrinterWatcher(tx, v.cfg, printer!.id, null));
+    expect((await inTx(v, (tx) => readWatcher(tx, v.cfg, second.id)))?.printerIds).toEqual([]);
+  });
+
+  it("refuses a station printer, switched-off printer and switched-off watcher", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const [station] = await inTx(v, (tx) =>
+      tx.select({ id: kitchenStations.id }).from(kitchenStations),
+    );
+    const { id: watcherId } = await inTx(v, (tx) =>
+      createWatcher(tx, v.cfg, {
+        name: "Pass",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const [printer] = await inTx(v, (tx) =>
+      tx
+        .insert(printers)
+        .values({
+          locationId: v.cfg.locationId,
+          name: "Watcher copy",
+          transport: "network_tcp",
+          host: "10.0.0.8",
+        })
+        .returning({ id: printers.id }),
+    );
+    await inTx(v, (tx) =>
+      tx.insert(stationPrinters).values({ stationId: station!.id, printerId: printer!.id }),
+    );
+    await expect(
+      inTx(v, (tx) => setPrinterWatcher(tx, v.cfg, printer!.id, watcherId)),
+    ).rejects.toMatchObject({ code: "printer.makes_and_watches", params: { id: printer!.id } });
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(watcherPrinters).where(eq(watcherPrinters.printerId, printer!.id)),
+      ),
+    ).toEqual([]);
+    await inTx(v, (tx) =>
+      tx.delete(stationPrinters).where(eq(stationPrinters.printerId, printer!.id)),
+    );
+    await inTx(v, (tx) =>
+      tx.update(printers).set({ active: false }).where(eq(printers.id, printer!.id)),
+    );
+    await expect(
+      inTx(v, (tx) => setPrinterWatcher(tx, v.cfg, printer!.id, watcherId)),
+    ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printer!.id } });
+    await inTx(v, (tx) =>
+      tx.update(printers).set({ active: true }).where(eq(printers.id, printer!.id)),
+    );
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, watcherId));
+    await expect(
+      inTx(v, (tx) => setPrinterWatcher(tx, v.cfg, printer!.id, watcherId)),
+    ).rejects.toMatchObject({ code: "watcher.not_found", params: { watcherId } });
+  });
   it("matches a dish only when its station and zone are followed", () => {
     const pass = {
       everyStation: false,

@@ -2,7 +2,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
+import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers, watcherPrinters } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { PaperWidth, Resolution } from "./layout.js";
@@ -97,7 +97,6 @@ export interface UpdatePrinterInput {
   port?: number | null;
   localKey?: string | null;
   pollId?: string | null;
-  ticketScope?: "station" | "order";
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   hasCashDrawer?: boolean;
@@ -112,7 +111,7 @@ export interface PrinterRow {
   port: number | null;
   localKey: string | null;
   pollId: string | null;
-  ticketScope: "station" | "order";
+  watcherId: string | null;
   paperWidth: PaperWidth;
   resolution: Resolution;
   hasCashDrawer: boolean;
@@ -182,12 +181,13 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       port: printers.port,
       localKey: printers.localKey,
       pollId: printers.pollId,
-      ticketScope: printers.ticketScope,
+      watcherId: watcherPrinters.watcherId,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
       hasCashDrawer: printers.hasCashDrawer,
       active: printers.active,
     })
     .from(printers)
+    .leftJoin(watcherPrinters, eq(watcherPrinters.printerId, printers.id))
     .orderBy(printers.name);
 }

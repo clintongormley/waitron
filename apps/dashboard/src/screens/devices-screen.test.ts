@@ -147,7 +147,7 @@ const printers: Printer[] = [
     port: 9100,
     localKey: null,
     pollId: null,
-    ticketScope: "station",
+    watcherId: null,
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,

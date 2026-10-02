@@ -17,7 +17,6 @@ import {
   printPaperWidth,
   printResolution,
   printers,
-  printTicketScope,
   printTransport,
   receiptPrintMode,
   tills,
@@ -72,6 +71,7 @@ import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
+import { setPrinterWatcher } from "./watchers.js";
 
 export interface PrintApiDeps {
   db: Database;
@@ -105,6 +105,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_full": 429,
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
+  "printer.makes_and_watches": 409,
+  "watcher.not_found": 404,
   "printer.probe_busy": 429,
   "printer.bluetooth_command_busy": 429,
   "printer.bluetooth_not_discovered": 409,
@@ -908,13 +910,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (localKey !== undefined) patch.localKey = localKey;
       const pollId = nullableOptionalString(body.pollId, "pollId");
       if (pollId !== undefined) patch.pollId = pollId;
-      if (body.ticketScope !== undefined) {
-        patch.ticketScope = requireEnum(
-          body.ticketScope,
-          "ticketScope",
-          printTicketScope.enumValues,
-        );
-      }
       if (body.paperWidth !== undefined) {
         patch.paperWidth = requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues);
       }
@@ -941,6 +936,21 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         }
         await updatePrinter(tx, deps.cfg, id, patch);
       });
+      return c.body(null, 204);
+    }),
+  );
+
+  app.put("/management-api/printers/:id/watcher", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrinterId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (body.watcherId !== null && typeof body.watcherId !== "string") {
+        throw new AppError("management.request_invalid", { field: "watcherId" });
+      }
+      await gated(sessionId, (tx) =>
+        setPrinterWatcher(tx, deps.cfg, id, body.watcherId as string | null),
+      );
       return c.body(null, 204);
     }),
   );

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  printers,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   locations,
@@ -336,7 +337,7 @@ describe("the link from a kitchen ticket to its bill and station", () => {
         { locationId: v.cfg.locationId },
         { name: "Pase", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
       );
-      await updatePrinter(tx, { locationId: v.cfg.locationId }, id, { ticketScope: "order" });
+      await tx.update(printers).set({ ticketScope: "order" }).where(eq(printers.id, id));
       await attachPrinterToStation(tx, { stationId: v.cocina, printerId: id });
       await attachPrinterToStation(tx, { stationId: v.barra, printerId: id });
       return id;
@@ -2059,7 +2060,7 @@ async function passPrinter(v: Venue, stations = [v.cocina, v.barra]): Promise<st
       { locationId: v.cfg.locationId },
       { name: "Pase", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
-    await updatePrinter(tx, { locationId: v.cfg.locationId }, id, { ticketScope: "order" });
+    await tx.update(printers).set({ ticketScope: "order" }).where(eq(printers.id, id));
     for (const stationId of stations)
       await attachPrinterToStation(tx, { stationId, printerId: id });
     return id;

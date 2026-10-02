@@ -3,6 +3,7 @@ import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  printers,
   diningTables,
   kitchenPrintJobLines,
   kitchenPrintJobs,
@@ -415,7 +416,8 @@ async function makePrinter(
     transport: "cloud_poll",
     pollId: `poll-${randomUUID()}`,
   });
-  if (scope === "order") await updatePrinter(tx, printCfg(cfg), id, { ticketScope: "order" });
+  if (scope === "order")
+    await tx.update(printers).set({ ticketScope: "order" }).where(eq(printers.id, id));
   return id;
 }
 

@@ -38,7 +38,7 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "units",
   ],
-  listPrinters: ["printers", "print_jobs"],
+  listPrinters: ["printers", "print_jobs", "watcher_printers"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
   listTills: ["tills"],

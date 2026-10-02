@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { locations, tills, workingOrderLines, withTransaction } from "@waitron/db";
+import {
+  locations,
+  printers as printerRows,
+  tills,
+  workingOrderLines,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -21,7 +27,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
 import { createStation } from "../kitchen.js";
-import { createPrinter, updatePrinter } from "@waitron/printing";
+import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
 import { setClaim } from "@waitron/venue-service";
 import { createTable } from "../tables.js";
@@ -114,7 +120,7 @@ export async function setupSplitExtrasVenue() {
       },
     );
     printers.pass = pass.id;
-    await updatePrinter(tx, { locationId: cfg.locationId }, pass.id, { ticketScope: "order" });
+    await tx.update(printerRows).set({ ticketScope: "order" }).where(eq(printerRows.id, pass.id));
     await attachPrinterToStation(tx, { stationId: stations.grill, printerId: pass.id });
 
     const food = await createCategory(tx, { name: "Food" });

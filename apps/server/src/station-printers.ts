@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { kitchenStations, printers, stationPrinters } from "@waitron/db";
+import { kitchenStations, printers, stationPrinters, watcherPrinters } from "@waitron/db";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { PrintConfig } from "@waitron/printing";
@@ -35,6 +35,13 @@ export async function attachPrinterToStation(
     .from(printers)
     .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
+
+  const [watcher] = await tx
+    .select({ printerId: watcherPrinters.printerId })
+    .from(watcherPrinters)
+    .where(eq(watcherPrinters.printerId, printerId))
+    .limit(1);
+  if (watcher) throw new AppError("printer.makes_and_watches", { id: printerId });
 
   await tx.insert(stationPrinters).values({ stationId, printerId }).onConflictDoNothing();
 }

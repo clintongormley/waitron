@@ -40,6 +40,8 @@ declare module "@waitron/shared" {
     "printer.bluetooth_not_discovered": { address: string };
     /** Forget names an address the named print agent does not currently report as paired. */
     "printer.bluetooth_not_paired": { address: string };
+    /** One printer cannot print both station tickets and watcher copies. */
+    "printer.makes_and_watches": { id: string };
     "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;

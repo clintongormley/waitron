@@ -6,6 +6,8 @@ import {
   isRefusal,
   locations,
   printers,
+  watchers,
+  watcherPrinters,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -75,7 +77,6 @@ async function fullRow(printerId: string): Promise<{
   name: string;
   host: string | null;
   local_key: string | null;
-  ticket_scope: string;
   active: boolean;
 }> {
   // Read THROUGH the table definition: `active` is the shared `flag` helper, an integer column with
@@ -86,7 +87,6 @@ async function fullRow(printerId: string): Promise<{
       name: printers.name,
       host: printers.host,
       local_key: printers.localKey,
-      ticket_scope: printers.ticketScope,
       active: printers.active,
     })
     .from(printers)
@@ -95,6 +95,25 @@ async function fullRow(printerId: string): Promise<{
 }
 
 describe("createPrinter", () => {
+  it("lists the attached watcher id and null for an unattached printer", async () => {
+    const cfg = await setup();
+    const attached = await seedPrinter(cfg, "Pass copy");
+    const unattached = await seedPrinter(cfg, "Kitchen");
+    const [watcher] = await asTx(cfg, (tx) =>
+      tx
+        .insert(watchers)
+        .values({ locationId: cfg.locationId, name: "Pass", everyStation: true, everyZone: true })
+        .returning({ id: watchers.id }),
+    );
+    await asTx(cfg, (tx) =>
+      tx.insert(watcherPrinters).values({ printerId: attached, watcherId: watcher!.id }),
+    );
+    const listed = await asTx(cfg, (tx) => listPrinters(tx, cfg));
+    expect(listed.find((printer) => printer.id === attached)).toMatchObject({
+      watcherId: watcher!.id,
+    });
+    expect(listed.find((printer) => printer.id === unattached)).toMatchObject({ watcherId: null });
+  });
   it("inserts a network_tcp printer; an omitted port defaults to 9100", async () => {
     const cfg = await setup();
     // port deliberately OMITTED: the stored port must be the column default 9100, not NULL.
@@ -201,14 +220,12 @@ describe("updatePrinter", () => {
         host: "10.0.0.20",
         port: 9200,
         pollId: "poll-extra",
-        ticketScope: "order",
         active: false,
       }),
     );
     const row = await fullRow(id);
     expect(row.name).toBe("Kitchen 2");
     expect(row.host).toBe("10.0.0.20");
-    expect(row.ticket_scope).toBe("order");
     expect(row.active).toBe(false);
     const { rows } = await suite.db.execute<{ port: number; poll_id: string | null }>(
       sql`select port, poll_id from printers where id = ${id}`,

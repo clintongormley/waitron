@@ -10,6 +10,7 @@ import type {
   Printer,
   Station,
   StationPrinter,
+  Watcher,
   Till,
 } from "../api/client.js";
 import { PrintingRulesScreen } from "./printing-rules-screen.js";
@@ -24,7 +25,7 @@ const printers: Printer[] = [
     port: 9100,
     localKey: null,
     pollId: null,
-    ticketScope: "station",
+    watcherId: null,
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
@@ -41,7 +42,7 @@ const printers: Printer[] = [
     port: null,
     localKey: null,
     pollId: "poll-1",
-    ticketScope: "station",
+    watcherId: null,
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
@@ -76,6 +77,32 @@ const stations: Station[] = [
     forgottenAfterMinutes: 15,
   },
 ];
+const watchers: Watcher[] = [
+  {
+    id: "w1",
+    name: "Pass",
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    displayOrder: 0,
+    active: true,
+    printerIds: [],
+  },
+  {
+    id: "w2",
+    name: "Terrace",
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: false,
+    displayOrder: 1,
+    active: true,
+    printerIds: [],
+  },
+];
 
 const tills: Till[] = [
   { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1", opensDrawer: true },
@@ -88,6 +115,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinters: vi.fn().mockResolvedValue(printers),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     listStations: vi.fn().mockResolvedValue(stations),
+    listWatchers: vi.fn().mockResolvedValue(watchers),
+    setPrinterWatcher: vi.fn().mockResolvedValue(undefined),
     listPrinterStations: vi.fn().mockResolvedValue([] as StationPrinter[]),
     attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
     detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
@@ -497,18 +526,66 @@ describe("printing rules", () => {
     expect(q(el, "[data-test=print-mode-unknown-loc-1]")).toBeTruthy();
     expect(q(el, "[data-test=drawer-policy-unknown-loc-1]")).toBeTruthy();
   });
-  it("saves ticket grouping independently of the printer's connection settings", async () => {
-    const api = stubApi();
+  it("offers watchers and saves a selected watcher", async () => {
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([{ ...printers[0], watcherId: "w1" }]),
+    });
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api,
     });
     await flush(el);
-    toggleSwitch(el, "[data-test=printer-ticket-scope-p1]", true);
+    const select = q(el, "select[name=watcherId]") as HTMLSelectElement;
+    expect(q(el, "[name=ticketScope]")).toBeNull();
+    expect([...select.options].map((option) => [option.value, option.textContent?.trim()])).toEqual(
+      [
+        ["", t("printers.watcher_no")],
+        ["w1", "Pass"],
+        ["w2", "Terrace"],
+      ],
+    );
+    expect(select.value).toBe("w1");
+    select.value = "w2";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { ticketScope: "order" });
-    toggleSwitch(el, "[data-test=printer-ticket-scope-p1]", false);
+    expect(api.setPrinterWatcher).toHaveBeenCalledWith("p1", "w2");
+    expect(q(el, "[data-test=station-toggle-p1-s1]")!.hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.textContent).toContain(t("printers.watcher_station_disabled"));
+  });
+  it("keeps the watcher picker inside a phone-width printer card", async () => {
+    const { host, el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api: stubApi(),
+    });
+    host.style.width = "320px";
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenLastCalledWith("p1", { ticketScope: "station" });
+    const select = q(el, "select[name=watcherId]")!;
+    expect(select.getBoundingClientRect().right).toBeLessThanOrEqual(
+      el.getBoundingClientRect().right,
+    );
+  });
+  it("shows a watcher attachment refusal inside its printer card and restores the stored selection", async () => {
+    let attached = true;
+    const api = stubApi({
+      setPrinterWatcher: vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" }),
+      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
+        printerId === "p1" && attached ? [{ stationId: "s1", printerId: "p1" }] : [],
+      ),
+      detachPrinterFromStation: vi.fn(async () => {
+        attached = false;
+      }),
+    });
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+    const select = q(el, "select[name=watcherId]") as HTMLSelectElement;
+    select.value = "w1";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush(el);
+    expect(select.value).toBe("");
+    expect(select.closest("wt-card")!.textContent).toContain(t("printers.watcher_conflict"));
+    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", false);
+    await flush(el);
+    expect(select.closest("wt-card")!.textContent).not.toContain(t("printers.watcher_conflict"));
   });
   it("reports loading failures", async () => {
     const api = stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "server.internal" }) });
@@ -597,19 +674,17 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
   );
 });
 
-it("uses named shared switches for ticket scope and station routing", async () => {
+it("uses a named watcher select and named shared switches for station routing", async () => {
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
     api: stubApi(),
   });
   await flush(el);
-  for (const [selector, name] of [
-    ["printer-ticket-scope-p1", "ticketScope"],
-    ["station-toggle-p1-s1", "stationIds"],
-  ]) {
+  for (const [selector, name] of [["station-toggle-p1-s1", "stationIds"]]) {
     const control = q(el, `[data-test="${selector}"]`)!;
     expect(control.tagName).toBe("WT-SWITCH");
     expect(control.shadowRoot!.querySelector("input")!.name).toBe(name);
   }
+  expect((q(el, "select[name=watcherId]") as HTMLSelectElement).name).toBe("watcherId");
 });
 
 it("refreshes displayed printers when their data changes elsewhere", async () => {

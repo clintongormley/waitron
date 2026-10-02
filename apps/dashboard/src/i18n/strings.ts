@@ -886,7 +886,12 @@ export const en = {
   "printers.port": "Port",
   "printers.local_key": "Device ID",
   "printers.poll_id": "Poll ID",
-  "printers.ticket_scope": "One ticket per order",
+  "printers.watcher_copies": "Prints a watcher's copies",
+  "printers.watcher_no": "No: prints the tickets of the stations below",
+  "printers.watcher_station_disabled":
+    "A printer that prints a watcher's copies prints no station tickets.",
+  "printers.watcher_conflict":
+    "This printer prints station tickets. Turn its stations off first, or it would print some dishes twice.",
   "printers.active": "Active",
   "printers.paper_width": "Paper width",
   "printers.paper_width_58": "58 mm",
@@ -2940,7 +2945,12 @@ export const es: Record<StringKey, string> = {
   "printers.port": "Puerto",
   "printers.local_key": "ID del dispositivo",
   "printers.poll_id": "ID de sondeo",
-  "printers.ticket_scope": "Un ticket por pedido",
+  "printers.watcher_copies": "Imprime las copias de un punto de seguimiento",
+  "printers.watcher_no": "No: imprime las comandas de las estaciones de abajo",
+  "printers.watcher_station_disabled":
+    "Una impresora que imprime las copias de un punto de seguimiento no imprime comandas de estación.",
+  "printers.watcher_conflict":
+    "Esta impresora imprime comandas de estación. Desactiva primero sus estaciones, o imprimiría algunos platos dos veces.",
   "printers.active": "Activo",
   "printers.paper_width": "Ancho del papel",
   "printers.paper_width_58": "58 mm",

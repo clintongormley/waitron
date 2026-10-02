@@ -4,6 +4,8 @@ import { AppError } from "@waitron/shared";
 import {
   floorZones,
   isUniqueViolation,
+  printers,
+  stationPrinters,
   watchers,
   watcherPrinters,
   watcherStations,
@@ -218,4 +220,49 @@ export async function readWatcher(
     .from(watchers)
     .where(and(eq(watchers.id, watcherId), eq(watchers.locationId, cfg.locationId)));
   return (await assemble(tx, rows))[0] ?? null;
+}
+
+/** A printer has one watcher, or station tickets, never both. */
+export async function setPrinterWatcher(
+  tx: Transaction,
+  cfg: TillConfig,
+  printerId: string,
+  watcherId: string | null,
+): Promise<void> {
+  const [printer] = await tx
+    .select({ id: printers.id })
+    .from(printers)
+    .where(
+      and(
+        eq(printers.id, printerId),
+        eq(printers.locationId, cfg.locationId),
+        eq(printers.active, true),
+      ),
+    );
+  if (!printer) throw new AppError("printer.not_found", { id: printerId });
+  if (watcherId === null) {
+    await tx.delete(watcherPrinters).where(eq(watcherPrinters.printerId, printerId));
+    return;
+  }
+  const [watcher] = await tx
+    .select({ id: watchers.id })
+    .from(watchers)
+    .where(
+      and(
+        eq(watchers.id, watcherId),
+        eq(watchers.locationId, cfg.locationId),
+        eq(watchers.active, true),
+      ),
+    );
+  if (!watcher) throw new AppError("watcher.not_found", { watcherId });
+  const [station] = await tx
+    .select({ stationId: stationPrinters.stationId })
+    .from(stationPrinters)
+    .where(eq(stationPrinters.printerId, printerId))
+    .limit(1);
+  if (station) throw new AppError("printer.makes_and_watches", { id: printerId });
+  await tx.insert(watcherPrinters).values({ printerId, watcherId }).onConflictDoUpdate({
+    target: watcherPrinters.printerId,
+    set: { watcherId },
+  });
 }

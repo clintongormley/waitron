@@ -36,7 +36,7 @@ import {
   updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { createPrinter, updatePrinter } from "@waitron/printing";
+import { createPrinter } from "@waitron/printing";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -4270,7 +4270,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           { locationId: v.cfg.locationId },
           { name: "Pase", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
         );
-        await updatePrinter(tx, { locationId: v.cfg.locationId }, id, { ticketScope: "order" });
+        await tx.update(printers).set({ ticketScope: "order" }).where(eq(printers.id, id));
         await attachPrinterToStation(tx, { stationId: v.stationId, printerId: id });
         return id;
       });

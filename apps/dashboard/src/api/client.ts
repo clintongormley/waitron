@@ -751,8 +751,6 @@ export interface PurchaseInvoicePatch {
 
 export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
 
-export type PrintTicketScope = "station" | "order";
-
 export type PrintPaperWidth = "58mm" | "80mm";
 export type PrintResolution = "180dpi" | "203dpi";
 
@@ -780,7 +778,7 @@ export interface Printer {
   port: number | null;
   localKey: string | null;
   pollId: string | null;
-  ticketScope: PrintTicketScope;
+  watcherId: string | null;
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
@@ -845,7 +843,6 @@ export interface PrinterPatch {
   port?: number | null;
   localKey?: string | null;
   pollId?: string | null;
-  ticketScope?: PrintTicketScope;
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
@@ -2576,6 +2573,12 @@ export class DashboardApi {
 
   updatePrinter(id: string, patch: PrinterPatch): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}`, "PATCH", patch);
+  }
+
+  setPrinterWatcher(printerId: string, watcherId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/printers/${printerId}/watcher`, "PUT", {
+      watcherId,
+    });
   }
 
   deactivatePrinter(id: string): Promise<void> {
