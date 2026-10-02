@@ -879,7 +879,7 @@ dashboard banner, beside the language chooser (A187), shown only in a demo, to t
 done page uses.
 
 **The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — DONE
-(#PR).** On every sign-in step after the email, on the passkey offer after sign-in, and on the
+(#1048).** On every sign-in step after the email, on the passkey offer after sign-in, and on the
 reset and account-setup page, the chosen email is a read-only `wt-input` labelled "Email" with the
 address as its value: the same filled box as the other fields, so its text lines up with the
 password field's and the new password's. "Use another account" sits in its `end` slot at the box's trailing end, except on
