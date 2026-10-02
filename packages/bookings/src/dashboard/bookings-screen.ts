@@ -355,8 +355,8 @@ export class BookingsScreen extends LitElement {
                 data-test=${`seat-table-${b.id}`}
                 label=${t("booking.table")}
                 search="auto"
-                searchPlaceholder=${t("booking.search")}
-                noResultsLabel=${t("booking.no_results")}
+                searchPlaceholder=${t("booking.combobox_search")}
+                noResultsLabel=${t("booking.combobox_no_results")}
                 .options=${this.tables.map((table) => ({ value: table.id, label: table.label }))}
                 .value=${this.seatTableId}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => {

@@ -177,6 +177,29 @@ async function type(el: VenueOperationsScreen, name: string, value: string) {
   control.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await settle(el);
 }
+/** Opens a dropdown's list and clicks the row it already shows, as a person can, and returns
+ * how many `wt-change` events the dropdown sent. */
+async function clickChosenRow(box: HTMLElement): Promise<number> {
+  const sent = vi.fn();
+  box.addEventListener("wt-change", sent);
+  await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  const row = box.shadowRoot!.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
+  expect(row).not.toBeNull();
+  await userEvent.click(row!);
+  box.removeEventListener("wt-change", sent);
+  return sent.mock.calls.length;
+}
+/** How many `wt-change` events reach the document while `act` runs. */
+async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
+  const heard = vi.fn();
+  document.addEventListener("wt-change", heard);
+  try {
+    await act();
+  } finally {
+    document.removeEventListener("wt-change", heard);
+  }
+  return heard.mock.calls.length;
+}
 
 describe("venue operations screen", () => {
   it("puts each tab's available Add actions beside the tablist", async () => {
@@ -218,7 +241,10 @@ describe("venue operations screen", () => {
       deviceZones: [],
     };
     const api = {
-      load: vi.fn().mockResolvedValue(view),
+      load: vi
+        .fn()
+        .mockResolvedValueOnce(view)
+        .mockResolvedValue({ ...view, deviceZones: [{ deviceId: "t1", zoneId: "z1" }] }),
       setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
       clearDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
@@ -231,6 +257,7 @@ describe("venue operations screen", () => {
       'wt-combobox[label="Front till: Starts in"]',
     )!;
     expect(selector).not.toBeNull();
+    expect(selector.getAttribute("name")).toBe("till-t1-starts-in");
     expect(selector.options[0]!.label).toBe("The venue's counter zone");
     await chooseOption(selector, "z1");
     await settle(el);
@@ -289,6 +316,42 @@ describe("venue operations screen", () => {
     expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
     expect(selector.value).toBe("z1");
     expect(pageAlert(el)).toContain("could not be saved");
+  });
+
+  // Fails if choosing the zone a till already starts in saves it again.
+  it("saves nothing when the starting zone already shown is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
+      }),
+      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+      clearDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    expect(await clickChosenRow(selector)).toBe(1);
+    await settle(el);
+    expect(api.setDeviceDefaultZone).not.toHaveBeenCalled();
+    expect(api.clearDeviceDefaultZone).not.toHaveBeenCalled();
+    expect(api.load).toHaveBeenCalledTimes(1);
+    expect(selector.value).toBe("z1");
+  });
+
+  it("keeps a starting zone's change inside the screen", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [],
+      }),
+      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    expect(await changesHeardOutside(() => chooseOption(selector, "z1"))).toBe(0);
   });
 
   it.each(["devices", "device_zone_defaults"] as const)(
@@ -1715,6 +1778,29 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
     ).toBe("true");
   });
 
+  // Fails if choosing the grouping already stored saves it again.
+  it("saves nothing when the grouping already shown is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveKitchenTicketGrouping: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "kitchen");
+    expect(await clickChosenRow(groupingSelect(el))).toBe(1);
+    await settle(el);
+    expect(api.saveKitchenTicketGrouping).not.toHaveBeenCalled();
+    expect(api.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the grouping's change inside the screen", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      saveKitchenTicketGrouping: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "kitchen");
+    expect(await changesHeardOutside(() => choose(el, "separate"))).toBe(0);
+  });
+
   // Fails if the Spanish catalogue loses the label or a choice.
   it("reads in Spanish", async () => {
     setLocale("es");
@@ -1949,6 +2035,42 @@ describe("the setting for the reminder to fire the next group", () => {
     ).toBe("true");
   });
 
+  // Fails if choosing the reminder already stored saves it again.
+  it("saves nothing when the reminder already shown is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "kitchen");
+    expect(await clickChosenRow(reminderSelect(el))).toBe(1);
+    await settle(el);
+    expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
+    expect(api.load).toHaveBeenCalledTimes(1);
+  });
+
+  // Fails if Off already stored is saved again: a blank choice must still compare equal to none.
+  it("saves nothing when Off is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(stored(null)),
+      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "kitchen");
+    expect(await clickChosenRow(reminderSelect(el))).toBe(1);
+    await settle(el);
+    expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
+  });
+
+  it("keeps the reminder's change inside the screen", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "kitchen");
+    expect(await changesHeardOutside(() => choose(el, "5"))).toBe(0);
+  });
+
   // Fails if the Spanish catalogue loses the label or a choice.
   it("reads in Spanish", async () => {
     setLocale("es");
@@ -2041,8 +2163,8 @@ describe("the venue screen's fields are the shared field components", () => {
     });
   });
 
-  // Fails if a dropdown given no value stops starting on its first choice, as the native select
-  // did, or the times stop being read from the shared time fields.
+  // Fails if a dropdown given no value stops starting on its first choice, or the times stop
+  // being read from the shared time fields.
   it("opens new hours on the first department and Sunday, and saves the times typed", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),

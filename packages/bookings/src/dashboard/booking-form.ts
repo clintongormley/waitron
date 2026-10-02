@@ -203,8 +203,8 @@ export class BookingForm extends LitElement {
           label=${t("booking.table")}
           placeholder=${t("booking.table_none")}
           search="auto"
-          searchPlaceholder=${t("booking.search")}
-          noResultsLabel=${t("booking.no_results")}
+          searchPlaceholder=${t("booking.combobox_search")}
+          noResultsLabel=${t("booking.combobox_no_results")}
           .options=${[
             { value: "", label: t("booking.table_none") },
             ...this.tables.map((table) => ({ value: table.id, label: table.label })),

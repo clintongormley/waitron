@@ -369,6 +369,57 @@ it("keeps a sort or order change inside the library", async () => {
   expect(heard).not.toHaveBeenCalled();
 });
 
+/** Opens a dropdown's list and clicks the row it already shows, as a person can, and returns
+ * how many `wt-change` events the dropdown sent. */
+async function clickChosenRow(box: HTMLElement): Promise<number> {
+  const sent = vi.fn();
+  box.addEventListener("wt-change", sent);
+  // The field's label lies over the trigger's centre and hands its click on to the trigger.
+  await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!, { force: true });
+  const row = box.shadowRoot!.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
+  expect(row).not.toBeNull();
+  await userEvent.click(row!);
+  box.removeEventListener("wt-change", sent);
+  return sent.mock.calls.length;
+}
+
+it("asks the server nothing, and keeps the order, when the sort already shown is chosen again", async () => {
+  const client = await mount();
+  const sort = el.shadowRoot!.querySelector<SortField>("wt-combobox[name=image-sort]")!;
+  await chooseOption(sort, "date");
+  await el.updateComplete;
+  const order = el.shadowRoot!.querySelector<SortField>("wt-combobox[name=image-direction]")!;
+  await chooseOption(order, "asc");
+  await vi.waitFor(() =>
+    expect(client.listImages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: "date", direction: "asc" }),
+    ),
+  );
+  const before = client.listImages.mock.calls.length;
+  expect(await clickChosenRow(sort)).toBe(1);
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(client.listImages).toHaveBeenCalledTimes(before);
+  expect(order.value).toBe("asc");
+});
+
+it("asks the server nothing when the order already shown is chosen again", async () => {
+  const client = await mount();
+  await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=image-sort]")!, "date");
+  await el.updateComplete;
+  await vi.waitFor(() =>
+    expect(client.listImages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: "date", direction: "desc" }),
+    ),
+  );
+  const before = client.listImages.mock.calls.length;
+  const order = el.shadowRoot!.querySelector<SortField>("wt-combobox[name=image-direction]")!;
+  expect(await clickChosenRow(order)).toBe(1);
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(client.listImages).toHaveBeenCalledTimes(before);
+});
+
 it("sends search and sort to the server", async () => {
   const client = await mount();
   field("image-search", "summer bread");

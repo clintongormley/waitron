@@ -182,8 +182,8 @@ const en = {
   "venue.print_held_work": "Print held groups in advance",
   "venue.print_held_work_hint":
     "A held group prints straight away on a kitchen ticket marked HOLD. Adding, moving, removing or changing its dishes then prints a HOLD correction, and firing it prints its ticket marked FIRE. A group held before this is turned on prints when it is fired, as before. A group already printed marked HOLD is still fired marked FIRE after this is turned off.",
-  "venue.search": "Search",
-  "venue.no_results": "No results",
+  "venue.combobox_search": "Search",
+  "venue.combobox_no_results": "No results",
   "venue.decrease": "Decrease {label}",
   "venue.increase": "Increase {label}",
 } as const;
@@ -371,8 +371,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.print_held_work": "Imprimir por adelantado los grupos en espera",
   "venue.print_held_work_hint":
     "Un grupo en espera se imprime en el momento en una comanda de cocina marcada HOLD. Añadir, mover, quitar o cambiar sus platos imprime después una corrección HOLD, y al marcharlo se imprime su comanda marcada FIRE. Un grupo que ya estaba en espera antes de activarlo se imprime al marcharlo, como hasta ahora. Un grupo ya impreso como HOLD se sigue marchando marcado FIRE aunque se desactive.",
-  "venue.search": "Buscar",
-  "venue.no_results": "Sin resultados",
+  "venue.combobox_search": "Buscar",
+  "venue.combobox_no_results": "Sin resultados",
   "venue.decrease": "Reducir {label}",
   "venue.increase": "Aumentar {label}",
 };

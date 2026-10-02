@@ -508,6 +508,7 @@ export class ImageLibrary extends LitElement {
           .value=${this.sort}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (event.detail.value === this.sort) return;
             this.sort = event.detail.value as ImageQuery["sort"];
             this.direction = this.sort === "name" ? "asc" : "desc";
             this.#filter();
@@ -532,6 +533,7 @@ export class ImageLibrary extends LitElement {
                 .value=${this.direction}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
                   event.stopPropagation();
+                  if (event.detail.value === this.direction) return;
                   this.direction = event.detail.value as "asc" | "desc";
                   this.#filter();
                 }}

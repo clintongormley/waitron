@@ -133,7 +133,7 @@ describe("sumup-connect-form", () => {
     await connect(el);
 
     // The picker is shown, no error message yet.
-    const select = q(el, "[data-test=merchant]") as HTMLSelectElement | null;
+    const select = q(el, "[data-test=merchant]") as MerchantField | null;
     expect(select).not.toBeNull();
     expect(await bottomOf(el)).toBe("");
     expect(fieldError(el, "merchant")).toBe("");
@@ -382,7 +382,7 @@ describe("sumup-connect-form", () => {
 
     await setInput(el, "api-key", "spans_two_merchants");
     await connect(el);
-    const select = q(el, "[data-test=merchant]") as HTMLSelectElement;
+    const select = q(el, "[data-test=merchant]") as MerchantField;
     expect(select.required).toBe(true);
     expect(merchantTrigger(el).getAttribute("aria-invalid")).toBe("false");
 

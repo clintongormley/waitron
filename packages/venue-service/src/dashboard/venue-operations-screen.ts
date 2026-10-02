@@ -84,7 +84,6 @@ export class VenueOperationsScreen extends LitElement {
         width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
       }
-      .required,
       .field-error,
       [role="alert"] {
         color: var(--wt-color-danger);
@@ -347,8 +346,8 @@ export class VenueOperationsScreen extends LitElement {
       .increaseLabel=${(text: string) => t("venue.increase").replace("{label}", text)}
     ></wt-number-stepper>`;
   }
-  /** A value the choices do not hold starts on the first choice, as a native select would; the
-   * save reads what is shown. An empty first choice is also the text shown while it is chosen. */
+  /** A value the choices do not hold starts on the first choice; the save reads what is shown. An
+   * empty first choice is also the text shown while it is chosen. */
   #select(
     name: string,
     label: string,
@@ -364,8 +363,8 @@ export class VenueOperationsScreen extends LitElement {
       label=${label}
       search="auto"
       placeholder=${first?.id === "" ? first.name : ""}
-      searchPlaceholder=${t("venue.search")}
-      noResultsLabel=${t("venue.no_results")}
+      searchPlaceholder=${t("venue.combobox_search")}
+      noResultsLabel=${t("venue.combobox_no_results")}
       .options=${choices.map((choice) => ({ value: choice.id, label: choice.name }))}
       .value=${shown}
       ?required=${required}
@@ -695,29 +694,34 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "startsIn",
             label: t("venue.starts_in"),
-            cell: (device) =>
-              html`<wt-combobox
+            cell: (device) => {
+              const stored = model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId;
+              return html`<wt-combobox
+                name=${`till-${device.id}-starts-in`}
                 label=${`${device.label}: ${t("venue.starts_in")}`}
                 hide-label
                 search="auto"
                 placeholder=${t("venue.counter_zone")}
-                searchPlaceholder=${t("venue.search")}
-                noResultsLabel=${t("venue.no_results")}
+                searchPlaceholder=${t("venue.combobox_search")}
+                noResultsLabel=${t("venue.combobox_no_results")}
                 .options=${[
                   { value: "", label: t("venue.counter_zone") },
                   ...model.zones.map((zone) => ({ value: zone.id, label: zone.name })),
                 ]}
-                .value=${live(model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId ?? "")}
+                .value=${live(stored ?? "")}
                 ?disabled=${this.busy}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
                   const zoneId = event.detail.value;
+                  if (zoneId === (stored ?? "")) return;
                   void this.#save(() =>
                     zoneId
                       ? this.api.setDeviceDefaultZone(device.id, zoneId)
                       : this.api.clearDeviceDefaultZone(device.id),
                   );
                 }}
-              ></wt-combobox>`,
+              ></wt-combobox>`;
+            },
           },
         ],
         (device) => device.id,
@@ -823,6 +827,7 @@ export class VenueOperationsScreen extends LitElement {
       stored === null || REMINDER_MINUTES.includes(stored)
         ? REMINDER_MINUTES
         : [...REMINDER_MINUTES, stored].sort((a, b) => a - b);
+    const shown = stored === null ? "" : String(stored);
     return html`<wt-combobox
       class="setting"
       name="releaseReminderMinutes"
@@ -830,8 +835,8 @@ export class VenueOperationsScreen extends LitElement {
       hint=${t("venue.release_reminder_hint")}
       search="auto"
       placeholder=${t("venue.release_reminder.off")}
-      searchPlaceholder=${t("venue.search")}
-      noResultsLabel=${t("venue.no_results")}
+      searchPlaceholder=${t("venue.combobox_search")}
+      noResultsLabel=${t("venue.combobox_no_results")}
       .options=${[
         { value: "", label: t("venue.release_reminder.off") },
         ...choices.map((minutes) => ({
@@ -839,11 +844,13 @@ export class VenueOperationsScreen extends LitElement {
           label: t("venue.release_reminder.minutes").replace("{n}", String(minutes)),
         })),
       ]}
-      .value=${live(stored === null ? "" : String(stored))}
+      .value=${live(shown)}
       ?disabled=${this.busy}
       error=${this.fieldErrors.releaseReminderMinutes ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
         const value = event.detail.value;
+        if (value === shown) return;
         void this.#saveReleaseReminderMinutes(value === "" ? null : Number(value));
       }}
     ></wt-combobox>`;
@@ -856,8 +863,8 @@ export class VenueOperationsScreen extends LitElement {
       label=${t("venue.kitchen_ticket_grouping")}
       hint=${t("venue.kitchen_ticket_grouping_hint")}
       search="auto"
-      searchPlaceholder=${t("venue.search")}
-      noResultsLabel=${t("venue.no_results")}
+      searchPlaceholder=${t("venue.combobox_search")}
+      noResultsLabel=${t("venue.combobox_no_results")}
       .options=${GROUPINGS.map((choice) => ({
         value: choice,
         label: t(`venue.kitchen_ticket_grouping.${choice}`),
@@ -866,6 +873,8 @@ export class VenueOperationsScreen extends LitElement {
       ?disabled=${this.busy}
       error=${this.fieldErrors.kitchenTicketGrouping ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        if (event.detail.value === stored) return;
         void this.#saveKitchenTicketGrouping(event.detail.value as KitchenTicketGrouping);
       }}
     ></wt-combobox>`;
