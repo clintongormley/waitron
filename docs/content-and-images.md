@@ -38,14 +38,14 @@ the **Image library**. Something you have deleted or switched off can also hold 
 without appearing in the list.
 
 A product's and a variant's customer-facing name is the exception, because it is optional: leave it
-empty in every language and Waitron falls back to the staff name, so it never blocks the change. Fill
-it in for Spanish and leave English blank, though, and that *is* a missing translation — you clearly
-meant to translate it — so it does hold the change up until you finish it or clear it. A section's
-customer names work the same way: none at all never blocks the change, but a section with some names
-and none in the new default language does. Edit a section's customer names on its menu's
-**Structure** tab, in **Products and menus**, **Menus**. A menu's own customer names are edited
-through **Rename** on the menu's row in that list, not on its **Structure** tab, although the
-**Missing translations** link for a menu's own name opens that tab.
+empty in every language and Waitron falls back to the staff name, so it never blocks the change.
+Fill it in for Spanish and leave English blank, though, and that *is* a missing translation — you
+clearly meant to translate it — so it does hold the change up until you finish it or clear it. A
+section's customer-facing names work the same way: none at all never blocks the change, but a
+section with some names and none in the new default language does. Edit a section's customer-facing
+names on its menu's **Structure** tab, in **Products and menus**, **Menus**. A menu's own
+customer-facing names are edited through **Rename** on the menu's row in that list, not on its
+**Structure** tab, although the **Missing translations** link for a menu's own name opens that tab.
 
 **Missing translations** lists, for each of your content languages, the customer-facing names that
 have no text in it. A language your region requires comes first, opens by itself when something is

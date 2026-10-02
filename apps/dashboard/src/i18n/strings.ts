@@ -1761,7 +1761,7 @@ export const en = {
   "sections.customer_name": "Customer-facing name",
   "sections.internal_name_required": "Enter an internal name.",
   "sections.internal_name_help":
-    "Staff see this name. Customers see the customer name, when there is one.",
+    "Staff see this name. Customers see the customer-facing name, when there is one.",
   "sections.customer_names": "Customer-facing names",
   "sections.members_saved_note": "Changes to this list are saved straight away.",
   "sections.members_label": "Items in {name}",
@@ -3799,7 +3799,7 @@ export const es: Record<StringKey, string> = {
   "sections.customer_name": "Nombre para el cliente",
   "sections.internal_name_required": "Introduce un nombre interno.",
   "sections.internal_name_help":
-    "El personal ve este nombre. Los clientes ven el nombre para clientes, si lo hay.",
+    "El personal ve este nombre. Los clientes ven el nombre para el cliente, si lo hay.",
   "sections.customer_names": "Nombres para el cliente",
   "sections.members_saved_note": "Los cambios en esta lista se guardan al momento.",
   "sections.members_label": "Elementos de {name}",
