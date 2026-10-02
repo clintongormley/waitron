@@ -45,7 +45,7 @@ at all, and it has no roles: one process opens one file, so every caller is the 
 What that costs, measured one statement at a time, is recorded at the top of
 `packages/db/src/immutability.test.ts`.
 
-## Two things that did not change with the engine
+## What stays out of an append-only table
 
 **Keep mutable delivery state in a separate table.** Correcting a delivery attempt must not require
 editing the immutable fact it describes.

@@ -21,8 +21,11 @@ let node: SeededTill;
 /**
  * Twenty appends started together against ONE venue file.
  *
- * Twenty appends started together and NOT awaited in turn must land on twenty
- * distinct, contiguous positions, each linked to its predecessor's huella. A queue that failed to
+ * Every writer waits on the file's one write queue, whichever node it appends to, so a busy node
+ * can stall a quiet one. `holds a second appender on the same chain until the first commits` is the
+ * case that tells a serialising queue from one that is not.
+ *
+ * Started together and NOT awaited in turn, the appends must land on twenty distinct, contiguous positions, each linked to its predecessor's huella. A queue that failed to
  * serialise breaks exactly that, because appends reading the same head compute the same position.
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });

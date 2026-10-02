@@ -39,7 +39,9 @@ export function driverErrorCode(error: unknown): string | undefined {
  * `.cause.message` nor a top-level `.message` is a string: throws instead.
  * `String(error)` on the wrapper reproduces the failed SQL, so a silent
  * fallback would let a pattern that happens to match the SQL itself (a table
- * or column name, say) pass an assertion for the wrong reason.
+ * or column name, say) pass an assertion for the wrong reason. The thrown text
+ * deliberately quotes an older wrapper wording, `Failed query: <sql>`, and is
+ * pinned verbatim by `./errors.test.ts`.
  *
  * Its own suite drives it with hand-built objects. Those establish which
  * branch each shape takes, and nothing about what arrives from this engine.

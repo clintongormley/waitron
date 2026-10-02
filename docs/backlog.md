@@ -4657,21 +4657,8 @@ approved.
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **Comments naming a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, 2026-10-02).** No
-  comment or test title under `apps/` or `packages/` names a SQLSTATE now. Each "never a 500" title
-  was checked by switching its screen off and re-running the test: only the printer-in-location
-  check and the absence date-range check still stop a 500, and only those titles say so. Still
-  unprobed, and naming no engine: about a dozen "not an opaque 500" titles in
-  `apps/server/src/till-api.test.ts`. The entry as first written follows.
-  Split out of the T2 sweep, 2026-09-23. Owner, 2026-10-02: "Postgres comments should go". `grep -rn "22P02\|22003\|23505\|23503\|42703\|42P01" apps/server/src`
-  returns lines across many files, some already converted and many not, and the unconverted ones read
-  in the present tense — a route comment saying a malformed id "`22P02`s → 500" when the column is
-  plain `text` and a malformed id now matches no row. **Why T2 left it:** correcting one honestly
-  means establishing, per ROUTE, what the unscreened path does now — often the same domain error the
-  screen produces, which turns "prevents an opaque 500" into "belt and braces" — and that is a
-  behavioural question, not a comment question. Several of them also sit in TEST TITLES, so the change
-  is not comment-only. **Next action:** its own pass, route by route, with the un-screened path
-  actually exercised rather than reasoned about.
+- **Comments naming a PostgreSQL SQLSTATE as today's behaviour — DONE (C127).** Still unprobed:
+  the remaining "not a 500" titles across the `apps/server` route suites, which name no engine.
 
 - **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92; the `pg` handles, the `.sqlite.` infix and the `bytea` title are C127's second pull request).**
   Still open: the `.sqlite.` infix in
@@ -4710,15 +4697,7 @@ approved.
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
-- **The topic files still carry PostgreSQL history — DONE (C127, 2026-10-02).** The topic files,
-  the package READMEs and `CLAUDE.md` no longer describe the old engine, except where they name the
-  `bench/pglite-throughput` rig or the guards that refuse PostgreSQL leftovers. The entry as first
-  written follows. (2026-09-23, from #496. Owner, 2026-10-02: "Postgres comments should go".)
-  #496 took it out of `CLAUDE.md` and fixed every topic-file passage that contradicted the new
-  `CLAUDE.md`, but did not sweep `docs/developers/conventions-data.md` or `testing-guide.md`. Most
-  mentions are dated receipts, which is where history belongs. **Next action, if wanted:** read both
-  files for any passage that states a PostgreSQL-era mechanism as CURRENT — a rule, a guard's
-  behaviour, a command — and date or retire it; leave dated receipts alone.
+- **The topic files still carry PostgreSQL history — DONE (C127).**
 
 ---
 
@@ -5858,7 +5837,11 @@ real `sh`.
   `packages/media/drizzle/0001_image_references.sql` and
   `packages/db/drizzle/0001_behavioural_triggers.sql`, which still points at `origin/main` for the
   originals): editing a shipped migration, even a comment, changes its hash, and the boot path's
-  ahead check would then read an already-migrated box as ahead.
+  ahead check would then read an already-migrated box as ahead. For the same reason both files keep
+  their PostgreSQL comparisons, including the false claim that SQLite's `raise` takes only a fixed
+  message: measured 2026-10-02 on `node:sqlite` (Node v26.7.0, SQLite 3.53.4), a trigger's
+  `raise(abort, 'row ' || new.a || ' refused')` refused an insert of 7 with `row 7 refused`,
+  errcode 1811.
 - **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
   5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
   that writes another attached database, so either `change_log` is reclassified to the file its

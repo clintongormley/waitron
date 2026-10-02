@@ -283,9 +283,13 @@ result as a specific cause. Other untargeted calls are still in the tree and not
 ## Editing rows one at a time can break a unique index the final state satisfies
 
 That same `writeItems` kept the rows a save still named and updated each where it stood, so a body
-exchanging two items' products put both rows on the same product midway through and
-`extra_list_items_list_product_uq` refused the first update, although the body's final product set
-was legal. The case is `saves a body that exchanges two retained items' products`
+exchanging two items' products put both rows on the same product midway through, although the
+body's final product set was legal. Measured 2026-10-02 on `node:sqlite` (Node v26.7.0, SQLite
+3.53.4), on a bare table with a unique index over `(list_id, product_id)` holding products A and B:
+inside one transaction, updating the first row to B printed
+`UNIQUE constraint failed: extra_list_items.list_id, extra_list_items.product_id`, errcode 2067,
+and deleting both rows then inserting the swapped pair committed. The case is
+`saves a body that exchanges two retained items' products`
 (`packages/catalogue/src/extras.concurrency.test.ts`). It now deletes every one of the list's rows and
 inserts the body's fresh, each under the id the body sent or a new one, which removes the
 intermediate state rather than ordering around it.
@@ -323,10 +327,9 @@ its header records the reading in both directions taken back to back: two bodies
 `withTransaction` report `secondStarted === false` while the first is held, and the same two bodies
 started without it report `true`.
 
-**The refusal itself has not been re-taken on this engine.** `saves a body that exchanges two
-retained items' products` (`packages/catalogue/src/extras.concurrency.test.ts`) still runs and still
-passes, so what is known today is that the case passes — not that deleting the delete-then-insert
-would still turn it red. `writeItems`'s own header says the same thing at the site.
+**The measurement above is on a bare table, not through `writeItems`.** `saves a body that
+exchanges two retained items' products` passes; that deleting the delete-then-insert turns it red
+has not been re-taken on this engine. `writeItems`'s own header says the same thing at the site.
 
 ## Resolve shared catalogue data once before a basket's line loop
 

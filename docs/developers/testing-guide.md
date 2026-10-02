@@ -1085,10 +1085,8 @@ measures nothing. Compare statements; do not quote a branch delta.
 
 What a contention suite asserts is that one writer holds the venue file at a time
 (`packages/store/src/write-queue.ts`). `packages/fiscal-verifactu/src/chain.concurrency.test.ts` is
-the worked example, and its own header names the two properties that did NOT survive the change:
-per-node parallelism is gone — every writer serialises on the FILE, whichever node it appends to —
-and a premise check that writers run on distinct backends has no counterpart, because one writer at
-a time is the design rather than the thing that would make the suite theatre.
+the worked example, and its header states what one queue costs: every writer waits on the file's one
+queue, whichever node it appends to, so a busy node can stall a quiet one.
 
 **Start a writer through `withTransaction`, never through a bare `db.transaction(...)`.** Only the
 former takes the write queue (`packages/db/src/tenancy.ts` → `db.withWriteLock`). Twenty bare
