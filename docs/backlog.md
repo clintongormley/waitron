@@ -820,7 +820,7 @@ a resting label now inherits the field box's font size, which is what the value 
 widens its box, does the same. A test in each field primitive (`wt-input` as text and password,
 `wt-textarea`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`) compares the resting label's
 size with the value's, then changes `--wt-font-size-md` and checks both follow. The phone-zoom
-question above is about a field's TEXT, not its label, so this does not touch it.
+question below is about a field's TEXT, not its label, so this does not touch it.
 
 **The setup wizard's review page is grouped, explained and readable (A185, owner 2026-10-02) —
 OPEN.** The owner, on a screenshot of "Review and provision": _"This layout looks really messy"_.

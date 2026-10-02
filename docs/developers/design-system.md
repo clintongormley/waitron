@@ -190,8 +190,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 The field tokens size the filled form field (see "The field box" under Forms):
 `--wt-field-height` (56px) is a labelled field's height, above `--wt-tap-min`, which
 `packages/ui-core/src/tokens/structure.test.ts` holds; `--wt-field-line-width` (1px) is the bottom
-line at rest and `--wt-field-line-width-active` (2px) the focused or invalid one; `--wt-dropdown-row-height` (48px)
-is the least height of a row in `wt-combobox`'s open list.
+line at rest and `--wt-field-line-width-active` (2px) the focused or invalid one;
+`--wt-dropdown-row-height` (48px) is the least height of a row in `wt-combobox`'s open list.
 
 The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
 system font; the app ships no font files (A179, 2026-10-01 — before it the scale was 13, 15, 19
@@ -915,17 +915,18 @@ in italics.
 
 The box carries data attributes its primitive sets, and `fieldStyles` draws each:
 
-- **The label rests or floats** (`data-label`, from `fieldLabelState`). It rests, at the
-  field box's font size, which the value inherits too, and centred in the box (in `wt-textarea`,
-  on its first line), while the field is empty and unfocused, has no hint and no placeholder, and
-  is not a date or time type (`date`, `time`, `datetime-local`, `month`, `week`), whose empty field the browser fills with its own format text. Otherwise it
-  floats, at `--wt-font-size-sm` at the top left, with the value or hint under it. A value set from
-  code rather than typed floats it too. The resting rule also leaves out a box whose control the
-  browser marks `:autofill`; `packages/ui-core/src/field-styles.test.ts` checks that the rule is
-  there and parses, and nothing makes a browser autofill a field. Resting or floated, the label is
+- **The label rests or floats** (`data-label`, from `fieldLabelState`). It rests — centred in the
+  box (in `wt-textarea`, on its first line) and at the value's size, because both inherit the field
+  box's font size — while the field is empty and unfocused, has no hint and no placeholder, and is
+  not a date or time type (`date`, `time`, `datetime-local`, `month`, `week`), whose empty field
+  the browser fills with its own format text. Otherwise it floats, at `--wt-font-size-sm` at the
+  top left, with the value or hint under it. A value set from code rather than typed floats it
+  too. The resting rule also leaves out a box whose control the browser marks `:autofill`;
+  `packages/ui-core/src/field-styles.test.ts` checks that the rule is there and parses, and
+  nothing makes a browser autofill a field. Resting or floated, the label is
   `--wt-color-text-muted`. A label longer than the box is cut with an ellipsis on one line; the
-  ellipsis is on the label's text, `.field-label-text`, so a required field's `*` after it is never
-  the part cut.
+  ellipsis is on the label's text, `.field-label-text`, so a required field's `*` after it is
+  never the part cut.
 - **Focus** (`:focus-within`): the bottom line becomes `--wt-field-line-width-active` of
   `--wt-color-primary` and the label `--wt-color-field-label-focus`. That line is the field's focus
   indicator; the control draws no focus ring of its own. A dropdown whose list is open (`data-open`)

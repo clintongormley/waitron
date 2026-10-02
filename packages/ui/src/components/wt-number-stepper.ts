@@ -40,10 +40,11 @@ export class WtNumberStepper extends LitElement {
         display: grid;
       }
 
-      /* An invisible copy of the label, at its resting size, is what widens the box: the label
-         itself is positioned over the box and takes no room. Ordered after the number so the
-         number stays the box's baseline. Hidden, not only clipped: Chromium puts generated text
-         clipped to nothing in the accessibility tree all the same. */
+      /* An invisible copy of the label, at the size the resting label inherits (larger than the
+         floated label), is what widens the box: the label itself is positioned over the box and
+         takes no room. Ordered after the number so the number stays the box's baseline. Hidden,
+         not only clipped: Chromium puts generated text clipped to nothing in the accessibility
+         tree all the same. */
       .field::before {
         content: attr(data-label-text);
         order: 1;
