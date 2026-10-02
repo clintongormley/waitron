@@ -1074,14 +1074,16 @@ Plan: [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-produc
 It builds A205 (a product row's click opens it) and replaces A207 (a blue Add product button in the
 header), which the owner cancelled: the header loses that button.
 
-**The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — OPEN.** The
+**The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
 until one name is long enough to push it left: _"the drag handle column shouldn't auto-expand, so
 the Name column would start just to the left of it"_ (read as: just to the right of the handle).
-The form's table sets no column widths, so the browser shares the spare width among the handle,
+The form's table had no column widths, so the browser shared the spare width among the handle,
 Default and menu columns. **Wanted:** the handle, Default and menu columns as narrow as their
-controls, and Name taking the rest. Same check on the extras list form's table. A195 asks the same
-of `wt-data-table`'s Actions column; one approach for both is welcome.
+controls, and Name taking the rest. The options list now gives spare width to Name; the extras list
+keeps its grip, Preselected and remove columns at their content widths. Chromium checks cover both
+languages at phone and desktop widths. A195 asks the same of `wt-data-table`'s Actions column; that
+separate item remains open.
 
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
 (#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;

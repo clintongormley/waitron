@@ -67,6 +67,19 @@ export class OptionListForm extends LitElement {
       td:last-child {
         padding-inline: 0;
       }
+      th:first-child,
+      td:first-child,
+      th:nth-child(3),
+      td:nth-child(3),
+      th:last-child,
+      td:last-child {
+        width: 1%;
+        white-space: nowrap;
+      }
+      th:nth-child(3) {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
       td:last-child {
         text-align: end;
       }

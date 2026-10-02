@@ -977,6 +977,46 @@ it("stacks the two choices steppers on a phone and sets them side by side on a w
   }
 });
 
+it.each([
+  [1280, "en"],
+  [1280, "es"],
+  [390, "en"],
+  [390, "es"],
+] as const)("keeps extras controls beside the product at %ipx in %s", async (frame, locale) => {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  await page.viewport(frame, 844);
+  setLocale(locale);
+  try {
+    const { el } = await mount({ value: addons, products });
+    const cells = el
+      .shadowRoot!.querySelector(`tr[data-item="${BACON_ITEM}"]`)!
+      .querySelectorAll("td");
+    const handle = cells[0]!.querySelector<HTMLElement>("[data-test^=drag-]")!;
+    const preselected = cells[3]!.querySelector("wt-switch")!;
+    const remove = cells[5]!.querySelector("wt-button")!;
+    expect(cells[0]!.getBoundingClientRect().width).toBeLessThanOrEqual(
+      handle.getBoundingClientRect().width + 2,
+    );
+    expect(cells[1]!.getBoundingClientRect().width).toBeGreaterThan(
+      cells[0]!.getBoundingClientRect().width,
+    );
+    expect(cells[3]!.getBoundingClientRect().width, "Preselected column").toBeLessThanOrEqual(
+      preselected.getBoundingClientRect().width + 8,
+    );
+    expect(
+      getComputedStyle(preselected.shadowRoot!.querySelector('[part~="label"]')!).whiteSpace,
+      "switch label keeps its wrapping behavior",
+    ).toBe("normal");
+    expect(cells[5]!.getBoundingClientRect().width, "remove column").toBeLessThanOrEqual(
+      remove.getBoundingClientRect().width + 2,
+    );
+  } finally {
+    setLocale("en");
+    await page.viewport(width, height);
+  }
+});
+
 it("refuses a maximum quantity of 0 TYPED into its stepper", async () => {
   const { el, host } = await mount({ value: addons });
   const submitted = record(host);
