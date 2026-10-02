@@ -2398,10 +2398,34 @@ export class TillApi {
   }
 
   askSaleDeadEnds(
-    lines: (SaleLine & { workingOrderLineId?: string })[],
-    workingOrderId: string,
+    request:
+      | { step: "pay" | "place"; lines: SaleLine[]; zoneId?: string; workingOrderId?: string }
+      | (SaleLine & { workingOrderLineId?: string })[],
+    workingOrderId?: string,
   ): Promise<DeadEndAnswer> {
-    return this.#request("/api/dead-ends/sale", "POST", { step: "edit", lines, workingOrderId });
+    return this.#request(
+      "/api/dead-ends/sale",
+      "POST",
+      Array.isArray(request) ? { step: "edit", lines: request, workingOrderId } : request,
+    );
+  }
+
+  askOrderDeadEnds(workingOrderId: string, toZoneId?: string): Promise<DeadEndAnswer> {
+    return this.#request("/api/dead-ends/order", "POST", {
+      workingOrderId,
+      ...(toZoneId === undefined ? {} : { toZoneId }),
+    });
+  }
+
+  setMakeAt(
+    workingOrderId: string,
+    revision: number,
+    lines: Record<string, string>,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/working-orders/${workingOrderId}/make-at`, "PUT", {
+      revision,
+      lines,
+    });
   }
 
   /**

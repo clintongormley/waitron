@@ -391,6 +391,50 @@ beforeEach(() => {
 afterEach(cleanupWidgets);
 
 describe("till-app: the three ways to pay part of a bill", () => {
+  it("asks where to make a bill dish before previewing a payment", async () => {
+    const askOrderDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      revision: 2,
+      deadEnds: [
+        {
+          key: "line-1",
+          name: "Paella",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const setMakeAt = vi.fn().mockResolvedValue({ revision: 3 });
+    const previewBillPayment = vi.fn().mockResolvedValue(cash("40.00", "10.00"));
+    const { el } = await mountApp({ askOrderDeadEnds, setMakeAt, previewBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    emit(dialog(el)!, "bill-pay-preview", {
+      choice: { kind: "contribution", amount: "40" },
+      pay: { method: "cash", tendered: "50" },
+    });
+    await flush(el);
+    expect(askOrderDeadEnds).toHaveBeenCalledWith("wo-4", undefined);
+    expect(previewBillPayment).not.toHaveBeenCalled();
+    const question = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(question).not.toBeNull();
+    question
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(
+        new CustomEvent("make-at", { detail: { key: "line-1", stationId: "kitchen" } }),
+      );
+    await (question as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(setMakeAt).toHaveBeenCalledWith("wo-4", 2, { "line-1": "kitchen" });
+    expect(previewBillPayment).toHaveBeenCalledOnce();
+    expect(setMakeAt.mock.invocationCallOrder[0]!).toBeLessThan(
+      previewBillPayment.mock.invocationCallOrder[0]!,
+    );
+  });
   it("pays for chosen items, then a contribution, then an equal share, showing the balance after each", async () => {
     const paidPaella = [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }];
     const answers = [
@@ -858,6 +902,7 @@ describe("till-app: the bill payment dialog's own steps", () => {
 
     emit(dialog(el)!, "bill-pay-preview", asked);
     emit(dialog(el)!, "bill-pay-preview", asked);
+    await flush(el);
     answer(cash("40.00", "10.00"));
     await flush(el);
 
@@ -1326,6 +1371,60 @@ describe("till-app: a single payment refused because money is already on the bil
 });
 
 describe("till-app: a partly paid order at the counter", () => {
+  it("rechecks a saved bill edit refused for a dead-end dish before opening payment", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue({ revision: 4 });
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Beer",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const el = await retrieved({ updateWorkingOrder, askSaleDeadEnds });
+    const c = counter(el);
+    c.store.addProduct(
+      {
+        id: "beer",
+        menuItemId: "offer-beer",
+        name: "Beer",
+        pricingUnit: "each",
+        unitPrice: "5.00",
+        vatClass: "general",
+        category: null,
+        allergens: null,
+      },
+      "1",
+    );
+    expect(c.store.persisted).toBe(true);
+    expect(c.store.dirty).toBe(true);
+    expect(c.store.id).toBe("wo-1");
+    expect((el as unknown as { billPaying: unknown }).billPaying).toBeNull();
+    expect((el as unknown as { heldOrders: HeldOrderSummary[] }).heldOrders).toEqual([held()]);
+    expect(payRest(el)).not.toBeNull();
+    emit(c, "counter-bill-pay", { amount: "70.00" });
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    const question = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(question).not.toBeNull();
+    question
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+    await (question as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(dialog(el)).not.toBeNull();
+  });
   const counterCanvas: CanvasDef = {
     formFactor: "till",
     tabs: [

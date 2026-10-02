@@ -656,6 +656,434 @@ afterEach(() => {
 });
 
 describe("till-app", () => {
+  it("asks before counter Pay, saves a chosen station, then takes payment", async () => {
+    const order: string[] = [];
+    const askSaleDeadEnds = vi.fn(async () => {
+      order.push("ask");
+      return {
+        sends: true,
+        deadEnds: [
+          {
+            key: "0",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed" as const,
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      };
+    });
+    const recordSale = vi.fn(async () => {
+      order.push("pay");
+      return saleResult;
+    });
+    const { el } = await mountApp({ askSaleDeadEnds, recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await flush(el);
+    expect(askSaleDeadEnds).toHaveBeenCalledWith({
+      step: "pay",
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: null }],
+      zoneId: "zone-counter",
+    });
+    expect(order).toEqual(["ask"]);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(c.store.lines[0]!.makeAt).toBe("kitchen");
+    expect(recordSale).not.toHaveBeenCalled();
+    emit(c, "confirm-payment", { method: "cash", amount: "2" });
+    await flush(el);
+    expect(recordSale).toHaveBeenCalledWith(
+      [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" }],
+      { method: "cash", amount: "2" },
+      expect.any(String),
+    );
+    expect(order).toEqual(["ask", "pay"]);
+  });
+
+  it("asks before Place and rechecks after a station refusal", async () => {
+    const answer = {
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed" as const,
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    };
+    const askSaleDeadEnds = vi.fn().mockResolvedValue(answer);
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue(placedResult);
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      askSaleDeadEnds,
+      placeOrder,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    emit(c, "place-order");
+    await flush(el);
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
+    const choose = async () => {
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+      dialog
+        .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+        .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+      await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+      await flush(el);
+    };
+    await choose();
+    expect(placeOrder).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
+    await choose();
+    expect(placeOrder).toHaveBeenCalledTimes(2);
+    expect(askSaleDeadEnds).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a Place refusal visible when its follow-up question has no answer", async () => {
+    const askSaleDeadEnds = vi
+      .fn()
+      .mockResolvedValueOnce({ sends: false, deadEnds: [], stations: [] })
+      .mockRejectedValue(new TypeError("offline"));
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockImplementation(() => new Promise(() => {}));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      askSaleDeadEnds,
+      placeOrder,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "place-order");
+    await flush(el);
+    expect(askSaleDeadEnds).toHaveBeenCalledTimes(2);
+    expect(placeOrder).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+      t("place.refused"),
+    );
+  });
+
+  it("lets Pay proceed when the question has no answer", async () => {
+    const askSaleDeadEnds = vi.fn().mockRejectedValue(new TypeError("offline"));
+    const { el } = await mountApp({ askSaleDeadEnds });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await flush(el);
+    expect(askSaleDeadEnds).toHaveBeenCalledOnce();
+    expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+  });
+
+  it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
+    "%s asks before paying a counter order and skips the dialog when the server says it sends nothing",
+    async (orderFlow) => {
+      const askSaleDeadEnds = vi.fn().mockResolvedValue({
+        sends: false,
+        deadEnds: [
+          {
+            key: "0",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [],
+      });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
+        askSaleDeadEnds,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await flush(el);
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      await flush(el);
+      expect(askSaleDeadEnds).toHaveBeenCalledWith(expect.objectContaining({ step: "pay" }));
+      expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
+      expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+    },
+  );
+
+  it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
+    "%s blocks counter tender when its payment will send a dead-end dish",
+    async (orderFlow) => {
+      const askSaleDeadEnds = vi.fn().mockResolvedValue({
+        sends: true,
+        deadEnds: [
+          {
+            key: "0",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
+        askSaleDeadEnds,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await flush(el);
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      await flush(el);
+      expect(askSaleDeadEnds).toHaveBeenCalledWith(expect.objectContaining({ step: "pay" }));
+      expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
+      expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+    },
+  );
+
+  it("removes a dead-end dish before entering tender and leaves the remaining basket total", async () => {
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [],
+    });
+    const { el } = await mountApp({ askSaleDeadEnds });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    c.store.addProduct(jamon, "1");
+    await flush(el);
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("remove", { detail: { key: "0" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(c.store.lines).toHaveLength(1);
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+    expect(c.store.total).toBe("10.00");
+    expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+  });
+
+  it("cancels a dead-end question and keeps the counter idle without paying", async () => {
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [],
+    });
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ askSaleDeadEnds, recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!
+      .click();
+    await flush(el);
+    expect(recordSale).not.toHaveBeenCalled();
+    expect(tenderPay(el).shadowRoot!.querySelector(".pay")).not.toBeNull();
+    expect(c.store.lines).toHaveLength(1);
+  });
+
+  it("keeps a retrieved dish's chosen station when saving the edited basket", async () => {
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({
+      updateWorkingOrder,
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        revision: 3,
+        lines: [
+          {
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "2.000",
+            makeAt: "kitchen",
+          },
+        ],
+      }),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(c.store.lines[0]!.makeAt).toBe("kitchen");
+    c.store.addProduct(cafe, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledWith(
+      "wo-1",
+      expect.objectContaining({
+        lines: [
+          { menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: "kitchen" },
+          { menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: null },
+        ],
+      }),
+    );
+  });
+
+  it("rechecks a retrieved counter order when its chosen station is switched off during save", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "route.station_inactive" })
+      .mockResolvedValue({ revision: 4 });
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "2",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "switched_off",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ updateWorkingOrder, askSaleDeadEnds, recordSale });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(recordSale).not.toHaveBeenCalled();
+    expect(askSaleDeadEnds).toHaveBeenCalledOnce();
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(recordSale).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks an integrated card's save refusal before calling pay", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue({ revision: 4 });
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "2",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const { el } = await mountApp({ updateWorkingOrder, askSaleDeadEnds, pay });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(pay).not.toHaveBeenCalled();
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(pay).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks a retrieved bill's Hold save refusal before clearing the basket", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue({ revision: 4 });
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "2",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const { el } = await mountApp({ updateWorkingOrder, askSaleDeadEnds });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+    expect(c.store.lines).toHaveLength(2);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(c.store.lines).toHaveLength(0);
+  });
+
   it("loads the site's content default without changing the interface or receipt language", async () => {
     const api = stubApi({
       getContentLanguages: vi
@@ -848,8 +1276,8 @@ describe("till-app", () => {
     await flush(el);
     expect(recordSale).toHaveBeenCalledWith(
       [
-        { menuItemId: "offer-standard", quantity: "1" },
-        { menuItemId: "offer-happy-hour", quantity: "1" },
+        { makeAt: null, menuItemId: "offer-standard", quantity: "1" },
+        { makeAt: null, menuItemId: "offer-happy-hour", quantity: "1" },
       ],
       { method: "cash", amount: "20.00" },
       expect.any(String),
@@ -1783,7 +2211,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       // The workingOrderId sent is the store's stable id, NOT a fresh uuid, so a lost-response re-tap
       // replays and a retrieved order settles under its own id (see the retrieve→pay and retry tests
@@ -1825,11 +2253,12 @@ describe("till-app", () => {
     expect(currentApi.recordSale).toHaveBeenCalledWith(
       [
         {
+          makeAt: null,
           menuItemId: "menu-item-cafe-0",
           quantity: "1",
           extras: [{ listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] }],
         },
-        { menuItemId: "menu-item-cafe-0", quantity: "2" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
       ],
       { method: "cash", amount: "5" },
       c.store.id,
@@ -1868,6 +2297,7 @@ describe("till-app", () => {
     expect(currentApi.recordSale).toHaveBeenCalledWith(
       [
         {
+          makeAt: null,
           menuItemId: "menu-item-cafe-0",
           quantity: "1",
           extras: [
@@ -2293,7 +2723,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
+      [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }],
       { method: "card", amount: "1.50", externalRef: "OP-42" },
       workingOrderId,
     );
@@ -2375,7 +2805,7 @@ describe("till-app", () => {
 
     // the adopted id is the pay-idempotency key.
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
     );
@@ -2409,8 +2839,8 @@ describe("till-app", () => {
     // id, from the copy at the revision it was retrieved at.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
-        { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { menuItemId: "menu-item-cafe-0", quantity: "1" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
       revision: 3,
@@ -2419,8 +2849,8 @@ describe("till-app", () => {
     // server needs the lock updated before it files from it.
     expect(recordSale).toHaveBeenCalledWith(
       [
-        { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { menuItemId: "menu-item-cafe-0", quantity: "1" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       { method: "cash", amount: "5" },
       "wo-1",
@@ -2597,6 +3027,7 @@ describe("till-app", () => {
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-stable", {
       lines: [
         {
+          makeAt: null,
           workingOrderLineId: "line-stable",
           menuItemId: "menu-item-cafe-0",
           quantity: "2",
@@ -2702,6 +3133,7 @@ describe("till-app", () => {
       revision: 0,
       lines: [
         {
+          makeAt: null,
           workingOrderLineId: "line-customised",
           menuItemId: "menu-item-cafe-0",
           quantity: "3",
@@ -2782,6 +3214,7 @@ describe("till-app", () => {
       workingOrderLineId: "line-customised",
       menuItemId: "menu-item-cafe-0",
       quantity,
+      makeAt: null,
     });
 
     await retrieve();
@@ -3007,6 +3440,7 @@ describe("till-app", () => {
       revision: 0,
       lines: [
         {
+          makeAt: null,
           workingOrderLineId: "line-answered",
           menuItemId: "menu-item-cafe-0",
           quantity: "3",
@@ -3062,8 +3496,8 @@ describe("till-app", () => {
     expect(updateWorkingOrder).toHaveBeenCalled();
     expect(recordSale).toHaveBeenCalledWith(
       [
-        { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { menuItemId: "menu-item-cafe-0", quantity: "1" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       { method: "cash", amount: "5" },
       "wo-1",
@@ -3207,7 +3641,7 @@ describe("till-app", () => {
 
     expect(currentApi.parkOrder).toHaveBeenCalledWith({
       id: parkedId,
-      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       label: "Mesa 4",
     });
     // The basket is emptied and its id re-minted, ready for the next customer; still on the counter.
@@ -3228,7 +3662,7 @@ describe("till-app", () => {
 
     expect(currentApi.parkOrder).toHaveBeenCalledWith({
       id: expect.any(String),
-      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       label: undefined,
     });
   });
@@ -3317,8 +3751,8 @@ describe("till-app", () => {
     // id and label — NOT re-parked (a re-park would idempotently replay and discard the edit).
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
-        { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { menuItemId: "menu-item-cafe-0", quantity: "1" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
       revision: 3,
@@ -3379,8 +3813,8 @@ describe("till-app", () => {
     // The stored "Mesa 4" is preserved, NOT wiped — updateWorkingOrder carries the name, not undefined.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
-        { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { menuItemId: "menu-item-cafe-0", quantity: "1" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
       revision: 3,
@@ -5113,6 +5547,25 @@ describe("till-app", () => {
         expect(ticket(el)).not.toBeNull();
       });
 
+      it("does not ask the counter dead-end question when a table bill opens cash tender", async () => {
+        const askSaleDeadEnds = vi.fn();
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
+          askSaleDeadEnds,
+        });
+        const screen = await toTableOrder(el, openTable);
+        screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+        await flush(el);
+        const tender = screen.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+        expect(tender).not.toBeNull();
+        tender.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+        await flush(el);
+        expect(askSaleDeadEnds).not.toHaveBeenCalled();
+        expect(tender.shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+      });
+
       it("a failed tab pay keeps the operator on the screen with a non-fatal error", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
@@ -5379,7 +5832,7 @@ describe("till-app", () => {
 
       expect(pay).toHaveBeenCalledWith({
         id: workingOrderId,
-        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+        lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         tip: "0.50",
         allowOffline: true,
       });
@@ -5400,7 +5853,7 @@ describe("till-app", () => {
 
       expect(pay).toHaveBeenCalledWith({
         id: c.store.id,
-        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
+        lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }],
       });
     });
 
@@ -5713,8 +6166,8 @@ describe("till-app", () => {
 
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
         lines: [
-          { menuItemId: "menu-item-cafe-0", quantity: "2" },
-          { menuItemId: "menu-item-cafe-0", quantity: "1" },
+          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
         ],
         label: "Mesa 4",
         revision: 3,
@@ -5722,8 +6175,8 @@ describe("till-app", () => {
       expect(pay).toHaveBeenCalledWith({
         id: "wo-1",
         lines: [
-          { menuItemId: "menu-item-cafe-0", quantity: "2" },
-          { menuItemId: "menu-item-cafe-0", quantity: "1" },
+          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
         ],
       });
       expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -5748,7 +6201,7 @@ describe("till-app", () => {
       expect(updateWorkingOrder).not.toHaveBeenCalled();
       expect(pay).toHaveBeenCalledWith({
         id: "wo-1",
-        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+        lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       });
     });
   });
@@ -5888,7 +6341,7 @@ describe("till-app", () => {
 
       expect(currentApi.parkOrder).toHaveBeenCalledWith({
         id,
-        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+        lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         label: undefined,
       });
       expect(currentApi.placeOrder).toHaveBeenCalledWith(id);
@@ -5951,8 +6404,8 @@ describe("till-app", () => {
       expect(currentApi.parkOrder).not.toHaveBeenCalled();
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
         lines: [
-          { menuItemId: "menu-item-cafe-0", quantity: "2" }, // retrieved
-          { menuItemId: "menu-item-cafe-0", quantity: "1" }, // the edit
+          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }, // retrieved
+          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }, // the edit
         ],
         label: "Mesa 4",
         revision: 3,
@@ -8942,6 +9395,96 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     return { ...mounted, c };
   }
 
+  it("asks where to make a stored counter dish before moving its bill to a table", async () => {
+    const askOrderDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      revision: 3,
+      deadEnds: [
+        {
+          key: "line-1",
+          name: "Café",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
+    const moveBill = vi
+      .fn()
+      .mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false });
+    const { el, c } = await counterWith({ askOrderDeadEnds, setMakeAt, moveBill });
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(askOrderDeadEnds).toHaveBeenCalledWith("wo-12", "z1");
+    expect(moveBill).not.toHaveBeenCalled();
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    expect((dialog as HTMLElement & { allowRemove: boolean }).allowRemove).toBe(false);
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(
+        new CustomEvent("make-at", { detail: { key: "line-1", stationId: "kitchen" } }),
+      );
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(setMakeAt).toHaveBeenCalledWith("wo-12", 3, { "line-1": "kitchen" });
+    expect(moveBill).toHaveBeenCalledOnce();
+    expect(setMakeAt.mock.invocationCallOrder[0]!).toBeLessThan(
+      moveBill.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("rechecks a move refused because its station lost its replacement", async () => {
+    const askOrderDeadEnds = vi
+      .fn()
+      .mockResolvedValueOnce({ sends: false, deadEnds: [], stations: [] })
+      .mockResolvedValue({
+        sends: true,
+        revision: 3,
+        deadEnds: [
+          {
+            key: "line-1",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      });
+    const moveBill = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false });
+    const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el, c } = await counterWith({ askOrderDeadEnds, moveBill, setMakeAt });
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(moveBill).toHaveBeenCalledOnce();
+    expect(askOrderDeadEnds).toHaveBeenCalledTimes(2);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(dialog).not.toBeNull();
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(
+        new CustomEvent("make-at", { detail: { key: "line-1", stationId: "kitchen" } }),
+      );
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(setMakeAt).toHaveBeenCalledOnce();
+    expect(moveBill).toHaveBeenCalledTimes(2);
+  });
+
   it("reads the floor when Move to table opens, and gives it to the held orders", async () => {
     const { el, c } = await counterWith();
     const reads = vi.mocked(currentApi.getTablesState).mock.calls.length;
@@ -9141,7 +9684,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
 
     expect(currentApi.recordSale).toHaveBeenCalledOnce();
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
     );
