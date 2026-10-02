@@ -22,6 +22,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
+import { createTable } from "./tables.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -259,13 +260,9 @@ async function placeOrder(names: string[]): Promise<string> {
  *  recallable); FILETE is line 2, held. */
 async function tabWithSopaAndFilete(): Promise<string> {
   const ids = await offerIdsByName();
-  const table = await app.request("/api/tables", {
-    method: "POST",
-    headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ label: `Mesa-${randomUUID().slice(0, 8)}`, zoneId: tablesZoneId }),
-  });
-  expect(table.status).toBe(200);
-  const { id: tableId } = (await table.json()) as { id: string };
+  const { id: tableId } = await withTransaction(suite.db, (tx) =>
+    createTable(tx, cfg, { label: `Mesa-${randomUUID().slice(0, 8)}`, zoneId: tablesZoneId }),
+  );
   const opened = await app.request(`/api/tables/${tableId}/seat`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },

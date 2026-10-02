@@ -384,11 +384,9 @@ export async function seatedWith(
   venue: BillVenue,
   ...names: string[]
 ): Promise<{ partyId: string; tabId: string; tableId: string; revision: number }> {
-  const table = await send(venue.app, venue.cookie, "POST", "/api/tables", {
-    label: `Mesa ${randomUUID().slice(0, 8)}`,
-    zoneId: venue.zoneId,
-  });
-  const tableId = table.json.id as string;
+  const { id: tableId } = await withTransaction(venue.db, (tx) =>
+    createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+  );
   const seated = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   if (seated.status !== 200) throw new Error(`seatedWith: seating answered ${seated.status}`);
   const partyId = seated.json.partyId as string;

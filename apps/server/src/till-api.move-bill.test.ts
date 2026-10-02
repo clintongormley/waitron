@@ -3,8 +3,16 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentLines, billPaymentRefunds, floorZones, saleLines, sales } from "@waitron/db";
+import {
+  billPaymentLines,
+  billPaymentRefunds,
+  floorZones,
+  saleLines,
+  sales,
+  withTransaction,
+} from "@waitron/db";
 import { parkOrder, placeOrder } from "./working-order.js";
+import { createTable } from "./tables.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
@@ -164,12 +172,10 @@ function holderOf(tableId: string): string | null {
 }
 
 async function freeTable(): Promise<string> {
-  const table = await post("/api/tables", {
-    label: `Mesa ${randomUUID().slice(0, 8)}`,
-    zoneId: venue.zoneId,
-  });
-  expect(table.status).toBe(200);
-  return table.json.id as string;
+  const { id } = await withTransaction(venue.db, (tx) =>
+    createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+  );
+  return id;
 }
 
 /** An open counter order in the tables' zone, so its service mode matches a party's main bill. */
@@ -1075,12 +1081,7 @@ describe("the move route", () => {
       expectedOtherPartyRevision: revisionOf(luis.partyId),
     };
     const left = await post(`/api/parties/${luis.partyId}/move`, {
-      toTableId: (
-        await post("/api/tables", {
-          label: `Mesa ${randomUUID().slice(0, 8)}`,
-          zoneId: venue.zoneId,
-        })
-      ).json.id,
+      toTableId: await freeTable(),
       expectedPartyRevision: read.expectedOtherPartyRevision,
     });
     expect(left.status).toBe(200);

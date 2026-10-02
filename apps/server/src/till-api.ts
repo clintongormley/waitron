@@ -63,14 +63,11 @@ import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-s
 import { enqueueManualDrawerOpen, resolveReceiptPrinter } from "./receipt-print.js";
 import {
   clearPlacement,
-  createTable,
-  deactivateTable,
   listServiceStatuses,
   listTables,
   listZones,
   setTablePlacement,
   setTableStatus,
-  updateTable,
   type FloorTableShape,
 } from "./tables.js";
 import {
@@ -368,7 +365,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.not_found": 404,
   "reader.provider_disconnected": 409,
   "table.not_found": 404,
-  "table.label_taken": 409,
   "table.inactive": 409,
   "zone.not_found": 404,
   "placement.invalid": 400,
@@ -507,17 +503,6 @@ export function parseOverrideField(value: unknown): { personId: string; pin: str
  */
 export function overridePinAttempts(pinThrottle: PinThrottle, sessionTillId: string): PinAttempts {
   return { throttle: pinThrottle, slot: `override:${sessionTillId}` };
-}
-
-/**
- * The whole bound on `dining_tables.capacity`: it is a plain integer column with no check, so
- * nothing below this screen refuses an out-of-range value.
- */
-function requireCapacity(capacity: number | undefined): void {
-  if (capacity === undefined) return;
-  if (!Number.isInteger(capacity) || capacity < 0 || capacity > 2_147_483_647) {
-    throw new AppError("management.request_invalid", { field: "capacity" });
-  }
 }
 
 /** A non-UUID names no open tab, so it gets the absent tab's `tab.not_open`. */
@@ -908,8 +893,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       pinThrottle.clear(device.deviceId, personId);
       setSessionCookie(c, session.token, deps.secureCookies);
-      // Display only: every server gate re-checks its permission via `authorize`, so a tampered
-      // client list grants nothing.
+      // Display only: the server checks each permission itself, so a tampered client list grants
+      // nothing.
       return c.json({
         personId: session.personId,
         permissions: permissionsForRole(session.role),
@@ -1768,20 +1753,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/tables", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const body = await readJsonBody<{ label: string; zoneId?: string; capacity?: number }>(c);
-      requireCapacity(body.capacity);
-      if (body.zoneId !== undefined && !isUuid(body.zoneId))
-        throw new AppError("zone.not_found", { zoneId: body.zoneId });
-      const result = await withTransaction(deps.db, async (tx) => {
-        return createTable(tx, deps.cfg, body);
-      });
-      return c.json(result);
-    }),
-  );
-
   app.get("/api/tables", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1819,34 +1790,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return listServiceStatuses(tx);
       });
       return c.json(statuses);
-    }),
-  );
-
-  app.patch("/api/tables/:id", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{ label?: string; zoneId?: string; capacity?: number }>(c);
-      requireCapacity(body.capacity);
-      if (body.zoneId !== undefined && !isUuid(body.zoneId))
-        throw new AppError("zone.not_found", { zoneId: body.zoneId });
-      await withTransaction(deps.db, async (tx) => {
-        await updateTable(tx, deps.cfg, id, body);
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  app.delete("/api/tables/:id", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await withTransaction(deps.db, async (tx) => {
-        await deactivateTable(tx, deps.cfg, id);
-      });
-      return c.body(null, 200);
     }),
   );
 

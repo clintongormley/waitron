@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { withTransaction } from "@waitron/db";
 import {
   provisionBillVenue,
   seatedWith,
@@ -11,6 +12,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import "./errors.js";
+import { createTable } from "./tables.js";
 
 // The routes of Move guests, Join tables and Split a table (table actions plan, Task 8). The
 // actions themselves are tested in `party-table-actions.test.ts`.
@@ -46,12 +48,10 @@ function tablesOf(partyId: string): string[] {
 }
 
 async function freeTable(): Promise<string> {
-  const table = await post("/api/tables", {
-    label: `Mesa ${randomUUID().slice(0, 8)}`,
-    zoneId: venue.zoneId,
-  });
-  expect(table.status).toBe(200);
-  return table.json.id as string;
+  const { id } = await withTransaction(venue.db, (tx) =>
+    createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+  );
+  return id;
 }
 
 /** Ana at two tables, her main bill (Tarta) and a split bill (Pulpo). */
