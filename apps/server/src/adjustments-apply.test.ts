@@ -1062,6 +1062,38 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     expect(await placeOf(billId, 2)).toEqual({ groupId: null, sent: false, items: [] });
   });
 
+  it("clears the chosen station on added units of an adjusted unsent line", async () => {
+    const { billId } = await bill([]);
+    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+      revision: (await stateOf(billId)).order!.revision,
+      lines: [{ menuItemId: venue.item("Burger"), quantity: "1", makeAt: venue.stationId }],
+      operatorId: venue.staffId,
+    });
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+
+    await inTx(venue, async (tx) =>
+      updateOrderLine(
+        tx,
+        venue.cfg,
+        billId,
+        1,
+        { quantity: "2", makeAt: null },
+        await readOrderRevision(tx, billId),
+        venue.staffId,
+      ),
+    );
+
+    const stations = await inTx(venue, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(stations).toEqual([{ makeAt: null }, { makeAt: null }]);
+    expect(await placeOf(billId, 2)).toEqual({ groupId: null, sent: false, items: [] });
+  });
+
   it("sends the coffee added to a comped one poured at the bar straight away, in its group", async () => {
     const { billId } = await bill([{ name: "Coffee" }]);
     const coffee = await placeOf(billId, 1);

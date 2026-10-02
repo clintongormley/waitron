@@ -163,6 +163,8 @@ describe("moveDishesToStation", () => {
     expect(item.stationId).toBe(bar);
     const oldBarJobs = (await jobs(barPrinter)).length;
     const oldGrillJobs = (await jobs(grillPrinter)).length;
+    const oldGrillNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill)))
+      .length;
     const s1 = { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill };
     const movedAt = new Date("2026-10-02T18:45:00.000Z");
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -194,9 +196,16 @@ describe("moveDishesToStation", () => {
     expect(movedLine!.makeAt).toBe(grill);
     expect((await jobs(barPrinter)).length, "Bar's printer has one new job").toBe(oldBarJobs + 1);
     expect(decodeTicket((await jobs(barPrinter))[oldBarJobs]!.payload)).toContain("MOVED TO GRILL");
+    expect((await jobs(grillPrinter)).length, "Grill's printer has one new job").toBe(
+      oldGrillJobs + 1,
+    );
     const grillPaper = decodeTicket((await jobs(grillPrinter))[oldGrillJobs]!.payload);
     expect(grillPaper).toContain("From Bar");
     expect(grillPaper).toContain("BURG");
+    expect(grillPaper).not.toMatch(/^\s*(?:\*+\s*)?(?:HOLD|FIRE)\b/m);
+    expect((await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill))).length).toBe(
+      oldGrillNotices,
+    );
     const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
     expect(notices.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
     const back = await inTx(venue, (tx) =>
@@ -470,6 +479,16 @@ describe("moveDishesToStation", () => {
     const before = {
       bar: (await jobs(barPrinter)).length,
       grill: (await jobs(grillPrinter)).length,
+      barNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
+      grillNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill))).length,
+      revision: (
+        await inTx(venue, (tx) =>
+          tx
+            .select({ revision: workingOrders.revision })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, tabId)),
+        )
+      )[0]!.revision,
     };
     await expect(
       inTx(venue, (tx) =>
@@ -483,6 +502,16 @@ describe("moveDishesToStation", () => {
     expect({
       bar: (await jobs(barPrinter)).length,
       grill: (await jobs(grillPrinter)).length,
+      barNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
+      grillNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill))).length,
+      revision: (
+        await inTx(venue, (tx) =>
+          tx
+            .select({ revision: workingOrders.revision })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, tabId)),
+        )
+      )[0]!.revision,
     }).toEqual(before);
   });
 

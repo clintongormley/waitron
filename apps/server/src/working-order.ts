@@ -4478,13 +4478,15 @@ async function applyLineEdits(
               kitchen: kitchenStateOf(parent),
               joins: parent,
               origin: parent,
-              inheritMakeAt: intent.makeAt == null,
+              inheritMakeAt:
+                intent.makeAt === undefined || (intent.makeAt === null && parent.ticket !== null),
             }
           : {
               kind: "line",
               kitchen: "fire",
               origin: parent,
-              inheritMakeAt: intent.makeAt == null,
+              inheritMakeAt:
+                intent.makeAt === undefined || (intent.makeAt === null && parent.ticket !== null),
             },
       );
     }
