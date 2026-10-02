@@ -1,4 +1,5 @@
 import { reorder } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -98,6 +99,93 @@ async function click(el: VariantTable, id: string) {
   await el.updateComplete;
 }
 
+type Box = HTMLElement & {
+  label: string;
+  hideLabel: boolean;
+  search: string;
+  placeholder: string;
+  value: string;
+  disabled: boolean;
+  options: { value: string; label: string; action?: true }[];
+  updateComplete: Promise<unknown>;
+};
+const box = (el: VariantTable, name: string) =>
+  el.shadowRoot!.querySelector<Box>(`wt-combobox[name="${name}"]`)!;
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shown(el: VariantTable, name: string): Promise<string | undefined> {
+  const combobox = box(el, name);
+  await combobox.updateComplete;
+  return combobox.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
+it("filters the rows by status from the shared dropdown", async () => {
+  const el = await mountTable({ variants: withRemoved() });
+  const filter = box(el, "variant-status");
+  expect(filter).not.toBeNull();
+  expect(filter.label).toBe(t("editor.variants_show"));
+  expect(filter.search).toBe("auto");
+  expect(filter.options).toEqual([
+    { value: "active", label: t("product.active_badge") },
+    { value: "inactive", label: t("product.inactive_badge") },
+    { value: "all", label: t("product.filter_status_all") },
+  ]);
+  expect(filter.value).toBe("active");
+  expect(await shown(el, "variant-status")).toBe(t("product.active_badge"));
+  await chooseOption(filter, "inactive");
+  await el.updateComplete;
+  expect(cells(el, 1).map((text) => text.replace(/\s+/g, " "))).toEqual([
+    `Entera ${t("product.inactive_badge")}`,
+  ]);
+  expect(await shown(el, "variant-status")).toBe(t("product.inactive_badge"));
+});
+
+it("picks the pricing unit from an unlabelled shared dropdown whose last row adds a unit", async () => {
+  const el = await mountTable({
+    unitId: "kg",
+    unitOptions: [
+      { value: null, label: "Each" },
+      { value: "kg", label: "kg" },
+    ],
+    addUnitLabel: "Add unit",
+  });
+  const unit = box(el, "pricing-unit");
+  expect(unit).not.toBeNull();
+  expect(unit.label).toBe(t("product.unit"));
+  expect(unit.hideLabel).toBe(true);
+  expect(unit.search).toBe("auto");
+  // Each is the unit a product with none sells in: the prompt shown for no unit, and a row.
+  expect(unit.placeholder).toBe("Each");
+  expect(unit.options).toEqual([
+    { value: "", label: "Each" },
+    { value: "kg", label: "kg" },
+    { value: "__add__", label: "Add unit", action: true },
+  ]);
+  expect(unit.value).toBe("kg");
+  expect(await shown(el, "pricing-unit")).toBe("kg");
+  const changed = listen(el, "wt-unit-change");
+  await chooseOption(unit, "");
+  expect(changed.mock.calls[0]![0].detail).toEqual({ unitId: null });
+  const added = listen(el, "wt-add-unit");
+  unit.dispatchEvent(
+    new CustomEvent("wt-combobox-action", {
+      detail: { value: "__add__" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  expect(added).toHaveBeenCalledOnce();
+  expect(changed).toHaveBeenCalledOnce();
+  el.busy = true;
+  await el.updateComplete;
+  expect(unit.disabled).toBe(true);
+});
+
+it("offers no add-unit row when the host gives it no label", async () => {
+  const el = await mountTable({ unitId: null, unitOptions: [{ value: null, label: "Each" }] });
+  expect(box(el, "pricing-unit").options).toEqual([{ value: "", label: "Each" }]);
+  expect(await shown(el, "pricing-unit")).toBe("Each");
+});
+
 it("lists one row per variant with its staff name and price, and changes the unit from the header", async () => {
   const el = await mountTable();
   expect(rows(el)).toHaveLength(3);
@@ -110,15 +198,14 @@ it("lists one row per variant with its staff name and price, and changes the uni
     { value: "l", label: "l" },
   ];
   await el.updateComplete;
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
+  const select = box(el, "pricing-unit");
   expect(select.value).toBe("kg");
-  // The heading names the price once, and the select shows only the unit, so a narrow column
+  // The heading names the price once, and the dropdown shows only the unit, so a narrow column
   // still has room to read it.
-  expect(select.selectedOptions[0]!.textContent!.trim()).toBe("kg");
+  expect(await shown(el, "pricing-unit")).toBe("kg");
   expect(select.closest("th")!.textContent).toContain(t("product.price"));
   const changed = listen(el, "wt-unit-change");
-  select.value = "l";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(select, "l");
   expect(changed.mock.calls[0]![0].detail).toEqual({ unitId: "l" });
   // The table is a staff screen: the customer-facing name belongs to the receipt, not here.
   expect(el.shadowRoot!.textContent).not.toContain("Media ración");
@@ -134,11 +221,17 @@ it("returns the unit chooser to its saved value after Add unit is chosen", async
     addUnitLabel: "Add unit",
   });
   const added = listen(el, "wt-add-unit");
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
-  select.value = "__add__";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  const select = box(el, "pricing-unit");
+  select.dispatchEvent(
+    new CustomEvent("wt-combobox-action", {
+      detail: { value: "__add__" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   expect(added).toHaveBeenCalledOnce();
   expect(select.value).toBe("kg");
+  expect(await shown(el, "pricing-unit")).toBe("kg");
 });
 
 it("keeps the unit chooser in the price heading a tap target on both axes", async () => {
@@ -152,11 +245,9 @@ it("keeps the unit chooser in the price heading a tap target on both axes", asyn
     });
     const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
     expect(tapMin).toBeGreaterThan(0);
-    const box = el
-      .shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!
-      .getBoundingClientRect();
-    expect(box.height).toBeGreaterThanOrEqual(tapMin);
-    expect(box.width).toBeGreaterThanOrEqual(tapMin);
+    const rect = box(el, "pricing-unit").getBoundingClientRect();
+    expect(rect.height).toBeGreaterThanOrEqual(tapMin);
+    expect(rect.width).toBeGreaterThanOrEqual(tapMin);
   });
 });
 
@@ -356,9 +447,7 @@ const withRemoved = (): ProductEditorVariant[] =>
   threeVariants().map((variant, index) => (index === 1 ? { ...variant, active: false } : variant));
 
 async function showStatus(el: VariantTable, status: string) {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="variant-status"]')!;
-  select.value = status;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(box(el, "variant-status"), status);
   await el.updateComplete;
 }
 
@@ -384,8 +473,7 @@ it("hides Inactive variants until the status filter asks for them", async () => 
   expect(names()).toEqual([`Entera ${t("product.inactive_badge")}`]);
   await showStatus(el, "all");
   expect(names()).toEqual(["Media", `Entera ${t("product.inactive_badge")}`, "Doble"]);
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="variant-status"]')!;
-  expect(select.selectedOptions[0]!.textContent!.trim()).toBe(t("product.filter_status_all"));
+  expect(await shown(el, "variant-status")).toBe(t("product.filter_status_all"));
 });
 
 it("says so when no variant has the chosen status", async () => {
@@ -476,6 +564,15 @@ it("shows every row when a variant is added while the filter shows only Inactive
   // Choosing the filter again is honoured: the new row forced it open once, not for good.
   await showStatus(el, "inactive");
   expect(cells(el, 1)).toHaveLength(1);
+});
+
+it("names All in the status dropdown when an added variant puts every row on screen", async () => {
+  const el = await mountTable({ variants: withRemoved().slice(0, 2) });
+  await showStatus(el, "inactive");
+  el.variants = [...el.variants, threeVariants()[2]!];
+  await el.updateComplete;
+  expect(box(el, "variant-status").value).toBe("all");
+  expect(await shown(el, "variant-status")).toBe(t("product.filter_status_all"));
 });
 
 it("shows no price hint at all while the product has no base price yet", async () => {

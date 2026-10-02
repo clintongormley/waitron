@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { ProductEditor } from "./product-editor.js";
@@ -209,9 +210,10 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       // Every status at once, so the scan covers an Inactive row and a row priced by its hint.
       const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
       await table.updateComplete;
-      const filter = table.shadowRoot!.querySelector<HTMLSelectElement>("[name=variant-status]")!;
-      filter.value = "all";
-      filter.dispatchEvent(new Event("change"));
+      await chooseOption(
+        table.shadowRoot!.querySelector("wt-combobox[name=variant-status]")!,
+        "all",
+      );
       await table.updateComplete;
       expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(3);
     }

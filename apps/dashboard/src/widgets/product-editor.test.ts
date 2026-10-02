@@ -244,7 +244,7 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
     });
     const table = variantTable(el)!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+    const select = table.shadowRoot!.querySelector('wt-combobox[name="pricing-unit"]')!;
     expect(select.getClientRects().length).toBeGreaterThan(0);
     expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
   });
@@ -265,7 +265,7 @@ it("changes a product's unit from the price field when the table's heading selec
   table.style.width = "20rem";
   await table.updateComplete;
   await new Promise((resolve) => requestAnimationFrame(resolve));
-  const heading = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+  const heading = table.shadowRoot!.querySelector('wt-combobox[name="pricing-unit"]')!;
   expect(heading.getClientRects()).toHaveLength(0);
   await openUnits(el);
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
@@ -1250,11 +1250,12 @@ it("names the product's unit in the variants table's price column", async () => 
     });
     const table = variantTable(el)!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[name="pricing-unit"]',
-    )!;
+    const select = table.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >('wt-combobox[name="pricing-unit"]')!;
     expect(select.getClientRects().length).toBeGreaterThan(0);
-    expect(select.selectedOptions[0]!.textContent!.trim()).toBe("ea");
+    await select.updateComplete;
+    expect(triggerText(select)).toBe("ea");
   });
 });
 
@@ -2544,7 +2545,7 @@ it.each(
       expect(linesOf(available, t("editor.available")), "the Available heading").toBe(1);
       // The heading's unit select goes with the price column. The unit stays one tap away on the
       // price field above the table, whose unit button changes the same unit.
-      const unitSelect = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+      const unitSelect = table.shadowRoot!.querySelector('wt-combobox[name="pricing-unit"]')!;
       expect(unitSelect.getClientRects()).toHaveLength(0);
       const unitButton = el
         .shadowRoot!.querySelector('wt-price-input[name="unit-price"]')!
