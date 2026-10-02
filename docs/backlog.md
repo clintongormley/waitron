@@ -824,7 +824,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
-cuts the label. Done: A178h, "Each" on a product and in the variants table's unit heading is drawn as
+cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
 a chosen value rather than the grey prompt (the dropdown gives it the stand-in value `__each__`, and
 a save still stores no unit); a variant's "Same as …" keeps the grey look. **Seen while building,
 not changed:**
