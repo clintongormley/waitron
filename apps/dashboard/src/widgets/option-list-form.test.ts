@@ -398,6 +398,83 @@ it("opens the option editor on a row's option, and its Save replaces that row wi
   ]);
 });
 
+/** The control an option's name is drawn in, which opens that option's editor. */
+function nameButton(el: OptionListForm, index: number): HTMLButtonElement {
+  return el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test="open-label-${index}"]`)!;
+}
+
+it("opens the option editor on an option when its name is clicked", async () => {
+  const { el } = await mount({ value: cooked });
+
+  await userEvent.click(el.shadowRoot!.querySelector('[data-test="label-1-name"]')!);
+  await el.updateComplete;
+  await editor(el).updateComplete;
+
+  expect(editor(el).open).toBe(true);
+  expect(editor(el).value).toEqual({ ...cooked.labels[1]!, kitchenName: "M" });
+  expect(field(editor(el), "label-name").value).toBe("Medium");
+});
+
+it("draws an option's name as a button that says it edits that option", async () => {
+  const { el } = await mount({ value: cooked });
+  const button = nameButton(el, 0);
+
+  expect(button.tagName).toBe("BUTTON");
+  expect(button.type).toBe("button");
+  expect(button.getAttribute("aria-label")).toBe(`${t("options.edit_option")}: Rare`);
+  expect(button.contains(el.shadowRoot!.querySelector('[data-test="label-0-name"]'))).toBe(true);
+});
+
+it("draws the name button as the name's text, a tap target high, with the keyboard focus ring from tokens", async () => {
+  const { el, host } = await mount({ value: cooked });
+  host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-font-size-md", "17px");
+  host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
+  host.style.setProperty("--wt-focus-offset", "5px");
+  const button = nameButton(el, 0);
+
+  const style = getComputedStyle(button);
+  expect(style.color).toBe("rgb(1, 2, 3)");
+  expect(style.fontSize).toBe("17px");
+  expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(style.borderTopWidth).toBe("0px");
+  expect(style.cursor).toBe("pointer");
+  host.style.setProperty("--wt-tap-min", "52px");
+  expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+
+  await userEvent.keyboard("{Tab}");
+  button.focus();
+  expect(button.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(button).outlineColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(button).outlineWidth).toBe("3px");
+  expect(getComputedStyle(button).outlineOffset).toBe("5px");
+});
+
+it.each(["{Enter}", " "])(
+  "opens the option editor from the keyboard on the name: %s",
+  async (key) => {
+    const { el } = await mount({ value: cooked });
+
+    nameButton(el, 0).focus();
+    await userEvent.keyboard(key);
+    await el.updateComplete;
+    await editor(el).updateComplete;
+
+    expect(editor(el).open).toBe(true);
+    expect(editor(el).value).toEqual({ ...cooked.labels[0]!, kitchenName: "R" });
+  },
+);
+
+it("keeps the Default radio's click to itself: it chooses the default and opens no editor", async () => {
+  const { el } = await mount({ value: cooked });
+
+  await userEvent.click(radio(el, 0));
+  await el.updateComplete;
+
+  expect(checkedDefault(el)).toEqual([0]);
+  expect(editor(el).open).toBe(false);
+});
+
 it("changes nothing when the option editor is cancelled", async () => {
   const { el, host } = await mount({ value: cooked });
   const submitted = record(host);
@@ -857,6 +934,19 @@ it("puts focus back on that row's actions after the option editor saves", async 
 
   expect(text(el, "label-0-name")).toBe("Blue");
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(actions));
+});
+
+it("puts focus back on the option's name when the editor its name opened closes", async () => {
+  const { el } = await mount({ value: cooked });
+  await userEvent.click(nameButton(el, 1));
+  await el.updateComplete;
+  await editor(el).updateComplete;
+  await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(true));
+
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(false));
+
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(nameButton(el, 1)));
 });
 
 it("puts focus back on Add option after a new option is saved", async () => {

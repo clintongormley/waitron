@@ -701,35 +701,30 @@ the heading only while closed. The Options and Extras editors' "Customer and kit
 names" line lists the names themselves (`ES … · EN … · Kitchen …`) instead of a count. The rule in
 `docs/developers/design-system.md` is rewritten to match.
 
-**The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — OPEN.**
-Both in the editor for one options list, `apps/dashboard/src/widgets/option-list-form.ts`, and the
-window it opens for one option, `apps/dashboard/src/widgets/option-label-form.ts`.
-
-- **Clicking an option's name should open its "Edit option" window.** Today the name is plain text
-  in the row (`#labelRow`); only the row menu's Edit opens the window (`#openEditor`). The Default
-  radio button and the row menu in the same row must keep their own clicks.
-- **The "Edit option" window shows the customer-facing names without folding them** — owner: _"it's
-  the only thing on that screen"_ besides the name and the Available switch. Today they sit in a
-  `wt-disclosure` that starts collapsed. **Decided (owner, 2026-10-01, mockup D2 of
-  [the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)):** no fold at all in this
-  window — the fields sit under a plain "Customer-facing names" heading, always shown, in the
-  order Name, Kitchen name (A171), the customer-facing names, Available. "Add option" opens the same
-  window and looks the same (owner, 2026-10-01: "yes"). The design-system rule "Sections always
-  start collapsed" is untouched, because this window no longer has a section that folds.
+**The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — DONE (#PR).**
+In the editor for one options list (`apps/dashboard/src/widgets/option-list-form.ts`), an option's
+name in its row is now a button, drawn as the name's text, that opens its "Edit option" window; the
+Default radio button and the row menu keep their own clicks, and closing the window puts focus back
+on the name. The window (`apps/dashboard/src/widgets/option-label-form.ts`) has no folding section:
+Name, then Kitchen name (A171's decision for this window), then the customer-facing names under a
+plain "Customer-facing names" heading, then Available, the same on Add and Edit (owner,
+2026-10-01, mockup D2 of [the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)).
 
 **The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171,
 owner 2026-10-01: "i think we should separate kitchen name from customer facing names
-(everywhere)") — OPEN.** Three editors put the kitchen name inside one "Customer and kitchen
+(everywhere)") — OPEN.** Two editors put the kitchen name inside one "Customer and kitchen
 names" section with the customer-facing name in each language: an options list
-(`apps/dashboard/src/widgets/option-list-form.ts`), one option (`option-label-form.ts`) and an
-extras list (`extra-list-form.ts`). The product editor already keeps them apart — the kitchen name
+(`apps/dashboard/src/widgets/option-list-form.ts`) and an extras list (`extra-list-form.ts`). The
+window for one option (`option-label-form.ts`) was done with A170: Kitchen name sits directly under
+Name there, and the window has no folding section. The product editor already keeps them apart — the kitchen name
 is in its "Kitchen" section with course, the customer-facing names under
 "Descriptors" (`product-editor.ts`) — and the variant form (`variant-form.ts`) has no section but
 shows the kitchen name as its own field directly above the customer-facing names. **Decided
-(owner, 2026-10-01, mockup B):** in the three editors the kitchen name is a plain field, always
+(owner, 2026-10-01, mockup B):** in the two list editors the kitchen name is a plain field, always
 shown, directly under Name; only the customer-facing names stay in the folding section, now headed
 "Customer-facing names". The product editor and the variant form already keep the two apart and are
-left as they are. Done together with A170. The section heading strings
+left as they are. A170 added `options.customer_names` ("Customer-facing names", "Nombres para el
+cliente") for the option window's heading. The section heading strings
 (`options.names_section`, `extras.names_section` in `apps/dashboard/src/i18n/strings.ts`, English
 and Spanish) change with it, and so does the closed section's summary: A169 (#1026) landed first
 and its summary lists the kitchen name with the customer-facing names (`namesLine`,
@@ -1032,7 +1027,9 @@ Default and menu columns. **Wanted:** the handle, Default and menu columns as na
 controls, and Name taking the rest. Same check on the extras list form's table. A195 asks the same
 of `wt-data-table`'s Actions column; one approach for both is welcome.
 
-**The option form opens with its names section expanded (A199, owner 2026-10-02) — OPEN.** The
+**The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
+(#PR):** the option window no longer folds its names at all, so they show on open on Add and Edit;
+"can still be collapsed" no longer applies, because nothing folds. The
 owner, on screenshots of "Add option": _"on the edit/add options page start with the names block
 expanded as there is very little else on this page"_. The single option's form
 (`apps/dashboard/src/widgets/option-label-form.ts`) holds only Name, the "Customer and kitchen names"
@@ -1045,7 +1042,7 @@ OPEN.** The owner: _"when rendering the names block "EN Medium, pink in the midd
 rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
 · ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
 line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
-list, option and extras list forms. **Decided (owner, 2026-10-02, choosing B of three mockups,
+list and extras list forms (the option form stopped folding its names with A170). **Decided (owner, 2026-10-02, choosing B of three mockups,
 "although C is good too"):** "EN:", "ES:" and "Kitchen:" (Spanish "Cocina:") in bold, the values
 in the summary's usual muted text. (C, the field names in full-strength text rather than bold, was
 the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give
@@ -1230,8 +1227,8 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033) and A177 (#1037) are done; next A170–A172, built in the new style rather
-than restyled twice.
+A169 (#1026), A176 (#1033), A177 (#1037) and A170 (#PR) are done; next A171 and A172, built in the
+new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line

@@ -16,7 +16,7 @@ const rare: DraftLabel = {
   available: true,
 };
 
-const states = ["closed", "add", "edit", "names-open", "invalid", "error", "busy"] as const;
+const states = ["closed", "add", "edit", "invalid", "error", "busy"] as const;
 
 describe.each(["light", "dark"] as const)("option editor (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
@@ -35,13 +35,7 @@ describe.each(["light", "dark"] as const)("option editor (%s)", (theme) => {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
     }
-    const names = el.shadowRoot!.querySelector<
-      HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
-    >('[data-test="names-section"]')!;
-    if (state === "names-open") names.open = true;
-    await names.updateComplete;
     // Each named state is scanned in the shape it names.
-    expect(names.open).toBe(state === "names-open" || state === "error");
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(state !== "closed");
     await expectNoA11yViolations(host);
   });

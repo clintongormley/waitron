@@ -88,6 +88,17 @@ export class OptionListForm extends LitElement {
         /* The user agent's own margin is lopsided (none below), which sets the dot off-centre. */
         margin: 0;
       }
+      .open-label {
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: start;
+        overflow-wrap: anywhere;
+        cursor: pointer;
+      }
       .label-actions {
         display: flex;
         flex-wrap: wrap;
@@ -302,8 +313,11 @@ export class OptionListForm extends LitElement {
     this.#closeEditor();
   }
 
-  #openEditor(label: DraftLabel | "new"): void {
+  #openedFrom: "name" | "menu" = "menu";
+
+  #openEditor(label: DraftLabel | "new", from: "name" | "menu" = "menu"): void {
     this.editingLabel = label;
+    this.#openedFrom = from;
   }
 
   /** Closes the option editor and puts focus back on the control that opened it. The focus waits
@@ -311,16 +325,21 @@ export class OptionListForm extends LitElement {
   #closeEditor(): void {
     const editing = this.editingLabel;
     this.editingLabel = null;
-    void this.#returnFocus(editing === null || editing === "new" ? null : editing.id);
+    void this.#returnFocus(
+      editing === null || editing === "new" ? null : editing.id,
+      this.#openedFrom,
+    );
   }
 
-  async #returnFocus(id: string | null): Promise<void> {
+  async #returnFocus(id: string | null, to: "name" | "menu" = "menu"): Promise<void> {
     await this.updateComplete;
     await this.shadowRoot!.querySelector("dashboard-option-label-form")!.updateComplete;
     const target =
       id === null
         ? this.shadowRoot!.querySelector<HTMLElement>('[data-test="add-option"]')
-        : this.shadowRoot!.querySelector<HTMLElement>(`tr[data-label="${id}"] wt-row-actions`);
+        : this.shadowRoot!.querySelector<HTMLElement>(
+            `tr[data-label="${id}"] ${to === "name" ? ".open-label" : "wt-row-actions"}`,
+          );
     target?.focus();
   }
 
@@ -445,7 +464,18 @@ export class OptionListForm extends LitElement {
       <td class="handle-cell">${this.#reorder.handle(label.id)}</td>
       <td>
         <div class="option-name">
-          <span data-test=${`label-${index}-name`}>${label.name}</span>${
+          <button
+            type="button"
+            class="open-label"
+            data-test=${`open-label-${index}`}
+            aria-label=${`${t("options.edit_option")}: ${label.name}`}
+            @click=${(event: Event) => {
+              event.stopPropagation();
+              this.#openEditor(label, "name");
+            }}
+          >
+            <span data-test=${`label-${index}-name`}>${label.name}</span></button
+          >${
             label.available
               ? nothing
               : html`<wt-lozenge data-test=${`label-${index}-unavailable`}
