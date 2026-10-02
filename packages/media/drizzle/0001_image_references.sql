@@ -1,7 +1,13 @@
 -- The two foreign keys `products.image` and `category_details.image` carried, as triggers.
 --
--- Guard: `packages/media/src/image-references.test.ts`, which pins the eight names AND tries a real
--- offending write against each rule with an accepting control beside it.
+-- Under PostgreSQL these were `products_media_image_fk` and `category_details_media_image_fk`, both
+-- `FOREIGN KEY (image) REFERENCES media_images (filename) ON DELETE RESTRICT`, written by hand in
+-- `--custom` SQL: `git show origin/main:packages/media/drizzle/0001_media_baseline_sql.sql`, lines
+-- 106-112. Regenerating every migration set from the TypeScript schema for the storage switch
+-- dropped both — a key that lives only in hand-written SQL does not survive a regeneration — and a
+-- `media_image_fk` grep over this tree's `.sql` files found nothing. This file is where they come
+-- back. Guard: `packages/media/src/image-references.test.ts`, which pins the eight names AND tries
+-- a real offending write against each rule with an accepting control beside it.
 --
 -- THE TWO-FILE RULE PERMITS THEM. `CLAUDE.md` §3: a table's class chooses the database FILE, and no
 -- foreign key may join a `local` table to a `ledger`/`state` one. All three tables here are `state`,
@@ -29,7 +35,7 @@
 -- and 2 checks that `packages/db` owns — into this module's migration, where the next core change
 -- to that table would silently leave it stale.
 --
--- WHAT A TRIGGER IS NOT. Three things, none of them reachable from a caller in the tree today:
+-- WHAT A TRIGGER IS NOT. Four things, none of them reachable from a caller in the tree today:
 --
 --   1. `pragma foreign_key_list('products')` does not list this, and nothing that enumerates keys
 --      from the engine will see it.
@@ -44,17 +50,23 @@
 --      `category_details` (`packages/media/src/module.ts:19`); and the test reset in
 --      `packages/db/src/testing/venue-db.ts` drops every trigger before its deletes and recreates
 --      them after.
+--   4. `raise` takes a LITERAL, so the message cannot name the row or the filename. It is the
+--      constraint's own name and nothing else, which is the one part of PostgreSQL's message that
+--      located the rule.
 --
 -- FOUR TRIGGERS PER KEY, because SQLite has no `BEFORE INSERT OR UPDATE` and no foreign key
 -- machinery to borrow: the two that guard a written filename (insert, update of `image`), and the
 -- two that guard the parent (`ON DELETE RESTRICT`, and the `ON UPDATE NO ACTION` that the key
 -- carried by default — nothing in the tree renames a stored filename, since it is the hash of the
 -- bytes, and the rule is restored rather than dropped so that nothing silently gains the ability).
--- `is not` is SQLite's null-safe inequality: `1 is not 2` and `1 is not null` are 1, `null is not
--- null` is 0 (measured 2026-10-02 on `node:sqlite`, Node v26.7.0, SQLite 3.53.4).
+-- `is not` is SQLite's null-safe inequality, PostgreSQL's `IS DISTINCT FROM`.
 --
--- `product_variants.image` is deliberately NOT guarded. `listImageUsages` still counts a variant,
--- so a photo a variant uses cannot be deleted through the product's own path.
+-- `product_variants.image` is deliberately NOT guarded: it carried no key on `origin/main` either
+-- (the constraint list in the since-deleted `packages/media/src/images.pg.test.ts` named only
+-- these two and `media_image_data_image_fk`; it is at
+-- `git show origin/main:packages/media/src/images.pg.test.ts`), and restoring more than was there
+-- would be a new rule, not a restoration. `listImageUsages` still counts a variant, so a photo a variant uses cannot be
+-- deleted through the product's own path.
 
 CREATE TRIGGER products_media_image_fk_insert
 BEFORE INSERT ON products
