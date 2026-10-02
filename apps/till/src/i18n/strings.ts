@@ -207,6 +207,7 @@ export const en = {
   "reader_picker.empty": "No active readers configured",
   "reader_picker.offline": "Offline",
   "card_reader.not_set_up": "This device is not set up to use the card reader",
+  "take_payment.not_permitted": "You do not have permission to take payments",
   // Allergen screen chrome; the allergen names are in `allergen-names.ts`.
   "allergens.open": "Allergens",
   "allergens.title": "Allergens",
@@ -1063,6 +1064,7 @@ export const es: Record<StringKey, string> = {
   "reader_picker.empty": "No hay lectores activos configurados",
   "reader_picker.offline": "Sin conexión",
   "card_reader.not_set_up": "Este dispositivo no está configurado para usar el lector de tarjetas",
+  "take_payment.not_permitted": "No tienes permiso para cobrar",
   "allergens.open": "Alérgenos",
   "allergens.title": "Alérgenos",
   "allergens.notice": "Hay información sobre alérgenos disponible — pregunta al personal.",

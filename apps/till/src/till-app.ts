@@ -97,6 +97,7 @@ import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import {
   confirmationOf,
+  isTakePaymentRefusal,
   moneyPlus,
   payLines,
   paymentAsk,
@@ -2309,7 +2310,9 @@ export class TillApp extends LitElement {
           ? "sale.refused"
           : reachedFiscal && isNetworkFailure(error)
             ? "sale.unconfirmed"
-            : counterError(error, "sale.error");
+            : isTakePaymentRefusal(error)
+              ? "take_payment.not_permitted"
+              : counterError(error, "sale.error");
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
@@ -2395,7 +2398,9 @@ export class TillApp extends LitElement {
             ? "sale.unconfirmed"
             : isReaderRefusal(error)
               ? "card_reader.not_set_up"
-              : counterError(error, "sale.error");
+              : isTakePaymentRefusal(error)
+                ? "take_payment.not_permitted"
+                : counterError(error, "sale.error");
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
@@ -2673,7 +2678,9 @@ export class TillApp extends LitElement {
         ? "sale.refused"
         : isNetworkFailure(error)
           ? "sale.unconfirmed"
-          : "sale.error";
+          : isTakePaymentRefusal(error)
+            ? "take_payment.not_permitted"
+            : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -5591,7 +5598,9 @@ export class TillApp extends LitElement {
           ? "sale.refused"
           : isNetworkFailure(error)
             ? "sale.unconfirmed"
-            : "sale.error";
+            : isTakePaymentRefusal(error)
+              ? "take_payment.not_permitted"
+              : "sale.error";
     } finally {
       this.submitting = false;
     }

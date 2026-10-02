@@ -1930,6 +1930,26 @@ describe("till-app table ordering: paying the tab", () => {
     expect(ticket(el)).toBeNull();
     expect(tableOrder(el)).not.toBeNull();
   });
+
+  it("says the operator may not take payments when paying the tab is refused the payment permission", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "authorization.not_permitted",
+        status: 403,
+        permission: "sale.take_payment",
+      }),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, "pay-tab", { method: "cash", amount: "3.00" });
+    await flush(el);
+
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(t("take_payment.not_permitted"));
+    expect(text).not.toContain(t("sale.error"));
+    expect(ticket(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+  });
 });
 
 describe("till-app table ordering: logout while a request is waiting for the server", () => {

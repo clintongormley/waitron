@@ -10,8 +10,17 @@ import {
 } from "./permissions.js";
 
 describe("roleHasPermission", () => {
-  it("gives staff no privileged permission", () => {
-    for (const p of PERMISSIONS) expect(roleHasPermission("staff", p)).toBe(false);
+  it("gives staff no permission but taking a payment", () => {
+    for (const p of PERMISSIONS) {
+      if (p === "sale.take_payment") continue;
+      expect(roleHasPermission("staff", p)).toBe(false);
+    }
+  });
+  it("lets every role take a payment", () => {
+    expect(PERMISSIONS).toContain("sale.take_payment");
+    for (const role of ["staff", "supervisor", "manager", "admin"] as const) {
+      expect(roleHasPermission(role, "sale.take_payment")).toBe(true);
+    }
   });
   it("lets a supervisor void, refund, discount and rectify but not manage staff", () => {
     expect(roleHasPermission("supervisor", "sale.void")).toBe(true);
@@ -161,7 +170,7 @@ describe("permissionsForRole", () => {
   it("spans core + module permissions on the ladder", () => {
     // Registered here too so this test does not depend on the order it runs in.
     registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
-    expect(permissionsForRole("staff")).toEqual([]);
+    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
     expect(permissionsForRole("supervisor")).toContain("report.view");
     expect(permissionsForRole("supervisor")).not.toContain("booking.manage");
     expect(permissionsForRole("manager")).toContain("booking.manage");

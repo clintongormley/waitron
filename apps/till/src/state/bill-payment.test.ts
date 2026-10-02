@@ -230,6 +230,15 @@ describe("refusalOf", () => {
     });
   });
 
+  it("keeps the permission a refusal names as text", () => {
+    expect(
+      refusalOf({ code: "authorization.not_permitted", status: 403, permission: "sale.refund" }),
+    ).toEqual({ code: "authorization.not_permitted", permission: "sale.refund" });
+    expect(refusalOf({ code: "authorization.not_permitted", permission: 7 })).toEqual({
+      code: "authorization.not_permitted",
+    });
+  });
+
   it("reads a refusal with no code of its own as the server's internal error", () => {
     expect(refusalOf({ status: 500 })).toEqual({ code: "server.internal" });
     expect(refusalOf({ code: 20 })).toEqual({ code: "server.internal" });

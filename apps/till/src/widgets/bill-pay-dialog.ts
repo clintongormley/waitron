@@ -27,6 +27,7 @@ import type {
 } from "../api/client.js";
 import {
   PAY_WAYS,
+  isTakePaymentRefusal,
   moneyPlus,
   paidQuantities,
   refundOffered,
@@ -67,6 +68,7 @@ export interface PayRefusal {
   code: string;
   field?: string;
   chargeable?: string;
+  permission?: string;
 }
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
@@ -125,9 +127,10 @@ function chargeableText(amount: string): string {
 }
 
 /** What the dialog says of a refusal: one of the app's own, the most a card can be charged when
- * the venue takes no tips, the till's own sentence for a device not set up for the card reader, or
- * the server's code in its own words. */
+ * the venue takes no tips, the till's own sentence for a device not set up for the card reader or
+ * for a person who may not take payments, or the server's code in its own words. */
 function refusalText(refusal: PayRefusal): string {
+  if (isTakePaymentRefusal(refusal)) return t("take_payment.not_permitted");
   switch (refusal.code) {
     case "network":
       return t("bill_pay.unconfirmed");

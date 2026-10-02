@@ -136,8 +136,9 @@ depends on the permissions of the person using the handheld. But a cash register
 opened by the device it is assigned to."_ And 2026-10-02: _"When we add a printer with a drawer to a
 till, we can specify whether it should control the till or not. So even if the printer is shared
 between tills, any till that says it should control it, does."_ (B29). A handheld places, collects
-and cancels like a till; the operator's permissions decide; none of the three checks a permission,
-only a signed-in operator. A till opens its receipt printer's drawer only while its "Opens the cash
+and cancels like a till; the operator's permissions decide. Placing and cancelling check no
+permission, only a signed-in operator; collecting, like every route that takes a payment, needs
+`sale.take_payment` (C128), which every role holds. A till opens its receipt printer's drawer only while its "Opens the cash
 drawer" setting (`tills.opens_drawer`) is on. It is on for a new till, so a one-till venue needs no
 step; a second till sharing the printer is switched off by hand on the Printing rules screen, which
 shows the switch only when the till's receipt printer has a drawer

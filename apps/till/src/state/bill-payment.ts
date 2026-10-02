@@ -180,12 +180,25 @@ export const REASON_MAX = 500;
  */
 export function refusalOf(error: unknown, changes = true): PayRefusal {
   if (changes && isNetworkFailure(error)) return { code: "network" };
-  const refused = error as { code?: unknown; field?: unknown; chargeable?: unknown };
+  const refused = error as {
+    code?: unknown;
+    field?: unknown;
+    chargeable?: unknown;
+    permission?: unknown;
+  };
   return {
     code: typeof refused.code === "string" ? refused.code : "server.internal",
     ...(typeof refused.field === "string" ? { field: refused.field } : {}),
     ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
+    ...(typeof refused.permission === "string" ? { permission: refused.permission } : {}),
   };
+}
+
+export function isTakePaymentRefusal(error: unknown): boolean {
+  const refused = error as { code?: unknown; permission?: unknown } | undefined;
+  return (
+    refused?.code === "authorization.not_permitted" && refused.permission === "sale.take_payment"
+  );
 }
 
 /** A refund as confirmed: without its submission id, and without the approver's PIN, which is

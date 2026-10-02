@@ -687,6 +687,23 @@ describe("till-app: a bill payment's refusals and retries", () => {
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="1"]')).toBeNull();
   });
 
+  it("says the operator may not take payments when the server refuses them the payment permission", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue({
+      code: "authorization.not_permitted",
+      status: 403,
+      permission: "sale.take_payment",
+    });
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("take_payment.not_permitted"));
+  });
+
   it("reads the balance again after a refused preview", async () => {
     const previewBillPayment = vi.fn().mockRejectedValue({ code: "bill.nothing_outstanding" });
     const getBillBalance = vi
