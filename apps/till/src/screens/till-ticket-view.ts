@@ -220,7 +220,7 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
  *  - the tipo(s) impositivo(s) and the base imponible per rate (7.1.f) — per-item VAT is NOT required;
  *    the cuota per rate is shown as an allowed extra;
  *  - contraprestación total (7.1.g);
- *  - «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend.
+ *  - «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend, at the top.
  *
  * It renders in the language the sale was filed in (`result.locale`, else {@link invoiceLocale}),
  * INDEPENDENT of the operator's UI language: an English-speaking operator in Barcelona still hands the
@@ -344,8 +344,15 @@ export class TillTicketView extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
 
+      /* AEAT's QR specification v0.5.0 §3: the QR block opens the invoice, set apart from what follows. */
+      .qr-block {
+        margin: 0 0 var(--wt-space-3);
+        padding: 0 0 var(--wt-space-3);
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+
       .qr-caption {
-        margin: var(--wt-space-3) 0 var(--wt-space-1);
+        margin: 0 0 var(--wt-space-1);
         text-align: center;
       }
 
@@ -452,6 +459,15 @@ export class TillTicketView extends LitElement {
               </p>`
             : nothing
         }
+        ${
+          svg
+            ? html`<div class="qr-block">
+                <p class="qr-caption">${QR_CAPTION}</p>
+                <div class="qr">${unsafeHTML(svg)}</div>
+                <p class="legend">${LEGEND}</p>
+              </div>`
+            : nothing
+        }
         <header class="issuer">
           <p class="venue">${issuer.venueName}</p>
           ${
@@ -543,12 +559,9 @@ export class TillTicketView extends LitElement {
         <div class="tender">${renderTender(r, format, labels)}</div>
 
         ${
-          svg
-            ? html`<p class="qr-caption">${QR_CAPTION}</p>
-                <div class="qr">${unsafeHTML(svg)}</div>`
-            : nothing
+          // With no QR to show, the legend keeps its place after the tender (C123 in `docs/backlog.md`).
+          svg ? nothing : html`<p class="legend">${LEGEND}</p>`
         }
-        <p class="legend">${LEGEND}</p>
         ${
           this.receipt?.footerMessage
             ? html`<p class="footer-message">${this.receipt.footerMessage}</p>`

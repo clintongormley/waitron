@@ -174,8 +174,8 @@ describe("GET /management-api/receipt-preview", () => {
     expect(lines[name + 1]).toBe("Calle Mayor 1, Madrid");
     expect(lines[name + 2]).toBe(`NIF: ${taxId}`);
     expect(lines.some((line) => line.startsWith("1  Café y tostada"))).toBe(true);
-    const legend = lines.indexOf("VERI*FACTU");
-    expect(lines.slice(legend + 1).filter(Boolean)).toEqual(["Gracias por su visita"]);
+    const change = lines.findIndex((line) => line.startsWith("Cambio"));
+    expect(lines.slice(change + 1).filter(Boolean)).toEqual(["Gracias por su visita"]);
     expect(result.preview.text).toContain("5,50 €");
   });
 

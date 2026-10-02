@@ -315,6 +315,50 @@ describe("till-ticket-view", () => {
     expect(text(el)).toContain("VERI*FACTU");
   });
 
+  // AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before anything else
+  // the invoicing system shows, with «QR tributario:» above it and VERI*FACTU directly under it.
+  describe("the QR comes first on an invoice that carries one", () => {
+    /** The ticket's top-level blocks in order, each as its class name, with the QR block spelt out. */
+    const blocks = (el: TillTicketView): string[] =>
+      [...el.shadowRoot!.querySelector("article.ticket")!.children].map((child) =>
+        child.matches(".qr-block")
+          ? `qr-block[${[...child.children].map((part) => part.className).join(",")}]`
+          : child.className,
+      );
+
+    it("shows the caption, the QR and the legend as the ticket's first content, before the issuer", async () => {
+      const { el } = await mount({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" });
+      expect(blocks(el).slice(0, 2)).toEqual(["qr-block[qr-caption,qr,legend]", "issuer"]);
+      const top = el.shadowRoot!.querySelector(".qr-block")!;
+      expect(top.querySelector(".qr-caption")!.textContent).toBe("QR tributario:");
+      expect(top.querySelector(".qr svg")).not.toBeNull();
+      expect(top.querySelector(".legend")!.textContent).toBe("VERI*FACTU");
+      expect(el.shadowRoot!.querySelectorAll(".legend")).toHaveLength(1);
+      expect(blocks(el).slice(-2)).toEqual(["tender", "footer-message"]);
+    });
+
+    it("keeps the practice notice above the QR block on a simulated ticket", async () => {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        result,
+        issuer,
+        invoiceLocale: "es-ES",
+        simulated: true,
+      });
+      expect(blocks(el).slice(0, 3)).toEqual([
+        "simulation-notice",
+        "qr-block[qr-caption,qr,legend]",
+        "issuer",
+      ]);
+    });
+
+    it("leaves a sale with no QR as it was: the issuer first, the legend after the tender", async () => {
+      const { el } = await mount({ qr: "" }, { footerMessage: "Gracias" });
+      const all = blocks(el);
+      expect(all[0]).toBe("issuer");
+      expect(all.slice(-3)).toEqual(["tender", "legend", "footer-message"]);
+    });
+  });
+
   it("emits a composed new-sale event when New sale is pressed", async () => {
     const { el } = await mount();
     let captured: Event | undefined;

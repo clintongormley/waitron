@@ -8,9 +8,9 @@
  * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
  * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1 plus the
  * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21), with AEAT's «QR tributario:» caption
- * above the QR (its QR specification v0.5.0, §3); sources in `docs/compliance/verifactu-findings.md`
- * §14 and the C115 entry in `docs/backlog.md`. The owner's non-fiscal trim renders around that core
- * and is never read by it.
+ * above the QR and the three at the top of the ticket (its QR specification v0.5.0, §3); sources in
+ * `docs/compliance/verifactu-findings.md` §14 and the C115 entry in `docs/backlog.md`. The owner's
+ * non-fiscal trim renders around that core and is never read by it.
  *
  * The receipt is issued in the INVOICE locale, not the operator's UI language: its fixed words come
  * from the country pack's table for that locale (`receiptLabelsFor`), and money, discount
@@ -54,8 +54,8 @@ export interface ReceiptIssuer {
 }
 
 /**
- * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message under the
- * legend. No field here can suppress or reorder a mandated element.
+ * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message at the end of
+ * the ticket. No field here can suppress or reorder a mandated element.
  */
 export interface ReceiptTrim {
   headerSubtitle?: string;
@@ -168,6 +168,20 @@ export function formatReceipt({
     b.line();
   }
 
+  // AEAT's QR specification v0.5.0 §3 puts the QR at the start of the invoice, the caption above it
+  // and the legend (art. 20.1.b) directly under it.
+  if (result.qr !== "") {
+    const matrix = qrModules(result.qr);
+    const dots = chooseQrDots(
+      matrix.length,
+      dpiValue(printer.resolution),
+      safeWidthDots(printer.paperWidth),
+    );
+    b.align("center").line(QR_CAPTION);
+    b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
+    b.line(LEGEND).line().align("left");
+  }
+
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
   text(issuer.venueName);
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
@@ -269,24 +283,10 @@ export function formatReceipt({
   }
   b.line();
 
-  // The QR (arts. 20-21), printed as an image Waitron builds, sized for this printer (30-40 mm). A sale's
-  // cotejo URL can legitimately be "" (the fiscal backend minted none): then no QR, but still the legend.
-  b.align("center");
-  if (result.qr !== "") {
-    const matrix = qrModules(result.qr);
-    const dots = chooseQrDots(
-      matrix.length,
-      dpiValue(printer.resolution),
-      safeWidthDots(printer.paperWidth),
-    );
-    b.line(QR_CAPTION);
-    b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
-  }
+  // A sale with no cotejo URL (the fiscal backend minted none) prints no QR block, but still the
+  // legend (art. 20.1.b), which keeps its place after the tender (C123 in `docs/backlog.md`).
+  if (result.qr === "") b.align("center").line(LEGEND).line().align("left");
 
-  // The VERI*FACTU legend — printed UNCONDITIONALLY in Veri*Factu mode (art. 20.1.b).
-  b.line(LEGEND).line().align("left");
-
-  // Non-fiscal footer trim, under the legend.
   if (receipt.footerMessage) text(receipt.footerMessage);
 
   // Repeat the practice warning at the tear-off edge so either end of a separated ticket identifies

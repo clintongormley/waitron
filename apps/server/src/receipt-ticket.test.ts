@@ -84,7 +84,7 @@ const TRIM: ReceiptTrim = {
   footerMessage: "¡Gracias por su visita!",
 };
 
-it("puts the QR legend immediately after the raster and a blank line before the footer", () => {
+it("puts the QR legend immediately after the raster and a blank line after it", () => {
   const bytes = formatReceipt({
     result: FILED_SALE,
     issuer: ISSUER,
@@ -133,6 +133,104 @@ it("prints no «QR tributario:» label when no QR is printed, and still prints t
   );
   expect(s).not.toContain("QR tributario");
   expect(s).toContain("VERI*FACTU");
+});
+
+/** A centred line on `printer`'s paper, padded as the receipt pads it. */
+function centred(printer: EscSetting, s: string): string {
+  const { columns } = textGrid(printer.paperWidth, printer.resolution);
+  return `${" ".repeat(Math.floor((columns - s.length) / 2))}${s}`;
+}
+
+/** The receipt's images in order: each drawn line of text, and the QR code as `"<QR>"`. */
+function drawn(bytes: Uint8Array): string[] {
+  return printedCommands(bytes)
+    .filter((c) => c.name === "GS v 0")
+    .map((c) => c.text ?? "<QR>");
+}
+
+// AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before anything else
+// the invoicing system prints, with «QR tributario:» above it and VERI*FACTU directly under it.
+describe("the QR comes first on an invoice that carries one", () => {
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints the caption, the QR and the legend before the issuer on $paperWidth",
+    (printer) => {
+      const bytes = formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+      });
+      expect(drawn(bytes).slice(0, 7)).toEqual([
+        centred(printer, "QR tributario:"),
+        "<QR>",
+        centred(printer, "VERI*FACTU"),
+        "",
+        ISSUER.venueName,
+        TRIM.headerSubtitle!,
+        `NIF: ${ISSUER.nif}`,
+      ]);
+    },
+  );
+
+  it("prints nothing of the QR block after the tender: a blank line, then the footer", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+    const change = lines.indexOf("Cambio 9,10 €");
+    expect(change).toBeGreaterThan(0);
+    expect(lines.slice(change + 1)).toEqual(["", TRIM.footerMessage!, ""]);
+  });
+
+  it("keeps the practice warning above the QR block on a simulated ticket, and at the tear-off end", () => {
+    const lines = drawn(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+        simulated: true,
+      }),
+    );
+    expect(lines.slice(0, 7)).toEqual([
+      "PRUEBA - SIN COBRO REAL",
+      "",
+      centred(PRINTER_80, "QR tributario:"),
+      "<QR>",
+      centred(PRINTER_80, "VERI*FACTU"),
+      "",
+      ISSUER.venueName,
+    ]);
+    expect(lines.at(-1)).toBe("PRUEBA - SIN COBRO REAL");
+  });
+
+  it("leaves a sale with no QR as it was: the issuer first, the legend after the tender", () => {
+    const lines = drawn(
+      formatReceipt({
+        result: { ...FILED_SALE, qr: "" },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(lines[0]).toBe(ISSUER.venueName);
+    const change = lines.findIndex((line) => line.startsWith("Cambio"));
+    expect(change).toBeGreaterThan(0);
+    expect(lines.slice(change + 1)).toEqual([
+      "",
+      centred(PRINTER_80, "VERI*FACTU"),
+      "",
+      TRIM.footerMessage!,
+    ]);
+  });
 });
 
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
@@ -293,6 +391,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
     const order = [
+      "VERI*FACTU",
       ISSUER.venueName,
       TRIM.headerSubtitle!,
       `NIF: ${ISSUER.nif}`,
@@ -302,7 +401,6 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       "Base 21%",
       "TOTAL",
       "Efectivo",
-      "VERI*FACTU",
       TRIM.footerMessage!,
     ];
     const positions = order.map((token) => s.indexOf(token));
@@ -1126,11 +1224,9 @@ function printedCents(line: string): number {
  */
 function expectPaymentRowsToAddUpToTotal(printed: string[]): void {
   const start = printed.findIndex((line) => line.startsWith("TOTAL"));
-  const end = printed.indexOf("VERI*FACTU", start);
   expect(start).toBeGreaterThanOrEqual(0);
-  expect(end).toBeGreaterThan(start);
   let paid = 0;
-  for (const line of printed.slice(start + 1, end)) {
+  for (const line of printed.slice(start + 1)) {
     if (/^(Efectivo|Tarjeta|Devolución) /.test(line)) paid += printedCents(line);
     else if (/^(Cambio|Propina) /.test(line)) paid -= printedCents(line);
   }
@@ -1176,15 +1272,13 @@ describe("a bill paid in parts before its invoice", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "")
-        .slice(0, 7),
+        .slice(0, 5),
     ).toEqual([
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
       "Tarjeta 11,90 €",
       "Ref. OP-9",
       "Propina 1,00 €",
-      "QR tributario:",
-      "VERI*FACTU",
     ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
@@ -1230,14 +1324,8 @@ describe("a bill payment partly given back before its invoice", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "")
-        .slice(0, 5),
-    ).toEqual([
-      "Efectivo 50,00 €",
-      "Devolución -6,00 €",
-      "Devolución -4,00 €",
-      "QR tributario:",
-      "VERI*FACTU",
-    ]);
+        .slice(0, 3),
+    ).toEqual(["Efectivo 50,00 €", "Devolución -6,00 €", "Devolución -4,00 €"]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
 
@@ -1272,14 +1360,8 @@ describe("a bill payment partly given back before its invoice", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "")
-        .slice(0, 5),
-    ).toEqual([
-      "Tarjeta 20,00 €",
-      "Ref. OP-3",
-      "Devolución -5,00 €",
-      "QR tributario:",
-      "VERI*FACTU",
-    ]);
+        .slice(0, 3),
+    ).toEqual(["Tarjeta 20,00 €", "Ref. OP-3", "Devolución -5,00 €"]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
 });
