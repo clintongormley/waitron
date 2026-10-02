@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -449,11 +450,10 @@ export async function typeSearch(el: CatalogueBrowser, value: string) {
 }
 export async function chooseFilter(el: CatalogueBrowser, column: string, value: string) {
   const table = await tableOf(el);
-  const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
-    `select[data-filter="${column}"]`,
+  const select = table.shadowRoot!.querySelector<HTMLElement>(
+    `wt-combobox[data-filter="${column}"]`,
   )!;
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(select, value);
   await table.updateComplete;
 }
 const crumbs = (el: CatalogueBrowser) =>

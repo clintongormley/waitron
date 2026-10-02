@@ -1,9 +1,10 @@
 import { html } from "lit";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
-import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import { chooseOption, cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 // For its `parkPointer` command type only.
 import type {} from "../a11y-helpers.js";
+import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-button.js";
 import "./wt-data-table.js";
@@ -138,8 +139,7 @@ test("a hidden unselectable row leaves selection while a hidden selectable row s
     columns: withStatus,
     rowSelectable: (row) => row.id !== "2",
   });
-  statusSelect(el).value = "active";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "active");
   await el.updateComplete;
   const seen: string[][] = [];
   el.addEventListener("wt-selection-change", (event) =>
@@ -191,17 +191,15 @@ test("reports a user filter change once across the shadow boundary and not on re
   });
   await el.updateComplete;
   expect(seen).toEqual([]);
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
   expect(select.value).toBe("off");
-  select.value = "active";
-  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  await chooseOption(select, "active");
   expect(seen).toHaveLength(1);
   expect(seen[0]!.detail).toEqual({ filters: { status: "active" } });
   expect(seen[0]!.bubbles).toBe(true);
   expect(seen[0]!.composed).toBe(true);
   expect(native).not.toHaveBeenCalled();
-  select.value = "";
-  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  await chooseOption(select, "");
   expect(seen[1]!.detail).toEqual({ filters: {} });
   expect(seen[0]!.detail).toEqual({ filters: { status: "active" } });
 });
@@ -1189,24 +1187,69 @@ async function tableS(props: Partial<WtDataTable<RowS>> = {}): Promise<WtDataTab
 
 test("renders one dropdown per filtered column and narrows on selection", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
-  expect([...select.options].map((o) => o.textContent!.trim())).toEqual([
-    "Any status",
-    "Active",
-    "Inactive",
-  ]);
-  select.value = "active";
-  select.dispatchEvent(new Event("change"));
+  const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  expect(select.options.map((o) => o.label)).toEqual(["Any status", "Active", "Inactive"]);
+  await chooseOption(select, "active");
   await el.updateComplete;
   expect(rowTextS(el).every((t) => t.includes("Active"))).toBe(true);
+});
+
+test("each filter is a compact dropdown named by its label, showing its all option until one is chosen", async () => {
+  const el = await tableS({ columns: withStatus });
+  const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  expect(filter.label).toBe("Filter by status");
+  expect(filter.hideLabel).toBe(true);
+  expect(filter.search).toBe("auto");
+  expect(filter.options).toEqual([
+    { value: "", label: "Any status" },
+    { value: "active", label: "Active" },
+    { value: "off", label: "Inactive" },
+  ]);
+  expect(filter.value).toBe("");
+  await filter.updateComplete;
+  const shown = () => filter.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
+  expect(shown()).toBe("Any status");
+  await chooseOption(filter, "off");
+  expect(shown()).toBe("Inactive");
+});
+
+test("picking a row in a filter's open list narrows the rows and reports the choice", async () => {
+  const el = await tableS({ columns: withStatus });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  await filter.updateComplete;
+  const row = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent!.trim() === "Inactive",
+  )!;
+  await userEvent.click(row);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+  expect(seen).toEqual([{ filters: { status: "off" } }]);
+});
+
+test("a filter dropdown's own change stays inside the table", async () => {
+  const escaped = vi.fn();
+  document.addEventListener("wt-change", escaped);
+  onTestFinished(() => document.removeEventListener("wt-change", escaped));
+  const el = (await mountInShadowRoot(
+    '<wt-data-table aria-label="Users"></wt-data-table>',
+  )) as WtDataTable<RowS>;
+  Object.assign(el, { rows: rowsS, columns: withStatus, rowKey: (row: RowS) => row.id });
+  await el.updateComplete;
+  await chooseOption(
+    el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!,
+    "off",
+  );
+  expect(escaped).not.toHaveBeenCalled();
 });
 
 test("filter dropdowns render and narrow rows without a search box", async () => {
   const el = await tableS({ columns: withStatus });
   expect(el.shadowRoot!.querySelector(".table-search")).toBeNull();
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
-  select.value = "off";
-  select.dispatchEvent(new Event("change"));
+  const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  await chooseOption(select, "off");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["2"]);
 });
@@ -1226,21 +1269,25 @@ test("typed search text stops narrowing once the search box is turned off", asyn
 test("the search box and each filter dropdown carry a semantic name", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   expect(el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!.name).toBe("search");
-  expect(
-    el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!.name,
-  ).toBe("status-filter");
+  expect(el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!.name).toBe(
+    "status-filter",
+  );
 });
 
-test("the search box and filter dropdowns draw the focus ring when focused", async () => {
+test("the search box draws the focus ring, and a filter dropdown the 2px primary line, when focused", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
-  for (const selector of [".table-search", 'select[data-filter="status"]']) {
-    const control = el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    control.focus();
-    expect(control.matches(":focus-visible"), selector).toBe(true);
-    expect(getComputedStyle(control).outlineColor, selector).toBe("rgb(4, 5, 6)");
-    expect(getComputedStyle(control).outlineStyle, selector).toBe("solid");
-  }
+  host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+  const search = el.shadowRoot!.querySelector<HTMLElement>(".table-search")!;
+  search.focus();
+  expect(search.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(search).outlineColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(search).outlineStyle).toBe("solid");
+  const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+  expect(getComputedStyle(filter.shadowRoot!.querySelector(".field")!).boxShadow).toBe(
+    "rgb(7, 8, 9) 0px -2px 0px 0px inset",
+  );
 });
 
 test("the search box and filter dropdown paint from the theme tokens", async () => {
@@ -1250,15 +1297,21 @@ test("the search box and filter dropdown paint from the theme tokens", async () 
   host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
   host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
   host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-color-field-fill", "rgb(13, 14, 15)");
+  host.style.setProperty("--wt-color-field-line", "rgb(16, 17, 18)");
+  host.style.setProperty("--wt-color-field-value", "rgb(19, 20, 21)");
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
-  const filter = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  const box = filter.shadowRoot!.querySelector(".field")!;
   expect(getComputedStyle(search).borderColor).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(search).backgroundColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(search).color).toBe("rgb(10, 11, 12)");
   expect(search.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
-  expect(getComputedStyle(filter).borderColor).toBe("rgb(1, 2, 3)");
-  expect(getComputedStyle(filter).backgroundColor).toBe("rgb(7, 8, 9)");
-  expect(getComputedStyle(filter).color).toBe("rgb(10, 11, 12)");
+  expect(getComputedStyle(box).backgroundColor).toBe("rgb(13, 14, 15)");
+  expect(getComputedStyle(box).boxShadow).toBe("rgb(16, 17, 18) 0px -1px 0px 0px inset");
+  expect(getComputedStyle(filter.shadowRoot!.querySelector(".trigger")!).color).toBe(
+    "rgb(19, 20, 21)",
+  );
   expect(filter.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
 });
 
@@ -1302,11 +1355,10 @@ test("the toolbar keeps the search box and filters on one line when wide", async
 test("search and filter combine with AND", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
   input.value = "ada";
   input.dispatchEvent(new Event("input"));
-  select.value = "off";
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(select, "off");
   await el.updateComplete;
   // Ada is Active, so name=ada AND status=off yields nothing.
   expect(el.shadowRoot!.querySelector(".message")).not.toBeNull();
@@ -1341,9 +1393,8 @@ test("a filter whose value is one string keeps only the rows equal to the chosen
     ],
   });
   await el.updateComplete;
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="state"]')!;
-  select.value = "active";
-  select.dispatchEvent(new Event("change"));
+  const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="state"]')!;
+  await chooseOption(select, "active");
   await el.updateComplete;
   expect(
     [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.getAttribute("data-row-key")),
@@ -1380,22 +1431,20 @@ test("a filter whose value is a list keeps a row when the list holds the chosen 
     ],
   });
   await el.updateComplete;
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="tags"]')!;
+  const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="tags"]')!;
   const keys = () =>
     [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.getAttribute("data-row-key"));
-  select.value = "a";
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(select, "a");
   await el.updateComplete;
   expect(keys()).toEqual(["1"]);
-  select.value = "b";
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(select, "b");
   await el.updateComplete;
   expect(keys()).toEqual(["1", "2"]);
 });
 
 test("a column with no filter contributes no dropdown", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
-  expect(el.shadowRoot!.querySelectorAll("select[data-filter]").length).toBe(1);
+  expect(el.shadowRoot!.querySelectorAll("wt-combobox[data-filter]").length).toBe(1);
 });
 
 test("restores a stored sort and filter from session storage under viewKey", async () => {
@@ -1417,9 +1466,9 @@ test("a restored filter's dropdown shows the restored choice", async () => {
   sessionStorage.setItem("test.shown", JSON.stringify({ filters: { status: "off" } }));
   const el = await tableS({ viewKey: "test.shown", searchable: true, columns: withStatus });
   expect(rowKeysS(el)).toEqual(["2"]);
-  expect(
-    el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!.value,
-  ).toBe("off");
+  expect(el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!.value).toBe(
+    "off",
+  );
 });
 
 test("drops a stored filter value the column no longer offers, or that is not a string", async () => {
@@ -1480,8 +1529,8 @@ const statusFilter = withStatus[1]!.filter!;
 function statusOffering(options: { value: string; label: string }[]): DataTableColumn<RowS>[] {
   return [sortableName, { ...withStatus[1]!, filter: { ...statusFilter, options } }];
 }
-function statusSelect(el: WtDataTable<RowS>): HTMLSelectElement {
-  return el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+function statusSelect(el: WtDataTable<RowS>): WtCombobox {
+  return el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
 }
 function storedFilters(key: string): unknown {
   return JSON.parse(sessionStorage.getItem(key)!).filters;
@@ -1517,8 +1566,7 @@ test("a stored filter is still dropped when its column appears with options that
 
 test("a chosen filter is cleared when its column's options stop offering it", async () => {
   const el = await tableS({ viewKey: "test.shrink", searchable: true, columns: withStatus });
-  statusSelect(el).value = "off";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "off");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["2"]);
   el.columns = statusOffering([{ value: "active", label: "Active" }]);
@@ -1531,8 +1579,7 @@ test("a chosen filter is cleared when its column's options stop offering it", as
 // An empty option list reads as "not loaded yet", the same rule a restored value follows.
 test("a chosen filter waits, unapplied, while its column offers no options at all", async () => {
   const el = await tableS({ viewKey: "test.emptied", searchable: true, columns: withStatus });
-  statusSelect(el).value = "off";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "off");
   await el.updateComplete;
   el.columns = statusOffering([]);
   await el.updateComplete;
@@ -1571,13 +1618,11 @@ const twoFilterColumns: DataTableColumn<RowS>[] = [
 test("choosing a filter in one column keeps the choice already made in another", async () => {
   const el = await tableS({ rows: twoFilterRows, columns: twoFilterColumns });
   const nameFilter = () =>
-    el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="name"]')!;
-  nameFilter().value = "Ada";
-  nameFilter().dispatchEvent(new Event("change"));
+    el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="name"]')!;
+  await chooseOption(nameFilter(), "Ada");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1", "3"]);
-  statusSelect(el).value = "active";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "active");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1"]);
   expect(nameFilter().value).toBe("Ada");
@@ -1585,12 +1630,10 @@ test("choosing a filter in one column keeps the choice already made in another",
 
 test("choosing the all option again removes the stored filter choice", async () => {
   const el = await tableS({ viewKey: "test.cleared", columns: withStatus });
-  statusSelect(el).value = "active";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "active");
   await el.updateComplete;
   expect(storedFilters("test.cleared")).toEqual({ status: "active" });
-  statusSelect(el).value = "";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "");
   await el.updateComplete;
   expect(storedFilters("test.cleared")).toEqual({});
   expect(rowKeysS(el)).toEqual(["1", "2"]);
@@ -1607,10 +1650,85 @@ test("a filter with an initial choice starts on it, and its dropdown shows it", 
   expect(statusSelect(el).value).toBe("active");
 });
 
+/** Eight statuses and the all row: more than a filter's list shows without a search box. */
+const manyStatuses = statusOffering(
+  Array.from({ length: 8 }, (_, index) => ({ value: `s${index}`, label: `Status ${index}` })),
+);
+
+/** Opens the filter's list, reads its search box's placeholder, then searches for text no row has
+ * and reads the list's empty text. */
+async function filterSearchWording(filter: WtCombobox): Promise<[string, string]> {
+  await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  await filter.updateComplete;
+  const search = filter.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  const placeholder = search.placeholder;
+  await userEvent.type(search, "zzz");
+  await filter.updateComplete;
+  return [placeholder, filter.shadowRoot!.querySelector(".empty")!.textContent!.trim()];
+}
+
+test("a long filter's search box and empty list read the table's filter wording", async () => {
+  const el = await tableS({
+    columns: manyStatuses,
+    filterSearchPlaceholder: "Buscar",
+    filterNoResultsLabel: "Sin resultados",
+  });
+  expect(await filterSearchWording(statusSelect(el))).toEqual(["Buscar", "Sin resultados"]);
+});
+
+test("a long filter's search box and empty list read English wording by default", async () => {
+  const el = await tableS({ columns: manyStatuses });
+  expect(await filterSearchWording(statusSelect(el))).toEqual(["Search", "No results"]);
+});
+
+/** Opens the filter's list and clicks the row labelled `label`, as a person would. */
+async function clickFilterRow(filter: WtCombobox, label: string): Promise<void> {
+  await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  await filter.updateComplete;
+  const row = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent!.trim() === label,
+  )!;
+  await userEvent.click(row);
+  await filter.updateComplete;
+}
+
+test("clicking the all row while nothing is chosen reports nothing and remembers nothing", async () => {
+  const el = await tableS({ viewKey: "test.reclick-all", columns: withStatus });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  await clickFilterRow(statusSelect(el), "Any status");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.reclick-all")).toBeNull();
+});
+
+test("clicking the row of a filter's initial choice reports nothing and remembers nothing", async () => {
+  const el = await tableS({ viewKey: "test.reclick-initial", columns: initiallyActive });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  await clickFilterRow(statusSelect(el), "Active");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.reclick-initial")).toBeNull();
+  expect(rowKeysS(el)).toEqual(["1"]);
+});
+
+test("clicking the row of a restored filter choice reports nothing and leaves the stored view alone", async () => {
+  sessionStorage.setItem("test.reclick-restored", JSON.stringify({ filters: { status: "off" } }));
+  const el = await tableS({ viewKey: "test.reclick-restored", columns: withStatus });
+  const stored = sessionStorage.getItem("test.reclick-restored");
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  await clickFilterRow(statusSelect(el), "Inactive");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.reclick-restored")).toBe(stored);
+  expect(rowKeysS(el)).toEqual(["2"]);
+});
+
 test("choosing the all option over an initial choice shows every row, and is remembered", async () => {
   const el = await tableS({ viewKey: "test.initial-all", columns: initiallyActive });
-  statusSelect(el).value = "";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1", "2"]);
   expect(storedFilters("test.initial-all")).toEqual({ status: "" });
@@ -1714,8 +1832,7 @@ test("a throwing setItem does not break the table", async () => {
 
 test("clearing select-all leaves selected rows that a filter has hidden", async () => {
   const el = await tableS({ selectable: true, selected: ["1", "2"], columns: withStatus });
-  statusSelect(el).value = "off";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "off");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["2"]);
   const seen: string[][] = [];
@@ -1743,8 +1860,7 @@ test("reads the stored view once, so a later write does not pull back the person
   sessionStorage.setItem("test.once", stored);
   const el = await tableS({ viewKey: "test.once", searchable: true, columns: withStatus });
   expect(rowKeysS(el)).toEqual(["2"]);
-  statusSelect(el).value = "active";
-  statusSelect(el).dispatchEvent(new Event("change"));
+  await chooseOption(statusSelect(el), "active");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1"]);
   sessionStorage.setItem("test.once", stored);
@@ -2111,8 +2227,7 @@ test("a hidden column's filter dropdown stays drawn and keeps filtering", async 
   await choose(el, "status");
   expect(headers(el)).toEqual(["Name"]);
   const select = statusSelect(el);
-  select.value = "off";
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(select, "off");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["2"]);
 });

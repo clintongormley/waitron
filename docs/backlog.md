@@ -1426,7 +1426,8 @@ gap. The filter is a native `<select class="table-filter">` drawn by `wt-data-ta
 and leaves the arrow to the browser. Not yet checked whether every dashboard dropdown using
 `selectStyles` shows the same thing, or only the filter — the till's own select styles
 (`apps/till/src/select-styles.ts`) are separate and use 12px side padding (_2026-10-02: A178d
-deleted that file; the till's dropdowns are now `wt-combobox`_). **Next action:**
+deleted that file; the till's dropdowns are now `wt-combobox`_; _2026-10-02: A178e made the filter
+a `wt-combobox`, which draws its own arrow; A178f closes this_). **Next action:**
 reproduce in the dashboard on Chromium and Safari, then give the shared select room at the
 right-hand end for its arrow (more end padding, or draw the arrow ourselves so its position is
 ours rather than the browser's), and look at a couple of other screens' dropdowns afterwards.
@@ -1480,7 +1481,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, and A178d (setup and the till) as #1016; A178e–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, A178d (setup and the till) as #1016, and A178e (the module screens, the table filter and the floor-plan zone name) as #1017; A178f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1675,6 +1676,32 @@ kit lost `autocomplete="off"`, which `wt-textarea` does not offer; and the till'
 a product with no `unit` (`productUnit`, `apps/till/src/widgets/product-name.ts`) names itself in
 English only, so a Spanish till drawing such a product shows the unit's id — seen only with test
 products; whether the server ever sends a product without a unit was not checked.
+
+**A178e — DONE (#1017).** Every field spec §9.5 lists for the module screens
+(`packages/*/src/dashboard/`) and §9.6 lists inside the primitives is drawn by a primitive: the
+native selects are `wt-combobox` (`search="auto"`), the adjustment report's two days are date
+`wt-input`s, and the venue operations screen's names and times are `wt-input` and its display
+order a `wt-number-stepper`. Also moved, though spec §9.5 did not list it: the "Starts in" dropdown
+in the venue operations Tills table, now a compact `wt-combobox` named "<till>: Starts in", whose
+empty first row, "The venue's counter zone", is also its placeholder. Each `wt-data-table` column
+filter is a compact `wt-combobox` (`hide-label`) whose "all" row is its placeholder; the table's
+search box stays as it was (A175). A filter's search box and its empty-list text are translated
+through two new `wt-data-table` properties (`filterSearchPlaceholder`, `filterNoResultsLabel`), and choosing the row a dropdown already shows no longer
+saves or sends again on the table filter, the Tills "Starts in", the two kitchen settings and the
+image library's sort and its order. The floor plan's zone name is a `wt-input` that sends its change
+once, on Enter or on leaving the field, not at every key, because the dashboard and the till save
+every placement change they hear. On the adjustment report a backwards range puts its sentence
+under both days. SumUp's merchant dropdown is
+labelled "Merchant", with the sentence that was its label ("This key covers more than one
+merchant…") shown above it. The image library's sort dropdowns take a minimum width, so a short
+choice no longer cuts the label. `selectStyles` (`packages/ui/src/base-styles.ts`) is no longer used
+by any screen; A178f deletes it. **Existing tests changed** are the three approved kinds, each listed
+in the pull request. **Seen, for the owner:** the venue operations kitchen tab's two dropdown
+explanations ("Applies to new kitchen tickets and to reprints." and the release reminder's) are now
+each dropdown's `hint`, which a field that always holds a value never shows, so they are read only
+by screen readers while the two switches beside them keep visible lines; and the menu assignment
+editor's display order stepper cuts its label to "Displ…" ("Orde…" in Spanish), the approved §12 point 9
+behaviour.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
@@ -2893,7 +2920,8 @@ screens also use that style, mark their dropdowns `aria-invalid` and have no inv
 of their own, so they gain the outline too: the product editor
 (`apps/dashboard/src/widgets/product-editor.ts`, its routing, VAT and unit
 dropdowns; _2026-10-02: those moved to `wt-combobox` in A178c_) and the venue operations screen
-(`packages/venue-service/src/dashboard/venue-operations-screen.ts`). Looked at after the review
+(`packages/venue-service/src/dashboard/venue-operations-screen.ts`; _2026-10-02: its dropdowns
+moved to `wt-combobox` in A178e_). Looked at after the review
 (#944's comment): the product editor's kitchen station and course dropdowns refused, and the venue
 operations screen's "Identical dishes on a kitchen ticket" dropdown after a refused save, in light
 and dark at 1280 and 390 wide — the outline shows and nothing else moved. The product editor's VAT
@@ -2912,7 +2940,9 @@ which draw their own invalid state (read, not run), so the open part is now the 
 alone._ Four stylesheets that already include `selectStyles` still carry their own identical
 `select[aria-invalid="true"]` rule — `reasons-screen.ts` (adjustments), `sumup-connect-form.ts`
 (payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard). They were left because none of their own test
-files asserts a border colour, so removing them would go unchecked.
+files asserts a border colour, so removing them would go unchecked. _2026-10-02: none of the four
+carries that rule now: A178c moved `member-list-editor.ts`'s and `unit-form.ts`'s dropdowns to
+`wt-combobox`, A178e the other two._
 
 The original walkthrough is retained under *Detail → Setup wizard*.
 
@@ -7191,7 +7221,8 @@ ongoing overhaul listed at the top of Track A.
   gone, the rows are on the page itself_); a native select labelled by a
   separate `<label for>` keeps that label, and an error outside it, at the modal's full width unless
   its screen caps the element wrapping them (the adjustments reasons screen does; no other one was
-  found in a modal); an inline label around a select is not capped, so its select would sit beside
+  found in a modal; _2026-10-02: A178e moved the reasons screen's role fields onto `wt-combobox`, so
+  no native select is left_); an inline label around a select is not capped, so its select would sit beside
   the label text (none was found in a modal); and forms built in `wt-dialog` rather than `wt-modal`
   (the ingredient form, the till's party name dialog, among others) are held only by the dialog's
   own 768px limit — whether they should follow the modal's form width is the owner's call.
@@ -7913,7 +7944,8 @@ ongoing overhaul listed at the top of Track A.
   `<select>`, so a rule alone could not be guarded. Sorts by the label the person reads with
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
   dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
-  `wt-data-table`'s locale-less `localeCompare` at the same time.
+  `wt-data-table`'s locale-less `localeCompare` at the same time. _2026-10-02: after A178b–e the
+  table's filters, and every other native select in product code, are `wt-combobox`._
 - **The till's schedule screen still has the My Schedule defects the dashboard fixed.**
   _2026-10-02: the dropdown half below is retired — A178d made the three dropdowns (shift,
   colleague, absence kind) `wt-combobox`es, and the counter screen no longer has a `<select>`; the

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
-import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
@@ -119,9 +119,8 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
 
   test("the list showing inactive reasons", async () => {
     const el = await screen(theme);
-    const filter = deep(el, 'select[data-filter="status"]') as HTMLSelectElement;
-    filter.value = "";
-    filter.dispatchEvent(new Event("change"));
+    const filter = deep(el, 'wt-combobox[data-filter="status"]') as HTMLElement;
+    await chooseOption(filter, "");
     await settle(el);
     await expectNoA11yViolations(host);
   });

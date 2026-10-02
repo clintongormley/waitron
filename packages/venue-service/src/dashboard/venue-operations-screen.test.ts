@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
@@ -128,6 +132,23 @@ function field(el: VenueOperationsScreen, name: string) {
 function input(el: VenueOperationsScreen, name: string) {
   return el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
 }
+/** One of the kitchen settings' dropdowns. */
+type SettingBox = HTMLElement & {
+  value: string;
+  disabled: boolean;
+  label: string;
+  hint: string;
+  error: string;
+  options: { value: string; label: string }[];
+};
+/** A till's starting-zone dropdown. */
+type TillZone = HTMLElement & { value: string; options: { value: string; label: string }[] };
+/** A dropdown's choices, as the text a person reads. */
+function options(box: Element) {
+  return (box as Element & { options: { label: string }[] }).options
+    .map((option) => option.label)
+    .join(" ");
+}
 function table(el: VenueOperationsScreen, name: string) {
   const result = el.shadowRoot!.querySelector(`[data-test="${name}"]`)!;
   expect(result.tagName).toBe("WT-DATA-TABLE");
@@ -148,13 +169,36 @@ async function bottom(el: VenueOperationsScreen): Promise<string> {
 function saveDisabled(el: VenueOperationsScreen) {
   return find(el, '[data-test="save-editor"]')!.hasAttribute("disabled");
 }
-/** Types a value the way a person does, so the editor hears the change. */
+/** Types a value the way a person does, into the shared field's own control, so the editor hears
+ * the change. */
 async function type(el: VenueOperationsScreen, name: string, value: string) {
-  const control = field(el, name);
+  const control = field(el, name).shadowRoot!.querySelector("input")!;
   control.value = value;
   control.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  control.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
   await settle(el);
+}
+/** Opens a dropdown's list and clicks the row it already shows, as a person can, and returns
+ * how many `wt-change` events the dropdown sent. */
+async function clickChosenRow(box: HTMLElement): Promise<number> {
+  const sent = vi.fn();
+  box.addEventListener("wt-change", sent);
+  await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  const row = box.shadowRoot!.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
+  expect(row).not.toBeNull();
+  await userEvent.click(row!);
+  box.removeEventListener("wt-change", sent);
+  return sent.mock.calls.length;
+}
+/** How many `wt-change` events reach the document while `act` runs. */
+async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
+  const heard = vi.fn();
+  document.addEventListener("wt-change", heard);
+  try {
+    await act();
+  } finally {
+    document.removeEventListener("wt-change", heard);
+  }
+  return heard.mock.calls.length;
 }
 
 describe("venue operations screen", () => {
@@ -197,7 +241,10 @@ describe("venue operations screen", () => {
       deviceZones: [],
     };
     const api = {
-      load: vi.fn().mockResolvedValue(view),
+      load: vi
+        .fn()
+        .mockResolvedValueOnce(view)
+        .mockResolvedValue({ ...view, deviceZones: [{ deviceId: "t1", zoneId: "z1" }] }),
       setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
       clearDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
@@ -206,17 +253,16 @@ describe("venue operations screen", () => {
     expect(tableText(el, "tills")).toContain("Front till");
     expect(tableText(el, "tills")).not.toContain("Kitchen screen");
     expect(tableText(el, "tills")).not.toContain("Old till");
-    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[aria-label="Front till: Starts in"]',
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>(
+      'wt-combobox[label="Front till: Starts in"]',
     )!;
     expect(selector).not.toBeNull();
-    expect(selector.options[0]!.textContent!.trim()).toBe("The venue's counter zone");
-    selector.value = "z1";
-    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(selector.getAttribute("name")).toBe("till-t1-starts-in");
+    expect(selector.options[0]!.label).toBe("The venue's counter zone");
+    await chooseOption(selector, "z1");
     await settle(el);
     expect(api.setDeviceDefaultZone).toHaveBeenCalledWith("t1", "z1");
-    selector.value = "";
-    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(selector, "");
     await settle(el);
     expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
   });
@@ -229,7 +275,7 @@ describe("venue operations screen", () => {
       }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!;
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
     expect(selector.value).toBe("z1");
   });
 
@@ -244,9 +290,8 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!;
-    selector.value = "z1";
-    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    await chooseOption(selector, "z1");
     await settle(el);
     expect(api.setDeviceDefaultZone).toHaveBeenCalledWith("t1", "z1");
     expect(selector.value).toBe("");
@@ -264,14 +309,49 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!;
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
     expect(selector.value).toBe("z1");
-    selector.value = "";
-    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(selector, "");
     await settle(el);
     expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
     expect(selector.value).toBe("z1");
     expect(pageAlert(el)).toContain("could not be saved");
+  });
+
+  // Fails if choosing the zone a till already starts in saves it again.
+  it("saves nothing when the starting zone already shown is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
+      }),
+      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+      clearDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    expect(await clickChosenRow(selector)).toBe(1);
+    await settle(el);
+    expect(api.setDeviceDefaultZone).not.toHaveBeenCalled();
+    expect(api.clearDeviceDefaultZone).not.toHaveBeenCalled();
+    expect(api.load).toHaveBeenCalledTimes(1);
+    expect(selector.value).toBe("z1");
+  });
+
+  it("keeps a starting zone's change inside the screen", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+        deviceZones: [],
+      }),
+      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    expect(await changesHeardOutside(() => chooseOption(selector, "z1"))).toBe(0);
   });
 
   it.each(["devices", "device_zone_defaults"] as const)(
@@ -294,7 +374,7 @@ describe("venue operations screen", () => {
       liveData.invalidate([{ type }]);
       await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
       expect(tableText(el, "tills")).toContain("Updated till");
-      expect(table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>("select")!.value).toBe(
+      expect(table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!.value).toBe(
         "z1",
       );
     },
@@ -318,7 +398,8 @@ describe("venue operations screen", () => {
         await selectTab(el, "zones");
         const root = table(el, "tills").shadowRoot!;
         const scroll = root.querySelector<HTMLElement>(".scroll")!;
-        const selector = root.querySelector<HTMLSelectElement>("select")!;
+        const box = root.querySelector<TillZone>("wt-combobox")!;
+        const selector = box.shadowRoot!.querySelector<HTMLElement>(".trigger")!;
         const minimumTapHeight = Number.parseFloat(
           getComputedStyle(selector).getPropertyValue("--wt-tap-min"),
         );
@@ -328,10 +409,12 @@ describe("venue operations screen", () => {
         );
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d")!;
-        context.font = getComputedStyle(selector).font;
-        expect(
-          context.measureText(selector.options[0]!.textContent!.trim()).width + 32,
-        ).toBeLessThanOrEqual(selector.clientWidth);
+        // The text's own room, which stops short of the chevron.
+        const shown = selector.querySelector<HTMLElement>(".value")!;
+        context.font = getComputedStyle(shown).font;
+        expect(context.measureText(box.options[0]!.label).width).toBeLessThanOrEqual(
+          shown.clientWidth,
+        );
       } finally {
         await page.viewport(width, height);
       }
@@ -378,10 +461,12 @@ describe("venue operations screen", () => {
       el.shadowRoot!.appendChild(probe);
       const form = probe.getBoundingClientRect().width;
       expect(modal(el)!.shadowRoot!.querySelector(".body")!.clientWidth).toBeGreaterThan(form);
-      const parts = modal(el)!.querySelectorAll(
-        ".form label, .form input, .form select, .field-error",
-      );
-      expect(parts).toHaveLength(8);
+      const fields = [...modal(el)!.querySelectorAll(".form wt-input, .form wt-combobox")];
+      const parts = [
+        ...fields,
+        ...fields.flatMap((box) => [...box.shadowRoot!.querySelectorAll("[data-error]")]),
+      ];
+      expect(parts).toHaveLength(5);
       for (const part of parts) {
         expect(part.getBoundingClientRect().width, part.outerHTML).toBeCloseTo(form, 0);
       }
@@ -400,7 +485,7 @@ describe("venue operations screen", () => {
     expect(tableText(el, "hours")).toContain("09:00");
     expect(tableText(el, "hours")).toContain("18:00");
     await action(el, "new-hours");
-    expect(field(el, "hours-weekday").textContent).toContain("Domingo");
+    expect(options(field(el, "hours-weekday"))).toContain("Domingo");
   });
 
   it("shows departments, trading names, zones, menu defaults and hours", async () => {
@@ -704,7 +789,7 @@ it("creates and edits zone menu assignments and preserves a current default", as
   expect(tableText(el, "zone-menus")).toContain("Casa Delgado");
   await action(el, "new-assignment-z1");
   expect(field(el, "assignment-menu").value).toBe("m2");
-  expect(field(el, "assignment-menu").textContent).not.toContain("Casa Delgado");
+  expect(options(field(el, "assignment-menu"))).not.toContain("Casa Delgado");
   field(el, "assignment-order").value = "2";
   (field(el, "assignment-default") as HTMLInputElement).checked = true;
   await action(el, "save-editor");
@@ -794,8 +879,12 @@ async function sortBy(el: VenueOperationsScreen, name: string, key: string) {
   list.shadowRoot!.querySelector<HTMLButtonElement>(`[data-sort="${key}"]`)!.click();
   await list.updateComplete;
 }
+/** The message under a field: the shared field's own `error`. */
 function fieldError(el: VenueOperationsScreen, name: string) {
-  return el.shadowRoot!.querySelector(`[data-field-error="${name}"]`)?.textContent?.trim();
+  return (
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>(`[name="${name}"]`)?.error ||
+    undefined
+  );
 }
 function modal(el: VenueOperationsScreen) {
   return el.shadowRoot!.querySelector("wt-modal");
@@ -1039,7 +1128,9 @@ describe("the venue editors refuse an incomplete form", () => {
 describe("an editor's messages", () => {
   const FIX = "Correct the highlighted fields to continue.";
   function invalid(el: VenueOperationsScreen, name: string) {
-    return field(el, name).getAttribute("aria-invalid");
+    return field(el, name)
+      .shadowRoot!.querySelector(".field-control")!
+      .getAttribute("aria-invalid");
   }
   async function newDepartment(api: Partial<VenueServiceApi> = {}) {
     const el = await mount({
@@ -1140,8 +1231,6 @@ describe("an editor's messages", () => {
     expect(saveDisabled(el)).toBe(false);
   });
 
-  // Fails if a change reported after the editor has gone is judged: the field holding focus as
-  // Escape closes the editor reports its change then.
   it("leaves no message behind when Escape closes an editor with a blank field", async () => {
     const el = await newDepartment();
     await action(el, "save-editor");
@@ -1342,6 +1431,11 @@ describe("an editor's messages", () => {
     await action(el, "save-editor");
     expect(await bottom(el)).toBe("The change could not be saved.");
     expect(el.shadowRoot!.querySelector("[data-field-error]")).toBeNull();
+    expect(
+      [...modal(el)!.querySelectorAll<HTMLElement & { error: string }>("[name]")].filter(
+        (box) => box.error,
+      ),
+    ).toEqual([]);
     expect(saveDisabled(el)).toBe(false);
     expect(pageAlert(el)).toBe("");
   });
@@ -1604,24 +1698,20 @@ describe("the setting that allows changes to items already sent to the kitchen",
 
 describe("the setting for how identical dishes print on a kitchen ticket", () => {
   function groupingSelect(el: VenueOperationsScreen) {
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[name="kitchenTicketGrouping"]',
+    const select = el.shadowRoot!.querySelector<SettingBox>(
+      'wt-combobox[name="kitchenTicketGrouping"]',
     )!;
     expect(select).not.toBeNull();
     return select;
   }
   function beside(el: VenueOperationsScreen) {
-    return el
-      .shadowRoot!.querySelector('[data-field-error="kitchenTicketGrouping"]')
-      ?.textContent?.trim();
+    return groupingSelect(el).error || undefined;
   }
   function stored(kitchenTicketGrouping: "combined" | "separate"): VenueServiceView {
     return { ...structuredClone(model), kitchenTicketGrouping };
   }
   async function choose(el: VenueOperationsScreen, value: string) {
-    const select = groupingSelect(el);
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(groupingSelect(el), value);
     await settle(el);
   }
 
@@ -1633,17 +1723,13 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
     await selectTab(combined, "kitchen");
     const select = groupingSelect(combined);
     expect(select.closest('[slot="kitchen"]')).not.toBeNull();
-    expect(select.labels![0]!.textContent).toContain("Identical dishes on a kitchen ticket");
-    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
-      [
-        ["combined", "One line: 3 x Burger"],
-        ["separate", "A line each: 1 x Burger, three times"],
-      ],
-    );
+    expect(select.label).toContain("Identical dishes on a kitchen ticket");
+    expect(select.options.map((option) => [option.value, option.label])).toEqual([
+      ["combined", "One line: 3 x Burger"],
+      ["separate", "A line each: 1 x Burger, three times"],
+    ]);
     expect(select.value).toBe("combined");
-    expect(
-      combined.shadowRoot!.querySelector('[data-test="kitchen-ticket-grouping-hint"]')!.textContent,
-    ).toContain("reprints");
+    expect(select.hint).toContain("reprints");
     const separate = await mount({
       load: vi.fn().mockResolvedValue(stored("separate")),
     } as unknown as VenueServiceApi);
@@ -1687,7 +1773,32 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
     expect(pageAlert(el)).toContain("could not be saved");
     expect(beside(el)).toContain("could not be saved");
     expect(groupingSelect(el).value).toBe("combined");
-    expect(groupingSelect(el).getAttribute("aria-invalid")).toBe("true");
+    expect(
+      groupingSelect(el).shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid"),
+    ).toBe("true");
+  });
+
+  // Fails if choosing the grouping already stored saves it again.
+  it("saves nothing when the grouping already shown is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveKitchenTicketGrouping: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "kitchen");
+    expect(await clickChosenRow(groupingSelect(el))).toBe(1);
+    await settle(el);
+    expect(api.saveKitchenTicketGrouping).not.toHaveBeenCalled();
+    expect(api.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the grouping's change inside the screen", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      saveKitchenTicketGrouping: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "kitchen");
+    expect(await changesHeardOutside(() => choose(el, "separate"))).toBe(0);
   });
 
   // Fails if the Spanish catalogue loses the label or a choice.
@@ -1697,8 +1808,8 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     const select = groupingSelect(el);
-    expect(select.labels![0]!.textContent).toContain("Platos iguales en una comanda de cocina");
-    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+    expect(select.label).toContain("Platos iguales en una comanda de cocina");
+    expect(select.options.map((option) => option.label)).toEqual([
       "Una línea: 3 x Hamburguesa",
       "Una por plato: 1 x Hamburguesa, tres veces",
     ]);
@@ -1819,24 +1930,20 @@ describe("the setting that prints held groups in advance", () => {
 
 describe("the setting for the reminder to fire the next group", () => {
   function reminderSelect(el: VenueOperationsScreen) {
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[name="releaseReminderMinutes"]',
+    const select = el.shadowRoot!.querySelector<SettingBox>(
+      'wt-combobox[name="releaseReminderMinutes"]',
     )!;
     expect(select).not.toBeNull();
     return select;
   }
   function beside(el: VenueOperationsScreen) {
-    return el
-      .shadowRoot!.querySelector('[data-field-error="releaseReminderMinutes"]')
-      ?.textContent?.trim();
+    return reminderSelect(el).error || undefined;
   }
   function stored(releaseReminderMinutes: number | null): VenueServiceView {
     return { ...structuredClone(model), releaseReminderMinutes };
   }
   async function choose(el: VenueOperationsScreen, value: string) {
-    const select = reminderSelect(el);
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(reminderSelect(el), value);
     await settle(el);
   }
 
@@ -1849,21 +1956,17 @@ describe("the setting for the reminder to fire the next group", () => {
     await selectTab(ten, "kitchen");
     const select = reminderSelect(ten);
     expect(select.closest('[data-test="kitchen-changes"]')).not.toBeNull();
-    expect(select.labels![0]!.textContent).toContain("Reminder to fire the next group");
-    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
-      [
-        ["", "Off"],
-        ["5", "5 minutes"],
-        ["10", "10 minutes"],
-        ["15", "15 minutes"],
-        ["20", "20 minutes"],
-        ["30", "30 minutes"],
-      ],
-    );
+    expect(select.label).toContain("Reminder to fire the next group");
+    expect(select.options.map((option) => [option.value, option.label])).toEqual([
+      ["", "Off"],
+      ["5", "5 minutes"],
+      ["10", "10 minutes"],
+      ["15", "15 minutes"],
+      ["20", "20 minutes"],
+      ["30", "30 minutes"],
+    ]);
     expect(select.value).toBe("10");
-    expect(
-      ten.shadowRoot!.querySelector('[data-test="release-reminder-hint"]')!.textContent,
-    ).toContain("marked served");
+    expect(select.hint).toContain("marked served");
     const off = await mount({
       load: vi.fn().mockResolvedValue(stored(null)),
     } as unknown as VenueServiceApi);
@@ -1877,7 +1980,7 @@ describe("the setting for the reminder to fire the next group", () => {
     } as unknown as VenueServiceApi);
     const select = reminderSelect(el);
     expect(select.value).toBe("45");
-    expect(select.selectedOptions[0]!.textContent!.trim()).toBe("45 minutes");
+    expect(select.shadowRoot!.querySelector(".trigger")!.textContent!.trim()).toBe("45 minutes");
   });
 
   // Fails if the select sends the old value, a string rather than a number, or stays usable mid-save.
@@ -1927,7 +2030,45 @@ describe("the setting for the reminder to fire the next group", () => {
     expect(pageAlert(el)).toContain("could not be saved");
     expect(beside(el)).toContain("could not be saved");
     expect(reminderSelect(el).value).toBe("10");
-    expect(reminderSelect(el).getAttribute("aria-invalid")).toBe("true");
+    expect(
+      reminderSelect(el).shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid"),
+    ).toBe("true");
+  });
+
+  // Fails if choosing the reminder already stored saves it again.
+  it("saves nothing when the reminder already shown is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "kitchen");
+    expect(await clickChosenRow(reminderSelect(el))).toBe(1);
+    await settle(el);
+    expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
+    expect(api.load).toHaveBeenCalledTimes(1);
+  });
+
+  // Fails if Off already stored is saved again: a blank choice must still compare equal to none.
+  it("saves nothing when Off is chosen again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(stored(null)),
+      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "kitchen");
+    expect(await clickChosenRow(reminderSelect(el))).toBe(1);
+    await settle(el);
+    expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
+  });
+
+  it("keeps the reminder's change inside the screen", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "kitchen");
+    expect(await changesHeardOutside(() => choose(el, "5"))).toBe(0);
   });
 
   // Fails if the Spanish catalogue loses the label or a choice.
@@ -1937,8 +2078,8 @@ describe("the setting for the reminder to fire the next group", () => {
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     const select = reminderSelect(el);
-    expect(select.labels![0]!.textContent).toContain("Aviso para marchar el siguiente grupo");
-    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+    expect(select.label).toContain("Aviso para marchar el siguiente grupo");
+    expect(select.options.map((option) => option.label)).toEqual([
       "Desactivado",
       "5 minutos",
       "10 minutos",
@@ -1946,6 +2087,288 @@ describe("the setting for the reminder to fire the next group", () => {
       "20 minutos",
       "30 minutos",
     ]);
+  });
+});
+
+describe("the venue screen's fields are the shared field components", () => {
+  type Box = HTMLElement & {
+    value: string;
+    label: string;
+    required: boolean;
+    disabled: boolean;
+    hint: string;
+    placeholder: string;
+    error: string;
+    updateComplete: Promise<unknown>;
+  };
+  type Dropdown = Box & {
+    search: string;
+    hideLabel: boolean;
+    options: { value: string; label: string }[];
+    searchPlaceholder: string;
+    noResultsLabel: string;
+  };
+  type Stepper = Box & {
+    min: number;
+    decreaseLabel: (label: string) => string;
+    increaseLabel: (label: string) => string;
+  };
+  function dropdown(root: ParentNode, name: string) {
+    const box = root.querySelector<Dropdown>(`wt-combobox[name="${name}"]`)!;
+    expect(box, name).not.toBeNull();
+    return box;
+  }
+  function textBox(el: VenueOperationsScreen, name: string) {
+    const box = el.shadowRoot!.querySelector<Box & { type: string }>(`wt-input[name="${name}"]`)!;
+    expect(box, name).not.toBeNull();
+    return box;
+  }
+  const options = (box: Dropdown) => box.options.map((option) => [option.value, option.label]);
+
+  // Fails if a department field stops being the shared one, or the screen stops reading what is
+  // typed or chosen in it.
+  it("saves a new department from what is typed and chosen in its fields", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createDepartment: vi.fn().mockResolvedValue({ id: "d3" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "departments");
+    await action(el, "new-department");
+    const name = textBox(el, "department-name");
+    expect([name.label, name.required, name.type]).toEqual(["Department name", true, "text"]);
+    const trading = textBox(el, "trading-name");
+    expect([trading.label, trading.required]).toEqual(["Trading name", true]);
+    const mode = dropdown(el.shadowRoot!, "department-mode");
+    expect([mode.label, mode.required, mode.search, mode.value]).toEqual([
+      "Service style",
+      true,
+      "auto",
+      "prepay",
+    ]);
+    expect(options(mode)).toEqual([
+      ["table_tab", "Table service"],
+      ["prepay", "Pay before preparation"],
+      ["invoice_first", "Pay then prepare"],
+      ["ticket_then_pay", "Prepare then pay"],
+    ]);
+    await type(el, "department-name", "Events");
+    await type(el, "trading-name", "Casa Delgado Events");
+    await chooseOption(mode, "invoice_first");
+    await action(el, "save-editor");
+    expect(api.createDepartment).toHaveBeenCalledWith({
+      name: "Events",
+      tradingName: "Casa Delgado Events",
+      defaultServiceMode: "invoice_first",
+    });
+  });
+
+  // Fails if a dropdown given no value stops starting on its first choice, or the times stop
+  // being read from the shared time fields.
+  it("opens new hours on the first department and Sunday, and saves the times typed", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      replaceHours: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "departments");
+    await action(el, "new-hours");
+    const department = dropdown(el.shadowRoot!, "hours-department");
+    expect([department.label, department.required, department.search, department.value]).toEqual([
+      "Department",
+      true,
+      "auto",
+      "d1",
+    ]);
+    expect(options(department)).toEqual([
+      ["d1", "Restaurant and bar"],
+      ["d2", "Deli"],
+    ]);
+    const day = dropdown(el.shadowRoot!, "hours-weekday");
+    expect([day.label, day.required, day.search, day.value]).toEqual(["Day", true, "auto", "0"]);
+    expect(options(day).map(([value]) => value)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
+    for (const [key, label] of [
+      ["hours-opens", "Opens"],
+      ["hours-closes", "Closes"],
+    ] as const) {
+      const time = textBox(el, key);
+      expect([time.label, time.required, time.type]).toEqual([label, true, "time"]);
+    }
+    await chooseOption(day, "3");
+    await type(el, "hours-opens", "11:00");
+    await type(el, "hours-closes", "20:00");
+    await action(el, "save-editor");
+    expect(api.replaceHours).toHaveBeenCalledWith("d1", [
+      { weekday: 3, opensAt: "11:00", closesAt: "20:00" },
+    ]);
+  });
+
+  // Fails if the zone's own service style loses its "use the department's" choice, or a zone with
+  // no department stops starting on the first active one.
+  it("offers a zone the department's service style as a choice and as the text shown for it", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      configureZone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    await action(el, "edit-zone-z1");
+    const department = dropdown(el.shadowRoot!, "zone-department-z1");
+    expect([department.required, department.search, department.value]).toEqual([
+      true,
+      "auto",
+      "d1",
+    ]);
+    const mode = dropdown(el.shadowRoot!, "zone-mode-z1");
+    expect([mode.label, mode.required, mode.search, mode.placeholder, mode.value]).toEqual([
+      "Service style",
+      false,
+      "auto",
+      "Use department default",
+      "prepay",
+    ]);
+    expect(options(mode)[0]).toEqual(["", "Use department default"]);
+    await chooseOption(mode, "");
+    await action(el, "save-editor");
+    expect(api.configureZone).toHaveBeenCalledWith("z1", { departmentId: "d1", serviceMode: null });
+    await action(el, "edit-zone-z2");
+    expect(dropdown(el.shadowRoot!, "zone-department-z2").value).toBe("d1");
+  });
+
+  // Fails if the display order stops being a stepper that counts from zero, or its buttons lose
+  // their names.
+  it("steps a menu's display order and saves it", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      allowMenu: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    await action(el, "new-assignment-z1");
+    const menu = dropdown(el.shadowRoot!, "assignment-menu");
+    expect([menu.label, menu.required, menu.search, menu.value]).toEqual([
+      "Menu name",
+      true,
+      "auto",
+      "m2",
+    ]);
+    expect(options(menu)).toEqual([["m2", "Deli takeaway"]]);
+    const order = el.shadowRoot!.querySelector<Stepper>(
+      'wt-number-stepper[name="assignment-order"]',
+    )!;
+    expect(order).not.toBeNull();
+    expect([order.label, order.required, order.min, order.value]).toEqual([
+      "Display order",
+      true,
+      0,
+      "1",
+    ]);
+    expect(order.decreaseLabel(order.label)).toBe("Decrease Display order");
+    expect(order.increaseLabel(order.label)).toBe("Increase Display order");
+    order.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="1"]')!.click();
+    await settle(el);
+    expect(order.value).toBe("2");
+    await action(el, "save-editor");
+    expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 2, makeDefault: false });
+  });
+
+  // Fails if the editor stops hearing a dropdown's change: a refusal under it must go once it is
+  // changed.
+  it("clears a refusal under a dropdown once another choice is made", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateDepartment: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "defaultServiceMode" },
+        status: 400,
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    await action(el, "edit-department-d1");
+    await action(el, "save-editor");
+    const mode = dropdown(el.shadowRoot!, "department-mode");
+    expect(mode.error).toBe("This value was not accepted. Change it and save again.");
+    await chooseOption(mode, "prepay");
+    await settle(el);
+    expect(mode.error).toBe("");
+  });
+
+  // Fails if the editor stops hearing a typed change: a field's message must go once it is fixed.
+  it("clears a field's message once it is typed into after a failed save", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      createDepartment: vi.fn(),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    await action(el, "new-department");
+    await action(el, "save-editor");
+    const name = textBox(el, "department-name");
+    expect(name.error).toBe("This field is required.");
+    const control = name.shadowRoot!.querySelector("input")!;
+    control.value = "Brunch";
+    control.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await settle(el);
+    expect(name.error).toBe("");
+  });
+
+  // Fails if a setting's dropdown loses its search rule, its hint, or Off as the text it shows.
+  it("gives the two kitchen settings' dropdowns their hints", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({ ...model, releaseReminderMinutes: null }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "kitchen");
+    const grouping = dropdown(el.shadowRoot!, "kitchenTicketGrouping");
+    expect([grouping.search, grouping.hint]).toEqual([
+      "auto",
+      "Applies to new kitchen tickets and to reprints.",
+    ]);
+    const reminder = dropdown(el.shadowRoot!, "releaseReminderMinutes");
+    expect([reminder.search, reminder.placeholder, reminder.value]).toEqual(["auto", "Off", ""]);
+    expect(reminder.hint).toContain("marked served");
+    expect(reminder.shadowRoot!.querySelector(".trigger")!.textContent!.trim()).toBe("Off");
+  });
+
+  // Fails if a till's starting zone stops being a compact dropdown named for its till.
+  it("draws each till's starting zone as a compact dropdown named for the till", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const zone = table(el, "tills").shadowRoot!.querySelector<Dropdown>("wt-combobox")!;
+    expect(zone).not.toBeNull();
+    expect([zone.label, zone.hideLabel, zone.search, zone.placeholder, zone.value]).toEqual([
+      "Front till: Starts in",
+      true,
+      "auto",
+      "The venue's counter zone",
+      "",
+    ]);
+    expect(options(zone)).toEqual([
+      ["", "The venue's counter zone"],
+      ["z1", "Dining room"],
+    ]);
+  });
+
+  // Fails if the Spanish catalogue loses the dropdowns' search wording or the stepper's buttons.
+  it("words the dropdowns' search and the stepper's buttons in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    await action(el, "new-assignment-z1");
+    const menu = dropdown(el.shadowRoot!, "assignment-menu");
+    expect([menu.searchPlaceholder, menu.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
+    const order = el.shadowRoot!.querySelector<Stepper>(
+      'wt-number-stepper[name="assignment-order"]',
+    )!;
+    expect(order.decreaseLabel("Orden")).toBe("Reducir Orden");
+    expect(order.increaseLabel("Orden")).toBe("Aumentar Orden");
   });
 });
 

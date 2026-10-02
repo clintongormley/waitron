@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { codeMessage, registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  codeMessage,
+  currentLocale,
+  registerCodeMessages,
+  setLocale,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
 import { SumUpConnectForm } from "./sumup-connect-form.js";
@@ -39,11 +46,26 @@ function focused(el: SumUpConnectForm, testId: string): boolean {
 }
 
 async function chooseMerchant(el: SumUpConnectForm, code: string): Promise<void> {
-  const select = q(el, "[data-test=merchant]") as HTMLSelectElement;
-  select.value = code;
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(q(el, "[data-test=merchant]")!, code);
   await el.updateComplete;
 }
+
+/** The shared dropdown's own button, which carries its invalid mark and description. */
+function merchantTrigger(el: SumUpConnectForm): HTMLButtonElement {
+  return q(el, "[data-test=merchant]")!.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+}
+
+type MerchantField = HTMLElement & {
+  name: string;
+  label: string;
+  value: string;
+  required: boolean;
+  placeholder: string;
+  search: string;
+  searchPlaceholder: string;
+  noResultsLabel: string;
+  options: { value: string; label: string }[];
+};
 
 function ambiguousThenPending(merchants: { code: string; name: string }[]): DashboardRequest {
   return vi
@@ -111,14 +133,13 @@ describe("sumup-connect-form", () => {
     await connect(el);
 
     // The picker is shown, no error message yet.
-    const select = q(el, "[data-test=merchant]") as HTMLSelectElement | null;
+    const select = q(el, "[data-test=merchant]") as MerchantField | null;
     expect(select).not.toBeNull();
     expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=merchant-error]")).toBeNull();
+    expect(fieldError(el, "merchant")).toBe("");
 
     // Choose the second merchant and connect again.
-    select!.value = "M2";
-    select!.dispatchEvent(new Event("change"));
+    await chooseOption(select!, "M2");
     await el.updateComplete;
     await connect(el);
 
@@ -190,7 +211,7 @@ describe("sumup-connect-form", () => {
     await connect(el);
 
     expect(request).toHaveBeenCalledTimes(1);
-    expect(text(el, "[data-test=merchant-error]")).toBe(t("payments.sumup.merchant_required"));
+    expect(fieldError(el, "merchant")).toBe(t("payments.sumup.merchant_required"));
   });
 
   it("sends one connect request when Connect is pressed again while the first is in flight", async () => {
@@ -361,25 +382,90 @@ describe("sumup-connect-form", () => {
 
     await setInput(el, "api-key", "spans_two_merchants");
     await connect(el);
-    const select = q(el, "[data-test=merchant]") as HTMLSelectElement;
+    const select = q(el, "[data-test=merchant]") as MerchantField;
     expect(select.required).toBe(true);
-    expect(select.getAttribute("aria-invalid")).toBe("false");
+    expect(merchantTrigger(el).getAttribute("aria-invalid")).toBe("false");
 
     await connect(el);
 
-    expect(select.getAttribute("aria-invalid")).toBe("true");
-    expect(select.getAttribute("aria-describedby")).toBe("merchant-error");
-    expect(text(el, "[data-test=merchant-error]")).toBe(t("payments.sumup.merchant_required"));
+    expect(merchantTrigger(el).getAttribute("aria-invalid")).toBe("true");
+    expect(
+      select.shadowRoot!.getElementById(merchantTrigger(el).getAttribute("aria-describedby")!)!
+        .textContent,
+    ).toBe(t("payments.sumup.merchant_required"));
+    expect(fieldError(el, "merchant")).toBe(t("payments.sumup.merchant_required"));
     expect(await bottomOf(el)).toBe(t("payments.sumup.fix_fields"));
     expect(connectDisabled(el)).toBe(true);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(select));
 
     await chooseMerchant(el, "M1");
 
-    expect(select.getAttribute("aria-invalid")).toBe("false");
-    expect(q(el, "[data-test=merchant-error]")).toBeNull();
+    expect(merchantTrigger(el).getAttribute("aria-invalid")).toBe("false");
+    expect(fieldError(el, "merchant")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(connectDisabled(el)).toBe(false);
+  });
+
+  it.each([
+    [
+      "en",
+      "Merchant",
+      "This key covers more than one merchant. Choose which one to connect.",
+      "Search",
+      "No results",
+    ],
+    [
+      "es",
+      "Comercio",
+      "Esta clave abarca más de un comercio. Elige cuál conectar.",
+      "Buscar",
+      "Sin resultados",
+    ],
+  ] as const)(
+    "asks for the merchant in the shared dropdown, with the reason it is asked above it (%s)",
+    async (locale, label, prompt, search, noResults) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const request = ambiguousThenPending([
+          { code: "M1", name: "Deli One" },
+          { code: "M2", name: "Deli Two" },
+        ]);
+        const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+        await setInput(el, "api-key", "spans_two_merchants");
+        await connect(el);
+        const merchant = q(el, "wt-combobox[name=merchantCode]") as MerchantField | null;
+        expect(merchant).not.toBeNull();
+        expect(merchant!.label).toBe(label);
+        expect(text(el, "[data-test=merchant-prompt]")).toBe(prompt);
+        expect(merchant!.required).toBe(true);
+        expect(merchant!.options).toEqual([
+          { value: "M1", label: "Deli One" },
+          { value: "M2", label: "Deli Two" },
+        ]);
+        expect(merchant!.value).toBe("");
+        expect(merchant!.search).toBe("auto");
+        expect(merchant!.searchPlaceholder).toBe(search);
+        expect(merchant!.noResultsLabel).toBe(noResults);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("keeps a merchant's change inside the form", async () => {
+    const request = ambiguousThenPending([{ code: "M1", name: "Deli One" }]);
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+    await setInput(el, "api-key", "spans_two_merchants");
+    await connect(el);
+    const heard = vi.fn();
+    document.addEventListener("wt-change", heard);
+    try {
+      await chooseMerchant(el, "M1");
+    } finally {
+      document.removeEventListener("wt-change", heard);
+    }
+    expect(heard).not.toHaveBeenCalled();
   });
 
   it("has no error summary above the fields", async () => {

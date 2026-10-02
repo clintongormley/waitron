@@ -172,7 +172,7 @@ for (const theme of ["light", "dark"] as const) {
     await frame();
     const row = measured(library.shadowRoot!.querySelector(".filters")!);
     const search = measured(library.shadowRoot!.querySelector("wt-input[name=image-search]")!);
-    const selects = [...library.shadowRoot!.querySelectorAll(".filters label")].map(measured);
+    const selects = [...library.shadowRoot!.querySelectorAll(".filters wt-combobox")].map(measured);
     for (const select of selects) expect(Math.abs(select.bottom - search.bottom)).toBeLessThan(1);
     expect(search.width).toBeGreaterThanOrEqual(token(library, "--wt-tap-min") * 8);
     const last = selects.at(-1)!;

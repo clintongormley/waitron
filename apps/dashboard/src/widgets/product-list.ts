@@ -697,6 +697,8 @@ export class ProductList extends LitElement {
 
   override render() {
     return html`<wt-data-table
+      filterSearchPlaceholder=${t("categories.combobox_search")}
+      filterNoResultsLabel=${t("categories.combobox_no_results")}
       aria-label=${t("catalogue.title")}
       viewKey="waitron.products.table"
       columnsLabel=${t("table.columns")}

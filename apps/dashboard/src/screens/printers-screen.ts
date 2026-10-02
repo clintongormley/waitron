@@ -1762,6 +1762,8 @@ export class PrintersScreen extends LitElement {
     ];
     return html`<section>
       <wt-data-table
+        filterSearchPlaceholder=${t("categories.combobox_search")}
+        filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="agents-table"
         viewKey="printers:agents"
         columnsLabel=${t("table.columns")}
@@ -2156,6 +2158,8 @@ export class PrintersScreen extends LitElement {
     ];
     return html`<section>
       <wt-data-table
+        filterSearchPlaceholder=${t("categories.combobox_search")}
+        filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="printers-table"
         viewKey="printers:table"
         columnsLabel=${t("table.columns")}

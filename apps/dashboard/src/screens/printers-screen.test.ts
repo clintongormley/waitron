@@ -285,16 +285,14 @@ type Dropdown = HTMLElement & { value: string };
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
 async function filterPrinters(el: PrintersScreen, value: string): Promise<void> {
   const table = q(el, '[data-test="printers-table"]')!;
-  const select = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
-  select.value = value === "all" ? "" : value;
-  select.dispatchEvent(new Event("change"));
+  const select = table.shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
+  await pickOption(select, value === "all" ? "" : value);
   await flush(el);
 }
 async function filterAgents(el: PrintersScreen, value: string): Promise<void> {
   const table = q(el, '[data-test="agents-table"]')!;
-  const select = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
-  select.value = value === "all" ? "" : value;
-  select.dispatchEvent(new Event("change"));
+  const select = table.shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
+  await pickOption(select, value === "all" ? "" : value);
   await flush(el);
 }
 async function selectTab(el: PrintersScreen, key: string): Promise<void> {
@@ -818,7 +816,7 @@ describe("guided printer calibration", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     const table = q(el, '[data-test="printers-table"]')!;
-    const select = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
+    const select = table.shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
     expect(select).not.toBeNull();
     expect(select.value).toBe("active");
     await filterPrinters(el, "disabled");
@@ -1093,6 +1091,22 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=agent-last-seen-a2]")).toBe(t("printers.last_seen_never", "es-ES"));
   });
 
+  it("words both tables' status filters' search in the dashboard's language", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const wording = (testId: string) => {
+      const filter = q(el, `[data-test=${testId}]`)!.shadowRoot!.querySelector<
+        HTMLElementTagNameMap["wt-combobox"]
+      >('[name="status-filter"]')!;
+      return [filter.searchPlaceholder, filter.noResultsLabel];
+    };
+    expect(wording("printers-table")).toEqual(["Buscar", "Sin resultados"]);
+    await selectTab(el, "agents");
+    expect(wording("agents-table")).toEqual(["Buscar", "Sin resultados"]);
+  });
+
   it("filters print agents by status and remembers the choice independently", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -1100,7 +1114,7 @@ describe("printers-screen", () => {
 
     await selectTab(el, "agents");
     const table = q(el, "[data-test=agents-table]")!;
-    const filter = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
+    const filter = table.shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
     expect(filter.value).toBe("active");
     expect(q(el, "[data-test=agent-row-a1]")).not.toBeNull();
     expect(q(el, "[data-test=agent-row-a2]")).toBeNull();
@@ -1215,7 +1229,7 @@ describe("printers-screen", () => {
     await selectTab(el, "printers");
     for (const id of ["p1", "p2", "p3"])
       expect(q(el, `[data-test=printer-row-${id}]`)).not.toBeNull();
-    expect((q(el, '[name="status-filter"]') as HTMLSelectElement).value).toBe("");
+    expect((q(el, '[name="status-filter"]') as Dropdown).value).toBe("");
     expect(
       (q(el, "[data-test=printers-table]") as import("@waitron/ui").WtDataTable).sortKey,
     ).not.toBe("connection");
@@ -3212,15 +3226,13 @@ it("defaults to active printers and filters disabled and all registrations", asy
   await flush(el);
   expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
   expect(q(el, "[data-test=printer-row-p2]")).toBeNull();
-  const select = q(el, '[name="status-filter"]') as HTMLSelectElement;
+  const select = q(el, '[name="status-filter"]') as Dropdown;
   expect(select.value).toBe("active");
-  select.value = "disabled";
-  select.dispatchEvent(new Event("change"));
+  await pickOption(select, "disabled");
   await flush(el);
   expect(q(el, "[data-test=printer-row-p1]")).toBeNull();
   expect(q(el, "[data-test=printer-row-p2]")).not.toBeNull();
-  select.value = "";
-  select.dispatchEvent(new Event("change"));
+  await pickOption(select, "");
   await flush(el);
   for (const id of ["p1", "p2", "p3"])
     expect(q(el, `[data-test="printer-row-${id}"]`)).not.toBeNull();

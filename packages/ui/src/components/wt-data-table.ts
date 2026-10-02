@@ -2,7 +2,8 @@ import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
-import { baseStyles, selectStyles } from "../base-styles.js";
+import { baseStyles } from "../base-styles.js";
+import "./wt-combobox.js";
 
 export interface DataTableColumn<Row> {
   key: string;
@@ -38,7 +39,6 @@ type SortDirection = "ascending" | "descending";
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -234,12 +234,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         max-width: 100%;
       }
 
-      .table-filter {
-        width: auto;
-        max-width: 100%;
-        min-height: var(--wt-tap-min);
-      }
-
       .columns-trigger {
         margin-inline-start: auto;
         min-width: var(--wt-tap-min);
@@ -360,6 +354,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
   @property() searchPlaceholder = "";
   @property() noMatchesMessage = "No matches";
+  /** The placeholder of a column filter's search box, which a filter shows above seven rows, its all row included. */
+  @property() filterSearchPlaceholder = "Search";
+  /** What a column filter's open list says when its search matches no option. */
+  @property() filterNoResultsLabel = "No results";
   /** The column chooser's button text and the accessible name of its list. */
   @property() columnsLabel = "Columns";
   /** When set, the tab's session storage remembers this table's sort and filter choices under this
@@ -904,15 +902,27 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ${this.columns.map((column) => {
                 const active = this.#activeFilter(column);
                 return column.filter
-                  ? html`<select
+                  ? html`<wt-combobox
                       class="table-filter"
                       name=${`${column.key}-filter`}
                       data-filter=${column.key}
-                      aria-label=${column.filter.label}
-                      @change=${(event: Event) => {
+                      label=${column.filter.label}
+                      hide-label
+                      search="auto"
+                      placeholder=${column.filter.allLabel}
+                      searchPlaceholder=${this.filterSearchPlaceholder}
+                      noResultsLabel=${this.filterNoResultsLabel}
+                      .options=${[
+                        { value: "", label: column.filter.allLabel },
+                        ...column.filter.options,
+                      ]}
+                      .value=${active}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
+                        const value = event.detail.value;
+                        // The combobox sends a change for a click on its already-chosen row too.
+                        if (value === this.#activeFilter(column)) return;
                         const next = { ...this.filterSelections };
-                        const value = (event.target as HTMLSelectElement).value;
                         if (value === "" && column.filter!.initial === undefined)
                           delete next[column.key];
                         else next[column.key] = value;
@@ -926,15 +936,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           }),
                         );
                       }}
-                    >
-                      <option value="" .selected=${active === ""}>${column.filter.allLabel}</option>
-                      ${column.filter.options.map(
-                        (option) =>
-                          html`<option value=${option.value} .selected=${active === option.value}>
-                            ${option.label}
-                          </option>`,
-                      )}
-                    </select>`
+                    ></wt-combobox>`
                   : nothing;
               })}
             </div>`

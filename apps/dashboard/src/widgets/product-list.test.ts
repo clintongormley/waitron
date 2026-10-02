@@ -1,7 +1,8 @@
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import type { WtCombobox } from "@waitron/ui";
+import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
@@ -42,11 +43,10 @@ function cellUnder(root: ShadowRoot, rowKey: string, header: string): HTMLElemen
 
 async function choose(el: ProductList, column: string, value: string): Promise<void> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
-    `select[data-filter="${column}"]`,
+  const select = table.shadowRoot!.querySelector<HTMLElement>(
+    `wt-combobox[data-filter="${column}"]`,
   )!;
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(select, value);
   await table.updateComplete;
 }
 
@@ -510,15 +510,14 @@ describe("product-list", () => {
       products: orderings(),
     });
     const root = await tableRoot(el);
-    const select = root.querySelector<HTMLSelectElement>('select[data-filter="ordering"]')!;
-    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
-      [
-        ["", t("product.filter_ordering_all")],
-        ["public", t("product.ordering_public")],
-        ["staff_only", t("product.ordering_staff_only")],
-        ["not_sold_separately", t("product.ordering_not_sold_separately")],
-      ],
-    );
+    const select = root.querySelector<WtCombobox>('wt-combobox[data-filter="ordering"]')!;
+    expect([select.searchPlaceholder, select.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
+    expect(select.options.map((option) => [option.value, option.label])).toEqual([
+      ["", t("product.filter_ordering_all")],
+      ["public", t("product.ordering_public")],
+      ["staff_only", t("product.ordering_staff_only")],
+      ["not_sold_separately", t("product.ordering_not_sold_separately")],
+    ]);
     await choose(el, "ordering", "not_sold_separately");
     expect(rowKeys(root)).toEqual(["c-topping"]);
     await choose(el, "ordering", "staff_only");
@@ -635,9 +634,9 @@ describe("product-list", () => {
       ],
     });
     const root = await tableRoot(el);
-    const select = root.querySelector<HTMLSelectElement>('select[data-filter="active"]')!;
-    expect([...select.options].map((option) => option.value)).toEqual(["", "active", "inactive"]);
-    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+    const select = root.querySelector<WtCombobox>('wt-combobox[data-filter="active"]')!;
+    expect(select.options.map((option) => option.value)).toEqual(["", "active", "inactive"]);
+    expect(select.options.map((option) => option.label)).toEqual([
       t("product.filter_status_all"),
       t("product.active_badge"),
       t("product.inactive_badge"),

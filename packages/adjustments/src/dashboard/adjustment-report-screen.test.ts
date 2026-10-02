@@ -116,14 +116,25 @@ function breakdown(el: AdjustmentReportScreen, test: string): string[][] {
   );
 }
 
+type DayField = HTMLElement & { value: string; type: string; label: string; error: string };
+
+function day(el: AdjustmentReportScreen, field: "from" | "to"): DayField {
+  return el.shadowRoot!.querySelector<DayField>(`wt-input[name="${field}"]`)!;
+}
+
+/** The native date box inside the shared field. */
+function dayBox(el: AdjustmentReportScreen, field: "from" | "to"): HTMLInputElement {
+  return day(el, field).shadowRoot!.querySelector<HTMLInputElement>("input")!;
+}
+
 async function pick(
   el: AdjustmentReportScreen,
   field: "from" | "to",
   value: string,
 ): Promise<void> {
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="${field}"]`)!;
+  const input = dayBox(el, field);
   input.value = value;
-  input.dispatchEvent(new Event("change"));
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await settle(el);
 }
 
@@ -133,12 +144,8 @@ describe("the adjustment report", () => {
     const el = await mount(api);
     expect(api.getReport).toHaveBeenCalledTimes(1);
     expect(api.getReport).toHaveBeenCalledWith(undefined);
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!.value).toBe(
-      "2026-09-29",
-    );
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="to"]')!.value).toBe(
-      "2026-09-29",
-    );
+    expect(day(el, "from").value).toBe("2026-09-29");
+    expect(day(el, "to").value).toBe("2026-09-29");
   });
 
   it("says which bills are counted and what the rate measures", async () => {
@@ -362,12 +369,8 @@ describe("the range", () => {
     first(fixtureReport("2026-09-29"));
     await settle(el);
     expect(getReport).toHaveBeenLastCalledWith({ from: "2026-09-01", to: "2026-09-02" });
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!.value).toBe(
-      "2026-09-01",
-    );
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="to"]')!.value).toBe(
-      "2026-09-02",
-    );
+    expect(day(el, "from").value).toBe("2026-09-01");
+    expect(day(el, "to").value).toBe("2026-09-02");
   });
 
   it("leaves the days empty when the first read is refused, and reads the days then chosen", async () => {
@@ -377,7 +380,7 @@ describe("the range", () => {
       .mockImplementation((range?: Range) => Promise.resolve(answer(fixtureReport, range)));
     const el = await mount(fakeApi({ getReport }));
     expect(part(el, "load-error")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!.value).toBe("");
+    expect(day(el, "from").value).toBe("");
     await pick(el, "from", "2026-09-01");
     expect(getReport).toHaveBeenCalledTimes(1);
     await pick(el, "to", "2026-09-03");
@@ -396,17 +399,74 @@ describe("the range", () => {
     const el = await mount(api);
     await open(el, ALEX);
     liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="to"]')!.value).toBe(
-        "2026-09-30",
-      ),
-    );
+    await vi.waitFor(() => expect(day(el, "to").value).toBe("2026-09-30"));
     await vi.waitFor(() =>
       expect(api.listEntries).toHaveBeenLastCalledWith("2026-09-30", "2026-09-30", {
         personId: ALEX,
       }),
     );
     liveData.clear();
+  });
+
+  it("draws both days as the shared date field, and a day typed into one asks for that range", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    expect(day(el, "from").type).toBe("date");
+    expect(day(el, "to").type).toBe("date");
+    expect(day(el, "from").label).toBe("From");
+    expect(day(el, "to").label).toBe("To");
+    await pick(el, "from", "2026-09-01");
+    expect(api.getReport).toHaveBeenLastCalledWith({ from: "2026-09-01", to: "2026-09-29" });
+    expect(day(el, "from").value).toBe("2026-09-01");
+  });
+
+  it("explains a range that runs backwards beside both days, and clears both once it runs forwards", async () => {
+    const el = await mount(fakeApi());
+    await pick(el, "from", "2026-09-30");
+    const sentence = "Choose a first day on or before the last day.";
+    for (const field of ["from", "to"] as const) {
+      const box = dayBox(el, field);
+      expect(box.getAttribute("aria-invalid"), field).toBe("true");
+      expect(day(el, field).error, field).toBe(sentence);
+      expect(
+        day(el, field).shadowRoot!.getElementById(box.getAttribute("aria-describedby")!)!
+          .textContent,
+        field,
+      ).toBe(sentence);
+    }
+    expect(part(el, "range-error")).toBeNull();
+    await pick(el, "from", "2026-09-29");
+    for (const field of ["from", "to"] as const) {
+      expect(dayBox(el, field).getAttribute("aria-invalid"), field).toBe("false");
+      expect(day(el, field).error, field).toBe("");
+    }
+  });
+
+  it("names the days in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    expect(day(el, "from").label).toBe("Desde");
+    expect(day(el, "to").label).toBe("Hasta");
+  });
+
+  it("keeps the report, and says nothing is wrong, while a day is cleared or not yet whole", async () => {
+    const el = await mount(fakeApi());
+    await pick(el, "to", "");
+    expect(part(el, "people")).not.toBeNull();
+    expect(day(el, "from").error).toBe("");
+    expect(dayBox(el, "to").getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("keeps a day's change inside the screen", async () => {
+    const el = await mount(fakeApi());
+    const heard = vi.fn();
+    document.addEventListener("wt-change", heard);
+    try {
+      await pick(el, "from", "2026-09-01");
+    } finally {
+      document.removeEventListener("wt-change", heard);
+    }
+    expect(heard).not.toHaveBeenCalled();
   });
 
   it("ignores a cleared day", async () => {
@@ -421,13 +481,16 @@ describe("the range", () => {
     const el = await mount(api);
     await pick(el, "from", "2026-09-30");
     expect(api.getReport).toHaveBeenCalledTimes(1);
-    expect(text(part(el, "range-error"))).toBe("Choose a first day on or before the last day.");
-    const from = el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!;
+    expect(day(el, "from").error).toBe("Choose a first day on or before the last day.");
+    const from = dayBox(el, "from");
     expect(from.getAttribute("aria-invalid")).toBe("true");
-    expect(from.getAttribute("aria-describedby")).toBe("range-error");
+    expect(
+      day(el, "from").shadowRoot!.getElementById(from.getAttribute("aria-describedby")!)!
+        .textContent,
+    ).toBe("Choose a first day on or before the last day.");
     expect(part(el, "people")).toBeNull();
     await pick(el, "to", "2026-09-30");
-    expect(part(el, "range-error")).toBeNull();
+    expect(day(el, "from").error).toBe("");
     expect(api.getReport).toHaveBeenLastCalledWith({ from: "2026-09-30", to: "2026-09-30" });
   });
 

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption,
@@ -183,13 +184,13 @@ describe("units-screen", () => {
     const el = await mount();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    const filter = table.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[data-filter="precision"]',
+    const filter = table.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[data-filter="precision"]',
     )!;
-    const optionLabels = [...filter.querySelectorAll("option")].map((o) => o.textContent!.trim());
+    const optionLabels = filter.options.map((o) => o.label);
     expect(optionLabels).toEqual([t("units.filter_precision_all"), "0", ",000"]);
-    filter.value = "3";
-    filter.dispatchEvent(new Event("change"));
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
+    await chooseOption(filter, "3");
     await el.updateComplete;
     await table.updateComplete;
     expect(listedKeys(el)).toEqual(["u2"]);

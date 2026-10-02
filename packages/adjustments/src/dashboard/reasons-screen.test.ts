@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
@@ -177,10 +181,22 @@ async function type(el: AdjustmentReasonsScreen, name: string, value: string): P
 }
 
 async function choose(el: AdjustmentReasonsScreen, name: string, value: string): Promise<void> {
-  const select = field(el, name) as unknown as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  await chooseOption(field(el, name), value);
   await settle(el);
+}
+
+type RoleField = Named & {
+  label: string;
+  search: string;
+  options: { value: string; label: string }[];
+};
+function roleField(el: AdjustmentReasonsScreen, name: string): RoleField {
+  return field(el, name) as RoleField;
+}
+
+/** The shared dropdown's own button, which carries its invalid mark. */
+function roleTrigger(el: AdjustmentReasonsScreen, name: string): HTMLButtonElement {
+  return field(el, name).shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
 }
 
 function actionBox(el: AdjustmentReasonsScreen, action: string): HTMLInputElement {
@@ -201,7 +217,7 @@ function noteSwitch(el: AdjustmentReasonsScreen): HTMLInputElement {
 /** The message shown beside a field: a text or price field's own error, or the line under a group. */
 function besideField(el: AdjustmentReasonsScreen, key: string): string {
   const input = el.shadowRoot!.querySelector<Named>(
-    `wt-input[name="${key}"], wt-price-input[name="${key}"]`,
+    `wt-input[name="${key}"], wt-price-input[name="${key}"], wt-combobox[name="${key}"]`,
   );
   if (input) return input.error ?? "";
   return el.shadowRoot!.querySelector(`[data-field-error="${key}"]`)?.textContent?.trim() ?? "";
@@ -243,12 +259,11 @@ describe("the reasons list", () => {
 
   it("shows the inactive reasons when the status filter asks for them, without reorder buttons", async () => {
     const el = await mount(fakeApi());
-    const filter = table(el).shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[data-filter="status"]',
+    const filter = table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      'wt-combobox[data-filter="status"]',
     )!;
     expect(filter.value).toBe("active");
-    filter.value = "inactive";
-    filter.dispatchEvent(new Event("change"));
+    await chooseOption(filter, "inactive");
     await settle(el);
     expect(rowKeys(el)).toEqual(["o"]);
     expect(rowText(el, "o")).toContain("Inactive");
@@ -283,6 +298,10 @@ describe("the reasons list", () => {
     expect(text).toContain("Hasta un 50% de un artículo");
     expect(text).toContain("Hasta 30,00\u00a0€ de una cuenta");
     expect(text).toContain("Aprueba: Encargado");
+    const filter = table(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      'wt-combobox[data-filter="status"]',
+    )!;
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
   });
 });
 
@@ -465,11 +484,74 @@ describe("the editor", () => {
     const el = await mount(fakeApi());
     await press(el, "edit-c");
     for (const name of ["applyRole", "approverRole"]) {
-      const select = field(el, name) as unknown as HTMLSelectElement;
-      expect([...select.options].map((option) => option.value)).toEqual(roles);
+      const select = roleField(el, name);
+      expect(select.options.map((option) => option.value)).toEqual(roles);
     }
     expect(field(el, "applyRole").value).toBe("supervisor");
     expect(field(el, "approverRole").value).toBe("manager");
+  });
+
+  it.each([
+    [
+      "en",
+      "Lowest role that applies it without approval",
+      "Lowest role that may approve it",
+      "Manager",
+    ],
+    [
+      "es",
+      "Rol mínimo que lo aplica sin aprobación",
+      "Rol mínimo que lo puede aprobar",
+      "Encargado",
+    ],
+  ] as const)(
+    "draws both role choices as the shared dropdown, labelled and showing the stored role, in %s",
+    async (locale, applyLabel, approverLabel, manager) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      await press(el, "edit-c");
+      const apply = roleField(el, "applyRole");
+      const approver = roleField(el, "approverRole");
+      expect(apply.tagName).toBe("WT-COMBOBOX");
+      expect(approver.tagName).toBe("WT-COMBOBOX");
+      expect(apply.label).toBe(applyLabel);
+      expect(approver.label).toBe(approverLabel);
+      expect(apply.search).toBe("auto");
+      expect(approver.search).toBe("auto");
+      expect(approver.options.find((option) => option.value === "manager")!.label).toBe(manager);
+      expect(approver.shadowRoot!.querySelector(".trigger")!.textContent!.trim()).toBe(manager);
+    },
+  );
+
+  it("keeps a role's change inside the screen", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    const heard = vi.fn();
+    document.addEventListener("wt-change", heard);
+    try {
+      await choose(el, "applyRole", "manager");
+    } finally {
+      document.removeEventListener("wt-change", heard);
+    }
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it("focuses the approving role when it is the first thing wrong", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    await choose(el, "approverRole", "staff");
+    await press(el, "save-editor");
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "approverRole"));
+    expect(roleTrigger(el, "approverRole").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("locks both role choices while a save is in flight", async () => {
+    const api = fakeApi({ updateReason: vi.fn(() => new Promise<AdjustmentReason>(() => {})) });
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(roleTrigger(el, "applyRole").disabled).toBe(true);
+    expect(roleTrigger(el, "approverRole").disabled).toBe(true);
   });
 
   it.each(["en", "es"])("keeps role seniority separate from name order in %s", async (locale) => {
@@ -481,7 +563,7 @@ describe("the editor", () => {
     await choose(el, "approverRole", "supervisor");
     await press(el, "save-editor");
     expect(api.updateReason).not.toHaveBeenCalled();
-    expect(field(el, "approverRole").getAttribute("aria-invalid")).toBe("true");
+    expect(roleTrigger(el, "approverRole").getAttribute("aria-invalid")).toBe("true");
     await choose(el, "approverRole", "admin");
     await press(el, "save-editor");
     expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
@@ -506,10 +588,12 @@ describe("the editor", () => {
       el.shadowRoot!.appendChild(probe);
       const form = probe.getBoundingClientRect().width;
       expect(modal(el)!.shadowRoot!.querySelector(".body")!.clientWidth).toBeGreaterThan(form);
-      const parts = modal(el)!.querySelectorAll(
-        ".select-field, .select-label, .select-field select, [data-field-error=approverRole]",
-      );
-      expect(parts).toHaveLength(7);
+      const boxes = [...modal(el)!.querySelectorAll("wt-combobox")];
+      const parts = [
+        ...boxes,
+        ...boxes.flatMap((box) => [...box.shadowRoot!.querySelectorAll("[data-error]")]),
+      ];
+      expect(parts).toHaveLength(3);
       for (const part of parts) {
         expect(part.getBoundingClientRect().width, part.outerHTML).toBeCloseTo(form, 0);
       }
@@ -535,7 +619,7 @@ describe("the editor", () => {
     expect((field(el, "approverRole") as unknown as HTMLSelectElement).value).toBe("manager");
     expect(noteSwitch(el).checked).toBe(true);
     for (const input of modal(el)!.querySelectorAll(
-      "wt-input, wt-price-input, select, input, wt-switch",
+      "wt-input, wt-price-input, wt-combobox, input, wt-switch",
     )) {
       expect(input.getAttribute("name"), input.outerHTML).toMatch(/^[a-zA-Z]+(-[a-z]+)?$/);
     }

@@ -1,8 +1,10 @@
 import { afterEach, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { ReactiveControllerHost } from "lit";
 import type { FloorTable, PlacementChange, PlacementClear } from "../floor.js";
 import type { FloorCanvasCopy } from "./wt-floor-canvas.js";
+import type { WtInput } from "./wt-input.js";
 import "./wt-floor-canvas.js";
 
 afterEach(cleanup);
@@ -175,11 +177,189 @@ test("editing the zone re-homes the selected table", async () => {
   tokenEl(el, "t1").click();
   await el.updateComplete;
   const detail = await withPlacementChange(el, () => {
-    const input = el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!;
-    input.value = "terrace";
-    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    editZone(el, "terrace");
   });
   expect(detail.zoneId).toBe("terrace");
+});
+
+function zoneField(el: Canvas): WtInput {
+  return el.shadowRoot!.querySelector<WtInput>('wt-input[name="zone"]')!;
+}
+
+/** The zone box's own text control. */
+function zoneControl(el: Canvas): HTMLInputElement {
+  return zoneField(el).shadowRoot!.querySelector("input")!;
+}
+
+/** Types `value` over the zone box's text and leaves the box, as a person editing it would. */
+function editZone(el: Canvas, value: string): void {
+  const input = zoneControl(el);
+  input.focus();
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  input.blur();
+}
+
+test("the zone box is the shared text field, labelled by the zone copy", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: "terrace" })], { editable: true });
+  el.copy = { zone: "Zona" };
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const field = zoneField(el);
+  await field.updateComplete;
+  expect(field.label).toBe("Zona");
+  expect(field.hideLabel).toBe(false);
+  expect(field.value).toBe("terrace");
+  expect(zoneControl(el).labels![0]!.textContent!.trim()).toBe("Zona");
+});
+
+test("the zone box's own change stays inside the canvas", async () => {
+  const el = (await mountInShadowRoot("<wt-floor-canvas></wt-floor-canvas>")) as Canvas;
+  el.tables = [oneTable("t1", { zoneId: null })];
+  el.editable = true;
+  await el.updateComplete;
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const escaped: Event[] = [];
+  const listen = (event: Event) => escaped.push(event);
+  document.addEventListener("wt-change", listen);
+  try {
+    editZone(el, "terrace");
+  } finally {
+    document.removeEventListener("wt-change", listen);
+  }
+  expect(escaped).toEqual([]);
+});
+
+test("typing a zone and leaving the box re-homes the table once, not at every key", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: null })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("terrace");
+  expect(placements).toEqual([]);
+  zoneControl(el).blur();
+  expect(placements.map((p) => p.zoneId)).toEqual(["terrace"]);
+});
+
+test("pressing Enter in the zone box re-homes the table, and leaving it then sends nothing more", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: null })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("patio{Enter}");
+  expect(placements.map((p) => p.zoneId)).toEqual(["patio"]);
+  zoneControl(el).blur();
+  expect(placements).toHaveLength(1);
+});
+
+test("visiting the zone box without typing re-homes nothing", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: "terrace" })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("{Enter}");
+  zoneControl(el).blur();
+  expect(placements).toEqual([]);
+});
+
+test("typing and then deleting back to the zone re-homes nothing, on leaving or on Enter", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: "terrace" })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("s{Backspace}");
+  zoneControl(el).blur();
+  zoneControl(el).focus();
+  await userEvent.keyboard("s{Backspace}{Enter}");
+  expect(placements).toEqual([]);
+});
+
+test("after Enter sends a zone, typing back to that zone and leaving sends nothing more", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: null })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("patio{Enter}s{Backspace}");
+  zoneControl(el).blur();
+  expect(placements.map((p) => p.zoneId)).toEqual(["patio"]);
+});
+
+test("a zone typed for one table is not given to the next table the box shows", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: null }), oneTable("t2", { zoneId: null })],
+    {
+      editable: true,
+    },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("terrace");
+  el.selectedId = "t2";
+  await el.updateComplete;
+  zoneControl(el).blur();
+  expect(placements).toEqual([]);
+});
+
+test("when the selection moves while the zone box keeps focus, the new table's own zone is what a send must differ from", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: "terrace" }), oneTable("t2", { zoneId: "bar" })],
+    { editable: true },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  el.selectedId = "t2";
+  await el.updateComplete;
+  expect(zoneControl(el).value).toBe("bar");
+  await userEvent.keyboard("{Backspace}{Backspace}{Backspace}terrace");
+  expect(zoneControl(el).value).toBe("terrace");
+  await userEvent.keyboard("{Enter}");
+  expect(placements.map((p) => [p.tableId, p.zoneId])).toEqual([["t2", "terrace"]]);
+});
+
+test("a zone typed for a table and left behind is not sent when that table is selected again", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: "terrace" }), oneTable("t2", { zoneId: "bar" })],
+    { editable: true },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("{Backspace}".repeat(7) + "patio");
+  expect(zoneControl(el).value).toBe("patio");
+  el.selectedId = "t2";
+  await el.updateComplete;
+  el.selectedId = "t1";
+  await el.updateComplete;
+  expect(zoneControl(el).value).toBe("terrace");
+  await userEvent.keyboard("{Enter}");
+  expect(placements).toEqual([]);
+});
+
+test("a zone typed for a table that leaves the plan while the box has focus is not sent", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: "terrace" }), oneTable("t2", { zoneId: "bar" })],
+    { editable: true },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const placements = collectPlacements(el);
+  zoneControl(el).focus();
+  await userEvent.keyboard("patio");
+  el.tables = [oneTable("t2", { zoneId: "bar" })];
+  await el.updateComplete;
+  expect(zoneField(el)).toBeNull();
+  expect(placements).toEqual([]);
 });
 
 test("deactivating clears the table's placement", async () => {
@@ -310,9 +490,7 @@ test("clearing the zone input re-homes the table to no zone", async () => {
   tokenEl(el, "t1").click();
   await el.updateComplete;
   const detail = await withPlacementChange(el, () => {
-    const input = el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!;
-    input.value = "   ";
-    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    editZone(el, "   ");
   });
   expect(detail.zoneId).toBeNull();
 });
@@ -346,9 +524,7 @@ test("a zone edit is trimmed before it is emitted", async () => {
   tokenEl(el, "t1").click();
   await el.updateComplete;
   const detail = await withPlacementChange(el, () => {
-    const input = el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!;
-    input.value = "  terrace  ";
-    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    editZone(el, "  terrace  ");
   });
   expect(detail.zoneId).toBe("terrace");
 });
@@ -642,10 +818,10 @@ test("the zone box opens on the selected table's zone, and empty when it has non
   );
   tokenEl(el, "t1").click();
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!.value).toBe("terrace");
+  expect(zoneField(el).value).toBe("terrace");
   tokenEl(el, "t2").click();
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!.value).toBe("");
+  expect(zoneField(el).value).toBe("");
 });
 
 test("the inspector follows the table that was selected, not the first one", async () => {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
-import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { ImageApi, LibraryImage } from "./client.js";
 import type { ImageLibrary } from "./image-library.js";
@@ -61,9 +61,7 @@ async function openDialog(library: ImageLibrary, action: string): Promise<HTMLEl
 describe.each(["light", "dark"] as const)("image library accessibility (%s)", (theme) => {
   it("labels search, filters, direction and image actions in the populated library", async () => {
     const library = await mount(theme);
-    const sort = library.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-sort]")!;
-    sort.value = "date";
-    sort.dispatchEvent(new Event("change"));
+    await chooseOption(library.shadowRoot!.querySelector("wt-combobox[name=image-sort]")!, "date");
     await library.updateComplete;
     await expectNoA11yViolations(host);
   });

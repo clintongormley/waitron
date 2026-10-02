@@ -2,7 +2,6 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
-  selectStyles,
   ContentLanguageController,
   currentContentLanguages,
   focusFirstInvalid,
@@ -17,6 +16,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { capitaliseFirst, resolveEnabledContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -53,7 +53,6 @@ function refusalField(error: unknown): string {
 export class ImageLibrary extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -77,6 +76,9 @@ export class ImageLibrary extends LitElement {
       .filters wt-input {
         flex: 1 1 calc(var(--wt-tap-min) * 8);
         min-width: 0;
+      }
+      .filters wt-combobox {
+        min-width: calc(var(--wt-space-6) * 7);
       }
       label {
         display: grid;
@@ -495,36 +497,47 @@ export class ImageLibrary extends LitElement {
             this.#searchTimer = setTimeout(() => this.#filter(), 250);
           }}
         ></wt-input>
-        <label
-          >${t("image.sort")}<select
-            name="image-sort"
-            @change=${(event: Event) => {
-              this.sort = (event.target as HTMLSelectElement).value as ImageQuery["sort"];
-              this.direction = this.sort === "name" ? "asc" : "desc";
-              this.#filter();
-            }}
-          >
-            ${(["relevance", "date", "name"] as const).map((sort) => html`<option value=${sort} ?selected=${this.sort === sort}>${t(sort === "name" ? "image.name_sort" : `image.${sort}`)}</option>`)}
-          </select></label
-        >
+        <wt-combobox
+          name="image-sort"
+          label=${t("image.sort")}
+          search="auto"
+          .options=${(["relevance", "date", "name"] as const).map((sort) => ({
+            value: sort,
+            label: t(sort === "name" ? "image.name_sort" : `image.${sort}`),
+          }))}
+          .value=${this.sort}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            if (event.detail.value === this.sort) return;
+            this.sort = event.detail.value as ImageQuery["sort"];
+            this.direction = this.sort === "name" ? "asc" : "desc";
+            this.#filter();
+          }}
+        ></wt-combobox>
         ${
           this.sort !== "relevance"
-            ? html`<label
-                >${t("image.direction")}<select
-                  name="image-direction"
-                  @change=${(event: Event) => {
-                    this.direction = (event.target as HTMLSelectElement).value as "asc" | "desc";
-                    this.#filter();
-                  }}
-                >
-                  <option value="asc" ?selected=${this.direction === "asc"}>
-                    ${t(this.sort === "date" ? "image.oldest_first" : "image.name_ascending")}
-                  </option>
-                  <option value="desc" ?selected=${this.direction === "desc"}>
-                    ${t(this.sort === "date" ? "image.newest_first" : "image.name_descending")}
-                  </option>
-                </select></label
-              >`
+            ? html`<wt-combobox
+                name="image-direction"
+                label=${t("image.direction")}
+                search="auto"
+                .options=${[
+                  {
+                    value: "asc",
+                    label: t(this.sort === "date" ? "image.oldest_first" : "image.name_ascending"),
+                  },
+                  {
+                    value: "desc",
+                    label: t(this.sort === "date" ? "image.newest_first" : "image.name_descending"),
+                  },
+                ]}
+                .value=${this.direction}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (event.detail.value === this.direction) return;
+                  this.direction = event.detail.value as "asc" | "desc";
+                  this.#filter();
+                }}
+              ></wt-combobox>`
             : nothing
         }
       </div>

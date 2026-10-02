@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { codeMessage } from "@waitron/dashboard-kit";
+import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { BookingForm } from "./booking-form.js";
 import type { Booking, BookingInput, DashboardTable } from "./client.js";
 
@@ -23,11 +24,21 @@ async function setInput(el: BookingForm, testId: string, value: string): Promise
 }
 
 async function setSelect(el: BookingForm, testId: string, value: string): Promise<void> {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${testId}]`)!;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(el.shadowRoot!.querySelector(`[data-test=${testId}]`)!, value);
   await el.updateComplete;
 }
+
+type TableField = HTMLElement & {
+  name: string;
+  label: string;
+  value: string;
+  placeholder: string;
+  search: string;
+  required: boolean;
+  searchPlaceholder: string;
+  noResultsLabel: string;
+  options: { value: string; label: string }[];
+};
 
 async function click(el: BookingForm, testId: string): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.click();
@@ -78,10 +89,56 @@ describe("booking-form", () => {
 
   it("offers a table picker with a no-table option plus every loaded table, keeping ids", async () => {
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
-    const options = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=booking-table] option"),
-    ];
+    const { options } = el.shadowRoot!.querySelector<TableField>("[data-test=booking-table]")!;
     expect(options.map((o) => o.value)).toEqual(["", "t-1", "t-2"]);
+  });
+
+  it.each([
+    ["en", "Table", "No table", "Search", "No results"],
+    ["es", "Mesa", "Sin mesa", "Buscar", "Sin resultados"],
+  ] as const)(
+    "draws the table as the shared dropdown, 'no table' its placeholder and first row (%s)",
+    async (locale, label, none, search, noResults) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
+        const table = el.shadowRoot!.querySelector<TableField>("wt-combobox[name=table]")!;
+        expect(table).not.toBeNull();
+        expect(table.label).toBe(label);
+        expect(table.placeholder).toBe(none);
+        expect(table.options.map((o) => o.label)).toEqual([none, "Mesa 1", "Mesa 2"]);
+        expect(table.value).toBe("");
+        expect(table.required).toBe(false);
+        expect(table.search).toBe("auto");
+        expect(table.searchPlaceholder).toBe(search);
+        expect(table.noResultsLabel).toBe(noResults);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("keeps a table's change inside the form", async () => {
+    const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
+    const heard = vi.fn();
+    document.addEventListener("wt-change", heard);
+    try {
+      await setSelect(el, "booking-table", "t-1");
+    } finally {
+      document.removeEventListener("wt-change", heard);
+    }
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it("sends no table once a chosen table is changed back to no table", async () => {
+    const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
+    const done = nextEvent<BookingInput>(el, "create-booking");
+    await fillValid(el);
+    await setSelect(el, "booking-table", "t-2");
+    await setSelect(el, "booking-table", "");
+    await click(el, "confirm");
+    expect((await done).detail.tableId).toBeNull();
   });
 
   it("submits plain local date+time, not a UTC instant", async () => {

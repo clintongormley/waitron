@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type {
   CatalogueSummary,
@@ -170,6 +174,8 @@ type Table = HTMLElement & {
   searchable: boolean;
   searchLabel: string;
   noMatchesMessage: string;
+  filterSearchPlaceholder: string;
+  filterNoResultsLabel: string;
   emptyMessage: string;
   viewKey: string;
   sortKey: string;
@@ -442,6 +448,10 @@ it("makes each tab's table searchable with a status filter", async () => {
     expect(found.searchable).toBe(true);
     expect(found.searchLabel).toBe(label);
     expect(found.columns.find((column) => column.key === "status")?.filter).toBeTruthy();
+    expect([found.filterSearchPlaceholder, found.filterNoResultsLabel]).toEqual([
+      "Buscar",
+      "Sin resultados",
+    ]);
   }
 });
 
@@ -456,9 +466,8 @@ it("filters an extras list out by its status", async () => {
   const extras = table(el, "extra-lists");
   await extras.updateComplete;
   await vi.waitFor(() => expect(extras.shadowRoot.textContent).toContain("Sauces"));
-  const filter = extras.shadowRoot.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
-  filter.value = "active";
-  filter.dispatchEvent(new Event("change", { bubbles: true }));
+  const filter = extras.shadowRoot.querySelector<HTMLElement>('[name="status-filter"]')!;
+  await chooseOption(filter, "active");
   await vi.waitFor(() => expect(extras.shadowRoot.textContent).not.toContain("Sauces"));
   expect(extras.shadowRoot.textContent).toContain("Breads");
 });

@@ -15,6 +15,8 @@ import {
   snapRotation,
   snapToGrid,
 } from "../floor.js";
+import type { WtInput } from "./wt-input.js";
+import "./wt-input.js";
 import "./wt-table-token.js";
 
 export interface FloorCanvasCopy {
@@ -159,24 +161,6 @@ export class WtFloorCanvas extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .zone {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
-      .zone input {
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
-
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -223,6 +207,13 @@ export class WtFloorCanvas extends LitElement {
   #drag: DragState | null = null;
 
   /**
+   * The zone box's state for the table it shows: `sent`, the text a send must differ from (the
+   * table's zone when it was selected, the box's text when it took focus, or the last send), and
+   * `typed`, the text typed since and not yet sent. Replaced whenever another table is selected.
+   */
+  #zone: { tableId: string; sent: string; typed: string | null } | null = null;
+
+  /**
    * Memoised per `this.tables` reference, so a drag writing `draft` on every pointermove does not make
    * Lit rebind every token's listeners each frame.
    */
@@ -238,12 +229,22 @@ export class WtFloorCanvas extends LitElement {
     this.#endDrag();
   }
 
+  get #selected(): FloorTable | null {
+    return this.editable && this.selectedId != null
+      ? (this.tables.find((t) => t.id === this.selectedId) ?? null)
+      : null;
+  }
+
+  override willUpdate(): void {
+    const selected = this.#selected;
+    if (selected?.id === this.#zone?.tableId) return;
+    this.#zone =
+      selected === null ? null : { tableId: selected.id, sent: selected.zoneId ?? "", typed: null };
+  }
+
   override render(): TemplateResult {
     const copy = this.#copy;
-    const selected =
-      this.editable && this.selectedId != null
-        ? (this.tables.find((t) => t.id === this.selectedId) ?? null)
-        : null;
+    const selected = this.#selected;
     return html`
       <div class="canvas" role="group" aria-label=${copy.floor}>
         ${this.tables.map((t) => this.#renderTable(t, copy))}
@@ -328,13 +329,22 @@ export class WtFloorCanvas extends LitElement {
             `,
           )}
         </div>
-        <label class="zone">
-          ${copy.zone}
-          <input
-            .value=${t.zoneId ?? ""}
-            @change=${(e: Event) => this.#onZone(t, (e.target as HTMLInputElement).value)}
-          />
-        </label>
+        <wt-input
+          name="zone"
+          label=${copy.zone}
+          .value=${t.zoneId ?? ""}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => {
+            e.stopPropagation();
+            this.#zone!.typed = e.detail.value;
+          }}
+          @keydown=${(e: KeyboardEvent) => {
+            if (e.key === "Enter") this.#commitZone(t);
+          }}
+          @focusin=${(e: FocusEvent) => {
+            this.#zone!.sent = (e.currentTarget as WtInput).value;
+          }}
+          @focusout=${() => this.#commitZone(t)}
+        ></wt-input>
         <div class="actions">
           <button type="button" class="chip rotate" @click=${() => this.#onRotate(t)}>
             ${copy.rotate}
@@ -461,8 +471,17 @@ export class WtFloorCanvas extends LitElement {
     });
   }
 
-  #onZone(t: FloorTable, value: string): void {
-    const trimmed = value.trim();
+  /** Sends the typed zone once, on Enter or on leaving the box, because the parent saves every
+   * placement change it hears. */
+  #commitZone(t: FloorTable): void {
+    // Null when the box leaves with its inspector: Chromium sends `focusout` as it is removed.
+    const zone = this.#zone;
+    if (zone === null || zone.typed === null) return;
+    const typed = zone.typed;
+    zone.typed = null;
+    if (typed === zone.sent) return;
+    zone.sent = typed;
+    const trimmed = typed.trim();
     this.#emitPlacement({ ...this.#placementOf(t), zoneId: trimmed === "" ? null : trimmed });
   }
 
