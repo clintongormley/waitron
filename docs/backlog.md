@@ -999,6 +999,19 @@ doing their own thing, and a drag that ends where it started opens nothing. Read
 folder's row opens the folder, as its name does today — ask if folder rows were meant to stay as
 they are. LOOK at 1280 and 390, light and dark.
 
+**The dashboard recovers by itself when the server comes back after a restart (A206, owner
+2026-10-02) — OPEN, not reproduced.** The owner: _"when i restart waitron the dashboard says
+"couldn't connect to waitron", but then it doesn't keep trying. i had to refresh the page"_. The
+message is `connection.failed`, raised by the shared request helper when a request gets no answer
+at all (`packages/dashboard-kit/src/request.ts`). The live connection already retries on its own,
+backing off up to 30 seconds (`packages/dashboard-kit/src/live-connection.ts`); read, not run: what
+looks to stay stuck is the request that loaded the screen, which nothing tries again. **Wanted:**
+while the server cannot be reached the dashboard keeps trying, and once it answers again the message
+goes away and the open screen reloads its data, with no page refresh. An unsaved edit in an open
+form is kept. **First** reproduce it: the dashboard open on a few screens (a table screen, a form,
+the Backups screen), restart the server, and note which ones stay stuck, and whether the live
+connection's return reaches them.
+
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — OPEN.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
 until one name is long enough to push it left: _"the drag handle column shouldn't auto-expand, so
