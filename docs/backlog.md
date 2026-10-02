@@ -999,23 +999,32 @@ they are. LOOK at 1280 and 390, light and dark.
 screens open across a restart, 20 kept "This browser could not connect…" or "could not be loaded"
 after their data had come back. The live connection already re-reads every watched query when its
 stream returns; what was missing was telling the screen. `QueryController`
-(`packages/dashboard-kit/src/query-controller.ts`) now takes an optional fourth argument, called once
-every read of that controller that failed has applied a value again, and each of those screens
-clears the message its failed read put up — unless something else has replaced it. Screens whose
+(`packages/dashboard-kit/src/query-controller.ts`) now takes an optional fourth argument, called
+once every failed read it still watches has applied a value with no new failure reported meanwhile.
+Each screen that keeps a read error clears it there, or already did in its apply callback: a stored
+message only if it is still the one the failed read set, a yes/no flag always (Menus' flag is also
+set by the read in `#openMenuForm`, which a recovery clears too). Profile, Recipe, the two order
+dialogs and the catalogue's placement step, not among the 20, take the same callback. Screens whose
 first load stopped before starting its later reads (Products, Printers, Modifiers, Content
-languages, Approvals, Sales' business day) start them on recovery. Measured afterwards: all 34
-screens recover from a 20 s and a 90 s outage, and 32 of 34 opened during the outage; an unsaved
-form edit is kept. Not covered — below, "Screens that load outside the shared queries never retry".
+languages, Approvals, Sales' business day) start them on recovery. Measured before the review's
+fixes of 2026-10-02: all 34 screens recover from a 20 s and a 90 s outage, and 32 of 34 opened
+during the outage; an unsaved form edit is kept. Not covered — below, "Screens that load outside the
+shared queries never retry".
 
-**Screens that load outside the shared queries never retry (A224, from A206's review,
-2026-10-02) — OPEN.** A206 fixed every read made through the shared query layer. A screen opened
-while the server is down and loading through a one-off request stays on its message until the page
-is refreshed: Payments (`listPaymentProviders`/`listReaders` in `#load`), Cloud services, and
-Profile's language list (`getLocales`). Also from that review: no read has a time limit, so a request
-that never answers keeps its read loading for ever; and on a screen that stores its message as a code
-(most of them), a save that failed with `connection.failed` during the outage loses its message when
-the reads recover — Units compares the error itself and keeps it. Roster and Planned vs actual show
-their "no locations" prompt instead of the error when the locations read fails.
+**Screens that load outside the shared queries never retry (A224, from A206's review, 2026-10-02) —
+OPEN.** A206 fixed every read made through the shared query layer. A screen opened while the server
+is down and loading through a one-off request stays on its message until the page is refreshed:
+Payments (`listPaymentProviders`/`listReaders` in `#load`), Cloud services, and Profile's language
+list (`getLocales`). Also from that review: no read has a time limit, so a request that never
+answers keeps its read loading for ever; and where a save's failure is shown in the same field as a
+read's, a save that failed with `connection.failed` during the outage loses its message when the
+reads recover. Most of the screens where that happens store the message as a code; Profile and the
+reprint dialog store its text. Units compares the error itself and keeps it, and the placement step
+keeps a save's failures in a list of their own. Sales releases its `getSalesOverview` watch in a
+`finally`, so if only that read fails while the daily-close read succeeds, no recovery is announced
+and the business day is not loaded until the screen is reopened — traced by reading, not tested.
+Roster and Planned vs actual show their "no locations" prompt instead of the error when the
+locations read fails.
 
 **The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
 2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on

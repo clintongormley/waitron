@@ -185,18 +185,21 @@ fails”).
 Use the shared query controller or the request primitive's `passive` option for event refreshes and
 timers. A normal GET touches the management session, so polling it would keep an unattended
 dashboard signed in. Observer callbacks assign snapshots; they do not rerun loaders that reset
-drafts. On the Backups screen a refresh never replaces a recovery key the screen made, because the
-operator may be copying it and the box would then store a key nobody saved. Its status watcher asks
-for a key only while the screen has made none, and at most once — a failed mint is not retried on
-every refresh, because the mint is a POST and a POST is never passive — so a first status read that
-failed, or a held key a later read finds too short, still gets a key. A key request already in
-flight is shared, so Apply, Rotate and the watcher never race to set the shown key. A failed
-status read's alert clears when a later status read succeeds or when Apply, Rotate or Save
-settings starts; an alert from anything else — an action, showing the old key, or a failed mint —
-stays until the screen is reopened or a key or settings action clears it. See
-`docs/developers/dashboard-live-updates.md` and the passive-session and backup-screen regressions
-(`apps/dashboard/src/screens/backup-screen.test.ts`, "the status watcher's key requests and read
-alerts").
+drafts. A screen may rerun the unfinished part of its most recent load from the query controller's
+`recovered` callback, and only if that load did not complete; the same callback is where a screen
+can clear a read error once the failed reads recover
+([dashboard-live-updates.md](dashboard-live-updates.md)). On the Backups screen a refresh never
+replaces a recovery key the screen made, because the operator may be copying it and the box would
+then store a key nobody saved. Its status watcher asks for a key only while the screen has made
+none, and at most once — a failed mint is not retried on every refresh, because the mint is a POST
+and a POST is never passive — so a first status read that failed, or a held key a later read finds
+too short, still gets a key. A key request already in flight is shared, so Apply, Rotate and the
+watcher never race to set the shown key. A failed status read's alert clears when a later status
+read succeeds or when Apply, Rotate or Save settings starts; an alert from anything else — an
+action, showing the old key, or a failed mint — stays until the screen is reopened or a key or
+settings action clears it. See `docs/developers/dashboard-live-updates.md` and the passive-session
+and backup-screen regressions (`apps/dashboard/src/screens/backup-screen.test.ts`, "the status
+watcher's key requests and read alerts").
 
 ## A background API client does not make POST requests passive
 
