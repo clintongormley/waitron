@@ -255,14 +255,14 @@ taking payment), and down-printer and dark-screen alerts
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner on
 2026-10-01, lands on its own when green); 3c, in three plans (owner, 2026-10-01), each its own
 branch: 3c-1, what a station's ticket shows: the rest of the order, and dishes made at the till
-([plan](superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md), built beside 3b); 3c-2, extras made at their own station, with the dish's and the extra's
+([plan](superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md), built beside 3b in #1013); 3c-2, extras made at their own station, with the dish's and the extra's
 tickets naming each other ([plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md),
 starts once 3b has landed); 3c-3, "Make at" on any dish before sending, moving a dish that has not
 been started to another station (a slip at the old station whenever it was sent there), and
 re-routing a held dish whose station closed before it was released, which, with no replacement,
 goes to its old station with an alert ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md),
 starts once 3c-2 has landed); 3d, watchers. **Next action:** 3b is lane D's PF4; the
-three 3c plans are approved (owner, 2026-10-01) and queued — 3c-1 as lane E's PF5, 3c-2 and 3c-3 as
+three 3c plans are approved (owner, 2026-10-01): 3c-1 landed as lane E's PF5 (#1013); 3c-2 and 3c-3 remain queued as
 lane D's PF6 and PF7, each landing on its own when green (3c-3 was amended after approval so a
 dish made at the till is never moved or re-routed, and now also waits for 3c-1). 3d, watchers
 ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): named watchers on Prep Stations that
