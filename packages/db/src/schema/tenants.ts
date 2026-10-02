@@ -74,8 +74,10 @@ export const tenants = table(
 );
 
 /**
- * A venue. `invoiceLocales` is an ORDERED list of one or two locales: one means
- * monolingual, two means both languages on the same invoice in that order.
+ * A venue. `invoiceLocales` is an ORDERED list of one or two receipt languages. A
+ * sale is filed and printed in the FIRST (`readReceiptLanguage`,
+ * `packages/catalogue/src/operations.ts`); an order line's customer text is
+ * snapshotted under every entry.
  *
  * The order is fiscal, not presentational. A reprint or a corrective invoice
  * issued a year later must reproduce the document the customer took, which is

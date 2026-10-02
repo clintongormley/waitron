@@ -2772,7 +2772,8 @@ first is still open:
     it 530px wide in English, 537px in Spanish): its `auto 1fr` columns (on main since 512999e30)
     never narrow below the longest value.
   - *The Cloud restore screen shows capture and expiry times as the server's raw ISO text* in both
-    languages, and the Review screen shows invoice languages as codes (`es-ES, en-GB`).
+    languages, and the Review screen shows invoice languages as codes (`es-ES, en-GB`). _(2026-10-02,
+    C113: one code now; `en-GB` is no longer offered.)_
   - *The file pickers' "Choose File / No file chosen" follow the browser's language*, not the
     chooser; the browser draws them.
   - *The Spanish certificate export steps name Chrome, macOS and Firefox menus from memory*
@@ -2827,6 +2828,8 @@ says whether it was seen in a run or only read in the code:
   module to take a description from), and Next only moves focus to that sentence. When the draft
   carries an operation description but no tax ID, a press puts "Enter the tax ID. Choose one or two
   invoice languages." above Next, ahead of the generic sentence — two fields Demo does not show.
+  _(2026-10-02, C113: the language sentence now reads "Choose the receipt language."; this case was
+  not run again.)_
   Seen in a throwaway test on 2026-09-29, since deleted; nothing pins it.
 - *In Demo, a local check that fails only on a field Demo hides* — for example a draft whose series
   code equals its refund-invoice series code — shows its message above Next once Next has been
@@ -4468,7 +4471,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         invoice locales changed", `scripts/behavioural-triggers.test.ts`). No product route changes
         a venue's invoice languages after setup today: a grep finds them written only by setup and
         the configuration import setup runs. **Next action:** limit both triggers to updates of
-        `descriptions` (and `variant_descriptions`) and `working_order_id`.
+        `descriptions` (and `variant_descriptions`) and `working_order_id`. _(2026-10-02, C113: the
+        Receipts page now changes a location's language, and refuses while an order could still
+        write a line; that refusal can block indefinitely, so this trigger change is still wanted —
+        C113's entry under A8.)_
       - A line outside any group that needs no kitchen, held, and first released after its bill was
         paid cannot be marked served: `sent_at` is its only record of release, and `stampSent`
         writes it only on an open bill, so the mark is refused `group.line_held`. Reproduced
@@ -7978,7 +7984,8 @@ ongoing overhaul listed at the top of Track A.
   by the dashboard's own nav and its tests.
   - Two sections: **Every location** holds the header subtitle and the footer message (the
     venue-wide trim), and a section titled with the location's name holds the invoice operation
-    description. There is no location picker: `location-settings-api.ts` edits only the server's
+    description. _(2026-10-02, C113: that section also holds the receipt language — entry
+    below.)_ There is no location picker: `location-settings-api.ts` edits only the server's
     own location (`deps.cfg.locationId`). Each field's hint, shown as its placeholder while it is
     empty, says what it is for and where it appears.
   - Beside the fields (below them at phone width) the server draws the sample sale from
@@ -8093,6 +8100,86 @@ ongoing overhaul listed at the top of Track A.
     tall on one grid (`packages/printing/src/escpos.ts:42`, `line()` at `:68`, which takes no size),
     and `apps/server/src/receipt-ticket.ts` uses no other way of drawing text — read, not checked on
     paper. Not changed here.
+- **One receipt language per location (C113, owner 2026-09-30) — done (2026-10-02, branch
+  `feat/receipt-language-per-location`).** The owner's decision: a receipt prints in ONE language,
+  never two, with no choice at print time, and dish names print as they were saved.
+  - The language is the first entry of the location's saved list (`locations.invoice_locales`),
+    read in the transaction that files the sale (`readReceiptLanguage`,
+    `packages/catalogue/src/operations.ts`): a walk-up sale, a card-reader sale and the recovery of
+    a card captured before a lost response, a bill paid in parts, and an invoice issued when an
+    order is placed. `WAITRON_TILL_LOCALE` no longer decides it. A reprint prints in the language
+    the sale was filed in (`sales.locale`), whatever the location holds by then.
+  - The fixed words (Fecha, Pedido, Efectivo, DUPLICADO and the rest) come from a table in Spain's
+    country pack with one set each for Spanish, Catalan, Galician and Basque
+    (`packages/country-es/src/receipt-labels.ts`, read through `receiptLabelsFor` in
+    `packages/country-packs/src/registry.ts`). The printed receipt and the till's on-screen ticket
+    both read it; the screen shows the language the server says the sale was filed in. A language
+    the table lacks prints the Spanish words. «QR tributario:» and VERI\*FACTU are the same in every
+    language.
+  - **Where it is set:** in the location's section of the **Receipts** page, and on setup's venue
+    screen. Outside Catalonia the owner picks one of Spain's four official languages (setup starts
+    on Spanish); on the Receipts page, picking one redraws the preview without saving. **In
+    Catalonia it is fixed to Catalan** and shown read-only with the reason, because the Catalan
+    Consumer Code (Llei 22/2010) art. 128-1.2.a gives customers the right to receive invoices in
+    Catalan, and the Agència Catalana del Consum says customers are entitled to till receipts in
+    Catalan ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). A
+    location there that still holds another language gets a note and a "Use Catalan" button.
+  - Server: `GET` and `PUT /management-api/receipt-language`
+    (`apps/server/src/location-settings-api.ts`, permission `venue.configure`). A PUT is refused
+    for a language the pack does not offer (`management.request_invalid`), for anything but Catalan
+    in Catalonia (`receipt.language_fixed`), and while an order at the location still has a line
+    the till can write (`receipt.language_orders_open`, below). Setup refuses anything but one
+    offered language. The preview route takes an optional `language`.
+  - The Receipts page and the Content languages page both show a note when the receipt language is
+    not one of the content languages: product names on receipts then print in the default content
+    language.
+  - **Open, for the owner:**
+    - **A change is refused while any order at the location can still write a line, and one such
+      order can block it indefinitely.** The database refuses a write to an order line whose
+      language keys no longer match the location. Measured by the till's own routes
+      (`apps/server/src/location-settings-api.orders-open.test.ts`): open and placed orders block; so
+      does a paid bill whose party, or the party it was merged into, is still seated, even when
+      every dish is served, because a serve can be taken back; and so does a paid order with a dish
+      no station took. A paid counter sale whose lines were all sent, a bill whose party has left
+      and an abandoned bill do not. A never-served or never-sent line therefore blocks a change for
+      as long as it stays. The real fix is a change to the order-line trigger, which is a migration
+      and was out of scope; the question is in the campaign's questions file.
+    - After a change, a paid counter sale with one dish a station took and one it did not is not
+      blocked, and its send-to-prep route (`/prep`) then answers 500, writing nothing, instead of
+      409 `ticket.already_fired`. No till screen calls that route.
+    - The refusal's count of blocking orders is not shown on the Receipts page: `codeMessage` fills
+      in no values.
+    - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,
+      «Cobrado») stay Spanish, and its date and amounts still follow `WAITRON_TILL_LOCALE`
+      (`apps/server/src/payment-slip-print.ts`). It is not the invoice, but art. 128-1.2.a also
+      covers «els altres documents que hi facin referència o que en derivin», so a Catalan venue's
+      slip is arguably covered.
+    - **The translations need a native or official check before go-live.** Apart from the Catalan
+      «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the
+      table was checked against a terminology source.
+    - The provisioning command (`waitron-provision`) and the configuration import can still store
+      two languages, or one no pack offers; the first entry is what prints. Neither holds Catalonia
+      to Catalan: only the Receipts route and setup do.
+    - `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
+      grep) and can be retired.
+    - The till reads its fallback receipt language and the allergen sheet's language only when it
+      starts (again after a server switch or an enrolment), so a change reaches those after a
+      reload. The on-screen ticket follows each sale's own language.
+    - The dev and demo seed's English mode stores `en-GB`, which prints the Spanish words beside
+      English dish names; the Receipts page shows it as the saved language although it is not
+      offered.
+    - Browsers carry no Galician or Basque number and date formats, so the till's on-screen ticket
+      writes a Galician or Basque sale's amounts and date in English style (`€20.00`,
+      `Aug 5, 2026`). Measured 2026-10-02: Playwright's Chromium 153 resolved `gl-ES` and `eu-ES`
+      to `en-US`, Google Chrome 154 on macOS to `en-GB`; `es-ES` and `ca-ES` resolved as
+      themselves. The printed receipt is formatted on the server and is not affected.
+    - The Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to its own
+      line on 58 mm paper.
+    - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
+      «Café y tostada») in every language; only its fixed words change.
+    - Setup still maps `provisioning.invalid_locales` to "Choose 1 or 2 invoice locales"; its own
+      route refuses anything but one language before that code can arise (read, not run), and
+      `apps/setup/src/setup-app.test.ts` pins the wording.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
@@ -8100,7 +8187,8 @@ ongoing overhaul listed at the top of Track A.
   several cards prints one slip per card payment (`apps/server/src/payment-slip-print.ts`). The
   one-payment routes (`payWorkingOrder`) take a single tender.
 - **Bilingual receipts** — `invoice_locales` is configured and snapshotted but rendered by neither
-  document.
+  document. _(Superseded 2026-09-30: the owner decided a receipt prints in one language; built by
+  C113, above.)_
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
   flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
@@ -8236,7 +8324,8 @@ ongoing overhaul listed at the top of Track A.
   configurable content languages and their shared fallback landed in #339, separately from interface
   and receipt languages. Still open, and unchanged by it: the write-side drift, where a sale's
   `sales.locale` is stamped from the boot-time `cfg` rather than from `locations.invoice_locales`
-  (fiscal-adjacent). There is still no single shared rule: the receipt's `lineName`
+  (fiscal-adjacent). _(Done 2026-10-02 by C113: a sale reads the location's language in the
+  transaction that files it.)_ There is still no single shared rule: the receipt's `lineName`
   (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
   (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
   Read in the code and not run: `resolveContentText` moves to another region of the same language

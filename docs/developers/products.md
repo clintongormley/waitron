@@ -59,11 +59,13 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   line with no variant this is what the basket and a retrieved tab show after the product has been
   renamed or deleted; on a variant line they show `variant_name` instead.
 - `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
-  then narrowed to exactly the venue's invoice languages by `toInvoiceLineDescriptions`.
+  then narrowed to exactly the location's saved receipt languages (`locations.invoice_locales`) by
+  `toInvoiceLineDescriptions`. A receipt prints the entry for the sale's language (`sales.locale`),
+  which is the first of that list when the sale is filed.
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
   variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
   them, `variant_descriptions` resolved and narrowed like `descriptions` above), plus the product's
-  (the parent's) kitchen name. An invoice locale that neither its own text nor the default
+  (the parent's) kitchen name. A receipt language that neither its own text nor the default
   language's text resolves is filled with the variant's staff name, by
   `fillBlankLocalesWithStaffName` (`packages/catalogue/src/product-presentation.ts`), when the line
   is priced (`priceOrderLines`, `apps/server/src/working-order.ts`).

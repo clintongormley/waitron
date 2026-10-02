@@ -59,8 +59,11 @@ Removing an additional language hides its ordinary translation fields but keeps 
 Add the language again to resume using those translations. The default language's row has no
 **Remove**: choose another default first. A required language's row has none either.
 
-Your receipt-language settings remain independent. Adding English content does not add an English
-receipt, and changing the content default does not rewrite issued receipts. Kitchen displays,
+Your receipt-language settings remain independent. A receipt prints in one language, chosen for
+each location on the **Receipts** page, which fixes it to Catalan in Catalonia. Adding English
+content does not add an English receipt, and changing the content default does not rewrite issued
+receipts. If the receipt language is not one of your content languages, this page and the Receipts
+page show a note: product names on receipts then print in your default language. Kitchen displays,
 orders you retrieve and sales reports keep their recorded names, even if you later remove that
 language from your content settings. The language of Waitron's buttons and screens remains your
 separate interface preference. These content settings
