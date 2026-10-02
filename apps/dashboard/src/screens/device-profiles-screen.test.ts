@@ -278,9 +278,7 @@ describe("device-profiles-screen editor form", () => {
     )!;
     expect(kdsSwitch.checked).toBe(false);
     // The form-factor picker pre-selects the loaded profile's form factor (p1 is a till).
-    const formFactor = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=profile-form-factor]",
-    )!;
+    const formFactor = el.shadowRoot!.querySelector<Combobox>("[data-test=profile-form-factor]")!;
     expect(formFactor.value).toBe("till");
   });
 
@@ -290,9 +288,7 @@ describe("device-profiles-screen editor form", () => {
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
     await flush(el);
-    const formFactor = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=profile-form-factor]",
-    )!;
+    const formFactor = el.shadowRoot!.querySelector<Combobox>("[data-test=profile-form-factor]")!;
     expect(formFactor.value).toBe("kds");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
