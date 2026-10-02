@@ -1899,7 +1899,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       held-orders or prep-queue card, loads the counter's lists at login as a till does, and a
       handheld is offered the card reader, on any pay card and on a bill, only when its device
       profile has integrated card payment (`#showsCounterLists` and `#cardReader`,
-      `apps/till/src/till-app.ts`). A till follows its profile the same way (C129); one with no
+      `apps/till/src/till-app.ts`). A till follows its profile the same way (C129, #1025); one with no
       device reads no capabilities at boot, so it is not offered the reader
       either, and the built-in till profile has the capability. When the server still refuses a
       reader payment with `device.forbidden_action` (a profile that lost the capability after the
