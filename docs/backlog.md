@@ -801,19 +801,19 @@ keyboard focus on the page, because the screen tried to focus the button while i
 greyed out (saving); it now waits until the list has reloaded.
 
 **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177, owner
-2026-10-01) — OPEN.** `wt-data-table` already separates two cases: nothing exists (`emptyMessage`)
-and rows exist but the search or a filter hides all of them (`noMatchesMessage`); about 25 screens
-pass their own text for each, in mixed shapes ("No users found.", "No canvases yet" without a full
-stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
-
-- **Nothing matches:** one fixed sentence in the shared table, the same on every screen, naming
-  both causes — e.g. "Nothing matches your search or filters." — in English and Spanish; the
-  per-screen `*.no_matches` strings go. Read from the code, not yet reproduced: `#visibleRows`
-  applies the filters and the search together, so today a FILTER that hides every row shows the
-  screen's "… match your search" text even when nothing was searched.
-- **Nothing yet:** stays specific to the screen, in one pattern — "No extras lists yet." — with the
-  Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
-  languages; a table with no Add action keeps just the sentence.
+2026-10-01) — DONE (#PR).** Every `wt-data-table` on the dashboard and in the modules' screens now
+passes `tableNoMatches()` from `@waitron/dashboard-kit` as its no-matches sentence ("Nothing
+matches your search or filters." / "Nada coincide con tu búsqueda ni con tus filtros."), which is
+also the table's own English default; the per-screen `*.no_matches` strings and `orders.empty` are
+gone. A filter alone, with nothing searched, does show that sentence (a test pins it). The empty
+sentences now read "No <things> yet." in both languages, and the Venue operations screen's five
+tables each name their own thing instead of sharing "No entries yet.". Kept as they were, because
+they answer a question rather than say nothing was made: the Alerts screen's two, the adjustment
+report's, a printer scan's, the Servers screen's and a list's "No products use this list.".
+Screens that filter before the table (Orders, the catalogue browser while searching, Users and
+Payments while their filters hide what exists, and the Units delete dialog's products) show the
+no-matches sentence themselves. Not covered: empty sentences outside a `wt-data-table` (floor,
+kitchen, devices and others) still use "Aún no hay" and other shapes.
 
 **An empty field's label is the same size as a typed value (A184, owner 2026-10-02) — DONE (#1035).** The
 owner, on a screenshot of a form with Password and PIN empty: _"the fieldname inside the field is
@@ -1228,8 +1228,8 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026) and A176 (#1033) are done; next A170–A172 and A177, built in the new style rather than
-restyled twice.
+A169 (#1026), A176 (#1033) and A177 (#PR) are done; next A170–A172, built in the new style rather
+than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
