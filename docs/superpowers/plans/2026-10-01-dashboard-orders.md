@@ -32,6 +32,11 @@
 > | 6. Cancelled bills                       | listed when sent or holding lines, as recommended       | Task 1, as written (`LISTED_BILL`).                                                                                               |
 > | 7. A sent bill cancelled with its invoice | Cancelled, marked Invoice not credited; the till's cancel is C126 | Task 1 and Task 2, as written. This plan does not change the cancel: lane C's C126 measures and decides it.            |
 >
+> _(2026-10-02, C126: built in lane B — the cancel now credits an issued invoice in full and needs
+> `sale.rectify`, so row 7's three cancel cases in Task 1 Step 2 no longer yield what they expect as
+> written; the pointer at that step says what each yields. Whether the Invoice not credited mark is
+> still needed is for lane E or the owner to decide.)_
+>
 > The owner confirmed the append-only reprint record and amended the scope, voided-copy and
 > permission choices on 2026-10-02 ~09:50. The code and tests in B27a carry those decisions.
 >
@@ -598,6 +603,18 @@ export async function billlessSale(venue: OrderVenue): Promise<string> {
 - [ ] **Step 2: Write the failing list tests.** Create `apps/server/src/orders-list.test.ts`. Rows
   are read one at a time through the detail route, so cases do not depend on how many bills earlier
   cases left behind (`resetPerTest: false`, as `unpaid-departure.test.ts:72` does):
+
+  _(2026-10-02, C126 — read against `apps/server/src/cancel-invoiced-order.test.ts` and
+  `packages/core/src/record-correction.ts`, not run here. The three cancel cases below cancel with
+  `venue.cookie`, the staff operator Ana's till session, which is now refused for an invoiced bill:
+  403, `authorization.not_permitted`, because the credit needs `sale.rectify`. Run with a
+  supervisor's till session instead, "reads a sent bill cancelled at the till…" and "reads a debt
+  cancelled at the till afterwards…" credit the invoice in full, so `invoiceNotCredited` is false,
+  not true. "drops the Invoice not credited mark…" credits the invoice first and then cancels; the
+  cancel's credit in full would take the invoice below zero, so it is refused with
+  `sale.correction_exceeds_total`. The cancel route no longer leaves an issued invoice uncredited;
+  whether any other path can abandon an invoiced bill was not traced, so whether the Invoice not
+  credited mark is still needed is for lane E or the owner to decide.)_
 
 ```ts
 import { randomUUID } from "node:crypto";

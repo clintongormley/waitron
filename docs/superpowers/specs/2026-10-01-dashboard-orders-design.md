@@ -92,6 +92,9 @@ creates one (`apps/server/src/provision.ts`, around `:53`) and multi-location is
 dashboard's report routes (`/management-api/reports/*`, `apps/server/src/report-api.ts`) are gated
 on `report.view` and return totals, never individual invoices. The scripts under `apps/server/scripts` issue credit notes
 through `recordCorrection` (`settle-invoice-first.ts`, `daily-close-demo.ts`, `modelo-303-demo.ts`).
+_(2026-10-02, C126: the till's cancel route now issues one too, for the whole invoice, when it
+cancels a placed order whose invoice was issued — `creditWholeInvoice`,
+`apps/server/src/cancel-credit.ts`.)_
 Which till or dashboard paths, if any, reach a void, a credit note or a substitution was not traced
 for this spec, and none needs to be: the screen reads these rows whoever wrote them.
 
@@ -172,7 +175,11 @@ Each row shows exactly one status, decided in this order:
    otherwise read Waiting for payment or Paid.
 3. **Left without paying** — an `unpaid_departures` row exists, the invoice is not settled, and the
    bill is still `placed`. A debt cancelled at the till afterwards reads Cancelled (rule 6), since
-   the cancel route accepts any `placed` bill. A
+   the cancel route accepts any `placed` bill. _(2026-10-02, C126: no longer any. Such a bill has
+   an issued invoice once its table has left, and the cancel now refuses an invoiced bill in
+   several cases, listed at `cancelPlacedOrder` (`apps/server/src/working-order.ts`) and
+   `creditWholeInvoice` (`apps/server/src/cancel-credit.ts`); otherwise it credits the invoice in
+   full, so the row reads Cancelled with Credited in full.)_ A
    debt whose credit notes bring it to nothing keeps this status, with the "Credited in full" mark
    and nothing in Still owed; the till's lookup (section 5) leaves it out, as today's till list
    does (`listUnpaidDepartures`, `apps/server/src/unpaid-departure.ts`, around `:265`).
@@ -503,7 +510,8 @@ receipt's caption, QR and VERI\*FACTU line, and the reprint lays out its copy wi
 change here. C124 narrows the order-line triggers behind C113's language-change refusal, not these
 routes. _(2026-10-02: C114, branch `feat/receipt-reprint-language`, gives
 `enqueueReceiptReprint` and `enqueueReceiptCopy` (split by #1027) an optional `language`; section
-4.5's reprint passes none, so it prints in the language the sale was filed in.)_ Lane C's C126 may change the till's cancel (section 4.2). The plan's tasks check
+4.5's reprint passes none, so it prints in the language the sale was filed in.)_ Lane C's C126 may change the till's cancel (section 4.2). _(2026-10-02: C126, built in
+lane B, does: the cancel credits an issued invoice in full; see section 4.2.)_ The plan's tasks check
 open pull requests before starting, as every lane does.
 
 ## 12. The owner's answers, and what is left
@@ -520,6 +528,7 @@ Owner, 2026-10-02 (~07:50, relayed by the supervising watcher):
 6. **Cancelled bills:** listed only when sent or holding lines, as recommended (section 4.1).
 7. **A sent bill cancelled after its invoice was issued:** Cancelled with an "Invoice not credited"
    mark on this screen; the till's cancel is queued separately as C126 (section 4.2).
+   _(2026-10-02, C126: built — the cancel credits the issued invoice in full; see section 4.2.)_
 
 The owner confirmed the append-only `receipt_reprints` table on 2026-10-02 ~09:50. The same
 answer allows a voided invoice's copy and limits staff to today's finished bills, as described

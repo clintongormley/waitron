@@ -2273,9 +2273,17 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     decided without the asesor).** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
     `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) now issues
     an R5 corrective invoice, by differences, for the whole invoice in the same transaction, settles
-    the original at nothing owed and abandons the order; an order with no invoice cancels as before.
-    It needs `sale.rectify` from the signed-in person (no manager-PIN override), and refuses a bill
-    holding a payment or with one in flight. No till screen calls the route. Open:
+    the original at nothing owed and abandons the order; an order with no invoice is abandoned with
+    nothing filed.
+    It needs `sale.rectify` from the signed-in person and an enrolled device, whose till the credit
+    note is filed on, and refuses a bill holding a payment or with one in flight. Any placed order,
+    invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
+    at the reader in this process. No till screen calls the route. Open:
+    - **Whether the cancel should accept a manager-PIN override is a question for the owner, not
+      a decision.** As built it takes none, so a waiter cancelling an invoiced order is refused 403
+      with no way round it, while the sibling till actions accept one: an unpaid departure
+      (`apps/server/src/unpaid-departure.ts`), a bill refund (`apps/server/src/bill-refunds.ts`)
+      and opening the drawer (`POST /api/drawer/open`, `apps/server/src/till-api.ts`).
     - **Some invoices cannot be credited through `recordCorrection` as it stands, so their cancel is
       refused (`sale.correction_breakdown_mismatch`).** It derives VAT from the lines, while the
       invoice's VAT is the menu price less its base: a 0.55 dish at 21% was invoiced 0.45 + 0.10 and
@@ -2284,6 +2292,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **An invoice that already has a credit note cannot be cancelled**
       (`sale.correction_exceeds_total`, measured); no route issues a credit note other than this one.
     - **The credit note is not printed** for the customer (asesor Q32 (b)).
+    - **A placed order with no invoice is not checked against stored card payments.** Its cancel
+      sees a card running at the reader in this process, but not a stored payment its provider has
+      not resolved, nor one captured and not yet filed; the cancel had no payment check at all
+      before C126.
   - **Asesor questions to send:**
     [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
     (money before the invoice, then a split; printing the invoice first),
@@ -5175,8 +5187,8 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
    filters by `cfg.locationId`, falling back to `cfg.orderFlow` when that finds none;
    `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's
-   till and node and, for an order whose invoice was issued, to give the credit note its till, node
-   and series; `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
+   till and node and, for an order whose invoice was issued, to give the credit note its node and
+   series (its till is the requesting device's); `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
    it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`, which the filing sites in
    `till-sale.ts` and `working-order.ts` call.
 2. **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/

@@ -780,8 +780,10 @@ answered. *(2026-10-01: built on the owner's decision without the asesor — see
 simplified invoice is issued for the full amount at that moment and filed like any other sale, and
 a later payment is recorded against that invoice. Nothing is held back from the fiscal chain until
 the money is collected. Recovering the VAT on a debt never collected (art. 80.Cuatro) is the
-venue's own business and is not built. The basis, quoted from the BOE consolidated texts fetched
-2026-10-01:
+venue's own business and is not built. *(2026-10-02, C126: cancelling such a bill, by a person
+holding `sale.rectify`, now credits its whole invoice, VAT included, with a corrective invoice,
+unless the cancel is refused (see Q32), and leaves the departure as recorded — see Q32, part (c).)* The basis, quoted from the BOE
+consolidated texts fetched 2026-10-01:
 
 - Ley 37/1992 (IVA), art. 75.Uno.2.º — the tax falls due «En las prestaciones de servicios, cuando
   se presten, ejecuten o efectúen las operaciones gravadas»
@@ -1631,7 +1633,9 @@ This records a question; no enquiry has been sent.
 (`recordCorrection`, `packages/core/src/record-correction.ts`). The Veri\*Factu backend files it
 *by differences*: `TipoRectificativa: "I"` in `packages/fiscal-verifactu/src/backend.ts`, so the
 record carries only the amount that changes. No till screen or server route calls it yet. Its only
-callers under `apps/` are three demo scripts in `apps/server/scripts/`, plus tests. Since
+callers under `apps/` are three demo scripts in `apps/server/scripts/`, plus tests. *(2026-10-02,
+C126: the till's cancel route now calls it, crediting an issued ticket in full when its order is
+cancelled — see Q32.)* Since
 2026-09-30 (#922), a correction that would take the invoice's total below zero, counting earlier
 corrections, is refused (`sale.correction_exceeds_total`).
 
@@ -1664,10 +1668,11 @@ This records a question; no enquiry has been sent.
 
 **Why it matters.** In a zone that invoices first, the simplified invoice is issued when the order
 is placed, before anyone pays. If the order is then cancelled, the invoice must not be left standing
-with nothing to collect it. On 2026-10-02 (lane B item C126) the owner decided, without the asesor,
-that the cancel issues a corrective invoice for the whole amount in the same step: an R5, *por
-diferencias*, through `recordCorrection` (`packages/core/src/record-correction.ts`), the only kind
-the Veri\*Factu backend files (`TipoRectificativa: "I"`, `packages/fiscal-verifactu/src/backend.ts`).
+with nothing to collect it. On 2026-10-02 (lane C item C126, built in lane B) the owner decided,
+without the asesor, that the cancel issues a corrective invoice for the whole amount in the same
+step: an R5, *por diferencias*, through `recordCorrection`
+(`packages/core/src/record-correction.ts`), the only kind the Veri\*Factu backend files
+(`TipoRectificativa: "I"`, `packages/fiscal-verifactu/src/backend.ts`).
 The original invoice is then settled at nothing owed. The same cancel reaches a bill recorded as
 *left without paying* (Q28). Where today's corrective path cannot reverse the invoice's VAT split to
 the cent, the cancel is refused instead and nothing is filed — a software limit, not a question here.
@@ -1689,19 +1694,33 @@ The sources, fetched raw on 2026-10-02:
   jurídico […] cuando se llega a emitir con el SIF una factura por un servicio o una entrega que no
   existen y que, por tanto, no se han realizado.»
 
-What we cannot settle from those: whether an order cancelled before it was served is an operation
-that "quedó sin efecto" (a corrective invoice) or one that never took place (an annulment), and
-whether the corrective invoice has to reach the customer.
+[verifactu-findings.md](verifactu-findings.md) §7 already settles that an annulment (*RF de
+anulación*) is for when the "invoice should never have existed", and that «todas las facturas
+emitidas, en la medida en que respondan a operaciones realmente efectuadas (como es el caso
+habitual) no pueden anularse». Its §9 and §15.4 already settle that an invoice is issued AND
+delivered — RD 1619/2012 art. 1, «expedir y entregar, en su caso» — and that art. 18 means
+"transmission immediately on issuance to a non-business recipient". Do not ask those. Q31 asks
+whether a correction should be filed by differences or by substitution; the cancel files by
+differences, so Q31's answer bears on it too.
+
+What those leave open: whether an order cancelled before it was served is an operation that
+"quedó sin efecto" (a corrective invoice) or one that never took place (an annulment); and how the
+duty to deliver applies to a corrective invoice issued when an order is cancelled, including when
+the customer has already left.
 
 > Nuestro TPV puede expedir la factura simplificada al registrar el pedido, antes del cobro. Si
 > después se cancela el pedido, hoy emitimos en el mismo momento una factura rectificativa (R5) por
 > diferencias por el importe total, y damos la factura original por saldada sin cobro.
 >
-> **(a)** ¿Es correcta una rectificativa R5 por el total, o debería ser un registro de anulación de
-> la factura original? ¿Cambia la respuesta según si lo pedido llegó a servirse o no?
+> **(a)** Entendemos, por las preguntas frecuentes de la AEAT para desarrolladores, que una factura
+> que responde a una operación realmente efectuada no puede anularse. Si el pedido se cancela antes
+> de que se sirva lo pedido, ¿procede igualmente una rectificativa R5 por el total, o un registro de
+> anulación de la factura original, por no haberse llegado a realizar la operación?
 >
-> **(b)** ¿Debe entregarse la rectificativa al cliente (impresa o de otro modo), o basta con
-> expedirla y registrarla?
+> **(b)** Entendemos que la factura debe expedirse y entregarse, en su caso (art. 1 del RD
+> 1619/2012), y remitirse en el momento de su expedición (art. 18). ¿Debe entregarse al cliente (impresa o de otro modo), en el momento de la cancelación,
+> la rectificativa emitida al cancelar el pedido? ¿Y si el cliente ya no está en el local, por
+> ejemplo porque se marchó sin pagar?
 >
 > **(c)** Si el cliente se marchó sin pagar (pregunta Q28) y después se cancela esa cuenta, ¿es
 > correcto emitir la rectificativa, o la deuda debe seguir registrada como impagada?
