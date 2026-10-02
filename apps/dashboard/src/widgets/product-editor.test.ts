@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
@@ -842,6 +842,27 @@ it("restores an existing allergen's presence and source when it is removed then 
   expect(el.currentValue.allergens).toEqual({ milk });
 });
 
+it("keeps a stored allergen's presence and source when another allergen is added", async () => {
+  const milk = { presence: "may_contain" as const, source: "shared fryer" };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, allergens: { milk } },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await openSection(el, "nutrition");
+  el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: { allergens: ["milk", "gluten"], dietary: [] } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.allergens).toEqual({ milk, gluten: { presence: "contains" } });
+});
+
 // Both kinds of modifier list, with staff, customer-facing and kitchen names that all differ: the
 // Modifiers section shows the STAFF name (docs/developers/products.md), and a fixture whose three
 // names read alike passes whether the section reads the right one or the wrong one. Each kind
@@ -1203,6 +1224,32 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
   expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBeNull();
 });
 
+it("closes an allergen dropdown on Escape without closing the product's window", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, allergens: { milk: { presence: "contains" } } },
+    locales: ["en"],
+  });
+  const cancelled = vi.fn();
+  el.addEventListener("wt-cancel", cancelled);
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="allergens-line"]')!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(picker.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull(),
+  );
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() =>
+    expect(picker.shadowRoot!.querySelector('[data-test="allergens-line"]')).not.toBeNull(),
+  );
+  expect(cancelled).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open).toBe(
+    true,
+  );
+});
+
 it("offers all six product dietary declarations without changing the saved set", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -1212,7 +1259,7 @@ it("offers all six product dietary declarations without changing the saved set",
   await openSection(el, "nutrition");
   const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
   await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-dietary"]')!.click();
+  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="dietary-line"]')!.click();
   await picker.updateComplete;
   const dietary = picker.shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>(
     "[data-test=dietary]",
