@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
@@ -27,9 +27,7 @@ async function setInput(el: PurchaseForm, testId: string, value: string): Promis
 }
 
 async function setSelect(el: PurchaseForm, testId: string, value: string): Promise<void> {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${testId}]`)!;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(el.shadowRoot!.querySelector(`[data-test=${testId}]`)!, value);
   await el.updateComplete;
 }
 
@@ -98,7 +96,66 @@ const EDIT_INVOICE: PurchaseInvoice = {
   ],
 };
 
+type ChoiceBox = HTMLElement & {
+  value: string;
+  label: string;
+  search: string;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const boxOf = (el: PurchaseForm, name: string): ChoiceBox =>
+  el.shadowRoot!.querySelector<ChoiceBox>(`wt-combobox[name="${name}"]`)!;
+
+/** What a closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownIn(el: PurchaseForm, name: string): Promise<string | undefined> {
+  const box = boxOf(el, name);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
 describe("purchase-form", () => {
+  it("picks the VAT regime and each line's VAT kind from shared dropdowns", async () => {
+    const { el } = await mountWidget<PurchaseForm>(
+      "dashboard-purchase-form",
+      baseProps({ invoice: EDIT_INVOICE }),
+    );
+    await el.updateComplete;
+    const regime = boxOf(el, "regime");
+    expect(regime).not.toBeNull();
+    expect(regime.label).toBe(t("purchase.regime"));
+    expect(regime.search).toBe("auto");
+    expect(regime.options).toEqual([
+      { value: "general", label: regimeName("general", "es-ES") },
+      { value: "equivalence_surcharge", label: regimeName("equivalence_surcharge", "es-ES") },
+    ]);
+    expect(regime.value).toBe("equivalence_surcharge");
+    expect(await shownIn(el, "regime")).toBe(regimeName("equivalence_surcharge", "es-ES"));
+    const kind = boxOf(el, "line-1-kind");
+    expect(kind.label).toBe(t("purchase.line_kind"));
+    expect(kind.search).toBe("auto");
+    expect(kind.options).toEqual([
+      { value: "ordinary", label: vatKindName("ordinary", "es-ES") },
+      { value: "capital", label: vatKindName("capital", "es-ES") },
+    ]);
+    expect(kind.value).toBe("ordinary");
+    expect(await shownIn(el, "line-1-kind")).toBe(vatKindName("ordinary", "es-ES"));
+
+    await chooseOption(regime, "general");
+    await chooseOption(kind, "capital");
+    await el.updateComplete;
+    expect(await shownIn(el, "regime")).toBe(regimeName("general", "es-ES"));
+    expect(await shownIn(el, "line-1-kind")).toBe(vatKindName("capital", "es-ES"));
+    const updated = nextEvent<{ patch: { header: { regime: string }; lines: { kind: string }[] } }>(
+      el,
+      "update-purchase",
+    );
+    await click(el, "confirm");
+    const { patch } = (await updated).detail;
+    expect(patch.header.regime).toBe("general");
+    expect(patch.lines.map((line) => line.kind)).toEqual(["capital", "capital"]);
+  });
+
   it("stays closed by default", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", {});
     expect((await openedDialog(el)).open).toBe(false);
@@ -111,19 +168,15 @@ describe("purchase-form", () => {
 
   it("offers both regimes and both VAT kinds, localised labels keeping wire values", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
-    const regimes = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=regime] option"),
-    ];
+    const regimes = boxOf(el, "regime").options;
     expect(regimes.map((o) => o.value)).toEqual(["general", "equivalence_surcharge"]);
     for (const o of regimes) {
-      expect(o.textContent!.trim()).toBe(regimeName(o.value, "es-ES"));
+      expect(o.label).toBe(regimeName(o.value, "es-ES"));
     }
-    const kinds = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=line-kind-0] option"),
-    ];
+    const kinds = boxOf(el, "line-0-kind").options;
     expect(kinds.map((o) => o.value)).toEqual(["ordinary", "capital"]);
     for (const o of kinds) {
-      expect(o.textContent!.trim()).toBe(vatKindName(o.value, "es-ES"));
+      expect(o.label).toBe(vatKindName(o.value, "es-ES"));
     }
   });
 
@@ -467,8 +520,7 @@ describe("purchase-form", () => {
     await el.updateComplete;
     const value = (id: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>(`[data-test=${id}]`)!.value;
-    const sel = (id: string) =>
-      el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${id}]`)!.value;
+    const sel = (id: string) => el.shadowRoot!.querySelector<ChoiceBox>(`[data-test=${id}]`)!.value;
     expect(value("supplier-tax-id")).toBe("B99999999");
     expect(value("supplier-name")).toBe("Proveedor Editado SL");
     expect(value("supplier-invoice-number")).toBe("E-2026/007");
@@ -476,11 +528,13 @@ describe("purchase-form", () => {
     expect(value("received-on")).toBe("2026-07-03");
     expect(value("total")).toBe("242.00");
     expect(sel("regime")).toBe("equivalence_surcharge");
+    expect(await shownIn(el, "regime")).toBe(regimeName("equivalence_surcharge", "es-ES"));
     expect(value("deductible-proportion")).toBe("50.00");
     expect(value("note")).toBe("Con nota");
     expect(el.shadowRoot!.querySelectorAll("[data-test^=line-rate-]").length).toBe(2);
     expect(value("line-rate-0")).toBe("10.00");
     expect(sel("line-kind-0")).toBe("capital");
+    expect(await shownIn(el, "line-0-kind")).toBe(vatKindName("capital", "es-ES"));
     expect(value("line-rate-1")).toBe("21.00");
   });
 
@@ -529,10 +583,16 @@ describe("purchase-form", () => {
       ),
     );
     const controls = [
-      ...el.shadowRoot!.querySelectorAll("input, select, textarea, wt-input, wt-price-input"),
+      ...el.shadowRoot!.querySelectorAll(
+        "input, select, textarea, wt-input, wt-price-input, wt-combobox",
+      ),
     ].flatMap((node) =>
-      node.shadowRoot ? [...node.shadowRoot.querySelectorAll("input, select, textarea")] : [node],
-    ) as (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)[];
+      node.localName === "wt-combobox"
+        ? [node.shadowRoot!.querySelector("button.trigger")!]
+        : node.shadowRoot
+          ? [...node.shadowRoot.querySelectorAll("input, select, textarea")]
+          : [node],
+    ) as (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement)[];
     expect(controls.map((control) => control.name)).toEqual([
       "supplier-tax-id",
       "supplier-name",
@@ -678,12 +738,13 @@ describe("purchase-form — money fields", () => {
             input.clientWidth,
           );
         }
-        const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=line-kind-0]")!;
-        const shown = kind.getBoundingClientRect().width;
-        kind.style.width = "max-content";
-        const needed = kind.getBoundingClientRect().width;
-        kind.style.width = "";
-        expect(shown, `${locale} the VAT type is cut off`).toBeGreaterThanOrEqual(needed);
+        const kind = el
+          .shadowRoot!.querySelector("[data-test=line-kind-0]")!
+          .shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
+        expect(kind.textContent!.trim()).toBe(vatKindName("capital", locale));
+        expect(kind.scrollWidth, `${locale} the VAT type is cut off`).toBeLessThanOrEqual(
+          kind.clientWidth,
+        );
       } finally {
         await page.viewport(width, height);
       }
