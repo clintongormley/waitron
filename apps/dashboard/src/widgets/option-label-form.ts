@@ -8,7 +8,13 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { optionalTextFields, switchField, textField, type FieldContext } from "./form-fields.js";
+import {
+  namesLine,
+  optionalTextFields,
+  switchField,
+  textField,
+  type FieldContext,
+} from "./form-fields.js";
 import { sameValue } from "./product-editor-model.js";
 import { t } from "../i18n/t.js";
 
@@ -173,18 +179,13 @@ export class OptionLabelForm extends LitElement {
 
   #namesSection(errors: Record<string, string>) {
     const locales = this.languages.languages;
-    const filled =
-      locales.filter((locale) => (this.customerName[locale] ?? "").trim()).length +
-      (this.kitchenName.trim() ? 1 : 0);
     const hasError =
       !!errors["label-kitchen-name"] ||
       locales.some((locale) => !!errors[`label-customer-name-${locale}`]);
     return html`<wt-disclosure
       data-test="names-section"
       heading=${t("options.names_section")}
-      summary=${t("options.names_summary")
-        .replace("{filled}", String(filled))
-        .replace("{total}", String(locales.length + 1))}
+      summary=${namesLine(locales, this.customerName, this.kitchenName)}
       .hasError=${hasError}
     >
       <div class="names">

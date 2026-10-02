@@ -20,38 +20,25 @@ export class WtDisclosure extends LitElement {
       }
 
       .section {
-        border: 1px solid transparent;
-        border-radius: var(--wt-radius-md);
+        padding-block: var(--wt-space-3);
       }
 
-      :host([open]) .section {
-        margin-top: calc(var(--wt-tap-min) / 2);
-        border-color: var(--wt-color-border);
-      }
-
+      /* The first row is the heading and chevron alone, so the summary line below it, shown only
+         while closed, never moves either of them. */
       .header {
-        position: relative;
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: minmax(var(--wt-tap-min), auto) auto;
         align-items: center;
-        gap: var(--wt-space-3);
+        column-gap: var(--wt-space-3);
         width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) 0;
+        padding: 0;
         border: 0;
         background: transparent;
         color: var(--wt-color-text);
         font: inherit;
         text-align: start;
         cursor: pointer;
-      }
-
-      :host([open]) .header {
-        top: calc(var(--wt-tap-min) / -2);
-        width: auto;
-        max-width: calc(100% - var(--wt-space-6));
-        margin-inline: var(--wt-space-3);
-        padding-inline: var(--wt-space-2);
-        background: var(--wt-color-surface);
       }
 
       /* No collapse is possible while an error is showing, so the header stops presenting itself as
@@ -61,7 +48,6 @@ export class WtDisclosure extends LitElement {
       }
 
       .heading {
-        flex: 1;
         font-weight: var(--wt-font-weight-bold);
       }
 
@@ -73,17 +59,13 @@ export class WtDisclosure extends LitElement {
       /* Points down when collapsed; rotates to point up when open, matching the direction the body
          reveals in. */
       .chevron {
-        flex: none;
+        grid-column: 2;
+        grid-row: 1;
         transition: transform 150ms ease;
       }
 
       :host([open]) .chevron {
         transform: rotate(180deg);
-      }
-
-      .body {
-        margin-top: calc(var(--wt-tap-min) / -2);
-        padding: 0 var(--wt-space-4) var(--wt-space-4);
       }
     `,
   ];
@@ -121,7 +103,11 @@ export class WtDisclosure extends LitElement {
           @click=${this.onToggle}
         >
           <span class="heading">${this.heading}</span>
-          ${this.summary ? html`<span class="summary">${this.summary}</span>` : nothing}
+          ${
+            this.summary && !this.open
+              ? html`<span class="summary">${this.summary}</span>`
+              : nothing
+          }
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
         <div id=${this.bodyId} class="body" ?hidden=${!this.open}>

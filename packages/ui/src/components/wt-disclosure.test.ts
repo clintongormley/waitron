@@ -63,16 +63,81 @@ test("summary paints from the muted-text token", async () => {
   expect(getComputedStyle(s).color).toBe("rgb(9, 9, 9)");
 });
 
-test("an open disclosure draws one rounded section border with its title on that border", async () => {
-  const el = await mount('<wt-disclosure heading="Kitchen" open><p>body</p></wt-disclosure>');
+async function settle(el: HTMLElement): Promise<void> {
+  await (el as import("./wt-disclosure.js").WtDisclosure).updateComplete;
+  await Promise.all(el.shadowRoot!.getAnimations().map((a) => a.finished));
+}
+
+function layout(el: HTMLElement) {
+  const box = (selector: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+  const heading = box(".heading");
+  const chevron = box(".chevron");
+  return {
+    headingLeft: heading.left,
+    headingTop: heading.top,
+    chevronRight: chevron.right,
+    chevronTop: chevron.top,
+    rowRight: box("button.header").right,
+  };
+}
+
+test("the heading and chevron stay where they are when the section opens, the chevron at the row's end", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR · Starters"><p>body</p></wt-disclosure>',
+  );
+  const closed = layout(el);
+  el.shadowRoot!.querySelector("button")!.click();
+  await settle(el);
+  const open = layout(el);
+  expect(open).toEqual(closed);
+  expect(closed.chevronRight).toBe(closed.rowRight);
+  expect(closed.rowRight).toBe(el.getBoundingClientRect().right);
+});
+
+test("no border is drawn, closed or open", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR"><p>body</p></wt-disclosure>',
+  );
   host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
-  const section = el.shadowRoot!.querySelector<HTMLElement>(".section")!;
-  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
-  expect(parseFloat(getComputedStyle(section).borderTopWidth)).toBeGreaterThan(0);
-  expect(getComputedStyle(section).borderTopColor).toBe("rgb(1, 2, 3)");
-  expect(getComputedStyle(section).borderRadius).not.toBe("0px");
-  expect(getComputedStyle(header).position).toBe("relative");
-  expect(parseFloat(getComputedStyle(header).top)).toBeLessThan(0);
+  const widths = () =>
+    [".section", "button.header", ".body"].flatMap((selector) => {
+      const style = getComputedStyle(el.shadowRoot!.querySelector(selector)!);
+      return [
+        style.borderTopWidth,
+        style.borderRightWidth,
+        style.borderBottomWidth,
+        style.borderLeftWidth,
+      ];
+    });
+  expect(new Set(widths())).toEqual(new Set(["0px"]));
+  (el as import("./wt-disclosure.js").WtDisclosure).open = true;
+  await settle(el);
+  expect(new Set(widths())).toEqual(new Set(["0px"]));
+});
+
+test("closed, the summary sits on its own line under the heading; open, the body shows instead", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR · Starters"><p>body</p></wt-disclosure>',
+  );
+  const heading = el.shadowRoot!.querySelector(".heading")!.getBoundingClientRect();
+  const summary = el.shadowRoot!.querySelector(".summary")!.getBoundingClientRect();
+  expect(summary.top).toBeGreaterThanOrEqual(heading.bottom);
+  expect(summary.left).toBe(heading.left);
+
+  (el as import("./wt-disclosure.js").WtDisclosure).open = true;
+  await settle(el);
+  expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
+  expect((el.shadowRoot!.querySelector(".body") as HTMLElement).hidden).toBe(false);
+});
+
+test("the space that sets the section apart, and the heading's colour, read tokens", async () => {
+  const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
+  host.style.setProperty("--wt-space-3", "17px");
+  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  const section = getComputedStyle(el.shadowRoot!.querySelector(".section")!);
+  expect([section.paddingTop, section.paddingBottom]).toEqual(["17px", "17px"]);
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".heading")!).color).toBe("rgb(4, 5, 6)");
 });
 
 test("focusing the host delegates focus to the header button", async () => {

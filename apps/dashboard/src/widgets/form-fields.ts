@@ -36,6 +36,22 @@ export const priceText = (value: string) =>
 export const priceSearchText = (shown: string, raw: readonly string[]) =>
   [shown, shown.replace(/\u00a0/g, " "), ...raw].join(" ");
 
+/** A folded names section's closed line: each language's customer-facing name after its code, then
+ * the kitchen name, blank ones left out. */
+export function namesLine(
+  locales: readonly string[],
+  customerName: Record<string, string>,
+  kitchenName: string,
+): string {
+  return [
+    ...locales.map((locale) => [locale.toUpperCase(), customerName[locale]?.trim()]),
+    [t("editor.section_kitchen"), kitchenName.trim()],
+  ]
+    .filter(([, name]) => name)
+    .map((parts) => parts.join(" "))
+    .join(" · ");
+}
+
 export const nonBlankNames = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 

@@ -691,29 +691,12 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   colour too, beside the ringed swatch (pinned in `category-form.test.ts`). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
-**The folding section jumps about when it opens (A169, owner 2026-10-01) — OPEN.** The shared
-`wt-disclosure` (`packages/ui/src/components/wt-disclosure.ts`), seen by the owner as the
-"Customer and kitchen names" section of the Options and Extras editors. It is also the product
-editor's Kitchen, Descriptors and Nutrition sections (`apps/dashboard/src/widgets/product-editor.ts`)
-and the option editor's names (`option-label-form.ts`). The owner's findings, each a result of the
-open style drawing the section as a bordered box with the header sitting on its top edge:
-
-- the chevron jumps from the far right (closed) to just after the summary (open) — open, the
-  header shrinks to its content (`width: auto`) instead of filling the row;
-- the title moves right when it opens, by the header's added side margin and padding;
-- a border appears only when it opens.
-
-**Decided (owner, 2026-10-01, choosing mockup B of
-[the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)):** no border and no lines — the
-section is set apart by spacing above and below alone. The heading and chevron stay exactly where
-they are in both states, the chevron always at the right-hand end of the row. Closed, the section
-shows its current values on a line under the heading (for the customer-facing names, each language's
-name after its code, e.g. "ES ¿Cómo la quiere hecha? · EN How would you like it cooked?"); open, it
-shows the form instead. The product editor's sections keep the one-line `summary` they show today,
-in the same place under the heading. **This changes a written rule:**
-`docs/developers/design-system.md` → "A collapsed disclosure is a borderless heading with a chevron
-… When it opens, one rounded border encloses the body and the heading sits across that border like
-a legend" describes the look being replaced, so the fix rewrites that paragraph too.
+**The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE.** `wt-disclosure`
+(`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
+heading and chevron in place when it opens (chevron at the row's end), and shows its summary under
+the heading only while closed. The Options and Extras editors' "Customer and kitchen
+names" line lists the names themselves (`ES … · EN … · Kitchen …`) instead of a count. The rule in
+`docs/developers/design-system.md` is rewritten to match.
 
 **The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — OPEN.**
 Both in the editor for one options list, `apps/dashboard/src/widgets/option-list-form.ts`, and the
@@ -743,9 +726,11 @@ shows the kitchen name as its own field directly above the customer-facing names
 (owner, 2026-10-01, mockup B):** in the three editors the kitchen name is a plain field, always
 shown, directly under Name; only the customer-facing names stay in the folding section, now headed
 "Customer-facing names". The product editor and the variant form already keep the two apart and are
-left as they are. Done together with A169 and A170. The section heading strings
+left as they are. Done together with A170. The section heading strings
 (`options.names_section`, `extras.names_section` in `apps/dashboard/src/i18n/strings.ts`, English
-and Spanish) change with it.
+and Spanish) change with it, and so does the closed section's summary: A169 (#1026) landed first
+and its summary lists the kitchen name with the customer-facing names (`namesLine`,
+`apps/dashboard/src/widgets/form-fields.ts`).
 
 **A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — OPEN.**
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
@@ -865,8 +850,9 @@ owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is w
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
 
-**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178 and A175 (#1029) are
-done; next A169–A172 and A176–A177, built in the new style rather than restyled twice.
+**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029)
+and A169 (#1026) are done; next A170–A172 and A176–A177, built in the new style rather than
+restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line

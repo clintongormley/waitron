@@ -13,7 +13,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { optionalTextFields, translations, type FieldContext } from "./form-fields.js";
+import { namesLine, optionalTextFields, translations, type FieldContext } from "./form-fields.js";
 import "./option-label-form.js";
 import type { DraftLabel } from "./option-label-form.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
@@ -400,17 +400,12 @@ export class OptionListForm extends LitElement {
 
   #namesSection(errors: Record<string, string>) {
     const locales = this.languages.languages;
-    const filled =
-      locales.filter((locale) => (this.customerName[locale] ?? "").trim()).length +
-      (this.kitchenName.trim() ? 1 : 0);
     const hasError =
       !!errors["kitchen-name"] || locales.some((locale) => !!errors[`customer-name-${locale}`]);
     return html`<wt-disclosure
       data-test="names-section"
       heading=${t("options.names_section")}
-      summary=${t("options.names_summary")
-        .replace("{filled}", String(filled))
-        .replace("{total}", String(locales.length + 1))}
+      summary=${namesLine(locales, this.customerName, this.kitchenName)}
       .hasError=${hasError}
     >
       <div class="names">
