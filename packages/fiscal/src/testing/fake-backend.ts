@@ -38,8 +38,7 @@ const nextId = (): string => `fake-${String(++counter).padStart(8, "0")}`;
 /**
  * A test double, not a stub. It writes to real tables through the caller's own transaction, so a
  * rollback is observable — an in-memory array would not roll back — and its integrity check can be
- * told to fail on demand. It supplies no `receiptQrText`, so a receipt built on it shows its QR with
- * no caption or legend.
+ * told to fail on demand.
  */
 export class FakeFiscalBackend implements FiscalBackend {
   readonly id = "fake";
