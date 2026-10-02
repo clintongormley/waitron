@@ -2753,13 +2753,10 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   });
 
   it.each(["cash", "card"] as const)(
-    "a handheld on the register that owns the drawer prints a %s sale's receipt there and opens nothing, though its operator and profile may open a drawer",
+    "a handheld on a till that opens the drawer prints a %s sale's receipt there and opens nothing, though its operator and profile may open a drawer",
     async (method) => {
       const { cfg, each, app } = await venueWithTill();
-      const printerId = await receiptPrinterFor(cfg, cfg.tillId, true);
-      await suite.db.execute(
-        sql`update printers set drawer_till_id = ${cfg.tillId} where id = ${printerId}`,
-      );
+      await receiptPrinterFor(cfg, cfg.tillId, true);
       const [supervisor] = await suite.db
         .insert(persons)
         .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })

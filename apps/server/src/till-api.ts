@@ -45,7 +45,7 @@ import {
   printSaleReceipt,
 } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
-import { enqueueManualDrawerOpen, ownsDrawer, resolveReceiptPrinter } from "./receipt-print.js";
+import { enqueueManualDrawerOpen, resolveReceiptPrinter } from "./receipt-print.js";
 import {
   clearPlacement,
   createTable,
@@ -1545,7 +1545,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         if (!printer.hasCashDrawer) {
           throw new AppError("drawer.not_attached", { printerId: printer.id });
         }
-        if (!(await ownsDrawer(tx, drawerCfg, printer))) {
+        if (!printer.tillOpensDrawer) {
           throw new AppError("drawer.not_owner", { printerId: printer.id });
         }
         await enqueueManualDrawerOpen(

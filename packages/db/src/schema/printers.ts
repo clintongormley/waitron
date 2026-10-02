@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, flag, id, label, newId, table } from "./columns.js";
-import { locations, tills } from "./tenants.js";
+import { locations } from "./tenants.js";
 
 /**
  * How a printer is reached. `local_key` is the USB serial or the Bluetooth MAC; `cloud_poll` is a
@@ -44,10 +44,6 @@ export const printers = table(
     paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
     resolution: printResolution("resolution").notNull().default("180dpi"),
     hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
-    // The register named to open this printer's drawer; who may open it: `drawerOwnerOf`.
-    /* v8 ignore start */
-    drawerTillId: id("drawer_till_id").references((): AnySQLiteColumn => tills.id),
-    /* v8 ignore stop */
     // Deactivate via active := false, never a hard delete (print_jobs reference it).
     active: flag("active").notNull().default(true),
   },

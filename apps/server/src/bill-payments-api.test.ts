@@ -244,19 +244,15 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const [deviceRow] = db.all<{ till_id: string }>(
     sql`select till_id from devices where id = ${device.deviceId}`,
   );
-  // On the register that owns the drawer, so only the handheld rule keeps its drawer shut.
+  // On the till device's own till, which opens the drawer, so only the handheld rule keeps it shut.
   const handheld = await enrolDeviceForTest(db, cfg, {
     name: "Terraza",
     profileId: seeded.handheldProfileId,
     registerId: deviceRow!.till_id,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
-  // Every till, so the device's own till prints whichever one it is; the drawer opens only for the
-  // register it names, the device's.
+  // Every till, so the device's own till prints and opens its drawer whichever one it is.
   db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
-  db.run(
-    sql`update printers set drawer_till_id = ${deviceRow!.till_id} where id = ${seeded.printerId}`,
-  );
   const app = new Hono();
   mountTillApi(
     app,
@@ -1968,7 +1964,7 @@ describe("a cash refund before the invoice (design §6)", () => {
     expect(await saleOf(billId)).toEqual([]);
   });
 
-  it("gives cash back on a handheld at the register that owns the drawer without opening it", async () => {
+  it("gives cash back on a handheld at a till that opens the drawer without opening it", async () => {
     const billId = await bill120();
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));
     const before = drawerJobCount();
@@ -3054,19 +3050,12 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
   });
 });
 
-describe.each([
-  ["another register is named its owner", () => venue.cfg.tillId],
-  ["no owner is named and two registers print there", () => null],
-])("a till that does not own the drawer it prints to, when %s", (_, ownerOf) => {
+describe("a till switched off from opening the drawer it prints to", () => {
   beforeEach(() => {
-    suite.db.run(
-      sql`update printers set drawer_till_id = ${ownerOf()} where id = ${venue.printerId}`,
-    );
+    suite.db.run(sql`update tills set opens_drawer = false where id = ${venue.deviceTillId}`);
   });
   afterEach(() => {
-    suite.db.run(
-      sql`update printers set drawer_till_id = ${venue.deviceTillId} where id = ${venue.printerId}`,
-    );
+    suite.db.run(sql`update tills set opens_drawer = true where id = ${venue.deviceTillId}`);
   });
 
   async function opensFor(paymentId: string) {

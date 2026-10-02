@@ -1131,52 +1131,6 @@ it("leaves a table's clearing state behind", async () => {
   }
 });
 
-it("copies a printer whose drawer names a till, leaving that choice behind", async () => {
-  const source = await applyVenue(planVenue(venue("B31415926"), ALL_MODULES), {
-    db: suite.db,
-    modules: ALL_MODULES,
-  });
-  await withTransaction(suite.db, async (tx) => {
-    await tx.insert(printers).values({
-      id: "dddddddd-cccc-cccc-cccc-dddddddddddd",
-      locationId: source.locationId,
-      name: "Counter",
-      transport: "network_tcp",
-      host: "192.0.2.7",
-      hasCashDrawer: true,
-    });
-    await tx.execute(sql`
-      update tills set receipt_printer_id = 'dddddddd-cccc-cccc-cccc-dddddddddddd'
-      where id = ${source.tillId}`);
-    await tx.execute(sql`
-      update printers set drawer_till_id = ${source.tillId}
-      where id = 'dddddddd-cccc-cccc-cccc-dddddddddddd'`);
-  });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-  const transferred = await buildConfigurationBundle(
-    suite.db,
-    source,
-    ALL_MODULES,
-    new Date("2026-10-02T12:00:00Z"),
-    versions,
-  );
-
-  await applyVenue(planVenue(venue("B27182818"), ALL_MODULES), {
-    db: targetSuite.db,
-    modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
-  });
-
-  const copied = await withTransaction(targetSuite.db, (tx) =>
-    tx
-      .select({ name: printers.name, drawerTillId: printers.drawerTillId })
-      .from(printers)
-      .where(eq(printers.hasCashDrawer, true)),
-  );
-  expect(copied).toEqual([{ name: "Counter", drawerTillId: null }]);
-});
-
 it("round-trips missing home slots alongside live tiles with fresh ids and unchanged positions", async () => {
   const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
     db: suite.db,

@@ -647,7 +647,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   });
 });
 
-describe("POST /api/drawer/open from a till device opens only its own register's drawer", () => {
+describe("POST /api/drawer/open from a till device opens its own till's drawer while that till is switched to", () => {
   /** A till device allowed to open a drawer, its cookie, and the register it minted at join. */
   async function enrolDrawerTill(cfg: TillConfig): Promise<{ cookie: string; tillId: string }> {
     tillDeviceCounter += 1;
@@ -730,32 +730,11 @@ describe("POST /api/drawer/open from a till device opens only its own register's
     ]);
   });
 
-  it("refuses drawer.not_owner, writing nothing, at a till printing to a drawer another register owns", async () => {
-    const { cfg, press } = await venueWithOpenPolicy();
-    const owner = await enrolDrawerTill(cfg);
-    const other = await enrolDrawerTill(cfg);
-    const printerId = await makePrinter(cfg);
-    for (const till of [owner, other]) {
-      await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
-    }
-    await suite.db.execute(
-      sql`update printers set drawer_till_id = ${owner.tillId} where id = ${printerId}`,
-    );
+  async function switchOff(tillId: string): Promise<void> {
+    await suite.db.update(tills).set({ opensDrawer: false }).where(eq(tills.id, tillId));
+  }
 
-    const refused = await press(other.cookie);
-
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toEqual({
-      error: { code: "drawer.not_owner", params: { printerId } },
-    });
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
-
-    expect((await press(owner.cookie)).status).toBe(200);
-    expect((await drawerOpensFor(cfg)).map((row) => row.tillId)).toEqual([owner.tillId]);
-  });
-
-  it("with no owner named, neither of two tills printing to one drawer printer opens it", async () => {
+  it("two tills sharing one drawer printer, neither switch touched: each opens it, naming itself", async () => {
     const { cfg, press } = await venueWithOpenPolicy();
     const first = await enrolDrawerTill(cfg);
     const second = await enrolDrawerTill(cfg);
@@ -764,33 +743,51 @@ describe("POST /api/drawer/open from a till device opens only its own register's
       await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
     }
 
-    for (const till of [first, second]) {
-      const res = await press(till.cookie);
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error: { code: "drawer.not_owner", params: { printerId } },
-      });
-    }
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    for (const till of [first, second]) expect((await press(till.cookie)).status).toBe(200);
+
+    expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([printerId, printerId]);
+    expect((await drawerOpensFor(cfg)).map((row) => [row.tillId, row.printerId])).toEqual([
+      [first.tillId, printerId],
+      [second.tillId, printerId],
+    ]);
   });
 
-  it("gated: the gate runs before the ownership check — an unpermitted operator at a till that is not the owner is 403", async () => {
+  it("refuses drawer.not_owner, writing nothing, at a till switched off, while the other till sharing the printer opens it", async () => {
+    const { cfg, press } = await venueWithOpenPolicy();
+    const on = await enrolDrawerTill(cfg);
+    const off = await enrolDrawerTill(cfg);
+    const printerId = await makePrinter(cfg);
+    for (const till of [on, off]) {
+      await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
+    }
+    await switchOff(off.tillId);
+
+    const refused = await press(off.cookie);
+
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: { code: "drawer.not_owner", params: { printerId } },
+    });
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+
+    expect((await press(on.cookie)).status).toBe(200);
+    expect((await drawerOpensFor(cfg)).map((row) => row.tillId)).toEqual([on.tillId]);
+  });
+
+  it("gated: the gate runs before the switch check — an unpermitted operator at a till switched off is 403", async () => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const session = (await login(app, cfg, operatorId)).split(";")[0]!;
-    const owner = await enrolDrawerTill(cfg);
-    const other = await enrolDrawerTill(cfg);
+    const off = await enrolDrawerTill(cfg);
     const printerId = await makePrinter(cfg);
-    await configureReceipt({ ...cfg, tillId: brandTillId(other.tillId) }, { printerId });
-    await suite.db.execute(
-      sql`update printers set drawer_till_id = ${owner.tillId} where id = ${printerId}`,
-    );
+    await configureReceipt({ ...cfg, tillId: brandTillId(off.tillId) }, { printerId });
+    await switchOff(off.tillId);
 
     const res = await app.request("/api/drawer/open", {
       method: "POST",
-      headers: { cookie: `${session}; ${other.cookie}` },
+      headers: { cookie: `${session}; ${off.cookie}` },
     });
 
     expect(res.status).toBe(403);

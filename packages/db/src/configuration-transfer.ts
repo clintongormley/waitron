@@ -27,7 +27,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     {
       name: "printers",
       locationColumns: ["location_id"],
-      omit: ["poll_token_hash", "drawer_till_id"],
+      omit: ["poll_token_hash"],
       reconnect: true,
     },
     { name: "station_printers" },

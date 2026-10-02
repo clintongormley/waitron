@@ -22,92 +22,15 @@ function printConfig(cfg: TillConfig): PrintConfig {
 /** The till's active receipt printer and the settings its receipts are laid out for. */
 export interface ReceiptPrinter extends EscSetting {
   id: string;
-  locationId: string;
   hasCashDrawer: boolean;
-  drawerTillId: string | null;
-}
-
-export interface PrintingRegister {
-  id: string;
-  locationId: string;
-  receiptPrinterId: string | null;
+  /** The calling till's own switch: whether it opens this printer's drawer. */
+  tillOpensDrawer: boolean;
 }
 
 /**
- * The register whose till alone may open `printer`'s drawer: the one the printer names while that
- * register's receipts print there, else the one register at its location that prints there, else
- * none — several registers sharing a printer must name an owner before any of them opens its drawer,
- * and a named owner whose receipts have moved elsewhere leaves the drawer with no owner at all.
- */
-export function drawerOwnerOf(
-  printer: { id: string; locationId: string; drawerTillId: string | null },
-  registers: readonly PrintingRegister[],
-): string | null {
-  if (printer.drawerTillId !== null) {
-    const named = registers.some(
-      (register) =>
-        register.id === printer.drawerTillId && register.receiptPrinterId === printer.id,
-    );
-    return named ? printer.drawerTillId : null;
-  }
-  const printingHere = registers.filter(
-    (register) =>
-      register.locationId === printer.locationId && register.receiptPrinterId === printer.id,
-  );
-  return printingHere.length === 1 ? printingHere[0]!.id : null;
-}
-
-export async function listDrawerOwners(
-  tx: Transaction,
-  printerRows: readonly { id: string; locationId: string; drawerTillId: string | null }[],
-): Promise<Map<string, string | null>> {
-  const registers = await tx
-    .select({
-      id: tills.id,
-      locationId: tills.locationId,
-      receiptPrinterId: tills.receiptPrinterId,
-    })
-    .from(tills);
-  const byPrinter = new Map<string, PrintingRegister[]>();
-  for (const register of registers) {
-    if (register.receiptPrinterId === null) continue;
-    const printing = byPrinter.get(register.receiptPrinterId);
-    if (printing === undefined) byPrinter.set(register.receiptPrinterId, [register]);
-    else printing.push(register);
-  }
-  return new Map(
-    printerRows.map((printer) => [
-      printer.id,
-      drawerOwnerOf(printer, byPrinter.get(printer.id) ?? []),
-    ]),
-  );
-}
-
-/**
- * Whether the calling register owns `printer`'s drawer. `printer` must be the caller's own receipt
- * printer ({@link resolveReceiptPrinter}), so a named owner owns it exactly when it is the caller.
- */
-export async function ownsDrawer(
-  tx: Transaction,
-  cfg: TillConfig,
-  printer: ReceiptPrinter,
-): Promise<boolean> {
-  if (printer.drawerTillId !== null) return printer.drawerTillId === cfg.tillId;
-  const registers = await tx
-    .select({
-      id: tills.id,
-      locationId: tills.locationId,
-      receiptPrinterId: tills.receiptPrinterId,
-    })
-    .from(tills)
-    .where(eq(tills.receiptPrinterId, printer.id));
-  return drawerOwnerOf(printer, registers) === cfg.tillId;
-}
-
-/**
- * The calling register's receipt printer when this request may open its drawer: the request's
- * configuration allows a drawer, the printer has one, and the register owns it. Otherwise
- * `undefined`, and the automatic paths open nothing.
+ * The calling till's receipt printer when this request may open its drawer: the request's
+ * configuration allows a drawer, the printer has one, and the till is switched to open it.
+ * Otherwise `undefined`, and the automatic paths open nothing.
  */
 async function drawerPrinter(
   tx: Transaction,
@@ -115,8 +38,8 @@ async function drawerPrinter(
 ): Promise<ReceiptPrinter | undefined> {
   if (cfg.allowCashDrawer === false) return undefined;
   const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined || !printer.hasCashDrawer) return undefined;
-  return (await ownsDrawer(tx, cfg, printer)) ? printer : undefined;
+  if (printer === undefined || !printer.hasCashDrawer || !printer.tillOpensDrawer) return undefined;
+  return printer;
 }
 
 /**
@@ -131,9 +54,8 @@ export async function resolveReceiptPrinter(
   const [printer] = await tx
     .select({
       id: printers.id,
-      locationId: printers.locationId,
       hasCashDrawer: printers.hasCashDrawer,
-      drawerTillId: printers.drawerTillId,
+      tillOpensDrawer: tills.opensDrawer,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
     })

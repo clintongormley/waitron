@@ -64,16 +64,9 @@ import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limi
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
-import {
-  requireBodyUuid,
-  requireEnum,
-  requireNullableBodyUuid,
-  requireString,
-  requireUuidParam,
-} from "@waitron/server-kit";
+import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
-import { listDrawerOwners } from "./receipt-print.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
@@ -172,10 +165,6 @@ function nullableOptionalString(v: unknown, field: string): string | null | unde
   return requireString(v, field);
 }
 
-function nullableOptionalUuid(v: unknown, field: string): string | null | undefined {
-  return v === undefined ? undefined : requireNullableBodyUuid(v, field);
-}
-
 function nullableOptionalInt(v: unknown, field: string): number | null | undefined {
   if (v === undefined) return undefined;
   if (v === null) return null;
@@ -183,32 +172,6 @@ function nullableOptionalInt(v: unknown, field: string): number | null | undefin
     throw new AppError("management.request_invalid", { field });
   }
   return v;
-}
-
-function drawerTillRefused(): AppError {
-  return new AppError("management.request_invalid", { field: "drawerTillId" });
-}
-
-/**
- * A drawer owner must be a register at the printer's location whose receipts print on it, because
- * drawer commands go only to the opening register's own receipt printer.
- */
-async function assertDrawerRegister(
-  tx: Transaction,
-  printer: { id: string; locationId: string },
-  tillId: string,
-): Promise<void> {
-  const [till] = await tx
-    .select({ id: tills.id })
-    .from(tills)
-    .where(
-      and(
-        eq(tills.id, tillId),
-        eq(tills.locationId, printer.locationId),
-        eq(tills.receiptPrinterId, printer.id),
-      ),
-    );
-  if (till === undefined) throw drawerTillRefused();
 }
 
 function optionalBool(v: unknown, field: string): boolean | undefined {
@@ -878,10 +841,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) input.hasCashDrawer = hasCashDrawer;
-      // No register prints on a printer not yet created, so none can own its drawer.
-      if (typeof nullableOptionalUuid(body.drawerTillId, "drawerTillId") === "string") {
-        throw drawerTillRefused();
-      }
       const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
       return c.json(created, 201);
     }),
@@ -892,7 +851,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, async (tx) => {
         const configured = await listPrinters(tx, deps.cfg);
-        const drawerOwners = await listDrawerOwners(tx, configured);
         // Aggregated over the full history, unlike the job list's bounded completed history.
         // `max(delivered_at)` is the latest instant only because every writer stores the canonical
         // `toISOString()` spelling.
@@ -916,7 +874,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           const summary = byPrinter.get(printer.id);
           return {
             ...printer,
-            drawerOwnerTillId: drawerOwners.get(printer.id) ?? null,
             pendingJobs: summary?.pending_jobs ?? 0,
             lastPrintAgentId: summary?.last_print_agent_id ?? null,
             lastPrintAt:
@@ -963,29 +920,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) patch.hasCashDrawer = hasCashDrawer;
-      const drawerTillId = nullableOptionalUuid(body.drawerTillId, "drawerTillId");
-      if (drawerTillId !== undefined) patch.drawerTillId = drawerTillId;
       const active = optionalBool(body.active, "active");
       if (active !== undefined) patch.active = active;
       await gated(sessionId, async (tx) => {
-        // Either key field can make the stored key a Bluetooth address, so both need the other's value.
-        const rekeys = patch.transport !== undefined || typeof patch.localKey === "string";
-        const [current] =
-          typeof drawerTillId === "string" || rekeys
-            ? await tx
-                .select({
-                  locationId: printers.locationId,
-                  transport: printers.transport,
-                  localKey: printers.localKey,
-                })
-                .from(printers)
-                .where(eq(printers.id, id))
-            : [];
-        if (typeof drawerTillId === "string") {
-          if (current === undefined) throw new AppError("printer.not_found", { id });
-          await assertDrawerRegister(tx, { id, locationId: current.locationId }, drawerTillId);
-        }
-        if (rekeys) {
+        // Either field can make the stored key a Bluetooth address, so both need the other's value.
+        if (patch.transport !== undefined || typeof patch.localKey === "string") {
+          const [current] = await tx
+            .select({ transport: printers.transport, localKey: printers.localKey })
+            .from(printers)
+            .where(eq(printers.id, id));
           const key = patch.localKey === undefined ? current?.localKey : patch.localKey;
           const transport = patch.transport ?? current?.transport;
           if (typeof key === "string" && transport !== undefined) {
@@ -1234,6 +1177,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             label: tills.name,
             locationId: tills.locationId,
             receiptPrinterId: tills.receiptPrinterId,
+            opensDrawer: tills.opensDrawer,
           })
           .from(tills)
           .orderBy(tills.name),
@@ -1276,6 +1220,29 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
         }
         await tx.update(tills).set({ receiptPrinterId: printerId }).where(eq(tills.id, tillId));
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  app.patch("/management-api/tills/:id/opens-drawer", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const tillId = requireUuidParam(c.req.param("id"), "TillId");
+      const body = await readJsonBody<{ opensDrawer?: unknown }>(c);
+      if (typeof body.opensDrawer !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "opensDrawer" });
+      }
+      const opensDrawer = body.opensDrawer;
+      await gated(sessionId, async (tx) => {
+        const [till] = await tx
+          .update(tills)
+          .set({ opensDrawer })
+          .where(eq(tills.id, tillId))
+          .returning({ id: tills.id });
+        if (till === undefined) {
+          throw new AppError("management.request_invalid", { field: "tillId" });
+        }
       });
       return c.body(null, 204);
     }),

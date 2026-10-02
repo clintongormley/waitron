@@ -101,13 +101,11 @@ export interface UpdatePrinterInput {
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   hasCashDrawer?: boolean;
-  drawerTillId?: string | null;
   active?: boolean;
 }
 
 export interface PrinterRow {
   id: string;
-  locationId: string;
   name: string;
   transport: PrintTransport;
   host: string | null;
@@ -118,7 +116,6 @@ export interface PrinterRow {
   paperWidth: PaperWidth;
   resolution: Resolution;
   hasCashDrawer: boolean;
-  drawerTillId: string | null;
   active: boolean;
 }
 
@@ -179,7 +176,6 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
   return tx
     .select({
       id: printers.id,
-      locationId: printers.locationId,
       name: printers.name,
       transport: printers.transport,
       host: printers.host,
@@ -190,7 +186,6 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
       hasCashDrawer: printers.hasCashDrawer,
-      drawerTillId: printers.drawerTillId,
       active: printers.active,
     })
     .from(printers)
