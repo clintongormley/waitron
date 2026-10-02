@@ -2112,7 +2112,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       it), and never opens the drawer.
     - **Done (C128, #1031) — who may take a payment.** Every till or handheld payment route now also needs
       `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
-    - **Done (C131) — the counter's pay card goes back to its choices after a reader payment.**
+    - **Done (C131, #1032) — the counter's pay card goes back to its choices after a reader payment.**
       Once a reader payment ends with no card outcome to show — refused, failed, or captured — the
       pay card leaves "Tap or insert card…" for its Cash and Card buttons, with any refusal in the
       banner; a retry, and the kitchen-station question that can come before one, belong to the
