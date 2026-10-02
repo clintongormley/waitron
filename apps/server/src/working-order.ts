@@ -1285,30 +1285,33 @@ export async function fireLines(
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
-  await stampSent(tx, orderId, sentLineIds, firedAt);
-  if (values.length === 0) return unrouted;
-  let inserted: {
-    workingOrderLineId: string;
-    stationId: string;
-    firedAt: string | null;
-    madeHere: boolean;
-  }[];
-  try {
-    // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
-    // already-fired items and reprint them.
-    inserted = await tx.insert(ticketItems).values(values).returning({
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      firedAt: ticketItems.firedAt,
-      madeHere: ticketItems.madeHere,
-    });
-  } catch (error) {
-    // A re-fire collides on the per-line unique, e.g. a double `sendToPrep`.
-    if (isUniqueViolation(error)) {
+  // Checked before this function's first write, or `stampSent` can stamp a line whose descriptions
+  // carry a former receipt language, which `working_order_lines_check_locales_update` refuses.
+  if (values.length > 0) {
+    const [alreadyFired] = await tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          values.map((value) => value.workingOrderLineId),
+        ),
+      )
+      .limit(1);
+    if (alreadyFired !== undefined) {
       throw new AppError("ticket.already_fired", { workingOrderId: orderId });
     }
-    throw error;
   }
+  await stampSent(tx, orderId, sentLineIds, firedAt);
+  if (values.length === 0) return unrouted;
+  // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
+  // already-fired items and reprint them.
+  const inserted = await tx.insert(ticketItems).values(values).returning({
+    workingOrderLineId: ticketItems.workingOrderLineId,
+    stationId: ticketItems.stationId,
+    firedAt: ticketItems.firedAt,
+    madeHere: ticketItems.madeHere,
+  });
 
   for (const row of inserted) {
     if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
@@ -4811,8 +4814,8 @@ export async function cancelPlacedOrder(
 }
 
 /**
- * Send a settled order's lines to the kitchen through `fireLines`. The unique item-per-line
- * constraint refuses the send if any line already has a ticket item.
+ * Send a settled order's lines to the kitchen through `fireLines`, which refuses the send if any
+ * line already has a ticket item.
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,

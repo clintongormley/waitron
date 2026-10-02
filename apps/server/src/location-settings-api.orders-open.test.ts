@@ -355,6 +355,11 @@ describe("a receipt-language change while orders are open", () => {
     expect(dishLines(id)[1]!.sent_at).toBeNull();
 
     expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+
+    const before = dishLines(id);
+    const after = await till("POST", `/api/working-orders/${id}/prep`);
+    expect(after).toMatchObject({ status: 409, json: { code: "ticket.already_fired" } });
+    expect(dishLines(id)).toEqual(before);
   });
 
   it("is refused while an order is placed, and accepted once it is collected", async () => {

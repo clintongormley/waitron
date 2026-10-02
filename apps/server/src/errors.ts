@@ -618,11 +618,10 @@ declare module "@waitron/shared" {
     "ticket.invalid_transition": { ticketItemId: string };
     /**
      * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
-     * catches the per-line unique violation on `ticket_items`, so every fire path is covered), a
-     * re-course of a fired line (`setLineCourse`), and, when the venue has switched off changes to
-     * sent items (`edit_sent_lines`), a recall (`recallLines`) or an edit (`applyLineEdits`) of a
-     * line that was sent to a station. It names the order, not a ticket item, because the re-fire
-     * never reads the colliding item.
+     * refuses a line that already holds a ticket item before any of its writes), a re-course of a
+     * fired line (`setLineCourse`), and, when the venue has switched off changes to sent items
+     * (`edit_sent_lines`), a recall (`recallLines`) or an edit (`applyLineEdits`) of a line that was
+     * sent to a station. It names the order, not a ticket item.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**

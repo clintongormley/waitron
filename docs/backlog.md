@@ -8145,8 +8145,9 @@ ongoing overhaul listed at the top of Track A.
       as long as it stays. The real fix is a change to the order-line trigger, which is a migration
       and was out of scope; the question is in the campaign's questions file.
     - After a change, a paid counter sale with one dish a station took and one it did not is not
-      blocked, and its send-to-prep route (`/prep`) then answers 500, writing nothing, instead of
-      409 `ticket.already_fired`. No till screen calls that route.
+      blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
+      did before the change, and leaves the order's lines unchanged. No till screen calls that
+      route.
     - The refusal's count of blocking orders is not shown on the Receipts page: `codeMessage` fills
       in no values.
     - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,
@@ -8178,9 +8179,6 @@ ongoing overhaul listed at the top of Track A.
       its own line on 58 mm paper.
     - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
       «Café y tostada») in every language; only its fixed words change.
-    - Setup still maps `provisioning.invalid_locales` to "Choose 1 or 2 invoice locales"; its own
-      route refuses anything but one language before that code can arise (read, not run), and
-      `apps/setup/src/setup-app.test.ts` pins the wording.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
