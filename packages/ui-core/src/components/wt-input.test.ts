@@ -1,5 +1,5 @@
 import { LitElement } from "lit";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { expect, test, afterEach } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-input.js";
@@ -653,4 +653,58 @@ test("a disabled field's label stays muted even when the field is invalid", asyn
   host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
   expect(getComputedStyle(parts(invalid).label).color).toBe("rgb(24, 25, 26)");
   expect(getComputedStyle(parts(withError).label).color).toBe("rgb(24, 25, 26)");
+});
+
+test("a read-only field's native input is read-only, shows its value and floats its label", async () => {
+  const el = await mount(
+    '<wt-input label="Email" name="chosen-email" value="ana@example.com" readonly></wt-input>',
+  );
+  const { field, label, input } = parts(el);
+  expect(input.readOnly).toBe(true);
+  expect(input.disabled).toBe(false);
+  expect(input.value).toBe("ana@example.com");
+  expect(label.htmlFor).toBe(input.id);
+  expect(field.getAttribute("data-label")).toBe("float");
+  expect(field.hasAttribute("data-disabled")).toBe(false);
+});
+
+test("typing into a read-only field changes nothing and announces no change", async () => {
+  const el = await mount('<wt-input label="Email" value="ana@example.com" readonly></wt-input>');
+  let changes = 0;
+  el.addEventListener("wt-change", () => changes++);
+  const { input } = parts(el);
+  input.focus();
+  await userEvent.keyboard("xyz");
+  expect(input.value).toBe("ana@example.com");
+  expect((el as HTMLElement & { value: string }).value).toBe("ana@example.com");
+  expect(changes).toBe(0);
+});
+
+test("a read-only field paints the editable field's fill, line and value colour, not the disabled ones", async () => {
+  const el = await mount('<wt-input label="Email" value="ana@example.com" readonly></wt-input>');
+  host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
+  host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
+  host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
+  host.style.setProperty("--wt-field-line-width", "1px");
+  host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
+  const { field, input } = parts(el);
+  expect(getComputedStyle(field).backgroundColor).toBe("rgb(8, 8, 8)");
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(7, 7, 7) 0px -1px 0px 0px inset");
+  expect(getComputedStyle(field, "::after").content).toBe("none");
+  expect(getComputedStyle(input).color).toBe("rgb(31, 32, 33)");
+  expect(getComputedStyle(input).cursor).not.toBe("not-allowed");
+});
+
+test("a read-only field holds an end action inside its box at the trailing end", async () => {
+  const el = await mount(
+    '<wt-input label="Email" value="ana@example.com" readonly><button slot="end">Edit</button></wt-input>',
+  );
+  await settle(el);
+  const { field } = parts(el);
+  const fieldBox = field.getBoundingClientRect();
+  const actionBox = el.querySelector("button")!.getBoundingClientRect();
+  expect(field.classList.contains("has-end")).toBe(true);
+  expect(actionBox.right).toBeLessThanOrEqual(fieldBox.right);
+  expect(actionBox.left).toBeGreaterThan(fieldBox.left + fieldBox.width / 2);
 });

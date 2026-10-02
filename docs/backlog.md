@@ -871,19 +871,15 @@ demo user cannot find the emails the dashboard sends. **Wanted:** an "Email inbo
 dashboard banner, beside the language chooser (A187), shown only in a demo, to the same address the
 done page uses.
 
-**The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — OPEN.**
-The owner, on the "Login with password" screen: _"the login screen doesn't use the new form field
-layout. also, the Email/clintongormley@gmail.com isn't aligned with the text in the password field
-which makes it look messy"_. The email above the password is plain text with a pencil button
-(`#renderLoginContext`, `apps/dashboard/src/screens/login-screen.ts`), starting at the field box's
-outer edge while a field's text is inset inside its box. **Decided (owner, 2026-10-02):** draw it as
-a filled field that cannot be typed in — the same box, "Email" as its label inside, the address as
-its value, the pencil ("Use another account") at the box's trailing end — so it lines up with the
-password field by being the same shape. `#renderLoginContext` is also used by the reset and
-account-setup page (`changeable = false`, no pencil), which takes the same look. `wt-input` has no
-read-only mode today; add one to the primitive (it must still be announced as the email, and must
-not look like an empty or disabled field), or a read-only variant of the field look, rather than
-drawing a field in the screen (CLAUDE.md §3).
+**The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — DONE
+(#1048).** On every sign-in step after the email, on the passkey offer after sign-in, and on the
+reset and account-setup page, the chosen email is a read-only `wt-input` labelled "Email" with the
+address as its value: the same filled box as the other fields, so its text lines up with the
+password field's and the new password's. "Use another account" sits in its `end` slot at the box's trailing end, except on
+the passkey offer and the reset and account-setup page, which have no such button. `wt-input`
+gained `readonly`, which keeps the editable field's look (design-system.md → Forms → "The field
+box"). Where a step keeps the hidden username input for password managers, it is still the only
+field named `email`; the read-only field is `chosen-email`.
 
 **A field the browser fills in keeps the field's own look (A190, owner 2026-10-02) — DONE.** On the
 sign-in screen and the setup wizard, a field the browser autofilled is drawn pale blue with no

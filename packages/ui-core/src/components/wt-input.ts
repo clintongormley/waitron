@@ -54,6 +54,8 @@ export class WtInput extends LitElement {
   @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
+  /** Shows a value that cannot be typed over, drawn as an editable field rather than a disabled one. */
+  @property({ type: Boolean, reflect: true }) readonly = false;
   @property({ type: Boolean, reflect: true }) invalid = false;
   /** Names the input by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
@@ -110,6 +112,7 @@ export class WtInput extends LitElement {
             aria-label=${this.hideLabel && this.label ? this.label : nothing}
             ?required=${this.required}
             ?disabled=${this.disabled}
+            ?readonly=${this.readonly}
             aria-invalid=${this.invalid || hasError}
             aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
             @input=${this.onInput}
