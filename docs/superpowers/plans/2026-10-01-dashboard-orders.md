@@ -38,7 +38,7 @@
 > not credited mark is dropped: such a bill reads Cancelled with its credit note. B27a landed
 > first (#1027) with the mark — `invoiceNotCredited` in `apps/server/src/orders-list.ts` and its
 > cases in `apps/server/src/orders-list.test.ts`. C126, landing second, removes them and updates
-> those cases (owner-approved). Task 1's mark text below is kept as written, with a pointer back
+> those cases (owner-approved). The mark's text below is kept as written, with a pointer back
 > here.)_
 >
 > The owner confirmed the append-only reprint record and amended the scope, voided-copy and
