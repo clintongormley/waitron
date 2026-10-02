@@ -3326,7 +3326,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     const tableId = await makeTable();
 
     // A string-typed but non-UUID zoneId is screened to the SAME `zone.not_found` a
-    // well-formed-but-missing zone gets, matching the sibling table POST/PATCH routes.
+    // well-formed-but-missing zone gets.
     const res = await app.request(`/api/tables/${tableId}/placement`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },
