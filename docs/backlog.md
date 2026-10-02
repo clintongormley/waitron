@@ -1889,9 +1889,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
       does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
       says, so B16 left it.
-    - **Completed orders cannot be looked up.** No till or dashboard screen lists them. The Orders
-      screen covers it: spec `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`, queued
-      as lane E's B27a–B27c.
+    - **Completed orders cannot be looked up on a screen.** B27a adds the server's list, detail,
+      staff and audited receipt-reprint routes; B27b's dashboard screen and B27c's till lookup
+      remain queued. Spec: `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`.
     - **The waiting list is drawn only inside the held-orders card**, so a canvas without that
       card shows no waiting list.
     - **Not measured — Pay on a sent `invoice_first` order whose invoice was credited may show the
@@ -1953,8 +1953,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **Handhelds on the default phone and tablet layouts never see the list.** It sits in the
       counter's held-orders card, which those layouts lack; since B31 a handheld whose layout adds
       a held-orders card loads and shows it. The owner kept the counter list as a stopgap and wants
-      the dashboard Orders screen (B27s; queued as lane E's B27a–B27c; the till-cancel question is
-      lane C's C126).
+      the dashboard Orders screen (B27s; B27a's server routes are built, B27b's screen and B27c's
+      till lookup remain queued; the till-cancel question is lane C's C126).
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
       amount, so staff confirm a debt the server does not record.** The dialog lists each bill at
       what `GET /api/parties/:id/bills` says it owes, which reads no credit note (`#departingBills`
