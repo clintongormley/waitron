@@ -151,6 +151,11 @@ export class ProductList extends LitElement {
         user-select: none;
         cursor: var(--reorder-drag-cursor, grab);
       }
+      /* A new category cannot be dragged, but its icon lines up with its siblings'. */
+      wt-data-table::part(grip-space) {
+        flex: none;
+        width: var(--wt-tap-min);
+      }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
         display: inline-block;
@@ -726,9 +731,8 @@ export class ProductList extends LitElement {
     return low === high ? text : `${text}–${formatMoney(String(high), locale)}`;
   }
 
-  /** The rule the product editor's `unitShortLabel` uses: Each for a unit that is not stored, else
-   * the abbreviation, or the name when it has none. A listed product with no stored unit still
-   * carries one, the server's Each, so only the stored list tells the two apart. */
+  /** A listed product with no stored unit still carries one, the server's Each, so only the stored
+   * list tells the two apart. */
   #unitWord(product: Product): string {
     if (!this.units.some(({ id }) => id === product.unitId)) return t("product.price_each");
     const language = this.unitLanguage;
@@ -982,6 +986,7 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell"
+                ><span part="grip-space"></span
                 ><wt-icon name="folder"></wt-icon>${this.#nameBox()}</span
               >`
             : nothing;

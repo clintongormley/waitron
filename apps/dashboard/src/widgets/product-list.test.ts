@@ -1796,6 +1796,19 @@ describe("the product list as a tree", () => {
     expect(box.getAttribute("label")).toBe(t("folders.name"));
   });
 
+  it("lines a new category's folder icon up with its sibling categories' icons", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    const iconLeft = (key: string) =>
+      root
+        .querySelector(`tr[data-row-key="${key}"] wt-icon[name="folder"]`)!
+        .getBoundingClientRect().left;
+    expect(iconLeft("draft:new")).toBe(iconLeft("folder:d"));
+    expect(iconLeft("draft:new")).toBe(iconLeft("folder:f"));
+  });
+
   it("sends the typed name, trimmed, on Enter or on leaving the box, and a cancel on Esc or on leaving it blank", async () => {
     const { el } = await mountTree();
     const sent: unknown[] = [];
