@@ -39,6 +39,11 @@ export class SectionAddProducts extends LitElement {
         gap: var(--wt-space-3);
         margin-bottom: var(--wt-space-3);
       }
+      /* A fixed basis, so choosing a category does not move the search field beside it. */
+      .category {
+        flex: 0 1 calc(var(--wt-space-6) * 6);
+        min-width: 0;
+      }
       .search {
         flex: 1;
         min-width: 0;
@@ -233,6 +238,7 @@ export class SectionAddProducts extends LitElement {
     const count = this.#chosen().length;
     return html`<div class="filters">
         <wt-combobox
+          class="category"
           name="category"
           label=${t("add_products.category")}
           search="auto"

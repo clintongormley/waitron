@@ -121,6 +121,28 @@ it("filters by category from the shared dropdown, with All categories as its pro
   expect(await shownCategory(el)).toBe("Principales");
 });
 
+it("keeps the category filter's width, and the search field beside it, whatever category is shown", async () => {
+  const el = await mount();
+  const box = categoryBox(el);
+  const searchField = q(el, 'wt-input[name="search"]');
+  const measure = () => ({
+    width: box.getBoundingClientRect().width,
+    searchLeft: searchField.getBoundingClientRect().left,
+  });
+  const before = measure();
+  expect(before.width).toBeGreaterThan(0);
+  await chooseOption(box, "c-mains");
+  await el.updateComplete;
+  expect(await shownCategory(el)).toBe("Principales");
+  expect(measure().width).toBeCloseTo(before.width, 0);
+  expect(measure().searchLeft).toBeCloseTo(before.searchLeft, 0);
+  await chooseOption(box, "c-beer");
+  await el.updateComplete;
+  expect(await shownCategory(el)).toBe("Bebidas / Cerveza");
+  expect(measure().width).toBeCloseTo(before.width, 0);
+  expect(measure().searchLeft).toBeCloseTo(before.searchLeft, 0);
+});
+
 it("lists every product by name until a filter is chosen", async () => {
   const el = await mount();
   expect(listed(el)).toEqual(["p-burger", "p-ipa", "p-lager", "p-lemonade", "p-water"]);
