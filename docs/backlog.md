@@ -1041,6 +1041,19 @@ that they're filled in, and we should show a thumbnail of the image too"_. Today
 
 LOOK at it at phone width, where a long English description leaves little room for the Spanish.
 
+**Choosing a product in an extras list adds it at once (A201, owner 2026-10-02) — OPEN.** The
+owner, on a screenshot of the extras list form's "Choose a product" dropdown beside an "Add
+product" button: _"make the hint text say "Add a product", remove the button. if you select a
+product in the dropdown it gets added automatically. if you close the chooser without selecting
+then nothing happens"_. Today (`apps/dashboard/src/widgets/extra-list-form.ts`) a choice is held in
+`pick` and only the button's `#addItem` adds the row. **Wanted:** the dropdown's prompt reads "Add
+a product" (Spanish to match; `extras.choose_product`), choosing a product adds its row straight
+away and the dropdown goes back to its prompt, and closing it without a choice adds nothing; the
+button and `extras.add_item` go. Focus stays on the dropdown after an add, so a keyboard user can
+add the next product, and the new row is announced (the form's live region). The menu screen's
+members editor (`member-list-editor.ts`) has the same choose-then-Add pattern; ask whether it
+should change too.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
