@@ -2631,6 +2631,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       countdown keeps running,
       since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
       or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
+    - **Open — the counter header scrolls sideways at phone width.** At a 390 px viewport,
+      `till-tab-shell`'s `.session` runs from x=294 to x=936 and the document is 936 px wide;
+      the header's flex row does not wrap its action buttons. The same isolated shell fixture
+      measured 936 px on the pre station-choice commit `0d9447d58` and on the current code.
+      Fit the header at handheld width without losing Find a bill, Allergens, the operator, or
+      Log out (`apps/till/src/widgets/tab-shell.ts`).
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a

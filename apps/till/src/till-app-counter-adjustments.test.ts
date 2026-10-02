@@ -320,6 +320,175 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-app: counter station choice", () => {
+  it("does not open a counter move after the basket changes during the station read", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi.fn().mockResolvedValue(lines),
+      moveDishStation: vi.fn(),
+    });
+    const read = deferred<typeof stations>();
+    vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    counter(el).store.setLineQuantity(1, "2");
+    read.resolve(stations);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+    expect(api.moveDishStation).not.toHaveBeenCalled();
+  });
+
+  it("refuses to submit a counter move after the basket changed with the dialog open", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi.fn().mockResolvedValue(lines),
+      moveDishStation: vi.fn(),
+    });
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    counter(el).store.setLineQuantity(1, "2");
+    emit(chooser, "station-chosen", { stationId: "grill" });
+    await flush(el);
+    expect(api.moveDishStation).not.toHaveBeenCalled();
+    expect(counter(el).store.lines[1]!.quantity).toBe("2");
+  });
+
+  it("holds counter edits after Move is submitted and canceled until the server reread completes", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const after = heldOrder(6);
+    after.lines[0]!.makeAt = "grill";
+    const answer = deferred<{ revision: number }>();
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValueOnce(lines)
+        .mockResolvedValue({ ...lines, revision: 6 }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValueOnce(heldOrder(4)).mockResolvedValue(after),
+      moveDishStation: vi.fn(() => answer.promise),
+    });
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    emit(chooser, "station-chosen", { stationId: "grill" });
+    await flush(el);
+    emit(chooser, "close");
+    await flush(el);
+    inBasket(el, ".line .step-inc")!.click();
+    await flush(el);
+    expect(counter(el).store.lines[0]!.quantity).toBe("1");
+    expect(counter(el).store.dirty).toBe(false);
+    answer.resolve({ revision: 6 });
+    await flush(el);
+    expect(counter(el).store.lines[0]!.makeAt).toBe("grill");
+    expect(counter(el).store.revision).toBe(6);
+    inBasket(el, ".line .step-inc")!.click();
+    await flush(el);
+    expect(counter(el).store.lines[0]!.quantity).toBe("2");
+  });
+
+  it("does not replace an edit made after another read overtakes a submitted move", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const answer = deferred<{ revision: number }>();
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi.fn().mockResolvedValue(lines),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder(4)),
+      moveDishStation: vi.fn(() => answer.promise),
+    });
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+      stationId: "grill",
+    });
+    await flush(el);
+    emit(counter(el), "retrieve-order", { id: "wo-9" });
+    await flush(el);
+    inBasket(el, ".line .step-inc")!.click();
+    await flush(el);
+    expect(counter(el).store.lines[0]!.quantity).toBe("2");
+    answer.resolve({ revision: 6 });
+    await flush(el);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(counter(el).store.lines[0]!.quantity).toBe("2");
+    expect(counter(el).store.dirty).toBe(true);
+  });
+
+  it("keeps Make at and Move openings exclusive while station reads finish out of order", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi.fn().mockResolvedValue(lines),
+      moveDishStation: vi.fn(),
+    });
+    const read = deferred<typeof stations>();
+    vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    read.resolve(stations);
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    expect(el.shadowRoot!.querySelectorAll("till-station-choice-dialog")).toHaveLength(1);
+    expect(chooser.getAttribute("mode")).toBe("make-at");
+    emit(chooser, "station-chosen", { stationId: "grill" });
+    await flush(el);
+    expect(counter(el).store.lines[1]!.makeAt).toBe("grill");
+    expect(api.moveDishStation).not.toHaveBeenCalled();
+  });
+
+  it("keeps a pending Move opening ahead of a later Make at request", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi.fn().mockResolvedValue(lines),
+    });
+    const read = deferred<typeof stations>();
+    vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    read.resolve(stations);
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    expect(el.shadowRoot!.querySelectorAll("till-station-choice-dialog")).toHaveLength(1);
+    expect(chooser.getAttribute("mode")).toBe("move");
+  });
+
+  it("does not let a closed Make at dialog submit to a later Move dialog", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi.fn().mockResolvedValue(lines),
+      moveDishStation: vi.fn(),
+    });
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    const old = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    emit(old, "close");
+    await flush(el);
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    emit(old, "station-chosen", { stationId: "grill" });
+    await flush(el);
+    expect(api.moveDishStation).not.toHaveBeenCalled();
+    expect(counter(el).store.lines[1]!.makeAt).toBeUndefined();
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")!.getAttribute("mode")).toBe(
+      "move",
+    );
+  });
+
   it("clears a station absent from the arriving list and sends null on save", async () => {
     const old = heldOrder(4);
     old.lines[1]!.makeAt = "switched-off";

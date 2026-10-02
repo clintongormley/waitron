@@ -1412,6 +1412,8 @@ export class TillApp extends LitElement {
   #stationsRead = 0;
   #stationsLoaded = false;
   #moveStationOpening: object | null = null;
+  #makeAtOpening: object | null = null;
+  #counterMoveSubmitting: object | null = null;
   @state() private movingStation: {
     workingOrderId: string;
     lineId: string;
@@ -1420,6 +1422,8 @@ export class TillApp extends LitElement {
     refusal: string | null;
     busy: boolean;
     counter?: boolean;
+    basketRevision?: number;
+    basketGeneration?: number;
   } | null = null;
   @state() private makingAt: {
     index: number;
@@ -4661,7 +4665,6 @@ export class TillApp extends LitElement {
   }
 
   async #onMoveStation(event: Event): Promise<void> {
-    if (this.movingStation !== null || this.#moveStationOpening !== null) return;
     const detail = (
       event as CustomEvent<{
         workingOrderId: string;
@@ -4671,62 +4674,124 @@ export class TillApp extends LitElement {
         counter?: boolean;
       }>
     ).detail;
+    if (
+      this.movingStation !== null ||
+      this.#moveStationOpening !== null ||
+      this.makingAt !== null ||
+      this.#makeAtOpening !== null ||
+      (detail.counter === true && this.#counterMoveSubmitting !== null)
+    )
+      return;
     const opening = {};
     this.#moveStationOpening = opening;
     const session = this.#operatorSession;
     const visit = this.#orderVisit;
     const orderId = detail.counter === true ? this.#store.id : this.activeTabId;
+    const revision = this.#store.revision;
+    const generation = this.#store.loadGeneration;
+    const counterEligible = () =>
+      detail.counter !== true ||
+      (detail.workingOrderId === orderId &&
+        generation === this.#store.loadGeneration &&
+        this.#counterStillAdjustable({ orderId: detail.workingOrderId, revision }) &&
+        this.counterLines?.lines.some((line) => line.id === detail.lineId && line.movable) ===
+          true);
     try {
+      if (!counterEligible()) return;
       await this.#loadStations();
       if (
         this.#moveStationOpening !== opening ||
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
-        orderId !== (detail.counter === true ? this.#store.id : this.activeTabId)
+        orderId !== (detail.counter === true ? this.#store.id : this.activeTabId) ||
+        !counterEligible()
       )
         return;
-      this.movingStation = { ...detail, refusal: null, busy: false };
+      this.movingStation = {
+        ...detail,
+        refusal: null,
+        busy: false,
+        ...(detail.counter === true
+          ? { basketRevision: revision, basketGeneration: generation }
+          : {}),
+      };
     } finally {
       if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
     }
   }
 
   async #onOpenMakeAt(event: Event): Promise<void> {
-    if (this.makingAt !== null || this.movingStation !== null) return;
+    if (
+      this.makingAt !== null ||
+      this.#makeAtOpening !== null ||
+      this.movingStation !== null ||
+      this.#moveStationOpening !== null ||
+      this.#counterMoveSubmitting !== null
+    )
+      return;
     const index = (event as CustomEvent<number>).detail;
     const orderId = this.#store.id;
     const session = this.#operatorSession;
     const line = this.#store.lines[index];
     if (line === undefined) return;
-    await this.#loadStations();
-    if (
-      orderId !== this.#store.id ||
-      session !== this.#operatorSession ||
-      this.#store.lines[index] !== line
-    )
-      return;
-    this.makingAt = { index, line, orderId, session };
+    const opening = {};
+    this.#makeAtOpening = opening;
+    try {
+      await this.#loadStations();
+      if (
+        this.#makeAtOpening !== opening ||
+        this.movingStation !== null ||
+        orderId !== this.#store.id ||
+        session !== this.#operatorSession ||
+        this.#store.lines[index] !== line
+      )
+        return;
+      this.makingAt = { index, line, orderId, session };
+    } finally {
+      if (this.#makeAtOpening === opening) this.#makeAtOpening = null;
+    }
   }
 
-  async #onStationChosen(event: Event): Promise<void> {
-    if (this.makingAt !== null) {
-      const open = this.makingAt;
-      const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
-      this.makingAt = null;
-      if (
-        open.orderId === this.#store.id &&
-        open.session === this.#operatorSession &&
-        this.#store.lines[open.index] === open.line
-      )
-        this.#store.setLineMakeAt(open.index, stationId ?? undefined);
+  #onMakeAtChosen(event: Event, open: NonNullable<typeof this.makingAt>): void {
+    if (this.makingAt !== open) return;
+    const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
+    this.makingAt = null;
+    if (
+      open.orderId === this.#store.id &&
+      open.session === this.#operatorSession &&
+      this.#store.lines[open.index] === open.line
+    )
+      this.#store.setLineMakeAt(open.index, stationId ?? undefined);
+  }
+
+  async #onStationChosen(
+    event: Event,
+    open: NonNullable<typeof this.movingStation>,
+  ): Promise<void> {
+    if (this.movingStation !== open) return;
+    const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
+    if (open.busy || stationId === null || stationId === open.stationId) return;
+    if (
+      open.counter === true &&
+      (open.basketGeneration !== this.#store.loadGeneration ||
+        !this.#counterStillAdjustable({
+          orderId: open.workingOrderId,
+          revision: open.basketRevision!,
+        }) ||
+        this.counterLines?.lines.some((line) => line.id === open.lineId && line.movable) !== true)
+    ) {
+      this.movingStation = null;
       return;
     }
-    const open = this.movingStation;
-    const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
-    if (open === null || open.busy || stationId === null || stationId === open.stationId) return;
     const body = { submissionId: crypto.randomUUID(), lineIds: [open.lineId], stationId };
-    this.movingStation = { ...open, busy: true, refusal: null };
+    const busy = { ...open, busy: true, refusal: null };
+    this.movingStation = busy;
     const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const generation = this.#store.loadGeneration;
+    const counterSubmission = open.counter === true ? {} : null;
+    if (counterSubmission !== null) this.#counterMoveSubmitting = counterSubmission;
+    const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       await resendUnanswered(
@@ -4734,12 +4799,18 @@ export class TillApp extends LitElement {
         limit.signal,
         () => session === this.#operatorSession,
       );
-      if (this.movingStation?.lineId === open.lineId) this.movingStation = null;
-      if (open.counter === true) await this.#reloadCounterOrder(open.workingOrderId, session);
-      else await this.#loadTabLines();
+      if (this.movingStation === busy) this.movingStation = null;
+      if (open.counter === true) {
+        if (
+          generation === this.#store.loadGeneration &&
+          session === this.#operatorSession &&
+          visit === this.#orderVisit
+        )
+          await this.#reloadCounterOrder(open.workingOrderId, session);
+      } else await this.#loadTabLines();
     } catch (error) {
       const refusal = lineWriteError(error);
-      if (this.movingStation?.lineId === open.lineId)
+      if (this.movingStation === busy)
         this.movingStation = {
           ...open,
           busy: false,
@@ -4748,10 +4819,18 @@ export class TillApp extends LitElement {
               ? refusal.code
               : ((error as { code?: string }).code ?? "server.internal"),
         };
-      if (open.counter === true) await this.#reloadCounterOrder(open.workingOrderId, session);
-      else await this.#loadTabLines();
+      if (open.counter === true) {
+        if (
+          generation === this.#store.loadGeneration &&
+          session === this.#operatorSession &&
+          visit === this.#orderVisit
+        )
+          await this.#reloadCounterOrder(open.workingOrderId, session);
+      } else await this.#loadTabLines();
     } finally {
       limit.done();
+      unlock();
+      if (this.#counterMoveSubmitting === counterSubmission) this.#counterMoveSubmitting = null;
     }
   }
 
@@ -6919,6 +6998,34 @@ export class TillApp extends LitElement {
     }
   }
 
+  #renderMoveStationDialog(open: NonNullable<typeof this.movingStation>) {
+    return html`<till-station-choice-dialog
+      mode="move"
+      .dishName=${open.name}
+      .stations=${this.stations}
+      .currentStationId=${open.stationId}
+      .busy=${open.busy}
+      .refusal=${open.refusal}
+      @station-chosen=${(event: Event) => void this.#onStationChosen(event, open)}
+      @close=${() => {
+        if (this.movingStation === open) this.movingStation = null;
+      }}
+    ></till-station-choice-dialog>`;
+  }
+
+  #renderMakeAtDialog(open: NonNullable<typeof this.makingAt>) {
+    return html`<till-station-choice-dialog
+      mode="make-at"
+      .dishName=${lineProductName(open.line.product)}
+      .stations=${this.stations}
+      .currentStationId=${open.line.makeAt ?? null}
+      @station-chosen=${(event: Event) => this.#onMakeAtChosen(event, open)}
+      @close=${() => {
+        if (this.makingAt === open) this.makingAt = null;
+      }}
+    ></till-station-choice-dialog>`;
+  }
+
   override render() {
     return html`
       <div
@@ -7069,32 +7176,8 @@ export class TillApp extends LitElement {
         }
         ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
         ${this.#renderCancelCrediting()}
-        ${
-          this.movingStation === null
-            ? nothing
-            : html`<till-station-choice-dialog
-                mode="move"
-                .dishName=${this.movingStation.name}
-                .stations=${this.stations}
-                .currentStationId=${this.movingStation.stationId}
-                .busy=${this.movingStation.busy}
-                .refusal=${this.movingStation.refusal}
-                @station-chosen=${(event: Event) => void this.#onStationChosen(event)}
-                @close=${() => (this.movingStation = null)}
-              ></till-station-choice-dialog>`
-        }
-        ${
-          this.makingAt === null
-            ? nothing
-            : html`<till-station-choice-dialog
-                mode="make-at"
-                .dishName=${lineProductName(this.makingAt.line.product)}
-                .stations=${this.stations}
-                .currentStationId=${this.makingAt.line.makeAt ?? null}
-                @station-chosen=${(event: Event) => void this.#onStationChosen(event)}
-                @close=${() => (this.makingAt = null)}
-              ></till-station-choice-dialog>`
-        }
+        ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
+        ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
         ${this.#renderEditDeadEnds()}
         ${
           this.deadEndsQuestion === null
