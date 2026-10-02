@@ -3,40 +3,46 @@ import { customElement, property, state } from "lit/decorators.js";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import "./wt-button.js";
-import type { WtLocaleOption } from "./wt-language-chooser.js";
+
+export interface WtLocaleOption {
+  code: string;
+  label: string;
+}
 
 /**
- * A page footer holding the language chooser. It never changes the language itself: the parent
+ * The language chooser for an app's top bar. It never changes the language itself: the parent
  * sets `active` and decides what a pick means.
+ *
+ * The trigger draws the full name (`part="name"`) and the short code (`part="code"`, hidden). An
+ * app swaps them at phone width with its own `::part()` rules, because a primitive here may hold no
+ * literal breakpoint and a media query cannot read a token.
  *
  * The options are NATIVE `<button role="menuitemradio">` elements as direct children of the
  * `role="menu"` container, so the role and `aria-checked` land on the element a screen reader
  * reaches (a `wt-button` does not forward a role or `aria-checked` to its inner button).
  */
-@customElement("wt-language-footer")
-export class WtLanguageFooter extends LitElement {
+@customElement("wt-language-chooser")
+export class WtLanguageChooser extends LitElement {
   static override styles = [
     baseStyles,
     css`
       :host {
-        display: block;
-      }
-
-      footer {
-        display: flex;
-        justify-content: flex-end;
-        padding-block: var(--wt-space-3) max(var(--wt-space-3), env(safe-area-inset-bottom));
-        padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+        display: inline-block;
       }
 
       .chooser {
         position: relative;
+        display: flex;
+      }
+
+      .code {
+        display: none;
       }
 
       .menu {
         position: absolute;
         z-index: 1;
-        bottom: calc(100% + var(--wt-space-1));
+        top: calc(100% + var(--wt-space-1));
         inset-inline-end: 0;
         max-width: calc(100vw - 2 * var(--wt-space-3));
         min-width: 100%;
@@ -214,6 +220,10 @@ export class WtLanguageFooter extends LitElement {
     );
   }
 
+  #shortCode(code: string): string {
+    return code.split("-")[0]!.toUpperCase();
+  }
+
   #label(code: string): string {
     return (
       this.locales?.find((l) => l.code === code)?.label ??
@@ -223,46 +233,47 @@ export class WtLanguageFooter extends LitElement {
   }
 
   override render() {
+    const label = this.#label(this.active);
     return html`
-      <footer>
-        <div class="chooser" @keydown=${(event: KeyboardEvent) => this.#onKeydown(event)}>
-          <wt-button
-            variant="secondary"
-            data-test="lang-trigger"
-            aria-haspopup="menu"
-            aria-expanded=${this.open}
-            @click=${() => this.#toggle()}
-          >
-            ${this.#label(this.active)}
-          </wt-button>
-          ${
-            this.open && this.locales
-              ? html`<div class="menu" role="menu">
-                  ${this.locales.map(
-                    (l) => html`
-                      <button
-                        type="button"
-                        class="option"
-                        role="menuitemradio"
-                        aria-checked=${l.code === this.active}
-                        data-test=${`lang-${l.code}`}
-                        @click=${(event: Event) => this.#pick(event, l.code)}
-                      >
-                        ${l.label}
-                      </button>
-                    `,
-                  )}
-                </div>`
-              : nothing
-          }
-        </div>
-      </footer>
+      <div class="chooser" @keydown=${(event: KeyboardEvent) => this.#onKeydown(event)}>
+        <wt-button
+          variant="secondary"
+          data-test="lang-trigger"
+          aria-label=${label}
+          aria-haspopup="menu"
+          aria-expanded=${this.open}
+          @click=${() => this.#toggle()}
+        >
+          <span class="name" part="name">${label}</span>
+          <span class="code" part="code" aria-hidden="true">${this.#shortCode(this.active)}</span>
+        </wt-button>
+        ${
+          this.open && this.locales
+            ? html`<div class="menu" role="menu">
+                ${this.locales.map(
+                  (l) => html`
+                    <button
+                      type="button"
+                      class="option"
+                      role="menuitemradio"
+                      aria-checked=${l.code === this.active}
+                      data-test=${`lang-${l.code}`}
+                      @click=${(event: Event) => this.#pick(event, l.code)}
+                    >
+                      ${l.label}
+                    </button>
+                  `,
+                )}
+              </div>`
+            : nothing
+        }
+      </div>
     `;
   }
 }
 
 declare global {
   interface HTMLElementTagNameMap {
-    "wt-language-footer": WtLanguageFooter;
+    "wt-language-chooser": WtLanguageChooser;
   }
 }

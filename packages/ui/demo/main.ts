@@ -22,6 +22,7 @@ import "../src/components/wt-count-badge.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-language-footer.js";
+import "../src/components/wt-language-chooser.js";
 
 registerIcons({
   ...DROPDOWN_ICONS,
@@ -199,6 +200,7 @@ const panel = (theme: "light" | "dark") => `
         <wt-button variant="primary" class="save-member">Save</wt-button>
       </wt-form-actions>
     </wt-modal>
+    <wt-language-chooser active="es-ES"></wt-language-chooser>
     <wt-language-footer active="es-ES"></wt-language-footer>
   </div>
 `;

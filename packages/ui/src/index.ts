@@ -85,7 +85,8 @@ export { WtLozenge } from "./components/wt-lozenge.js";
 export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge.js";
 export { WtToast, type WtToastTone } from "./components/wt-toast.js";
 export { WtNotice } from "./components/wt-notice.js";
-export { WtLanguageFooter, type WtLocaleOption } from "./components/wt-language-footer.js";
+export { WtLanguageFooter } from "./components/wt-language-footer.js";
+export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";
