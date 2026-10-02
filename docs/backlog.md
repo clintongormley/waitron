@@ -717,7 +717,7 @@ the same words (owner, 2026-10-02): "Customer-facing names" / "Nombres para el c
 
 **The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171,
 owner 2026-10-01: "i think we should separate kitchen name from customer facing names
-(everywhere)") — DONE (#PR).** In the options list and extras list editors
+(everywhere)") — DONE (#1044).** In the options list and extras list editors
 (`apps/dashboard/src/widgets/option-list-form.ts`, `extra-list-form.ts`) the Kitchen name is a
 plain field, always shown, directly under Name (owner, 2026-10-01, mockup B). Only the
 customer-facing names fold, in a section headed "Customer-facing names" ("Nombres para el
@@ -1450,7 +1450,7 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040) and A171 (#PR) are done; next A172, built
+A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040) and A171 (#1044) are done; next A172, built
 in the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
