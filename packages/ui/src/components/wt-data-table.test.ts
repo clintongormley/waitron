@@ -1107,6 +1107,12 @@ test("a real click on a pinned cell's empty space toggles a toggling tree row on
   expect(treeKeys(el)).toEqual(["food", "drinks"]);
 });
 
+/** A resize is reported after layout and before the next paint, so the table has seen a new width by
+ * the second frame. */
+async function frames(): Promise<void> {
+  for (let i = 0; i < 2; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
 test("a phone-width tree indents each level half as far, and no deeper than four levels", async () => {
   const ids = ["a", "b", "c", "d", "e", "f"];
   const deep: TreeRow[] = ids.map((id, index) => ({
@@ -1122,13 +1128,17 @@ test("a phone-width tree indents each level half as far, and no deeper than four
       el.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
     ).paddingInlineStart;
   el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
   expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "8px", "32px", "32px"]);
   el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
   expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "16px", "64px", "80px"]);
 });
 
-// A container query measures the box inside its border, which is what clientWidth reports here.
-test("the phone indent starts at a 380px box, not at 381px, and a flat table is no size container", async () => {
+// The width compared is the scroll box's inside its border, which is what clientWidth reports here.
+test("the phone indent starts at a 380px box, not at 381px, and a flat table never takes it", async () => {
   const el = await treeTable();
   host.style.setProperty("--wt-space-2", "8px");
   host.style.setProperty("--wt-space-4", "16px");
@@ -1138,14 +1148,42 @@ test("the phone indent starts at a 380px box, not at 381px, and a flat table is 
     ).paddingInlineStart;
   const box = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
   el.style.width = "383px";
+  await frames();
   expect(box.clientWidth).toBe(381);
   expect(indent()).toBe("16px");
   el.style.width = "382px";
+  await frames();
   expect(box.clientWidth).toBe(380);
   expect(indent()).toBe("8px");
   cleanup();
   const flat = await table();
-  expect(getComputedStyle(flat.shadowRoot!.querySelector(".scroll")!).containerType).toBe("normal");
+  flat.style.width = "360px";
+  await frames();
+  expect(flat.hasAttribute("narrow")).toBe(false);
+});
+
+test("a tree that becomes a flat table drops its phone indent", async () => {
+  const el = await treeTable();
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+  el.rowParent = undefined;
+  await el.updateComplete;
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+});
+
+test("a tree stops watching its width while it is out of the page, and watches again when it returns", async () => {
+  const el = await treeTable();
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  el.remove();
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  el.style.width = "360px";
+  host.append(el);
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
 });
 
 test("lines a toggling branch's name up with the text beside it", async () => {

@@ -35,6 +35,10 @@ export interface DataTableColumn<Row> {
 
 type SortDirection = "ascending" | "descending";
 
+/** The tree's box width, in px, at or below which each level indents `--wt-space-2` rather than
+ * `--wt-space-4` and stops deepening after four levels. */
+const NARROW_TREE_WIDTH = 380;
+
 @customElement("wt-data-table")
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
@@ -50,11 +54,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         overflow-x: auto;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
-      }
-
-      /* The indent follows the table's own width, not the window's; a flat table needs neither. */
-      .scroll.tree {
-        container-type: inline-size;
       }
 
       .scroll:focus-visible {
@@ -347,10 +346,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
         padding-inline-start: calc(var(--tree-depth, 0) * var(--wt-space-4));
       }
 
-      @container (max-width: 380px) {
-        .tree-cell {
-          padding-inline-start: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-2));
-        }
+      :host([narrow]) .tree-cell {
+        padding-inline-start: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-2));
       }
     `,
   ];
@@ -445,6 +442,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @query(".columns-panel") private chooserPanel!: HTMLElement;
   private readonly seededBranches = new Set<string>();
   #restored = false;
+  /** A CSS condition cannot read a token, so the width is compared here and the host carries the
+   * answer as `narrow`. */
+  readonly #scrollObserver = new ResizeObserver((entries) => {
+    for (const { contentRect } of entries)
+      this.toggleAttribute("narrow", contentRect.width <= NARROW_TREE_WIDTH);
+  });
+  #observedScroll: Element | null = null;
   #remembered: Set<string> | null = null;
 
   #rememberedOpen(): Set<string> {
@@ -461,6 +465,32 @@ export class WtDataTable<Row = unknown> extends LitElement {
       Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === "string") : [],
     );
     return this.#remembered;
+  }
+
+  /** The indent follows the tree's own width, not the window's; a flat table is not watched. */
+  #observeScroll(): void {
+    const scroll = this.rowParent ? this.renderRoot.querySelector(".scroll") : null;
+    if (scroll === this.#observedScroll) return;
+    if (this.#observedScroll) this.#scrollObserver.unobserve(this.#observedScroll);
+    if (scroll) this.#scrollObserver.observe(scroll);
+    else this.removeAttribute("narrow");
+    this.#observedScroll = scroll;
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observeScroll();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#scrollObserver.disconnect();
+    this.#observedScroll = null;
+  }
+
+  protected override updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    this.#observeScroll();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -1326,7 +1356,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
     return html`
       ${this.#renderToolbar()}
-      <div class="scroll tree" tabindex="0" role="region" aria-label=${label ?? nothing}>
+      <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table role="treegrid">
           ${this.#renderHead(visibleKeys, shown)}
           <tbody role="rowgroup">

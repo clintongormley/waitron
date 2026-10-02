@@ -540,8 +540,9 @@ the branch's own collapsed state. With `searchOpensPath`, as the Products tree s
 while a search is typed, even one that matches itself, and what passes the filters under a match
 stays reachable, closed as the person left it. With filters alone, only a row kept solely to hold a
 match's place is held open. A tree whose box is 380px wide or less indents each level
-`--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels; only a tree's box is a size
-container.
+`--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels. A CSS condition cannot read
+a token, so the table watches a tree's box in code and sets a `narrow` attribute on itself while the
+box is that narrow; a flat table is not watched.
 
 A tree also answers `isExpanded(key)`, opens or closes a branch with `setExpanded(key, expanded)`
 (no event), reports the order it would draw a set of siblings in with `sortedSiblings(rows)`, and
