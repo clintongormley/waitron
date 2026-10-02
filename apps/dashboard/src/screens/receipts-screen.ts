@@ -1,9 +1,8 @@
 import { DraftRows, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ifDefined } from "lit/directives/if-defined.js";
 import { resolveContentText, type ContentLanguages } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
@@ -38,7 +37,6 @@ const TRIM_FIELDS: readonly TrimField[] = ["headerSubtitle", "footerMessage"];
 export class ReceiptsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     paperStyles,
     css`
       :host {
@@ -78,10 +76,6 @@ export class ReceiptsScreen extends LitElement {
         margin-bottom: var(--wt-space-1);
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
-      }
-      .required {
-        margin-inline-start: var(--wt-space-1);
-        color: var(--wt-color-danger);
       }
       .field-value {
         display: block;
@@ -599,13 +593,13 @@ export class ReceiptsScreen extends LitElement {
 
   #renderLanguage(receiptLanguage: ReceiptLanguage): TemplateResult {
     const error = this.languageRefusal;
-    const errorLine =
-      error !== ""
-        ? html`<span id="receipt-language-error" class="field-error">${error}</span>`
-        : nothing;
     const { fixed, language: stored } = receiptLanguage;
     if (fixed !== null) {
       const fixedName = receiptLanguageName(fixed.locale, false);
+      const errorLine =
+        error !== ""
+          ? html`<span id="receipt-language-error" class="field-error">${error}</span>`
+          : nothing;
       return html`<div data-test="receipt-language">
         <span class="field-label">${t("receipts.language")}</span>
         <span class="field-value" data-test="receipt-language-value"
@@ -640,27 +634,22 @@ export class ReceiptsScreen extends LitElement {
       ? receiptLanguage.choices
       : [...receiptLanguage.choices, stored];
     return html`<div data-test="receipt-language">
-      <label>
-        <span class="field-label"
-          >${t("receipts.language")}<span class="required" aria-hidden="true">*</span></span
-        >
-        <select
-          name="receiptLanguage"
-          required
-          aria-invalid=${error !== "" ? "true" : "false"}
-          aria-describedby=${ifDefined(error !== "" ? "receipt-language-error" : undefined)}
-          ?disabled=${this.saving}
-          @change=${(event: Event) => this.#pickLanguage((event.target as HTMLSelectElement).value)}
-        >
-          ${offered.map(
-            (language) =>
-              html`<option value=${language} .selected=${language === chosen}>
-                ${receiptLanguageName(language)}
-              </option>`,
-          )}
-        </select>
-      </label>
-      ${errorLine} ${this.#renderWarning(chosen)}
+      <wt-combobox
+        name="receiptLanguage"
+        label=${t("receipts.language")}
+        required
+        search="auto"
+        .options=${offered.map((language) => ({
+          value: language,
+          label: receiptLanguageName(language),
+        }))}
+        .value=${chosen}
+        error=${error}
+        ?disabled=${this.saving}
+        @wt-change=${(event: CustomEvent<{ value: string }>) =>
+          this.#pickLanguage(event.detail.value)}
+      ></wt-combobox>
+      ${this.#renderWarning(chosen)}
     </div>`;
   }
 

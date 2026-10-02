@@ -76,11 +76,27 @@ function stubApi(
 
 const q = <T extends HTMLElement = HTMLElement>(el: ReceiptsScreen, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector);
-const select = (el: ReceiptsScreen) => q<HTMLSelectElement>(el, "select[name=receiptLanguage]");
+type Dropdown = HTMLElement & {
+  value: string;
+  label: string;
+  required: boolean;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+const select = (el: ReceiptsScreen) => q<Dropdown>(el, "wt-combobox[name=receiptLanguage]");
+/** The text in the dropdown's closed box, which is what the operator reads. */
+async function shown(el: ReceiptsScreen): Promise<string | undefined> {
+  const field = select(el)!;
+  await field.updateComplete;
+  return field.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
 const paperText = (el: ReceiptsScreen) => q(el, ".paper")?.textContent ?? "";
 const warning = (el: ReceiptsScreen) => q(el, "[data-test=receipt-language-warning]");
+/** The refusal under the language: the dropdown's own error line, or the fixed area's. */
 const languageError = (el: ReceiptsScreen) =>
-  q(el, "#receipt-language-error")?.textContent?.trim() ?? "";
+  (
+    select(el)?.shadowRoot!.querySelector("[data-error]") ?? q(el, "#receipt-language-error")
+  )?.textContent?.trim() ?? "";
 async function bottomOf(el: ReceiptsScreen): Promise<string> {
   const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
   return actions.error;
@@ -99,9 +115,7 @@ async function mount(api: DashboardApi): Promise<ReceiptsScreen> {
 }
 
 function pick(el: ReceiptsScreen, language: string): void {
-  const field = select(el)!;
-  field.value = language;
-  field.dispatchEvent(new Event("change", { bubbles: true }));
+  void chooseOption(select(el)!, language);
 }
 
 async function save(el: ReceiptsScreen): Promise<void> {
@@ -120,21 +134,23 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
   it("offers the four languages by name in a labelled dropdown, with the saved one chosen", async () => {
     const el = await mount(stubApi(madrid("gl-ES")));
     const field = select(el)!;
-    expect([...field.options].map((option) => [option.value, option.textContent!.trim()])).toEqual([
+    expect(field.options.map((option) => [option.value, option.label])).toEqual([
       ["es-ES", "Spanish"],
       ["ca-ES", "Catalan"],
       ["gl-ES", "Galician"],
       ["eu-ES", "Basque"],
     ]);
-    expect([...field.selectedOptions].map((option) => option.value)).toEqual(["gl-ES"]);
-    expect(field.labels![0]!.textContent).toContain(t("receipts.language"));
+    expect(field.value).toBe("gl-ES");
+    expect(await shown(el)).toBe("Galician");
+    expect(field.label).toBe(t("receipts.language"));
   });
 
   it("marks the dropdown required, as the description is, with a star hidden from screen readers", async () => {
     const el = await mount(stubApi(madrid()));
     const field = select(el)!;
     expect(field.required).toBe(true);
-    const star = field.labels![0]!.querySelector(".required")!;
+    await field.updateComplete;
+    const star = field.shadowRoot!.querySelector(".field-label .required")!;
     expect(star.textContent).toBe("*");
     expect(star.getAttribute("aria-hidden")).toBe("true");
     expect(getComputedStyle(star).color).toBe(
@@ -203,6 +219,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(order(api.putReceiptLanguage)).toBeLessThan(order(api.putLocationSettings));
     expect(q(el, "[role=status]")!.textContent).toBe(t("receipts.saved"));
     expect(select(el)!.value).toBe("gl-ES");
+    expect(await shown(el)).toBe("Galician");
     await save(el);
     expect(api.putReceiptLanguage).toHaveBeenCalledTimes(1);
   });
@@ -248,16 +265,26 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
       expect(api.putLocationSettings).not.toHaveBeenCalled();
       expect(api.putReceipt).not.toHaveBeenCalled();
       expect(languageError(el)).toBe(codeMessage(code));
-      expect(select(el)!.getAttribute("aria-invalid")).toBe("true");
-      expect(select(el)!.getAttribute("aria-describedby")).toBe("receipt-language-error");
+      await select(el)!.updateComplete;
+      const control = select(el)!.shadowRoot!.querySelector(".trigger")!;
+      expect(control.getAttribute("aria-invalid")).toBe("true");
+      expect(
+        control
+          .getAttribute("aria-describedby")!
+          .split(" ")
+          .map((id) => select(el)!.shadowRoot!.getElementById(id)!.textContent!.trim()),
+      ).toEqual([codeMessage(code)]);
       expect(await bottomOf(el)).toBe(t("form.fix_fields"));
       expect(q(el, "[data-test=save]")!.hasAttribute("disabled")).toBe(false);
       expect(q(el, "[role=status]")).toBeNull();
       await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(select(el)));
       expect(select(el)!.value).toBe("gl-ES");
+      expect(await shown(el)).toBe("Galician");
       pick(el, "eu-ES");
       await el.updateComplete;
+      await select(el)!.updateComplete;
       expect(languageError(el)).toBe("");
+      expect(control.getAttribute("aria-invalid")).toBe("false");
       expect(await bottomOf(el)).toBe("");
     },
   );
@@ -309,9 +336,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     const api = stubApi(madrid("en-GB"));
     const el = await mount(api);
     const field = select(el)!;
-    expect([...field.selectedOptions].map((option) => option.textContent!.trim())).toEqual([
-      "English",
-    ]);
+    expect(await shown(el)).toBe("English");
     expect(field.value).toBe("en-GB");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
@@ -319,7 +344,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
 
   it("shows a stored value that is not a language as it is, without failing", async () => {
     const el = await mount(stubApi(madrid("not a language")));
-    expect(select(el)!.selectedOptions[0]!.textContent!.trim()).toBe("not a language");
+    expect(await shown(el)).toBe("not a language");
     expect(warning(el)).toBeNull();
   });
 
@@ -330,6 +355,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     const el = await mount(api);
     liveData.invalidate([{ type: "locations" }]);
     await vi.waitFor(() => expect(select(el)!.value).toBe("eu-ES"));
+    expect(await shown(el)).toBe("Basque");
     await vi.waitFor(() => expect(background.previewReceipt).toHaveBeenCalledWith({}));
     expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}]]);
     pick(el, "gl-ES");
@@ -338,6 +364,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     await vi.waitFor(() => expect(background.getReceiptLanguage).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(select(el)!.value).toBe("gl-ES");
+    expect(await shown(el)).toBe("Galician");
     await save(el);
     expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
   });
@@ -377,12 +404,14 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     await flush(el);
     await flush(el);
     expect(select(el)!.value).toBe("gl-ES");
+    expect(await shown(el)).toBe("Galician");
     expect(paperText(el)).toContain("Idioma gl-ES");
 
     vi.mocked(background.getReceiptLanguage).mockResolvedValue(madrid("eu-ES"));
     stored = "eu-ES";
     liveData.invalidate([{ type: "locations" }]);
     await vi.waitFor(() => expect(select(el)!.value).toBe("eu-ES"));
+    expect(await shown(el)).toBe("Basque");
     await vi.waitFor(() => expect(paperText(el)).toContain("Idioma eu-ES"));
   });
 
@@ -400,6 +429,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     q(el, "[data-test=retry]")!.click();
     await flush(el);
     await vi.waitFor(() => expect(select(el)?.value).toBe("gl-ES"));
+    expect(await shown(el)).toBe("Galician");
   });
 });
 
@@ -540,8 +570,9 @@ describe("the Receipts page's receipt language in Spanish", () => {
       stubApi(madrid("gl-ES"), { defaultLanguage: "es", languages: ["es"] }),
     );
     const field = select(madridPage)!;
-    expect(field.labels![0]!.querySelector(".field-label")!.textContent).toBe("Idioma del recibo*");
-    expect([...field.options].map((option) => option.textContent!.trim())).toEqual([
+    await field.updateComplete;
+    expect(field.shadowRoot!.querySelector(".field-label")!.textContent).toBe("Idioma del recibo*");
+    expect(field.options.map((option) => option.label)).toEqual([
       "Español",
       "Catalán",
       "Gallego",

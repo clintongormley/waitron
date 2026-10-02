@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./receipts-screen.js";
 import type { ReceiptsScreen } from "./receipts-screen.js";
@@ -174,16 +175,17 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=receiptLanguage]");
-    if (select) {
-      select.value = "ca-ES";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+    const language = el.shadowRoot!.querySelector("wt-combobox[name=receiptLanguage]");
+    if (receiptLanguage.fixed === null) {
+      await chooseOption(language!, "ca-ES");
       await flush(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
       await flush(el);
       await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("#receipt-language-error")).not.toBeNull(),
+        expect(language!.shadowRoot!.querySelector("[data-error]")).not.toBeNull(),
       );
+    } else {
+      expect(language).toBeNull();
     }
     expect(el.shadowRoot!.querySelector("[data-test=receipt-language-warning]")).toBeNull();
     await expectNoA11yViolations(host);
