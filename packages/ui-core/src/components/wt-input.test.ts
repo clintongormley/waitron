@@ -1,4 +1,5 @@
 import { LitElement } from "lit";
+import { commands } from "vitest/browser";
 import { expect, test, afterEach } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-input.js";
@@ -13,6 +14,67 @@ function parts(el: HTMLElement) {
     input: root.querySelector<HTMLInputElement>("input")!,
   };
 }
+
+async function screenshotPixel(x: number, y: number): Promise<string> {
+  const png = await (
+    commands as typeof commands & {
+      screenshotBase64: () => Promise<string>;
+    }
+  ).screenshotBase64();
+  const image = await createImageBitmap(
+    new Blob([Uint8Array.from(atob(png), (char) => char.charCodeAt(0))], { type: "image/png" }),
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const scale = Number(
+    window.parent.document.getElementById("vitest-tester")?.getAttribute("data-scale") ?? 1,
+  );
+  const [r, g, b] = context.getImageData(Math.floor(x * scale), Math.floor(y * scale), 1, 1).data;
+  image.close();
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+test.each(["light", "dark"])(
+  "an autofilled %s input keeps the field fill and bottom line",
+  async (theme) => {
+    const el = await mount(
+      '<wt-input label="Email" name="email" autocomplete="username"></wt-input>',
+    );
+    host.setAttribute("data-theme", theme);
+    el.id = "autofill-probe";
+    const { field, input } = parts(el);
+    input.value = "owner@example.test";
+    await (
+      commands as typeof commands & {
+        forceAutofill: (hostId: string) => Promise<void>;
+      }
+    ).forceAutofill(el.id);
+    expect(input.matches(":autofill")).toBe(true);
+    const probe = document.createElement("span");
+    probe.style.color = getComputedStyle(field).getPropertyValue("--wt-color-field-value").trim();
+    document.body.appendChild(probe);
+    expect(getComputedStyle(input).webkitTextFillColor).toBe(getComputedStyle(probe).color);
+
+    const rect = field.getBoundingClientRect();
+    const x = rect.left + 4;
+    expect(await screenshotPixel(x, rect.top + rect.height / 2)).toBe(
+      getComputedStyle(field).backgroundColor,
+    );
+    const lineColor = getComputedStyle(field).getPropertyValue("--wt-color-field-line").trim();
+    probe.style.color = lineColor;
+    const line = await screenshotPixel(x, rect.bottom - 1);
+    const rgb = (color: string) => color.match(/\d+/g)!.map(Number);
+    const distance = (a: string, b: string) =>
+      rgb(a).reduce((sum, channel, i) => sum + Math.abs(channel - rgb(b)[i]!), 0);
+    expect(distance(line, getComputedStyle(probe).color)).toBeLessThan(
+      distance(line, getComputedStyle(field).backgroundColor),
+    );
+    probe.remove();
+  },
+);
 
 async function settle(el: HTMLElement): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));

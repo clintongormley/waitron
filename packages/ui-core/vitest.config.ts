@@ -7,6 +7,21 @@ type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
+  screenshot(): Promise<Uint8Array>;
+  context(): {
+    newCDPSession(page: PlaywrightPage): Promise<{
+      send(method: string, params?: object): Promise<unknown>;
+    }>;
+  };
+}
+
+interface CdpNode {
+  nodeId: number;
+  nodeName: string;
+  attributes?: string[];
+  children?: CdpNode[];
+  shadowRoots?: CdpNode[];
+  contentDocument?: CdpNode;
 }
 
 /**
@@ -21,6 +36,39 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
+};
+
+const forceAutofill: BrowserCommand<[hostId: string]> = async (context, hostId) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("DOM.enable");
+  await cdp.send("CSS.enable");
+  const { root } = (await cdp.send("DOM.getDocument", { depth: -1, pierce: true })) as {
+    root: CdpNode;
+  };
+  const descendants = (node: CdpNode): CdpNode[] => [
+    node,
+    ...[
+      ...(node.children ?? []),
+      ...(node.shadowRoots ?? []),
+      ...(node.contentDocument ? [node.contentDocument] : []),
+    ].flatMap(descendants),
+  ];
+  const host = descendants(root).find((node) => {
+    const i = node.attributes?.indexOf("id") ?? -1;
+    return i >= 0 && node.attributes?.[i + 1] === hostId;
+  });
+  const input = host && descendants(host).find((node) => node.nodeName === "INPUT");
+  if (!input) throw new Error(`No input under ${hostId}`);
+  await cdp.send("CSS.forcePseudoState", {
+    nodeId: input.nodeId,
+    forcedPseudoClasses: ["autofill"],
+  });
+};
+
+const screenshotBase64: BrowserCommand<[]> = async (context) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  return Buffer.from(await page.screenshot()).toString("base64");
 };
 
 export default defineConfig({
@@ -38,6 +86,8 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
+        forceAutofill,
+        screenshotBase64,
         ...parkPointerCommands,
       },
     },
