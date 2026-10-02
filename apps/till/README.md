@@ -22,8 +22,9 @@ itself:
    authoritatively (the browser never sends a price). _(2026-09-30, lane B item B15: a bill that
    already holds a payment, or one the operator splits with Pay items, Contribute or Split equally,
    is paid in several payments through the bill payment dialog instead.)_
-4. **Ticket** — the AEAT verification QR first (after any practice warning), then the filed invoice
-   number, per-rate VAT desglose and change, then "new sale". Logging out keeps the basket for the next operator.
+4. **Ticket** — the AEAT verification QR first when there is one (after any practice warning), then
+   the filed invoice number, per-rate VAT desglose and change, then "new sale". Logging out keeps
+   the basket for the next operator.
 
 ## Running it in dev
 

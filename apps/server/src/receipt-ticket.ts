@@ -8,8 +8,8 @@
  * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
  * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1 plus the
  * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21), with AEAT's «QR tributario:» caption
- * above the QR; when a QR is printed, the caption, the QR and the legend come first, after any
- * practice warning (its QR specification v0.5.0, §3); sources in
+ * above the QR and, when a QR is printed, the caption, the QR and the legend first (AEAT's QR
+ * specification v0.5.0, §3), after any practice warning; sources in
  * `docs/compliance/verifactu-findings.md` §14 and the C115 entry in `docs/backlog.md`. The owner's
  * non-fiscal trim renders around that core and is never read by it.
  *
@@ -170,8 +170,8 @@ export function formatReceipt({
   }
 
   // AEAT's QR specification v0.5.0 §3 puts the QR at the start of the invoice, the caption above it
-  // and the legend (art. 20.1.b) directly under it. The practice warning stays above it because it is
-  // not invoice content.
+  // and the legend (art. 20.1.b) directly under it. A practice ticket is not a real invoice, so its
+  // warning stays above the QR block (the C115 entry in `docs/backlog.md`).
   if (result.qr !== "") {
     const matrix = qrModules(result.qr);
     const dots = chooseQrDots(

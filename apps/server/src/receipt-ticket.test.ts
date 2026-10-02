@@ -148,8 +148,8 @@ function drawn(bytes: Uint8Array): string[] {
     .map((c) => c.text ?? "<QR>");
 }
 
-// AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before anything else
-// the invoicing system prints, with «QR tributario:» above it and VERI*FACTU directly under it.
+// AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before the invoice's
+// own content, with «QR tributario:» above it and VERI*FACTU directly under it.
 describe("the QR comes first on an invoice that carries one", () => {
   it.each([PRINTER_58, PRINTER_80])(
     "prints the caption, the QR and the legend before the issuer on $paperWidth",

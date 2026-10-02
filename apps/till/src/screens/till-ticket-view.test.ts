@@ -315,8 +315,8 @@ describe("till-ticket-view", () => {
     expect(text(el)).toContain("VERI*FACTU");
   });
 
-  // AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before anything else
-  // the invoicing system shows, with «QR tributario:» above it and VERI*FACTU directly under it.
+  // AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before the
+  // invoice's own content, with «QR tributario:» above it and VERI*FACTU directly under it.
   describe("the QR comes first on an invoice that carries one", () => {
     /** The ticket's top-level blocks in order, each as its class name, with the QR block spelt out. */
     const blocks = (el: TillTicketView): string[] =>

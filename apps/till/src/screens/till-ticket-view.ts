@@ -461,7 +461,8 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         ${
-          // The practice warning stays above the QR block: it is not invoice content.
+          // A practice ticket is not a real invoice, so its warning stays above the QR block (the
+          // C115 entry in `docs/backlog.md`).
           svg
             ? html`<div class="qr-block">
                 <p class="qr-caption">${QR_CAPTION}</p>
