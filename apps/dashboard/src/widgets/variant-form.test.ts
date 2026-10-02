@@ -135,11 +135,6 @@ it.each([
   }
 });
 
-it("falls back to the plain price label when the product has no unit yet", async () => {
-  const el = await mountForm({ unitLabel: "" });
-  expect(field(el, "unitPrice").label).toBe(t("editor.price"));
-});
-
 it.each([
   { locale: "en-GB", unitLabel: "", label: "Price" },
   { locale: "es-ES", unitLabel: "", label: "Precio" },

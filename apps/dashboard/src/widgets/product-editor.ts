@@ -616,8 +616,7 @@ export class ProductEditor extends LitElement {
     const abbr = this.text(unit.abbreviation);
     return abbr ? `${name} (${abbr})` : name;
   }
-  /** Empty for a product with no unit, which is sold by the each: the price then reads "Price",
-   * never "Price per Each". */
+  /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
   private get unitShortLabel(): string {
     const unitId = this.draft.unitId ?? this.inherited?.unitId ?? null;
     const unit = this.units.find((unit) => unit.id === unitId);
