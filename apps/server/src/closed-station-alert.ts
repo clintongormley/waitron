@@ -2,7 +2,6 @@ import { eq, inArray } from "drizzle-orm";
 import {
   isRefusal,
   NOT_NULL_VIOLATION,
-  TRIGGER_ABORT,
   UNIQUE_VIOLATION,
   workingOrderLines,
   workingOrders,
@@ -20,8 +19,8 @@ export interface Stranded {
   lineIds: readonly string[];
 }
 
-/** Record one release that leaves work at a closed station. An alert refusal cannot fail the
- * release; no logger is available on this path. An open alert on this till absorbs later releases. */
+/** Record one release that leaves work at a closed station. An open alert on this till absorbs
+ * later releases. */
 export async function raiseReleasedAtClosedStation(
   tx: Transaction,
   cfg: Pick<TillConfig, "tillId">,
@@ -60,4 +59,4 @@ export async function raiseReleasedAtClosedStation(
   }
 }
 
-const ALERT_REFUSALS = [...TRIGGER_ABORT, ...UNIQUE_VIOLATION, ...NOT_NULL_VIOLATION];
+const ALERT_REFUSALS = [...UNIQUE_VIOLATION, ...NOT_NULL_VIOLATION];

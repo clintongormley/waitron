@@ -1182,10 +1182,10 @@ someone marks it handled, the next one records again. The wording says so. **Ref
 incidents table carries no trigger (its schema comment, `incidents.ts:14-16`), the dedup conflict is
 absorbed by the targeted clause, and `till_id` is the server's own till row — so, read and not run,
 none of the refusals `raiseDishesNotSent` catches (its catch `dish-not-sent-alert.ts:42-54`, the list
-`ALERT_REFUSALS` `:57`) is expected here. Copy its catch anyway (`isRefusal(error, ALERT_REFUSALS)` →
-swallow), for one reason only: an alert must never fail a release, even though no refusal is
-expected. Log nothing (the release
-paths carry no logger); state that in the function's description. The file must contain no other
+`ALERT_REFUSALS` `:57`) is expected here. Catch only unique and not-null insert refusals; result
+code 1811 alone cannot identify a trigger refusal (`CLAUDE.md` §3). Those listed refusals do not
+fail a release; other failures still propagate. Log
+nothing (the release paths carry no logger). The file must contain no other
 double-quoted dotted literal: `scripts/alert-codes.test.ts` reads every one in a listed file as a
 recorded code (`:84-90`).
 

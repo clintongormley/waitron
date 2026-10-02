@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { incidents, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -91,4 +91,36 @@ it("records one release alert with staff names in line order until the open aler
       params: expect.objectContaining({ station: "Upstairs bar, Fryer", dishes: "Burger, Vino" }),
     }),
   ]);
+});
+
+it("does not mistake an unrelated 1811 refusal for an expected alert constraint", async () => {
+  const venue = await setupPartyVenue(suite.db);
+  const station = await inTx(venue, (tx) =>
+    createStation(tx, venue.cfg, { name: "Upstairs bar", isDefault: true }),
+  );
+  const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
+  const { partyId, tabId } = await seat(venue, tableId);
+  await orderForParty(venue, partyId, ["Burger"], tabId);
+  const [line] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId)),
+  );
+  await suite.db.execute(sql`
+    create trigger refuse_station_alert before insert on incidents
+    when new.code = 'route.released_at_closed_station'
+    begin select raise(abort, 'FOREIGN KEY constraint failed'); end
+  `);
+  try {
+    await expect(
+      inTx(venue, (tx) =>
+        raiseReleasedAtClosedStation(tx, venue.cfg, tabId, new Date(), [
+          { stationId: station.id, stationName: "Upstairs bar", lineIds: [line!.id] },
+        ]),
+      ),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+  } finally {
+    await suite.db.execute(sql`drop trigger refuse_station_alert`);
+  }
 });
