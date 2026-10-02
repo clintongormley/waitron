@@ -304,8 +304,7 @@ export class TillCardGrid extends LitElement {
         ></till-station-screen>`;
       case "table-order":
         // `canSettle` is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
-        // (cash + manual-card tenders; the server fences only the integrated reader, `/api/pay`) — so it
-        // is not passed.
+        // — so it is not passed.
         return html`<till-table-order-screen
           embedded
           .lines=${this.tabLines}

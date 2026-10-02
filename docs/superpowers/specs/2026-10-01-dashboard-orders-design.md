@@ -16,7 +16,8 @@ orders; the dashboard's Sales and takings screen shows totals only (`docs/backlo
 "completed orders cannot be looked up"). Bills a table left without paying (B17, #991) are listed
 only in the counter's held-orders card on the till, which the default phone and tablet layouts do
 not have, and nothing on any screen collects them: the list is read-only
-(`apps/till/src/widgets/unpaid-departures.ts`, its header comment).
+(`apps/till/src/widgets/unpaid-departures.ts`, its header comment). (Update 2026-10-02, B31: a
+handheld whose layout adds a held-orders card now loads and shows the list too.)
 
 The owner, 2026-10-01 ~19:21, on B17's question 2: "really all orders should be visible on the
 dashboard so we can just filter by unpaid". And: once that screen exists, the till's "Left without

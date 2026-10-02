@@ -487,10 +487,6 @@ export class TillTenderPay extends LitElement {
     return this.#renderIdlePay(disabled, this.mode !== "prepay");
   }
 
-  /**
-   * A handheld renders it too: a manual card tender goes to `POST /api/sales`, which the server
-   * does not fence against a handheld — only the INTEGRATED reader (`/api/pay`) is fenced.
-   */
   #renderCardButton(disabled: boolean) {
     return html`
       <wt-button

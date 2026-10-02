@@ -1833,8 +1833,7 @@ describe("handheld sales and device capability gates", () => {
     const sessionPair = await loginOperator(app, cfg, operatorId);
 
     // The `card` tender on `POST /api/sales` is charged on a separate bank terminal the POS never
-    // talks to, so it files the same chained record as cash plus one captured `payments` row. Only
-    // the integrated reader (`POST /api/pay`) is fenced against a handheld.
+    // talks to, so it files the same chained record as cash plus one captured `payments` row.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },

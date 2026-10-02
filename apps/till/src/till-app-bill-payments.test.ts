@@ -2293,7 +2293,7 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(getTabLines.mock.calls.length).toBeGreaterThan(readsAtTake[0]!);
   });
 
-  it("offers a handheld no reader: its card is keyed on a separate terminal", async () => {
+  it("offers no reader to a handheld whose profile lacks integrated card payment: its card is keyed on a separate terminal", async () => {
     const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
       tabs: [
@@ -2320,6 +2320,7 @@ describe("till-app: a bill payment on the card reader", () => {
       getTill: vi.fn().mockResolvedValue({
         ...till,
         canvas: phoneCanvas,
+        capabilities: ["print-receipt"] as CapabilityFlag[],
         cardProvider: "stripe_terminal",
         activeReaders: readers,
         defaultReaderId: readers[0]!.id,
@@ -2434,13 +2435,14 @@ describe("till-app: a bill payment on the card reader", () => {
 
   it("tells a handheld the same as a till when the server refuses the device the reader", async () => {
     const refused = { code: "device.forbidden_action", status: 403, params: { action: "pay" } };
+    // The till has no sentence of its own for this code, so it says the generic one.
+    const says = codeMessage("server.internal");
     const onTill = await takeOnReader(vi.fn().mockRejectedValue(refused));
-    const tillSays = inDialog(onTill, "wt-form-actions")!.error;
-    expect(tillSays).not.toBe("");
+    expect(inDialog(onTill, "wt-form-actions")!.error).toBe(says);
     cleanupWidgets();
 
     const onHandheld = await takeOnHandheldReader(vi.fn().mockRejectedValue(refused));
-    expect(inDialog(onHandheld, "wt-form-actions")!.error).toBe(tillSays);
+    expect(inDialog(onHandheld, "wt-form-actions")!.error).toBe(says);
   });
 });
 

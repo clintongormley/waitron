@@ -223,7 +223,8 @@ type RefreshList = "held" | "station" | "waiting" | "departures";
 type Reread = "read" | "unread" | "gone";
 
 interface RefreshRetry {
-  /** What the write that preceded the failed refresh achieved. */
+  /** What the retry notice says: what the write before the failed refresh achieved, or, when no write
+   * came before it, only that the list could not refresh. */
   messageKey: StringKey;
   failures: number;
   secondsLeft: number;
@@ -1635,15 +1636,13 @@ export class TillApp extends LitElement {
     this.#setScreen(landingFace);
     this.#restoreDestination();
     if (this.#showsCounterLists()) {
+      // Each list says its own failure, so one that fails never stops the others loading.
       const departures = this.#refreshDepartures();
-      try {
-        await this.#refreshHeldOrders();
-        await this.#refreshStationQueue();
-        await this.#refreshWaiting();
-      } finally {
-        await departures;
-      }
-      // Loaded after the counter is shown, and a failure is swallowed, so the roster never blocks a sale.
+      await this.#refreshList("held", "refresh.held");
+      await this.#refreshList("station", "refresh.station");
+      await this.#refreshWaiting();
+      await departures;
+      // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
         this.staff = await this.api.listStaff();
       } catch {

@@ -379,7 +379,7 @@ export class TillBillPayDialog extends LitElement {
    * it from the till's setup. */
   @property({ type: Boolean }) tipsEnabled = true;
   /** The provider of this device's card reader, which a card is charged on; `none` takes a card on
-   * a separate terminal, keyed by hand. A handheld is given none. */
+   * a separate terminal, keyed by hand. */
   @property() cardReader: CardProvider = "none";
   /** The venue's readers a card can be sent to; offered only when there is more than one. */
   @property({ attribute: false }) readers: TillActiveReader[] = [];
