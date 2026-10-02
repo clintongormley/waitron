@@ -1018,16 +1018,7 @@ Edit does. A click elsewhere on the row, or Enter on the row, opens the option's
 while the drag handle, the Default radio and the row menu keep doing their own thing. The extras
 list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
 
-**Clicking a product's row on the Products screen opens it (A205, owner 2026-10-02) — FOLDED INTO A208** (the category tree spec builds it; kept here for the owner's words). The
-owner: _"clicking on a product row should open the edit screen"_. The Products table
-(`apps/dashboard/src/widgets/product-list.ts`) gives `wt-data-table` no `rowClick`, so a product
-opens only from Edit in its row menu; the Modifiers, Units and Orders screens already open a row on
-a click (`wt-data-table`'s row activation). **Wanted:** a click on a product's row, or Enter on it,
-does what Edit in that row's menu does — a variant's row opens that variant, as its own Edit does.
-The drag grip, the dragging of a row onto a folder, the selection checkbox and the row menu keep
-doing their own thing, and a drag that ends where it started opens nothing. Read as: a click on a
-folder's row opens the folder, as its name does today — ask if folder rows were meant to stay as
-they are. LOOK at 1280 and 390, light and dark.
+**Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
 **The dashboard recovers by itself when the server comes back after a restart (A206, owner
 2026-10-02) — DONE (#1052).** Reproduced with the server serving the built dashboard itself, as the box does
@@ -1067,14 +1058,9 @@ locations read fails.
 2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
 the dark banner; the running figure stays visible. Seen at 1280 wide on every screen.
 
-**The Products screen as a category tree (A208, owner 2026-10-02) — OPEN, spec and plan
-approved, queued in lane A.** The owner, on two screenshots: _"this layout is messy, needs tidying"_,
-with folders that open in place, a clearer drag, adds from each category's ⋮ menu and prices that
-show their unit. Spec:
-[2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md).
-Plan: [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
-It builds A205 (a product row's click opens it) and replaces A207 (a blue Add product button in the
-header), which the owner cancelled: the header loses that button.
+**The Products screen as a category tree (A208) — DONE.** Spec
+[2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md);
+plan [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right

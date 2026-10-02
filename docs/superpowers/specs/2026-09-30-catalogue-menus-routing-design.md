@@ -68,6 +68,10 @@ The products screen shows products and folders together.
 
 - **Folder view.** You open a folder and see its subfolders and products. A breadcrumb shows where
   you are. You can add a product or a folder at the current level.
+
+  > 2026-10-02: the folder view became a category tree; see
+  > [2026-10-02-products-category-tree-design.md](2026-10-02-products-category-tree-design.md).
+
 - **Flat view.** A toggle switches between "Folders" and "All products". The flat view lists every
   product with its folder path. It is for sorting by name or price, and for finding products that
   are switched off or missing something. Today's product list already shows every product in one

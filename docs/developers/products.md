@@ -383,7 +383,7 @@ A line sold as a variant has the variant as its `product_id`. It is priced and t
 variant's effective values above, and freezes the parent's names beside the variant's own
 (_What a sold line freezes_, above), so reports can group it under its parent. The filed
 `sale_lines` row names the variant and its parent only as plain values, never as keys. In the kitchen, a product exception naming the parent covers the variant. Otherwise its effective
-category determines the nearest claimed folder. Its course, category, allergens and dietary labels
+category determines the nearest claimed category. Its course, category, allergens and dietary labels
 are its effective values (`effectiveProductColumns`; `packages/venue-service/src/routing.ts`;
 `priceOrderLines`, `fireLines` and `readQueueSubItems`, `apps/server/src/working-order.ts`). The
 till splits a tab line by the unit precision the line
