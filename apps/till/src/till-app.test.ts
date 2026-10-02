@@ -9246,7 +9246,11 @@ describe("a failed list refresh after a successful write", () => {
   });
 
   it("place: the collect stage stands and the queue refresh failure never shows sale.unconfirmed", async () => {
-    const getStationQueue = failingAfterLogin<StationQueue>({ items: [], notices: [] });
+    const getStationQueue = failingAfterLogin<StationQueue>({
+      items: [],
+      notices: [],
+      printersDown: [],
+    });
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
       getStationQueue,
@@ -9279,7 +9283,11 @@ describe("a failed list refresh after a successful write", () => {
   ] as const)(
     "a kitchen queue that cannot be read after an order in a %s zone is paid by %s at the order stage says the sale was recorded",
     async (orderFlow, _method, event, detail) => {
-      const getStationQueue = failingAfterLogin<StationQueue>({ items: [], notices: [] });
+      const getStationQueue = failingAfterLogin<StationQueue>({
+        items: [],
+        notices: [],
+        printersDown: [],
+      });
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
         getStationQueue,
@@ -9356,7 +9364,11 @@ describe("a failed list refresh after a successful write", () => {
   });
 
   it("a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure does not bring the notice back", async () => {
-    const getStationQueue = failingAfterLogin<StationQueue>({ items: [], notices: [] });
+    const getStationQueue = failingAfterLogin<StationQueue>({
+      items: [],
+      notices: [],
+      printersDown: [],
+    });
     const { el } = await mountWithPrepayZone(getStationQueue);
     const c = await toCounterFake(el);
     c.store.addProduct(cafe, "2");

@@ -285,3 +285,34 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+describe.each(["light", "dark"] as const)("printer warning a11y (%s theme)", (theme) => {
+  it.each([false, true])(
+    "has no violations with two printer statuses (device mode: %s)",
+    async (deviceMode) => {
+      const printersDown = [
+        { printerId: "p-1", printerName: "Epson", since: "2026-08-17T18:14:00Z" },
+        { printerId: "p-2", printerName: "Star", since: "2026-08-17T18:18:00Z" },
+      ];
+      const api = deviceMode
+        ? deviceStubApi({
+            getDeviceStation: vi.fn().mockResolvedValue({
+              station: { id: "st-dev", queue: groups, notices: [], printersDown },
+            }),
+          })
+        : stubApi({
+            getStationQueue: vi
+              .fn()
+              .mockResolvedValue({ items: groups, notices: [], printersDown }),
+          });
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api, deviceMode },
+        theme,
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelectorAll("[data-printer-down][role=status]")).toHaveLength(2);
+      await expectNoA11yViolations(host);
+    },
+  );
+});

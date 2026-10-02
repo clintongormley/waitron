@@ -136,6 +136,8 @@ export const en = {
   "station.elsewhere": "Also on this order (not for this station)",
   "station.elsewhere_held": "On hold",
   "station.print_problem": "Printing problem",
+  "station.printer_down":
+    "Printer {name} has printed nothing since something sent to it at {time} got stuck. Tickets are still shown here; tell a manager.",
   "station.table_changed_named": "{table} changed.",
   "station.table_changed_unnamed": "A table changed.",
   "station.table_changed": "The screen has been refreshed: check it and press again.",
@@ -1000,6 +1002,8 @@ export const es: Record<StringKey, string> = {
   "station.elsewhere": "También en este pedido (no para esta estación)",
   "station.elsewhere_held": "En espera",
   "station.print_problem": "Problema de impresión",
+  "station.printer_down":
+    "La impresora {name} no ha impreso nada desde que se atascó algo que se le envió a las {time}. Las comandas siguen apareciendo aquí; avisa a un encargado.",
   "station.table_changed_named": "{table} ha cambiado.",
   "station.table_changed_unnamed": "Una mesa ha cambiado.",
   "station.table_changed": "La pantalla se ha actualizado: revísala y vuelve a pulsar.",

@@ -1260,8 +1260,16 @@ export interface KitchenNotice {
   createdAt: string;
 }
 
-/** `GET /api/stations/:id/queue` — the station's work, oldest first, and its unacknowledged notices. */
+/** A station printer whose oldest outstanding print has blocked its output. */
+export interface StationPrinterDown {
+  printerId: string;
+  printerName: string;
+  since: string;
+}
+
+/** `GET /api/stations/:id/queue` — work, unacknowledged notices and down printers. */
 export interface StationQueue {
+  printersDown: StationPrinterDown[];
   items: StationQueueGroup[];
   notices: KitchenNotice[];
 }
@@ -1333,7 +1341,12 @@ export interface DeviceIdentity {
  * device cookie names the station, so there is no id to pass.
  */
 export interface DeviceStation {
-  station: { id: string; queue: StationQueueGroup[]; notices: KitchenNotice[] };
+  station: {
+    id: string;
+    queue: StationQueueGroup[];
+    notices: KitchenNotice[];
+    printersDown: StationPrinterDown[];
+  };
 }
 
 /**
