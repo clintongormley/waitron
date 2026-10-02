@@ -28,6 +28,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/add-content-language.js";
+import { receiptLanguageWarning } from "../widgets/receipt-language.js";
 
 const GAP_KINDS: readonly TranslationGapKind[] = [
   "product",
@@ -188,6 +189,7 @@ export class ContentLanguagesScreen extends LitElement {
   @state() private saveError = "";
   @state() private gaps: LanguageTranslationGaps[] | null = null;
   @state() private gapsFailed = false;
+  @state() private receiptLanguage: string | null = null;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -202,6 +204,14 @@ export class ContentLanguagesScreen extends LitElement {
       this.gapsFailed = true;
     },
   );
+  /** Only for the receipt-language warning, so a failed read hides the warning and nothing else. */
+  readonly #receiptQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.receiptLanguage = null;
+    },
+  );
   /** How many configurations the server has delivered, so a save can tell whether one arrived while
    * it was in flight. */
   #reads = 0;
@@ -211,6 +221,17 @@ export class ContentLanguagesScreen extends LitElement {
     super.connectedCallback();
     void this.#load();
     void this.#loadGaps();
+    void this.#loadReceiptLanguage();
+  }
+
+  async #loadReceiptLanguage(): Promise<void> {
+    try {
+      await this.#receiptQueries.watch("getReceiptLanguage", [], (value) => {
+        this.receiptLanguage = value.language;
+      });
+    } catch {
+      this.receiptLanguage = null;
+    }
   }
 
   async #loadGaps(): Promise<void> {
@@ -304,6 +325,7 @@ export class ContentLanguagesScreen extends LitElement {
         ? html`<span class="field-meta">${t("content_languages.required")}</span>`
         : nothing;
     return html`${this.#renderNotice(config, rules)}
+      ${this.receiptLanguage === null ? nothing : receiptLanguageWarning(this.receiptLanguage, config)}
       <wt-card>
         <ul data-test="languages" aria-label=${t("content_languages.enabled")}>
           <li class="action-row">

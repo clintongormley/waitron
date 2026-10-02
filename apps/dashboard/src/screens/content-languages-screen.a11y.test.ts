@@ -28,6 +28,11 @@ function stubApi(
     getContentLanguageRules: vi.fn().mockResolvedValue(rules),
     updateContentLanguages: vi.fn(save),
     getContentTranslationGaps: vi.fn().mockResolvedValue(gaps),
+    getReceiptLanguage: vi.fn().mockResolvedValue({
+      language: "es-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: null,
+    }),
   } as unknown as DashboardApi;
 }
 
@@ -50,6 +55,23 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the receipt-language warning accessibly", async () => {
+    const api = stubApi(LOADED);
+    vi.mocked(api.getReceiptLanguage).mockResolvedValue({
+      language: "gl-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: null,
+    });
+    const { el, host } = await mountWidget<ContentLanguagesScreen>(
+      "dashboard-content-languages-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=receipt-language-warning]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
