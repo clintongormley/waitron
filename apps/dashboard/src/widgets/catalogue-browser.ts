@@ -420,14 +420,11 @@ export class CatalogueBrowser extends LitElement {
     const draft = this.nameDraft;
     if (!draft) return;
     this.nameError = "";
-    const parentId =
-      draft.kind === "create"
-        ? draft.parentId
-        : (this.categories.find(({ id }) => id === draft.categoryId)?.parentId ?? null);
+    const parentId = draft.kind === "create" ? draft.parentId : null;
     try {
       if (draft.kind === "create")
         await this.api.createCategory({ name: event.detail.name, parentId });
-      else await this.api.updateCategory(draft.categoryId, { name: event.detail.name, parentId });
+      else await this.api.updateCategory(draft.categoryId, { name: event.detail.name });
       if (this.nameDraft === draft) this.nameDraft = null;
     } catch (error) {
       const message = Object.values(categoryRefusalErrors(error, parentId))[0]!;

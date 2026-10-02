@@ -885,8 +885,28 @@ it("renames a top-level category in place without adopting the addressed one", a
   expect(box.value).toBe("Drinks");
   await userEvent.keyboard("Beverages{Enter}");
   await vi.waitFor(() =>
-    expect(el.api.updateCategory).toHaveBeenCalledWith("d", { name: "Beverages", parentId: null }),
+    expect(el.api.updateCategory).toHaveBeenCalledWith("d", { name: "Beverages" }),
   );
+});
+it("a rename sends the name only, so renaming a category just dragged elsewhere keeps the move", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const target = await nameCell(el, "folder:f");
+  drag(await nameCell(el, "folder:b"), target);
+  target.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["b"] },
+      "f",
+    ),
+  );
+  await menuAction(el, "rename-b");
+  await nameBox(el);
+  await userEvent.keyboard("Beer{Enter}");
+  await vi.waitFor(() => expect(el.api.updateCategory).toHaveBeenCalledOnce());
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toEqual([["b", { name: "Beer" }]]);
 });
 it("keeps a refused name in its box with the refusal under it, and Enter tries again", async () => {
   const el = await mountBrowser();
@@ -1502,10 +1522,7 @@ it("saves a second name, and its box answers Enter, Esc and leaving it, while an
   await nameBox(el);
   await userEvent.keyboard("Fresh{Enter}");
   await boxGone();
-  expect(el.api.updateCategory).toHaveBeenCalledExactlyOnceWith("f", {
-    name: "Fresh",
-    parentId: null,
-  });
+  expect(el.api.updateCategory).toHaveBeenCalledExactlyOnceWith("f", { name: "Fresh" });
   await menuAction(el, "add-category-root");
   await nameBox(el);
   await userEvent.keyboard("Tea{Tab}");
