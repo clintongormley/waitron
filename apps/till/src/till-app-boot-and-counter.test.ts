@@ -1125,11 +1125,11 @@ describe("till-app shell navigation", () => {
 
 /** The bottom edges of the till, the screen it shows, and that screen's language button. */
 function bottoms(el: TillApp, screen: Element) {
-  const footer = screen.shadowRoot!.querySelector("wt-language-footer")!;
+  const chooser = screen.shadowRoot!.querySelector("wt-language-chooser")!;
   return {
     app: el.getBoundingClientRect().bottom,
     screen: screen.getBoundingClientRect().bottom,
-    footer: footer.getBoundingClientRect().bottom,
+    chooser: chooser.getBoundingClientRect().bottom,
   };
 }
 
@@ -1174,7 +1174,7 @@ describe("till-app fits the page it is given", () => {
     const edges = bottoms(el, shell(el)!);
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
-    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+    expect(edges.chooser).toBeLessThanOrEqual(pageBottom);
   });
 
   it("keeps the whole page within the screen, its padding included, while a refusal banner shows", async () => {
@@ -1226,7 +1226,7 @@ describe("till-app fits the page it is given", () => {
     const edges = bottoms(el, lock(el)!);
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
-    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+    expect(edges.chooser).toBeLessThanOrEqual(pageBottom);
   });
 
   it("keeps the join screen's language button on the page", async () => {
@@ -1241,7 +1241,7 @@ describe("till-app fits the page it is given", () => {
     const edges = bottoms(el, join);
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
-    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+    expect(edges.chooser).toBeLessThanOrEqual(pageBottom);
   });
 });
 

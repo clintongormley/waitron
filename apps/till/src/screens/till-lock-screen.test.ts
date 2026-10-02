@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
@@ -288,18 +288,33 @@ describe("till-lock-screen", () => {
   it("renders the language chooser in the roster view", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
   });
 
-  it("puts the shared language footer after sign-in content", async () => {
+  it("puts the language chooser at the top right on its own, above the sign-in content", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
-    const footer = el.shadowRoot!.querySelector("wt-language-footer")!;
-    expect(footer).not.toBeNull();
-    expect(footer.previousElementSibling).toBe(el.shadowRoot!.querySelector(".screen"));
+    expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+    const own = chooser.getBoundingClientRect();
+    const screen = el.getBoundingClientRect();
+    const content = el.shadowRoot!.querySelector(".screen")!.getBoundingClientRect();
+    expect(own.bottom).toBeLessThanOrEqual(content.top);
+    expect(own.top - screen.top).toBeLessThanOrEqual(32);
+    expect(screen.right - own.right).toBeLessThanOrEqual(32);
+    expect(own.left).toBeGreaterThan(screen.left + screen.width / 2);
   });
 
-  it("puts server status above the language footer when the till cannot reach its primary", async () => {
+  it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
+    expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
+    expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
+  });
+
+  it("keeps server status below the sign-in content, with the language chooser above both", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
       serverStatuses: [
@@ -307,19 +322,22 @@ describe("till-lock-screen", () => {
       ],
     });
     await flush(el);
-    const footer = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     const status = el.shadowRoot!.querySelector("[data-server-status]")!;
-    expect(footer.previousElementSibling).toBe(status);
-    expect(status.previousElementSibling).toBe(el.shadowRoot!.querySelector(".screen"));
+    const content = el.shadowRoot!.querySelector(".screen")!;
+    expect(chooser.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      content.getBoundingClientRect().top,
+    );
+    expect(status.previousElementSibling).toBe(content);
   });
 
-  it("updates its footer when the till locale changes while sign-in stays open", async () => {
+  it("updates its chooser when the till locale changes while sign-in stays open", async () => {
     setLocale("es-ES");
     try {
       const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
       setLocale("en-GB");
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("wt-language-footer")!.getAttribute("active")).toBe(
+      expect(el.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active")).toBe(
         "en-GB",
       );
     } finally {
@@ -332,7 +350,7 @@ describe("till-lock-screen", () => {
     await flush(el);
     const spy = vi.fn();
     el.addEventListener("wt-locale-selected", (e) => spy((e as CustomEvent).detail));
-    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     chooser.dispatchEvent(
       new CustomEvent("wt-locale-selected", {
         detail: { code: "en-GB" },
@@ -347,7 +365,7 @@ describe("till-lock-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
-    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
     await vi.waitFor(() => {
       const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
@@ -382,10 +400,10 @@ describe("till-lock-screen", () => {
   it("keeps the language chooser available in PIN mode", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
   });
 
   it("round-trips a leading-zero PIN (e.g. the default 0000) to login unmangled", async () => {

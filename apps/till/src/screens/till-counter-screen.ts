@@ -3,11 +3,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { type WtCombobox, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-language-footer.js";
+import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { type DietPredicate, hasDietData } from "../menu-filter.js";
 import type { TabDef } from "../layout.js";
+import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 import "../widgets/card-grid.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
@@ -46,6 +47,7 @@ export class TillCounterScreen extends LitElement {
 
   static override styles = [
     baseStyles,
+    languageChooserStyles,
     css`
       :host {
         display: block;
@@ -55,14 +57,6 @@ export class TillCounterScreen extends LitElement {
         display: flex;
         flex-direction: column;
         min-height: 100%;
-      }
-
-      .screen:not(.embedded) {
-        min-height: 100dvh;
-      }
-
-      wt-language-footer {
-        padding-inline: var(--wt-space-4);
       }
 
       .header {
@@ -94,7 +88,6 @@ export class TillCounterScreen extends LitElement {
       .body.grid-body {
         display: flex;
         flex-direction: column;
-        flex: 1;
         gap: var(--wt-space-3);
         padding: var(--wt-space-4);
       }
@@ -302,7 +295,7 @@ export class TillCounterScreen extends LitElement {
 
   override render() {
     return html`
-      <div class=${this.embedded ? "screen embedded" : "screen"}>
+      <div class="screen">
         ${
           this.embedded
             ? nothing
@@ -336,6 +329,10 @@ export class TillCounterScreen extends LitElement {
                   >
                     ${t("schedule.open")}
                   </wt-button>
+                  <wt-language-chooser
+                    active=${currentLocale()}
+                    .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+                  ></wt-language-chooser>
                   <span class="operator">${this.operatorName}</span>
                   <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
                     ${t("action.logout")}
@@ -353,14 +350,6 @@ export class TillCounterScreen extends LitElement {
                 @close-allergens=${() => this.#closeAllergens()}
               ></till-allergen-screen>`
             : this.#gridBody()
-        }
-        ${
-          this.embedded
-            ? nothing
-            : html`<wt-language-footer
-                active=${currentLocale()}
-                .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-              ></wt-language-footer>`
         }
       </div>
     `;

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale, t } from "../i18n/t.js";
+import { chooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillEnrolScreen } from "./till-enrol-screen.js";
 import type { TillApi } from "../api/client.js";
 
@@ -466,14 +466,29 @@ it("does not emit `enrolled` for an approval that lands after teardown", async (
 it("renders its own language chooser, so a fresh device can be set up in Spanish", async () => {
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
   await flush(el);
-  expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
 });
 
-it("puts the shared language footer after the join form in page flow", async () => {
+it("puts the language chooser at the top right on its own, above the join form", async () => {
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
   await flush(el);
-  const form = el.shadowRoot!.querySelector(".screen")!;
-  expect(form.nextElementSibling?.localName).toBe("wt-language-footer");
+  expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
+  const own = el.shadowRoot!.querySelector("wt-language-chooser")!.getBoundingClientRect();
+  const screen = el.getBoundingClientRect();
+  const form = el.shadowRoot!.querySelector(".screen")!.getBoundingClientRect();
+  expect(own.bottom).toBeLessThanOrEqual(form.top);
+  expect(own.top - screen.top).toBeLessThanOrEqual(32);
+  expect(screen.right - own.right).toBeLessThanOrEqual(32);
+  expect(own.left).toBeGreaterThan(screen.left + screen.width / 2);
+});
+
+it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
+  setLocale("es-ES");
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
+  await flush(el);
+  const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
+  expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
+  expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
 });
 
 it("feeds its language chooser from the venue's locale list", async () => {
@@ -487,7 +502,7 @@ it("feeds its language chooser from the venue's locale list", async () => {
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi({ getLocales }),
   });
-  const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
+  const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
   chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
   await vi.waitFor(() => {
     const menu = chooser.shadowRoot!.querySelector('[role="menu"]');

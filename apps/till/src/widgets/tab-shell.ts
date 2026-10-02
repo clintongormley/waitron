@@ -5,7 +5,8 @@ import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TabDef } from "../layout.js";
-import "@waitron/ui/src/components/wt-language-footer.js";
+import "@waitron/ui/src/components/wt-language-chooser.js";
+import { languageChooserStyles } from "./language-chooser-styles.js";
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
@@ -26,6 +27,7 @@ export class TillTabShell extends LitElement {
 
   static override styles = [
     baseStyles,
+    languageChooserStyles,
     css`
       :host {
         display: flex;
@@ -105,8 +107,9 @@ export class TillTabShell extends LitElement {
         overflow: auto;
       }
 
-      wt-language-footer {
-        padding-inline: var(--wt-space-4);
+      /* Stands in for the bar, so the chooser sits where the bar's trailing end would put it. */
+      .language-corner {
+        padding: var(--wt-space-3) var(--wt-space-4);
       }
 
       .drill {
@@ -133,6 +136,15 @@ export class TillTabShell extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  #chooser(): TemplateResult | typeof nothing {
+    return this.loadLocales !== undefined
+      ? html`<wt-language-chooser
+          active=${currentLocale()}
+          .loadLocales=${this.loadLocales}
+        ></wt-language-chooser>`
+      : nothing;
+  }
+
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
     // Mirrors `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body rendered.
@@ -143,7 +155,9 @@ export class TillTabShell extends LitElement {
       <div class="shell">
         ${
           this.kiosk
-            ? nothing
+            ? this.loadLocales !== undefined
+              ? html`<div class="language-corner">${this.#chooser()}</div>`
+              : nothing
             : html`
                 <header class="head">
                   <span class="brand">${BRAND}</span>
@@ -209,6 +223,7 @@ export class TillTabShell extends LitElement {
                       @click=${() => this.#emit("open-allergens")}
                       >${t("allergens.open")}</wt-button
                     >
+                    ${this.#chooser()}
                     <span class="operator">${this.operatorName}</span>
                     <wt-button
                       class="logout"
@@ -228,14 +243,6 @@ export class TillTabShell extends LitElement {
             <slot name="drill" @slotchange=${() => this.requestUpdate()}></slot>
           </div>
         </div>
-        ${
-          this.loadLocales !== undefined
-            ? html`<wt-language-footer
-                active=${currentLocale()}
-                .loadLocales=${this.loadLocales}
-              ></wt-language-footer>`
-            : nothing
-        }
       </div>
     `;
   }
