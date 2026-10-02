@@ -5,6 +5,7 @@ export class QueryController implements ReactiveController {
   #slots = new Map<string, () => void>();
   #failing = new Set<string>();
   #lastError: unknown = undefined;
+  #failures = 0;
 
   /** `recovered` is called once every slot whose failure reached `error` has applied a value again,
    * with the last error passed to `error`, so the view can clear the message it showed for it. */
@@ -38,6 +39,7 @@ export class QueryController implements ReactiveController {
         if (active) {
           this.#failing.add(slot);
           this.#lastError = error;
+          this.#failures += 1;
           this.error(error);
         }
         if (initial && active) rejectInitial(error);
@@ -46,13 +48,14 @@ export class QueryController implements ReactiveController {
       };
       const accept = async (value: T): Promise<void> => {
         if (active) {
+          const failures = this.#failures;
           try {
             await apply(value);
           } catch (error) {
             reject(error);
             return;
           }
-          if (this.#failing.delete(slot) && this.#failing.size === 0)
+          if (failures === this.#failures && this.#failing.delete(slot) && this.#failing.size === 0)
             this.recovered?.(this.#lastError);
         }
         initial = false;

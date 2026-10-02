@@ -335,6 +335,41 @@ describe("query controller recovery", () => {
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
   });
 
+  it("does not count an apply that finished after a newer read failed as a recovery", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    let next: "fail" | "ok" | "slow" = "fail";
+    const read = vi.fn(async () => {
+      if (next === "fail") throw outage;
+      return next;
+    });
+    let finishApply!: () => void;
+    const apply = vi.fn((value: string) =>
+      value === "slow"
+        ? new Promise<void>((resolve) => {
+            finishApply = resolve;
+          })
+        : undefined,
+    );
+    await expect(
+      controller.watch("jobs", { key: "jobs", dependencies: [], read }, apply),
+    ).rejects.toEqual(outage);
+    next = "slow";
+    data.refresh();
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith("slow"));
+    next = "fail";
+    data.refresh();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finishApply();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(recovered).not.toHaveBeenCalled();
+    next = "ok";
+    data.refresh();
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+  });
+
   it("reports the most recent failure it showed the view", async () => {
     const data = new LiveData();
     const recovered = vi.fn();
