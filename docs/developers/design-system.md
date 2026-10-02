@@ -269,8 +269,7 @@ still takes the body's whole width.
 
 A screen that styles its own native controls, or writes a field's label outside its select, reads
 the same variable on the element that wraps each field, so the label text, the control and the
-field's error stop together: the profile screen's `.select-field` (the Language label, select and
-error in the edit details modal), the adjustments reasons screen's `.select-field` (each role
+field's error stop together: the adjustments reasons screen's `.select-field` (each role
 select with its `<label for>` and error, in the reason editor), every `label` in the venue operations
 screen's editor modals (each holds one field's text and control, and its error when it has one), and the
 `.error` line under the content languages Add language dialog's select, whose label and select take
@@ -1119,8 +1118,9 @@ of what the header shows, and outside a search the header's `aria-expanded` and 
 arriving at another page in it opens it again. A group opened on arrival stays open after you leave
 it, as one opened by hand does.
 
-A search box sits at the top of the sidebar, above the groups: a native `<input type="search">`
-named `nav-search`, whose accessible name and placeholder are both **Search pages**. A staff session
+A search box sits at the top of the sidebar, above the groups: a `wt-input type="search"` with
+`hide-label`, named `nav-search`, whose hidden label (its accessible name) and placeholder are both
+**Search pages**. A staff session
 has no sidebar, so it has no search either. While the box holds a term (spaces trimmed), the nav
 shows only the pages whose label in the current language contains it, ignoring case and accents
 ("categorias" finds "Categorías"), plus every page of a group whose header contains it. The search
