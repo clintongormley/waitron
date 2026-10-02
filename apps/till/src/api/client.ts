@@ -828,6 +828,8 @@ export interface TillSaleResult {
   /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
   payments?: BillTenderLine[];
   qr: string;
+  /** The fiscal backend's words around the QR; present only beside a non-empty `qr`. */
+  qrText?: { caption: string; legend: string };
   /** The language the sale was filed in. */
   locale?: string;
 }
@@ -1120,6 +1122,7 @@ export interface PlaceOrderResult {
   issuedAt?: string;
   total?: string;
   qr?: string;
+  qrText?: { caption: string; legend: string };
   vatBreakdown?: VatBreakdownEntry[];
 }
 

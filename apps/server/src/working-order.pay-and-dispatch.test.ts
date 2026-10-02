@@ -778,6 +778,7 @@ describe("payWorkingOrder", () => {
     expect(first.total).toBe("5.50");
     expect(first.vatBreakdown).toEqual([{ rate: "21.00", base: "4.55", tax: "0.95" }]);
     expect(first.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
+    expect(first.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
     // The FILED line list: café×1 (gross 1.50) + agua×2 (gross 4.00). Σ(gross) == 5.50.
     expect(first.lines).toEqual([
       {
@@ -814,6 +815,7 @@ describe("payWorkingOrder", () => {
     expect(second.tender).toEqual(first.tender);
     expect(second.qr).toBe(first.qr);
     expect(second.qr.length).toBeGreaterThan(0);
+    expect(second.qrText).toEqual(first.qrText);
 
     // No double filing: STILL exactly one sale + one registro after the retry.
     expect(await saleCount(id)).toBe(1);
@@ -1605,6 +1607,26 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await registroCount(id)).toBe(1); // STILL one registro
     expect(await outstanding()).toEqual([]); // settled → no longer owed
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
+  });
+
+  it("Mode I: the placed result carries the backend's words beside its QR", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+
+    const placed = await placeOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+      cfg.tillId,
+    );
+    expect(placed.qr).not.toBe("");
+    expect(placed.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
   });
 
   it("Mode I: a covered cash over-tender at collect settles at the total and hands back change", async () => {

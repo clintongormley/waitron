@@ -1439,6 +1439,7 @@ async function bootServer(
         pairingMode,
         venueLocale,
         listIpv4: boxAddresses,
+        receiptQrText: tillBackend.receiptQrText,
       },
       log,
     );
@@ -1461,7 +1462,7 @@ async function bootServer(
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true);
   mountLocationSettingsApi(app, { db, cfg: till, fiscal: enabledFiscal }, log);
-  mountReceiptPreviewApi(app, { db, cfg: till }, log);
+  mountReceiptPreviewApi(app, { db, cfg: till, receiptQrText: tillBackend.receiptQrText }, log);
   const managementApi = mountManagementApi(
     app,
     {

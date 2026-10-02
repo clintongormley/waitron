@@ -16,7 +16,7 @@ describe("qrSvg", () => {
     expect(svg).toMatch(/<path[^>]*\bd="M/);
   });
 
-  it("returns an empty string for an empty payload (the ticket still prints the legend)", () => {
+  it("returns an empty string for an empty payload", () => {
     expect(qrSvg("")).toBe("");
   });
 

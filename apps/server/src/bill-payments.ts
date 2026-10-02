@@ -67,6 +67,7 @@ import {
   readBillTenderLines,
   readSettledTicket,
   readTenderBlock,
+  receiptQr,
 } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { fingerprint } from "./parties.js";
@@ -753,7 +754,7 @@ async function issueWhenFullyPaid(
     ...(await receiptLines(tx, workingOrderId, priced, stored.identities)),
     tender: await readTenderBlock(tx, cfg, saleId, workingOrderId),
     payments: await readBillTenderLines(tx, saleId),
-    qr: fiscal.verificationUrl ?? "",
+    ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
   await enqueueSaleReceipt(tx, cfg, ticket, saleId);
   return { invoice: ticket, total };

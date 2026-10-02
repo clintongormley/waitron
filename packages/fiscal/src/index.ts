@@ -26,6 +26,7 @@ export type {
   IntegrityIssue,
   IntegrityReport,
   NodeRegistration,
+  ReceiptQrText,
   ReconcileMismatch,
   ReconcileResult,
   SaleForFiscalRecord,

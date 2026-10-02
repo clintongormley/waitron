@@ -386,8 +386,8 @@ before selecting native centre alignment. The owner's 17:40:44 photograph on 202
 body and QR shifted right and clipped on a 58mm roll; that payload carried no print-area commands.
 Whether the printer's own width setting also contributed was not tested. Since 2026-10-01 (C107)
 text lines are drawn into full-width pictures with their centring already in them, so the receipt's
-one native centre command is the one sent before its QR picture and legend
-(`apps/server/src/receipt-ticket.ts`).
+one native centre command is the one sent before its QR block (caption, QR picture, legend); a
+receipt with no QR sends none (`apps/server/src/receipt-ticket.ts`).
 `apps/server/src/receipt-ticket.test.ts` pins the print area at the start of the job, 360 dots in its
 58mm case and 512 in its 80mm one, and that every line's picture is that wide;
 `apps/server/src/print-job-preview.test.ts` pins only that the dashboard preview consumes both

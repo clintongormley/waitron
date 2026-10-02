@@ -51,7 +51,7 @@ const PRINTER_58: EscSetting = {
  * and self-consistent — Σ(line.gross) === total, Σ(base + tax) === total, and total + change === the
  * cash tendered — so every printed amount can be asserted by its digit portion.
  */
-const FILED_SALE: TillSaleResult = {
+const FILED_WITHOUT_TEXT: TillSaleResult = {
   locale: "es-ES",
   orderLabel: "Mesa 6",
   orderNumber: 41,
@@ -78,13 +78,21 @@ const FILED_SALE: TillSaleResult = {
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=17-08-2026&importe=20.90",
 };
 
+const FILED_SALE: TillSaleResult = {
+  ...FILED_WITHOUT_TEXT,
+  qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
+};
+
+/** The same sale from a regime that minted no verification link and supplies no words for one. */
+const NO_QR_SALE: TillSaleResult = { ...FILED_WITHOUT_TEXT, qr: "" };
+
 const ISSUER: ReceiptIssuer = { venueName: "Charcutería La Buena", nif: "B12345678" };
 const TRIM: ReceiptTrim = {
   headerSubtitle: "Calle Mayor 1, Madrid",
   footerMessage: "¡Gracias por su visita!",
 };
 
-it("puts the QR legend immediately after the raster and a blank line before the footer", () => {
+it("puts the QR legend immediately after the raster and a blank line after it", () => {
   const bytes = formatReceipt({
     result: FILED_SALE,
     issuer: ISSUER,
@@ -121,7 +129,7 @@ it.each([PRINTER_80, PRINTER_58])(
   },
 );
 
-it("prints no «QR tributario:» label when no QR is printed, and still prints the legend", () => {
+it("prints neither the caption nor the legend when no QR is printed, even if the words are given", () => {
   const s = decodeTicket(
     formatReceipt({
       result: { ...FILED_SALE, qr: "" },
@@ -132,7 +140,161 @@ it("prints no «QR tributario:» label when no QR is printed, and still prints t
     }),
   );
   expect(s).not.toContain("QR tributario");
-  expect(s).toContain("VERI*FACTU");
+  expect(s).not.toContain("VERI*FACTU");
+});
+
+it("prints the caption and the legend the sale carries, not words of its own", () => {
+  const lines = drawn(
+    formatReceipt({
+      result: { ...FILED_SALE, qrText: { caption: "CAP-X", legend: "LEG-Y" } },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    }),
+  );
+  expect(lines.slice(0, 4)).toEqual([
+    centred(PRINTER_80, "CAP-X"),
+    "<QR>",
+    centred(PRINTER_80, "LEG-Y"),
+    "",
+  ]);
+  expect(lines.join("\n")).not.toContain("VERI*FACTU");
+  expect(lines.join("\n")).not.toContain("QR tributario");
+});
+
+it.each([PRINTER_58, PRINTER_80])(
+  "wraps a caption and a legend wider than the paper on $paperWidth, losing no word",
+  (printer) => {
+    const caption = "Alpha bravo charlie delta echo foxtrot golf hotel india juliet";
+    const legend = "Kilo lima mike november oscar papa quebec romeo sierra tango";
+    const lines = drawn(
+      formatReceipt({
+        result: { ...FILED_SALE, qrText: { caption, legend } },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+      }),
+    );
+    const qrAt = lines.indexOf("<QR>");
+    const columns = columnsFor(printer.paperWidth);
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    const words = (from: string[]): string[] => from.join(" ").trim().split(/\s+/);
+    expect(words(lines.slice(0, qrAt))).toEqual(caption.split(" "));
+    const blankAfterLegend = lines.indexOf("", qrAt);
+    expect(words(lines.slice(qrAt + 1, blankAfterLegend))).toEqual(legend.split(" "));
+    for (const line of [...lines.slice(0, qrAt), ...lines.slice(qrAt + 1, blankAfterLegend)]) {
+      expect(line).toBe(centred(printer, line.trim()));
+    }
+  },
+);
+
+it("prints a QR the regime gives no words for on its own, before the issuer", () => {
+  const lines = drawn(
+    formatReceipt({
+      result: { ...FILED_WITHOUT_TEXT, qr: FILED_SALE.qr },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    }),
+  );
+  expect(lines.slice(0, 3)).toEqual(["<QR>", "", ISSUER.venueName]);
+});
+
+/** A centred line on `printer`'s paper, padded as the receipt pads it. */
+function centred(printer: EscSetting, s: string): string {
+  const { columns } = textGrid(printer.paperWidth, printer.resolution);
+  return `${" ".repeat(Math.floor((columns - s.length) / 2))}${s}`;
+}
+
+/** The receipt's images in order: each drawn line of text, and the QR code as `"<QR>"`. */
+function drawn(bytes: Uint8Array): string[] {
+  return printedCommands(bytes)
+    .filter((c) => c.name === "GS v 0")
+    .map((c) => c.text ?? "<QR>");
+}
+
+// AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before the invoice's
+// own content, with «QR tributario:» above it and VERI*FACTU directly under it.
+describe("the QR comes first on an invoice that carries one", () => {
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints the caption, the QR and the legend before the issuer on $paperWidth",
+    (printer) => {
+      const bytes = formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+      });
+      expect(drawn(bytes).slice(0, 7)).toEqual([
+        centred(printer, "QR tributario:"),
+        "<QR>",
+        centred(printer, "VERI*FACTU"),
+        "",
+        ISSUER.venueName,
+        TRIM.headerSubtitle!,
+        `NIF: ${ISSUER.nif}`,
+      ]);
+    },
+  );
+
+  it("prints nothing of the QR block after the tender: a blank line, then the footer", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+    const change = lines.indexOf("Cambio 9,10 €");
+    expect(change).toBeGreaterThan(0);
+    expect(lines.slice(change + 1)).toEqual(["", TRIM.footerMessage!, ""]);
+  });
+
+  it("keeps the practice warning above the QR block on a simulated ticket, and at the tear-off end", () => {
+    const lines = drawn(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+        simulated: true,
+      }),
+    );
+    expect(lines.slice(0, 7)).toEqual([
+      "PRUEBA - SIN COBRO REAL",
+      "",
+      centred(PRINTER_80, "QR tributario:"),
+      "<QR>",
+      centred(PRINTER_80, "VERI*FACTU"),
+      "",
+      ISSUER.venueName,
+    ]);
+    expect(lines.at(-1)).toBe("PRUEBA - SIN COBRO REAL");
+  });
+
+  it("prints a sale with no QR issuer-first, and no legend anywhere: the footer follows the tender", () => {
+    const lines = drawn(
+      formatReceipt({
+        result: NO_QR_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(lines[0]).toBe(ISSUER.venueName);
+    const change = lines.findIndex((line) => line.startsWith("Cambio"));
+    expect(change).toBeGreaterThan(0);
+    expect(lines.slice(change + 1)).toEqual(["", TRIM.footerMessage!]);
+    expect(lines.join("\n")).not.toContain("VERI*FACTU");
+  });
 });
 
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
@@ -255,7 +417,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       // AEAT's caption above the QR (its QR specification v0.5.0, §3).
       expect(s).toContain("QR tributario:");
 
-      // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
+      // The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b).
       expect(s).toContain("VERI*FACTU");
 
       expect(s).toContain("12,10"); // line 1 gross
@@ -293,6 +455,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
     const order = [
+      "VERI*FACTU",
       ISSUER.venueName,
       TRIM.headerSubtitle!,
       `NIF: ${ISSUER.nif}`,
@@ -302,7 +465,6 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       "Base 21%",
       "TOTAL",
       "Efectivo",
-      "VERI*FACTU",
       TRIM.footerMessage!,
     ];
     const positions = order.map((token) => s.indexOf(token));
@@ -358,9 +520,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(s).toContain(`NIF: ${ISSUER.nif}`);
   });
 
-  it("prints no QR command when the regime minted none, but still prints the legend", () => {
+  it("prints no QR command and no legend when the regime minted no QR", () => {
     const bytes = formatReceipt({
-      result: { ...FILED_SALE, qr: "" },
+      result: NO_QR_SALE,
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
@@ -370,8 +532,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     const commands = printedCommands(bytes);
     expect(commands.filter((c) => c.name === "GS v 0" && c.text === undefined)).toEqual([]);
     expect(commands.map((c) => c.name)).not.toContain("GS ( k");
-    // ...but the legend is unconditional in Veri*Factu mode (art. 20.1.b).
-    expect(decodeTicket(bytes)).toContain("VERI*FACTU");
+    expect(decodeTicket(bytes)).not.toContain("VERI*FACTU");
   });
 
   it("resolves a line name to another description when the invoice locale is missing, and to empty for an empty map", () => {
@@ -480,6 +641,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       ],
       tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
+      qrText: FILED_SALE.qrText,
     };
     const s = decodeTicket(
       formatReceipt({
@@ -540,6 +702,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       ],
       tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
+      qrText: FILED_SALE.qrText,
     };
     const s = decodeTicket(
       formatReceipt({
@@ -1126,11 +1289,9 @@ function printedCents(line: string): number {
  */
 function expectPaymentRowsToAddUpToTotal(printed: string[]): void {
   const start = printed.findIndex((line) => line.startsWith("TOTAL"));
-  const end = printed.indexOf("VERI*FACTU", start);
   expect(start).toBeGreaterThanOrEqual(0);
-  expect(end).toBeGreaterThan(start);
   let paid = 0;
-  for (const line of printed.slice(start + 1, end)) {
+  for (const line of printed.slice(start + 1)) {
     if (/^(Efectivo|Tarjeta|Devolución) /.test(line)) paid += printedCents(line);
     else if (/^(Cambio|Propina) /.test(line)) paid -= printedCents(line);
   }
@@ -1172,19 +1333,13 @@ describe("a bill paid in parts before its invoice", () => {
     const printed = lines();
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 7),
-    ).toEqual([
+    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
       "Tarjeta 11,90 €",
       "Ref. OP-9",
       "Propina 1,00 €",
-      "QR tributario:",
-      "VERI*FACTU",
+      TRIM.footerMessage!,
     ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
@@ -1226,17 +1381,11 @@ describe("a bill payment partly given back before its invoice", () => {
     ).map((line) => line.trim().replace(/\s+/g, " "));
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 5),
-    ).toEqual([
+    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
       "Efectivo 50,00 €",
       "Devolución -6,00 €",
       "Devolución -4,00 €",
-      "QR tributario:",
-      "VERI*FACTU",
+      TRIM.footerMessage!,
     ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
@@ -1268,17 +1417,11 @@ describe("a bill payment partly given back before its invoice", () => {
     ).map((line) => line.trim().replace(/\s+/g, " "));
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
-    expect(
-      printed
-        .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 5),
-    ).toEqual([
+    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
       "Tarjeta 20,00 €",
       "Ref. OP-3",
       "Devolución -5,00 €",
-      "QR tributario:",
-      "VERI*FACTU",
+      TRIM.footerMessage!,
     ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });

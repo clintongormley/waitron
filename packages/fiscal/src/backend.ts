@@ -24,6 +24,12 @@ export interface FiledReceipt {
   issuer?: { legalName: string; taxId: string };
 }
 
+/** The words a regime prints above and under its verification QR, in the regime's own wording. */
+export interface ReceiptQrText {
+  caption: string;
+  legend: string;
+}
+
 export interface Counterparty {
   taxId: string;
   legalName: string;
@@ -168,6 +174,9 @@ export interface FiscalBackend {
    * `NodeRegistration`/`FiscalRecordRef` it returns.
    */
   readonly id: string;
+
+  /** Printed around `verificationUrl`'s QR, and never without one; absent when the regime prints none. */
+  readonly receiptQrText?: ReceiptQrText;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 

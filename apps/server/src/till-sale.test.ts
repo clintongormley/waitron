@@ -51,7 +51,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
-import { payWorkingOrder, recordTillSale } from "./till-sale.js";
+import { payWorkingOrder, receiptQr, recordTillSale } from "./till-sale.js";
 import { addTabRound, createOpenOrder, updateHeldOrder } from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -673,8 +673,33 @@ describe("recordTillSale", () => {
     });
 
     expect(result.qr).toBe("");
+    expect(result.qrText).toBeUndefined();
     expect(result.total).toBe("1.50");
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
+  });
+});
+
+describe("receiptQr", () => {
+  const words = { caption: "CAP-X", legend: "LEG-Y" };
+  const speaking = { receiptQrText: words } as unknown as FiscalBackend;
+  const silent = {} as unknown as FiscalBackend;
+
+  it("carries the backend's words beside a verification link", () => {
+    expect(receiptQr(speaking, "https://verify.invalid/1")).toEqual({
+      qr: "https://verify.invalid/1",
+      qrText: words,
+    });
+  });
+
+  it("carries no words when there is no link, even from a backend that has some", () => {
+    expect(receiptQr(speaking, undefined)).toEqual({ qr: "" });
+    expect(receiptQr(speaking, "")).toEqual({ qr: "" });
+  });
+
+  it("carries a link alone from a backend with no words for it", () => {
+    expect(receiptQr(silent, "https://verify.invalid/1")).toEqual({
+      qr: "https://verify.invalid/1",
+    });
   });
 });
 

@@ -6,11 +6,11 @@
  * filed record, never a second source of fiscal truth.
  *
  * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
- * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1 plus the
- * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21), with AEAT's «QR tributario:» caption
- * above the QR (its QR specification v0.5.0, §3); sources in `docs/compliance/verifactu-findings.md`
- * §14 and the C115 entry in `docs/backlog.md`. The owner's non-fiscal trim renders around that core
- * and is never read by it.
+ * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1, plus,
+ * when the sale carries a verification link, its QR first (after any practice warning) with the
+ * fiscal backend's own caption above it and legend under it (`FiscalBackend.receiptQrText`). The
+ * Veri*Factu sources for that layout are in `docs/compliance/verifactu-findings.md` §14. The
+ * owner's non-fiscal trim renders around that core and is never read by it.
  *
  * The receipt is issued in the INVOICE locale, not the operator's UI language: its fixed words come
  * from the country pack's table for that locale (`receiptLabelsFor`), and money, discount
@@ -54,8 +54,8 @@ export interface ReceiptIssuer {
 }
 
 /**
- * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message under the
- * legend. No field here can suppress or reorder a mandated element.
+ * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message after the
+ * payment lines. No field here can suppress or reorder a mandated element.
  */
 export interface ReceiptTrim {
   headerSubtitle?: string;
@@ -80,12 +80,6 @@ export interface FormatReceiptInput {
   simulated?: boolean;
   duplicate?: boolean;
 }
-
-/** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
-const LEGEND = "VERI*FACTU";
-
-/** AEAT's caption above the QR (its QR specification v0.5.0, §3). Spanish; never translated. */
-const QR_CAPTION = "QR tributario:";
 
 /** The per-dish option-quantity badge (`×2`). */
 const QTY_BADGE = "×";
@@ -125,7 +119,7 @@ function issueDate(iso: string, locale: string): string {
 
 /**
  * Render one filed sale — the customer's factura simplificada. Total: empty `lines`/`vatBreakdown`
- * yield a header-and-total ticket, and an empty `result.qr` prints no QR but still the legend.
+ * yield a header-and-total ticket, and an empty `result.qr` prints no QR block at all.
  * Every string goes through `prepareText` before it is measured, so no line exceeds the column count.
  */
 export function formatReceipt({
@@ -166,6 +160,20 @@ export function formatReceipt({
   if (simulated) {
     text(label.practice);
     b.line();
+  }
+
+  if (result.qr !== "") {
+    const matrix = qrModules(result.qr);
+    const dots = chooseQrDots(
+      matrix.length,
+      dpiValue(printer.resolution),
+      safeWidthDots(printer.paperWidth),
+    );
+    b.align("center");
+    if (result.qrText) text(result.qrText.caption);
+    b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
+    if (result.qrText) text(result.qrText.legend);
+    b.line().align("left");
   }
 
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
@@ -269,24 +277,6 @@ export function formatReceipt({
   }
   b.line();
 
-  // The QR (arts. 20-21), printed as an image Waitron builds, sized for this printer (30-40 mm). A sale's
-  // cotejo URL can legitimately be "" (the fiscal backend minted none): then no QR, but still the legend.
-  b.align("center");
-  if (result.qr !== "") {
-    const matrix = qrModules(result.qr);
-    const dots = chooseQrDots(
-      matrix.length,
-      dpiValue(printer.resolution),
-      safeWidthDots(printer.paperWidth),
-    );
-    b.line(QR_CAPTION);
-    b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
-  }
-
-  // The VERI*FACTU legend — printed UNCONDITIONALLY in Veri*Factu mode (art. 20.1.b).
-  b.line(LEGEND).line().align("left");
-
-  // Non-fiscal footer trim, under the legend.
   if (receipt.footerMessage) text(receipt.footerMessage);
 
   // Repeat the practice warning at the tear-off edge so either end of a separated ticket identifies

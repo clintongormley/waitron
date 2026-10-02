@@ -1788,16 +1788,12 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     expect(tickets).toHaveLength(1);
     const printed = tickets[0]!;
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
-    expect(
-      printed.slice(start, printed.indexOf("VERI*FACTU", start) + 1).filter((l) => l !== ""),
-    ).toEqual([
+    expect(printed.slice(start).filter((l) => l !== "")).toEqual([
       "TOTAL 60,00 €",
       "Tarjeta 30,00 €",
       "Devolución -10,00 €",
       "Efectivo 20,00 €",
       "Efectivo 20,00 €",
-      "QR tributario:",
-      "VERI*FACTU",
     ]);
   });
 

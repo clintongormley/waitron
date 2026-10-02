@@ -40,7 +40,7 @@ import {
 } from "@waitron/payments";
 import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
-import type { FiscalBackend } from "@waitron/fiscal";
+import type { FiscalBackend, ReceiptQrText } from "@waitron/fiscal";
 import {
   createOpenOrder,
   fireLines,
@@ -207,6 +207,18 @@ export interface TillSaleResult {
   billAdjustments?: ReceiptAdjustment[];
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;
+  /** The fiscal backend's words around the QR; present only beside a non-empty `qr`. */
+  qrText?: ReceiptQrText;
+}
+
+/** A receipt's QR, with the fiscal backend's words around it only when there is a QR to print. */
+export function receiptQr(
+  backend: FiscalBackend,
+  verificationUrl: string | undefined,
+): Pick<TillSaleResult, "qr" | "qrText"> {
+  const qr = verificationUrl ?? "";
+  if (qr === "" || backend.receiptQrText === undefined) return { qr };
+  return { qr, qrText: { ...backend.receiptQrText } };
 }
 
 /** Read the persisted amounts and manual terminal reference; card identity belongs on the slip. */
@@ -623,7 +635,7 @@ export async function readSettledTicket(
     ...ticketLines,
     tender,
     ...(billTenders.length === 0 ? {} : { payments: billTenders }),
-    qr: filed.verificationUrl,
+    ...receiptQr(backend, filed.verificationUrl),
     ...(filed.issuer
       ? { issuer: { venueName: filed.issuer.legalName, nif: filed.issuer.taxId } }
       : {}),
@@ -767,7 +779,7 @@ async function fileImmediateSale(
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
     ...(await receiptLines(tx, workingOrderId, priced, order.identities)),
     tender: tenderBlock,
-    qr: fiscal.verificationUrl ?? "",
+    ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
 
   await enqueueSaleReceipt(tx, cfg, ticket, saleId);
@@ -1284,7 +1296,7 @@ async function finalizeCapture(
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
         ...(await receiptLines(tx, req.id, priced, identities)),
         tender: tenderBlock,
-        qr: fiscal.verificationUrl ?? "",
+        ...receiptQr(deps.backend, fiscal.verificationUrl),
       };
       // A card on a connected machine: a receipt and no drawer. A throw here would roll back a sale
       // whose card P2 already charged.
@@ -1423,7 +1435,7 @@ async function finalizeRecovery(
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
       ...(await receiptLines(tx, req.id, priced, order.identities)),
       tender: tenderBlock,
-      qr: fiscal.verificationUrl ?? "",
+      ...receiptQr(deps.backend, fiscal.verificationUrl),
     };
     // A card on a connected machine: a receipt and no drawer. The replay above returns before this,
     // so nothing prints twice.
