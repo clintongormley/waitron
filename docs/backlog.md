@@ -2871,7 +2871,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   and `PUT /management-api/receipt-language` (`apps/server/src/location-settings-api.ts`).
   - **Open, for the owner:**
     - **A change is refused while an open order at the location holds a line**
-      (`receipt.language_orders_open`; narrowed by lane C's C124, 2026-10-02, with core
+      (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
       `0064_line_locale_triggers_text_only`). The order-line language triggers now check a line's
       names only when an update changes them or moves the line, so the till can still split such a
       line, which copies its old-language names into a new line, or move it to another bill, and the
