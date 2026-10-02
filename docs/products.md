@@ -73,8 +73,9 @@ table.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
 arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu
-offers **Open**, **Edit** and **Remove**. **Edit** reopens the small window. Changes you make in the
-table, including the Available switch, are saved when you save the product.
+offers **Open**, **Edit** and **Remove**. **Edit**, or a click on the variant's row, reopens the
+small window. Changes you make in the table, including the Available switch, are saved when you save
+the product.
 
 **Open** takes you to the variant's own page, where it can have its own VAT, main category,
 allergens and the other product details. Apart from the names, each detail you leave blank there

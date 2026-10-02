@@ -118,6 +118,43 @@ export class VariantTable extends LitElement {
           max-width: calc(var(--wt-tap-min) + var(--wt-space-6));
         }
       }
+      tr {
+        position: relative;
+      }
+      /* Not the raised surface: that is the dialog panel's own colour, so the tint would not show. */
+      tr:not([data-dragging]):hover td,
+      tr:not([data-dragging]):focus-within td {
+        background: var(--wt-color-bg);
+      }
+      .row-activate {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        z-index: 0;
+      }
+      .row-activate:disabled {
+        cursor: default;
+      }
+      .row-activate:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      /* The row's button lies over the whole row; these controls are lifted above it so they keep
+         their own clicks. A dragged row is lifted above them, because the reorder controller's own
+         lift of 1 would tie with them. */
+      td :is(.handle, wt-switch, wt-row-actions) {
+        position: relative;
+        z-index: 1;
+      }
+      tr[data-dragging] {
+        z-index: 2;
+      }
       /* A rejected row is marked in the row itself: a message above Save alone does not say
          WHICH variant is wrong, and these rows have no field of their own to attach it to. */
       tr.invalid td:first-child {
@@ -193,9 +230,8 @@ export class VariantTable extends LitElement {
     { announce: () => t("action.reordered") },
   );
 
-  /** Puts focus on a row's actions trigger: the Edit button behind it cannot take focus while the
-   * menu is closed. A row just drawn has a trigger only once its menu has rendered, so this waits
-   * for that. */
+  /** Puts focus on a row's actions trigger. A row just drawn has a trigger only once its menu has
+   * rendered, so this waits for that. */
   async focusRow(index: number): Promise<void> {
     const menu = this.shadowRoot?.querySelector<LitElement>(`[data-test="actions-${index}"]`);
     await menu?.updateComplete;
@@ -319,6 +355,17 @@ export class VariantTable extends LitElement {
     return html`<tr class=${error ? "invalid" : ""} data-test=${`row-${index}`}>
       <td>${this.#reorder.handle(row.key)}</td>
       <td>
+        <button
+          type="button"
+          class="row-activate"
+          data-test=${`edit-row-${index}`}
+          aria-label=${`${t("action.edit")}: ${label}`}
+          .disabled=${this.busy}
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            this.#emit("wt-edit", { index });
+          }}
+        ></button>
         ${label}
         ${
           variant.active

@@ -1284,11 +1284,12 @@ no border; the section keeps its heading, drawn like the editor's other section 
 that nothing else uses `.bordered-group` before deleting its styles, and that the comment about a
 fieldset's minimum width (the variants table) still applies to whatever replaces it.
 
-**Clicking a variant's row opens its edit window (A215) — OPEN.** The owner: _"variants when
-clicked should open the edit modal"_. In `variant-table.ts` a row's click does nothing today; its
-menu holds Open (the variant's own page), Edit (the edit window, `wt-edit`) and Remove or Restore.
-**Wanted:** a click on the row, or Enter on it, does what Edit does. The drag handle, the
-Available switch and the row menu keep doing their own thing, as A197 asks for the options list.
+**Clicking a variant's row opens its edit window (A215) — DONE.** The owner: _"variants when
+clicked should open the edit modal"_. In `variant-table.ts` a click anywhere on a row, or Enter on
+it, does what Edit in the row's menu does (`wt-edit`): a transparent button the size of the row
+lies over its name, price and badges, named "Edit: <variant>" and disabled while the product saves
+or another of the editor's windows is open. The drag handle, the Available switch and the row menu
+are lifted above it and keep their own clicks.
 
 **The price's unit button says "Each" or "per kg", never "per Each" (A216) — OPEN.** The owner:
 _"I don't like "per Each", it should either be "Each" or "per Unit""_. The button text is
