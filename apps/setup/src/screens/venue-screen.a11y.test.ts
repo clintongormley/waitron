@@ -48,6 +48,25 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with Barcelona's receipt language fixed, its reason shown and the choice disabled", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {}, theme);
+    const province = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=province]")!;
+    province.value = "08";
+    province.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    const reason = el.shadowRoot!.querySelector("#invoice-locales-fixed")!;
+    expect(reason.textContent!.trim()).not.toBe("");
+    expect(el.shadowRoot!.querySelector("fieldset.locales")!.getAttribute("aria-describedby")).toBe(
+      reason.id,
+    );
+    const radios = [
+      ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="invoiceLocales"]'),
+    ];
+    expect(radios.length).toBeGreaterThan(1);
+    expect(radios.every((radio) => radio.disabled)).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations when a server error and a client error coincide (one alert)", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>(
       "setup-venue-screen",

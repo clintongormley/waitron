@@ -1283,6 +1283,16 @@ describe("one receipt language", () => {
     );
   });
 
+  it("gives the region's reason in English when the wizard's language has none", async () => {
+    setLocale("ca-ES");
+    expect(Object.keys(CATALONIA.fixedReceiptLocale!.reason)).not.toContain("ca");
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await fillValid(el, BARCELONA);
+    const reason = q(el, "[data-test=invoice-locales-fixed]");
+    expect(reason?.textContent!.trim()).toBe(CATALONIA.fixedReceiptLocale!.reason.en);
+    expect(q(el, "fieldset.locales")!.getAttribute("aria-describedby")).toBe(reason!.id);
+  });
+
   it("shows no reason and leaves the choice open outside Catalonia", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     await fillValid(el);

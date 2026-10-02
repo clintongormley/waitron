@@ -12,6 +12,7 @@ import {
   type ReceiptLanguageRules,
 } from "@waitron/country";
 import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/country-packs";
+import { resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -585,7 +586,8 @@ export class SetupVenueScreen extends LitElement {
     const receipt = this.#receiptRules(pack, area);
     const receiptLanguages = this.#receiptLanguages(receipt);
     const fixed = receipt?.fixed;
-    const fixedReason = fixed?.reason[currentLocale().split("-")[0]!];
+    const fixedReason =
+      fixed === undefined ? "" : resolveContentText(fixed.reason, currentLocale(), "en");
     const errors = this.#errors;
     const fieldErrors = [...errors.keys()].filter((key) => this.#shows(key));
     const invalid = this.attempted && [...this.#invalidFields()].some((key) => this.#shows(key));
@@ -643,7 +645,7 @@ export class SetupVenueScreen extends LitElement {
                 aria-invalid=${errors.has("invoiceLocales") ? "true" : "false"}
                 aria-describedby=${
                   [
-                    ...(fixedReason === undefined ? [] : ["invoice-locales-fixed"]),
+                    ...(fixedReason === "" ? [] : ["invoice-locales-fixed"]),
                     ...(errors.has("invoiceLocales") ? ["invoice-locales-error"] : []),
                   ].join(" ") || nothing
                 }
@@ -655,7 +657,7 @@ export class SetupVenueScreen extends LitElement {
                   >
                 </legend>
                 ${
-                  fixedReason === undefined
+                  fixedReason === ""
                     ? nothing
                     : html`<p
                         class="reason"
