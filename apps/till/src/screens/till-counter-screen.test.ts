@@ -79,6 +79,7 @@ const cardGrid = (el: TillCounterScreen) =>
       cardProvider: string;
       tipsEnabled: boolean;
       cardOutcome?: string;
+      cardAttemptsOver: number;
     }
   >("till-card-grid");
 
@@ -306,6 +307,11 @@ describe("till-counter-screen", () => {
     expect(grid.cardProvider).toBe("stripe_on_device");
     expect(grid.tipsEnabled).toBe(true);
     expect(grid.cardOutcome).toBe("declined");
+  });
+
+  it("threads cardAttemptsOver through to the card grid", async () => {
+    const { el } = await mount({ cardAttemptsOver: 3 });
+    expect(cardGrid(el)!.cardAttemptsOver).toBe(3);
   });
 
   it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {

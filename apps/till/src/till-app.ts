@@ -1434,6 +1434,8 @@ export class TillApp extends LitElement {
   @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
   /** Relayed to the pay card, which leaves its "Tap or insert card" spinner when this changes. */
   @state() private cardAttemptsOver = 0;
+  /** Card attempts started and not yet ended; {@link cardAttemptsOver} moves when this returns to 0. */
+  #cardAttemptsRunning = 0;
   /**
    * Single-flight guard: two chained fiscal records for one purchase cannot be repaired. Set
    * synchronously before the first await of {@link TillApp.#onConfirmPayment}, so a second
@@ -2334,21 +2336,22 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders().catch(() => undefined);
   }
 
+  async #onCollectCard(event: Event): Promise<void> {
+    // A tap ignored here is not counted and moves nothing.
+    if (this.submitting) return;
+    this.#cardAttemptsRunning++;
+    try {
+      await this.#collectCard(event, false);
+    } finally {
+      if (--this.#cardAttemptsRunning === 0) this.cardAttemptsOver++;
+    }
+  }
+
   /**
    * Like {@link TillApp.#onConfirmPayment}, sharing its `submitting` guard, but a decline, timeout or
    * `network_unavailable` comes back as data, not a throw: nothing was filed, so it is recorded in
    * {@link cardOutcome} and the basket stays, with no error banner.
    */
-  async #onCollectCard(event: Event): Promise<void> {
-    // Another attempt is running and owns the pay card's spinner.
-    if (this.submitting) return;
-    try {
-      await this.#collectCard(event, false);
-    } finally {
-      this.cardAttemptsOver++;
-    }
-  }
-
   async #collectCard(event: Event, retried: boolean): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;

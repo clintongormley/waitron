@@ -1913,7 +1913,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **Done (C131) — the counter's pay card goes back to its choices after a reader payment.**
       Once a reader payment ends with no card outcome to show — refused, failed, or captured — the
       pay card leaves "Tap or insert card…" for its Cash and Card buttons, with any refusal in the
-      banner; an automatic retry keeps the spinner up until it ends (`cardAttemptsOver`,
+      banner; a retry, and the kitchen-station question that can come before one, belong to the
+      attempt, and the spinner comes down once no card attempt is still running (`cardAttemptsOver`,
       `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
       request settled.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.

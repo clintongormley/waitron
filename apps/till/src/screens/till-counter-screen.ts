@@ -149,7 +149,7 @@ export class TillCounterScreen extends LitElement {
   @property() cardProvider: CardProvider = "none";
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
-  @property({ type: Number }) cardAttemptsOver = 0;
+  @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
   /**
