@@ -130,6 +130,20 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(field.labels![0]!.textContent).toContain(t("receipts.language"));
   });
 
+  it("marks the dropdown required, as the description is, with a star hidden from screen readers", async () => {
+    const el = await mount(stubApi(madrid()));
+    const field = select(el)!;
+    expect(field.required).toBe(true);
+    const star = field.labels![0]!.querySelector(".required")!;
+    expect(star.textContent).toBe("*");
+    expect(star.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(star).color).toBe(
+      getComputedStyle(
+        q(el, "wt-input[name=operationDescription]")!.shadowRoot!.querySelector(".required")!,
+      ).color,
+    );
+  });
+
   it("redraws the preview in a newly picked language at once, saving nothing", async () => {
     const api = stubApi(madrid());
     const el = await mount(api);
@@ -328,6 +342,50 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
   });
 
+  it("keeps a just-saved language when a read begun before the save answers after it", async () => {
+    let stored = "es-ES";
+    const drawStored = vi.fn((config: ReceiptConfig, width?: PrintPaperWidth, language?: string) =>
+      Promise.resolve(drawn(config, width, language ?? stored)),
+    );
+    let answer!: (value: ReceiptLanguage) => void;
+    const liveData = new LiveData();
+    const background = stubApi(madrid(), undefined, {
+      getReceiptLanguage: vi.fn(
+        () =>
+          new Promise<ReceiptLanguage>((resolve) => {
+            answer = resolve;
+          }),
+      ),
+      previewReceipt: drawStored,
+    });
+    const api = Object.assign(
+      stubApi(madrid(), undefined, {
+        putReceiptLanguage: vi.fn(async (language: string) => {
+          stored = language;
+        }),
+        previewReceipt: drawStored,
+      }),
+      { liveData, background },
+    );
+    const el = await mount(api);
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() => expect(background.getReceiptLanguage).toHaveBeenCalledTimes(1));
+    pick(el, "gl-ES");
+    await save(el);
+    expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
+    answer(madrid("es-ES"));
+    await flush(el);
+    await flush(el);
+    expect(select(el)!.value).toBe("gl-ES");
+    expect(paperText(el)).toContain("Idioma gl-ES");
+
+    vi.mocked(background.getReceiptLanguage).mockResolvedValue(madrid("eu-ES"));
+    stored = "eu-ES";
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() => expect(select(el)!.value).toBe("eu-ES"));
+    await vi.waitFor(() => expect(paperText(el)).toContain("Idioma eu-ES"));
+  });
+
   it("reports a failed read of the receipt language and offers retry", async () => {
     const api = stubApi(madrid(), undefined, {
       getReceiptLanguage: vi
@@ -482,7 +540,7 @@ describe("the Receipts page's receipt language in Spanish", () => {
       stubApi(madrid("gl-ES"), { defaultLanguage: "es", languages: ["es"] }),
     );
     const field = select(madridPage)!;
-    expect(field.labels![0]!.querySelector(".field-label")!.textContent).toBe("Idioma del recibo");
+    expect(field.labels![0]!.querySelector(".field-label")!.textContent).toBe("Idioma del recibo*");
     expect([...field.options].map((option) => option.textContent!.trim())).toEqual([
       "Español",
       "Catalán",

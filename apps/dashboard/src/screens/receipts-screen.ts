@@ -79,6 +79,10 @@ export class ReceiptsScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
+      .required {
+        margin-inline-start: var(--wt-space-1);
+        color: var(--wt-color-danger);
+      }
       .field-value {
         display: block;
         font-weight: var(--wt-font-weight-bold);
@@ -163,9 +167,9 @@ export class ReceiptsScreen extends LitElement {
       this.locationLoadFailed = true;
     },
   );
-  readonly #languageQueries = new DashboardQueries(
+  readonly #languageQueries = new QueryController(
     this,
-    () => this.api,
+    () => this.api.liveData,
     () => {
       this.languageLoadFailed = true;
     },
@@ -208,6 +212,8 @@ export class ReceiptsScreen extends LitElement {
   #dirty = false;
   /** Successful description writes so far; a read stamped with an older count may predate the latest one. */
   #saves = 0;
+  /** The same, for this page's receipt-language writes. */
+  #languageSaves = 0;
 
   @state() private attempted = false;
   @state() private saving = false;
@@ -244,15 +250,28 @@ export class ReceiptsScreen extends LitElement {
   }
 
   async #loadLanguage(): Promise<void> {
+    const query = dashboardQuery(this.api, "getReceiptLanguage", []);
     try {
-      await this.#languageQueries.watch("getReceiptLanguage", [], (value) => {
-        const savedElsewhere =
-          this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
-        this.receiptLanguage = value;
-        this.languageLoadFailed = false;
-        if (savedElsewhere && this.receiptLoaded && this.pickedLanguage === null)
-          this.#redrawInSavedLanguage();
-      });
+      await this.#languageQueries.watch(
+        "getReceiptLanguage",
+        {
+          ...query,
+          key: `${query.key}:save-stamped`,
+          read: async () => {
+            const saves = this.#languageSaves;
+            return { saves, value: await query.read() };
+          },
+        },
+        ({ saves, value }) => {
+          if (saves !== this.#languageSaves) return;
+          const savedElsewhere =
+            this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
+          this.receiptLanguage = value;
+          this.languageLoadFailed = false;
+          if (savedElsewhere && this.receiptLoaded && this.pickedLanguage === null)
+            this.#redrawInSavedLanguage();
+        },
+      );
     } catch {
       this.languageLoadFailed = true;
     }
@@ -442,6 +461,7 @@ export class ReceiptsScreen extends LitElement {
       return false;
     }
     this.receiptLanguage = { ...this.receiptLanguage!, language };
+    this.#languageSaves += 1;
     // A picked language was already drawn; one saved without a pick (Use Catalan) was not.
     if (this.pickedLanguage === null) {
       this.#previewActive = true;
@@ -621,9 +641,12 @@ export class ReceiptsScreen extends LitElement {
       : [...receiptLanguage.choices, stored];
     return html`<div data-test="receipt-language">
       <label>
-        <span class="field-label">${t("receipts.language")}</span>
+        <span class="field-label"
+          >${t("receipts.language")}<span class="required" aria-hidden="true">*</span></span
+        >
         <select
           name="receiptLanguage"
+          required
           aria-invalid=${error !== "" ? "true" : "false"}
           aria-describedby=${ifDefined(error !== "" ? "receipt-language-error" : undefined)}
           ?disabled=${this.saving}
