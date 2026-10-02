@@ -916,6 +916,31 @@ first; if it does, leave it where it is and say so in the PR. The login rules in
 the first page shows the same choices to everyone. Sign in with Apple does not exist; the mockup
 only showed where it would go.
 
+**A focused table search box turns its own border blue, with no second ring (A192, owner
+2026-10-02) — OPEN.** The owner, on two screenshots of the Modifiers screen's "Search extras
+lists": _"Focusing on the search box adds a second thicker blue border. instead it should turn the
+existing border blue."_ The box is `wt-data-table`'s `.table-search`
+(`packages/ui/src/components/wt-data-table.ts`), which has a grey 1px border and no focus rule of
+its own; no global focus rule was found in the dashboard or the tokens, so the ring is presumably
+the browser's own focus outline — check in a real Chromium. **Wanted:** on focus the existing
+border turns the primary blue and nothing is drawn outside it, as `wt-combobox`'s search box already
+does (its `.search:focus-visible` rule: "Its own primary border is the focus marking"). Every table
+with a search box gets it, since they all share this one. The focus must stay visible enough to
+pass the primitive's axe test in both themes, and LOOK at it in both.
+
+**A table filter's "Any …" choice is drawn as a chosen value, not a hint (A193, owner
+2026-10-02) — OPEN.** The owner, on a screenshot of the Modifiers screen's status filter: _"The Any
+Status shouldn't be a hint, it is a value that appears in the dropdown"_. `wt-data-table` gives
+each column filter's `wt-combobox` a first option `{ value: "", label: allLabel }` and also passes
+`allLabel` as its `placeholder`; the combobox reads an empty value as nothing chosen and draws the
+placeholder in the grey italic prompt look (`.value.placeholder`,
+`packages/ui/src/components/wt-combobox.ts`). **Wanted:** "Any status", and every table filter's
+"Any …" choice, is drawn like any other chosen value. This is the shape A178h fixed for the
+product's "Each" with a stand-in value (`__each__`); the "Uncategorised" and "No course" choices
+noted under A178 below have it too. Pick one fix for all of them, in the combobox or the table,
+rather than a stand-in per screen — and the filter's "nothing chosen" must still mean "no filter"
+to the table's saved view (`#persistView`) and to `wt-filter-change` listeners.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
