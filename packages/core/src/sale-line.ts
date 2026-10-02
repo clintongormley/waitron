@@ -48,4 +48,10 @@ export interface RecordSaleLine {
   lineGross?: string | null;
   /** The product's reporting chain, as the line recorded it when it was added. */
   classification?: SaleLineClassification | null;
+  /** The original invoice line this corrective line reverses or adjusts. Only `recordCorrection`
+   * stores it (`recordSale` and `recordSubstitution` store null), and it refuses one that is not a
+   * line of the invoice it corrects. On a whole-invoice credit every line must name one, a
+   * different one each, and be it reversed (same product, minus its quantity and line total), and
+   * every invoice line must be named; on a partial correction it is optional. */
+  correctsLineId?: string | null;
 }

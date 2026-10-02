@@ -421,6 +421,41 @@ describe("cancelling a placed order whose invoice was issued", () => {
     );
   });
 
+  it("names, on each credit-note line, the invoice line with the same number that it reverses", async () => {
+    const id = await placed([
+      { name: "Caña", quantity: "2" },
+      {
+        name: "Café",
+        quantity: "1",
+        extras: [
+          { listId: extraListId, picks: [{ productId: productIdOf("Leche"), quantity: 2 }] },
+        ],
+      },
+    ]);
+    const original = await invoiceOf(id);
+
+    expect((await cancel(id)).status).toBe(200);
+
+    const [credit] = await creditsOf(original.id);
+    const linksOf = (saleId: string) =>
+      inTx(venue, (tx) =>
+        tx
+          .select({
+            id: saleLines.id,
+            lineNo: saleLines.lineNo,
+            correctsLineId: saleLines.correctsLineId,
+          })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, saleId))
+          .orderBy(saleLines.lineNo),
+      );
+    const invoiced = await linksOf(original.id);
+    expect(invoiced).toHaveLength(3);
+    expect((await linksOf(credit!.id)).map((line) => [line.lineNo, line.correctsLineId])).toEqual(
+      invoiced.map((line) => [line.lineNo, line.id]),
+    );
+  });
+
   it("refuses an operator without sale.rectify and no override, writing nothing and using no invoice number", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
 
@@ -746,6 +781,55 @@ describe("cancelling a placed order whose invoice was issued", () => {
     await expectRefusedUnwritten(id, cancel(id), {
       status: 409,
       code: "sale.total_mismatch",
+    });
+  });
+
+  // The cancel reverses every stored invoice line exactly, so these two reach the line checks with
+  // a value stored as bytes: it reads back as a new byte array each time, so the cancel's copy and
+  // the one `recordCorrection` reads are not the same value.
+  it("answers 409 when a stored invoice line's product reads back unlike itself, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    await inTx(venue, (tx) =>
+      tx.insert(saleLines).values({
+        saleId: original.id,
+        lineNo: 99,
+        name: "Añadida",
+        descriptions: { [venue.cfg.locale]: "Añadida" },
+        quantity: 1000,
+        unitPrice: 0,
+        vatRate: 2100,
+        lineTotal: 0,
+        productId: sql`x'01'`,
+      }),
+    );
+
+    await expectRefusedUnwritten(id, cancel(id), {
+      status: 409,
+      code: "sale.correction_line_not_reversed",
+    });
+  });
+
+  it("answers 409 when a stored invoice line's id reads back unlike itself, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    await inTx(venue, (tx) =>
+      tx.insert(saleLines).values({
+        id: sql`x'02'`,
+        saleId: original.id,
+        lineNo: 99,
+        name: "Añadida",
+        descriptions: { [venue.cfg.locale]: "Añadida" },
+        quantity: 1000,
+        unitPrice: 0,
+        vatRate: 2100,
+        lineTotal: 0,
+      }),
+    );
+
+    await expectRefusedUnwritten(id, cancel(id), {
+      status: 409,
+      code: "sale.correction_line_not_on_invoice",
     });
   });
 

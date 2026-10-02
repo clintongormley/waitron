@@ -2848,9 +2848,25 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
       Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
       `cash.drawer`, so its cases cannot tell which of those it reads.
-    - **A credit note's lines do not record which invoice line each one reverses** — no column
-      holds that link, so a credit note cannot be traced back line by line. Storing it on every
-      corrective line `recordCorrection` writes is queued as C132 (owner, 2026-10-02), moved to lane B.
+    - **Done by C132 (2026-10-02): a credit note's line names the invoice line it reverses.**
+      `sale_lines.corrects_line_id` (core migration `0070_sale_line_corrects`, a foreign key to
+      `sale_lines.id`) holds, on a corrective invoice's line, the original line it reverses or
+      adjusts; it is null on an ordinary sale's line, on a substitution's, and on a partial
+      correction's line that names none. The whole-order cancel fills it on every reversing line,
+      extras picks included (`reversedLines`, `apps/server/src/cancel-credit.ts`).
+      `recordCorrection` refuses a line naming a line that is not on the invoice it corrects with
+      `sale.correction_line_not_on_invoice`, before a number is allocated. **Decided by the owner
+      at C132's review (2026-10-02 ~23:10), and built: a credit of the whole invoice must reverse
+      it line for line.**
+      Each of its lines names a different invoice line and is that line with the same product,
+      minus its quantity and minus its line total; every invoice line is named. Anything else is
+      refused with `sale.correction_line_not_reversed`, before a number is allocated. A partial
+      correction keeps the looser rule: its lines may name a line or not. No report reads the link
+      yet. Open, for partial corrections only, which no product code makes yet (only tests and demo
+      scripts do): whether a line a correction ADDS (a new charge, not a change to an invoice line)
+      stays unlinked, and whether two adjustments may name the same invoice line. When a report
+      starts reading the link it will want an index on the column, as `sales_corrects_idx` serves
+      `sales.corrects_sale_id`.
     - **A fully credited bill's original invoice can still be reprinted**, from the till and from
       the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
       not decided.

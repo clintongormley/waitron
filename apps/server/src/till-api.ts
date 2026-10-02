@@ -337,6 +337,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // A record built from the invoice as stored, or from the server's own pricing, disagrees with
   // itself: nothing the request sent, and permanent for the same invoice or basket.
   "sale.correction_lines_mismatch": 409,
+  "sale.correction_line_not_on_invoice": 409,
+  "sale.correction_line_not_reversed": 409,
   "sale.total_mismatch": 409,
   "sale.correction_exceeds_total": 409,
   "sale.voided": 409,

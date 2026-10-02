@@ -1491,7 +1491,7 @@ describe("ordering extras and options — parent + child lines", () => {
       };
     });
     expect(columns).toContain("option_snapshots");
-    expect(keys.sort()).toEqual(["parent_line_id", "sale_id"]);
+    expect(keys.sort()).toEqual(["corrects_line_id", "parent_line_id", "sale_id"]);
     expect(columns).not.toContain("menu_item_id");
     expect(columns).not.toContain("extra_list_item_id");
   });

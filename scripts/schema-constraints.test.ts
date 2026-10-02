@@ -175,6 +175,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["registros_facturacion", ["till_id"], "tills"],
   ["roster_versions", ["location_id"], "locations"],
   ["roster_versions", ["published_by_person_id"], "persons"],
+  ["sale_lines", ["corrects_line_id"], "sale_lines"],
   ["sale_lines", ["parent_line_id"], "sale_lines"],
   ["sale_lines", ["sale_id"], "sales"],
   ["sale_settlements", ["sale_id"], "sales"],

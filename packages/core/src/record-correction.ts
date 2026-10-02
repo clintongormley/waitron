@@ -68,7 +68,10 @@ export interface RecordCorrectionInput {
    * by a cent. Refused with `sale.correction_not_whole` unless `total` is minus the original's and
    * nothing corrects the original yet; with `sale.total_mismatch` unless the copy sums to `total`;
    * and with `sale.correction_lines_mismatch` unless, rate by rate, the lines' totals are the
-   * copy's base and the gross amounts they state are its base plus tax.
+   * copy's base and the gross amounts they state are its base plus tax. Its lines must also
+   * reverse the invoice line for line (`sale.correction_line_not_reversed`): each names, in
+   * `correctsLineId`, a different invoice line, with that line's product, minus its quantity and
+   * minus its line total, and every invoice line is named.
    */
   wholeInvoice?: boolean;
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
@@ -87,8 +90,12 @@ export interface RecordCorrectionInput {
  * derived breakdown's `sale.total_mismatch` refusal comes before all three; a whole-invoice
  * credit's refusals come after the gate and `sale.correction_exceeds_total`, because they read
  * what is on the invoice, and before the number, a line value the converters refuse (overflow,
- * or not a decimal) included. A failed integrity check records an incident and the correction
- * proceeds anyway.
+ * or not a decimal) included. A line naming, as the line it reverses, one that is not on the
+ * invoice being corrected is refused with `sale.correction_line_not_on_invoice` after all of those
+ * and before the number; then a whole-invoice credit whose lines do not reverse the invoice line
+ * for line is refused with `sale.correction_line_not_reversed`, also before the number. A
+ * partial correction's lines may name a line or not, and may name the same one. A failed
+ * integrity check records an incident and the correction proceeds anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
@@ -195,7 +202,37 @@ export async function recordCorrection(
   // A whole-invoice credit converts its lines before a number is allocated, so a line value the
   // converters refuse (overflow, or not a decimal) is refused with nothing written; the sale's id
   // is filled in once it exists.
-  const wholeLineRows = input.wholeInvoice === true ? saleLineRows("", input.lines) : undefined;
+  const wholeLineRows =
+    input.wholeInvoice === true ? saleLineRows("", input.lines, { corrective: true }) : undefined;
+
+  if (wholeLineRows !== undefined || input.lines.some((line) => line.correctsLineId != null)) {
+    const onInvoice = new Map(
+      (
+        await tx
+          .select({
+            id: saleLines.id,
+            quantity: saleLines.quantity,
+            lineTotal: saleLines.lineTotal,
+            productId: saleLines.productId,
+          })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, input.correctsSaleId))
+          .orderBy(saleLines.lineNo)
+      ).map((row) => [row.id, row]),
+    );
+    for (const line of input.lines) {
+      if (line.correctsLineId != null && !onInvoice.has(line.correctsLineId)) {
+        throw new AppError("sale.correction_line_not_on_invoice", {
+          saleId: input.correctsSaleId,
+          lineNo: line.lineNo,
+          correctsLineId: line.correctsLineId,
+        });
+      }
+    }
+    if (wholeLineRows !== undefined) {
+      assertReversesLineForLine(input.correctsSaleId, wholeLineRows, onInvoice);
+    }
+  }
 
   // Nothing branches on `verification.ok`: a failed check records one incident carrying every
   // issue, once `saleId` exists, and the correction is chained anyway.
@@ -267,7 +304,10 @@ export async function recordCorrection(
 
   await tx
     .insert(saleLines)
-    .values(wholeLineRows?.map((row) => ({ ...row, saleId })) ?? saleLineRows(saleId, input.lines));
+    .values(
+      wholeLineRows?.map((row) => ({ ...row, saleId })) ??
+        saleLineRows(saleId, input.lines, { corrective: true }),
+    );
 
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })
@@ -302,6 +342,54 @@ export async function recordCorrection(
   );
 
   return { saleId, fiscal };
+}
+
+/**
+ * Refuses a whole-invoice credit unless each of its lines names a different invoice line and is
+ * that line reversed, and every invoice line is named. Compared at the scales the rows store, so
+ * a quantity or amount the converters round to the target's is accepted. Every named line is
+ * already known to be on the invoice.
+ */
+function assertReversesLineForLine(
+  saleId: SaleId,
+  credit: readonly {
+    lineNo: number;
+    correctsLineId: string | null;
+    productId: string | null;
+    quantity: number;
+    lineTotal: number;
+  }[],
+  invoice: ReadonlyMap<string, { quantity: number; lineTotal: number; productId: string | null }>,
+): void {
+  const refuse = (
+    reason: "names_no_line" | "names_line_twice" | "not_exact_reversal" | "leaves_line_unnamed",
+    lineNo: number | null,
+    correctsLineId: string | null,
+  ) =>
+    new AppError("sale.correction_line_not_reversed", { saleId, reason, lineNo, correctsLineId });
+  const named = new Set<string>();
+  for (const line of credit) {
+    if (line.correctsLineId === null) {
+      throw refuse("names_no_line", line.lineNo, null);
+    }
+    if (named.has(line.correctsLineId)) {
+      throw refuse("names_line_twice", line.lineNo, line.correctsLineId);
+    }
+    named.add(line.correctsLineId);
+    const target = invoice.get(line.correctsLineId)!;
+    if (
+      line.productId !== target.productId ||
+      line.quantity !== -target.quantity ||
+      line.lineTotal !== -target.lineTotal
+    ) {
+      throw refuse("not_exact_reversal", line.lineNo, line.correctsLineId);
+    }
+  }
+  for (const id of invoice.keys()) {
+    if (!named.has(id)) {
+      throw refuse("leaves_line_unnamed", null, id);
+    }
+  }
 }
 
 /**
