@@ -2543,7 +2543,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       attempt, and the spinner comes down once no card attempt is still running (`cardAttemptsOver`,
       `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
       request settled.
-    - **Done (C130) — a device shows the screens its profile assigns, and the person's permissions
+    - **Done (C130, #1056) — a device shows the screens its profile assigns, and the person's permissions
       decide the rest.** A device profile has three switches, "Kitchen button", "Pass button"
       and "My schedule button" (`show-station`, `show-expo`, `show-schedule` in
       `CAPABILITY_FLAGS`, `packages/layouts/src/canvas.ts`), on for the built-in till profile and off
