@@ -172,6 +172,7 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
+import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import { geographyOf } from "./venue-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
@@ -871,6 +872,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountBillPaymentsApi(app, deps, log, run, pinThrottle);
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
+  mountBillLookupApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it, and the shift records the device's own till rather than `cfg.tillId`.

@@ -1,5 +1,9 @@
 # The dashboard's Orders screen — Implementation Plan
 
+> **Update, 2026-10-02 (B27c):** Task 3 replaces the till's read-only Left without paying list
+> with Find a bill and retires GET /api/unpaid-departures. Earlier references to the list describe
+> the starting code and the work this task removes.
+
 > **Update, 2026-10-02 (B27b):** The owner's C126 decision removes the "Invoice not credited"
 > mark from Task 2. C126 is to credit an invoiced bill cancelled at the till in full; the dashboard
 > shows Cancelled and the credit note. The older Task 1 examples below remain as their original

@@ -116,6 +116,8 @@ import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
+import "./widgets/find-bill-dialog.js";
+import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
@@ -138,7 +140,6 @@ import type {
   BillPaymentView,
   BillRefundResult,
   CounterWaitingOrder,
-  UnpaidDeparture,
   UnpaidDepartureRequest,
   DeviceStation,
   DeadEndAnswer,
@@ -228,7 +229,7 @@ type Screen =
 /** An overlay over the active canvas tab. Sale context remains local; regular destinations have URLs. */
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
-type RefreshList = "held" | "station" | "waiting" | "departures";
+type RefreshList = "held" | "station" | "waiting";
 
 /** How reading an adjusted order again ended. */
 type Reread = "read" | "unread" | "gone";
@@ -1262,8 +1263,9 @@ export class TillApp extends LitElement {
   /** Every open working order in the venue, across tills. */
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
-  /** The bills parties left without paying whose invoice is still owed. */
-  @state() private unpaidDepartures: UnpaidDeparture[] = [];
+  @state() private findingBill = false;
+  @state() private findBillBusy = false;
+  @state() private findBillError?: StringKey;
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
@@ -1458,7 +1460,6 @@ export class TillApp extends LitElement {
     held: 0,
     station: 0,
     waiting: 0,
-    departures: 0,
   };
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), tillPath);
@@ -1682,11 +1683,9 @@ export class TillApp extends LitElement {
     this.#restoreDestination();
     if (this.#showsCounterLists()) {
       // Each list says its own failure, so one that fails never stops the others loading.
-      const departures = this.#refreshDepartures();
       await this.#refreshList("held", "refresh.held");
       await this.#refreshList("station", "refresh.station");
       await this.#refreshWaiting();
-      await departures;
       // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
         this.staff = await this.api.listStaff();
@@ -1723,14 +1722,9 @@ export class TillApp extends LitElement {
     return this.#refreshList(list, messageKey);
   }
 
-  /** Never throws: a failure is said in the list's own retry notice. */
-  #refreshDepartures(): Promise<void> {
-    return this.#refreshList("departures", "refresh.departures");
-  }
-
   /**
    * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue`,
-   * `counterWaiting` or `unpaidDepartures`) or start, change or end its retry, and
+   * `counterWaiting`) or start, change or end its retry, and
    * {@link TillApp.#abandonListRefreshes} makes every earlier request stale. Without a `messageKey`
    * a failure is also thrown to the caller.
    */
@@ -1754,10 +1748,6 @@ export class TillApp extends LitElement {
     if (list === "waiting") {
       const waiting = await this.api.listCounterWaiting();
       return () => (this.counterWaiting = waiting);
-    }
-    if (list === "departures") {
-      const departures = await this.api.listUnpaidDepartures();
-      return () => (this.unpaidDepartures = departures);
     }
     const rows = await this.api.listWorkingOrders();
     return () => (this.heldOrders = rows);
@@ -1847,7 +1837,6 @@ export class TillApp extends LitElement {
     this.#refreshGeneration.held++;
     this.#refreshGeneration.station++;
     this.#refreshGeneration.waiting++;
-    this.#refreshGeneration.departures++;
     for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
     this.#refreshTimers.clear();
     this.refreshRetries = {};
@@ -2703,6 +2692,32 @@ export class TillApp extends LitElement {
             : "sale.error";
     } finally {
       this.submitting = false;
+    }
+  }
+
+  async #onFindBillPay(event: Event): Promise<void> {
+    if (this.submitting) return;
+    const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
+    this.submitting = true;
+    this.findBillBusy = true;
+    this.findBillError = undefined;
+    try {
+      this.result = await this.api.collectOrder(workingOrderId, tender);
+      this.findingBill = false;
+      this.#showTicket(workingOrderId, !invoiced);
+      await this.#refreshAfterWrite("station", "refresh.station_after_sale");
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
+    } catch (error) {
+      this.findBillError = isPermanentSaleRefusal(error)
+        ? "sale.refused"
+        : isNetworkFailure(error)
+          ? "sale.unconfirmed"
+          : isTakePaymentRefusal(error)
+            ? "take_payment.not_permitted"
+            : "sale.error";
+    } finally {
+      this.submitting = false;
+      this.findBillBusy = false;
     }
   }
 
@@ -5439,8 +5454,7 @@ export class TillApp extends LitElement {
     await this.#onDepartureRecorded(open.id, party.id, visit, sent);
   }
 
-  /** The dialog closes, the table leaves the screen as a finished one does, and the bills left
-   * unpaid are read again. */
+  /** The dialog closes and the table leaves the screen as a finished one does. */
   async #onDepartureRecorded(
     id: number,
     partyId: string,
@@ -5449,8 +5463,6 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     if (this.#departingNow(id) !== null) this.#closeDeparting();
     await this.#onTableClosed(partyId, visit, sent);
-    if (sent.session === this.#operatorSession)
-      await this.#refreshAfterWrite("departures", "refresh.departures_after_record");
   }
 
   /** The people who can approve the departure in dialog `id` are read, and their PIN prompt opens. */
@@ -5599,6 +5611,7 @@ export class TillApp extends LitElement {
     this.#closeAdjust();
     this.#closeBillPaying();
     this.#closeDeparting();
+    this.findingBill = false;
     this.#operatorSession++;
   }
 
@@ -6259,14 +6272,13 @@ export class TillApp extends LitElement {
       ?.key;
   }
 
-  /**
-   * Station, Expo and Schedule surfaces not authored as tabs, offered as buttons. A handheld gets none:
-   * it cannot open any of them.
-   */
   #affordances(): ShellAffordance[] {
-    if (this.handheldMode) return [];
+    if (this.handheldMode) return ["find-bill"];
     const tabKeys = new Set(this.canvas?.tabs.map((tab) => tab.key) ?? []);
-    return (["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a));
+    return [
+      ...(["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a)),
+      "find-bill",
+    ];
   }
 
   #counterOrderInFlight(): boolean {
@@ -6293,7 +6305,6 @@ export class TillApp extends LitElement {
         .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
-        .unpaidDepartures=${this.unpaidDepartures}
         .tables=${this.tables}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.#defaultStationId()}
@@ -6328,7 +6339,6 @@ export class TillApp extends LitElement {
       .products=${tableTab ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
       .counterWaiting=${this.counterWaiting}
-      .unpaidDepartures=${this.unpaidDepartures}
       .stationQueue=${this.stationQueue}
       .defaultStationId=${this.#defaultStationId()}
       .busy=${this.submitting}
@@ -6497,6 +6507,14 @@ export class TillApp extends LitElement {
         @print-receipt=${() => void this.#onPrintReceipt()}
         @payment-slip=${() => void this.#onPaymentSlip()}
         @open-drawer=${() => void this.#onOpenDrawer()}
+        @find-bill=${() => {
+          this.findBillError = undefined;
+          this.findingBill = true;
+        }}
+        @find-bill-pay=${(event: Event) => void this.#onFindBillPay(event)}
+        @find-bill-close=${() => {
+          this.findingBill = false;
+        }}
         @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
         @override-cancel=${() => this.#closeOverrideDialog()}
         @show-schedule=${() => this.#onShowSchedule()}
@@ -6576,8 +6594,17 @@ export class TillApp extends LitElement {
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
         <till-make-now .items=${this.makeNow} @dismiss=${this.#dismissMakeNow}></till-make-now>
+        ${
+          this.findingBill
+            ? html`<till-find-bill-dialog
+                .api=${this.api}
+                .busy=${this.findBillBusy}
+                .error=${this.findBillError}
+              ></till-find-bill-dialog>`
+            : nothing
+        }
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
-        ${this.#renderRefreshNotice("waiting")} ${this.#renderRefreshNotice("departures")}
+        ${this.#renderRefreshNotice("waiting")}
         <!-- The waiting-for-promotion banner. On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
              server.waiting_promotion copy compactly here while the router reports no server is accepting

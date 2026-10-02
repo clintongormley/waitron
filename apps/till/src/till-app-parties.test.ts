@@ -218,7 +218,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    listUnpaidDepartures: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
     listZones: vi.fn().mockResolvedValue([zone]),
     listStatuses: vi.fn().mockResolvedValue([]),
@@ -6154,7 +6153,6 @@ describe("till-app: recording an unpaid departure", () => {
   it("with the permission, sends the reason and the revision it read, and the table finishes as Finish leaves it", async () => {
     const { el } = await openDeparture();
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
-    const departureReads = vi.mocked(api.listUnpaidDepartures).mock.calls.length;
 
     await typeReason(el, "  Ran off ");
     await confirmDeparture(el);
@@ -6167,7 +6165,6 @@ describe("till-app: recording an unpaid departure", () => {
     expect(dialog(el)).toBeNull();
     expect(tableOrder(el)).toBeNull();
     expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
-    expect(api.listUnpaidDepartures).toHaveBeenCalledTimes(departureReads + 1);
   });
 
   it("without the permission, asks a supervisor or manager for their PIN and sends it with the same reason", async () => {
@@ -6313,7 +6310,6 @@ describe("till-app: recording an unpaid departure", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockRejectedValueOnce({ code: "party.not_open", status: 409 });
     const { el } = await openDeparture({ recordUnpaidDeparture });
-    const departureReads = vi.mocked(api.listUnpaidDepartures).mock.calls.length;
     await typeReason(el, "Ran off");
 
     await confirmDeparture(el);
@@ -6322,7 +6318,6 @@ describe("till-app: recording an unpaid departure", () => {
 
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
     expect(dialog(el)).toBeNull();
-    expect(api.listUnpaidDepartures).toHaveBeenCalledTimes(departureReads + 1);
     const text = banner(el)!.textContent!;
     expect(text).toContain(t("departure.probably_recorded"));
     expect(text).not.toContain(codeMessage("party.not_open"));

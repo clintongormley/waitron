@@ -15,11 +15,7 @@ import {
   type TillApiDeps,
 } from "./till-api.js";
 import { requireSession } from "./till-session.js";
-import {
-  listUnpaidDepartures,
-  recordUnpaidDeparture,
-  type UnpaidDepartureRequest,
-} from "./unpaid-departure.js";
+import { recordUnpaidDeparture, type UnpaidDepartureRequest } from "./unpaid-departure.js";
 import "./errors.js";
 
 /** The body, refused field by field as `management.request_invalid`, as a bill refund's is. */
@@ -69,13 +65,6 @@ export function mountUnpaidDepartureApi(
       return c.json(
         await withTransaction(deps.db, (tx) => listActivePersonsWithPermission(tx, "sale.void")),
       );
-    }),
-  );
-
-  app.get("/api/unpaid-departures", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      return c.json(await withTransaction(deps.db, listUnpaidDepartures));
     }),
   );
 }

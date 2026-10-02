@@ -1,5 +1,9 @@
 # The dashboard's Orders screen — design
 
+> **Update, 2026-10-02 (B27c):** Find a bill on tills and handhelds replaces the counter's
+> read-only Left without paying list and its GET route. Earlier descriptions of the list record
+> the starting design.
+
 > **Update, 2026-10-02 (B27b):** The owner's later C126 decision supersedes the "Invoice not
 > credited" mark below. C126 is to credit an invoiced bill in full when cancelled, so the Orders
 > screen shows Cancelled and its credit note without that mark. The earlier paragraphs record the

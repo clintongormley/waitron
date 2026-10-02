@@ -59,6 +59,17 @@ describe("till-tab-shell", () => {
     expect(fired).toBe(true);
   });
 
+  it("offers Find a bill from the header when the operator can collect a debt", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs,
+      affordances: ["find-bill"],
+    });
+    const seen: string[] = [];
+    el.addEventListener("find-bill", () => seen.push("find-bill"));
+    el.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
+    expect(seen).toEqual(["find-bill"]);
+  });
+
   it("omits an affordance button that is not in affordances", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,

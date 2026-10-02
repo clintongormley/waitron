@@ -2245,9 +2245,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
       does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
       says, so B16 left it.
-    - **Completed orders can now be looked up on the dashboard.** B27a adds the server's list, detail,
+    - **Completed orders can now be looked up on the dashboard, and an unpaid bill can be found on the till.** B27a adds the server's list, detail,
       staff, printer choice and audited receipt-copy routes; B27b adds the dashboard screen and its
-      receipt-copy action. B27c's till lookup remains queued. Spec:
+      receipt-copy action. B27c adds Find a bill on the till. Spec:
       `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`.
     - **The waiting list is drawn only inside the held-orders card**, so a canvas without that
       card shows no waiting list.
@@ -2306,11 +2306,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       full uses `POST /api/working-orders/:id/collect`.
     - **A dish never sent, on hold or recalled blocks the departure**
       (`unpaid_departure.unfired_dishes`); staff cancel it first.
-    - **Handhelds on the default phone and tablet layouts never see the list.** It sits in the
-      counter's held-orders card, which those layouts lack; since B31 a handheld whose layout adds
-      a held-orders card loads and shows it. The owner kept the counter list as a stopgap and wants
-      the dashboard Orders screen (B27s; B27a's server routes and B27b's screen are built; B27c's
-      till lookup remains queued; the till-cancel question was C126, now built: see its entry below).
+    - **Find a bill replaces the counter's list.** A till or handheld can search unpaid bills by
+      invoice number, order number, table or party name, then collect one. The dashboard Orders
+      screen's Unpaid filter shows the same debts. The till-cancel question was C126, now built:
+      see its entry below.
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
       amount, so staff confirm a debt the server does not record.** The dialog lists each bill at
       what `GET /api/parties/:id/bills` says it owes, which reads no credit note (`#departingBills`

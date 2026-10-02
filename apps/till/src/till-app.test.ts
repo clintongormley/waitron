@@ -30,12 +30,10 @@ import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
-import type { TillUnpaidDepartures } from "./widgets/unpaid-departures.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   CounterWaitingOrder,
   DeadEndAnswer,
-  UnpaidDeparture,
   DevDeviceList,
   FloorZone,
   HeldOrderSummary,
@@ -406,7 +404,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    listUnpaidDepartures: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn().mockResolvedValue({
       id: "wo-1",
       orderNumber: 5,
@@ -1798,7 +1795,6 @@ describe("till-app", () => {
       );
       expect(currentApi.listWorkingOrders).toHaveBeenCalled();
       expect(currentApi.listCounterWaiting).toHaveBeenCalled();
-      expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
       selectTab(el, "counter");
       await flush(el);
       expect(counter(el)!.heldOrders).toEqual([heldSummary]);
@@ -1819,7 +1815,6 @@ describe("till-app", () => {
         expect(currentApi.listWorkingOrders).toHaveBeenCalled();
         expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
         expect(currentApi.listCounterWaiting).toHaveBeenCalled();
-        expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
         const grid = activeTabGrid(el)!.shadowRoot!;
         if (type === "prep-queue") {
           expect(grid.querySelector<TillStationQueue>("till-station-queue")!.groups).toEqual([
@@ -1840,7 +1835,6 @@ describe("till-app", () => {
       await toCounter(el);
       expect(currentApi.listWorkingOrders).toHaveBeenCalled();
       expect(currentApi.listCounterWaiting).toHaveBeenCalled();
-      expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
     });
 
     const payCard = (el: TillApp, tab: string): TillTenderPay =>
@@ -1975,7 +1969,6 @@ describe("till-app", () => {
 
           expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
           expect(currentApi.listCounterWaiting).toHaveBeenCalled();
-          expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
           expect(currentApi.listStaff).toHaveBeenCalled();
           expect(notice(el, "held").hasAttribute("data-active")).toBe(true);
           expect(notice(el, "held").querySelector(".refresh-message")!.textContent!.trim()).toBe(
@@ -7282,6 +7275,145 @@ describe("till-app", () => {
       expect(view.result).toBe(saleResult);
     });
 
+    it("Find a bill collects an existing debt and offers a duplicate receipt", async () => {
+      const waiting = vi.fn().mockResolvedValue([]);
+      const { el } = await mountApp({ listCounterWaiting: waiting });
+      await toCounter(el);
+      const shell = el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
+      shell.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      expect(dialog).not.toBeNull();
+      const reads = waiting.mock.calls.length;
+      dialog.dispatchEvent(
+        new CustomEvent("find-bill-pay", {
+          detail: {
+            workingOrderId: "wo-debt",
+            tender: { method: "cash", amount: "30.00" },
+            invoiced: true,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
+        method: "cash",
+        amount: "30.00",
+      });
+      expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+      expect(waiting.mock.calls.length).toBeGreaterThan(reads);
+    });
+
+    it.each([true, false])(
+      "Find a bill searches and collects through the dialog (already invoiced: %s)",
+      async (invoiced) => {
+        const lookup = vi.fn().mockResolvedValue({
+          bills: [
+            {
+              workingOrderId: "wo-debt",
+              orderNumber: 12,
+              label: "Birthday",
+              partyName: "Familia Ruiz",
+              tables: ["4"],
+              invoiceNumber: invoiced ? "A/12" : null,
+              openedAt: "2026-10-01T18:00:00.000Z",
+              departedAt: null,
+              status: "waiting_for_payment",
+              stillOwed: "30.00",
+            },
+          ],
+        });
+        const { el } = await mountApp({
+          lookUpBills: lookup,
+          getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+        });
+        await toCounter(el);
+        el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+          .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+          .click();
+        await el.updateComplete;
+        const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+        const search = dialog.shadowRoot!.querySelector<HTMLElement>("[name=bill-search]")!;
+        await vi.waitFor(() => expect(search.shadowRoot!.querySelector("input")).not.toBeNull());
+        const input = search.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+        input.value = "Ruiz";
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await dialog.updateComplete;
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-search]")!.click();
+        await vi.waitFor(() =>
+          expect(dialog.shadowRoot!.querySelector("[data-bill]")).not.toBeNull(),
+        );
+        expect(lookup).toHaveBeenCalledWith("Ruiz");
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bill]")!.click();
+        await dialog.updateComplete;
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
+        await flush(el);
+        expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
+          method: "cash",
+          amount: "30.00",
+        });
+        expect(ticket(el)!.originalReceiptAvailable).toBe(!invoiced);
+      },
+    );
+
+    it("keeps Find a bill open with a refusal when collection fails", async () => {
+      const { el } = await mountApp({
+        collectOrder: vi.fn().mockRejectedValue({ code: "fiscal.foreign_recipient_unsupported" }),
+      });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      dialog.dispatchEvent(
+        new CustomEvent("find-bill-pay", {
+          detail: {
+            workingOrderId: "wo-debt",
+            tender: { method: "cash", amount: "30.00" },
+            invoiced: true,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(dialog);
+      expect(dialog.error).toBe("sale.refused");
+      expect(ticket(el)).toBeNull();
+    });
+
+    it("tells the operator when Find a bill collection is refused for payment permission", async () => {
+      const { el } = await mountApp({
+        collectOrder: vi.fn().mockRejectedValue({
+          code: "authorization.not_permitted",
+          status: 403,
+          permission: "sale.take_payment",
+        }),
+      });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      dialog.dispatchEvent(
+        new CustomEvent("find-bill-pay", {
+          detail: {
+            workingOrderId: "wo-debt",
+            tender: { method: "cash", amount: "30.00" },
+            invoiced: true,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(dialog.error).toBe("take_payment.not_permitted");
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(dialog);
+    });
+
     it("a failed collect keeps the counter (collect stage) and the basket, showing a non-fatal error", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
@@ -7885,7 +8017,7 @@ describe("till-app", () => {
       ],
     };
 
-    it("renders the tab shell for a handheld with a full header and no affordances", async () => {
+    it("renders the tab shell for a handheld with Find a bill in its full header", async () => {
       // A handheld stays on `lock` until the waiter PIN-logs-in (then lands on this layout's first tab, `floor`);
       // the shell activates only on that authenticated surface, so boot THEN login before asserting.
       const { el } = await mountApp({
@@ -7904,10 +8036,8 @@ describe("till-app", () => {
       expect(s).not.toBeNull();
       // Handheld = the FULL header, never kiosk (kiosk is the kds display alone).
       expect(s.kiosk).toBe(false);
-      // No Station/Expo/Schedule buttons — the handheld affordance list is empty even though none of the
-      // three is authored as a tab (the `handheldMode` branch in `#affordances`; the memo recompute on
-      // `handheldMode` change is what makes this `[]` rather than the stale pre-probe `{station,expo,schedule}`).
-      expect(s.affordances).toEqual([]);
+      expect(s.affordances).toEqual(["find-bill"]);
+      expect(s.shadowRoot!.querySelector(".find-bill")).not.toBeNull();
       // The full header renders its logout control — kiosk mode would suppress the whole header.
       expect(s.shadowRoot!.querySelector(".logout")).not.toBeNull();
     });
@@ -11187,95 +11317,5 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="waiting"]')!;
     expect(notice.hasAttribute("data-active")).toBe(true);
     expect(notice.textContent).toContain(t("refresh.waiting"));
-  });
-});
-
-describe("the bills parties left without paying", () => {
-  const departure: UnpaidDeparture = {
-    id: "ud-1",
-    workingOrderId: "wo-9",
-    billLabel: null,
-    tableLabels: ["4"],
-    saleId: "s-9",
-    invoiceNumber: "F-0009",
-    amount: "30.00",
-    reason: "Ran off",
-    recordedByName: "Ana",
-    authorizedByName: "Ana",
-    recordedAt: "2026-10-01T21:30:00.000Z",
-  };
-  const departuresList = (el: TillApp) =>
-    counterGrid(el)?.shadowRoot?.querySelector<TillUnpaidDepartures>("till-unpaid-departures") ??
-    null;
-
-  it("lists them in the held-orders card even when nothing is held or waiting", async () => {
-    const { el } = await mountApp({
-      listUnpaidDepartures: vi.fn().mockResolvedValue([departure]),
-    });
-    await toCounter(el);
-
-    expect(departuresList(el)!.departures).toEqual([departure]);
-    expect(
-      departuresList(el)!.shadowRoot!.querySelector('[data-departure="ud-1"]')!.textContent,
-    ).toContain("Ran off");
-  });
-
-  it("shows no list, and no held-orders card, when nobody has left without paying", async () => {
-    const { el } = await mountApp();
-    await toCounter(el);
-
-    expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
-    expect(departuresList(el)?.departures ?? []).toEqual([]);
-    expect(counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")).toBeNull();
-  });
-
-  it("are not read again when a counter sale or a hand over reads the waiting orders again", async () => {
-    const { el } = await mountApp();
-    const c = await toCounter(el);
-    const reads = vi.mocked(currentApi.listUnpaidDepartures).mock.calls.length;
-    const waitingReads = vi.mocked(currentApi.listCounterWaiting).mock.calls.length;
-
-    c.store.addProduct(cafe, "2");
-    await el.updateComplete;
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
-    expect(currentApi.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 1);
-
-    emit(counter(el)!, "hand-over-order", { id: "wo-sent" });
-    await flush(el);
-    expect(currentApi.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 2);
-
-    expect(currentApi.listUnpaidDepartures).toHaveBeenCalledTimes(reads);
-  });
-
-  it("reads them without waiting for the waiting orders' answer", async () => {
-    let answerWaiting!: (orders: CounterWaitingOrder[]) => void;
-    const { el } = await mountApp({
-      listCounterWaiting: vi.fn(
-        () => new Promise<CounterWaitingOrder[]>((resolve) => (answerWaiting = resolve)),
-      ),
-      listUnpaidDepartures: vi.fn().mockResolvedValue([departure]),
-    });
-    await flush(el);
-    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
-    await flush(el);
-
-    expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
-    answerWaiting([]);
-    await flush(el);
-    expect(departuresList(el)!.departures).toEqual([departure]);
-  });
-
-  it("a failed read of the list says so and offers to try again", async () => {
-    const { el } = await mountApp({
-      listUnpaidDepartures: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-    });
-    await toCounter(el);
-
-    const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="departures"]')!;
-    expect(notice.hasAttribute("data-active")).toBe(true);
-    expect(notice.textContent).toContain(t("refresh.departures"));
-    const waiting = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="waiting"]')!;
-    expect(waiting.hasAttribute("data-active")).toBe(false);
   });
 });
