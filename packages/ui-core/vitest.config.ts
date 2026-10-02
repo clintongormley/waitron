@@ -7,6 +7,20 @@ type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
+  context(): {
+    newCDPSession(page: PlaywrightPage): Promise<{
+      send(method: string, params?: object): Promise<unknown>;
+    }>;
+  };
+}
+
+interface CdpNode {
+  nodeId: number;
+  nodeName: string;
+  attributes?: string[];
+  children?: CdpNode[];
+  shadowRoots?: CdpNode[];
+  contentDocument?: CdpNode;
 }
 
 /**
@@ -21,6 +35,35 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
+};
+
+// Forces Chromium's pseudo-class paint; it does not fill or save a credential.
+const forceAutofillPseudoState: BrowserCommand<[hostId: string]> = async (context, hostId) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("DOM.enable");
+  await cdp.send("CSS.enable");
+  const { root } = (await cdp.send("DOM.getDocument", { depth: -1, pierce: true })) as {
+    root: CdpNode;
+  };
+  const descendants = (node: CdpNode): CdpNode[] => [
+    node,
+    ...[
+      ...(node.children ?? []),
+      ...(node.shadowRoots ?? []),
+      ...(node.contentDocument ? [node.contentDocument] : []),
+    ].flatMap(descendants),
+  ];
+  const host = descendants(root).find((node) => {
+    const i = node.attributes?.indexOf("id") ?? -1;
+    return i >= 0 && node.attributes?.[i + 1] === hostId;
+  });
+  const input = host && descendants(host).find((node) => node.nodeName === "INPUT");
+  if (!input) throw new Error(`No input under ${hostId}`);
+  await cdp.send("CSS.forcePseudoState", {
+    nodeId: input.nodeId,
+    forcedPseudoClasses: ["autofill"],
+  });
 };
 
 export default defineConfig({
@@ -38,6 +81,7 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
+        forceAutofillPseudoState,
         ...parkPointerCommands,
       },
     },

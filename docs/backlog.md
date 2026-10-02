@@ -892,14 +892,17 @@ read-only mode today; add one to the primitive (it must still be announced as th
 not look like an empty or disabled field), or a read-only variant of the field look, rather than
 drawing a field in the screen (CLAUDE.md §3).
 
-**A field the browser fills in keeps the field's own look (A190, owner 2026-10-02) — OPEN.** On the
+**A field the browser fills in keeps the field's own look (A190, owner 2026-10-02) — DONE.** On the
 sign-in screen and the setup wizard, a field the browser autofilled is drawn pale blue with no
 bottom line, unlike every other field. **Decided (owner, 2026-10-02):** an autofilled field looks
 like a typed one — the field fill and the bottom line — in every field primitive and both themes.
 The label already floats for an autofilled field (`:has(:autofill)` in
 `packages/ui-core/src/field-styles.ts` and `wt-price-input`); the colour and line were not looked
-into. Check in a real Chromium that the browser's own autofill colour is what draws the blue before
-choosing the fix, and LOOK with a saved password.
+into. A Chromium browser test forces the autofill pseudo-class, checks the visible fill, bottom line
+and value colour in both themes, and reproduces the browser's light-theme pale blue and dark-theme
+translucent slate fill before the CSS fix. An isolated Chromium
+profile accepted a saved test password through `navigator.credentials.store`, but did not autofill
+it after a reload or restart under automation; that saved-password visual check remains unverified.
 
 **The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
 owner 2026-10-02) — OPEN.** The owner, on the passkey page: _"this page also looks a bit messy"_.

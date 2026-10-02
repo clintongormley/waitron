@@ -77,6 +77,10 @@ export const fieldStyles = css`
     color: var(--wt-color-text-muted);
     font-style: italic;
   }
+  .field-control:autofill {
+    background-clip: text;
+    -webkit-text-fill-color: var(--wt-color-field-value);
+  }
   .field:focus-within:not([data-open]) {
     box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
   }
@@ -111,6 +115,9 @@ export const fieldStyles = css`
   .field[data-disabled] .field-control {
     color: var(--wt-color-text-muted);
     cursor: not-allowed;
+  }
+  .field[data-disabled] .field-control:autofill {
+    -webkit-text-fill-color: var(--wt-color-text-muted);
   }
   .field[data-compact] {
     min-height: var(--wt-tap-min);
