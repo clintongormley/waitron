@@ -3606,6 +3606,7 @@ export class TillApp extends LitElement {
     const offerRequest = ++this.#tableOfferRequest;
     this.#orderVisit++;
     this.#moveStationOpening = null;
+    this.#makeAtOpening = null;
     this.movingStation = null;
     this.makingAt = null;
     this.#clearErrorKeepingLateChange();
@@ -4732,6 +4733,7 @@ export class TillApp extends LitElement {
     const index = (event as CustomEvent<number>).detail;
     const orderId = this.#store.id;
     const session = this.#operatorSession;
+    const visit = this.#orderVisit;
     const line = this.#store.lines[index];
     if (line === undefined) return;
     const opening = {};
@@ -4743,6 +4745,7 @@ export class TillApp extends LitElement {
         this.movingStation !== null ||
         orderId !== this.#store.id ||
         session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
         this.#store.lines[index] !== line
       )
         return;

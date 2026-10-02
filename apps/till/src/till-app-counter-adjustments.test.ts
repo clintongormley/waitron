@@ -320,6 +320,46 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-app: counter station choice", () => {
+  it("drops Make at when table navigation overtakes its station read", async () => {
+    const read = deferred<typeof stations>();
+    const seating = deferred<{ tabId: string; partyId: string; revision: number }>();
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      seatTable: vi.fn(() => seating.promise),
+    });
+    vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    emit(counter(el), "open-table", { tableId: "t-1", seated: false, guestCount: 2 });
+    read.resolve(stations);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+  });
+
+  it("allows a table Move after table navigation overtakes a pending Make at", async () => {
+    const read = deferred<typeof stations>();
+    const seating = deferred<{ tabId: string; partyId: string; revision: number }>();
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      seatTable: vi.fn(() => seating.promise),
+    });
+    vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    emit(counter(el), "open-table", { tableId: "t-1", seated: false, guestCount: 2 });
+    emit(counter(el), "move-station", {
+      workingOrderId: "table-order",
+      lineId: "table-line",
+      name: "Bravas",
+      stationId: "bar",
+    });
+    read.resolve(stations);
+    await flush(el);
+    const dialogs = el.shadowRoot!.querySelectorAll("till-station-choice-dialog");
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]!.getAttribute("mode")).toBe("move");
+  });
+
   it("does not open a counter move after the basket changes during the station read", async () => {
     const lines = listing(4);
     lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
