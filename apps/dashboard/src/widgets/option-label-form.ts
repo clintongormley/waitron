@@ -44,6 +44,8 @@ export class OptionLabelForm extends LitElement {
       legend {
         margin-bottom: var(--wt-space-2);
         padding: 0;
+      }
+      .group-label {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
@@ -185,7 +187,9 @@ export class OptionLabelForm extends LitElement {
   #customerNames(errors: Record<string, string>) {
     const locales = this.languages.languages;
     return html`<fieldset class="names">
-      <legend data-test="customer-names-heading">${t("options.customer_names")}</legend>
+      <legend class="group-label" data-test="customer-names-heading">
+        ${t("options.customer_names")}
+      </legend>
       ${optionalTextFields(
         this.#fields(errors),
         "label-customer-name",

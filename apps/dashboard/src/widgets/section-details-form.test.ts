@@ -365,3 +365,17 @@ it.each([
     }
   },
 );
+it("leaves the colour caption out of the group-label look the names heading takes", async () => {
+  const el = await detailsForm();
+  const heading = el.shadowRoot!.querySelector<HTMLElement>(
+    '[data-test="customer-names-heading"]',
+  )!;
+  const caption = el.shadowRoot!.querySelector<HTMLElement>("fieldset.color legend")!;
+  const headingStyle = getComputedStyle(heading);
+  const captionStyle = getComputedStyle(caption);
+  expect(headingStyle.textTransform).toBe("uppercase");
+  expect(captionStyle.textTransform).toBe("none");
+  expect(captionStyle.color).not.toBe(headingStyle.color);
+  expect(captionStyle.marginBottom).not.toBe("0px");
+  expect(captionStyle.marginBottom).toBe(headingStyle.marginBottom);
+});
