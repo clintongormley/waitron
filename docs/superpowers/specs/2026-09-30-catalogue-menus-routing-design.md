@@ -302,6 +302,11 @@ fallback, and so on. The chain ends at the venue default.
 The chosen station is **recorded when the work is sent**, as today. Changing a rule never moves
 work that has already been sent.
 
+_2026-10-01 (slice 3b, owner): the [3b plan](../plans/2026-10-01-station-hours-fallbacks-slice-3b.md)
+replaces the fallback policy above. Closed and switched-off stations follow their fallback chain;
+no replacement is a dead end, and the till asks where to make the dish before sending or taking
+payment. Printer and screen failures raise alerts. Closing a station moves only new work._
+
 ### 5.4 Delivery area
 
 _2026-10-01, approved R10: you set a till's default service zone on Venue operations › Service
@@ -350,6 +355,7 @@ what, then the delivery area, then the station.
 - **Warnings:**
   - "Can never match": an earlier exception catches everything this one would.
   - Each destination is checked. A station that is switched off, for example, is flagged.
+    _2026-10-01 (slice 3b, owner): a switched-off station follows its fallback, like a closed one._
 
 **The three examples this design was tested against:**
 
@@ -369,6 +375,11 @@ what, then the delivery area, then the station.
   the fallback, following the chain.
 - **Printer or screen down.** The same fallback applies when a station's printer or screen is not
   reachable, and someone is alerted. Nothing disappears without anyone knowing.
+  _2026-10-01 (slice 3b, owner): a down printer reroutes nothing; it raises an alert on the dashboard,
+  on Prep Stations and on the station's kitchen screen, and the manager closes the station by hand.
+  A station with dishes sent in the last hour still waiting, whose kitchen screens have all stopped
+  checking in for three minutes, is alerted on the dashboard and Prep Stations, whether or not it is
+  open — closing it moves only new work._
 - **Rules never mention time.** Time lives on stations.
 
 ### 5.8 Extras

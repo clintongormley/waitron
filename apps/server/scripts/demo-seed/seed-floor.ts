@@ -13,6 +13,8 @@ import {
   departmentHours,
   departments,
   createException,
+  replaceStationHours,
+  setStationFallback,
   zoneMenus,
   zoneServicePolicies,
 } from "@waitron/venue-service";
@@ -172,6 +174,12 @@ export async function seedFloor(
     if (downstairsStationId === undefined || upstairsStationId === undefined) {
       throw new Error("seedFloor: bar preparation stations were not created");
     }
+    const stationCfg = { locationId: brandLocationId(locationId) };
+    await replaceStationHours(tx, stationCfg, upstairsStationId, [
+      { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      { weekday: 6, opensAt: "19:00", closesAt: "21:00" },
+    ]);
+    await setStationFallback(tx, stationCfg, upstairsStationId, downstairsStationId);
     const barCategories = await tx
       .select({ id: categories.id })
       .from(categories)

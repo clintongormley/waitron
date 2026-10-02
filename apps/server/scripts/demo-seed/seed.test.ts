@@ -183,6 +183,53 @@ describe("seedDemoRestaurant", () => {
     });
   });
 
+  it("opens Upstairs bar on Friday and Saturday evenings and routes closed evenings to Downstairs bar", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 1 });
+
+    await withTransaction(suite.db, async (tx) => {
+      const cfg = { locationId: brandLocationId(venue.locationId) };
+      const { rows: hours } = await tx.execute<{
+        weekday: number;
+        opens_at: string;
+        closes_at: string;
+      }>(sql`
+        select h.weekday, h.opens_at, h.closes_at from station_hours h
+        join kitchen_stations s on s.id = h.station_id
+        where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'
+        order by h.weekday`);
+      expect(hours).toEqual([
+        { weekday: 5, opens_at: "19:00:00", closes_at: "21:00:00" },
+        { weekday: 6, opens_at: "19:00:00", closes_at: "21:00:00" },
+      ]);
+      const { rows: fallbacks } = await tx.execute<{ name: string }>(sql`
+        select fallback.name from station_fallbacks f
+        join kitchen_stations s on s.id = f.station_id
+        join kitchen_stations fallback on fallback.id = f.fallback_station_id
+        where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'`);
+      expect(fallbacks).toEqual([{ name: "Downstairs bar" }]);
+
+      const { rows: zones } = await tx.execute<{ id: string }>(sql`
+        select id from floor_zones
+        where location_id = ${venue.locationId} and name = 'Upstairs bar'`);
+      const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
+        select id, name from kitchen_stations where location_id = ${venue.locationId}`);
+      const { products } = await listAvailableProducts(tx, venue.locationId);
+      const drink = products.find((product) => product.name === "Negroni")!;
+      for (const [instant, stationName] of [
+        ["2026-10-02T18:00:00Z", "Upstairs bar"],
+        ["2026-10-06T18:00:00Z", "Downstairs bar"],
+      ] as const) {
+        const station = stations.find((candidate) => candidate.name === stationName)!;
+        expect(await resolveMakers(tx, cfg, zones[0]!.id, [drink.id], new Date(instant))).toEqual(
+          new Map([
+            [drink.id, { kind: "made", route: { kind: "station", stationId: station.id } }],
+          ]),
+        );
+      }
+    });
+  });
+
   it("runs every sub-seed: both menus, the floor, the staff, the adjustment reasons, a sale, and content-addressed media", async () => {
     const venue = await provisionVenue();
 

@@ -226,7 +226,7 @@ older build before using the new published document. What is left:
   none is a dead end, and the till asks the waiter where to make such a dish, or to remove it,
   before sending or taking payment), and down-printer and dark-screen alerts
   ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner
-  on 2026-10-01, lands on its own when green) — lane D's PF4.
+  on 2026-10-01, built 2026-10-02 and awaiting branch review, CI and landing) — lane D's PF4.
 - **3c-2**, extras made at their own station, with the dish's and the extra's tickets naming each
   other ([plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md), starts once 3b has
   landed) — lane D's PF6.
@@ -249,6 +249,15 @@ older build before using the new published document. What is left:
   remains open; and a device's made-here stations do not travel in configuration export, because
   devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
   from an export sets them again on the Devices screen.
+- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
+  may never mark dishes ready on its screen. With that screen switched off, each send can raise
+  the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
+  opened through the dev stack's device chooser never records a check-in: the override returns
+  before the cookie path updates `lastSeenAt` (`apps/server/src/device-session.ts:176-186`).
+  Improve how the alert distinguishes a kitchen using paper and how the dev chooser records check-ins.
+- **Opening or closing a station from the till** (S11, owner, 2026-10-01). Add a core till route
+  calling a new `VENUE_SERVICE` seat method, so staff can open or close the station from the till.
+  Take a manager's PIN as the cash drawer route does (`apps/server/src/till-api.ts:1631-1659`).
 - **Deleting or moving a folder does not show which products change station** (slice 3a, approved
   R6). The delete dialog counts claims and exceptions removed but lists no products whose
   destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that
