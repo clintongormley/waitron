@@ -2754,8 +2754,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       PIN sent with that request is neither checked nor counted. The drawer, refund and
       unpaid-departure routes check the permission first. Moving it earlier changes who gets which
       refusal; not decided.
-    - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — open as
-      PR #1055 (`feat/service-cancel-credit-till`), left for the owner to land.** On the table screen, a party
+    - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — landed as #1055
+      (main `0f48b8bd5`, 2026-10-02).** On the table screen, a party
       bill that is placed, has its sale filed and holds no payment shows "Cancel and credit" to
       anyone signed in (`#billRow`, `apps/till/src/screens/till-table-order-screen.ts`). Its dialog
       (`apps/till/src/widgets/cancel-credit-dialog.ts`) names the invoice and the amount, takes a
@@ -2777,12 +2777,18 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       - **Counter orders are not offered it.** A counter order placed and invoiced but unpaid (the
         `invoice_first` mode) has no "Cancel and credit"; the counter's waiting list carries no
         invoice field. Queued as lane B's B34 (owner, 2026-10-02).
+      - **The approver list is fetched with no time limit.** After a refusal for lack of
+        permission the till asks `GET /api/cancel-credit-authorizers` who can approve, and until
+        the answer arrives the dialog stays busy with its buttons disabled (`apps/till/src/till-app.ts`,
+        the approvers fetch). The unpaid-departure and refund dialogs fetch theirs the same way and
+        predate B32; a time limit belongs on all three together. Raised by B32's review by reading
+        only; nobody reproduced a stalled answer.
     - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
       Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
       `cash.drawer`, so its cases cannot tell which of those it reads.
     - **A credit note's lines do not record which invoice line each one reverses** — no column
       holds that link, so a credit note cannot be traced back line by line. Storing it on every
-      corrective line `recordCorrection` writes is queued as lane C's C132 (owner, 2026-10-02).
+      corrective line `recordCorrection` writes is queued as C132 (owner, 2026-10-02), moved to lane B.
     - **A fully credited bill's original invoice can still be reprinted**, from the till and from
       the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
       not decided.
