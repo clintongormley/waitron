@@ -175,21 +175,24 @@ describe("allergen-dietary-picker", () => {
     );
   });
 
-  it("closes the combobox on Escape and puts focus back on its line", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
-      value: { allergens: ["milk"], dietary: [] },
-    });
-    line(el, "allergens").focus();
-    await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull(),
-    );
-    await userEvent.keyboard("{Escape}");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).toBeNull(),
-    );
-    expect(deepActiveElement()).toBe(line(el, "allergens"));
-  });
+  it.each(["allergens", "dietary"] as const)(
+    "closes the %s combobox on Escape and puts focus back on its line",
+    async (field) => {
+      const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+        value: { allergens: ["milk"], dietary: [] },
+      });
+      line(el, field).focus();
+      await userEvent.keyboard("{Enter}");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector(`[data-test="${field}"]`)).not.toBeNull(),
+      );
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector(`[data-test="${field}"]`)).toBeNull(),
+      );
+      expect(deepActiveElement()).toBe(line(el, field));
+    },
+  );
 
   it("keeps the combobox open when Escape only closes its open list", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {

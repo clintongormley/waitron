@@ -85,7 +85,6 @@ export class AllergenDietaryPicker extends LitElement {
 
   #edit(field: Field, event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
     this.editing = field;
     void this.#focus(`[data-test="${field}"]`);
   }
