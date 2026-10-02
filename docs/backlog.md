@@ -1913,6 +1913,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       `POST /api/working-orders/:id/payments` with `entry: "reader"`) checks the signed-in
       person's permissions: beyond being signed in on an enrolled device with a till, the device
       profile's capability is the only check (queued as C128).
+    - **Open — the counter's pay card stays on "Tap or insert card…" after a refused reader
+      payment.** Seen in a browser test on C129's branch: after `/api/pay` is refused (with
+      `device.forbidden_action`, and the same with `server.internal`), the counter shows the
+      refusal in its banner but the pay card keeps its waiting-for-card text and a Cancel button
+      (`apps/till/src/widgets/tender-pay.ts`, unchanged by C129). Cancel presumably returns it;
+      not measured on a real reader.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
