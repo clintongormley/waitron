@@ -703,8 +703,7 @@ declare module "@waitron/shared" {
     /** The venue's region fixes its receipt language; `language` is that fixed language, never the
      * caller's value. */
     "receipt.language_fixed": { field: "receiptLanguage"; language: string };
-    /** A receipt-language change refused because `count` orders at the location still have a line
-     * the till can write, which the line trigger refuses once its language key is stale. */
+    /** A receipt-language change refused because `count` open orders at the location hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     /**
      * A request named a device binding id that matches no row. Checked by a read before the write in

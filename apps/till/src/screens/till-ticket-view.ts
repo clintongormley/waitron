@@ -32,11 +32,11 @@ export interface TicketIssuer {
 /**
  * A filed line's goods name in the receipt's language (art. 7.1.e).
  *
- * `descriptions` is the ONE map on this ticket an exact-key lookup may be used on:
- * `toInvoiceLineDescriptions` (`packages/catalogue/src/invoice-descriptions.ts`) re-keys every priced
- * line's onto the location's receipt language. Nothing re-keys the line's `unitName`, which is why the
- * quantity below resolves that one through `resolveSnapshotText` instead — as the printed twin
- * (`apps/server/src/receipt-ticket.ts`) does.
+ * `descriptions` is keyed by the receipt languages saved when the line was added
+ * (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`); a later change can
+ * leave them without the sale's language, so the lookup falls back to the first stored name. Nothing
+ * re-keys the line's `unitName`, which is why the quantity below resolves that one through
+ * `resolveSnapshotText` instead, as the printed twin (`apps/server/src/receipt-ticket.ts`) does.
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";

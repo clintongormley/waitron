@@ -1285,8 +1285,6 @@ export async function fireLines(
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
-  // Checked before this function's first write, or `stampSent` can stamp a line whose descriptions
-  // carry a former receipt language, which `working_order_lines_check_locales_update` refuses.
   if (values.length > 0) {
     const [alreadyFired] = await tx
       .select({ id: ticketItems.id })

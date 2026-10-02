@@ -16,11 +16,10 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { provisionBillVenue, send, seatedWith, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// A receipt-language change is refused while an order at the location has a line the till can
-// still write: a line keyed under the old language is refused by the database's line trigger
-// (`working_order_lines_check_locales_update`) once the location's language differs. Each case
-// below is a write the till's own routes were measured making, and its control is the state in
-// which those routes can no longer write it.
+// A receipt-language change is refused while an open order at the location holds a line: the till
+// can still split such a line, inserting a copy keyed under the old language, or move it to another
+// bill, and the database's line triggers refuse both once the location's language differs. A placed
+// or paid order's lines, and an open order with none, take no such write, so they do not block.
 let venue: BillVenue;
 let counter: ZoneOffers;
 let manager: string;
@@ -211,7 +210,7 @@ describe("a receipt-language change while orders are open", () => {
     expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
   });
 
-  it("accepts a change once every counter sale is paid and sent, as nothing can write their lines", async () => {
+  it("accepts a change once every counter sale is paid and sent", async () => {
     reset();
     const id = await counterSale();
     expect(dishLines(id).every((line) => line.sent_at !== null && line.served_at === null)).toBe(
@@ -222,30 +221,25 @@ describe("a receipt-language change while orders are open", () => {
     expect(prep.json).toMatchObject({ code: "ticket.already_fired" });
   });
 
-  it("is refused while a paid bill's party is seated, as its dishes can still be served, and accepted once the party leaves", async () => {
+  it("accepts a change while a paid bill's party is seated, and its dishes can still be served", async () => {
     reset();
     const party = await paidPartyBill();
     const [line] = dishLines(party.tabId);
     expect(line!.served_at).toBeNull();
 
-    expect(await changeTo("gl-ES")).toEqual(refusedFor(1));
-
-    const finished = await till("POST", `/api/parties/${party.partyId}/finish`, {
-      expectedPartyRevision: revisionOf(party.partyId),
-    });
-    expect(finished.status).toBe(200);
     expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(language()).toEqual(["gl-ES"]);
 
     const served = await till("POST", `/api/parties/${party.partyId}/served`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revisionOf(party.partyId),
       items: [{ lineId: line!.id, quantity: "1" }],
     });
-    expect(served).toMatchObject({ status: 409, json: { code: "party.not_open" } });
-    expect(dishLines(party.tabId)[0]!.served_at).toBeNull();
+    expect(served.status).toBe(200);
+    expect(dishLines(party.tabId)[0]!.served_at).not.toBeNull();
   });
 
-  it("is refused while a seated party's paid bill is fully served, as a serve can still be taken back", async () => {
+  it("accepts a change while a seated party's paid bill is fully served, and the serve can still be taken back", async () => {
     reset();
     const party = await paidPartyBill();
     const [line] = dishLines(party.tabId);
@@ -257,10 +251,18 @@ describe("a receipt-language change while orders are open", () => {
     expect(served.status).toBe(200);
     expect(dishLines(party.tabId)[0]!.served_at).not.toBeNull();
 
-    expect(await changeTo("gl-ES")).toEqual(refusedFor(1));
+    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+
+    const unserved = await till("POST", `/api/parties/${party.partyId}/unserved`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revisionOf(party.partyId),
+      items: [{ lineId: line!.id, quantity: "1" }],
+    });
+    expect(unserved.status).toBe(200);
+    expect(dishLines(party.tabId)[0]!.served_at).toBeNull();
   });
 
-  it("is refused while a paid bill sits on a party merged into one still seated", async () => {
+  it("accepts a change while a paid bill sits on a party merged into one still seated", async () => {
     reset();
     const survivor = await seatedWith(venue, "Tarta");
     const merged = await paidPartyBill();
@@ -281,24 +283,21 @@ describe("a receipt-language change while orders are open", () => {
             where wo.id = ${merged.tabId}`,
       ),
     ).toEqual([{ state: "closed", party_id: merged.partyId }]);
-    // The survivor's own bill was paid too, so the merged party's bill is what blocks.
     const paid = await till("POST", "/api/sales", {
       workingOrderId: survivor.tabId,
       lines: [],
       tender: { method: "cash", amount: "18.00" },
     });
     expect(paid.status).toBe(200);
+    expect(
+      rows<{ state: string }>(sql`select state from parties where id = ${survivor.partyId}`),
+    ).toEqual([{ state: "open" }]);
 
-    expect(await changeTo("gl-ES")).toEqual(refusedFor(2));
-
-    const finished = await till("POST", `/api/parties/${survivor.partyId}/finish`, {
-      expectedPartyRevision: revisionOf(survivor.partyId),
-    });
-    expect(finished.status).toBe(200);
     expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(language()).toEqual(["gl-ES"]);
   });
 
-  it("is refused while a paid counter sale holds a dish no station took, and accepted once it is sent", async () => {
+  it("accepts a change while a paid counter sale holds a dish no station took, which the send route then sends", async () => {
     reset();
     const id = randomUUID();
     venue.db.run(sql`update kitchen_stations set active = 0`);
@@ -315,11 +314,10 @@ describe("a receipt-language change while orders are open", () => {
     }
     expect(dishLines(id)[0]!.sent_at).toBeNull();
 
-    expect(await changeTo("gl-ES")).toEqual(refusedFor(1));
+    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
 
     expect((await till("POST", `/api/working-orders/${id}/prep`)).status).toBe(200);
     expect(dishLines(id)[0]!.sent_at).not.toBeNull();
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
   });
 
   it("accepts a change while a paid sale holds an unsent dish beside one a station took, which the send route refuses", async () => {
@@ -362,7 +360,7 @@ describe("a receipt-language change while orders are open", () => {
     expect(dishLines(id)).toEqual(before);
   });
 
-  it("is refused while an order is placed, and accepted once it is collected", async () => {
+  it("accepts a change while an order is placed, and the order can still be collected", async () => {
     reset();
     const placing = await withTransaction(venue.db, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
@@ -379,14 +377,22 @@ describe("a receipt-language change while orders are open", () => {
       expect(placed.status).toBe(200);
       expect(statusOf(id)).toBe("placed");
 
-      expect(await changeTo("gl-ES")).toEqual(refusedFor(1));
+      expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
 
       const collected = await till("POST", `/api/working-orders/${id}/collect`, {
         tender: { method: "cash", amount: "35.00" },
       });
       expect(collected.status).toBe(200);
       expect(statusOf(id)).toBe("settled");
-      expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+      expect(
+        rows<{ locale: string }>(sql`select locale from sales where working_order_id = ${id}`),
+      ).toEqual([{ locale: "gl-ES" }]);
+      expect(
+        rows<{ descriptions: string }>(
+          sql`select sl.descriptions from sale_lines sl join sales s on s.id = sl.sale_id
+              where s.working_order_id = ${id}`,
+        ).map((line) => JSON.parse(line.descriptions) as unknown),
+      ).toEqual([{ "es-ES": "Paella valenciana" }]);
     } finally {
       await withTransaction(venue.db, (tx) =>
         offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
@@ -394,7 +400,50 @@ describe("a receipt-language change while orders are open", () => {
     }
   });
 
-  it("does not count a seated party's abandoned bill, which no route serves", async () => {
+  it("accepts a change while an invoice-first order is placed, and collecting it keeps the language it was filed in", async () => {
+    reset();
+    const placing = await withTransaction(venue.db, (tx) =>
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+    );
+    const id = randomUUID();
+    const filed = () => ({
+      sales: rows<Record<string, unknown>>(sql`select * from sales where working_order_id = ${id}`),
+      lines: rows<Record<string, unknown>>(
+        sql`select sl.* from sale_lines sl join sales s on s.id = sl.sale_id
+            where s.working_order_id = ${id} order by sl.line_no`,
+      ),
+    });
+    try {
+      const parked = await till("POST", "/api/working-orders", {
+        id,
+        zoneId: placing.zoneId,
+        lines: [{ menuItemId: placing.offerFor(productId("Paella")), quantity: "1" }],
+      });
+      expect(parked.status).toBe(200);
+      const placed = await till("POST", `/api/working-orders/${id}/place`);
+      expect(placed.status).toBe(200);
+      expect(statusOf(id)).toBe("placed");
+      const before = filed();
+      expect(before.sales).toEqual([expect.objectContaining({ locale: "es-ES" })]);
+      expect(before.lines).toHaveLength(1);
+
+      expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+      expect(language()).toEqual(["gl-ES"]);
+
+      const collected = await till("POST", `/api/working-orders/${id}/collect`, {
+        tender: { method: "cash", amount: "35.00" },
+      });
+      expect(collected.status).toBe(200);
+      expect(statusOf(id)).toBe("settled");
+      expect(filed()).toEqual(before);
+    } finally {
+      await withTransaction(venue.db, (tx) =>
+        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
+      );
+    }
+  });
+
+  it("does not count a seated party's abandoned bill, which is no longer open", async () => {
     reset();
     const party = await seatedWith(venue, "Paella", "Tarta");
     const split = await till("POST", `/api/bills/${party.tabId}/split`, {
@@ -417,5 +466,30 @@ describe("a receipt-language change while orders are open", () => {
       items: [{ lineId: line!.id, quantity: "1" }],
     });
     expect(serve).toMatchObject({ status: 404, json: { code: "group.not_found" } });
+  });
+
+  it("accepts a change while a seated party's bill holds no dish", async () => {
+    reset();
+    const party = await seatedWith(venue);
+    expect(statusOf(party.tabId)).toBe("open");
+    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+  });
+
+  // Why an open order holding a line still blocks. A language changed underneath one by direct SQL
+  // leaves its split refused by the line triggers, and that surfaces as an unmapped 500 rather than
+  // a named refusal: a known gap, kept here so a change to it is seen.
+  it("a split of a bill holding a line fails once the language is changed underneath it, which is why such a bill blocks a change", async () => {
+    reset();
+    const party = await seatedWith(venue, "Paella", "Tarta");
+    const before = dishLines(party.tabId);
+    venue.db.run(
+      sql`update locations set invoice_locales = '["gl-ES"]' where id = ${venue.cfg.locationId}`,
+    );
+    const split = await till("POST", `/api/bills/${party.tabId}/split`, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      transfers: [{ lineNo: 2 }],
+    });
+    expect(split).toMatchObject({ status: 500, json: { code: "server.internal" } });
+    expect(dishLines(party.tabId)).toEqual(before);
   });
 });

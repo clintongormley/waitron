@@ -1323,6 +1323,7 @@ the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
 `packages/db/drizzle/0043_drop_triggers_before_rebuild.sql` and
 `packages/db/drizzle/0045_recreate_triggers_after_rebuild.sql` (the three triggers around `0044`'s
 rebuild of `dining_tables`, `parties` and `service_commands`),
+`packages/db/drizzle/0047_product_ordering_check.sql`,
 `packages/db/drizzle/0050_line_list_price_frozen.sql` (re-creates
 `working_order_lines_require_open_parent_update` with `list_unit_price_gross` in both
 unchanged-column lists),
@@ -1330,22 +1331,43 @@ unchanged-column lists),
 `working_order_lines_require_open_parent_update` with an exception for a line's first sent stamp),
 `packages/db/drizzle/0056_placed_order_handover.sql` (re-creates
 `working_orders_enforce_transition` with an exception for a sent, unpaid order's handover stamp),
+`packages/db/drizzle/0059_drop_product_triggers_before_rebuild.sql` and
+`packages/db/drizzle/0061_recreate_product_triggers.sql` (the triggers on `products` around
+`0060`'s rebuild),
+`packages/db/drizzle/0064_line_locale_triggers_text_only.sql` (re-creates the two locale update
+triggers on `working_order_lines` to fire only when an update changes the name map each checks or
+moves the line),
 `packages/media/drizzle/0001_image_references.sql`,
-`packages/media/drizzle/0002_section_image_references.sql` and
-`packages/media/drizzle/0003_published_image_references.sql`) each carry their own
+`packages/media/drizzle/0002_section_image_references.sql`,
+`packages/media/drizzle/0003_published_image_references.sql`,
+`packages/media/drizzle/0004_drop_category_image_triggers.sql`,
+`packages/media/drizzle/0006_recreate_section_image_triggers.sql`,
+`packages/media/drizzle/0007_recreate_product_image_triggers.sql`,
+`packages/catalogue/drizzle/0013_drop_category_image_triggers.sql`,
+`packages/catalogue/drizzle/0018_sections_owned_prepare.sql` and
+`packages/catalogue/drizzle/0021_sections_owned_restore.sql`) each carry their own
 `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-26 (2026-09-27 for
 `0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql`,
 `0033_line_served_exception.sql` and `0038_main_bill_release.sql`, 2026-09-29 for
 `0042_placed_bill_moves.sql`, `0043_drop_triggers_before_rebuild.sql` and
 `0045_recreate_triggers_after_rebuild.sql`, 2026-09-30 for `0050_line_list_price_frozen.sql`, and
-2026-10-01 for `0053_line_sent_after_close.sql` and `0056_placed_order_handover.sql`)
+2026-10-01 for `0053_line_sent_after_close.sql` and `0056_placed_order_handover.sql`, and
+2026-10-02 for core `0047_product_ordering_check.sql`,
+`0059_drop_product_triggers_before_rebuild.sql`, `0061_recreate_product_triggers.sql` and
+`0064_line_locale_triggers_text_only.sql`, media `0004_drop_category_image_triggers.sql`,
+`0006_recreate_section_image_triggers.sql` and `0007_recreate_product_image_triggers.sql`, and
+catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
+`0021_sections_owned_restore.sql`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
 does not reproduce it.
 
-One generated migration also carries hand-written SQL:
-`packages/media/drizzle/0005_photo_name_only.sql`. Drizzle generated its rebuild of `media_images`;
+Two generated migrations also carry hand-written SQL:
+`packages/media/drizzle/0005_photo_name_only.sql` and `packages/db/drizzle/0036_party_rename.sql`.
+In `0036` the whole file is hand-written: its header says drizzle-kit's generated SQL for the rename
+rebuilt every table the rename touches and failed on a fresh database, so a regeneration must paste
+the file back rather than keep drizzle's. In `0005`, Drizzle generated its rebuild of `media_images`;
 the drop of media's eleven reference triggers and the copy of `media_image_data` aside before it,
 and the restore of the bytes and the re-creation of the triggers after it, are hand-written, so a
 regeneration must paste both parts back around the regenerated rebuild. Drizzle's rebuild on its
