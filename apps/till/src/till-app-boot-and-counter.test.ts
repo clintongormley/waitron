@@ -1,4 +1,5 @@
-import { currentContentLanguages } from "@waitron/ui";
+import { page } from "vitest/browser";
+import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
@@ -1177,12 +1178,16 @@ describe("till-app fits the page it is given", () => {
   });
 
   it("keeps the whole page within the screen, its padding included, while a refusal banner shows", async () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(1024, 768);
     const style = document.createElement("style");
     style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
     document.head.append(style);
-    const page = document.createElement("div");
-    page.id = "app";
-    document.body.append(page);
+    applyTokens(document.documentElement);
+    const app = document.createElement("div");
+    app.id = "app";
+    document.body.append(app);
     try {
       api = stubApi({
         getTill: vi.fn().mockResolvedValue({
@@ -1194,7 +1199,7 @@ describe("till-app fits the page it is given", () => {
         listDefaultZoneOffers: vi.fn().mockResolvedValue(fullMenu),
       });
       const el = Object.assign(document.createElement("till-app"), { api });
-      page.append(el);
+      app.append(el);
       const c = await toCounter(el);
       c.store.addProduct(c.products[0]!, "1");
       await el.updateComplete;
@@ -1205,12 +1210,14 @@ describe("till-app fits the page it is given", () => {
       expect(banner(el)).not.toBeNull();
       expect(document.documentElement.scrollHeight).toBe(window.innerHeight);
     } finally {
-      page.remove();
+      app.remove();
       style.remove();
+      document.documentElement.removeAttribute("data-wt-theme-root");
+      await page.viewport(width, height);
     }
   });
 
-  it("keeps the lock screen's language button on the page", async () => {
+  it("keeps the lock screen's language button on the page while its staff list is short", async () => {
     const { el, host } = await mountApp();
     host.style.height = `${PAGE_HEIGHT}px`;
     await flush(el);
