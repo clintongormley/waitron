@@ -89,6 +89,22 @@ test("closes when the user clicks anywhere outside it", async () => {
   expect(tip.matches(":popover-open")).toBe(false);
 });
 
+test("closes when focus moves to the next control", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  const next = document.createElement("button");
+  next.textContent = "Next";
+  host.append(next);
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+  await userEvent.keyboard("{Tab}");
+
+  expect(document.activeElement).toBe(next);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+});
+
 test("a click inside the tooltip does not close it", async () => {
   const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
   const button = el.shadowRoot!.querySelector("button")!;
