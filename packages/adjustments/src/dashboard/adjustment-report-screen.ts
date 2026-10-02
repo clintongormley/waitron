@@ -144,26 +144,9 @@ export class AdjustmentReportScreen extends LitElement {
         gap: var(--wt-space-4);
         margin-bottom: var(--wt-space-4);
       }
-      .picker {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-      input[type="date"] {
-        font: inherit;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-        border-radius: var(--wt-radius-md);
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-      }
-      input[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-      }
-      .range-error {
-        margin: 0 0 var(--wt-space-4);
-        color: var(--wt-color-danger);
+      /* Sized by the date box, so the backwards-range message wraps under it rather than widening it. */
+      .pickers wt-input {
+        width: min-content;
       }
       .summary {
         display: flex;
@@ -465,10 +448,10 @@ export class AdjustmentReportScreen extends LitElement {
     this.renderRoot.querySelector<HTMLElement>(`[data-test="${target}"]`)!.focus();
   }
 
-  #onDateChange(field: "from" | "to", event: Event): void {
+  #onDateChange(field: "from" | "to", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const value = (event.target as HTMLInputElement).value;
-    // A cleared date input reads "", which names no day.
+    const value = event.detail.value;
+    // A date box reads "" while it is cleared or not yet a whole day, which names no day.
     if (value === "") return;
     this.#rangeChosen = true;
     this[field] = value;
@@ -887,27 +870,20 @@ export class AdjustmentReportScreen extends LitElement {
   override render(): TemplateResult {
     const backwards = this.#backwards();
     const report = this.report;
+    // The sentence names the first day, so it sits under that field; the last day is marked only.
     const picker = (field: "from" | "to") =>
-      html`<label class="picker"
-        >${t(`adjustment_report.${field}`)}
-        <input
-          type="date"
-          name=${field}
-          .value=${this[field] ?? ""}
-          aria-invalid=${backwards ? "true" : "false"}
-          aria-describedby=${backwards ? "range-error" : nothing}
-          @change=${(event: Event) => this.#onDateChange(field, event)}
-      /></label>`;
+      html`<wt-input
+        type="date"
+        name=${field}
+        label=${t(`adjustment_report.${field}`)}
+        .value=${this[field] ?? ""}
+        .invalid=${backwards}
+        error=${backwards && field === "from" ? t("adjustment_report.range_backwards") : ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onDateChange(field, event)}
+      ></wt-input>`;
     return html`<h1 data-test="heading">${t("adjustment_report.title")}</h1>
       <p class="intro" data-test="intro">${t("adjustment_report.intro")}</p>
       <div class="pickers">${picker("from")}${picker("to")}</div>
-      ${
-        backwards
-          ? html`<p id="range-error" class="range-error" data-test="range-error">
-              ${t("adjustment_report.range_backwards")}
-            </p>`
-          : nothing
-      }
       ${
         this.loadError
           ? html`<p class="alert" role="alert" data-test="load-error">${this.loadError}</p>`

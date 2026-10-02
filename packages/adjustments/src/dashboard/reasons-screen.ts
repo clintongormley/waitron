@@ -9,7 +9,6 @@ import {
   ContentLanguageController,
   currentContentLanguages,
   focusFirstInvalid,
-  selectStyles,
   submitOnEnter,
   type DataTableColumn,
 } from "@waitron/ui";
@@ -119,7 +118,6 @@ function languageName(code: string): string {
 export class AdjustmentReasonsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -166,12 +164,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       .required {
         margin-inline-start: var(--wt-space-1);
       }
-      /* Matches the label wt-input draws, so every field in the form is labelled alike. */
-      .select-label {
-        margin-bottom: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
       .choice {
         display: flex;
         align-items: center;
@@ -183,16 +175,6 @@ export class AdjustmentReasonsScreen extends LitElement {
         height: var(--wt-space-5);
         margin: 0;
         accent-color: var(--wt-color-primary);
-      }
-      .select-field {
-        display: grid;
-        max-width: var(--wt-field-max-width);
-      }
-      select {
-        min-height: var(--wt-tap-min);
-      }
-      select[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
       }
       .limit {
         display: grid;
@@ -751,32 +733,24 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   #roleSelect(errors: FieldErrors, field: "applyRole" | "approverRole", label: string) {
     const draft = this.draft!;
-    const invalid = errors[field] !== undefined;
     const locale = currentLocale();
     const collator = new Intl.Collator(locale, { sensitivity: "base" });
     const roles = [...ROLES_BY_SENIORITY].sort((a, b) =>
       collator.compare(roleName(a, locale), roleName(b, locale)),
     );
-    return html`<div class="select-field">
-      <label class="select-label" for=${field}>${label}</label>
-      <select
-        id=${field}
-        name=${field}
-        ?disabled=${this.busy}
-        aria-invalid=${invalid}
-        aria-describedby=${invalid ? `error-${field}` : nothing}
-        @change=${(event: Event) =>
-          this.#edit({ [field]: (event.target as HTMLSelectElement).value as PersonRole })}
-      >
-        ${roles.map(
-          (role) =>
-            html`<option value=${role} .selected=${draft[field] === role}>
-              ${roleName(role)}
-            </option>`,
-        )}
-      </select>
-      ${this.#fieldError(errors, field)}
-    </div>`;
+    return html`<wt-combobox
+      name=${field}
+      label=${label}
+      search="auto"
+      .options=${roles.map((role) => ({ value: role, label: roleName(role) }))}
+      .value=${draft[field]}
+      error=${errors[field] ?? ""}
+      .disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.#edit({ [field]: event.detail.value as PersonRole });
+      }}
+    ></wt-combobox>`;
   }
 
   #reasonForm(errors: FieldErrors) {

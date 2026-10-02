@@ -116,11 +116,14 @@ describe.each(["light", "dark"] as const)("adjustment report accessibility (%s)"
 
   test("a range that runs backwards", async () => {
     const el = await screen(theme);
-    const from = el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!;
-    from.value = "2026-09-30";
-    from.dispatchEvent(new Event("change"));
+    const from = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      'wt-input[name="from"]',
+    )!;
+    const box = from.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    box.value = "2026-09-30";
+    box.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await settle(el);
-    expect(el.shadowRoot!.querySelector('[data-test="range-error"]')).not.toBeNull();
+    expect(from.error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 });

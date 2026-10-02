@@ -269,8 +269,7 @@ still takes the body's whole width.
 
 A screen that styles its own native controls, or writes a field's label outside its select, reads
 the same variable on the element that wraps each field, so the label text, the control and the
-field's error stop together: the adjustments reasons screen's `.select-field` (each role
-select with its `<label for>` and error, in the reason editor). A screen whose own layout
+field's error stop together. A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
 button beside the ruler's answer, and the section member list's `.add` row does, for its Add button
