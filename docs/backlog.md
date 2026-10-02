@@ -807,7 +807,9 @@ matches your search or filters." / "Nada coincide con tu búsqueda ni con tus fi
 also the table's own English default; the tables' per-screen `*.no_matches` strings and
 `orders.empty` are gone. A filter alone, with nothing searched, does show that sentence (a test pins it). The empty
 sentences now read "No <things> yet." in both languages, and the Venue operations screen's five
-tables each name their own thing instead of sharing "No entries yet.". Kept as they were, because
+tables each name their own thing instead of sharing "No entries yet.", except its Tills table,
+which leaves out revoked devices and kitchen screens and so says "No active tills." / "No hay cajas
+activas." (owner's choice on #1037). Kept as they were, because
 they answer a question rather than say nothing was made: the Alerts screen's two, the adjustment
 report's, a printer scan's, the Servers screen's and a list's "No products use this list.".
 Screens that filter before the table (Orders, the catalogue browser while searching, Users and

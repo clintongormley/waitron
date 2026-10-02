@@ -465,7 +465,9 @@ ni con tus filtros."), which every dashboard table passes as `noMatchesMessage`,
 with no search or filter today, so a filter added later is covered (owner, A177). The empty sentence
 stays the screen's own and reads "No <things> yet." ("No extras lists yet.", "Todavía no hay listas
 de extras."), except where the table lists the answer to a question rather than things made, such as
-the Alerts screen's "Nothing needs attention." A screen that filters its rows before handing them to
+the Alerts screen's "Nothing needs attention.", or where the screen hands the table only part of what
+was made, such as the Venue operations screen's Tills table, which leaves out revoked devices and kitchen
+screens and says "No active tills." A screen that filters its rows before handing them to
 the table chooses the empty sentence itself, because the table cannot tell nothing made from nothing
 matching: the Orders screen's rows are always the result of its search and filters, so it passes
 `tableNoMatches()` as `emptyMessage`; the catalogue browser does while its search box has text; and
