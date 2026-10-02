@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
@@ -243,12 +247,11 @@ describe("the reasons list", () => {
 
   it("shows the inactive reasons when the status filter asks for them, without reorder buttons", async () => {
     const el = await mount(fakeApi());
-    const filter = table(el).shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[data-filter="status"]',
+    const filter = table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      'wt-combobox[data-filter="status"]',
     )!;
     expect(filter.value).toBe("active");
-    filter.value = "inactive";
-    filter.dispatchEvent(new Event("change"));
+    await chooseOption(filter, "inactive");
     await settle(el);
     expect(rowKeys(el)).toEqual(["o"]);
     expect(rowText(el, "o")).toContain("Inactive");

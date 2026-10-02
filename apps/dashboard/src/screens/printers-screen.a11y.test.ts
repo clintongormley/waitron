@@ -695,12 +695,10 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
       .click();
     await flush(el);
-    const filter = q(
-      el,
-      '[data-test="printers-table"]',
-    )!.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
-    filter.value = "";
-    filter.dispatchEvent(new Event("change"));
+    const filter = q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
+      '[name="status-filter"]',
+    )!;
+    await pickOption(filter, "");
     await flush(el);
     const forget = q(el, "[data-test=forget-pairing-p4]")!;
     forget.closest("dashboard-row-actions")!.shadowRoot!.querySelector("button")!.click();

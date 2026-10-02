@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./product-list.js";
 import type { ProductList } from "./product-list.js";
@@ -168,11 +169,10 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[data-filter="active"]',
+    const select = table.shadowRoot!.querySelector<HTMLElement>(
+      'wt-combobox[data-filter="active"]',
     )!;
-    select.value = "";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(select, "");
     await table.updateComplete;
     table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
     await table.updateComplete;
@@ -189,11 +189,10 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[data-filter="active"]',
+    const select = table.shadowRoot!.querySelector<HTMLElement>(
+      'wt-combobox[data-filter="active"]',
     )!;
-    select.value = "inactive";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(select, "inactive");
     await table.updateComplete;
     expect(table.shadowRoot!.querySelector('[part~="context"]')).not.toBeNull();
     expect(table.shadowRoot!.querySelector('tr[data-row-key="p4:v2"]')).not.toBeNull();

@@ -1,8 +1,9 @@
 import { html } from "lit";
 import { afterEach, describe, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanup, host } from "../test-helpers.js";
+import { chooseOption, cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
+import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 
@@ -178,14 +179,45 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.searchLabel = "Search users";
     el.noMatchesMessage = "No users match";
     await el.updateComplete;
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(".table-filter")!;
-    select.value = "Active";
-    select.dispatchEvent(new Event("change"));
+    const select = el.shadowRoot!.querySelector<WtCombobox>(".table-filter")!;
+    await chooseOption(select, "Active");
     const search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
     search.value = "zzz";
     search.dispatchEvent(new Event("input"));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[role=status]")!.textContent).toContain("No users match");
+    await expectNoA11yViolations(host);
+  });
+
+  test("a filter dropdown with its list open", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (r) => r.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (r) => r.status,
+        filter: {
+          label: "Filter by status",
+          allLabel: "Any status",
+          value: (r) => r.status,
+          options: [
+            { value: "Active", label: "Active" },
+            { value: "Inactive", label: "Inactive" },
+          ],
+        },
+      },
+    ];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    await el.updateComplete;
+    const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+    await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await filter.updateComplete;
+    expect(filter.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
     await expectNoA11yViolations(host);
   });
 

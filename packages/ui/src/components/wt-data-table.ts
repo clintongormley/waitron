@@ -2,7 +2,8 @@ import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
-import { baseStyles, selectStyles } from "../base-styles.js";
+import { baseStyles } from "../base-styles.js";
+import "./wt-combobox.js";
 
 export interface DataTableColumn<Row> {
   key: string;
@@ -38,7 +39,6 @@ type SortDirection = "ascending" | "descending";
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -232,12 +232,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
         max-width: 100%;
-      }
-
-      .table-filter {
-        width: auto;
-        max-width: 100%;
-        min-height: var(--wt-tap-min);
       }
 
       .columns-trigger {
@@ -904,15 +898,23 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ${this.columns.map((column) => {
                 const active = this.#activeFilter(column);
                 return column.filter
-                  ? html`<select
+                  ? html`<wt-combobox
                       class="table-filter"
                       name=${`${column.key}-filter`}
                       data-filter=${column.key}
-                      aria-label=${column.filter.label}
-                      @change=${(event: Event) => {
+                      label=${column.filter.label}
+                      hide-label
+                      search="auto"
+                      placeholder=${column.filter.allLabel}
+                      .options=${[
+                        { value: "", label: column.filter.allLabel },
+                        ...column.filter.options,
+                      ]}
+                      .value=${active}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
                         const next = { ...this.filterSelections };
-                        const value = (event.target as HTMLSelectElement).value;
+                        const value = event.detail.value;
                         if (value === "" && column.filter!.initial === undefined)
                           delete next[column.key];
                         else next[column.key] = value;
@@ -926,15 +928,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           }),
                         );
                       }}
-                    >
-                      <option value="" .selected=${active === ""}>${column.filter.allLabel}</option>
-                      ${column.filter.options.map(
-                        (option) =>
-                          html`<option value=${option.value} .selected=${active === option.value}>
-                            ${option.label}
-                          </option>`,
-                      )}
-                    </select>`
+                    ></wt-combobox>`
                   : nothing;
               })}
             </div>`

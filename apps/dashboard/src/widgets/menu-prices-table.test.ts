@@ -196,19 +196,18 @@ function shown(el: MenuPricesTable): string[] {
 }
 
 async function choose(el: MenuPricesTable, filter: string, value: string): Promise<void> {
-  const select = table(el).shadowRoot.querySelector<HTMLSelectElement>(
-    `select[data-filter="${filter}"]`,
+  const select = table(el).shadowRoot.querySelector<HTMLElement>(
+    `wt-combobox[data-filter="${filter}"]`,
   )!;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(select, value);
   await table(el).updateComplete;
 }
 
 function options(el: MenuPricesTable, filter: string): string[] {
-  const select = table(el).shadowRoot.querySelector<HTMLSelectElement>(
-    `select[data-filter="${filter}"]`,
+  const select = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    `wt-combobox[data-filter="${filter}"]`,
   )!;
-  return [...select.options].map((option) => text(option));
+  return select.options.map((option) => option.label);
 }
 
 function modal(el: MenuPricesTable) {
