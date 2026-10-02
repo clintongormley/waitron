@@ -1117,7 +1117,9 @@ locations. Once a session is active, put the account menu — a person-icon `wt-
 holding Account settings and Log out — at the banner's trailing (right-hand in the shipped locales)
 edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
 two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
-space runs short, and the legal name and mode pill take the second in full.
+space runs short, and the legal name and mode pill take the second in full. The language chooser
+sits at the trailing edge too, before the alerts bell and the account menu, signed in and signed out
+(see "Navigation and language controls").
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
 the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the account menu.

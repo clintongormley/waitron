@@ -304,7 +304,8 @@ readers already announce the trigger as a button that opens a list box.
 | Open | Tab, Shift+Tab | picks nothing, closes, and lets focus move on (today nothing in the component handles Tab) |
 
 Wrapping replaces clamping because the `wt-language-footer` menu already wraps
-(`docs/developers/design-system.md`, its primitives row) and one product should behave one way. A
+(`docs/developers/design-system.md`, its primitives row) and one product should behave one way.
+(Since A187, 2026-10-02, that menu is `wt-language-chooser`.) A
 group heading is not a row: arrows skip it. The "No results" text stays outside the list box (the
 reason is in the code at `wt-combobox.ts`, the comment above it).
 

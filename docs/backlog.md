@@ -2615,12 +2615,16 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       language button stays on screen. The lock and join screens fill at least the height left; a
       staff list longer than the screen still makes the page scroll to reach the language button,
       as it did before. Before, the page was taller than the screen even with no banner, by the
-      body's padding and the demo strip.
+      body's padding and the demo strip. (Since A187, 2026-10-02, the language chooser is at the
+      top right of the lock screen.)
       Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
       a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
       `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
       no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
-      space changes the screen's layout, so it is its own change.
+      space changes the screen's layout, so it is its own change. Likewise the till's
+      `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
+      above the bottom edge, the room the old language footer took; decide whether it should drop
+      to the bottom edge.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a

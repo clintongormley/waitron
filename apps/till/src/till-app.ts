@@ -894,8 +894,7 @@ export class TillApp extends LitElement {
         display: block;
       }
 
-      /* Over the page, above the language button: in the flow, its closing would move the floor under a
-         waiter's finger. */
+      /* Over the page: in the flow, its closing would move the floor under a waiter's finger. */
       .submitted-toast {
         position: fixed;
         inset-inline: var(--wt-space-3);

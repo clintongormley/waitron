@@ -488,9 +488,10 @@ export class DashboardApp extends LitElement {
          constant that drives the narrow state); 48rem matches the existing repo precedent in
          apps/till/src/screens/till-counter-screen.ts:111. */
       @media (max-width: 48rem) {
-        /* A phone cannot fit the lockup, the legal name, the mode pill and both menus on one line, so
-           the name and pill take a second row and the menus stay at the trailing edge of the first.
-           The lockup's column is the one that shrinks, so the menus keep the first row. */
+        /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
+           one line, so the name and pill take a second row and the trailing controls stay at the
+           trailing edge of the first. The lockup's column is the one that shrinks, so the trailing
+           controls keep the first row. */
         .brand-banner {
           display: grid;
           grid-template-columns: auto minmax(0, max-content) 1fr auto;
