@@ -1,6 +1,6 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { capitaliseFirst, contentLanguageCode } from "@waitron/shared";
+import { languageDisplayName } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import type { WtDialog } from "@waitron/ui";
 import { trackDialog } from "./track-dialog.js";
@@ -8,19 +8,6 @@ import { currentLocale, t } from "../i18n/t.js";
 
 export interface ReprintLanguageDetail {
   language: string;
-}
-
-/** A receipt language's name in the operator's language, capitalised to stand alone. */
-function languageName(tag: string): string {
-  let code: string;
-  try {
-    code = contentLanguageCode(tag);
-  } catch {
-    return tag;
-  }
-  const locale = currentLocale();
-  const name = new Intl.DisplayNames([locale], { type: "language" }).of(code) ?? tag;
-  return capitaliseFirst(name, locale);
 }
 
 /**
@@ -107,7 +94,7 @@ export class TillReprintLanguageDialog extends LitElement {
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
-      .heading=${t("reprint_language.heading")}
+      .heading=${t("reprint_language.title")}
       @wt-close=${() => this.#cancel()}
     >
       <fieldset class="choice">
@@ -123,12 +110,17 @@ export class TillReprintLanguageDialog extends LitElement {
                   .checked=${this.chosen === language}
                   @change=${() => (this.chosen = language)}
                 />
-                <span>${languageName(language)}</span>
+                <span>${languageDisplayName(language, currentLocale())}</span>
               </label>`,
           )}
         </div>
       </fieldset>
-      <wt-button slot="footer" data-reprint-cancel variant="ghost" @click=${() => this.#cancel()}>
+      <wt-button
+        slot="footer"
+        data-reprint-cancel
+        variant="secondary"
+        @click=${() => this.#cancel()}
+      >
         ${t("action.cancel")}
       </wt-button>
       <wt-button

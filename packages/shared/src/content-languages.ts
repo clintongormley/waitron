@@ -62,6 +62,27 @@ export function contentLanguageCode(value: string): string {
   return language;
 }
 
+const displayNamesByLocale = new Map<string, Intl.DisplayNames>();
+
+/** A tag's language named in `locale`, capitalised when it stands alone rather than inside a
+ * sentence. A tag that is not a language, or that `locale` has no name for, comes back as it is. */
+export function languageDisplayName(tag: string, locale: string, standalone = true): string {
+  let code: string;
+  try {
+    code = contentLanguageCode(tag);
+  } catch {
+    return tag;
+  }
+  let names = displayNamesByLocale.get(locale);
+  if (!names) {
+    names = new Intl.DisplayNames([locale], { type: "language", fallback: "none" });
+    displayNamesByLocale.set(locale, names);
+  }
+  const name = names.of(code);
+  if (name === undefined) return tag;
+  return standalone ? capitaliseFirst(name, locale) : name;
+}
+
 /** Empty translations fall back to the configured default without manufacturing a translation. */
 export function resolveContentText(
   translations: Readonly<Record<string, string>>,

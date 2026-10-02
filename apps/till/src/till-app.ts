@@ -1369,7 +1369,7 @@ export class TillApp extends LitElement {
    */
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages a copy may be reprinted in; with more than one, a reprint asks which. */
-  private receiptLanguages: string[] = [];
+  @state() private receiptLanguages: string[] = [];
   /** The sale whose receipt copy is waiting for its language to be chosen. */
   @state() private reprintAsking: string | null = null;
   /**

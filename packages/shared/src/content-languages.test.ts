@@ -3,6 +3,7 @@ import { capitaliseFirst } from "./capitalise.js";
 import {
   contentLanguageCode,
   contentLanguageChoices,
+  languageDisplayName,
   resolveContentText,
   resolveEnabledContentText,
   resolveSnapshotText,
@@ -166,5 +167,46 @@ describe("receipt snapshot text", () => {
 
   it("uses the configured fallback for an invalid display preference", () => {
     expect(resolveSnapshotText({ "es-ES": "Pan", "ca-ES": "Pa" }, "not_a_locale", "ca")).toBe("Pa");
+  });
+});
+
+describe("language display name", () => {
+  it("names a tag's language in the display language, capitalised to stand alone", () => {
+    expect(languageDisplayName("ca-ES", "es-ES")).toBe("Catalán");
+    expect(languageDisplayName("ca-ES", "en-GB")).toBe("Catalan");
+  });
+
+  it("leaves the name as it reads inside a sentence when it does not stand alone", () => {
+    expect(languageDisplayName("ca-ES", "es-ES", false)).toBe("catalán");
+  });
+
+  it.each(["not-a-language", "zz", ""])("returns %j, which is not a language, as it is", (tag) =>
+    expect(languageDisplayName(tag, "es-ES")).toBe(tag),
+  );
+
+  it("returns the tag as it is when the display language has no name for it", () => {
+    expect(languageDisplayName("aeb-TN", "en-GB")).toBe("Tunisian Arabic");
+    expect(languageDisplayName("aeb-TN", "es-ES")).toBe("aeb-TN");
+  });
+
+  it("builds the names for a display language once, and again only for another language", () => {
+    // A plain spy's call-through loses the instance's `of`, so the mock builds a real one.
+    expect(languageDisplayName("fr", "de-DE")).toBe("Französisch");
+    const RealDisplayNames = Intl.DisplayNames;
+    const spy = vi.spyOn(Intl, "DisplayNames").mockImplementation(function (
+      ...args: ConstructorParameters<typeof Intl.DisplayNames>
+    ): Intl.DisplayNames {
+      return new RealDisplayNames(...args);
+    } as unknown as typeof Intl.DisplayNames);
+    try {
+      expect(languageDisplayName("ca-ES", "de-DE")).toBe("Katalanisch");
+      expect(spy).not.toHaveBeenCalled();
+      expect(languageDisplayName("ca-ES", "nl-NL")).toBe("Catalaans");
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(languageDisplayName("fr", "nl-NL")).toBe("Frans");
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -48,7 +48,7 @@ describe("till-reprint-language-dialog", () => {
   it("offers each receipt language by name, one radio each, all named language", async () => {
     const el = await mountDialog();
 
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(t("reprint_language.heading"));
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(t("reprint_language.title"));
     expect(el.shadowRoot!.querySelector("legend")!.textContent!.trim()).toBe(
       t("reprint_language.legend"),
     );
@@ -73,6 +73,12 @@ describe("till-reprint-language-dialog", () => {
         .filter((radio) => radio.checked)
         .map((radio) => radio.value),
     ).toEqual(["gl-ES"]);
+  });
+
+  it("has the location's receipt language focused", async () => {
+    const el = await mountDialog({ defaultLanguage: "gl-ES" });
+
+    expect(el.shadowRoot!.activeElement).toBe(radios(el).find((radio) => radio.value === "gl-ES"));
   });
 
   it("starts on the first language when the location's is not among them", async () => {
