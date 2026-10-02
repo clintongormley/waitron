@@ -112,8 +112,10 @@ export class PrepStationsApi {
     productId: string,
     zoneId: string | null,
     moment?: RoutingMoment,
+    extraProductIds: readonly string[] = [],
   ): Promise<RouteExplanation> {
     const query = new URLSearchParams({ productId, zoneId: zoneId ?? "" });
+    for (const id of extraProductIds) query.append("extraId", id);
     if (moment) {
       query.set("weekday", String(moment.weekday));
       query.set("time", moment.timeOfDay);

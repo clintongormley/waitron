@@ -1503,6 +1503,37 @@ describe("routing explanation route", () => {
       noReplacement: false,
       stations: [{ id: fx.stationId, name: "Terrace bar", active: true }],
     });
+    const second = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Olives",
+        categoryId: fx.categoryId,
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      }),
+    );
+    const withExtras = await send(
+      fx.app,
+      "GET",
+      `${path}&extraId=${product.id}&extraId=${second.id}`,
+      fx.managerCookie,
+    );
+    expect(withExtras.status).toBe(200);
+    expect(await withExtras.json()).toMatchObject({
+      extras: [{ productId: product.id }, { productId: second.id }],
+      extrasWaitOnDish: false,
+    });
+    const unknown = await send(
+      fx.app,
+      "GET",
+      `${path}&extraId=00000000-0000-4000-8000-000000000000`,
+      fx.managerCookie,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "route.subject_not_found", params: { subject: "product" } },
+    });
     expect(
       (
         await send(

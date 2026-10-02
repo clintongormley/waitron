@@ -208,6 +208,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private exceptionFieldError = "";
   @state() private assignmentChoiceKey = 0;
   @state() private testProduct = "";
+  @state() private testExtras: string[] = [];
   @state() private testZone = "";
   @state() private testWhen = "now";
   @state() private testWeekday = 0;
@@ -537,11 +538,28 @@ export class PrepStationsScreen extends LitElement {
     try {
       const explanation =
         this.testWhen === "now"
-          ? await this.api.explain(this.testProduct, this.testZone || null)
-          : await this.api.explain(this.testProduct, this.testZone || null, {
-              weekday: this.testWeekday,
-              timeOfDay: this.testTime,
-            });
+          ? this.testExtras.length
+            ? await this.api.explain(
+                this.testProduct,
+                this.testZone || null,
+                undefined,
+                this.testExtras,
+              )
+            : await this.api.explain(this.testProduct, this.testZone || null)
+          : this.testExtras.length
+            ? await this.api.explain(
+                this.testProduct,
+                this.testZone || null,
+                {
+                  weekday: this.testWeekday,
+                  timeOfDay: this.testTime,
+                },
+                this.testExtras,
+              )
+            : await this.api.explain(this.testProduct, this.testZone || null, {
+                weekday: this.testWeekday,
+                timeOfDay: this.testTime,
+              });
       if (request === this.#testRequest) this.explanation = explanation;
     } catch {
       if (request === this.#testRequest) this.testError = t("prep.test_error");
@@ -584,6 +602,50 @@ export class PrepStationsScreen extends LitElement {
       destination: this.#testStationName(destination),
     });
   }
+  #extraSentence(extra: RouteExplanation["extras"][number]): string {
+    const name =
+      this.view?.testProducts.find((product) => product.id === extra.productId)?.name ??
+      extra.productId;
+    const outcome = extra.outcome;
+    if (outcome.kind === "follows_dish") {
+      const station = extra.fallbacks[0] ? this.#testStationName(extra.fallbacks[0].stationId) : "";
+      return format(`prep.test_extra_${outcome.why}`, {
+        name,
+        station,
+        dishStation:
+          this.explanation?.route?.kind === "station"
+            ? this.#testStationName(this.explanation.route.stationId)
+            : "",
+      });
+    }
+    const decision = extra.decidedBy;
+    const reason =
+      decision?.kind === "claim"
+        ? format("prep.test_extra_claim", {
+            station: this.#testStationName(extra.fallbacks[0]?.stationId ?? outcome.stationId),
+            folder: this.#path(decision.categoryId),
+          })
+        : decision?.kind === "exception"
+          ? format("prep.test_extra_exception", {
+              rule: this.#exceptionText(
+                this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId),
+              ),
+            })
+          : t("prep.test_default");
+    const fallbacks = extra.fallbacks
+      .map((step, index) =>
+        format("prep.test_fallback_step", {
+          reason: format(`prep.test_${step.why}`, {
+            station: this.#testStationName(step.stationId),
+          }),
+          destination: this.#testStationName(
+            extra.fallbacks[index + 1]?.stationId ?? outcome.stationId,
+          ),
+        }),
+      )
+      .join(" ");
+    return `${fallbacks}${fallbacks ? " " : ""}${format("prep.test_extra_made", { name, station: this.#testStationName(outcome.stationId), reason })}`;
+  }
   #tester() {
     const explanation = this.explanation;
     return html`<wt-card data-test="route-tester">
@@ -602,6 +664,42 @@ export class PrepStationsScreen extends LitElement {
             void this.#explain();
           }}
         ></wt-combobox>
+        <div>
+          <wt-combobox
+            data-test="test-extra"
+            name="extra"
+            label=${t("prep.test_extras_chosen")}
+            placeholder=${t("prep.test_choose_extra")}
+            .value=${""}
+            .options=${this.view?.testProducts.filter((product) => !this.testExtras.includes(product.id)).map((product) => ({ value: product.id, label: product.name })) ?? []}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              const id = event.detail.value;
+              if (id && !this.testExtras.includes(id)) {
+                this.testExtras = [...this.testExtras, id];
+                void this.#explain();
+              }
+            }}
+          ></wt-combobox>
+          <div class="item">
+            ${this.testExtras.map(
+              (id) =>
+                html`<span class="chip"
+                  >${this.view?.testProducts.find((product) => product.id === id)?.name ?? id}
+                  <wt-button
+                    size="sm"
+                    variant="secondary"
+                    data-test=${`remove-extra-${id}`}
+                    aria-label=${format("prep.test_remove_extra", { name: this.view?.testProducts.find((product) => product.id === id)?.name ?? id })}
+                    @click=${() => {
+                      this.testExtras = this.testExtras.filter((extraId) => extraId !== id);
+                      void this.#explain();
+                    }}
+                    >×</wt-button
+                  ></span
+                >`,
+            )}
+          </div>
+        </div>
         <wt-combobox
           data-test="test-zone"
           name="zone"
@@ -677,6 +775,8 @@ export class PrepStationsScreen extends LitElement {
         ${explanation?.route === null && explanation.decidedBy === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
         ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
         ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${this.#testRule(explanation.decidedBy)}</p>` : nothing}
+        ${explanation?.extrasWaitOnDish && this.testExtras.length ? html`<p>${t("prep.test_extras_wait")}</p>` : nothing}
+        ${explanation?.extras?.map((extra) => html`<p>${this.#extraSentence(extra)}</p>`)}
       </div>
     </wt-card>`;
   }

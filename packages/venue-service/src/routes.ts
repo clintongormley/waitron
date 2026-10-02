@@ -244,6 +244,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const productId = requireUuidParam(c.req.query("productId") ?? "", "ProductId");
+        const extraProductIds = (c.req.queries("extraId") ?? []).map((id) =>
+          requireUuidParam(id, "ProductId"),
+        );
         const zone = c.req.query("zoneId");
         const zoneId = zone ? requireUuidParam(zone, "ServiceZoneId") : null;
         const weekday = c.req.query("weekday");
@@ -258,7 +261,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? { kind: "now" as const, at: new Date() }
             : { kind: "at" as const, moment: { weekday: Number(weekday), timeOfDay: time! } };
         return c.json(
-          await gated(sessionId, (tx) => explainRoute(tx, ctx.cfg, productId, zoneId, when)),
+          await gated(sessionId, (tx) =>
+            explainRoute(tx, ctx.cfg, productId, zoneId, when, extraProductIds),
+          ),
         );
       }),
     );

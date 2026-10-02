@@ -1422,6 +1422,63 @@ async function extrasFixture(tx: Transaction) {
 }
 
 describe("extra maker resolution", () => {
+  it("explains each chosen extra against the dish's final station and names its claim", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
+      const result = await explainRoute(
+        tx,
+        f.cfg,
+        f.mojito,
+        null,
+        { kind: "now", at: fixedInstant },
+        [f.chips, f.cheese],
+      );
+      expect(result.extras).toEqual([
+        {
+          productId: f.chips,
+          outcome: { kind: "made", stationId: f.fryer },
+          decidedBy: { kind: "claim", categoryId: f.sides },
+          fallbacks: [],
+        },
+        {
+          productId: f.cheese,
+          outcome: { kind: "follows_dish", why: "no_rule" },
+          decidedBy: { kind: "default" },
+          fallbacks: [],
+        },
+      ]);
+      expect(result.extrasWaitOnDish).toBe(false);
+      expect(result.stations).toContainEqual({ id: f.fryer, name: "Fryer", active: true });
+    }));
+  it("waits for the dish's station before explaining extras when its claimed station is closed", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
+      await setStationToday(tx, f.cfg, f.grill, "closed", fixedInstant);
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [f.chips]),
+      ).toMatchObject({ route: null, extras: [], extrasWaitOnDish: true });
+      const id = randomUUID();
+      await expect(
+        explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [id]),
+      ).rejects.toMatchObject({
+        code: "route.subject_not_found",
+        params: { subject: "product", id },
+      });
+    }));
+  it("treats a dish with no preparation as having no station when explaining an extra", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      await setClaim(tx, f.cfg, f.cocktails, noPrep);
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [f.chips]),
+      ).toMatchObject({
+        route: noPrep,
+        extrasWaitOnDish: false,
+        extras: [{ productId: f.chips, outcome: { kind: "made", stationId: f.fryer } }],
+      });
+    }));
   it("splits claimed extras while unclaimed extras follow their dish", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);

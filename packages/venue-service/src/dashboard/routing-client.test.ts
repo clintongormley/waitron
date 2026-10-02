@@ -130,6 +130,22 @@ it("escapes product and zone identifiers in a zoned route explanation", async ()
   );
 });
 
+it("sends every chosen extra in order with a scheduled explanation", async () => {
+  const request = vi.fn(async () => ({ extras: [] }));
+  await new PrepStationsApi(request as DashboardRequest).explain(
+    "burger",
+    null,
+    { weekday: 5, timeOfDay: "22:00" },
+    ["chips", "cheese"],
+  );
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/venue-service/routing/explain?productId=burger&zoneId=&extraId=chips&extraId=cheese&weekday=5&time=22%3A00",
+    "GET",
+    undefined,
+    { passive: false },
+  );
+});
+
 it("uses passive reads for the background routing refresh", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/venue-service/routing"

@@ -364,6 +364,7 @@ export async function explainRoute(
   productId: string,
   zoneId: string | null,
   when: ExplainWhen,
+  extraProductIds: readonly string[] = [],
 ): Promise<RouteExplanation> {
   const uuid = storedUuid(productId);
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
@@ -391,11 +392,47 @@ export async function explainRoute(
     zoneId,
     moment,
   );
+  const extrasWaitOnDish = choice.route === null;
+  const extras: RouteExplanation["extras"] = [];
+  for (const id of extraProductIds) {
+    const extraId = storedUuid(id);
+    const [extra] = await tx
+      .select({
+        id: products.id,
+        routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+        categoryId: effectiveProductColumns.categoryId,
+      })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .where(eq(products.id, extraId));
+    if (extra === undefined)
+      throw new AppError("route.subject_not_found", { subject: "product", id });
+    if (extrasWaitOnDish) continue;
+    const result = chooseExtraMaker(
+      rules,
+      {
+        productId: extraId,
+        routedProductId: storedUuid(extra.routedId),
+        categoryId: extra.categoryId,
+      },
+      zoneId,
+      moment,
+      choice.route.kind === "station" ? choice.route.stationId : null,
+    );
+    extras.push({
+      productId: id,
+      outcome: result.outcome,
+      decidedBy: result.decidedBy,
+      fallbacks: [...result.fallbacks],
+    });
+  }
   return {
     ...choice,
     clockReadable: moment !== null,
     fallbacks: [...choice.fallbacks],
     stations: stations.map(({ id, name, active }) => ({ id, name, active })),
+    extras,
+    extrasWaitOnDish,
   };
 }
 

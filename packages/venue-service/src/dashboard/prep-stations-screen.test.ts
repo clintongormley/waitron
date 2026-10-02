@@ -273,6 +273,213 @@ it("explains exceptions, claims, defaults and an unroutable product", async () =
   }
 });
 
+it.each(["en", "es"])(
+  "shows every extra outcome and rechecks removable picks in %s",
+  async (locale) => {
+    setLocale(locale);
+    const names = ["Chips", "Cheese", "Sauce", "Olives", "Pickles"];
+    const products = names.map((name) => ({ id: name.toLowerCase(), name }));
+    const a = api({
+      load: vi.fn().mockResolvedValue({
+        ...view,
+        testProducts: [...view.testProducts, ...products],
+        categories: [...view.categories, { id: "sides", name: "Sides", parentId: "food" }],
+        routing: {
+          ...view.routing,
+          stations: [
+            ...view.routing.stations,
+            { id: "fryer", name: "Fryer", active: true },
+            { id: "closed", name: "Closed", active: true },
+          ],
+        },
+      }),
+      explain: vi.fn().mockResolvedValue({
+        route: { kind: "station", stationId: "bar" },
+        decidedBy: { kind: "default" },
+        fallbacks: [],
+        noReplacement: false,
+        clockReadable: true,
+        stations: [
+          { id: "bar", name: "Bar", active: true },
+          { id: "fryer", name: "Fryer", active: true },
+          { id: "closed", name: "Closed", active: true },
+        ],
+        extrasWaitOnDish: false,
+        extras: [
+          {
+            productId: "chips",
+            outcome: { kind: "made", stationId: "fryer" },
+            decidedBy: { kind: "claim", categoryId: "sides" },
+            fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
+          },
+          {
+            productId: "cheese",
+            outcome: { kind: "follows_dish", why: "no_rule" },
+            decidedBy: null,
+            fallbacks: [],
+          },
+          {
+            productId: "sauce",
+            outcome: { kind: "follows_dish", why: "no_preparation" },
+            decidedBy: null,
+            fallbacks: [],
+          },
+          {
+            productId: "olives",
+            outcome: { kind: "follows_dish", why: "no_replacement" },
+            decidedBy: { kind: "claim", categoryId: "sides" },
+            fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
+          },
+          {
+            productId: "pickles",
+            outcome: { kind: "follows_dish", why: "same_station" },
+            decidedBy: null,
+            fallbacks: [],
+          },
+        ],
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="test-product"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "bread" } }),
+    );
+    await settle(el);
+    for (const id of products.map((p) => p.id)) {
+      q(el, '[data-test="test-extra"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: id } }),
+      );
+      await settle(el);
+    }
+    expect(a.explain).toHaveBeenLastCalledWith(
+      "bread",
+      null,
+      undefined,
+      products.map((p) => p.id),
+    );
+    const answer = q(el, '[data-test="test-answer"]')!.textContent!;
+    for (const name of names) expect(answer).toContain(`${name}:`);
+    expect(answer).toContain(
+      locale === "en"
+        ? "Closed claims Food › Sides"
+        : "Closed tiene asignada la carpeta Food › Sides",
+    );
+    expect(answer).toContain(locale === "en" ? "follows the dish" : "sigue al plato");
+    expect(answer).toContain(
+      locale === "en" ? "Closed is closed by hand" : "Closed se ha cerrado a mano",
+    );
+    for (const sentence of locale === "en"
+      ? [
+          "Cheese: follows the dish — no exception or claim covers it",
+          "Sauce: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket",
+          "Olives: follows the dish — Closed is closed and nothing can replace it",
+          "Pickles: follows the dish — it is made at Bar, where the dish is",
+        ]
+      : [
+          "Cheese: sigue al plato — ninguna excepción ni asignación lo cubre",
+          "Sauce: sigue al plato — lo que lo cubre no necesita preparación",
+          "Olives: sigue al plato — Closed está cerrada y nada puede sustituirla",
+          "Pickles: sigue al plato — se prepara en Bar, donde se prepara el plato",
+        ])
+      expect(answer).toContain(sentence);
+    q(el, '[data-test="remove-extra-chips"]')!.click();
+    await settle(el);
+    expect(a.explain).toHaveBeenLastCalledWith("bread", null, undefined, [
+      "cheese",
+      "sauce",
+      "olives",
+      "pickles",
+    ]);
+  },
+);
+
+it.each(["en", "es"])(
+  "waits for the dish before describing picked extras in %s",
+  async (locale) => {
+    setLocale(locale);
+    const a = api({
+      explain: vi.fn().mockResolvedValue({
+        route: null,
+        decidedBy: null,
+        fallbacks: [],
+        noReplacement: false,
+        clockReadable: true,
+        stations: [],
+        extras: [],
+        extrasWaitOnDish: true,
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="test-product"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "bread" } }),
+    );
+    q(el, '[data-test="test-extra"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "bread" } }),
+    );
+    await settle(el);
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+      locale === "en"
+        ? "Extras: decided once the dish has a station to go to"
+        : "Extras: se deciden cuando el plato tenga una estación de destino",
+    );
+  },
+);
+
+it.each(["en", "es"])("names the exception that sends an extra elsewhere in %s", async (locale) => {
+  setLocale(locale);
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      products: [...view.products, { id: "chips", name: "Chips" }],
+      testProducts: [...view.testProducts, { id: "chips", name: "Chips" }],
+      routing: {
+        ...view.routing,
+        exceptions: [
+          {
+            id: "extra-rule",
+            position: 0,
+            zoneId: null,
+            categoryId: null,
+            productId: "chips",
+            target: { kind: "station", stationId: "bar" },
+            neverMatches: false,
+            stationOff: false,
+          },
+        ],
+      },
+    }),
+    explain: vi.fn().mockResolvedValue({
+      route: { kind: "no_preparation" },
+      decidedBy: null,
+      fallbacks: [],
+      noReplacement: false,
+      clockReadable: true,
+      stations: [{ id: "bar", name: "Bar", active: true }],
+      extrasWaitOnDish: false,
+      extras: [
+        {
+          productId: "chips",
+          outcome: { kind: "made", stationId: "bar" },
+          decidedBy: { kind: "exception", exceptionId: "extra-rule" },
+          fallbacks: [],
+        },
+      ],
+    }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  q(el, '[data-test="test-extra"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "chips" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+    locale === "en"
+      ? "Chips: made at Bar, because of the exception 'Chips → Bar'"
+      : "Chips: se prepara en Bar, porque lo indica la excepción «Chips → Bar»",
+  );
+});
+
 it("opens a product tester link with its product selected", async () => {
   setLocale("en");
   const before = location.href;
