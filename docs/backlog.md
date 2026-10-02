@@ -1028,8 +1028,16 @@ that they're filled in, and we should show a thumbnail of the image too"_. Today
   stays two rows however many languages the venue has;
 - the image is not in that line at all: the product's photo sits beside the Name field at the top
   of the editor, as the product list (`product-list.ts`) shows it beside each product's name (the
-  owner's suggestion). Whether that thumbnail also opens the image picker was not discussed; the
-  picker stays in the Descriptors section unless the owner says otherwise.
+  owner's suggestion). **Clicking it opens the image picker, and the picker moves out of the
+  Descriptors section** (owner, 2026-10-02: _"it should open the image picker, in fact the image
+  picker should move out of the descriptions box i think"_). Today `dashboard-image-upload` is
+  drawn inside that section, with its error under it, and `SECTION_FIELDS.descriptors` lists
+  `image`, so an image error forces the section open; both move with the picker, and an image
+  error then shows beside the photo. The picker is drawn only when the editor has an `api`; the
+  photo's slot needs a state for that too. With no photo, the slot shows a placeholder that still
+  opens the picker (the list's `thumb-placeholder` look). A variant with no photo of its own shows
+  its parent's (`inheritedImage`), and it must be clear that it is inherited. It is a button: a tap
+  target, a focus ring, and a name a screen reader reads ("Change photo" / "Add photo").
 
 LOOK at it at phone width, where a long English description leaves little room for the Spanish.
 
