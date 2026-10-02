@@ -61,17 +61,20 @@ Use variants for forms of the same product that need distinct names and prices, 
 single** and **Coffee, double**. Each variant has its own availability. Reordering or editing the
 variants keeps their stable identities, so a menu's settings for a variant keep pointing at it.
 
-Variants appear as a table under the price. Choose **Add variant** to add one. A small window opens
+Variants have a section of their own, **Variants**, under **Pricing**. Choose **Add variant** to
+add one. A small window opens
 where you give the variant its three names (staff, customer-facing and kitchen), its price, image
 and availability; the customer-facing and kitchen names fall back to the variant's staff name
 exactly as the product's do. Save the window to add that one variant, or cancel it to add nothing.
 On the till, a receipt, a kitchen ticket and the sales report, a variant is shown under its own name
 alone, so name it in full: **Large coffee**, not **Large**.
 
-The product keeps its own price field. Once the product has an Active variant, the field's label
-starts **Base price**, because a variant you leave without a price of its own sells at it. That
-variant's empty price shows the base price greyed out as a hint, in its window and in its row of the
-table.
+The product keeps its own price field, above its VAT. Once the product has an Active variant, the
+field's label starts **Base price**, because a variant you leave without a price of its own sells at
+it. That variant's empty price shows the base price greyed out as a hint, in its window and in its
+row of the table. The **Pricing** section then folds to one line, such as **Base price:** €38.00
+per kg · **VAT:** Reduced (10%); choose the line to open it. It opens by itself when the base price
+or the VAT needs fixing, and on a product that has never been saved.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
 arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu
@@ -93,8 +96,10 @@ changes, because leaving the product would lose them: save the product first.
 
 **Remove** makes a saved variant Inactive once you save the product: the till stops offering it, and
 its past sales are kept. A variant you added and have not saved yet is simply dropped. The table
-shows only Active variants at first; set **Show variants** to **Inactive** or **Any status** to see
-removed ones, and choose **Restore** from a row's menu to make one Active again.
+shows only Active variants at first. While some variant is Inactive, a link beside **Add variant**
+says how many, such as **Show 1 inactive**: choose it to see them in the table, and choose **Hide
+inactive** to hide them again. Choose **Restore** from an Inactive row's menu to make it Active
+again.
 
 You cannot add or restore an Active variant on a product that an extras list offers, because a
 product with Active variants cannot be an extra. The save is refused, and the dashboard names the

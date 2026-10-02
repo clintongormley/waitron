@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
@@ -79,7 +78,7 @@ describe.each(["light", "dark"] as const)("variant table (%s)", (theme) => {
       { ...variants[0]!, active: false },
       { ...variants[1]!, unitPrice: null },
     ]);
-    await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=variant-status]")!, "all");
+    el.showInactive = true;
     await el.updateComplete;
     // Without these the scan could pass on a table that drew neither state.
     expect(el.shadowRoot!.querySelector("[data-test=inactive-0]")).not.toBeNull();

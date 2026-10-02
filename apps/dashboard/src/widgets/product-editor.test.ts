@@ -14,7 +14,7 @@ import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
 import { localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import { formatMoney } from "@waitron/shared";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 import { EACH_CHOICE } from "./variant-table.js";
 
@@ -124,6 +124,7 @@ function variantTable(el: ProductEditor) {
     HTMLElement & {
       variants: EditorVariant[];
       errors: Record<number, string>;
+      showInactive: boolean;
       updateComplete: Promise<unknown>;
     }
   >("dashboard-variant-table");
@@ -362,7 +363,7 @@ it("applies variant-table unit changes and forwards its add-unit action", async 
   expect(create.mock.calls[0]![0].detail).toEqual({ kind: "unit" });
 });
 
-it("renders the sections in the designed order, with the VAT rate above the price", async () => {
+it("renders the sections in the designed order, with the price above the VAT rate", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: product,
@@ -383,16 +384,16 @@ it("renders the sections in the designed order, with the VAT rate above the pric
     "descriptors",
     "nutrition",
     "price",
+    "variants",
     "modifiers",
   ]);
   const tax = el.shadowRoot!.querySelector("[name=tax]")!;
   const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
-  // DOCUMENT_POSITION_FOLLOWING: the price field comes after the VAT dropdown, never before it.
-  expect(tax.compareDocumentPosition(price) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // DOCUMENT_POSITION_FOLLOWING: the VAT dropdown comes after the price field, never before it.
+  expect(price.compareDocumentPosition(tax) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const pricing = section(el, "price");
-  expect(pricing.tagName).toBe("FIELDSET");
-  expect(pricing.querySelector("legend")?.textContent).toBe(t("editor.pricing"));
-  expect(parseFloat(getComputedStyle(pricing).borderTopWidth)).toBeGreaterThan(0);
+  expect(pricing.querySelector(".group-label")?.textContent).toBe(t("editor.pricing"));
+  expect(parseFloat(getComputedStyle(pricing).borderTopWidth)).toBe(0);
 });
 
 it("opens the three optional sections collapsed", async () => {
@@ -3101,4 +3102,363 @@ it("keeps a variant's inherited choice as each inherited dropdown's prompt and f
       "placeholder",
     );
   }
+});
+
+// --- The Pricing and Variants sections ---
+
+const saved: ProductEditorDraft = { ...product, id: "coffee" };
+async function mountPricing(value: ProductEditorDraft, props: Partial<ProductEditor> = {}) {
+  return (
+    await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      ...props,
+    })
+  ).el;
+}
+type Fold = HTMLElement & {
+  open: boolean;
+  hasError: boolean;
+  summaryFields: { label: string; value: string }[];
+  updateComplete: Promise<unknown>;
+};
+const pricing = (el: ProductEditor) => section(el, "price") as unknown as Fold;
+const showInactiveLink = (el: ProductEditor) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-inactive]");
+const followsInDocument = (first: Element, second: Element) =>
+  Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+it("draws Pricing with no box, headed like the editor's other open sections, the price above VAT", async () => {
+  const el = await mountPricing(saved);
+  const section = pricing(el);
+  expect(section.tagName).not.toBe("WT-DISCLOSURE");
+  const style = getComputedStyle(section);
+  expect([style.borderTopWidth, style.borderInlineStartWidth]).toEqual(["0px", "0px"]);
+  const heading = section.querySelector(".group-label")!;
+  expect(heading.textContent!.trim()).toBe(t("editor.pricing"));
+  const modifiers = section.parentElement!.querySelector(
+    '[data-section="modifiers"] .group-label',
+  )!;
+  for (const property of ["fontSize", "fontWeight", "textTransform", "color"] as const)
+    expect(getComputedStyle(heading)[property], property).toBe(
+      getComputedStyle(modifiers)[property],
+    );
+  const price = section.querySelector("[name=unit-price]")!;
+  const tax = section.querySelector("[name=tax]")!;
+  expect(followsInDocument(price, tax)).toBe(true);
+});
+
+it("folds Pricing once the product has an active variant, its closed line the base price then VAT", async () => {
+  const el = await mountPricing({ ...saved, variants: [small, large] });
+  const fold = pricing(el);
+  expect(fold.tagName).toBe("WT-DISCLOSURE");
+  expect(fold.getAttribute("heading")).toBe(t("editor.pricing"));
+  expect(fold.open).toBe(false);
+  expect(fold.summaryFields).toEqual([
+    {
+      label: t("editor.base_price"),
+      value: `${formatMoney("9.00", currentLocale())} ${t("editor.per_unit").replace("{unit}", "ea")}`,
+    },
+    { label: t("product.vat"), value: "Reduced (10%)" },
+  ]);
+  const price = fold.querySelector("[name=unit-price]")!;
+  expect(followsInDocument(price, fold.querySelector("[name=tax]")!)).toBe(true);
+});
+
+it.each([
+  { locale: "en-GB", line: "Base price: €9.00 each · VAT: Reduced (10%)" },
+  { locale: "es-ES", line: "Precio base: 9,00 € la unidad · IVA: Reduced (10%)" },
+])("writes the folded Pricing line in $locale, with no unit as each", async ({ locale, line }) => {
+  setLocale(locale as "en-GB" | "es-ES");
+  try {
+    const el = await mountPricing({ ...saved, unitId: null, variants: [small] });
+    const fold = pricing(el);
+    await fold.updateComplete;
+    expect(
+      fold.shadowRoot!.querySelector(".summary")!.textContent!.replace(/\s+/g, " ").trim(),
+    ).toBe(line.replace(/\s+/g, " "));
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("leaves a blank base price, and a VAT class the form does not offer, off the folded line", async () => {
+  const el = await mountPricing({
+    ...saved,
+    unitPrice: "",
+    vatClass: "general",
+    variants: [small],
+  });
+  expect(pricing(el).summaryFields).toEqual([]);
+});
+
+it("keeps Pricing open while every variant is Inactive, since the price is then the product's own", async () => {
+  const el = await mountPricing({ ...saved, variants: [{ ...small, active: false }] });
+  expect(pricing(el).tagName).not.toBe("WT-DISCLOSURE");
+  expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("label")).toBe(
+    t("editor.price_unit").replace("{unit}", "ea"),
+  );
+});
+
+it("folds Pricing when a variant is added to a saved product, and opens it when the variant goes", async () => {
+  const el = await mountPricing(saved);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+  await el.updateComplete;
+  const fresh: EditorVariant = { ...small, name: "Fresh" };
+  delete fresh.id;
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", { detail: { value: fresh }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(pricing(el).tagName).toBe("WT-DISCLOSURE");
+  expect(pricing(el).open).toBe(false);
+  await tableEvent(el, "wt-remove", { index: 0 });
+  expect(pricing(el).tagName).not.toBe("WT-DISCLOSURE");
+});
+
+it("starts the Pricing fold open on a product never saved", async () => {
+  const el = await mountPricing({ ...product, variants: [small] });
+  const fold = pricing(el);
+  expect(fold.tagName).toBe("WT-DISCLOSURE");
+  expect(fold.open).toBe(true);
+  // Closing it is honoured: the start is open, not every render.
+  fold.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await fold.updateComplete;
+  await input(el, "name", "Coffee to go");
+  expect(pricing(el).open).toBe(false);
+});
+
+it.each(["unit-price", "tax", "unit"])(
+  "opens the folded Pricing section when the server refuses %s",
+  async (name) => {
+    const el = await mountPricing({ ...saved, variants: [small] });
+    expect(pricing(el).open).toBe(false);
+    el.fieldErrors = { [name]: "Refused" };
+    await el.updateComplete;
+    const fold = pricing(el);
+    await fold.updateComplete;
+    expect(fold.hasError).toBe(true);
+    expect(fold.open).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe(name);
+  },
+);
+
+it("opens the folded Pricing section when Save finds the base price invalid", async () => {
+  const el = await mountPricing({ ...saved, variants: [small] });
+  await input(el, "unit-price", "abc");
+  save(el);
+  await el.updateComplete;
+  const fold = pricing(el);
+  await fold.updateComplete;
+  expect(fold.open).toBe(true);
+  expect(errorOf(el, "unit-price")).toBe(t("editor.price_invalid"));
+});
+
+it("draws the variants in their own section under Pricing, always open, ending with Add variant", async () => {
+  const el = await mountPricing({ ...saved, variants: [small, large] });
+  const variants = section(el, "variants");
+  expect(variants.tagName).not.toBe("WT-DISCLOSURE");
+  expect(variants.querySelector(".group-label")!.textContent!.trim()).toBe(t("editor.variants"));
+  expect(variants.querySelector("dashboard-variant-table")).not.toBeNull();
+  expect(pricing(el).querySelector("dashboard-variant-table")).toBeNull();
+  expect(followsInDocument(pricing(el), variants)).toBe(true);
+  const table = variants.querySelector("dashboard-variant-table")!;
+  const add = variants.querySelector("[data-test=add-variant]")!;
+  expect(followsInDocument(table, add)).toBe(true);
+});
+
+it("makes the Variants section the Add variant button alone while there are no variants", async () => {
+  const el = await mountPricing(saved);
+  const variants = section(el, "variants");
+  expect(variants.querySelector(".group-label")).toBeNull();
+  expect(variants.querySelector("dashboard-variant-table")).toBeNull();
+  expect(variants.querySelector("[data-test=add-variant]")).not.toBeNull();
+  expect(showInactiveLink(el)).toBeNull();
+});
+
+it("offers Show inactive beside Add variant only while some variant is Inactive, counting them", async () => {
+  const el = await mountPricing({ ...saved, variants: [small, large] });
+  expect(showInactiveLink(el)).toBeNull();
+  await tableEvent(el, "wt-remove", { index: 0 });
+  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.show_inactive_one"));
+  const row = showInactiveLink(el)!.parentElement!;
+  expect(row.querySelector("[data-test=add-variant]")).not.toBeNull();
+  await tableEvent(el, "wt-remove", { index: 1 });
+  expect(showInactiveLink(el)!.textContent!.trim()).toBe(
+    t("editor.show_inactive").replace("{count}", "2"),
+  );
+  expect(variantTable(el)!.showInactive).toBe(false);
+});
+
+it.each([
+  { locale: "en-GB", one: "Show 1 inactive", two: "Show 2 inactive", hide: "Hide inactive" },
+  {
+    locale: "es-ES",
+    one: "Mostrar 1 inactiva",
+    two: "Mostrar 2 inactivas",
+    hide: "Ocultar inactivas",
+  },
+])("words the inactive link in $locale", async ({ locale, one, two, hide }) => {
+  setLocale(locale as "en-GB" | "es-ES");
+  try {
+    const el = await mountPricing({ ...saved, variants: [small, { ...large, active: false }] });
+    expect(showInactiveLink(el)!.textContent!.trim()).toBe(one);
+    showInactiveLink(el)!.click();
+    await el.updateComplete;
+    expect(showInactiveLink(el)!.textContent!.trim()).toBe(hide);
+    const both = await mountPricing({
+      ...saved,
+      variants: [small, large].map((variant) => ({ ...variant, active: false })),
+    });
+    expect(showInactiveLink(both)!.textContent!.trim()).toBe(two);
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("shows and hides the Inactive variants from the link, and starts hidden on every product", async () => {
+  const el = await mountPricing({ ...saved, variants: [small, { ...large, active: false }] });
+  const table = variantTable(el)! as ReturnType<typeof variantTable> & { showInactive: boolean };
+  showInactiveLink(el)!.click();
+  await el.updateComplete;
+  expect(table.showInactive).toBe(true);
+  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.hide_inactive"));
+  showInactiveLink(el)!.click();
+  await el.updateComplete;
+  expect(table.showInactive).toBe(false);
+  showInactiveLink(el)!.click();
+  await el.updateComplete;
+  el.value = { ...saved, id: "tea", variants: [small, { ...large, active: false }] };
+  await el.updateComplete;
+  expect(variantTable(el)!.showInactive).toBe(false);
+});
+
+it("says Hide inactive when the table shows the Inactive rows itself", async () => {
+  const el = await mountPricing({ ...saved, variants: [small, { ...large, active: false }] });
+  el.fieldErrors = { "variant-1-name": "Refused" };
+  await el.updateComplete;
+  await variantTable(el)!.updateComplete;
+  await el.updateComplete;
+  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.hide_inactive"));
+});
+
+it("puts focus on Show inactive when Remove hides the last row on screen", async () => {
+  const el = await mountPricing({ ...saved, variants: [small] });
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  table
+    .shadowRoot!.querySelector<HTMLElement & { show(): void }>('[data-test="actions-0"]')!
+    .show();
+  const remove = table.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-0"]')!;
+  remove.focus();
+  remove.click();
+  await el.updateComplete;
+  expect(el.currentValue.variants[0]!.active).toBe(false);
+  await expect
+    .poll(() => el.shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("show-inactive");
+});
+
+it("draws a variant's page with Pricing open, the price above VAT, and no Variants section", async () => {
+  const el = await mountVariant();
+  const section = pricing(el);
+  expect(section.tagName).not.toBe("WT-DISCLOSURE");
+  expect(section.querySelector(".group-label")!.textContent!.trim()).toBe(t("editor.pricing"));
+  expect(
+    followsInDocument(
+      section.querySelector("[name=unit-price]")!,
+      section.querySelector("[name=tax]")!,
+    ),
+  ).toBe(true);
+  expect(el.shadowRoot!.querySelector('[data-section="variants"]')).toBeNull();
+});
+
+// --- The photo, in the Descriptors section ---
+
+async function mountWithPhoto(props: Partial<ProductEditor> = {}) {
+  return (
+    await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: saved,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
+      ...props,
+    })
+  ).el;
+}
+const photoControl = (el: ProductEditor) =>
+  el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "dashboard-image-upload",
+  )!;
+
+it("keeps the photo the image control chooses, and saves it", async () => {
+  const el = await mountWithPhoto();
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  const changed = new CustomEvent("image-changed", {
+    detail: { image: "cecina.png" },
+    bubbles: true,
+    composed: true,
+  });
+  const outside = vi.fn();
+  el.addEventListener("image-changed", outside);
+  photoControl(el).dispatchEvent(changed);
+  await el.updateComplete;
+  expect(outside).not.toHaveBeenCalled();
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.image).toBe("cecina.png");
+});
+
+it("holds Save while the image picker is open", async () => {
+  const el = await mountWithPhoto();
+  const picker = (open: boolean) =>
+    photoControl(el).dispatchEvent(
+      new CustomEvent("image-picker-state", { detail: { open }, bubbles: true, composed: true }),
+    );
+  picker(true);
+  await el.updateComplete;
+  expect(saveButton(el).disabled).toBe(true);
+  picker(false);
+  await el.updateComplete;
+  expect(saveButton(el).disabled).toBe(false);
+});
+
+it("opens Descriptors on a refused photo, says why under it, and puts focus on Choose", async () => {
+  const el = await mountWithPhoto();
+  expect(section(el, "descriptors").open).toBe(false);
+  el.fieldErrors = { image: "The photo is gone" };
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=image-error]")!.textContent!.trim()).toBe(
+    "The photo is gone",
+  );
+  await expect.poll(() => section(el, "descriptors").open).toBe(true);
+  await expect
+    .poll(() => photoControl(el).shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("choose-image");
+});
+
+it("asks the screen for a new category from Add category", async () => {
+  const el = await mountPricing(saved);
+  const create = vi.fn();
+  el.addEventListener("wt-create-related", create);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-category]")!.click();
+  expect(create).toHaveBeenCalledOnce();
+  expect(create.mock.calls[0]![0].detail).toEqual({ kind: "category" });
+});
+
+it("refuses a variant with no name on its row, and saves nothing", async () => {
+  const el = await mountPricing({ ...saved, variants: [small, { ...large, name: " " }] });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  await el.updateComplete;
+  expect(submit).not.toHaveBeenCalled();
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  expect(table.errors).toEqual({ 1: t("editor.variant_name_required") });
 });

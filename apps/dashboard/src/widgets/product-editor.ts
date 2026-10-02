@@ -31,6 +31,7 @@ import {
   nonBlankNames,
   optionalTextFields,
   priceLabel,
+  priceText,
   switchField,
   textField,
   type FieldContext,
@@ -78,6 +79,7 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
 const SECTION_FIELDS = {
   kitchen: ["kitchen-name", "product-course"],
   descriptors: ["customer-name-", "description-", "image"],
+  price: ["tax", "unit"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
 
@@ -222,45 +224,18 @@ export class ProductEditor extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
       }
-      .bordered-group {
-        display: flex;
-        flex-direction: column;
-        /* A fieldset is at least as wide as its widest content by default, which let the variants
-           table push the pricing group past the dialog's edge at phone width instead of scrolling
-           inside its own wrapper. */
-        min-inline-size: 0;
-        gap: var(--wt-space-3);
-        margin: 0;
-        padding: var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-      /* At phone width the box's sides and inset are room the variants table needs, so the group
-         keeps only its top and bottom rules. */
-      @media (max-width: 30rem) {
-        .bordered-group {
-          padding-inline: 0;
-          border-inline: 0;
-          border-radius: 0;
-        }
-      }
-      .bordered-group legend {
-        padding-inline: var(--wt-space-1);
-        color: var(--wt-color-text);
-        font-weight: var(--wt-font-weight-bold);
-      }
       label {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
       }
-      .choices {
+      fieldset.group {
         min-inline-size: 0;
         margin: 0;
         padding: 0;
         border: 0;
       }
-      .choices legend {
+      fieldset.group > legend {
         padding: 0;
         margin-block-end: var(--wt-space-3);
       }
@@ -294,6 +269,10 @@ export class ProductEditor extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+      wt-button.link::part(button) {
+        font-weight: var(--wt-font-weight-normal);
+        text-decoration: underline;
       }
       .error {
         color: var(--wt-color-danger);
@@ -369,6 +348,11 @@ export class ProductEditor extends LitElement {
   @state() private variantOpen = false;
   /** Which variant the variant window is editing, or null while it is adding a new one. */
   @state() private variantIndex: number | null = null;
+  /** Whether the variants table shows the Inactive variants as well. */
+  @state() private showInactive = false;
+  /** Whether the Pricing fold starts open: on a product never saved, whose price and VAT are still
+   * being set. Read once per product, so a fold the person closes stays closed. */
+  #pricingStartsOpen = false;
   private submitted = false;
   private generation = 0;
   /** The field to put focus in once the update that reported an error has rendered. */
@@ -417,6 +401,8 @@ export class ProductEditor extends LitElement {
       this.unitPickerOpen = false;
       this.variantOpen = false;
       this.variantIndex = null;
+      this.showInactive = false;
+      this.#pricingStartsOpen = !this.value?.id;
       this.#variantProblems = new Map();
     }
     if ((changed.has("busy") && !this.busy) || changed.has("fieldErrors")) this.submitted = false;
@@ -736,9 +722,16 @@ export class ProductEditor extends LitElement {
     this.variantOpen = true;
   }
 
-  private async focusAddVariant(): Promise<void> {
+  /** After a Remove: a table left with no row on screen cannot keep the focus itself, so it goes to
+   * what follows it — Show inactive while hidden variants remain, Add variant when none do. */
+  private async focusAfterRemove(): Promise<void> {
+    const { variants } = this.draft;
+    if (variants.length && (this.showInactive || variants.some((variant) => variant.active)))
+      return;
     await this.updateComplete;
-    this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")?.focus();
+    this.shadowRoot!.querySelector<HTMLElement>(
+      variants.length ? "[data-test=show-inactive]" : "[data-test=add-variant]",
+    )?.focus();
   }
 
   private closeVariant(): void {
@@ -1019,7 +1012,7 @@ export class ProductEditor extends LitElement {
    * page does not offer the choice. */
   private renderOrdering() {
     const error = this.error("ordering");
-    return html`<fieldset class="group choices" data-section="ordering">
+    return html`<fieldset class="group" data-section="ordering">
       <legend class="group-label">${t("product.ordering")}</legend>
       ${PRODUCT_ORDERINGS.map(
         (ordering) =>
@@ -1117,14 +1110,38 @@ export class ProductEditor extends LitElement {
       </div>`;
   }
 
+  private get hasActiveVariant(): boolean {
+    return this.draft.variants.some((variant) => variant.active);
+  }
+
+  /** The folded Pricing section's closed line: the base price, then VAT. A blank price, or a VAT
+   * class this form does not offer, is left out. */
+  private pricingSummary(amount: string, unitLabel: string) {
+    const price = amount.trim();
+    const tax = this.taxes.find((tax) => tax.id === this.draft.vatClass);
+    return [
+      ...(price
+        ? [
+            {
+              label: t("editor.base_price"),
+              value: unitLabel
+                ? `${priceText(price)} ${t("editor.per_unit").replace("{unit}", unitLabel)}`
+                : t("editor.price_each").replace("{price}", priceText(price)),
+            },
+          ]
+        : []),
+      ...(tax ? [{ label: t("product.vat"), value: this.taxLabel(tax) }] : []),
+    ];
+  }
+
+  /** Price, then VAT. Once an active variant sells at it, the price is a base price and the section
+   * folds, so the variants below it are what the editor shows first. */
   private renderPrice() {
     const unitLabel = this.unitShortLabel;
     const parent = this.inherited;
-    const base = this.draft.variants.some((variant) => variant.active);
-    return html`<fieldset class="bordered-group" data-section="price">
-      <legend>${t("editor.pricing")}</legend>
-      ${this.renderTax()}
-      <wt-price-input
+    const base = this.hasActiveVariant;
+    const amount = this.draft.unitPrice ?? "";
+    const fields = html`<wt-price-input
         name="unit-price"
         label=${
           !base
@@ -1138,7 +1155,7 @@ export class ProductEditor extends LitElement {
         placeholder=${parent?.unitPrice ?? ""}
         ?required=${parent === null}
         ?disabled=${this.suspended}
-        .value=${this.draft.unitPrice ?? ""}
+        .value=${amount}
         .error=${this.error("unit-price")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
@@ -1149,89 +1166,116 @@ export class ProductEditor extends LitElement {
           this.unitPickerOpen = true;
         }}
       ></wt-price-input>
-      ${this.unitOpen ? this.renderUnit() : nothing} ${parent ? nothing : this.renderVariants()}
-    </fieldset>`;
+      ${this.unitOpen ? this.renderUnit() : nothing} ${this.renderTax()}`;
+    if (!base)
+      return html`<fieldset class="group" data-section="price">
+        <legend class="group-label">${t("editor.pricing")}</legend>
+        ${fields}
+      </fieldset>`;
+    return keyed(
+      this.generation,
+      html`<wt-disclosure
+        data-section="price"
+        heading=${t("editor.pricing")}
+        .summaryFields=${this.pricingSummary(amount, unitLabel)}
+        ?open=${this.#pricingStartsOpen}
+        ?has-error=${this.sectionHasError("price")}
+      >
+        <div class="group">${fields}</div>
+      </wt-disclosure>`,
+    );
   }
 
   private renderVariants() {
     // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
     const unsaved = this.value !== null && !sameValue(this.draft, this.value);
-    return html`${
-        this.draft.variants.length
-          ? html`<dashboard-variant-table
-              .variants=${this.draft.variants}
-              basePrice=${this.draft.unitPrice ?? ""}
-              .unitId=${this.draft.unitId}
-              .unitOptions=${[
-                { value: null, label: t("editor.unit_each") },
-                ...this.units.map((unit) => ({
-                  value: unit.id,
-                  label: this.text(unit.abbreviation) || this.text(unit.name),
-                })),
-              ]}
-              addUnitLabel=${t("editor.add_unit")}
-              .busy=${this.suspended}
-              .openBlocked=${unsaved}
-              .errors=${this.#rowsNow}
-              @wt-unit-change=${(event: CustomEvent<{ unitId: string | null }>) => {
-                event.stopPropagation();
-                this.change("unitId", event.detail.unitId);
-              }}
-              @wt-add-unit=${(event: Event) => this.related(event, "unit")}
-              @wt-reorder=${(event: CustomEvent<{ from: number; to: number }>) => {
-                event.stopPropagation();
-                // The table has ALREADY moved the row on screen, so a host that does not apply the
-                // same move leaves the draft silently out of step with what is displayed.
-                this.change(
-                  "variants",
-                  reorder(this.draft.variants, event.detail.from, event.detail.to),
-                );
-              }}
-              @wt-toggle-available=${(
-                event: CustomEvent<{ index: number; available: boolean }>,
-              ) => {
-                event.stopPropagation();
-                this.changeVariant(event.detail.index, (variant) => ({
-                  ...variant,
-                  available: event.detail.available,
-                }));
-              }}
-              @wt-edit=${(event: CustomEvent<{ index: number }>) => {
-                event.stopPropagation();
-                this.variantIndex = event.detail.index;
-                this.variantOpen = true;
-              }}
-              @wt-open=${(event: CustomEvent<{ index: number }>) => {
-                event.stopPropagation();
-                const id = this.draft.variants[event.detail.index]?.id;
-                if (this.suspended || unsaved || id === undefined) return;
-                this.dispatchEvent(
-                  new CustomEvent("wt-open-product", {
-                    detail: { productId: id },
-                    bubbles: true,
-                    composed: true,
-                  }),
-                );
-              }}
-              @wt-remove=${(event: CustomEvent<{ index: number }>) => {
-                event.stopPropagation();
-                const { index } = event.detail;
-                // Removing makes a saved variant Inactive; one never saved has no row to make
-                // Inactive, so it simply leaves the draft.
-                if (this.draft.variants[index]?.id === undefined)
+    const { variants } = this.draft;
+    const inactive = variants.filter((variant) => !variant.active).length;
+    return html`<div class="group" data-section="variants">
+      ${
+        variants.length
+          ? html`<span class="group-label">${t("editor.variants")}</span>
+              <dashboard-variant-table
+                .variants=${this.draft.variants}
+                basePrice=${this.draft.unitPrice ?? ""}
+                .unitId=${this.draft.unitId}
+                .unitOptions=${[
+                  { value: null, label: t("editor.unit_each") },
+                  ...this.units.map((unit) => ({
+                    value: unit.id,
+                    label: this.text(unit.abbreviation) || this.text(unit.name),
+                  })),
+                ]}
+                addUnitLabel=${t("editor.add_unit")}
+                .busy=${this.suspended}
+                .openBlocked=${unsaved}
+                .errors=${this.#rowsNow}
+                .showInactive=${this.showInactive}
+                @wt-show-inactive=${(event: Event) => {
+                  event.stopPropagation();
+                  this.showInactive = true;
+                }}
+                @wt-unit-change=${(event: CustomEvent<{ unitId: string | null }>) => {
+                  event.stopPropagation();
+                  this.change("unitId", event.detail.unitId);
+                }}
+                @wt-add-unit=${(event: Event) => this.related(event, "unit")}
+                @wt-reorder=${(event: CustomEvent<{ from: number; to: number }>) => {
+                  event.stopPropagation();
+                  // The table has ALREADY moved the row on screen, so a host that does not apply the
+                  // same move leaves the draft silently out of step with what is displayed.
                   this.change(
                     "variants",
-                    this.draft.variants.filter((_, i) => i !== index),
+                    reorder(this.draft.variants, event.detail.from, event.detail.to),
                   );
-                else this.changeVariant(index, (variant) => ({ ...variant, active: false }));
-                // With no variant left the table is not drawn, so it cannot keep the focus itself.
-                if (!this.draft.variants.length) void this.focusAddVariant();
-              }}
-              @wt-restore=${(event: CustomEvent<{ index: number }>) => {
-                event.stopPropagation();
-                this.changeVariant(event.detail.index, (variant) => ({ ...variant, active: true }));
-              }}
-            ></dashboard-variant-table>`
+                }}
+                @wt-toggle-available=${(
+                  event: CustomEvent<{ index: number; available: boolean }>,
+                ) => {
+                  event.stopPropagation();
+                  this.changeVariant(event.detail.index, (variant) => ({
+                    ...variant,
+                    available: event.detail.available,
+                  }));
+                }}
+                @wt-edit=${(event: CustomEvent<{ index: number }>) => {
+                  event.stopPropagation();
+                  this.variantIndex = event.detail.index;
+                  this.variantOpen = true;
+                }}
+                @wt-open=${(event: CustomEvent<{ index: number }>) => {
+                  event.stopPropagation();
+                  const id = this.draft.variants[event.detail.index]?.id;
+                  if (this.suspended || unsaved || id === undefined) return;
+                  this.dispatchEvent(
+                    new CustomEvent("wt-open-product", {
+                      detail: { productId: id },
+                      bubbles: true,
+                      composed: true,
+                    }),
+                  );
+                }}
+                @wt-remove=${(event: CustomEvent<{ index: number }>) => {
+                  event.stopPropagation();
+                  const { index } = event.detail;
+                  // Removing makes a saved variant Inactive; one never saved has no row to make
+                  // Inactive, so it simply leaves the draft.
+                  if (this.draft.variants[index]?.id === undefined)
+                    this.change(
+                      "variants",
+                      this.draft.variants.filter((_, i) => i !== index),
+                    );
+                  else this.changeVariant(index, (variant) => ({ ...variant, active: false }));
+                  void this.focusAfterRemove();
+                }}
+                @wt-restore=${(event: CustomEvent<{ index: number }>) => {
+                  event.stopPropagation();
+                  this.changeVariant(event.detail.index, (variant) => ({
+                    ...variant,
+                    active: true,
+                  }));
+                }}
+              ></dashboard-variant-table>`
           : nothing
       }
       <div class="row">
@@ -1242,7 +1286,28 @@ export class ProductEditor extends LitElement {
           @click=${this.addVariant}
           >${t("editor.add_variant")}</wt-button
         >
-      </div>`;
+        ${
+          inactive
+            ? html`<wt-button
+                class="link"
+                variant="ghost"
+                data-test="show-inactive"
+                @click=${(event: Event) => {
+                  event.stopPropagation();
+                  this.showInactive = !this.showInactive;
+                }}
+                >${
+                  this.showInactive
+                    ? t("editor.hide_inactive")
+                    : inactive === 1
+                      ? t("editor.show_inactive_one")
+                      : t("editor.show_inactive").replace("{count}", String(inactive))
+                }</wt-button
+              >`
+            : nothing
+        }
+      </div>
+    </div>`;
   }
 
   /** The list's own STAFF name. This surface shows exactly one of a list's three names and it is
@@ -1442,7 +1507,7 @@ export class ProductEditor extends LitElement {
           ${keyed(this.generation, this.renderKitchen())}
           ${keyed(this.generation, this.renderDescriptors())}
           ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}
-          ${this.inherited ? nothing : this.renderModifiers()}
+          ${this.inherited ? nothing : html`${this.renderVariants()} ${this.renderModifiers()}`}
         </div>
         <wt-form-actions slot="footer" .error=${bottom}
           ><wt-button

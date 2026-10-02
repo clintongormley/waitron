@@ -1243,8 +1243,8 @@ one is published before it goes live. Needs a brainstorm and spec before buildin
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
 kg)". All eleven are in `apps/dashboard/src/widgets/product-editor.ts` unless another file is
 named. All eleven were settled from mockups on 2026-10-02 (A216 on the reading its entry
-records); the decisions follow each entry. A214, A217 and A219 all reshape the Pricing section:
-build them together.
+records); the decisions follow each entry. A214, A217 and A219 reshaped the Pricing section
+together, in one branch.
 LOOK at each on a product AND on a variant's page (the editor shows a variant with its parent's
 values as the blank choices), at 1280 and 390, light and dark.
 
@@ -1327,11 +1327,11 @@ Seeds, edit"). The product picker offers no "may contain" today (only the ingred
 `allergen-picker.ts` does), and the draft keeps each allergen's stored presence when the list
 changes; keep that. A variant's hints of its parent's values (`nutritionHints`) stay meaningful.
 
-**No box around Pricing (A214) — OPEN.** The owner: _"Pricing also doesn't need the box around
-it"_. `renderPrice` draws a `fieldset class="bordered-group"` with a "Pricing" legend. **Wanted:**
-no border; the section keeps its heading, drawn like the editor's other section headings. Check
-that nothing else uses `.bordered-group` before deleting its styles, and that the comment about a
-fieldset's minimum width (the variants table) still applies to whatever replaces it.
+**No box around Pricing (A214) — DONE (this branch).** The owner: _"Pricing also doesn't need the
+box around it"_. Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the
+same upper-case muted group label as Classification and Modifiers, or, once A219 folds it, a
+`wt-disclosure` headed like Kitchen. `.bordered-group` had no other user and is gone, with its
+comment about the variants table widening the fieldset: the table now sits in its own section.
 
 **Clicking a variant's row opens its edit window (A215) — DONE (#1049).** The owner: _"variants when
 clicked should open the edit modal"_. In `variant-table.ts` a click anywhere on a row, or Enter on
@@ -1354,7 +1354,7 @@ window, which has no unit button, labels it "Price" (`unitShortLabel` and `rende
 (`feat/products-category-tree`) has a comment in `product-list.ts` citing `unitShortLabel` as
 returning Each, which is no longer true; fix it when that branch is rebased.
 
-**The variants' status filter becomes a "Show inactive" link (A217) — DECIDED, ready to build.** The owner:
+**The variants' status filter becomes a "Show inactive" link (A217) — DONE (this branch).** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
 (`variant-status`, `variant-table.ts`) stands alone between the base price and the table. Offer
 mockups: for example in the table's header row, beside the Add variant button, or shown only once
@@ -1364,6 +1364,11 @@ on a hidden row.
 beside Add variant, there only while some variant is Inactive (Remove in a row's menu makes a
 saved variant Inactive; Restore brings it back, and this link is the only way to reach it). The
 wording is "inactive", to match the rest of the dashboard (owner).
+Built: "Show 1 inactive" / "Show 2 inactive" ("Mostrar 1 inactiva" / "Mostrar 2 inactivas"), a
+link-styled button after Add variant; once chosen it reads "Hide inactive" ("Ocultar inactivas")
+and hides them again. Each product opens with them hidden. The table still shows them itself when a
+reported problem or a just-added unsaved variant would sit on a hidden row, and the link then reads
+"Hide inactive". A Remove that leaves no row on screen puts focus on the link.
 
 **"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — DECIDED,
 ready to build.** The owner: _"i don't like the new extras list and new options list in the
@@ -1381,7 +1386,7 @@ group headings (`wt-combobox`'s existing `group`), and each group ends with its 
 choice, "+ New extras list…" and "+ New options list…", drawn in the primary blue so it does not
 read as a list. No divider is needed.
 
-**With variants, Pricing folds and Variants becomes its own section (A219) — DECIDED, ready to build.**
+**With variants, Pricing folds and Variants becomes its own section (A219) — DONE (this branch).**
 The owner: _"when we have variants the vat and base price and status filter are overwhelming.
 they overshadow the variants, which are the interesting bits. perhaps they should be collapsed?"_.
 Once a product has an active variant, the base price is the price each variant falls back to
@@ -1399,6 +1404,14 @@ Descriptors — heading and arrow, then a muted line "**Base price:** €38.00 p
 Reduced (10%)" — not as a grey box, which reads as a field (the owner). The variants move to
 their own section, "Variants", below it and always open, ending with Add variant and A217's link.
 Without variants, Pricing stays open as today and Variants is just the Add variant button.
+Built: the fold follows the base-price label, so it needs an ACTIVE variant; with only Inactive
+ones the price is the product's own and Pricing stays open. The bold names come from a new
+`summaryFields` property on `wt-disclosure` (A200 asked for a way to pass name and value pairs). A
+blank base price is left off the line; with no unit the price reads "€38.00 each" ("38,00 € la
+unidad"). "No VAT yet" was read as a product never saved, and its fold starts open: a product's
+save refuses a missing VAT class (`vatClass` in `packages/catalogue/src/product-editor-input.ts`),
+and a new product's draft starts on General. A VAT, unit or price error opens the fold
+(`SECTION_FIELDS`).
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — OPEN.** The owner: _"the Kitchen name, and customer facing names aren't showing the internal
