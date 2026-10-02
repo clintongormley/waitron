@@ -1434,13 +1434,12 @@ of actions scrolls within its own part of the row. The rule is in
 
 **Search fields are pill-shaped; they should only round their corners (A175, owner 2026-10-01:
 "all the search fields have too much rounding they just need the corners rounded, not a
-semicircle") — OPEN.** Three search boxes use `border-radius: var(--wt-radius-full)` (9999px, a
+semicircle") — OPEN.** Two search boxes use `border-radius: var(--wt-radius-full)` (9999px, a
 half-circle at each end): every table's search (`.table-search`,
-`packages/ui/src/components/wt-data-table.ts`), the sidebar's "Search pages" (`.nav-search`,
-`apps/dashboard/src/dashboard-app.ts`) and the search box inside the searchable dropdown
-(`.search`, `packages/ui/src/components/wt-combobox.ts`). The other search boxes found by
-`grep -rln 'type="search"'` (the Products screen's folder search and the till's menu search, both
-`wt-input`, and the Staff screen's own input) already have ordinary corners. **Wanted:** the three
+`packages/ui/src/components/wt-data-table.ts`) and the search box inside the searchable dropdown
+(`.search`, `packages/ui/src/components/wt-combobox.ts`). The sidebar's "Search pages" and the
+Staff screen's search are `wt-input` since A178b, which draws the filled field's corners, as do the
+Products screen's folder search and the till's menu search. **Wanted:** the two
 take `var(--wt-radius-md)` (8px), the radius every other text field uses, so the focus ring
 follows it too. Small; no guard checks a field's radius.
 
@@ -1474,7 +1473,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010; A178b–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, and A178b (the dashboard screens); A178c–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1612,6 +1611,25 @@ case now expects the arrows to wrap (spec §12 point 8), and its "popup stays in
 gutter" case presses the trigger near its chevron, because a resting label now covers the
 trigger's middle, and checks the list opened before its unchanged assertion. Both tap-target suites'
 "the interactive set is exactly …" lists gained `wt-textarea`.
+
+**A178b — DONE.** Every field spec §9.1 lists for `apps/dashboard/src/screens/` and
+`apps/dashboard/src/dashboard-app.ts` is drawn by a primitive: native selects are `wt-combobox`
+(`search="auto"`), date, time and search inputs `wt-input`, whole-number inputs `wt-number-stepper`,
+the receipt footer `wt-textarea`; login's three hidden password-manager inputs stay. Also moved,
+though the spec's list predates them: the receipts preview's paper width and the menus screen's
+"Include a menu" field (#993). The after-render fix-ups that re-applied a select's value in
+`printing-rules-screen.ts` and `devices-screen.ts` are gone; where a refused change leaves the stored
+value unchanged, the dropdown binds it with Lit's `live()`, so it shows the stored value again. A
+dropdown in a flex row shrank to its value and cut its own label, so those screens give it a flex
+basis. On the printer calibration step, the two-sentence QR question that was the resolution
+dropdown's label is now visible text above the fields, and the dropdown is labelled "Print
+resolution". **Existing tests changed** are the three approved kinds (driving through
+`chooseOption` or `wt-change`, reading the primitive's value, options, error or the inner control's
+`aria-*`, and the new look), each listed in the pull request. **Left open, for the owner:** the
+backup screen's two retention steppers cut their labels to "Keep…" and "Dele…" (the approved
+§12 point 9 behaviour; the alternative is a box that widens to its label). **Seen, not changed:** a
+blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is on
+`main` before this change (`#save`'s `split(":")`); what the server does with it was not checked.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
