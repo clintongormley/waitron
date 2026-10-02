@@ -114,6 +114,18 @@ export class ExtraListForm extends LitElement {
       td:last-child {
         padding-inline: 0;
       }
+      th:first-child,
+      td:first-child,
+      th:nth-child(4),
+      td:nth-child(4),
+      td:last-child {
+        width: 1%;
+        white-space: nowrap;
+      }
+      th:nth-child(4) {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
       /* A row lines up its text, not its boxes (spec D6); the handle cell keeps its centring. */
       tbody td:not(.handle-cell) {
         vertical-align: baseline;

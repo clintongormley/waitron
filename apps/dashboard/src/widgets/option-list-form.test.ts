@@ -1225,6 +1225,40 @@ it.each([1280, 390])(
   },
 );
 
+it.each([
+  [1280, "en"],
+  [1280, "es"],
+  [390, "en"],
+  [390, "es"],
+] as const)(
+  "keeps the option controls narrow beside a short name at %ipx in %s",
+  async (frame, locale) => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(frame, 844);
+    setLocale(locale);
+    try {
+      const { el } = await mount({ value: cooked });
+      const cells = el
+        .shadowRoot!.querySelector(`tr[data-label="${RARE}"]`)!
+        .querySelectorAll("td");
+      const widths = [...cells].map((cell) => cell.getBoundingClientRect().width);
+      const handle = cells[0]!.querySelector<HTMLElement>("[data-test^=drag-]")!;
+      const menu = cells[3]!.querySelector("wt-row-actions")!;
+
+      expect(widths[0], "handle column").toBeLessThanOrEqual(
+        handle.getBoundingClientRect().width + 2,
+      );
+      expect(widths[2], "Default column").toBeLessThanOrEqual(72);
+      expect(widths[3], "menu column").toBeLessThanOrEqual(menu.getBoundingClientRect().width + 2);
+      expect(widths[1], "Name receives the spare space").toBeGreaterThan(widths[0]);
+    } finally {
+      setLocale("en");
+      await page.viewport(width, height);
+    }
+  },
+);
+
 it("clears a refusal held for an option once that option is saved in its editor, and only that option's", async () => {
   const { el } = await mount({
     value: cooked,

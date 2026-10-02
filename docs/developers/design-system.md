@@ -444,6 +444,11 @@ primitive. Always supply `aria-label`; use its loading, empty and error properti
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
 
+In the options and extras list forms, the reorder grip and other control columns take only the
+width their contents need. The option name takes the spare width; the extras product, quantity and
+price columns share it. A long translated control heading may wrap above its control instead of
+widening that column.
+
 A table with no rows draws `emptyMessage` in a padded box with the table's own border, corners and
 background, centred, and under it whatever the screen puts in its `empty-action` slot: the screen's
 own Add button, rendered there only while its list is empty, so a screen whose Add button also
