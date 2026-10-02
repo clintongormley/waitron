@@ -779,7 +779,7 @@ Each hint follows the field it copies as the owner types: change Name and the bl
 change with it.
 
 **An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
-— DONE.** `wt-data-table` draws a table with no rows as a padded box with the
+— DONE (#1033).** `wt-data-table` draws a table with no rows as a padded box with the
 table's own border, corners and background, the sentence centred and, under it, whatever the
 screen puts in the new `empty-action` slot; the "nothing matches" case keeps the toolbar and gets
 the same box without the slot. Every dashboard table whose screen has an Add action for its own
@@ -1077,7 +1077,7 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026) and A176 are done; next A170–A172 and A177, built in the new style rather than
+A169 (#1026) and A176 (#1033) are done; next A170–A172 and A177, built in the new style rather than
 restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
