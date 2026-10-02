@@ -219,6 +219,54 @@ describe("venue operations screen", () => {
     expect(tabs.querySelector('[slot="zones"] [data-test="new-assignment-z1"]')).toBeNull();
   });
 
+  it("puts Add department and Add hours under their empty tables' sentence, each opening its editor", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({ ...model, departments: [], hours: [] }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    const department = table(el, "departments").querySelector<HTMLElement>(
+      ":scope > [slot=empty-action]",
+    )!;
+    expect(department.assignedSlot).not.toBeNull();
+    expect(department.textContent!.trim()).toBe("Add department");
+    const hours = table(el, "hours").querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(hours.assignedSlot).not.toBeNull();
+    expect(hours.textContent!.trim()).toBe("Add hours");
+    expect(hours.hasAttribute("disabled")).toBe(true);
+    department.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add department");
+  });
+
+  it("opens the hours editor from the empty hours table's Add hours", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({ ...model, hours: [] }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    expect(table(el, "departments").querySelector("[slot=empty-action]")).toBeNull();
+    const hours = table(el, "hours").querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(hours.hasAttribute("disabled")).toBe(false);
+    hours.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add hours");
+  });
+
+  it("puts Make available under a zone's empty menu table, opening the menu editor", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    const button = table(el, "zone-menus").querySelector<HTMLElement>(
+      ":scope > [slot=empty-action]",
+    )!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.textContent!.trim()).toBe("Make available");
+    button.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Make available");
+  });
+
   it("disables Make available when a floor zone has no service zone", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),

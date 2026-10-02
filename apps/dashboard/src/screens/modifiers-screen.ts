@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import {
   UrlStateController,
   baseStyles,
@@ -550,10 +551,11 @@ export class ModifiersScreen extends LitElement {
         : nothing
     }`;
   }
-  #renderAdd(kind: Kind) {
+  #renderAdd(kind: Kind, slot?: "empty-action") {
     const row = kind === "extras" ? "extra" : "option";
     return html`<wt-button
       data-test=${`add-${row}-list`}
+      slot=${ifDefined(slot)}
       variant="primary"
       .disabled=${!this.locales}
       @click=${() => this.#edit(kind, null)}
@@ -581,7 +583,8 @@ export class ModifiersScreen extends LitElement {
       .rowClick=${kind === "options" ? (list: ModifierList) => this.#edit(kind, list) : undefined}
       .rowClickLabel=${(list: ModifierList) => `${t("action.edit")}: ${list.name}`}
       .emptyMessage=${t(`${kind}.empty`)}
-    ></wt-data-table>`;
+      >${this.#lists(kind).length === 0 ? this.#renderAdd(kind, "empty-action") : nothing}</wt-data-table
+    >`;
   }
   override render() {
     const editing = this.editing;

@@ -129,6 +129,7 @@ export class StaffList extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(person: PersonSummary) => person.personId}
         .emptyMessage=${t("staff.empty")}
+        ><slot name="empty-action" slot="empty-action"></slot
       ></wt-data-table>
     `;
   }

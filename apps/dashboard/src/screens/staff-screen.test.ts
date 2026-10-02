@@ -276,6 +276,27 @@ describe("staff-screen", () => {
     expect(form(el).open).toBe(true);
   });
 
+  it("puts the add button under the empty staff table's sentence, opening the same form", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await list(el).updateComplete;
+
+    const button = list(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.checkVisibility()).toBe(true);
+    expect(button.textContent!.trim()).toBe(t("staff.add_user"));
+    button.click();
+    await el.updateComplete;
+    expect(form(el).open).toBe(true);
+  });
+
+  it("draws no add button in the staff table once people exist", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    expect(list(el).querySelector("[slot=empty-action]")).toBeNull();
+  });
+
   // If a dismiss left `formOpen` true, the next add click would be true→true and render nothing.
   it("reopens the create form after a dismiss", async () => {
     const api = stubApi();

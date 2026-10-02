@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { ref } from "lit/directives/ref.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import {
   baseStyles,
   focusFirstInvalid,
@@ -1662,19 +1663,22 @@ export class MenusScreen extends LitElement {
     this.#listSize.observe(probe);
   };
 
+  #renderAddMenu(slot?: "empty-action") {
+    return html`<wt-button
+      data-test="add-menu"
+      slot=${ifDefined(slot)}
+      variant="primary"
+      @click=${() => this.#openMenuForm(null)}
+      >${t("menus.add")}</wt-button
+    >`;
+  }
+
   #renderList() {
     return html`<h1>${t("menus.title")}</h1>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${
         !this.loading && !this.loadError
-          ? html`<div class="page-actions">
-                <wt-button
-                  data-test="add-menu"
-                  variant="primary"
-                  @click=${() => this.#openMenuForm(null)}
-                  >${t("menus.add")}</wt-button
-                >
-              </div>
+          ? html`<div class="page-actions">${this.#renderAddMenu()}</div>
               <div class="list">
                 <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeProbe)}></span>
                 <wt-data-table
@@ -1689,7 +1693,8 @@ export class MenusScreen extends LitElement {
                   .columns=${this.narrow ? this.#narrowColumns : this.#columns}
                   .rowKey=${(menu: MenuRow) => menu.id}
                   .emptyMessage=${t("menus.empty")}
-                ></wt-data-table>
+                  >${this.#rows.length === 0 ? this.#renderAddMenu("empty-action") : nothing}</wt-data-table
+                >
               </div>`
           : nothing
       }

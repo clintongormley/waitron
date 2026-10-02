@@ -770,6 +770,21 @@ it("replaces an address naming an unknown menu or tab rather than adding a histo
   expect(history.length).toBe(before);
 });
 
+it("puts Add menu under the empty menu table's sentence, opening the same form", async () => {
+  const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue([]) }));
+  const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+  expect(button.assignedSlot).not.toBeNull();
+  expect(button.textContent!.trim()).toBe(t("menus.add"));
+  button.click();
+  await el.updateComplete;
+  expect(modal(el, "menu-form").open).toBe(true);
+});
+
+it("draws no Add menu button in the menu table once menus exist", async () => {
+  const el = await mount();
+  expect(table(el).querySelector(":scope > [slot=empty-action]")).toBeNull();
+});
+
 it("creating a menu needs a name: an empty one is explained beside the field and above Save", async () => {
   const client = api();
   const el = await mount(client);

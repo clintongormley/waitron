@@ -1,6 +1,7 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -307,15 +308,21 @@ export class StaffScreen extends LitElement {
     }
   }
 
+  #renderAdd(slot?: "empty-action") {
+    return html`<wt-button
+      variant="primary"
+      data-test="add"
+      slot=${ifDefined(slot)}
+      @click=${() => this.#openForm()}
+      >${t("staff.add_user")}</wt-button
+    >`;
+  }
+
   override render() {
     return html`
       <div class="header">
         <h1 class="title">${t("staff.title")}</h1>
-        <div class="actions">
-          <wt-button variant="primary" data-test="add" @click=${() => this.#openForm()}
-            >${t("staff.add_user")}</wt-button
-          >
-        </div>
+        <div class="actions">${this.#renderAdd()}</div>
       </div>
       <div class="filters" aria-label=${t("staff.filters")}>
         <wt-input
@@ -370,7 +377,8 @@ export class StaffScreen extends LitElement {
         .currentPersonId=${this.currentPersonId}
         @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
-      ></dashboard-staff-list>
+        >${this.people.length === 0 ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
+      >
       ${
         this.errorKey && !this.editOpen && !this.formOpen && this.rowAction === null
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`

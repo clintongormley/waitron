@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
@@ -164,6 +164,7 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) unroutedFolderIds: string[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
+  @property({ attribute: false }) emptyAction?: () => TemplateResult;
 
   #listNames: ReadonlyMap<string, string> = new Map();
   #dragged: string[] = [];
@@ -701,6 +702,7 @@ export class ProductList extends LitElement {
   }
 
   override render() {
+    const rows = this.#rows();
     return html`<wt-data-table
       filterSearchPlaceholder=${t("categories.combobox_search")}
       filterNoResultsLabel=${t("categories.combobox_no_results")}
@@ -716,12 +718,13 @@ export class ProductList extends LitElement {
       .selected=${this.selected}
       .rowSelectable=${(row: ListRow) => row.kind === "folder" || row.variant === null}
       .selectionLabel=${(row: ListRow) => (row.kind === "folder" ? row.folder.name : (row.variant?.name ?? row.product.name))}
-      .rows=${this.#rows()}
+      .rows=${rows}
       .columns=${this.#columns()}
       .rowKey=${(row: ListRow) => row.key}
       .rowParent=${(row: ListRow) => row.parentKey}
       .emptyMessage=${t("catalogue.no_products")}
-    ></wt-data-table>`;
+      >${rows.length === 0 && this.emptyAction ? this.emptyAction() : nothing}</wt-data-table
+    >`;
   }
 }
 

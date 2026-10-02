@@ -2,6 +2,7 @@ import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { codeOf } from "@waitron/dashboard-kit";
@@ -410,6 +411,7 @@ export class VenueOperationsScreen extends LitElement {
     rows: readonly T[],
     columns: DataTableColumn<T>[],
     rowKey: (row: T) => string,
+    add?: Action,
   ) {
     return html`<wt-data-table
       data-test=${key}
@@ -420,15 +422,17 @@ export class VenueOperationsScreen extends LitElement {
       .columns=${columns}
       .rowKey=${rowKey}
       .emptyMessage=${t("venue.no_rows")}
-    ></wt-data-table>`;
+      >${add && rows.length === 0 ? this.#tabAction(add, "empty-action") : nothing}</wt-data-table
+    >`;
   }
   #toolbar(label: string) {
     return html`<div class="toolbar"><h2>${label}</h2></div>`;
   }
-  #tabAction(action: Action) {
+  #tabAction(action: Action, slot?: "empty-action") {
     return html`<wt-button
       variant="primary"
       data-test=${action.key}
+      slot=${ifDefined(slot)}
       ?disabled=${this.busy || action.disabled === true}
       @click=${(event: Event) => {
         this.#opener = event.currentTarget as HTMLElement;
@@ -437,25 +441,39 @@ export class VenueOperationsScreen extends LitElement {
       >${action.label}</wt-button
     >`;
   }
+  #addDepartment(): Action {
+    return {
+      key: "new-department",
+      label: t("venue.add_department"),
+      run: () => this.#open({ kind: "department" }),
+    };
+  }
+  #addHours(): Action {
+    return {
+      key: "new-hours",
+      label: t("venue.add_hours"),
+      disabled: this.model!.departments.length === 0,
+      run: () => this.#open({ kind: "hours" }),
+    };
+  }
+  #addAssignment(zoneId: string): Action {
+    return {
+      key: `new-assignment-${zoneId}`,
+      label: t("venue.make_available"),
+      disabled: !this.model!.zones.some((row) => row.id === zoneId),
+      run: () => this.#open({ kind: "assignment", zoneId }),
+    };
+  }
   #tabActions() {
     const model = this.model!;
     const zone = model.floorZones.find((row) => row.id === this.zoneId);
     return html`<div slot="actions">
       ${
         this.view === "departments"
-          ? html`${this.#tabAction({ key: "new-department", label: t("venue.add_department"), run: () => this.#open({ kind: "department" }) })}${this.#tabAction({ key: "new-hours", label: t("venue.add_hours"), disabled: model.departments.length === 0, run: () => this.#open({ kind: "hours" }) })}`
+          ? html`${this.#tabAction(this.#addDepartment())}${this.#tabAction(this.#addHours())}`
           : nothing
       }
-      ${
-        this.view === "zones" && zone
-          ? this.#tabAction({
-              key: `new-assignment-${zone.id}`,
-              label: t("venue.make_available"),
-              disabled: !model.zones.some((row) => row.id === zone.id),
-              run: () => this.#open({ kind: "assignment", zoneId: zone.id }),
-            })
-          : nothing
-      }
+      ${this.view === "zones" && zone ? this.#tabAction(this.#addAssignment(zone.id)) : nothing}
     </div>`;
   }
   #confirm(name: string, action: () => Promise<unknown>): void {
@@ -554,6 +572,7 @@ export class VenueOperationsScreen extends LitElement {
           },
         ],
         (row) => row.id,
+        this.#addDepartment(),
       )}
       ${this.#toolbar(t("venue.hours"))}
       ${this.#table(
@@ -611,6 +630,7 @@ export class VenueOperationsScreen extends LitElement {
           },
         ],
         (row) => String(model.hours.indexOf(row)),
+        this.#addHours(),
       )}
     </section>`;
   }
@@ -788,6 +808,7 @@ export class VenueOperationsScreen extends LitElement {
                 },
               ],
               (row) => row.menuId,
+              this.#addAssignment(zone.id),
             )}`
           : nothing
       }

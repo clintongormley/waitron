@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
@@ -460,6 +461,10 @@ export class AdjustmentReasonsScreen extends LitElement {
     }
     this.#close();
     await this.#load();
+    await this.updateComplete;
+    // The empty table's Add reason is gone once the reason it made is listed.
+    if (this.#opener?.isConnected === false)
+      this.renderRoot.querySelector<HTMLElement>('.toolbar [data-test="add-reason"]')?.focus();
     await after?.();
   }
 
@@ -919,21 +924,23 @@ export class AdjustmentReasonsScreen extends LitElement {
     );
   }
 
+  #renderAdd(slot?: "empty-action") {
+    return html`<wt-button
+      variant="primary"
+      data-test="add-reason"
+      slot=${ifDefined(slot)}
+      ?disabled=${this.busy}
+      @click=${(event: Event) => this.#open({ kind: "reason" }, event.currentTarget as HTMLElement)}
+      >${t("adjustments.add")}</wt-button
+    >`;
+  }
+
   override render() {
     const alert = this.loadError ?? this.orderError;
     return html`<h1>${t("adjustments.title")}</h1>
       <p class="intro">${t("adjustments.intro")}</p>
       ${alert ? html`<p class="alert" role="alert" data-test="page-alert">${alert}</p>` : nothing}
-      <div class="toolbar">
-        <wt-button
-          variant="primary"
-          data-test="add-reason"
-          ?disabled=${this.busy}
-          @click=${(event: Event) =>
-            this.#open({ kind: "reason" }, event.currentTarget as HTMLElement)}
-          >${t("adjustments.add")}</wt-button
-        >
-      </div>
+      <div class="toolbar">${this.#renderAdd()}</div>
       ${
         this.reasons
           ? html`<wt-data-table
@@ -947,7 +954,8 @@ export class AdjustmentReasonsScreen extends LitElement {
               .columns=${this.#columns()}
               .rowKey=${(reason: AdjustmentReason) => reason.id}
               .emptyMessage=${t("adjustments.empty")}
-            ></wt-data-table>`
+              >${this.reasons.length === 0 ? this.#renderAdd("empty-action") : nothing}</wt-data-table
+            >`
           : nothing
       }
       ${this.#limitSection()} ${this.#modal()}`;

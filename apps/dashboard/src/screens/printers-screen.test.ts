@@ -843,6 +843,45 @@ describe("printer configuration tabs", () => {
     expect(q(el, '[data-test="open-add-printer"]')!.checkVisibility()).toBe(false);
   });
 
+  it("puts Add printer under the empty printer table's sentence, opening the same search", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    const table = q(el, '[data-test="printers-table"]')!;
+    const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.textContent!.trim()).toBe(t("printers.add_printer"));
+    button.click();
+    await flush(el);
+    expect(q(el, "[data-test=new-printer-modal]")).not.toBeNull();
+    expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
+  });
+
+  it("puts Add agent under the empty agent table's sentence, opening the same pairing", async () => {
+    const api = stubApi({ listAgents: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "agents");
+    const table = q(el, '[data-test="agents-table"]')!;
+    const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.textContent!.trim()).toBe(t("printers.add_agent"));
+    button.click();
+    await flush(el);
+    expect(q(el, "[data-test=new-agent-modal]")).not.toBeNull();
+    expect(api.openPairingMode).toHaveBeenCalledOnce();
+  });
+
+  it("draws no Add button in the printer or agent table once they have rows", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    for (const id of ["printers-table", "agents-table"])
+      expect(q(el, `[data-test="${id}"]`)!.querySelector("[slot=empty-action]")).toBeNull();
+  });
+
   it.each([
     [[], [], "agents"],
     [[{ ...agents[0]!, active: false }], printers, "agents"],

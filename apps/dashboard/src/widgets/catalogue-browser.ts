@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { chooseMaker, type RoutingModel } from "@waitron/venue-service/routing";
@@ -125,6 +125,8 @@ export class CatalogueBrowser extends LitElement {
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) folderId: string | null = null;
   @property() view: "folders" | "all" = "folders";
+  /** The screen's Add button, drawn under an empty list's sentence; not while a search is typed. */
+  @property({ attribute: false }) emptyAction?: () => TemplateResult;
   @state() private search = "";
   @state() private folderForm: { value: CategorySummary | null } | null = null;
   @state() private formBusy = false;
@@ -612,6 +614,7 @@ export class CatalogueBrowser extends LitElement {
         .categories=${this.categories}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
+        .emptyAction=${this.search.trim() ? undefined : this.emptyAction}
         @open-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
           this.#navigate("open-folder", event.detail);

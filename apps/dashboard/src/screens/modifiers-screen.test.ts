@@ -869,6 +869,41 @@ it("opens the options form from the Options tab's Add button", async () => {
   expect(extraForm(el).open).toBe(false);
 });
 
+it("puts the Extras tab's Add button under its empty table's sentence, opening the same form", async () => {
+  const el = await mount(api({ listExtraLists: vi.fn().mockResolvedValue([]) }));
+  const table = el.shadowRoot!.querySelector('[data-test="extra-lists"]')!;
+  const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+  expect(button.assignedSlot).not.toBeNull();
+  expect(button.textContent!.trim()).toBe(t("extras.add"));
+  button.click();
+  await el.updateComplete;
+  expect(extraForm(el).open).toBe(true);
+  expect(extraForm(el).value).toBeNull();
+  expect(optionForm(el).open).toBe(false);
+});
+
+it("puts the Options tab's Add button under its empty table's sentence, opening the same form", async () => {
+  const el = await mount(api({ listOptionLists: vi.fn().mockResolvedValue([]) }));
+  await selectTab(el, "options");
+  const table = el.shadowRoot!.querySelector('[data-test="option-lists"]')!;
+  const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+  expect(button.assignedSlot).not.toBeNull();
+  expect(button.textContent!.trim()).toBe(t("options.add"));
+  button.click();
+  await el.updateComplete;
+  expect(optionForm(el).open).toBe(true);
+  expect(optionForm(el).value).toBeNull();
+  expect(extraForm(el).open).toBe(false);
+});
+
+it("draws no Add button in a modifier table that has lists", async () => {
+  const el = await mount();
+  for (const id of ["extra-lists", "option-lists"])
+    expect(
+      el.shadowRoot!.querySelector(`[data-test="${id}"]`)!.querySelector("[slot=empty-action]"),
+    ).toBeNull();
+});
+
 it("opens a row's own list in the matching editor", async () => {
   const el = await mount();
   await clickInTable(el, "extra-lists", "edit-extra-e1");

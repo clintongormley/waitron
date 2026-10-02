@@ -1,5 +1,6 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import type { ContentLanguages } from "@waitron/shared";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import { baseStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
@@ -125,6 +126,7 @@ export class CatalogueScreen extends LitElement {
   @state() private placementFailures: PlacementFailure[] = [];
   @state() private placementBusy = false;
   #editorGeneration = 0;
+  #emptyAction = () => this.#renderAddProduct("empty-action");
   #linkedProduct: string | null = null;
   /** The parent the last nested category create named, to place a `category.not_found` about it. */
   #submittedParent: string | null = null;
@@ -263,6 +265,24 @@ export class CatalogueScreen extends LitElement {
   @state() private folderId: string | null = null;
   @state() private view: "folders" | "all" = "folders";
   @state() private newCategoryId: string | null = null;
+
+  #renderAddProduct(slot?: "empty-action") {
+    const locales = this.contentLanguages?.languages ?? [];
+    return html`<wt-button
+      data-test="add-product"
+      slot=${ifDefined(slot)}
+      ?disabled=${!locales.length || !this.units.length}
+      @click=${() => this.#openCreate()}
+      >${t("catalogue.add_product")}</wt-button
+    >`;
+  }
+
+  protected override willUpdate(changed: PropertyValues): void {
+    // The product list draws this button, so a new function, which re-renders that list, is made
+    // only when what the button depends on changes rather than on every render of this screen.
+    if (changed.has("contentLanguages") || changed.has("units"))
+      this.#emptyAction = () => this.#renderAddProduct("empty-action");
+  }
 
   #openCreate(): void {
     this.newCategoryId =
@@ -587,18 +607,7 @@ export class CatalogueScreen extends LitElement {
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
-        <div class="actions">
-          ${
-            this.catalogues.length
-              ? html`<wt-button
-                  data-test="add-product"
-                  ?disabled=${!locales.length || !this.units.length}
-                  @click=${this.#openCreate}
-                  >${t("catalogue.add_product")}</wt-button
-                >`
-              : nothing
-          }
-        </div>
+        <div class="actions">${this.catalogues.length ? this.#renderAddProduct() : nothing}</div>
       </div>
       ${
         this.catalogues.length
@@ -623,6 +632,7 @@ export class CatalogueScreen extends LitElement {
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
+              .emptyAction=${this.#emptyAction}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId);

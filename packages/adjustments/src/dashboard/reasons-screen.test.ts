@@ -241,6 +241,37 @@ function button(el: AdjustmentReasonsScreen, test: string): HTMLElement & { disa
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 describe("the reasons list", () => {
+  it("puts Add reason under the empty table's sentence, opening the same editor", async () => {
+    const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue([]) }));
+    const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.textContent!.trim()).toBe("Add reason");
+    button.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("New reason");
+  });
+
+  it("draws no Add reason in the table once reasons exist", async () => {
+    const el = await mount(fakeApi());
+    expect(table(el).querySelector(":scope > [slot=empty-action]")).toBeNull();
+  });
+
+  it("returns focus to the toolbar's Add reason after the first reason is made from the empty table", async () => {
+    const api = fakeApi({
+      listReasons: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([complaint]),
+    });
+    const el = await mount(api);
+    table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!.click();
+    await settle(el);
+    await type(el, "name", "Birthday");
+    await toggleAction(el, "comp");
+    await press(el, "save-editor");
+    expect(api.createReason).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector('.toolbar [data-test="add-reason"]'),
+    );
+  });
+
   it("lists the active reasons in their order, with what each allows, its limits and roles", async () => {
     const el = await mount(fakeApi());
     expect(rowKeys(el)).toEqual(["e", "c", "d"]);

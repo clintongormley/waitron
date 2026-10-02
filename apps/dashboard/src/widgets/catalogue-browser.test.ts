@@ -1,3 +1,4 @@
+import { html } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
@@ -766,6 +767,17 @@ it("leaves selection mode on Cancel and restores the ordinary toolbar with no se
       'tr[data-row-key="bread"] input[type="checkbox"]',
     )!.checked,
   ).toBe(false);
+});
+it("draws its screen's empty action in an empty folder, and not when a search finds nothing", async () => {
+  const el = await mountBrowser({
+    products: [],
+    folderId: "b",
+    emptyAction: () => html`<button slot="empty-action">Add product</button>`,
+  });
+  const button = (await tableOf(el)).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+  expect(button.assignedSlot).not.toBeNull();
+  await typeSearch(el, "nothing like this");
+  expect((await tableOf(el)).querySelector("[slot=empty-action]")).toBeNull();
 });
 it.each(["folder", "view", "search", "filter"])(
   "clears selection on %s and keeps selection mode on",

@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import type { LitElement } from "lit";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -269,6 +270,14 @@ const step = (el: CatalogueScreen): AddToMenus =>
   el.shadowRoot!.querySelector("dashboard-add-to-menus")!;
 const list = (el: CatalogueScreen): CatalogueBrowser =>
   el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+async function productTable(el: CatalogueScreen) {
+  await list(el).updateComplete;
+  const products = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
+  await products.updateComplete;
+  const table = products.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  return table;
+}
 function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
@@ -371,6 +380,51 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect(editor(el).open).toBe(false);
     expect(api.listProducts).toHaveBeenCalledTimes(4);
+  });
+
+  it("puts Add product under the empty product table's sentence, opening the same editor", async () => {
+    const api = stubApi({
+      listCategories: vi.fn().mockResolvedValue([]),
+      listProducts: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(button.assignedSlot).not.toBeNull();
+    expect(button.textContent!.trim()).toBe(t("catalogue.add_product"));
+    button.click();
+    await el.updateComplete;
+    expect(editor(el).open).toBe(true);
+    expect(editor(el).value).toBeNull();
+  });
+
+  it("keeps the empty table's Add product disabled exactly while the header's is", async () => {
+    const api = stubApi({
+      listCategories: vi.fn().mockResolvedValue([]),
+      listProducts: vi.fn().mockResolvedValue([]),
+      listUnits: vi.fn().mockResolvedValue([]),
+    });
+    Object.assign(api, { liveData: new LiveData() });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    const slotted = async () =>
+      (await productTable(el)).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    const header = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!;
+    expect(header().hasAttribute("disabled")).toBe(true);
+    expect((await slotted()).hasAttribute("disabled")).toBe(true);
+    vi.mocked(api.listUnits).mockResolvedValue(units);
+    api.liveData.invalidate([{ type: "units", id: units[0]!.id }]);
+    await vi.waitFor(() => expect(header().hasAttribute("disabled")).toBe(false));
+    expect((await slotted()).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("draws no Add product button in the product table once it lists something", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    expect((await productTable(el)).querySelector("[slot=empty-action]")).toBeNull();
   });
 
   it("loads the aggregate on edit and keeps the editor open after a failed save", async () => {
