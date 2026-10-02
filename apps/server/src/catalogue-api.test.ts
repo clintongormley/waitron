@@ -250,8 +250,8 @@ const suite = useVenueDb({
       .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    // A MANAGER (holds `person.manage`) and a STAFF person (holds nothing), each with a live
-    // management session.
+    // A MANAGER (holds `person.manage`) and a STAFF person (holds no `person.manage`), each with a
+    // live management session.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)

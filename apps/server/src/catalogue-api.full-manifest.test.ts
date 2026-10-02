@@ -81,7 +81,7 @@ interface Venue {
   locationId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `person.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds no `person.manage`). */
   staffCookie: string;
 }
 

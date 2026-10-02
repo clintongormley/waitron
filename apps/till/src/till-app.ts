@@ -2294,7 +2294,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
-      // filed; anything else is the free-to-retry `sale.error`.
+      // filed.
       if (
         !reachedFiscal &&
         !retried &&

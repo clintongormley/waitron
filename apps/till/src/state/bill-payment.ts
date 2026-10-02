@@ -175,7 +175,8 @@ export const REASON_MAX = 500;
 
 /**
  * A refused request as the dialogs show it: its code, or `server.internal` when it carries none,
- * with the field it names and, for a tip the venue does not take, the most a card can be charged.
+ * with the field it names, for a tip the venue does not take the most a card can be charged, and
+ * the permission an `authorization.not_permitted` names.
  * A request that `changes` the bill and got no answer is `network`, as it may have been made.
  */
 export function refusalOf(error: unknown, changes = true): PayRefusal {

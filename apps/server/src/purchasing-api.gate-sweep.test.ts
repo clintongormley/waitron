@@ -29,7 +29,7 @@ const noopLog: Logger = () => {};
 interface Venue {
   /** A live MANAGEMENT session cookie for a `manager` (holds `purchase.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds no `purchase.manage`). */
   staffCookie: string;
 }
 

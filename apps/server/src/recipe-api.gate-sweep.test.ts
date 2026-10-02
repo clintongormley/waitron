@@ -33,7 +33,7 @@ const NODE_ID = "11111111-1111-4111-8111-111111111111";
 interface Venue {
   /** A live MANAGEMENT session cookie for a `manager` (holds `recipe.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds no `recipe.manage`). */
   staffCookie: string;
   /** A seeded product, so the two `/products/:id/recipe` routes can be gated against a real id. */
   productId: string;

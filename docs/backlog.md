@@ -1898,13 +1898,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       one after another, so a read that hangs still delays the rest); this changed for tills too.
       Left as they were: a handheld gets no Station, Expo or Schedule button (an existing test pins
       it), and never opens the drawer.
-    - **Done (C128) — who may take a payment.** Every route a till or handheld takes money on
-      (`POST /api/sales`, `POST /api/pay`, `POST /api/working-orders/:id/collect` and
-      `POST /api/working-orders/:id/payments`, every entry) now also needs the signed-in person to
-      hold `sale.take_payment`, checked with the session (`requireSession`,
-      `apps/server/src/till-session.ts`) before the device checks. Every role holds it, so nobody
-      lost anything; a refusal is `authorization.not_permitted` and the till says "You do not have
-      permission to take payments" (`take_payment.not_permitted`). No supervisor override.
+    - **Done (C128) — who may take a payment.** Every till or handheld payment route now also needs
+      `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
     - **Open — the counter's pay card stays on "Tap or insert card…" after a refused reader
       payment.** Seen in a browser test on C129's branch: after `/api/pay` is refused (with
       `device.forbidden_action`, and the same with `server.internal`), the counter shows the

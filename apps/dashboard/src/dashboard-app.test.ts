@@ -3934,7 +3934,9 @@ describe("alerts in the shell", () => {
   it("does not open the Alerts screen for a staff session", async () => {
     history.replaceState(null, "", "/manage/alerts");
     const api = alertsApi({
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "staff", permissions: [] }),
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["sale.take_payment"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
@@ -4045,7 +4047,7 @@ describe("alerts in the shell", () => {
     const getMe = vi
       .fn()
       .mockResolvedValueOnce(manager)
-      .mockResolvedValueOnce({ ...manager, role: "staff", permissions: [] })
+      .mockResolvedValueOnce({ ...manager, role: "staff", permissions: ["sale.take_payment"] })
       .mockResolvedValue(manager);
     const api = alertsApi({
       getMe,
@@ -4376,7 +4378,9 @@ describe("dashboard-app: remaining faces and shell controls", () => {
 
   it("ignores a request to open a product's editor from a session that cannot see the catalogue", async () => {
     const api = stubApi({
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "staff", permissions: [] }),
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["sale.take_payment"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);

@@ -137,8 +137,8 @@ const suite = useVenueDb({
     // Default thresholds (5/10/15): 20 minutes is well past forgotten.
     await seedFiredOrder(db, { orderNumber: 1, ageMinutes: 20, stationId, tableLabel: "12" });
 
-    // A MANAGER (role `manager`, holds report.view) and a STAFF person (holds nothing), each with a
-    // live management session so the route tests drive the gate through a real cookie.
+    // A MANAGER (role `manager`, holds report.view) and a STAFF person (holds no report.view), each
+    // with a live management session so the route tests drive the gate through a real cookie.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)

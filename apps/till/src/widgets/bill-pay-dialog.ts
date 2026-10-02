@@ -60,10 +60,10 @@ export interface PayRequest {
   allocation?: AllocationChoice;
 }
 
-/** A refusal's code, the request field it names when it names one, and for a tip the venue does
- * not take the most the card can be charged. The app's own codes: `network`, a payment that got no
- * answer; `unread`, a balance that could not be read again; `declined` and `card_network`, a card
- * the reader did not charge. */
+/** A refusal's code, the request field it names when it names one, for a tip the venue does not
+ * take the most the card can be charged, and the permission an `authorization.not_permitted`
+ * names. The app's own codes: `network`, a payment that got no answer; `unread`, a balance that
+ * could not be read again; `declined` and `card_network`, a card the reader did not charge. */
 export interface PayRefusal {
   code: string;
   field?: string;
