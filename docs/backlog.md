@@ -5191,13 +5191,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       read the box's configured till, and a till switched off is refused `drawer.not_owner`. Found on the way: once collect accepted a
       handheld, a handheld collecting in cash would have opened its register's drawer; collect now
       builds its configuration through the same `deviceSaleCfg` as the sale and bill routes, which
-      allows a drawer only on a till. **Open for the owner:** the dashboard's "Test open drawer"
+      allows a drawer only on a till. The dashboard's "Test open drawer"
       calibration (`POST /management-api/printers/:id/test-drawer`) still opens any active
       printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no till
-      and no per-till check — should it be limited too? **Open:** the till app still keeps a handheld off the
+      and no per-till check — left as it is (owner, 2026-10-02). The till app still keeps a handheld off the
       counter screen (where Place lives) and gives its bill-pay dialog no card reader whatever its
       profile allows (`apps/till/src/till-app.ts`, `HANDHELD_FACES` and the `cardReader` binding);
-      both are screen choices by form factor, left for a decision. The Devices screen's per-device
+      both are screen choices by form factor, queued as B31 (owner, 2026-10-02). The Devices screen's per-device
       "Receipt printer" is read by nothing that prints.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the

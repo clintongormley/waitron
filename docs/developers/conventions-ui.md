@@ -142,7 +142,7 @@ failed with the switch check removed; and the handheld-collect cases in
 One path is outside the rule: the dashboard's "Test open drawer" calibration,
 `POST /management-api/printers/:id/test-drawer` (`apps/server/src/print-api.ts`), opens any
 active printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no till
-and no per-till check. Whether it should be gated too is an open question for the owner (B29).
+and no per-till check. The owner chose to leave it as it is (2026-10-02, B29).
 
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 
