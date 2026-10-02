@@ -6,6 +6,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { CatalogueBrowser } from "./catalogue-browser.js";
@@ -101,6 +102,19 @@ export async function toggleCategory(el: CatalogueBrowser, id: string) {
     .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="folder:${id}"] .row-activate`)!
     .click();
   await table.updateComplete;
+}
+async function menuAction(el: CatalogueBrowser, test: string) {
+  (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+  await el.updateComplete;
+}
+async function nameBox(el: CatalogueBrowser) {
+  const table = await tableOf(el);
+  await vi.waitFor(() =>
+    expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
+  );
+  return table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    'wt-input[name="category-name"]',
+  )!;
 }
 
 it("marks only folders without an active own or inherited routing claim and clears the mark when claimed", async () => {
@@ -559,71 +573,56 @@ it("opens and closes a category from its row, and says which it will do", async 
     table.shadowRoot!.querySelector('tr[data-row-key="folder:d"] wt-icon[name="folder"]'),
   ).not.toBeNull();
 });
-it("creates a folder under the current folder and closes after save", async () => {
-  const el = await mountBrowser({ categoryId: "d" });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Juice" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+it("Add category makes the typed category inside the category whose menu asked, and the box goes", async () => {
+  const el = await mountBrowser();
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  expect(await rowKeys(el)).toEqual([
+    "folder:d",
+    "folder:b",
+    "draft:new",
+    "cola",
+    "folder:f",
+    "bread",
+  ]);
+  await userEvent.keyboard("Juice{Enter}");
   await vi.waitFor(() =>
-    expect(el.api.createCategory).toHaveBeenCalledWith({ name: "Juice", parentId: "d" }),
+    expect(el.api.createCategory).toHaveBeenCalledExactlyOnceWith({ name: "Juice", parentId: "d" }),
   );
-  await vi.waitFor(() => expect(form.open).toBe(false));
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
 });
-it("renames a root folder without adopting the current folder", async () => {
+it("renames a top-level category in place without adopting the addressed one", async () => {
   const el = await mountBrowser({ categoryId: "b" });
-  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
-  list.dispatchEvent(
-    new CustomEvent("rename-folder", { detail: { folderId: "d" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Beverages" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  await menuAction(el, "rename-d");
+  const box = await nameBox(el);
+  expect(box.value).toBe("Drinks");
+  await userEvent.keyboard("Beverages{Enter}");
   await vi.waitFor(() =>
     expect(el.api.updateCategory).toHaveBeenCalledWith("d", { name: "Beverages", parentId: null }),
   );
 });
-it("keeps a refused folder save open with a field error", async () => {
-  const el = await mountBrowser({ categoryId: "d" });
+it("keeps a refused name in its box with the refusal under it, and Enter tries again", async () => {
+  const el = await mountBrowser();
   vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.invalid" });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Juice" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  await vi.waitFor(() => expect(form.fieldErrors.name).toBeTruthy());
-  expect(form.open).toBe(true);
-  expect(form.shadowRoot!.querySelector("wt-form-actions")!.getAttribute("slot")).toBe("footer");
-  expect(form.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+  await menuAction(el, "add-category-d");
+  const box = await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await vi.waitFor(() => expect(box.error).toBe(codeMessage("category.invalid")));
+  expect(await rowKeys(el)).toContain("draft:new");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledTimes(2));
 });
 
-it("creates a top-level folder when the addressed folder is missing", async () => {
+it("Add category on All products makes a top-level category", async () => {
   const el = await mountBrowser({ categoryId: "gone" });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  await form.updateComplete;
-  form
-    .shadowRoot!.querySelector('[name="name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Juice" } }));
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
   await vi.waitFor(() =>
-    expect(el.api.createCategory).toHaveBeenCalledWith({ name: "Juice", parentId: null }),
+    expect(el.api.createCategory).toHaveBeenCalledExactlyOnceWith({
+      name: "Juice",
+      parentId: null,
+    }),
   );
 });
 
@@ -757,7 +756,7 @@ it("leaves selection mode on Cancel and restores the ordinary toolbar with no se
   await press(el, "cancel-selection");
   expect((await tableOf(el)).selectable).toBe(false);
   expect(count(el)).toBeUndefined();
-  for (const action of ["select", "new-folder"])
+  for (const action of ["select"])
     expect(el.shadowRoot!.querySelector(`[data-test="${action}"]`), action).not.toBeNull();
   await press(el, "select");
   expect(count(el)).toBe("0 selected");
@@ -1136,15 +1135,88 @@ it("Move to… on a category's menu opens the move dialog for that category alon
   );
 });
 
-it("Add category on a category's menu opens the category form inside it", async () => {
+it("Esc, or leaving the box blank, adds nothing", async () => {
   const el = await mountBrowser();
-  (await tableOf(el))
-    .shadowRoot!.querySelector<HTMLElement>('[data-test="add-category-f"]')!
-    .click();
-  await el.updateComplete;
-  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  expect(form.open).toBe(true);
-  expect(form.defaultParentId).toBe("f");
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Tea{Escape}");
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("{Tab}");
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  expect(el.api.createCategory).not.toHaveBeenCalled();
+});
+
+it("makes one category from Enter pressed twice, or Enter then leaving the box", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}{Enter}{Tab}");
+  finish(folder("j", "Juice", null));
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  expect(el.api.createCategory).toHaveBeenCalledOnce();
+});
+
+it("leaves a box opened while an earlier name was saving", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await menuAction(el, "rename-f");
+  await nameBox(el);
+  finish(folder("j", "Juice", "d"));
+  await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const table = await tableOf(el);
+  expect(
+    table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'tr[data-row-key="folder:f"] wt-input[name="category-name"]',
+    )!.value,
+  ).toBe("Food");
+});
+
+it("Add category clears a typed search, so its name box shows", async () => {
+  const el = await mountBrowser();
+  await typeSearch(el, "cola");
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="catalogue-search"]')!
+      .value,
+  ).toBe("");
+});
+
+it("keeps the old name, and sends nothing more, when a refused rename is left with Esc", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.updateCategory).mockRejectedValueOnce({ code: "category.invalid" });
+  await menuAction(el, "rename-d");
+  const box = await nameBox(el);
+  await userEvent.keyboard("Beverages{Enter}");
+  await vi.waitFor(() => expect(box.error).not.toBe(""));
+  await userEvent.keyboard("{Escape}");
+  const table = await tableOf(el);
+  await vi.waitFor(() =>
+    expect(table.shadowRoot!.querySelector('wt-input[name="category-name"]')).toBeNull(),
+  );
+  expect(el.api.updateCategory).toHaveBeenCalledOnce();
+  expect(table.shadowRoot!.querySelector('tr[data-row-key="folder:d"] strong')!.textContent).toBe(
+    "Drinks",
+  );
 });
 
 it("passes whether products can be added to every menu", async () => {

@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
@@ -77,6 +77,9 @@ async function openRow(el: ProductList, key: string): Promise<void> {
   root.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!.click();
   await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
 }
+
+const focusedName = (el: ProductList) =>
+  el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.activeElement?.getAttribute("name");
 
 const counted = (categories: number, products: number) =>
   [
@@ -1771,4 +1774,172 @@ describe("the product list as a tree", () => {
       }
     },
   );
+
+  it("puts a new category's name box inside the category it is added to, opened, holding the cursor", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "create", parentId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(rowKeys(root)).toEqual([
+      "folder:d",
+      "folder:b",
+      "draft:new",
+      "cola",
+      "folder:f",
+      "bread",
+    ]);
+    expect(root.querySelector('tr[data-row-key="draft:new"]')!.getAttribute("aria-level")).toBe(
+      "3",
+    );
+    const box = root.querySelector('tr[data-row-key="draft:new"] wt-input')!;
+    expect(box.getAttribute("part")).toBe("name-box");
+    expect(box.getAttribute("label")).toBe(t("folders.name"));
+  });
+
+  it("sends the typed name, trimmed, on Enter or on leaving the box, and a cancel on Esc or on leaving it blank", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    const start = async (parentId: string | null) => {
+      el.nameDraft = null;
+      await el.updateComplete;
+      el.nameDraft = { kind: "create", parentId };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    };
+    await start(null);
+    await userEvent.keyboard("  Juice  {Enter}");
+    await start(null);
+    await userEvent.keyboard("Tea{Tab}");
+    await start("d");
+    await userEvent.keyboard("Tea{Escape}");
+    await start("d");
+    await userEvent.keyboard("{Tab}");
+    expect(sent).toEqual([{ name: "Juice" }, { name: "Tea" }, "cancel", "cancel"]);
+  });
+
+  it("sends a name once, shows a refusal under the box, and then lets Enter send again", async () => {
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice{Enter}{Enter}");
+    expect(sent).toEqual([{ name: "Juice" }]);
+    el.nameError = "That name is taken.";
+    await el.updateComplete;
+    const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    )!;
+    await box.updateComplete;
+    expect(box.shadowRoot!.querySelector("[data-error]")!.textContent).toBe("That name is taken.");
+    await userEvent.keyboard("{Enter}");
+    expect(sent).toEqual([{ name: "Juice" }, { name: "Juice" }]);
+  });
+
+  it("turns a category's name into the box, holding its name, for a rename", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    expect(row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.value).toBe("Drinks");
+    expect(row.querySelector("strong")).toBeNull();
+    expect(row.querySelector(".row-activate")).toBeNull();
+  });
+
+  it("sends a cancel on Enter in a blank box, and nothing more once a name is sent", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("   {Enter}");
+    el.nameDraft = null;
+    await el.updateComplete;
+    el.nameDraft = { kind: "create", parentId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice{Enter}{Escape}{Tab}");
+    expect(sent).toEqual(["cancel", { name: "Juice" }]);
+  });
+
+  it("closes a category's menu when Rename is chosen from it", async () => {
+    const { el, root } = await mountTree();
+    const renames: unknown[] = [];
+    el.addEventListener("rename-folder", (event) => renames.push((event as CustomEvent).detail));
+    const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-folder-d"]',
+    )!;
+    menu.show();
+    const popup = menu.shadowRoot!.querySelector("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(true);
+    root.querySelector<HTMLElement>('[data-test="rename-d"]')!.click();
+    expect(renames).toEqual([{ folderId: "d" }]);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("a rename's box sends a cancel on Esc, and on leaving it blank", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    const rename = async () => {
+      el.nameDraft = null;
+      await el.updateComplete;
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    };
+    await rename();
+    await userEvent.keyboard("Beverages{Escape}");
+    await rename();
+    await userEvent.keyboard("{Backspace}{Tab}");
+    expect(sent).toEqual(["cancel", "cancel"]);
+  });
+
+  it("opens the All products menu, without moving focus, when the catalogue loads empty, and only that once", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    onTestFinished(() => outside.remove());
+    outside.focus();
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [],
+      categories: [],
+      loaded: true,
+    });
+    const menu = (await tableRoot(el)).querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-root"]',
+    )!;
+    const popup = () => menu.shadowRoot!.querySelector("[popover]")!;
+    await vi.waitFor(() => expect(popup().matches(":popover-open")).toBe(true));
+    expect(document.activeElement).toBe(outside);
+    menu.hide();
+    el.products = [];
+    await el.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(popup().matches(":popover-open")).toBe(false);
+  });
+
+  it("leaves the menu closed before the catalogue has loaded, and for one with something in it", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [],
+      categories: [],
+    });
+    const popup = async () =>
+      (await tableRoot(el))
+        .querySelector('[data-test="actions-root"]')!
+        .shadowRoot!.querySelector("[popover]")!;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect((await popup()).matches(":popover-open")).toBe(false);
+    el.products = [product()];
+    el.loaded = true;
+    await el.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect((await popup()).matches(":popover-open")).toBe(false);
+  });
 });

@@ -5,7 +5,6 @@ import { chooseMaker, type RoutingModel } from "@waitron/venue-service/routing";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import type {
-  CategoryInput,
   CategorySummary,
   CatalogueSelection,
   FolderContents,
@@ -24,8 +23,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import { acceptsCatalogueDrop, type ProductList } from "./product-list.js";
-import "./category-form.js";
+import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -84,11 +82,11 @@ export class CatalogueBrowser extends LitElement {
   /** The category the address names; the browser opens it, and every category above it, once. */
   @property({ attribute: false }) categoryId: string | null = null;
   @property({ type: Boolean }) canAddProduct = false;
+  @property({ type: Boolean }) loaded = false;
   @state() private search = "";
-  @state() private folderForm: { value: CategorySummary | null; parentId: string | null } | null =
-    null;
-  @state() private formBusy = false;
-  @state() private formErrors: Record<string, string> = {};
+  @state() private nameDraft: CategoryNameDraft | null = null;
+  @state() private nameError = "";
+  #nameBusy = false;
 
   @state() private selecting = false;
   @state() private selected: string[] = [];
@@ -172,10 +170,6 @@ export class CatalogueBrowser extends LitElement {
     this.#emit("open-category", { categoryId: parentId });
   }
 
-  /** The category the address names, while it exists; New folder creates inside it. */
-  #addressed(): string | null {
-    return this.categories.some(({ id }) => id === this.categoryId) ? this.categoryId : null;
-  }
   #selection(keys = this.selected): CatalogueSelection {
     return {
       productIds: keys.filter((key) => !key.startsWith("folder:")),
@@ -404,27 +398,25 @@ export class CatalogueBrowser extends LitElement {
   #emit(name: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  #openForm(
-    value: CategorySummary | null,
-    parentId = value ? value.parentId : this.#addressed(),
-  ): void {
-    this.formErrors = {};
-    this.folderForm = { value, parentId };
-  }
-  async #save(event: CustomEvent<{ value: CategoryInput }>): Promise<void> {
+  async #saveName(event: CustomEvent<{ name: string }>): Promise<void> {
     event.stopPropagation();
-    if (this.formBusy || !this.folderForm) return;
-    this.formBusy = true;
-    this.formErrors = {};
+    const draft = this.nameDraft;
+    if (!draft || this.#nameBusy) return;
+    this.#nameBusy = true;
+    this.nameError = "";
+    const parentId =
+      draft.kind === "create"
+        ? draft.parentId
+        : (this.categories.find(({ id }) => id === draft.categoryId)?.parentId ?? null);
     try {
-      const value = event.detail.value;
-      if (this.folderForm.value) await this.api.updateCategory(this.folderForm.value.id, value);
-      else await this.api.createCategory(value);
-      this.folderForm = null;
+      if (draft.kind === "create")
+        await this.api.createCategory({ name: event.detail.name, parentId });
+      else await this.api.updateCategory(draft.categoryId, { name: event.detail.name, parentId });
+      if (this.nameDraft === draft) this.nameDraft = null;
     } catch (error) {
-      this.formErrors = categoryRefusalErrors(error, event.detail.value.parentId);
+      this.nameError = Object.values(categoryRefusalErrors(error, parentId))[0]!;
     } finally {
-      this.formBusy = false;
+      this.#nameBusy = false;
     }
   }
   override render() {
@@ -453,9 +445,14 @@ export class CatalogueBrowser extends LitElement {
           event.stopPropagation();
           this.#openMove([`folder:${event.detail.folderId}`]);
         }}
+        .nameDraft=${this.nameDraft}
+        .nameError=${this.nameError}
+        .loaded=${this.loaded}
         @add-category=${(event: CustomEvent<{ parentId: string | null }>) => {
           event.stopPropagation();
-          this.#openForm(null, event.detail.parentId);
+          this.search = "";
+          this.nameError = "";
+          this.nameDraft = { kind: "create", parentId: event.detail.parentId };
         }}
         .categories=${this.categories}
         .products=${this.products}
@@ -468,8 +465,15 @@ export class CatalogueBrowser extends LitElement {
         .unitLanguage=${this.unitLanguage}
         @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
-          const value = this.categories.find(({ id }) => id === event.detail.folderId);
-          if (value) this.#openForm(value);
+          this.nameError = "";
+          this.nameDraft = { kind: "rename", categoryId: event.detail.folderId };
+        }}
+        @name-commit=${(event: CustomEvent<{ name: string }>) => void this.#saveName(event)}
+        @name-cancel=${(event: Event) => {
+          event.stopPropagation();
+          if (this.#nameBusy) return;
+          this.nameDraft = null;
+          this.nameError = "";
         }}
       >
         <wt-input
@@ -518,31 +522,15 @@ export class CatalogueBrowser extends LitElement {
                     >${t("folders.cancel_selection")}</wt-button
                   >`
               : html`<wt-button
-                    data-test="select"
-                    variant="secondary"
-                    @click=${() => (this.selecting = true)}
-                    >${t("folders.select")}</wt-button
-                  >
-                  <wt-button data-test="new-folder" @click=${() => this.#openForm(null)}
-                    >${t("folders.new")}</wt-button
-                  >`
+                  data-test="select"
+                  variant="secondary"
+                  @click=${() => (this.selecting = true)}
+                  >${t("folders.select")}</wt-button
+                >`
           }
         </div>
       </dashboard-product-list>
-      <dashboard-category-form
-        .open=${this.folderForm !== null}
-        .value=${this.folderForm?.value ?? null}
-        .defaultParentId=${this.folderForm?.parentId ?? null}
-        .categories=${this.categories}
-        .busy=${this.formBusy}
-        .fieldErrors=${this.formErrors}
-        @wt-submit=${(event: CustomEvent<{ value: CategoryInput }>) => void this.#save(event)}
-        @wt-cancel=${(event: Event) => {
-          event.stopPropagation();
-          if (!this.formBusy) this.folderForm = null;
-        }}
-      ></dashboard-category-form
-      >${this.#operationDialog()}${
+      ${this.#operationDialog()}${
         this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing
       }`;
   }

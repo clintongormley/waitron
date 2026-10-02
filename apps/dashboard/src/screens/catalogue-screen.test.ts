@@ -1830,6 +1830,18 @@ describe("catalogue-screen", () => {
     expect(products.units).toEqual(units);
     expect(products.unitLanguage).toBe("es");
   });
+
+  it("tells the product list the catalogue has loaded only once its products have", async () => {
+    const pending: ((value: Product[]) => void)[] = [];
+    const api = stubApi({
+      listProducts: vi.fn(() => new Promise<Product[]>((resolve) => pending.push(resolve))),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(list(el).loaded).toBe(false);
+    for (const resolve of pending) resolve([]);
+    await vi.waitFor(() => expect(list(el).loaded).toBe(true));
+  });
 });
 
 it("reads and writes the opened category in the address", async () => {

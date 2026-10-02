@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-input.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
@@ -28,10 +29,15 @@ import {
 } from "@waitron/catalogue/src/product-ordering.js";
 
 export const ROOT_KEY = "root";
+const DRAFT_KEY = "draft:new";
+
+export type CategoryNameDraft =
+  { kind: "create"; parentId: string | null } | { kind: "rename"; categoryId: string };
 
 type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null };
 type CategoryRow = { kind: "folder"; key: string; parentKey: string; folder: CategorySummary };
-type ListRow = ProductRow | CategoryRow | RootRow;
+type DraftRow = { kind: "draft"; key: typeof DRAFT_KEY; parentKey: string };
+type ListRow = ProductRow | CategoryRow | RootRow | DraftRow;
 
 interface ProductRow {
   kind: "product";
@@ -166,6 +172,10 @@ export class ProductList extends LitElement {
         font-size: var(--wt-font-size-sm);
         white-space: nowrap;
       }
+      wt-data-table::part(name-box) {
+        flex: 1 1 calc(var(--wt-tap-min) * 4);
+        min-width: 0;
+      }
       wt-data-table::part(maker-link) {
         display: block;
         max-inline-size: 12rem;
@@ -192,8 +202,17 @@ export class ProductList extends LitElement {
   @property() search = "";
   /** Whether a product can be made yet: the editor needs a content language and a unit. */
   @property({ type: Boolean }) canAddProduct = false;
+  @property({ attribute: false }) nameDraft: CategoryNameDraft | null = null;
+  /** The server's refusal of the name the box last sent, shown under the box. */
+  @property() nameError = "";
+  /** Whether the catalogue has loaded, so that an empty one is known to be empty. */
+  @property({ type: Boolean }) loaded = false;
 
   #listNames: ReadonlyMap<string, string> = new Map();
+  #nameValue = "";
+  /** Set once the box has sent its name or its cancel, until a refusal or a new box. */
+  #nameSent = false;
+  #emptyChecked = false;
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
   #dragged: string[] = [];
@@ -226,7 +245,7 @@ export class ProductList extends LitElement {
       .filter((item): item is HTMLElement => item instanceof HTMLElement);
     const row = path.find((item) => item.matches("tr[data-row-key]"));
     const listed = row ? this.#rowByKey.get(row.dataset.rowKey!) : undefined;
-    if (!row || !listed || listed.kind === "root") return;
+    if (!row || !listed || listed.kind === "root" || listed.kind === "draft") return;
     if (listed.kind === "product" && listed.variant !== null) return;
     if (
       path.some((item) =>
@@ -340,6 +359,102 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
+    if (changed.has("nameDraft")) {
+      const draft = this.nameDraft;
+      this.#nameSent = false;
+      this.#nameValue =
+        draft?.kind === "rename"
+          ? (this.categories.find(({ id }) => id === draft.categoryId)?.name ?? "")
+          : "";
+    }
+    if (changed.has("nameError") && this.nameError !== "") this.#nameSent = false;
+  }
+
+  protected override updated(changed: PropertyValues<this>): void {
+    if (changed.has("nameDraft") && this.nameDraft) void this.#focusNameBox();
+    if (this.loaded && !this.#emptyChecked) {
+      this.#emptyChecked = true;
+      if (this.products.length === 0 && this.categories.length === 0) void this.#openRootMenu();
+    }
+  }
+
+  async #focusNameBox(): Promise<void> {
+    const draft = this.nameDraft;
+    const table = this.#table();
+    if (!draft || !table) return;
+    await table.updateComplete;
+    await table.revealRow(draft.kind === "create" ? DRAFT_KEY : `folder:${draft.categoryId}`);
+    const box = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    );
+    if (!box) return;
+    await box.updateComplete;
+    box.focus();
+    box.shadowRoot!.querySelector("input")!.select();
+  }
+
+  /** `show()` moves no focus, so the person's place on the page is kept. */
+  async #openRootMenu(): Promise<void> {
+    const table = this.#table();
+    if (!table) return;
+    await table.updateComplete;
+    const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-root"]',
+    );
+    if (!menu) return;
+    await menu.updateComplete;
+    menu.show();
+  }
+
+  #commitName(): void {
+    if (this.#nameSent) return;
+    const name = this.#nameValue.trim();
+    if (name === "") {
+      this.#cancelName();
+      return;
+    }
+    this.#nameSent = true;
+    this.#send("name-commit", { name });
+  }
+
+  #cancelName(): void {
+    if (this.#nameSent) return;
+    this.#nameSent = true;
+    this.#send("name-cancel", {});
+  }
+
+  #nameBox() {
+    return html`<wt-input
+      part="name-box"
+      name="category-name"
+      label=${t("folders.name")}
+      hide-label
+      .value=${this.#nameValue}
+      .error=${this.nameError}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.#nameValue = event.detail.value;
+      }}
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          this.#commitName();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          this.#cancelName();
+        }
+      }}
+      @focusout=${() => {
+        if (this.nameDraft === null || this.#nameSent) return;
+        if (this.#nameValue.trim() === "") this.#cancelName();
+        else this.#commitName();
+      }}
+    ></wt-input>`;
+  }
+
+  #renaming(id: string): boolean {
+    return this.nameDraft?.kind === "rename" && this.nameDraft.categoryId === id;
   }
 
   #emit(
@@ -369,6 +484,15 @@ export class ProductList extends LitElement {
         parentKey: keyOf(folder.parentId),
         folder,
       })),
+      ...(this.nameDraft?.kind === "create"
+        ? [
+            {
+              kind: "draft",
+              key: DRAFT_KEY,
+              parentKey: keyOf(this.nameDraft.parentId),
+            } satisfies DraftRow,
+          ]
+        : []),
       ...this.products.flatMap((product): ProductRow[] => [
         {
           kind: "product",
@@ -709,6 +833,12 @@ export class ProductList extends LitElement {
       pinned: column.pinned,
       cell: (row, context) => {
         if (row.kind === "product") return column.cell(row, context);
+        if (row.kind === "draft")
+          return column.key === "name"
+            ? html`<span part="folder-cell"
+                ><wt-icon name="folder"></wt-icon>${this.#nameBox()}</span
+              >`
+            : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
@@ -734,8 +864,9 @@ export class ProductList extends LitElement {
               aria-label=${`${t("folders.drag")}: ${folder.name}`}
             >
               <wt-icon name="grip"></wt-icon></button
-            ><wt-icon name="folder"></wt-icon><strong>${folder.name}</strong
-            ><span part="count" data-test=${`count-${folder.id}`}>${this.#contents(folder.id)}</span
+            ><wt-icon name="folder"></wt-icon>${
+              this.#renaming(folder.id) ? this.#nameBox() : html`<strong>${folder.name}</strong>`
+            }<span part="count" data-test=${`count-${folder.id}`}>${this.#contents(folder.id)}</span
             >${
               this.unroutedFolderIds.includes(folder.id)
                 ? html`<span
@@ -760,7 +891,7 @@ export class ProductList extends LitElement {
               align="start"
               variant="secondary"
               data-test=${`rename-${folder.id}`}
-              @click=${(event: Event) => this.#emitFolder(event, "rename-folder", folder.id)}
+              @click=${() => this.#send("rename-folder", { folderId: folder.id })}
               >${t("folders.rename")}</wt-button
             ><wt-button
               align="start"
@@ -785,7 +916,9 @@ export class ProductList extends LitElement {
                 ? column.sortValue!(row)
                 : row.kind === "folder"
                   ? row.folder.name
-                  : "",
+                  : row.kind === "draft"
+                    ? null
+                    : "",
           }
         : {}),
       ...(column.searchValue
@@ -796,7 +929,7 @@ export class ProductList extends LitElement {
                 ? row.variant === null
                   ? column.searchValue!(row)
                   : ""
-                : row.kind === "root"
+                : row.kind === "root" || row.kind === "draft"
                   ? ""
                   : column.key === "name"
                     ? row.folder.name
@@ -896,7 +1029,11 @@ export class ProductList extends LitElement {
       .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
       .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
       .rowActivation=${(row: ListRow) =>
-        row.kind === "folder" ? "toggle" : row.kind === "root" ? "none" : "click"}
+        row.kind === "folder" && !this.#renaming(row.folder.id)
+          ? "toggle"
+          : row.kind === "product"
+            ? "click"
+            : "none"}
       .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
         row.kind === "folder"
           ? t(expanded ? "folders.close_named" : "folders.open_named").replace(

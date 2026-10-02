@@ -97,6 +97,7 @@ export class CatalogueScreen extends LitElement {
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
   @state() private products: Product[] = [];
+  @state() private productsLoaded = false;
   @state() private madeAt: Record<string, MadeAt> = {};
   @state() private routing: RoutingModel | null = null;
   @state() private courses: Course[] = [];
@@ -232,6 +233,7 @@ export class CatalogueScreen extends LitElement {
       if (!this.catalogues.some(({ id }) => id === this.selectedCatalogueId))
         this.selectedCatalogueId = this.catalogues[0]?.id ?? "";
       await this.#reloadProducts();
+      this.productsLoaded = true;
     } catch (error) {
       this.#loadFailed = true;
       this.errorKey = codeOf(error);
@@ -628,6 +630,7 @@ export class CatalogueScreen extends LitElement {
               .units=${this.units}
               .unitLanguage=${this.contentLanguages?.languages[0] ?? "en"}
               .canAddProduct=${locales.length > 0 && this.units.length > 0}
+              .loaded=${this.productsLoaded}
               @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
                 event.stopPropagation();
                 this.#addFrom = event.detail.categoryId;
