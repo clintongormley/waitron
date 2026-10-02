@@ -2,6 +2,7 @@ import { DraftRows } from "@waitron/dashboard-kit";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 // The `@waitron/ui` barrel registers `<wt-floor-canvas>` and `<wt-table-token>`, used here by tag.
 import {
@@ -427,7 +428,7 @@ export class FloorScreen extends LitElement {
               ...(tbl.zoneId === null ? [{ value: "", label: t("floor.no_zone") }] : []),
               ...this.zones.map((z) => ({ value: z.id, label: z.name })),
             ]}
-            .value=${tbl.zoneId ?? ""}
+            .value=${live(tbl.zoneId ?? "")}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onAssignZone(tbl.id, e)}
           ></wt-combobox>
           <wt-button
