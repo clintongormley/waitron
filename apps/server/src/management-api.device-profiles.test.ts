@@ -273,6 +273,31 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(((await got.json()) as ProfileRow).canvasId).toBe(canvasId);
   });
 
+  it("saves the three screen switches and reads them back", async () => {
+    const app = mountApp();
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name: uniqueName("Screens"),
+        formFactor: "phone-portrait",
+        canvasId: null,
+        capabilities: ["show-station", "show-expo", "show-schedule"],
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as ProfileRow;
+    const got = await app.request(`/management-api/device-profiles/${id}`, {
+      headers: { cookie: managerCookie },
+    });
+    expect(got.status).toBe(200);
+    expect(((await got.json()) as ProfileRow).capabilities).toEqual([
+      "show-station",
+      "show-expo",
+      "show-schedule",
+    ]);
+  });
+
   it("POST + PUT persist inactivityTimeoutSeconds; PUT wipes it when the key is omitted (full-replace)", async () => {
     const app = mountApp();
     const created = await app.request("/management-api/device-profiles", {

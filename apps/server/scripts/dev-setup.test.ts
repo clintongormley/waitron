@@ -278,7 +278,14 @@ describe("devSetup against a real venue directory", () => {
       {
         name: "Counter",
         canvasId: null,
-        capabilities: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
+        capabilities: [
+          "integrated-card-payment",
+          "open-cash-drawer",
+          "print-receipt",
+          "show-station",
+          "show-expo",
+          "show-schedule",
+        ],
       },
       { name: "Handheld", canvasId: null, capabilities: [] },
       { name: "Kitchen", canvasId: null, capabilities: ["act-as-kds"] },

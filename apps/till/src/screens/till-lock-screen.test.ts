@@ -13,7 +13,7 @@ function stubApi(
 ): TillApi {
   return {
     listStaff: vi.fn().mockResolvedValue([ana, ben]),
-    login: vi.fn().mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: null }),
+    login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: null }),
     // The language chooser rendered in the roster view fetches this only when the operator opens it.
     getLocales: vi.fn().mockResolvedValue({
       locales: [
@@ -168,9 +168,7 @@ describe("till-lock-screen", () => {
       throw new Error("access denied");
     });
     try {
-      const login = vi
-        .fn()
-        .mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: null });
+      const login = vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: null });
       const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
         api: stubApi({ login }),
         deviceId: "dev1",
@@ -232,8 +230,8 @@ describe("till-lock-screen", () => {
     expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("logs in with (personId, pin) and emits logged-in with the confirmed personId, name + capability", async () => {
-    const login = vi.fn().mockResolvedValue({ personId: "p1", canConfigureTill: true });
+  it("logs in with (personId, pin) and emits logged-in with the confirmed personId, name + permissions", async () => {
+    const login = vi.fn().mockResolvedValue({ personId: "p1", permissions: ["venue.configure"] });
     const api = stubApi({ login });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
@@ -248,14 +246,12 @@ describe("till-lock-screen", () => {
     expect(spy).toHaveBeenCalledWith({
       personId: "p1",
       displayName: "Ana",
-      canConfigureTill: true,
+      permissions: ["venue.configure"],
     });
   });
 
   it("remembers the operator on this device after a successful login", async () => {
-    const login = vi
-      .fn()
-      .mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: null });
+    const login = vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: null });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi({ login }),
       deviceId: "dev1",
@@ -270,9 +266,7 @@ describe("till-lock-screen", () => {
   });
 
   it("threads the login response's per-user locale into the logged-in detail", async () => {
-    const login = vi
-      .fn()
-      .mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: "en-GB" });
+    const login = vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "en-GB" });
     const api = stubApi({ login });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
@@ -286,7 +280,7 @@ describe("till-lock-screen", () => {
     expect(spy).toHaveBeenCalledWith({
       personId: "p1",
       displayName: "Ana",
-      canConfigureTill: false,
+      permissions: [],
       locale: "en-GB",
     });
   });

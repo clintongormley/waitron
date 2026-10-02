@@ -352,7 +352,7 @@ const sent = (): BillPaymentRequest[] =>
 
 async function openTable(el: TillApp): Promise<TillTableOrderScreen> {
   await flush(el);
-  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   emit(shell(el), "tab-select", { key: "floor" });
   await flush(el);
@@ -1534,7 +1534,7 @@ describe("till-app: a partly paid order at the counter", () => {
       ...overrides,
     });
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     emit(counter(el), "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -1642,7 +1642,7 @@ describe("till-app: a partly paid order at the counter", () => {
     await payTheRest(el);
     emit(counter(el), "logout");
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
     const listReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
 
@@ -1670,7 +1670,7 @@ describe("till-app: a partly paid order at the counter", () => {
     await payTheRest(el);
     emit(counter(el), "logout");
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
     emit(counter(el), "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -1714,7 +1714,7 @@ describe("till-app: a partly paid order at the counter", () => {
     await payTheRest(el);
     emit(counter(el), "logout");
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
     emit(counter(el), "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -1760,7 +1760,7 @@ describe("till-app: a partly paid order at the counter", () => {
     // The send waits one retry pause, then sees the session has ended and gives up.
     await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_PAUSE_MS));
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
     emit(counter(el), "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -2491,7 +2491,7 @@ describe("till-app: a bill payment on the card reader", () => {
       takeBillPayment,
     });
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -2576,7 +2576,7 @@ describe("till-app: a bill payment on the card reader", () => {
       takeBillPayment,
     });
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);

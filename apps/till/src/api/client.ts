@@ -174,14 +174,13 @@ export interface StaffMember {
 }
 
 /**
- * `POST /api/session` success. `canConfigureTill` is computed server-side
- * (`roleHasPermission(role, "venue.configure")`) so the client never mirrors the role→permission map.
- * Convenience only — the on-till placement routes re-check `venue.configure`, so a tampered client
- * value grants nothing.
+ * `POST /api/session` success. `permissions` is the server's list for the operator's role, so the
+ * client never mirrors the role→permission map. Display only: the server checks each permission
+ * itself, so a tampered list grants nothing.
  */
 export interface SessionResult {
   personId: string;
-  canConfigureTill: boolean;
+  permissions: string[];
   /** The operator's stored UI locale, or `null` when they have never set one (the venue default applies). */
   locale: string | null;
 }

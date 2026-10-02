@@ -28,6 +28,7 @@ import {
   hashPin,
   hashSessionToken,
   loginWithPin,
+  permissionsForRole,
   persons,
 } from "@waitron/identity";
 import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
@@ -58,6 +59,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import type { Logger, LogLevel } from "./logger.js";
+import { createTable } from "./tables.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -404,14 +406,14 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    // The response carries the server-computed `canConfigureTill` capability so the till can gate
-    // manager-only affordances client-side; Ana is `staff`, who does NOT hold `venue.configure`, so it is
-    // false. `locale` is the operator's own UI-language preference — Ana has none, so null.
-    expect(await res.json()).toEqual({
+    // `locale` is the operator's own UI-language preference — Ana has none, so null.
+    const body = (await res.json()) as { permissions: string[] };
+    expect(body).toEqual({
       personId: ana.id,
-      canConfigureTill: false,
+      permissions: permissionsForRole("staff"),
       locale: null,
     });
+    expect(body.permissions).not.toContain("venue.configure");
 
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
@@ -436,7 +438,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(rows.rows).toEqual([{ ended: 1 }]);
   });
 
-  it("POST computes canConfigureTill from the operator's ACTUAL role — true for a manager", async () => {
+  it("POST answers the permissions of the operator's ACTUAL role — a manager's hold venue.configure", async () => {
     // A manager holds `venue.configure`; with the staff case above this pins the role, not a constant.
     // Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
     const app = new Hono();
@@ -455,11 +457,13 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     });
     expect(res.status).toBe(200);
     // Marta carries no locale preference either.
-    expect(await res.json()).toEqual({
+    const body = (await res.json()) as { permissions: string[] };
+    expect(body).toEqual({
       personId: managerId,
-      canConfigureTill: true,
+      permissions: permissionsForRole("manager"),
       locale: null,
     });
+    expect(body.permissions).toContain("venue.configure");
 
     await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
     await suite.db.execute(sql`delete from persons where id = ${managerId}`);
@@ -487,7 +491,11 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId, pin: "7777" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId, canConfigureTill: false, locale: "en-GB" });
+    expect(await res.json()).toEqual({
+      personId,
+      permissions: permissionsForRole("staff"),
+      locale: "en-GB",
+    });
 
     await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
     await suite.db.execute(sql`delete from persons where id = ${personId}`);
@@ -2943,15 +2951,9 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       update zone_service_policies set default_menu_id = ${aguaProduct.catalogueId}
       where zone_id = ${zoneId}`);
 
-    // Create a table IN that zone through the till route, so `createTable`'s zoneId assignment (and its
-    // zone FK) is exercised — not a raw insert.
-    const tableRes = await app.request("/api/tables", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ label: "4", zoneId }),
-    });
-    expect(tableRes.status).toBe(200);
-    const { id: tableId } = (await tableRes.json()) as { id: string };
+    const { id: tableId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "4", zoneId }),
+    );
 
     // Seat the table, then ring TWO lines. `priceBasket` maps items 1:1 (it does NOT merge by
     // product), so two lines of the one seeded product become line_no 1 and 2 — pendingToServe
@@ -3062,12 +3064,9 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
 
     // A REAL party with a line, so only the body's shape can refuse.
     const tab = await tabZone();
-    const tableRes = await app.request("/api/tables", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ label: "served-bad-items", zoneId: tab.zoneId }),
-    });
-    const { id: tableId } = (await tableRes.json()) as { id: string };
+    const { id: tableId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "served-bad-items", zoneId: tab.zoneId }),
+    );
     const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -3106,12 +3105,9 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     // A real party with one line, then a mark of a line id that names nothing — and one that is no
     // UUID at all: the command's own guard, not a route screen.
     const tab = await tabZone();
-    const tableRes = await app.request("/api/tables", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ label: "served-99", zoneId: tab.zoneId }),
-    });
-    const { id: tableId } = (await tableRes.json()) as { id: string };
+    const { id: tableId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "served-99", zoneId: tab.zoneId }),
+    );
     const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -3199,16 +3195,13 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     return { zoneId, posX: 120, posY: 340, shape: "rect", rotation: 90 };
   }
 
-  /** Create a fresh table (unique label) through the till route, returning its id — a distinct row per
-   *  test so the PUT/DELETE cases never contend on one table's placement. */
-  async function makeTable(app: Hono): Promise<string> {
-    const res = await app.request("/api/tables", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: managerCookie },
-      body: JSON.stringify({ label: `placement-${randomUUID().slice(0, 8)}` }),
-    });
-    expect(res.status).toBe(200);
-    return ((await res.json()) as { id: string }).id;
+  /** A fresh table (unique label) per test, so the PUT/DELETE cases never contend on one table's
+   *  placement. */
+  async function makeTable(): Promise<string> {
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: `placement-${randomUUID().slice(0, 8)}` }),
+    );
+    return id;
   }
 
   /**
@@ -3229,7 +3222,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
   it("a MANAGER operator places a table (204, placement landed); a STAFF operator is 403", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const tableId = await makeTable(app);
+    const tableId = await makeTable();
 
     // Manager holds `venue.configure`: `authorize` passes, the placement is written, the route answers 204.
     const ok = await app.request(`/api/tables/${tableId}/placement`, {
@@ -3264,7 +3257,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
   it("a MANAGER operator clears a placement (204, columns NULLed); a STAFF operator is 403", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const tableId = await makeTable(app);
+    const tableId = await makeTable();
 
     // Place it first (as the manager) so there is something to clear.
     const placed = await app.request(`/api/tables/${tableId}/placement`, {
@@ -3306,8 +3299,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // The isUuid screen refuses a non-UUID :id with the domain `table.not_found` (404), the shape the
-    // sibling PATCH/DELETE /api/tables routes use.
+    // The isUuid screen refuses a non-UUID :id with the domain `table.not_found` (404).
     const put = await app.request("/api/tables/not-a-uuid/placement", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -3331,10 +3323,10 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
   it("a malformed zoneId in the PUT body is 404 zone.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const tableId = await makeTable(app);
+    const tableId = await makeTable();
 
     // A string-typed but non-UUID zoneId is screened to the SAME `zone.not_found` a
-    // well-formed-but-missing zone gets, matching the sibling table POST/PATCH routes.
+    // well-formed-but-missing zone gets.
     const res = await app.request(`/api/tables/${tableId}/placement`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -3403,7 +3395,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
   it("a placement VALUE fault surfaces the verb's placement.invalid as 400 through the till route", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const tableId = await makeTable(app);
+    const tableId = await makeTable();
 
     // posX above the 0..1000 canvas bound is `setTablePlacement`'s `placement.invalid` naming the field
     // (reached only AFTER `authorize` passes for the manager). Weaker than it looks: the `?? 400`
@@ -3747,13 +3739,9 @@ describe("canonical modifier HTTP serialization", () => {
     await suite.db.execute(
       sql`update zone_service_policies set default_menu_id=${aguaProduct.catalogueId} where zone_id=${zoneId}`,
     );
-    const table = await f.app.request("/api/tables", {
-      method: "POST",
-      headers: f.headers,
-      body: JSON.stringify({ label: "Modifiers", zoneId }),
-    });
-    expect(table.status).toBe(200);
-    const { id: tableId } = (await table.json()) as { id: string };
+    const { id: tableId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "Modifiers", zoneId }),
+    );
     const line = { menuItemId: f.offer.id, quantity: "1", ...f.answers };
     const opened = await f.app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",

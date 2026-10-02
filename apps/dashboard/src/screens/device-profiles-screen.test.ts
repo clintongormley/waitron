@@ -224,6 +224,30 @@ describe("device-profiles-screen editor form", () => {
     );
   });
 
+  it("draws a My schedule button switch whose save sends show-schedule", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Waiter");
+    selectFormFactor(el, "phone-portrait");
+    await el.updateComplete;
+    const scheduleSwitch = el.shadowRoot!.querySelector("[data-test=cap-show-schedule]")!;
+    // Shipped locale is es-ES.
+    expect(scheduleSwitch.getAttribute("label")).toBe("Botón Mi horario");
+    toggle(el, "cap-show-schedule", true);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Waiter",
+      null,
+      ["show-schedule"],
+      "phone-portrait",
+      null,
+    );
+  });
+
   it("New profile defaults the form factor to the cash register (till) when unchanged", async () => {
     const api = stubApi();
     const el = await mount(api);

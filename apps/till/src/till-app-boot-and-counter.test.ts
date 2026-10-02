@@ -91,7 +91,7 @@ const till = {
   cardProvider: "none" as const,
   tipsEnabled: false,
   canvas: tillCanvas,
-  capabilities: ["print-receipt"] as CapabilityFlag[],
+  capabilities: ["print-receipt", "show-station", "show-expo", "show-schedule"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
   servers: [],
@@ -234,7 +234,7 @@ const privateState = <T>(el: TillApp, field: string): T =>
 
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   return counter(el)!;
 }

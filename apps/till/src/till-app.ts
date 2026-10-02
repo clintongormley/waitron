@@ -976,7 +976,7 @@ export class TillApp extends LitElement {
     diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
     this.operatorName = "";
-    this.canEdit = false;
+    this.permissions = [];
     this.#endOperatorSession();
     this.#dropDraft();
     this.errorKey = "server.switched";
@@ -1079,7 +1079,7 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
-  /** An enrolled handheld: stays on the lock screen for a PIN login, then lands on the floor. */
+  /** An enrolled handheld: narrower menu columns, and never the cash drawer. */
   @state() private handheldMode = false;
   /**
    * The device front door {@link #boot} chose, shown ahead of the lock screen and shell: `"chooser"` in
@@ -1217,7 +1217,8 @@ export class TillApp extends LitElement {
   #markedRounds = new Set<WorkingOrderStore>();
   /** The signed-in person's draft on the open order's party. */
   #draftSync?: DraftSync;
-  /** Moved on by each sign-in, so a sign-out still saving its draft leaves a later session alone. */
+  /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
+   * loading, leaves a later session alone. */
   #signIns = 0;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
@@ -1299,10 +1300,10 @@ export class TillApp extends LitElement {
   @state() private zones: FloorZone[] = [];
   @state() private tables: TableState[] = [];
   /**
-   * From the session's server-computed `canConfigureTill`, never derived from a role here. Hiding the
-   * editor is convenience only; the server re-checks `venue.configure`. Reset at logout.
+   * The operator's permissions from sign-in, never derived from a role here. Display only: the
+   * server checks each permission itself. Reset at logout.
    */
-  @state() private canEdit = false;
+  @state() private permissions: string[] = [];
   /** Every active status, not only those applied to a table, so an unused status can still be picked. */
   @state() private statuses: TableServiceStatus[] = [];
   /** The working-order id of the tab opened from the floor. */
@@ -1530,11 +1531,9 @@ export class TillApp extends LitElement {
     void this.#boot();
   }
 
-  /** `handheldMode` is set after `canvas` in {@link #boot}, so a change to either recomputes the
-   * affordances. */
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
-    if (changed.has("canvas") || changed.has("handheldMode"))
+    if (changed.has("canvas") || changed.has("capabilities"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
@@ -1628,9 +1627,9 @@ export class TillApp extends LitElement {
         // Not dev mode, or a transient failure.
       }
     }
-    // A KDS boots straight into its station, prefetching the queue; a handheld stays on the lock
-    // screen; any other or unknown kind is a normal operator till. A browser with no device cookie
-    // answers `device.unauthorized` and gets the join screen, which is not a boot failure.
+    // A KDS boots straight into its station, prefetching the queue; any other or unknown kind waits on
+    // the lock screen for a sign-in. A browser with no device cookie answers `device.unauthorized` and
+    // gets the join screen, which is not a boot failure.
     try {
       const identity = await this.api.getDeviceIdentity();
       if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
@@ -1659,17 +1658,21 @@ export class TillApp extends LitElement {
   }
 
   async #onLoggedIn(event: Event): Promise<void> {
-    const { personId, displayName, canConfigureTill, locale } = (
-      event as CustomEvent<LoggedInDetail>
-    ).detail;
+    const { personId, displayName, permissions, locale } = (event as CustomEvent<LoggedInDetail>)
+      .detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
-    this.#signIns++;
+    const signIn = ++this.#signIns;
+    const session = this.#operatorSession;
+    // While this loads, the lock screen can start a newer sign-in, and a logout (idle, or from the
+    // shell once it shows) or a server move can end this one.
+    const replaced = () => signIn !== this.#signIns || session !== this.#operatorSession;
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
     let offerLoadFailed = false;
     try {
       const catalogue = await this.api.listDefaultZoneOffers();
+      if (replaced()) return;
       const { zones, context } = catalogue;
       this.#loadCounterOffers(catalogue);
       this.counterServiceZones = zones ?? [];
@@ -1678,6 +1681,7 @@ export class TillApp extends LitElement {
       if (zones !== undefined && context.serviceMode !== "table_tab")
         this.orderFlow = context.serviceMode;
     } catch {
+      if (replaced()) return;
       offerLoadFailed = true;
       this.#loadCounterOffers({ offers: [], menus: [] }, false);
       this.counterServiceZones = [];
@@ -1689,34 +1693,46 @@ export class TillApp extends LitElement {
     this.operatorName = displayName;
     this.operatorPersonId = personId;
     this.#resumeOrderDraft();
-    this.canEdit = canConfigureTill;
+    this.permissions = permissions;
     this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
-    const landingFace = this.handheldMode ? "floor" : "counter";
-    if (landingFace === "floor") await this.#loadFloorData();
+    const firstTab = this.canvas?.tabs[0];
+    const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
+    if (landsOnFloor) await this.#loadFloorData(replaced);
+    if (replaced()) return;
     // History may change while login data loads and the lock screen still owns the page.
     this.#setActiveTab(this.#requestedTab(), true, true);
-    this.#setScreen(landingFace);
+    this.#setScreen(landsOnFloor ? "floor" : "counter");
     this.#restoreDestination();
-    if (this.#showsCounterLists()) {
+    const showsCounterLists = this.#showsCounterLists();
+    if (showsCounterLists) {
       // Each list says its own failure, so one that fails never stops the others loading.
-      await this.#refreshList("held", "refresh.held");
-      await this.#refreshList("station", "refresh.station");
-      await this.#refreshWaiting();
+      const lists = [
+        ["held", "refresh.held"],
+        ["station", "refresh.station"],
+        ["waiting", "refresh.waiting"],
+      ] as const;
+      for (const [list, messageKey] of lists) {
+        await this.#refreshList(list, messageKey);
+        if (replaced()) return;
+      }
+    }
+    if (showsCounterLists || this.#affordances().includes("schedule")) {
       // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
-        this.staff = await this.api.listStaff();
+        const staff = await this.api.listStaff();
+        if (replaced()) return;
+        this.staff = staff;
       } catch {
         // Non-fatal: the picker keeps the roster it had.
       }
     }
-    // A restored floor tab needs its data on first paint. The handheld landing already loads it;
-    // avoid repeating that load while still loading a floor tab restored on a counter device.
+    // A restored floor tab needs its data on first paint, unless the landing already loaded it.
     if (this.#inShell() && !this.#floorLoaded) {
       const tab = this.#activeTab();
-      if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData();
+      if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData(replaced);
     }
   }
 
@@ -3401,13 +3417,14 @@ export class TillApp extends LitElement {
    * A shell tab reached through `tab-select` must load the floor itself, or the floor-plan card renders
    * with no table to tap. A failed load leaves the last-known floor.
    */
-  async #loadFloorData(): Promise<void> {
+  async #loadFloorData(replaced: () => boolean = () => false): Promise<void> {
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
         this.api.listZones(),
         this.api.listStatuses(),
       ]);
+      if (replaced()) return;
       this.tables = tables;
       this.zones = zones;
       this.statuses = statuses;
@@ -3423,7 +3440,6 @@ export class TillApp extends LitElement {
   }
 
   #showsCounterLists(): boolean {
-    if (!this.handheldMode) return true;
     return (
       this.canvas?.tabs.some(
         (tab) =>
@@ -6221,7 +6237,7 @@ export class TillApp extends LitElement {
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.operatorName = "";
-    this.canEdit = false;
+    this.permissions = [];
     this.#orderVisit++;
     this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
@@ -6292,10 +6308,11 @@ export class TillApp extends LitElement {
   }
 
   #affordances(): ShellAffordance[] {
-    if (this.handheldMode) return ["find-bill"];
     const tabKeys = new Set(this.canvas?.tabs.map((tab) => tab.key) ?? []);
     return [
-      ...(["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a)),
+      ...(["station", "expo", "schedule"] as const).filter(
+        (screen) => !tabKeys.has(screen) && this.capabilities.includes(`show-${screen}`),
+      ),
       "find-bill",
     ];
   }
@@ -6354,7 +6371,7 @@ export class TillApp extends LitElement {
       .storedLines=${this.#basketStoredLines()}
       .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
-      .canConfigureTill=${this.canEdit}
+      .permissions=${this.permissions}
       .products=${tableTab ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
       .counterWaiting=${this.counterWaiting}

@@ -260,7 +260,8 @@ older build before using the new published document. What is left:
 - **The till navigation widens a 390 px full-page screenshot to about 797–803 px** (PF6 Task 9).
   The queue and pass cards fit the viewport; inspect the containing navigation before changing
   those cards. Task 9 read the full-page image dimensions with `sips`; this does not measure card
-  overflow.
+  overflow. C130's entry below measured the header alone: with only Find a bill offered, 560 px in
+  English and 602 px in Spanish; the Kitchen, Pass and My schedule switches widen it further.
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
   may never mark dishes ready on its screen. With that screen switched off, each send can raise
   the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
@@ -2519,8 +2520,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       basket from `GET /api/working-orders/:id/placed`, which carries the order's lines. Reported
       by B16's review fixer from reading; no test shows it.
     - Lane B item B31 (owner, 2026-10-02): a handheld whose layout has a Counter tab, or a
-      held-orders or prep-queue card, loads the counter's lists at login as a till does, and a
-      handheld is offered the card reader, on any pay card and on a bill, only when its device
+      held-orders or prep-queue card, loads the counter's lists at login (since C130 a till
+      likewise loads them only when its layout shows one), and a handheld is offered the card
+      reader, on any pay card and on a bill, only when its device
       profile has integrated card payment (`#showsCounterLists` and `#cardReader`,
       `apps/till/src/till-app.ts`). A till follows its profile the same way (C129, #1025); one with no
       device reads no capabilities at boot, so it is not offered the reader
@@ -2530,8 +2532,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       reader" (`card_reader.not_set_up`). At login each counter list shows its own failure with a
       retry notice, so one list that fails no longer stops the others loading (they are still read
       one after another, so a read that hangs still delays the rest); this changed for tills too.
-      Left as they were: a handheld gets no Station, Expo or Schedule button (an existing test pins
-      it), and never opens the drawer.
+      Left as it was: a handheld never opens the drawer. (Its Station, Pass and Schedule buttons
+      now follow its profile — C130 below.)
     - **Done (C128, #1031) — who may take a payment.** Every till or handheld payment route now also needs
       `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
     - **Done (C131, #1032) — the counter's pay card goes back to its choices after a reader payment.**
@@ -2541,6 +2543,48 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       attempt, and the spinner comes down once no card attempt is still running (`cardAttemptsOver`,
       `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
       request settled.
+    - **Done (C130) — a device shows the screens its profile assigns, and the person's permissions
+      decide the rest.** A device profile has three switches, "Kitchen button", "Pass button"
+      and "My schedule button" (`show-station`, `show-expo`, `show-schedule` in
+      `CAPABILITY_FLAGS`, `packages/layouts/src/canvas.ts`), on for the built-in till profile and off
+      for the handheld one; the till offers each header button only when its profile has the switch
+      and its layout has no tab of that name, on any device. The lists loaded at sign-in and the
+      first screen come from the layout on every device. The till's sign-in answer carries the
+      person's permission list instead of one yes/no, and the till locks only the cards whose
+      permission the person lacks (today the table-plan editor); the server still checks every
+      permission itself. The till's unused routes to add, rename and remove a table
+      (`POST`/`PATCH`/`DELETE /api/tables`), which checked no permission, are gone. A sign-in that
+      something newer replaced while it was still loading — a second person signing in, the idle
+      lock, or the till moving to another server — now stops at its next step and installs nothing
+      further (`#onLoggedIn`, `apps/till/src/till-app.ts`); what it had already installed before
+      that step is cleared or overwritten by the event that replaced it (a logout or a server
+      switch clears the name and permissions, a newer sign-in overwrites them). Before, it could
+      put the earlier person's name and permission list back on the till, or open the till with
+      nobody signed in; this predated C130 (the same steps on main installed the person and the
+      table-plan yes/no the same way).
+      Left open: a till profile saved before C130, and one newly created on the Device profiles
+      screen, has the three switches off until a manager turns them on; a till with no device reads
+      no capabilities, so it shows none of the three buttons. A change to a device profile reaches
+      a till only when the till starts again — a page load, a move to another server or a
+      re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
+      `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
+      so signing out and in again does not pick it up. Seen in a visual check on 2026-10-02: at
+      390 wide a handheld's till header runs past the right edge (the page measured 736 wide;
+      Kitchen, Allergens, the operator's name and Log out sat off-screen), and turning the switches
+      on adds buttons to it. A review measured the header on 2026-10-02 in
+      real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone tabs and an
+      operator signed in: with only Find a bill offered — what main offers every handheld;
+      `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured 560 px wide in
+      English and 602 px in Spanish, so the overflow predates C130 (the same overflow as the open
+      PF6 Task 9 entry above, "The till navigation widens a 390 px full-page screenshot"); with
+      the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
+      wholly off-screen. On the handheld, the station screen's back button says "Back to counter"
+      though a handheld on the built-in phone layout lands on the floor plan; and clicking the
+      knob (`span.thumb`) of a
+      `wt-switch` that is on does not turn it off (clicking the label or its left edge, or Space,
+      does), seen on the Device profiles screen, on the existing "Integrated card payment" switch
+      too — the same knob already left open under A215 (clicking a variant's row); `packages/ui`
+      is untouched by C130.
     - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
       The page gives the till the screen less its padding (`apps/till/index.html`), and the error
       banner and the other notices above the tabs take their height from the tab shell, so the
@@ -2940,7 +2984,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 - **Screen faults seen during menus Task 9's look on 2026-09-27.** Seen on the dev stack while
   checking the till's home page, not investigated, and not checked against `main`, so any of them
   may predate that branch:
-  - on the till at 390 px wide, the header makes the page wider than the screen;
+  - on the till at 390 px wide, the header makes the page wider than the screen (measured in
+    C130's entry above: 560 px in English and 602 px in Spanish with only Find a bill offered);
   - on the till's floor map at 390 px wide, tables overlap one another;
   - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
     canvases, see A182 below);
@@ -4529,12 +4574,11 @@ approved.
     screen's own tests; the floor screen's only mount (`widgets/card-grid.ts`) passes `embedded` and
     `canExitToCounter=false`, so its standalone header, Back button and that property are likewise
     test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
-    so a device cookie revoked mid-session raises nothing until the next connect. Test NAMES still
-    say `till.configure` where the permission is `venue.configure`, in `apps/till/src/api/client.test.ts`
-    and `till-app.test.ts`. The screens' `css` templates still carry task and spec numbers ("Task
-    7", "KDS-4 §3d"). Unchecked and kept: the allergen screen's legal citation (RD 126/2015 Art.
-    6.5.a.2°). Not restored because nothing confirms it: the table-order screen's `#lineGross` "same
-    arithmetic the server files with" (the server does not call `grossOf`).
+    so a device cookie revoked mid-session raises nothing until the next connect. The screens' `css`
+    templates still carry task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the
+    allergen screen's legal citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing
+    confirms it: the table-order screen's `#lineGross` "same arithmetic the server files with" (the
+    server does not call `grossOf`).
   - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
     change. Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
     `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for

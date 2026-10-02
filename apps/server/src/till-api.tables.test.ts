@@ -31,6 +31,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
+import { createTable } from "./tables.js";
 
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
@@ -234,156 +235,51 @@ async function seatWithOneLine(id: string): Promise<string> {
 }
 
 describe("table + tab routes", () => {
-  it("POST /api/tables creates and GET /api/tables lists it", async () => {
-    const create = await request("/api/tables", {
-      method: "POST",
-      body: JSON.stringify({ label: "12", zoneId: seededZoneId, capacity: 4 }),
-    });
-    expect(create.status).toBe(200);
-    const { id } = (await create.json()) as { id: string };
+  it("a signed-in staff session's POST, PATCH and DELETE on /api/tables answer 404 and leave the table unchanged", async () => {
+    const label = `K-${randomUUID().slice(0, 6)}`;
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label, zoneId: seededZoneId, capacity: 4 }),
+    );
+    const row = () =>
+      suite.db.all<{ label: string; capacity: number | null; active: number }>(
+        sql`select label, capacity, active from dining_tables where id = ${id}`,
+      );
+    const before = row();
+
+    const answers = [
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: `${label}-new`, zoneId: seededZoneId }),
+      }),
+      await request(`/api/tables/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ label: `${label}-renamed`, capacity: 9 }),
+      }),
+      await request(`/api/tables/${id}`, { method: "DELETE" }),
+    ];
+
+    expect(answers.map((res) => res.status)).toEqual([404, 404, 404]);
+    expect(row()).toEqual(before);
+    expect(before).toEqual([{ label, capacity: 4, active: 1 }]);
+    expect(suite.db.all(sql`select id from dining_tables where label = ${`${label}-new`}`)).toEqual(
+      [],
+    );
+  });
+
+  it("GET /api/tables lists an active table", async () => {
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "12", zoneId: seededZoneId, capacity: 4 }),
+    );
     const list = (await (await request("/api/tables")).json()) as unknown[];
     expect(list).toContainEqual(
       expect.objectContaining({ id, label: "12", zoneId: seededZoneId, active: true }),
     );
   });
 
-  it("POST /api/tables with an unknown zoneId → 404 zone.not_found", async () => {
-    const res = await request("/api/tables", {
-      method: "POST",
-      body: JSON.stringify({ label: "orphan-zone", zoneId: randomUUID() }),
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("POST /api/tables with a MALFORMED zoneId → 404 zone.not_found", async () => {
-    // A non-UUID `zoneId` is screened to the SAME `zone.not_found` a well-formed-but-missing zoneId
-    // gets, so a bad zone reads the same whether it is malformed or merely absent.
-    const res = await request("/api/tables", {
-      method: "POST",
-      body: JSON.stringify({ label: "bad-zone", zoneId: "not-a-uuid" }),
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("POST /api/tables with a duplicate label → 409 table.label_taken", async () => {
-    await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "7" }) });
-    const dup = await request("/api/tables", {
-      method: "POST",
-      body: JSON.stringify({ label: "7" }),
-    });
-    expect(dup.status).toBe(409);
-    expect(await dup.json()).toMatchObject({ error: { code: "table.label_taken" } });
-  });
-
-  it("POST /api/tables with a capacity above 2147483647 → 400 management.request_invalid", async () => {
-    // `9999999999` is a valid JS number, so a bare type check would let it through; the route's
-    // `requireCapacity` range guard refuses it as a domain 400.
-    const res = await request("/api/tables", {
-      method: "POST",
-      body: JSON.stringify({ label: "over-cap", capacity: 9_999_999_999 }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "capacity" } },
-    });
-  });
-
-  it("PATCH /api/tables/:id with a NEGATIVE capacity → 400 management.request_invalid (not a 500)", async () => {
-    const { id } = (await (
-      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "neg-cap" }) })
-    ).json()) as { id: string };
-    const res = await request(`/api/tables/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ capacity: -1 }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "capacity" } },
-    });
-  });
-
-  it("PATCH /api/tables/:id with a malformed id → 404 table.not_found (isUuid guard, not a 500)", async () => {
-    const res = await request("/api/tables/not-a-uuid", {
-      method: "PATCH",
-      body: JSON.stringify({ label: "X" }),
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
-  });
-
-  it("PATCH /api/tables/:id with a MALFORMED zoneId → 404 zone.not_found", async () => {
-    // The twin of the malformed-zoneId screen above, one field over. A real table id is used so the
-    // id screen passes and the zoneId screen is what fires.
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: "bad-zone-patch" }),
-      })
-    ).json()) as { id: string };
-    const res = await request(`/api/tables/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ zoneId: "not-a-uuid" }),
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("PATCH /api/tables/:id edits a real table (label/zoneId/capacity) and returns an empty 200", async () => {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: "20", zoneId: seededZoneId, capacity: 2 }),
-      })
-    ).json()) as { id: string };
-
-    const res = await request(`/api/tables/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ label: "20A", capacity: 6 }),
-    });
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("");
-
-    const list = (await (await request("/api/tables")).json()) as {
-      id: string;
-      label: string;
-      zoneId: string | null;
-      capacity: number | null;
-    }[];
-    expect(list.find((t) => t.id === id)).toMatchObject({
-      label: "20A",
-      zoneId: seededZoneId,
-      capacity: 6,
-    });
-  });
-
-  it("DELETE /api/tables/:id deactivates a real table (it leaves the active list)", async () => {
-    const { id } = (await (
-      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "21" }) })
-    ).json()) as { id: string };
-
-    const res = await request(`/api/tables/${id}`, { method: "DELETE" });
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("");
-
-    const list = (await (await request("/api/tables")).json()) as { id: string }[];
-    expect(list.find((t) => t.id === id)).toBeUndefined();
-  });
-
-  it("DELETE /api/tables/:id with a malformed id → 404 table.not_found (isUuid guard, not a 500)", async () => {
-    const res = await request("/api/tables/not-a-uuid", { method: "DELETE" });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
-  });
-
   it("POST /api/tables/:id/seat opens a tab; a second → 409 tab.already_open", async () => {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: "3", zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "3", zoneId: tablesZoneId }),
+    );
     const open = await request(`/api/tables/${id}/seat`, {
       method: "POST",
       body: JSON.stringify({}),
@@ -412,12 +308,9 @@ describe("table + tab routes", () => {
   });
 
   it("POST /api/parties/:id/groups appends; a cancel through .../adjustments voids; GET /api/tables/state reflects it", async () => {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: "5", zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "5", zoneId: tablesZoneId }),
+    );
     const { tabId, partyId } = await seat(id);
     expect((await sendRound(partyId, [{ menuItemId, quantity: "1" }])).status).toBe(200);
 
@@ -459,12 +352,9 @@ describe("table + tab routes", () => {
   });
 
   it("a cancel of a quantity voids that part of the line, and refuses a quantity it cannot void", async () => {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+    );
     const { tabId, partyId } = await seat(id);
     await sendRound(partyId, [{ menuItemId, quantity: "3" }]);
 
@@ -488,12 +378,9 @@ describe("table + tab routes", () => {
   });
 
   it("POST .../lines/send answers 409 product.unavailable for a recalled line whose product sold out", async () => {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: `S-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: `S-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+    );
     const { tabId, partyId } = await seat(id);
     await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
     await request(`/api/working-orders/${tabId}/lines/recall`, {
@@ -517,12 +404,9 @@ describe("table + tab routes", () => {
   });
 
   it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: "9", zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: "9", zoneId: tablesZoneId }),
+    );
     const { tabId, partyId } = await seat(id);
     // One round of two lines, then serve line 1 (the two floor states the screen renders).
     await sendRound(partyId, [
@@ -572,12 +456,9 @@ describe("table + tab routes", () => {
   });
 
   it("GET /api/working-orders/:id/lines carries the venue's setting for changing sent items", async () => {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: `C-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: `C-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+    );
     const tabId = await seatWithOneLine(id);
     const read = async () =>
       (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
@@ -611,12 +492,9 @@ describe("table + tab routes", () => {
 
   /** A tab on a fresh table with one line fired to the kitchen, and the revision a copy reads. */
   async function firedTab(): Promise<{ tabId: string; partyId: string; revision: number }> {
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: `E-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: `E-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+    );
     const { tabId, partyId } = await seat(id);
     await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
     const { revision } = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
@@ -767,19 +645,8 @@ describe("table + tab routes", () => {
     const id = randomUUID();
     const json = { "content-type": "application/json" };
     const cases = [
-      noAuth.request("/api/tables", {
-        method: "POST",
-        headers: json,
-        body: JSON.stringify({ label: "z" }),
-      }),
       noAuth.request("/api/tables"),
       noAuth.request("/api/tables/state"),
-      noAuth.request(`/api/tables/${id}`, {
-        method: "PATCH",
-        headers: json,
-        body: JSON.stringify({ label: "z" }),
-      }),
-      noAuth.request(`/api/tables/${id}`, { method: "DELETE" }),
       noAuth.request(`/api/tables/${id}/seat`, {
         method: "POST",
         headers: json,
