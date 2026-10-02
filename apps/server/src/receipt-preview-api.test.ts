@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { printers, readTenant, tills, withTransaction } from "@waitron/db";
+import { locations, printers, readTenant, tills, withTransaction } from "@waitron/db";
 import { validateReceiptConfig } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -64,6 +64,12 @@ function linesOf(result: ReceiptPreviewResponse, start: number, end: number): st
 
 function printedLines(result: ReceiptPreviewResponse): string[] {
   return linesOf(result, 0, result.preview.blocks.length);
+}
+
+function setLocationLanguages(invoiceLocales: string[]): Promise<unknown> {
+  return withTransaction(suite.db, (tx) =>
+    tx.update(locations).set({ invoiceLocales }).where(eq(locations.id, venue.cfg.locationId)),
+  );
 }
 
 async function withPrinters(
@@ -382,7 +388,77 @@ describe("GET /management-api/receipt-preview", () => {
   });
 
   it("formats the sample in the location's receipt language", async () => {
-    expect((await rendered({}, { locale: "en-GB" })).preview.text).toContain("€5.50");
+    // `cfg.locale` stays the fixture's `es-ES`, which would print «5,50 €». Restored in `finally`, as
+    // the location is shared.
+    await setLocationLanguages(["en-GB"]);
+    try {
+      expect((await rendered({})).preview.text).toContain("€5.50");
+    } finally {
+      await setLocationLanguages(["es-ES"]);
+    }
+  });
+
+  describe("language", () => {
+    const at = async (query: string) => {
+      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+      expect(response.status).toBe(200);
+      return printedLines((await response.json()) as ReceiptPreviewResponse);
+    };
+    const labelled = (lines: string[], label: string) =>
+      lines.some((line) => line === label || line.startsWith(`${label} `));
+
+    it("draws the sample in a language asked for, whatever the location has saved", async () => {
+      const lines = await at("&language=gl-ES");
+      expect(labelled(lines, "Data")).toBe(true);
+      expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
+      expect(labelled(lines, "Fecha")).toBe(false);
+    });
+
+    it("follows the location's saved language when none is asked for", async () => {
+      await setLocationLanguages(["gl-ES"]);
+      try {
+        const lines = await at("");
+        expect(labelled(lines, "Data")).toBe(true);
+        expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
+      } finally {
+        await setLocationLanguages(["es-ES"]);
+      }
+      expect(labelled(await at(""), "Fecha")).toBe(true);
+    });
+
+    it("draws in one transaction", async () => {
+      let opened = 0;
+      const counting = new Proxy(suite.db, {
+        get(target, key) {
+          if (key === "withWriteLock")
+            return (fn: Parameters<typeof target.withWriteLock>[0]) => {
+              opened += 1;
+              return target.withWriteLock(fn);
+            };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+        },
+      });
+      const counted = new Hono();
+      mountReceiptPreviewApi(counted, { db: counting, cfg: venue.cfg }, () => {});
+      const response = await counted.request(
+        `/management-api/receipt-preview?receipt=${encodeURIComponent("{}")}&language=gl-ES`,
+        { headers: { cookie: venue.managerCookie } },
+      );
+      expect([response.status, opened]).toEqual([200, 1]);
+    });
+
+    it.each([
+      ["a language the pack does not offer", "&language=en-GB"],
+      ["an empty language", "&language="],
+      ["a language given twice", "&language=gl-ES&language=gl-ES"],
+    ])("refuses %s", async (_, query) => {
+      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "language" } },
+      });
+    });
   });
 
   it("marks a practice installation's receipt as a practice one, as its printed receipts are", async () => {

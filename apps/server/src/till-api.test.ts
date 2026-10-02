@@ -1122,8 +1122,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // `canvas` is the `till` form-factor default, even for this cookieless request.
     expect(body).toEqual({
       locale: "es-ES",
-      // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
-      // for this ES venue, but sourced from different fields — the decoupling test below drives them apart).
+      // The RECEIPT locale — the location's first `invoice_locales` entry, DISTINCT from the UI `locale`
+      // above (both es-ES for this ES venue, but sourced from different fields — the decoupling test below
+      // drives them apart).
       invoiceLocale: "es-ES",
       onboardingIntent: "prepare",
       venueName: "Test SL",
@@ -1196,27 +1197,36 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (cfg.locale)", async () => {
-    // Drive `cfg.locale` (fiscal/receipt) and `venueLocale` (display) APART to prove the route reads
-    // each from its own source: the wire `locale` (UI) must follow `venueLocale`, and `invoiceLocale`
-    // (the printed legal receipt's language) must follow the fiscal `cfg.locale` — NEVER the venue
-    // default. This is decision 2 of the per-user-language spec: a supported fiscal `ca-ES` is dropped
-    // by the UI venue-default derivation to `es-ES`, so binding the receipt to `venueLocale` would flip
-    // a Catalan receipt to Spanish. (In production both are `es-ES` for an ES venue, so a
-    // default-vs-default assertion could not tell a swapped source.)
-    const app = new Hono();
-    mountTillApi(
-      app,
-      { ...deps(suite.db), cfg: { ...cfg, locale: "ca-ES" }, venueLocale: "en-GB" },
-      collect([]),
+  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (the location's language)", async () => {
+    // Drive the location's saved receipt language, `cfg.locale` and `venueLocale` (display) APART to
+    // prove the route reads each from its own source: the wire `locale` (UI) must follow
+    // `venueLocale`, and `invoiceLocale` (the printed legal receipt's language) must follow the
+    // location's first `invoice_locales` entry — NEVER the venue default.
+    // A supported `ca-ES` is dropped by the UI venue-default derivation to `es-ES`, so binding the
+    // receipt to `venueLocale` would flip a Catalan receipt to Spanish. Restored in `finally`, as the
+    // location is shared.
+    await suite.db.execute(
+      sql`update locations set invoice_locales = '["ca-ES"]' where id = ${cfg.locationId}`,
     );
+    try {
+      const app = new Hono();
+      mountTillApi(
+        app,
+        { ...deps(suite.db), cfg: { ...cfg, locale: "gl-ES" }, venueLocale: "en-GB" },
+        collect([]),
+      );
 
-    const res = await app.request("/api/till");
-    expect(res.status).toBe(200);
-    expect((await res.json()) as { locale: string; invoiceLocale: string }).toMatchObject({
-      locale: "en-GB",
-      invoiceLocale: "ca-ES",
-    });
+      const res = await app.request("/api/till");
+      expect(res.status).toBe(200);
+      expect((await res.json()) as { locale: string; invoiceLocale: string }).toMatchObject({
+        locale: "en-GB",
+        invoiceLocale: "ca-ES",
+      });
+    } finally {
+      await suite.db.execute(
+        sql`update locations set invoice_locales = '["es-ES"]' where id = ${cfg.locationId}`,
+      );
+    }
   });
 
   it("GET /api/locales returns the supported list + the venue default, no session required", async () => {

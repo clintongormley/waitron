@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findAdministrativeAreaByPostalCode, resolveFiscalJurisdiction } from "@waitron/country";
+import {
+  RECEIPT_LABEL_KEYS,
+  findAdministrativeAreaByPostalCode,
+  receiptLanguageRules,
+  resolveFiscalJurisdiction,
+} from "@waitron/country";
 import {
   SPAIN,
   validateSpanishNif,
@@ -186,6 +191,61 @@ describe("regional content languages", () => {
       expect(other.foreignLanguageNotice, other.code).toBeUndefined();
     }
   });
+});
+
+describe("receipt language", () => {
+  const OFFICIAL = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+
+  it("offers exactly Spain's four official languages, Spanish first, and never English", () => {
+    expect(SPAIN.invoiceLocales).toEqual(OFFICIAL);
+    expect(SPAIN.invoiceLocales).not.toContain("en-GB");
+  });
+
+  it.each(["08", "17", "25", "43"])(
+    "fixes %s to Catalan and says why in English and Spanish",
+    (code) => {
+      const rules = receiptLanguageRules(SPAIN, code);
+      expect(rules.choices).toEqual(OFFICIAL);
+      expect(rules.defaultLocale).toBe("ca-ES");
+      expect(rules.fixed?.locale).toBe("ca-ES");
+      expect(Object.keys(rules.fixed!.reason).sort()).toEqual(["en", "es"]);
+      for (const text of Object.values(rules.fixed!.reason)) expect(text).toContain("128-1.2.a");
+    },
+  );
+
+  it.each(["03", "12", "46", "15", "27", "32", "36", "01", "20", "48", "07", "31", "28"])(
+    "leaves %s free to choose, with Spanish the default",
+    (code) => {
+      expect(receiptLanguageRules(SPAIN, code)).toStrictEqual({
+        choices: OFFICIAL,
+        defaultLocale: "es-ES",
+      });
+    },
+  );
+});
+
+describe("receipt labels", () => {
+  it("labels exactly the pack's receipt languages", () => {
+    expect(Object.keys(SPAIN.receiptLabels ?? {}).sort()).toEqual([...SPAIN.invoiceLocales].sort());
+  });
+
+  it.each(SPAIN.invoiceLocales)("gives %s every label as non-empty text", (locale) => {
+    const labels = SPAIN.receiptLabels?.[locale];
+    expect(Object.keys(labels ?? {}).sort()).toEqual([...RECEIPT_LABEL_KEYS].sort());
+    for (const key of RECEIPT_LABEL_KEYS) {
+      expect(typeof labels?.[key], key).toBe("string");
+      expect(labels?.[key].trim(), key).not.toBe("");
+    }
+  });
+
+  it.each(SPAIN.invoiceLocales)(
+    "keeps the never-translated Veri*Factu legend and QR caption out of %s",
+    (locale) => {
+      const values = Object.values(SPAIN.receiptLabels?.[locale] ?? {});
+      expect(values).not.toContain("VERI*FACTU");
+      expect(values).not.toContain("QR tributario:");
+    },
+  );
 });
 
 describe("validateSpanishPhone", () => {

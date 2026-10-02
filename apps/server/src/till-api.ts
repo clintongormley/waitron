@@ -17,7 +17,11 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
-import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
+import {
+  listAccessibleCatalogues,
+  listAvailableProducts,
+  readReceiptLanguage,
+} from "@waitron/catalogue";
 import {
   kindOfFormFactor,
   getReceipt,
@@ -176,7 +180,7 @@ export interface TillApiDeps {
   providers?: readonly CardProviderContribution[];
   /** Gates the per-tab device override header (`x-waitron-dev-device`); unset leaves it inert. */
   devMode?: boolean;
-  /** The venue's default UI locale, distinct from the fiscal `cfg.locale` the receipt uses. */
+  /** The venue's default UI locale, distinct from the location's receipt language. */
   venueLocale: string;
   /** The setup journey that created this installation, shown persistently by the till. */
   onboardingIntent?: OnboardingIntent;
@@ -991,6 +995,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           return provider === undefined ? [] : [{ id: r.id, name: r.name, provider }];
         });
         return {
+          invoiceLocale: (await readReceiptLanguage(tx, deps.cfg.locationId)).locale,
           issuer:
             taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,
@@ -1018,9 +1023,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       /* v8 ignore stop */
       return c.json({
         locale: deps.venueLocale,
-        // The receipt's language, kept separate from the UI `locale`: the UI derivation drops
-        // UI-unsupported codes, which must never reach the receipt.
-        invoiceLocale: deps.cfg.locale,
+        // The location's receipt language, kept separate from the UI `locale`: the UI derivation
+        // drops UI-unsupported codes, which must never reach the receipt.
+        invoiceLocale: boot.invoiceLocale,
         onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,

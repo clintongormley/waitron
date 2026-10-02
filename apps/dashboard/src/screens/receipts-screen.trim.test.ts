@@ -30,6 +30,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
     putLocationSettings: vi.fn().mockResolvedValue(undefined),
+    getReceiptLanguage: vi.fn().mockResolvedValue({
+      language: "es-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: null,
+    }),
+    putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
+    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
     ...overrides,
   } as unknown as DashboardApi;

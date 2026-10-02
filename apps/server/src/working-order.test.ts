@@ -2974,7 +2974,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("a re-fire of an already-fired line is refused ticket.already_fired, not a raw 23505", async () => {
+  it("a re-fire of an already-fired line is refused ticket.already_fired", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const orderId = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -2982,9 +2982,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const { id } = await placeOrderWith(tx, cfg, [line(p)]);
       return id;
     });
-    // A SECOND fire of the same lines collides on `ticket_items`' per-line
-    // `(working_order_line_id)` unique. `fireLines` maps that to the domain code
-    // (naming the order) rather than leaking the raw constraint error as an opaque 500.
+    // A SECOND fire of the same lines is refused because each line already holds a ticket item.
     await expect(
       withTransaction(db, async (tx) => {
         const fired = await tx

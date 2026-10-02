@@ -618,11 +618,10 @@ declare module "@waitron/shared" {
     "ticket.invalid_transition": { ticketItemId: string };
     /**
      * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
-     * catches the per-line unique violation on `ticket_items`, so every fire path is covered), a
-     * re-course of a fired line (`setLineCourse`), and, when the venue has switched off changes to
-     * sent items (`edit_sent_lines`), a recall (`recallLines`) or an edit (`applyLineEdits`) of a
-     * line that was sent to a station. It names the order, not a ticket item, because the re-fire
-     * never reads the colliding item.
+     * refuses a line that already holds a ticket item before any of its writes), a re-course of a
+     * fired line (`setLineCourse`), and, when the venue has switched off changes to sent items
+     * (`edit_sent_lines`), a recall (`recallLines`) or an edit (`applyLineEdits`) of a line that was
+     * sent to a station. It names the order, not a ticket item.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**
@@ -701,6 +700,12 @@ declare module "@waitron/shared" {
      * device.
      */
     "device.register_name_taken": Record<string, never>;
+    /** The venue's region fixes its receipt language; `language` is that fixed language, never the
+     * caller's value. */
+    "receipt.language_fixed": { field: "receiptLanguage"; language: string };
+    /** A receipt-language change refused because `count` orders at the location still have a line
+     * the till can write, which the line trigger refuses once its language key is stale. */
+    "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     /**
      * A request named a device binding id that matches no row. Checked by a read before the write in
      * `device.ts`, because this engine's foreign-key refusal does not say which key failed.

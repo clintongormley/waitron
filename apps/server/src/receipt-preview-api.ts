@@ -9,6 +9,7 @@ import {
   withTransaction,
   type Database,
 } from "@waitron/db";
+import { readReceiptLanguage } from "@waitron/catalogue";
 import { authorizeManager } from "@waitron/identity";
 import { validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
 import { textGrid, type EscSetting, type PaperWidth } from "@waitron/printing";
@@ -23,6 +24,7 @@ import {
 import { formatReceipt } from "./receipt-ticket.js";
 import { SAMPLE_SALE } from "./sample-receipt.js";
 import type { TillConfig } from "./till-config.js";
+import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 
 const run = createErrorBoundary(
   {
@@ -86,6 +88,18 @@ function optionalPaperWidth(given: string[] | undefined): PaperWidth | undefined
   return requireEnum(given[0], "paperWidth", printPaperWidth.enumValues);
 }
 
+/** A language to draw in other than the saved one: one of those the venue's pack offers. */
+function optionalLanguage(
+  given: string[] | undefined,
+  choices: readonly string[],
+): string | undefined {
+  if (given === undefined) return undefined;
+  if (given.length !== 1 || !choices.includes(given[0]!)) {
+    throw new AppError("management.request_invalid", { field: "language" });
+  }
+  return given[0];
+}
+
 /**
  * The setting to draw at: the asked-for width when a receipt printer has it, else the width most
  * tills print on, a tie going to the till first by name. A width's resolution is that of the till
@@ -108,8 +122,9 @@ function chooseSetting(settings: EscSetting[], asked: PaperWidth | undefined): E
 /**
  * A sample receipt drawn by the formatter a sale's receipt prints from, with unsaved trim. It
  * files, saves and enqueues nothing. A GET, so a dashboard refresh can ask for it passively; the
- * `receipt` parameter holds the JSON object a save sends as `receipt`, and an optional `paperWidth`
- * picks one of the widths an answer offers.
+ * `receipt` parameter holds the JSON object a save sends as `receipt`, an optional `paperWidth`
+ * picks one of the widths an answer offers, and an optional `language` draws in another of the
+ * receipt languages the venue may choose.
  */
 export function mountReceiptPreviewApi(
   app: Hono,
@@ -121,7 +136,7 @@ export function mountReceiptPreviewApi(
       const sessionId = requireManagementSession(c);
       const requested = requireReceiptParameter(c.req.queries("receipt"));
       const asked = optionalPaperWidth(c.req.queries("paperWidth"));
-      const { issuer, settings } = await withTransaction(deps.db, async (tx) => {
+      const { issuer, settings, language, rules } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -137,8 +152,14 @@ export function mountReceiptPreviewApi(
           )
           .where(eq(tills.locationId, deps.cfg.locationId))
           .orderBy(asc(tills.name), asc(tills.id));
-        return { issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId }, settings };
+        return {
+          issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+          settings,
+          language: await readReceiptLanguage(tx, deps.cfg.locationId),
+          rules: await readVenueReceiptLanguageRules(tx, { locationId: deps.cfg.locationId }),
+        };
       });
+      const locale = optionalLanguage(c.req.queries("language"), rules.choices) ?? language.locale;
       const printer = chooseSetting(settings, asked);
       const receipt = validateReceiptConfig(requested);
       const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
@@ -148,7 +169,7 @@ export function mountReceiptPreviewApi(
             result: SAMPLE_SALE,
             issuer,
             receipt: trim,
-            invoiceLocale: deps.cfg.locale,
+            invoiceLocale: locale,
             printer,
             simulated: deps.cfg.practiceMode,
           }),

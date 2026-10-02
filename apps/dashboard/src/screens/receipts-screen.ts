@@ -1,6 +1,7 @@
 import { DraftRows, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -12,13 +13,15 @@ import type {
   DashboardApi,
   PrintPaperWidth,
   ReceiptConfig,
+  ReceiptLanguage,
   ReceiptPreview,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardQuery } from "../api/live-queries.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { PrintPaper, paperStyles, type PaperMark } from "../widgets/print-paper.js";
+import { receiptLanguageName, receiptLanguageWarning } from "../widgets/receipt-language.js";
 
 /** How long typing must pause before the preview is redrawn with the latest text. */
 export const RECEIPT_PREVIEW_QUIET_MS = 300;
@@ -27,8 +30,8 @@ type TrimField = "headerSubtitle" | "footerMessage";
 const TRIM_FIELDS: readonly TrimField[] = ["headerSubtitle", "footerMessage"];
 
 /**
- * The venue-wide receipt trim and this location's invoice operation description, saved by one Save,
- * beside a live preview the server draws as the receipt will print.
+ * The venue-wide receipt trim and this location's receipt language and invoice operation
+ * description, saved by one Save, beside a live preview the server draws as the receipt will print.
  */
 @customElement("dashboard-receipts-screen")
 export class ReceiptsScreen extends LitElement {
@@ -67,6 +70,33 @@ export class ReceiptsScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
         color: var(--wt-color-text-muted);
+      }
+      .field-label {
+        display: block;
+        margin-bottom: var(--wt-space-1);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .field-value {
+        display: block;
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .reason {
+        margin: var(--wt-space-1) 0 0;
+        max-width: 60ch;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .warning {
+        max-width: 60ch;
+        margin: var(--wt-space-2) 0 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+      }
+      .use-fixed {
+        margin-top: var(--wt-space-2);
       }
       wt-form-actions {
         margin-top: var(--wt-space-4);
@@ -125,6 +155,21 @@ export class ReceiptsScreen extends LitElement {
       this.locationLoadFailed = true;
     },
   );
+  readonly #languageQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.languageLoadFailed = true;
+    },
+  );
+  /** Only for the warning, so a failed read hides the warning and nothing else. */
+  readonly #contentQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.contentLanguages = null;
+    },
+  );
   readonly #paper = new PrintPaper();
 
   @state() private headerSubtitle = "";
@@ -143,9 +188,20 @@ export class ReceiptsScreen extends LitElement {
   /** The server's refusal of the description, shown until the field changes. */
   @state() private refusal = "";
   @state() private saveFailed = false;
+  @state() private receiptLanguage: ReceiptLanguage | null = null;
+  @state() private languageLoadFailed = false;
+  /** A language picked and not yet saved; null while the saved one stands. */
+  @state() private pickedLanguage: string | null = null;
+  /** The server's refusal of the language, shown under it until it changes or Save is pressed. */
+  @state() private languageRefusal = "";
+  /** A failed language save's sentence for the bottom message, until the next Save. */
+  @state() private languageError: string | null = null;
+  @state() private contentLanguages: ContentLanguages | null = null;
   #dirty = false;
   /** Successful description writes so far; a read stamped with an older count may predate the latest one. */
   #saves = 0;
+  /** The same, for this page's receipt-language writes. */
+  #languageSaves = 0;
 
   @state() private attempted = false;
   @state() private saving = false;
@@ -165,6 +221,7 @@ export class ReceiptsScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+    void this.#loadContentLanguages();
   }
 
   override disconnectedCallback(): void {
@@ -176,7 +233,58 @@ export class ReceiptsScreen extends LitElement {
   async #load(): Promise<void> {
     this.receiptLoadError = null;
     this.locationLoadFailed = false;
-    await Promise.all([this.#loadReceipt(), this.#loadLocation()]);
+    this.languageLoadFailed = false;
+    await Promise.all([this.#loadReceipt(), this.#loadLocation(), this.#loadLanguage()]);
+  }
+
+  async #loadLanguage(): Promise<void> {
+    const query = dashboardQuery(this.api, "getReceiptLanguage", []);
+    try {
+      await this.#languageQueries.watch(
+        "getReceiptLanguage",
+        {
+          ...query,
+          key: `${query.key}:save-stamped`,
+          read: async () => {
+            const saves = this.#languageSaves;
+            return { saves, value: await query.read() };
+          },
+        },
+        ({ saves, value }) => {
+          if (saves !== this.#languageSaves) return;
+          const savedElsewhere =
+            this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
+          this.receiptLanguage = value;
+          this.languageLoadFailed = false;
+          // A fixed language has no dropdown left to take back a pick or show its refusal.
+          const droppedPick = value.fixed !== null && this.pickedLanguage !== null;
+          if (value.fixed !== null) {
+            this.pickedLanguage = null;
+            this.languageRefusal = "";
+          }
+          if ((savedElsewhere || droppedPick) && this.receiptLoaded && this.pickedLanguage === null)
+            this.#redrawInSavedLanguage();
+        },
+      );
+    } catch {
+      this.languageLoadFailed = true;
+    }
+  }
+
+  async #loadContentLanguages(): Promise<void> {
+    try {
+      await this.#contentQueries.watch("getContentLanguages", [], (value) => {
+        this.contentLanguages = value;
+      });
+    } catch {
+      this.contentLanguages = null;
+    }
+  }
+
+  /** The picked language when it differs from the saved one, which a preview and a save then send. */
+  #changedLanguage(): string | null {
+    const picked = this.pickedLanguage;
+    return picked !== null && picked !== this.receiptLanguage?.language ? picked : null;
   }
 
   async #loadReceipt(): Promise<void> {
@@ -270,14 +378,17 @@ export class ReceiptsScreen extends LitElement {
     this.#previewActive = false;
     const config = this.#trim();
     const width = this.chosenWidth;
-    const requested = JSON.stringify([config, width]);
+    const language = this.#changedLanguage();
+    const requested = JSON.stringify([config, width, language]);
     if (requested === this.#previewRequested) return;
     this.#previewRequested = requested;
     this.#previewInFlight = true;
     try {
-      this.preview = await (width === null
-        ? client.previewReceipt(config)
-        : client.previewReceipt(config, width));
+      this.preview = await (language !== null
+        ? client.previewReceipt(config, width ?? undefined, language)
+        : width === null
+          ? client.previewReceipt(config)
+          : client.previewReceipt(config, width));
       this.previewFailed = false;
     } catch {
       this.previewFailed = true;
@@ -305,6 +416,63 @@ export class ReceiptsScreen extends LitElement {
     this.chosenWidth = width;
     this.#previewActive = true;
     void this.#sendPreview();
+  }
+
+  /** The saved language is not part of the preview's key, because no parameter is sent for it. */
+  #redrawInSavedLanguage(): void {
+    this.#previewRequested = null;
+    void this.#sendPreview();
+  }
+
+  #pickLanguage(language: string): void {
+    this.pickedLanguage = language === this.receiptLanguage!.language ? null : language;
+    this.languageRefusal = "";
+    this.saved = false;
+    this.#previewActive = true;
+    void this.#sendPreview();
+  }
+
+  #languageRefused(error: unknown): void {
+    const code = codeOf(error);
+    const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+    if (field !== "receiptLanguage") {
+      this.languageError = `${t("receipts.language_save_error")} ${codeMessage(code)}`;
+      return;
+    }
+    const sentence =
+      code === "management.request_invalid" ? t("receipts.language_invalid") : codeMessage(code);
+    // A fixed language is shown read-only, so there is no field to mark.
+    if (this.receiptLanguage!.fixed === null) this.languageRefusal = sentence;
+    else this.languageError = sentence;
+  }
+
+  /** Whether the language was saved; a refusal is shown where it belongs. */
+  async #sendLanguage(language: string): Promise<boolean> {
+    try {
+      await this.api.putReceiptLanguage(language);
+    } catch (error) {
+      this.#languageRefused(error);
+      return false;
+    }
+    this.receiptLanguage = { ...this.receiptLanguage!, language };
+    this.#languageSaves += 1;
+    // A picked language was already drawn; one saved without a pick (Use Catalan) was not.
+    if (this.pickedLanguage === null) {
+      this.#previewActive = true;
+      this.#redrawInSavedLanguage();
+    }
+    this.pickedLanguage = null;
+    return true;
+  }
+
+  async #useFixedLanguage(locale: string): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    this.saved = false;
+    this.languageRefusal = "";
+    this.languageError = null;
+    await this.#sendLanguage(locale);
+    this.saving = false;
   }
 
   #validate(): string {
@@ -348,12 +516,22 @@ export class ReceiptsScreen extends LitElement {
     this.trimRefusals = {};
     this.attempted = true;
     this.refusal = "";
+    this.languageRefusal = "";
+    this.languageError = null;
     if (this.#validate() !== "") {
       await this.updateComplete;
       await focusFirstInvalid(this.#form());
       return;
     }
     this.saving = true;
+    // Sent alone and first, so a refused language never leaves the other settings saved without it.
+    const language = this.#changedLanguage();
+    if (language !== null && !(await this.#sendLanguage(language))) {
+      this.saving = false;
+      await this.updateComplete;
+      await focusFirstInvalid(this.#form());
+      return;
+    }
     const [trim, location] = await Promise.allSettled([
       this.api.putReceipt(this.#trim()),
       this.api.putLocationSettings(this.description),
@@ -407,13 +585,78 @@ export class ReceiptsScreen extends LitElement {
     ></wt-textarea>`;
   }
 
+  #renderWarning(language: string): TemplateResult | typeof nothing {
+    return this.contentLanguages === null
+      ? nothing
+      : receiptLanguageWarning(language, this.contentLanguages);
+  }
+
+  #renderLanguage(receiptLanguage: ReceiptLanguage): TemplateResult {
+    const error = this.languageRefusal;
+    const { fixed, language: stored } = receiptLanguage;
+    if (fixed !== null) {
+      const fixedName = receiptLanguageName(fixed.locale, false);
+      return html`<div data-test="receipt-language">
+        <span class="field-label">${t("receipts.language")}</span>
+        <span class="field-value" data-test="receipt-language-value"
+          >${receiptLanguageName(stored)}</span
+        >
+        <p class="reason" data-test="receipt-language-reason">
+          ${resolveContentText(fixed.reason, currentLocale(), "en")}
+        </p>
+        ${
+          stored === fixed.locale
+            ? nothing
+            : html`<p class="warning" role="note" data-test="receipt-language-stored">
+                  ${t("receipts.language_stored")
+                    .replace("{stored}", receiptLanguageName(stored, false))
+                    .replace("{fixed}", fixedName)}
+                </p>
+                <wt-button
+                  class="use-fixed"
+                  data-test="use-fixed-language"
+                  variant="secondary"
+                  ?disabled=${this.saving}
+                  @click=${() => void this.#useFixedLanguage(fixed.locale)}
+                  >${t("receipts.language_use").replace("{fixed}", fixedName)}</wt-button
+                >`
+        }
+        ${this.#renderWarning(stored)}
+      </div>`;
+    }
+    const chosen = this.pickedLanguage ?? stored;
+    const offered = receiptLanguage.choices.includes(stored)
+      ? receiptLanguage.choices
+      : [...receiptLanguage.choices, stored];
+    return html`<div data-test="receipt-language">
+      <wt-combobox
+        name="receiptLanguage"
+        label=${t("receipts.language")}
+        required
+        search="auto"
+        .options=${offered.map((language) => ({
+          value: language,
+          label: receiptLanguageName(language),
+        }))}
+        .value=${chosen}
+        error=${error}
+        ?disabled=${this.saving}
+        @wt-change=${(event: CustomEvent<{ value: string }>) =>
+          this.#pickLanguage(event.detail.value)}
+      ></wt-combobox>
+      ${this.#renderWarning(chosen)}
+    </div>`;
+  }
+
   #renderForm(): TemplateResult {
     const descriptionError = this.#descriptionError();
     const marked =
       descriptionError !== "" ||
+      this.languageRefusal !== "" ||
       this.trimRefusals.headerSubtitle !== undefined ||
       this.trimRefusals.footerMessage !== undefined;
     const bottom = [
+      this.languageError ?? "",
       this.errorKey === null
         ? ""
         : `${t("receipts.trim_save_error")} ${codeMessage(this.errorKey)}`,
@@ -446,6 +689,7 @@ export class ReceiptsScreen extends LitElement {
       </section>
       <section class="settings" aria-labelledby="location-heading">
         <h2 id="location-heading" data-test="location-name">${this.name}</h2>
+        ${this.#renderLanguage(this.receiptLanguage!)}
         <wt-input
           name="operationDescription"
           autocomplete="off"
@@ -544,16 +788,20 @@ export class ReceiptsScreen extends LitElement {
           ? html`<p role="alert">${codeMessage(this.receiptLoadError)}</p>`
           : nothing
       }
-      ${this.locationLoadFailed ? html`<p role="alert">${t("location_settings.load_error")}</p>` : nothing}
       ${
-        this.locationLoadFailed || this.receiptLoadError !== null
+        this.locationLoadFailed || this.languageLoadFailed
+          ? html`<p role="alert">${t("location_settings.load_error")}</p>`
+          : nothing
+      }
+      ${
+        this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
           ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
               >${t("location_settings.retry")}</wt-button
             >`
           : nothing
       }
       ${
-        this.receiptLoaded && this.locationLoaded
+        this.receiptLoaded && this.locationLoaded && this.receiptLanguage !== null
           ? html`<div class="layout">${this.#renderForm()} ${this.#renderPreview()}</div>`
           : nothing
       }`;

@@ -6,9 +6,11 @@ import {
   findFiscalModules,
   getCountryPack,
   getVenueSetupCountryPack,
+  receiptLabelsFor,
   resolveInstalledContentLanguageRules,
   resolveInstalledCountryLocale,
   resolveInstalledDefaultContentLanguage,
+  resolveInstalledReceiptLanguageRules,
 } from "./registry.js";
 
 describe("installed country packs", () => {
@@ -128,5 +130,50 @@ describe("content-language rules", () => {
       { country: null, area: null },
     ])
       expect(resolveInstalledDefaultContentLanguage(input)).toBeUndefined();
+  });
+});
+
+describe("receipt-language rules", () => {
+  const SPAIN_OFFICIAL = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+
+  it("fixes a Barcelona venue's receipts to Catalan and carries the reason", () => {
+    const rules = resolveInstalledReceiptLanguageRules({ country: "ES", area: "Barcelona" });
+    expect(rules.choices).toEqual(SPAIN_OFFICIAL);
+    expect(rules.defaultLocale).toBe("ca-ES");
+    expect(rules.fixed?.locale).toBe("ca-ES");
+    expect(Object.keys(rules.fixed!.reason).sort()).toEqual(["en", "es"]);
+  });
+
+  it("offers a Madrid venue the four official languages, Spanish by default, nothing fixed", () => {
+    expect(resolveInstalledReceiptLanguageRules({ country: "es", area: "Madrid" })).toStrictEqual({
+      choices: SPAIN_OFFICIAL,
+      defaultLocale: "es-ES",
+    });
+  });
+
+  it("offers nothing for a country with no installed pack, or no country, and defaults to Spanish", () => {
+    for (const country of ["XX", null])
+      expect(resolveInstalledReceiptLanguageRules({ country, area: "Barcelona" })).toStrictEqual({
+        choices: [],
+        defaultLocale: "es-ES",
+      });
+  });
+});
+
+describe("receipt labels", () => {
+  // Compared with the pack's own entries rather than spelled out: the words are Spanish-domain
+  // vocabulary, which this package's English-only guard refuses (`scripts/english-only.test.ts`).
+  const spain = getCountryPack("ES")!.receiptLabels!;
+
+  it("finds a locale's labels in the pack that has them", () => {
+    expect(receiptLabelsFor("ca-ES")).toBe(spain["ca-ES"]);
+    expect(receiptLabelsFor("ca-ES").date).toBe("Data");
+    expect(receiptLabelsFor("es-ES")).toBe(spain["es-ES"]);
+    expect(receiptLabelsFor("es-ES").date).not.toBe("Data");
+  });
+
+  it("prints Spain's Spanish labels for a locale no installed pack labels", () => {
+    for (const locale of ["en-GB", "es", "fr-FR"])
+      expect(receiptLabelsFor(locale)).toBe(spain["es-ES"]);
   });
 });

@@ -11,6 +11,8 @@ import {
   perDishOptionQuantity,
   resolveSnapshotText,
 } from "@waitron/shared";
+import { FALLBACK_RECEIPT_LOCALE, receiptLabelsFor } from "@waitron/country-packs";
+import type { ReceiptLabels } from "@waitron/country";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
 import type {
@@ -28,39 +30,17 @@ export interface TicketIssuer {
 }
 
 /**
- * A filed line's goods name in the invoice locale (art. 7.1.e).
+ * A filed line's goods name in the receipt's language (art. 7.1.e).
  *
  * `descriptions` is the ONE map on this ticket an exact-key lookup may be used on:
  * `toInvoiceLineDescriptions` (`packages/catalogue/src/invoice-descriptions.ts`) re-keys every priced
- * line's onto the venue's invoice locales. Nothing re-keys the line's `unitName`, which is why the
+ * line's onto the location's receipt language. Nothing re-keys the line's `unitName`, which is why the
  * quantity below resolves that one through `resolveSnapshotText` instead — as the printed twin
  * (`apps/server/src/receipt-ticket.ts`) does.
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
-
-/**
- * The fiscal labels are fixed Spanish constants, so the receipt is a Spanish legal document whatever
- * the operator-UI language. A non-Spanish invoice locale would need a translated label set.
- */
-const LABEL = {
-  nif: "NIF",
-  invoice: "Factura",
-  date: "Fecha",
-  order: "Pedido",
-  base: "Base",
-  vat: "IVA",
-  total: "TOTAL",
-  cash: "Efectivo",
-  change: "Cambio",
-  card: "Tarjeta",
-  tip: "Propina",
-  charged: "Cobrado",
-  refund: "Devolución",
-  comp: "Invitación",
-  discount: "Descuento",
-} as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
@@ -105,24 +85,29 @@ function lineGross(line: TillSaleLine, locale: string) {
 const percentFormatters = new Map<string, Intl.NumberFormat>();
 
 /** `Descuento 12,5%` for 1250 basis points, as `apps/server/src/receipt-ticket.ts` prints it. */
-function adjustmentLabel(adjustment: ReceiptAdjustment, locale: string): string {
-  if (adjustment.kind === "comp") return LABEL.comp;
-  if (adjustment.percentBp === undefined) return LABEL.discount;
+function adjustmentLabel(
+  adjustment: ReceiptAdjustment,
+  locale: string,
+  labels: ReceiptLabels,
+): string {
+  if (adjustment.kind === "comp") return labels.comp;
+  if (adjustment.percentBp === undefined) return labels.discount;
   let formatter = percentFormatters.get(locale);
   if (formatter === undefined) {
     formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
     percentFormatters.set(locale, formatter);
   }
-  return `${LABEL.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
+  return `${labels.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
 }
 
 function adjustmentRow(
   adjustment: ReceiptAdjustment,
   locale: string,
+  labels: ReceiptLabels,
   kind: "adjustment" | "bill-adjustment",
 ) {
   return html`<li class="line ${kind}">
-    <span class="line-name">${adjustmentLabel(adjustment, locale)}</span>
+    <span class="line-name">${adjustmentLabel(adjustment, locale, labels)}</span>
     <span class="line-gross">-${formatMoney(adjustment.amount, locale)}</span>
   </li>`;
 }
@@ -144,15 +129,15 @@ function tenderRow(label: string, amount: string, locale: string) {
 
 /** One payment of a bill paid in parts, as the printed receipt (`apps/server/src/receipt-ticket.ts`)
  * lists it. */
-function renderBillPayment(payment: BillTenderLine, locale: string) {
+function renderBillPayment(payment: BillTenderLine, locale: string, labels: ReceiptLabels) {
   const given = (refund: { amount: string; tip: string }) =>
     addDecimal(decimal(refund.amount), decimal(refund.tip));
   const paid =
     payment.method === "cash"
-      ? html`${tenderRow(LABEL.cash, payment.tendered, locale)}
-        ${payment.change !== "0.00" ? tenderRow(LABEL.change, payment.change, locale) : nothing}`
+      ? html`${tenderRow(labels.cash, payment.tendered, locale)}
+        ${payment.change !== "0.00" ? tenderRow(labels.change, payment.change, locale) : nothing}`
       : html`${tenderRow(
-          LABEL.card,
+          labels.card,
           // A card's amount is net of its refunds, which are listed beneath it: show the original
           // charge.
           payment.refunds.reduce(
@@ -163,42 +148,44 @@ function renderBillPayment(payment: BillTenderLine, locale: string) {
         )}
         ${
           payment.reference !== null
-            ? html`<div class="tender-row"><span>Ref. ${payment.reference}</span></div>`
+            ? html`<div class="tender-row">
+                <span>${labels.reference} ${payment.reference}</span>
+              </div>`
             : nothing
         }`;
   return html`
-    ${paid} ${payment.tip !== "0.00" ? tenderRow(LABEL.tip, payment.tip, locale) : nothing}
+    ${paid} ${payment.tip !== "0.00" ? tenderRow(labels.tip, payment.tip, locale) : nothing}
     ${payment.refunds.map((refund) =>
-      tenderRow(LABEL.refund, negateDecimal(given(refund)), locale),
+      tenderRow(labels.refund, negateDecimal(given(refund)), locale),
     )}
   `;
 }
 
 /** An allowed operational extra alongside `result.total`. Card-present identity lives on the separate
  * payment slip. */
-function renderTender(result: TillSaleResult, locale: string) {
+function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLabels) {
   if (result.payments !== undefined && result.payments.length > 0) {
-    return result.payments.map((payment) => renderBillPayment(payment, locale));
+    return result.payments.map((payment) => renderBillPayment(payment, locale, labels));
   }
   const t = result.tender;
   if (t.method === "unpaid") return nothing;
   if (t.method === "cash") {
     return html`
       <div class="tender-row">
-        <span>${LABEL.cash}</span>
+        <span>${labels.cash}</span>
         <span>${formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale)}</span>
       </div>
       <div class="tender-row">
-        <span>${LABEL.change}</span>
+        <span>${labels.change}</span>
         <span>${formatMoney(t.change, locale)}</span>
       </div>
     `;
   }
   return html`
-    <div class="tender-row"><span>${LABEL.card}</span></div>
+    <div class="tender-row"><span>${labels.card}</span></div>
     ${
       t.reference !== null
-        ? html`<div class="tender-row"><span>Ref. ${t.reference}</span></div>`
+        ? html`<div class="tender-row"><span>${labels.reference} ${t.reference}</span></div>`
         : nothing
     }
     ${
@@ -207,11 +194,11 @@ function renderTender(result: TillSaleResult, locale: string) {
       t.tip !== "0.00"
         ? html`
             <div class="tender-row">
-              <span>${LABEL.tip}</span>
+              <span>${labels.tip}</span>
               <span>${formatMoney(t.tip, locale)}</span>
             </div>
             <div class="tender-row">
-              <span>${LABEL.charged}</span>
+              <span>${labels.charged}</span>
               <span>${formatMoney(t.charged, locale)}</span>
             </div>
           `
@@ -229,15 +216,16 @@ function renderTender(result: TillSaleResult, locale: string) {
  *
  *  - issuer venue name + NIF (7.1.d);
  *  - número + serie (7.1.a) and fecha de expedición (7.1.b);
- *  - identification of the goods (7.1.e): name (invoice locale), quantity, per-line gross;
+ *  - identification of the goods (7.1.e): name (receipt language), quantity, per-line gross;
  *  - the tipo(s) impositivo(s) and the base imponible per rate (7.1.f) — per-item VAT is NOT required;
  *    the cuota per rate is shown as an allowed extra;
  *  - contraprestación total (7.1.g);
  *  - «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend.
  *
- * It renders in the INVOICE locale ({@link invoiceLocale}), INDEPENDENT of the operator's UI language:
- * an English-speaking operator still hands the customer a Spanish ticket. So nothing here goes through
- * the operator-UI `t()` / `currentLocale()` except the operator's own action buttons.
+ * It renders in the language the sale was filed in (`result.locale`, else {@link invoiceLocale}),
+ * INDEPENDENT of the operator's UI language: an English-speaking operator in Barcelona still hands the
+ * customer a Catalan ticket. So nothing here goes through the operator-UI `t()` / `currentLocale()`
+ * except the operator's own action buttons.
  */
 @customElement("till-ticket-view")
 export class TillTicketView extends LitElement {
@@ -404,7 +392,7 @@ export class TillTicketView extends LitElement {
   @property({ attribute: false }) result!: TillSaleResult;
   /** Current boot issuer, used when an immediate ticket response has no filed issuer identity. */
   @property({ attribute: false }) issuer!: TicketIssuer;
-  /** NEVER the operator-UI `currentLocale()`. */
+  /** The receipt language for a result that names none. NEVER the operator-UI `currentLocale()`. */
   @property() invoiceLocale = "es-ES";
   /** True for Demo and Preparation transactions. This warning is outside the fiscal core below. */
   @property({ type: Boolean }) simulated = false;
@@ -445,15 +433,22 @@ export class TillTicketView extends LitElement {
   override render() {
     const r = this.result;
     const issuer = r.issuer ?? this.issuer;
-    const locale = this.invoiceLocale;
+    const language = r.locale ?? this.invoiceLocale;
+    const labels = receiptLabelsFor(language);
+    // Browsers ship no number or date formats for some receipt languages (Galician and Basque in
+    // Chromium 153 and Chrome 154), and would write those amounts the English way.
+    const format =
+      Intl.NumberFormat.supportedLocalesOf([language]).length > 0
+        ? language
+        : FALLBACK_RECEIPT_LOCALE;
     const svg = qrSvg(r.qr);
-    const orderGroup = `${r.orderLabel === null ? "" : `${r.orderLabel} · `}${LABEL.order} ${r.orderNumber}`;
+    const orderGroup = `${r.orderLabel === null ? "" : `${r.orderLabel} · `}${labels.order} ${r.orderNumber}`;
     return html`
-      <article class="ticket">
+      <article class="ticket" lang=${language}>
         ${
           this.simulated
             ? html`<p class="simulation-notice" data-test="simulation-notice">
-                PRUEBA — SIN COBRO REAL
+                ${labels.practice.replace(" - ", " — ")}
               </p>`
             : nothing
         }
@@ -464,17 +459,17 @@ export class TillTicketView extends LitElement {
               ? html`<p class="header-subtitle">${this.receipt.headerSubtitle}</p>`
               : nothing
           }
-          <p class="nif">${LABEL.nif}: ${issuer.nif}</p>
+          <p class="nif">${labels.nif}: ${issuer.nif}</p>
         </header>
 
         <div class="meta">
           <div class="meta-row">
-            <span class="meta-label">${LABEL.invoice}</span>
+            <span class="meta-label">${labels.invoice}</span>
             <span class="invoice-number">${r.invoiceNumber}</span>
           </div>
           <div class="meta-row">
-            <span class="meta-label">${LABEL.date}</span>
-            <span>${issueDate(r.issuedAt, locale)}</span>
+            <span class="meta-label">${labels.date}</span>
+            <span>${issueDate(r.issuedAt, format)}</span>
           </div>
           <div class="meta-row order-group">
             <span>${orderGroup}</span>
@@ -487,17 +482,17 @@ export class TillTicketView extends LitElement {
             // the goods list can never diverge from the invoice.
             (group) => html`
               <li class="line">
-                <span class="line-name">${lineName(group.dish.descriptions, locale)}</span>
+                <span class="line-name">${lineName(group.dish.descriptions, language)}</span>
                 <span class="line-qty"
                   >${group.dish.quantity}${
                     group.dish.unitName == null
                       ? ""
-                      : ` ${resolveSnapshotText(group.dish.unitName, locale, locale)}`
+                      : ` ${resolveSnapshotText(group.dish.unitName, language, language)}`
                   }</span
                 >
-                ${lineGross(group.dish, locale)}
+                ${lineGross(group.dish, format)}
               </li>
-              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
+              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: language }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
               ${group.options.map(
                 // The per-dish count is recovered from the filed COMBINED child quantity.
                 (option) => {
@@ -506,22 +501,22 @@ export class TillTicketView extends LitElement {
                   return html`
                     <li class="line option">
                       <span class="line-name"
-                        >${lineName(option.descriptions, locale)}${badge}</span
+                        >${lineName(option.descriptions, language)}${badge}</span
                       >
-                      ${lineGross(option, locale)}
+                      ${lineGross(option, format)}
                     </li>
                   `;
                 },
               )}
               ${[group.dish, ...group.options].flatMap((line) =>
                 (line.adjustments ?? []).map((adjustment) =>
-                  adjustmentRow(adjustment, locale, "adjustment"),
+                  adjustmentRow(adjustment, format, labels, "adjustment"),
                 ),
               )}
             `,
           )}
           ${(r.billAdjustments ?? []).map((adjustment) =>
-            adjustmentRow(adjustment, locale, "bill-adjustment"),
+            adjustmentRow(adjustment, format, labels, "bill-adjustment"),
           )}
         </ul>
 
@@ -529,23 +524,23 @@ export class TillTicketView extends LitElement {
           ${r.vatBreakdown.map(
             (v) => html`
               <div class="vat-row">
-                <span class="vat-label">${LABEL.base} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.base, locale)}</span>
+                <span class="vat-label">${labels.base} ${v.rate}%</span>
+                <span class="vat-amount">${formatMoney(v.base, format)}</span>
               </div>
               <div class="vat-row">
-                <span class="vat-label">${LABEL.vat} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.tax, locale)}</span>
+                <span class="vat-label">${labels.vat} ${v.rate}%</span>
+                <span class="vat-amount">${formatMoney(v.tax, format)}</span>
               </div>
             `,
           )}
         </div>
 
         <div class="total-row">
-          <span>${LABEL.total}</span>
-          <span>${formatMoney(r.total, locale)}</span>
+          <span>${labels.total}</span>
+          <span>${formatMoney(r.total, format)}</span>
         </div>
 
-        <div class="tender">${renderTender(r, locale)}</div>
+        <div class="tender">${renderTender(r, format, labels)}</div>
 
         ${
           svg

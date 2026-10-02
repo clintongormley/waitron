@@ -7,4 +7,9 @@ describe("formatMoney", () => {
     expect(s).toBe("12,50 €");
     expect(s.charCodeAt(5)).toBe(0x20);
   });
+
+  it("prints a negative amount with the ASCII hyphen-minus in every receipt language", () => {
+    for (const locale of ["es-ES", "ca-ES", "gl-ES", "eu-ES"])
+      expect(formatMoney("-2.00", locale), locale).toBe("-2,00 €");
+  });
 });

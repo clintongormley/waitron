@@ -52,6 +52,7 @@ const PRINTER_58: EscSetting = {
  * cash tendered — so every printed amount can be asserted by its digit portion.
  */
 const FILED_SALE: TillSaleResult = {
+  locale: "es-ES",
   orderLabel: "Mesa 6",
   orderNumber: 41,
   invoiceNumber: "A/1",
@@ -459,6 +460,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // line. Σ(line.gross) === total and Σ(base + tax) === total: the receipt groups the filed lines
     // and never recomputes a fiscal figure.
     const withOptions: TillSaleResult = {
+      locale: "es-ES",
       orderLabel: null,
       orderNumber: 1,
       invoiceNumber: "A/7",
@@ -514,6 +516,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // A child line's filed `quantity` is the COMBINED count (dish quantity × per-option quantity).
     // The "×N" badge appears only when the PER-DISH count is above 1.
     const withPerOptionQty: TillSaleResult = {
+      locale: "es-ES",
       orderLabel: null,
       orderNumber: 1,
       invoiceNumber: "A/9",
@@ -1507,5 +1510,218 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(lines.filter((line) => line.endsWith("1234,56 €"))).toHaveLength(1);
     expect(lines.filter((line) => line.endsWith("-123,45 €"))).toHaveLength(1);
     expect(lines.filter((line) => line.endsWith("-1000,00 €"))).toHaveLength(1);
+  });
+});
+
+describe("the receipt's fixed words follow its language", () => {
+  // Every fixed word the receipt can print: a comp and a 12.5% discount, a bill paid in parts by
+  // cash with change and by card with a tip, a reference and a refund, on a duplicate practice
+  // ticket. A single card tender with a tip adds the charged line.
+  const LABELLED_SALE: TillSaleResult = {
+    ...FILED_SALE,
+    lines: [
+      {
+        descriptions: { "es-ES": "Hamburguesa" },
+        quantity: "1",
+        gross: "0.00",
+        listGross: "12.00",
+        parentLineNo: null,
+        adjustments: [{ kind: "comp", amount: "12.00" }],
+      },
+      {
+        descriptions: { "es-ES": "Tabla de quesos" },
+        quantity: "1",
+        gross: "10.50",
+        listGross: "12.00",
+        parentLineNo: null,
+        adjustments: [{ kind: "discount", percentBp: 1250, amount: "1.50" }],
+      },
+    ],
+    payments: [
+      {
+        method: "cash",
+        amount: "10.00",
+        tip: "0.00",
+        tendered: "50.00",
+        change: "40.00",
+        refunds: [],
+      },
+      {
+        method: "card",
+        amount: "10.90",
+        tip: "1.00",
+        reference: "OP-9",
+        refunds: [{ amount: "2.00", tip: "0.00" }],
+      },
+    ],
+  };
+  const CARD_WITH_TIP: TillSaleResult = {
+    ...FILED_SALE,
+    tender: { method: "card", charged: "21.90", tip: "1.00", reference: "4471" },
+  };
+
+  function printed(result: TillSaleResult, invoiceLocale: string): string[] {
+    return printedLines(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale,
+        printer: PRINTER_80,
+        simulated: true,
+        duplicate: true,
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+  }
+
+  it.each([
+    {
+      locale: "ca-ES",
+      words: {
+        practice: "PROVA - SENSE COBRAMENT REAL",
+        duplicate: "DUPLICAT",
+        nif: "NIF: B12345678",
+        order: "Mesa 6 · Comanda 41",
+        invoice: "Factura A/1",
+        date: "Data ",
+        comp: "Invitació -12,00 €",
+        discount: "Descompte 12,5% -1,50 €",
+        base: "Base 21% 10,00 €",
+        vat: "IVA 21% 2,10 €",
+        total: "TOTAL 20,90 €",
+        cash: "Efectiu 50,00 €",
+        change: "Canvi 40,00 €",
+        card: "Targeta 12,90 €",
+        reference: "Ref. OP-9",
+        tip: "Propina 1,00 €",
+        refund: "Devolució -2,00 €",
+        charged: "Cobrat 21,90 €",
+      },
+      single: {
+        cash: "Efectiu 30,00 €",
+        change: "Canvi 9,10 €",
+        card: "Targeta",
+        reference: "Ref. 4471",
+      },
+    },
+    {
+      locale: "gl-ES",
+      words: {
+        practice: "PROBA - SEN COBRO REAL",
+        duplicate: "DUPLICADO",
+        nif: "NIF: B12345678",
+        order: "Mesa 6 · Pedido 41",
+        invoice: "Factura A/1",
+        date: "Data ",
+        comp: "Invitación -12,00 €",
+        discount: "Desconto 12,5% -1,50 €",
+        base: "Base 21% 10,00 €",
+        vat: "IVE 21% 2,10 €",
+        total: "TOTAL 20,90 €",
+        cash: "Efectivo 50,00 €",
+        change: "Cambio 40,00 €",
+        card: "Tarxeta 12,90 €",
+        reference: "Ref. OP-9",
+        tip: "Propina 1,00 €",
+        refund: "Devolución -2,00 €",
+        charged: "Cobrado 21,90 €",
+      },
+      single: {
+        cash: "Efectivo 30,00 €",
+        change: "Cambio 9,10 €",
+        card: "Tarxeta",
+        reference: "Ref. 4471",
+      },
+    },
+    {
+      locale: "eu-ES",
+      words: {
+        practice: "PROBA - BENETAKO KOBRANTZARIK GABE",
+        duplicate: "BIKOIZKARIA",
+        nif: "IFZ: B12345678",
+        order: "Mesa 6 · Eskaera 41",
+        invoice: "Faktura A/1",
+        date: "Data ",
+        comp: "Gonbidapena -12,00 €",
+        discount: "Deskontua 12,5% -1,50 €",
+        base: "Oinarria 21% 10,00 €",
+        vat: "BEZ 21% 2,10 €",
+        total: "GUZTIRA 20,90 €",
+        cash: "Eskudirua 50,00 €",
+        change: "Itzulia 40,00 €",
+        card: "Txartela 12,90 €",
+        reference: "Erref. OP-9",
+        tip: "Eskupekoa 1,00 €",
+        refund: "Itzulketa -2,00 €",
+        charged: "Kobratua 21,90 €",
+      },
+      single: {
+        cash: "Eskudirua 30,00 €",
+        change: "Itzulia 9,10 €",
+        card: "Txartela",
+        reference: "Erref. 4471",
+      },
+    },
+  ])("prints every fixed word in $locale", ({ locale, words, single }) => {
+    const sale = printed(LABELLED_SALE, locale);
+    const card = printed(CARD_WITH_TIP, locale);
+    const cash = printed(FILED_SALE, locale);
+    const { charged, date, practice, ...rows } = words;
+    for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
+    expect(sale.filter((line) => line === practice)).toHaveLength(2);
+    expect(sale.some((line) => line.startsWith(date))).toBe(true);
+    expect(card).toContain(charged);
+    expect(card).toContain(single.card);
+    expect(card).toContain(single.reference);
+    expect(cash).toContain(single.cash);
+    expect(cash).toContain(single.change);
+    for (const [name, ticket] of Object.entries({ sale, card, cash })) {
+      for (const spanish of ["Fecha", "Tarjeta", "PRUEBA"]) {
+        expect(ticket.join("\n"), `${name}: ${spanish}`).not.toContain(spanish);
+      }
+    }
+  });
+
+  it("prints the Veri*Factu legend and the QR caption identically in every language", () => {
+    const fromQrText = (invoiceLocale: string) =>
+      fromQr(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale,
+          printer: PRINTER_80,
+        }),
+      );
+    const spanish = printedCommands(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    const caption =
+      spanish[spanish.findIndex((c) => c.name === "GS v 0" && c.text === undefined) - 1];
+    expect(caption?.text?.trim()).toBe("QR tributario:");
+    for (const locale of ["ca-ES", "gl-ES", "eu-ES"]) {
+      const commands = printedCommands(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale: locale,
+          printer: PRINTER_80,
+        }),
+      );
+      const qrAt = commands.findIndex((c) => c.name === "GS v 0" && c.text === undefined);
+      expect(Buffer.from(commands[qrAt - 1]!.bytes), locale).toEqual(Buffer.from(caption!.bytes));
+      const [qr, legend] = fromQrText(locale);
+      const [spanishQr, spanishLegend] = fromQrText("es-ES");
+      expect(Buffer.from(qr!.bytes), locale).toEqual(Buffer.from(spanishQr!.bytes));
+      expect(Buffer.from(legend!.bytes), locale).toEqual(Buffer.from(spanishLegend!.bytes));
+      expect(legend?.text?.trim()).toBe("VERI*FACTU");
+    }
   });
 });

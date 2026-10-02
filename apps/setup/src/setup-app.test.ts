@@ -1212,7 +1212,7 @@ describe("setup-app", () => {
 
   it.each([
     ["provisioning.territory_country_mismatch", "country must match the fiscal territory"],
-    ["provisioning.invalid_locales", "Choose 1 or 2 invoice locales"],
+    ["provisioning.invalid_locales", "Choose the receipt language."],
     ["provisioning.duplicate_series_code", "must differ"],
     ["fiscal.regime_not_implemented", "isn't supported yet"],
   ])(

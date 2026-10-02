@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./receipts-screen.js";
 import type { ReceiptsScreen } from "./receipts-screen.js";
@@ -34,6 +35,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
     putLocationSettings: vi.fn().mockResolvedValue(undefined),
+    getReceiptLanguage: vi.fn().mockResolvedValue({
+      language: "es-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: null,
+    }),
+    putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
+    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     previewReceipt: vi.fn(async (config: ReceiptConfig) => preview(config)),
     ...overrides,
   } as unknown as DashboardApi;
@@ -137,6 +145,66 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-combobox[name=paperWidth]")).not.toBeNull(),
     );
+    await expectNoA11yViolations(host);
+  });
+
+  const choices = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+  const reason = { en: "Receipts here print in Catalan.", es: "Aquí se imprimen en catalán." };
+
+  it.each([
+    ["chosen, with a refusal under it", { language: "gl-ES", choices, fixed: null }],
+    ["fixed", { language: "ca-ES", choices, fixed: { locale: "ca-ES", reason } }],
+    [
+      "fixed, with another stored and the button to correct it",
+      { language: "es-ES", choices, fixed: { locale: "ca-ES", reason } },
+    ],
+  ])("renders accessibly with the receipt language %s", async (_, receiptLanguage) => {
+    const api = stubApi({
+      getReceiptLanguage: vi.fn().mockResolvedValue(receiptLanguage),
+      putReceiptLanguage: vi.fn().mockRejectedValue({
+        code: "receipt.language_orders_open",
+        params: { field: "receiptLanguage", count: 1 },
+      }),
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "ca", "gl"] }),
+    });
+    const { el, host } = await mountWidget<ReceiptsScreen>(
+      "dashboard-receipts-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    const language = el.shadowRoot!.querySelector("wt-combobox[name=receiptLanguage]");
+    if (receiptLanguage.fixed === null) {
+      await chooseOption(language!, "ca-ES");
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+      await flush(el);
+      await vi.waitFor(() =>
+        expect(language!.shadowRoot!.querySelector("[data-error]")).not.toBeNull(),
+      );
+    } else {
+      expect(language).toBeNull();
+    }
+    expect(el.shadowRoot!.querySelector("[data-test=receipt-language-warning]")).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with the warning that receipts print in a language the content lacks", async () => {
+    const api = stubApi({
+      getReceiptLanguage: vi.fn().mockResolvedValue({ language: "gl-ES", choices, fixed: null }),
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "ca"] }),
+    });
+    const { el, host } = await mountWidget<ReceiptsScreen>(
+      "dashboard-receipts-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=receipt-language-warning]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

@@ -98,6 +98,7 @@ import {
   readContentLanguages,
   readSavedContentLanguages,
   readInvoiceLocales,
+  readReceiptLanguage,
   parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
@@ -1284,30 +1285,33 @@ export async function fireLines(
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
-  await stampSent(tx, orderId, sentLineIds, firedAt);
-  if (values.length === 0) return unrouted;
-  let inserted: {
-    workingOrderLineId: string;
-    stationId: string;
-    firedAt: string | null;
-    madeHere: boolean;
-  }[];
-  try {
-    // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
-    // already-fired items and reprint them.
-    inserted = await tx.insert(ticketItems).values(values).returning({
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      firedAt: ticketItems.firedAt,
-      madeHere: ticketItems.madeHere,
-    });
-  } catch (error) {
-    // A re-fire collides on the per-line unique, e.g. a double `sendToPrep`.
-    if (isUniqueViolation(error)) {
+  // Checked before this function's first write, or `stampSent` can stamp a line whose descriptions
+  // carry a former receipt language, which `working_order_lines_check_locales_update` refuses.
+  if (values.length > 0) {
+    const [alreadyFired] = await tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          values.map((value) => value.workingOrderLineId),
+        ),
+      )
+      .limit(1);
+    if (alreadyFired !== undefined) {
       throw new AppError("ticket.already_fired", { workingOrderId: orderId });
     }
-    throw error;
   }
+  await stampSent(tx, orderId, sentLineIds, firedAt);
+  if (values.length === 0) return unrouted;
+  // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
+  // already-fired items and reprint them.
+  const inserted = await tx.insert(ticketItems).values(values).returning({
+    workingOrderLineId: ticketItems.workingOrderLineId,
+    stationId: ticketItems.stationId,
+    firedAt: ticketItems.firedAt,
+    madeHere: ticketItems.madeHere,
+  });
 
   for (const row of inserted) {
     if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
@@ -4675,6 +4679,8 @@ export async function priceForIssuance(
 /** An invoice {@link issueUnpaidInvoice} filed, and the order fields its receipt prints. */
 export interface IssuedInvoice {
   saleId: SaleId;
+  /** The language the invoice was filed in. */
+  locale: string;
   fiscal: Awaited<ReturnType<typeof recordSale>>["fiscal"];
   orderLabel: string | null;
   orderNumber: number;
@@ -4695,13 +4701,13 @@ export async function issueUnpaidInvoice(
   saleTillId: TillId,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
+  const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, backend, {
     tillId: saleTillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(id),
-    locale: cfg.locale,
-    invoiceLocales: cfg.invoiceLocales,
+    ...language,
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
@@ -4714,7 +4720,7 @@ export async function issueUnpaidInvoice(
     .update(workingOrders)
     .set({ label: order.orderLabel })
     .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
-  return { saleId, fiscal, ...order };
+  return { saleId, fiscal, locale: language.locale, ...order };
 }
 
 /** The receipt of an invoice {@link issueUnpaidInvoice} filed. */
@@ -4727,6 +4733,7 @@ async function unpaidReceipt(
   const { priced } = invoice;
   return {
     ...(await readReceiptIssuer(backend, tx, issued.saleId)),
+    locale: issued.locale,
     orderLabel: issued.orderLabel,
     orderNumber: issued.orderNumber,
     invoiceNumber: await readInvoiceNumber(tx, issued.saleId),
@@ -4807,8 +4814,8 @@ export async function cancelPlacedOrder(
 }
 
 /**
- * Send a settled order's lines to the kitchen through `fireLines`. The unique item-per-line
- * constraint refuses the send if any line already has a ticket item.
+ * Send a settled order's lines to the kitchen through `fireLines`, which refuses the send if any
+ * line already has a ticket item.
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,

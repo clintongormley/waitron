@@ -29,6 +29,14 @@ export interface AdministrativeArea {
   /** A new venue's default content language in this area. */
   readonly defaultContentLocale?: string;
   readonly foreignLanguageNotice?: ForeignLanguageNotice;
+  /** The one receipt language the law gives a venue here. `reason` is keyed by the dashboard's
+   * language code and says why. */
+  readonly fixedReceiptLocale?: FixedReceiptLocale;
+}
+
+export interface FixedReceiptLocale {
+  readonly locale: string;
+  readonly reason: Readonly<Record<string, string>>;
 }
 
 export interface FiscalModules {
@@ -43,11 +51,37 @@ export interface FiscalJurisdiction {
   readonly modules?: FiscalModules;
 }
 
+/** The fixed words a printed receipt carries, one set per receipt language. */
+export const RECEIPT_LABEL_KEYS = [
+  "nif",
+  "invoice",
+  "date",
+  "order",
+  "base",
+  "vat",
+  "total",
+  "cash",
+  "change",
+  "card",
+  "tip",
+  "charged",
+  "refund",
+  "comp",
+  "discount",
+  "reference",
+  "duplicate",
+  "practice",
+] as const;
+
+export type ReceiptLabels = Readonly<Record<(typeof RECEIPT_LABEL_KEYS)[number], string>>;
+
 export interface CountryPack {
   readonly countryCode: string;
   readonly defaultLocale: string;
   readonly defaultTimeZone: string;
   readonly invoiceLocales: readonly string[];
+  /** Keyed by invoice locale. */
+  readonly receiptLabels?: Readonly<Record<string, ReceiptLabels>>;
   readonly officialLocales?: readonly string[];
   readonly moduleIds: readonly string[];
   /** Whether this pack has enough validated fiscal behavior to create a venue in the setup wizard. */
@@ -185,5 +219,24 @@ export function contentLanguageRules(
     ...(area?.foreignLanguageNotice === undefined
       ? {}
       : { foreignLanguageNotice: area.foreignLanguageNotice }),
+  };
+}
+
+export interface ReceiptLanguageRules {
+  readonly choices: readonly string[];
+  readonly defaultLocale: string;
+  readonly fixed?: FixedReceiptLocale;
+}
+
+export function receiptLanguageRules(
+  pack: CountryPack,
+  areaValue: string | null | undefined,
+): ReceiptLanguageRules {
+  const area = areaValue == null ? undefined : findAdministrativeArea(pack, areaValue);
+  const fixed = area?.fixedReceiptLocale;
+  return {
+    choices: pack.invoiceLocales,
+    defaultLocale: fixed?.locale ?? pack.defaultLocale,
+    ...(fixed === undefined ? {} : { fixed }),
   };
 }

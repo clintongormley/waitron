@@ -1,9 +1,17 @@
 // No `import "./errors.js"`: this file throws no AppError code.
 import { eq } from "drizzle-orm";
-import { locations, readTenant, withTransaction, type Database } from "@waitron/db";
+import {
+  locations,
+  readTenant,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import type { ReceiptLanguageRules } from "@waitron/country";
 import {
   resolveInstalledContentLanguageRules,
   resolveInstalledCountryLocale,
+  resolveInstalledReceiptLanguageRules,
 } from "@waitron/country-packs";
 import {
   FALLBACK_LOCALE,
@@ -12,26 +20,31 @@ import {
   type SupportedLocale,
 } from "@waitron/shared";
 
-async function readVenueGeography(
+async function geographyIn(
+  tx: Transaction,
+  locationId: string,
+): Promise<{ country: string | null; area: string | null }> {
+  const t = await readTenant(tx);
+  const [loc] = await tx
+    .select({ province: locations.province })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  return { country: t?.country ?? null, area: loc?.province ?? null };
+}
+
+function readVenueGeography(
   db: Database,
   locationId: string,
 ): Promise<{ country: string | null; area: string | null }> {
-  return withTransaction(db, async (tx) => {
-    const t = await readTenant(tx);
-    const [loc] = await tx
-      .select({ province: locations.province })
-      .from(locations)
-      .where(eq(locations.id, locationId));
-    return { country: t?.country ?? null, area: loc?.province ?? null };
-  });
+  return withTransaction(db, (tx) => geographyIn(tx, locationId));
 }
 
 /**
  * The venue's default UI locale, from geography and an optional override, through the shared
  * `override → area → country → English` chain.
  *
- * This is a DISPLAY value, DELIBERATELY separate from the fiscal `cfg.locale` / `cfg.invoiceLocales`
- * that feed receipt and invoice rendering. The `override` is the RAW `WAITRON_TILL_LOCALE`
+ * This is a DISPLAY value, DELIBERATELY separate from the location's receipt language, which a sale
+ * is filed and printed in. The `override` is the RAW `WAITRON_TILL_LOCALE`
  * (`cfg.localeOverride`), NOT the defaulted `cfg.locale`, whose `es-ES` default would mask the
  * geography derivation.
  */
@@ -54,4 +67,13 @@ export async function readVenueContentLanguageRules(
   params: { locationId: string },
 ): Promise<ContentLanguageRules> {
   return resolveInstalledContentLanguageRules(await readVenueGeography(db, params.locationId));
+}
+
+/** The receipt languages the venue's country pack offers, and the one its region fixes, if any,
+ * read in the caller's transaction. */
+export async function readVenueReceiptLanguageRules(
+  tx: Transaction,
+  params: { locationId: string },
+): Promise<ReceiptLanguageRules> {
+  return resolveInstalledReceiptLanguageRules(await geographyIn(tx, params.locationId));
 }

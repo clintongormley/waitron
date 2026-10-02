@@ -47,6 +47,7 @@ import {
   listMenuOffers,
   listProducts,
   readInvoiceLocales,
+  readReceiptLanguage,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
   updateMenuDetails,
@@ -1344,6 +1345,25 @@ describe("catalogue operations", () => {
       );
       expect(await readInvoiceLocales(tx, locationId)).toEqual(["es-ES", "en-GB"]);
       expect(await readInvoiceLocales(tx, crypto.randomUUID())).toEqual([]);
+    });
+  });
+
+  it("readReceiptLanguage returns a location's first saved language and the whole list", async () => {
+    await asTenant(async (tx) => {
+      await tx.execute(
+        sql`update locations set invoice_locales = '["gl-ES","es-ES"]' where id = ${locationId}`,
+      );
+      expect(await readReceiptLanguage(tx, locationId)).toEqual({
+        locale: "gl-ES",
+        invoiceLocales: ["gl-ES", "es-ES"],
+      });
+    });
+  });
+
+  it("readReceiptLanguage throws for no such location", async () => {
+    await asTenant(async (tx) => {
+      const missing = crypto.randomUUID();
+      await expect(readReceiptLanguage(tx, missing)).rejects.toThrow(`no location ${missing}`);
     });
   });
 

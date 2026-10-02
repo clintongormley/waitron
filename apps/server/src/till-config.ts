@@ -20,7 +20,12 @@ export interface TillConfig {
   nodeId: NodeId;
   seriesId: SeriesId;
   locationId: LocationId;
+  /**
+   * `WAITRON_TILL_LOCALE`, defaulted. Not the receipt's language: a sale is filed and printed in its
+   * location's saved language (`readReceiptLanguage`).
+   */
   locale: string;
+  /** No product code reads it; a sale files its location's saved list. */
   invoiceLocales: string[];
   /**
    * The RAW `WAITRON_TILL_LOCALE` (`undefined` when unset or empty), for the venue's default UI locale.

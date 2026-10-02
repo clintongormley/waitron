@@ -8,7 +8,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { assertQuantityPrecision } from "@waitron/catalogue";
+import { assertQuantityPrecision, readReceiptLanguage } from "@waitron/catalogue";
 import {
   AppError,
   addDecimal,
@@ -688,13 +688,13 @@ async function issueWhenFullyPaid(
 
   // Deferred, then settled with the bill's tenders in this transaction: the filed record is the one
   // an immediate sale files, and settlement is what writes each tender's bill payment.
+  const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(workingOrderId),
-    locale: cfg.locale,
-    invoiceLocales: cfg.invoiceLocales,
+    ...language,
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
@@ -745,6 +745,7 @@ async function issueWhenFullyPaid(
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
     ...receiptOrder,
+    locale: language.locale,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,

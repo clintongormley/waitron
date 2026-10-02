@@ -15,7 +15,7 @@ export const venueEn = {
   "venue.label.tax_id": "Tax ID",
   "venue.label.legal_name": "Legal name",
   "venue.label.location_name": "Location name",
-  "venue.label.invoice_locales": "Invoice languages (pick one or two)",
+  "venue.label.invoice_locales": "Receipt language",
   "venue.label.operation_description": "Invoice operation description",
   "venue.label.address_line1": "Address line 1",
   "venue.label.address_line2": "Address line 2 (optional)",
@@ -33,9 +33,9 @@ export const venueEn = {
   "venue.combobox_no_results": "No results",
   "venue.fiscal_territory": "Fiscal territory: {territory}",
   "venue.time_zone": "Time zone: {zone}",
-  "venue.invoice_locales_help_label": "Help with invoice languages",
+  "venue.invoice_locales_help_label": "Help with the receipt language",
   "venue.invoice_locales_help":
-    "Choose the languages printed on invoices. The country's language is ticked first, and a province with a language of its own adds it second; the operation description is kept separately.",
+    "Choose the one language receipts print in. Where the region's law sets it, it is chosen for you and cannot be changed. The operation description is kept separately.",
 
   // Each `venue.field.*` fills `{field}` in the three sentences after it. Spanish carries the
   // article in the field, so the sentences read correctly whatever the noun's gender.
@@ -64,7 +64,7 @@ export const venueEn = {
     "Use the business's registered legal name, as it appears on its tax documents.",
   "venue.help.name": "Choose the name you use for this location in Waitron.",
   "venue.help.operation_description":
-    "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. Invoice languages do not translate this text. You can change it in the dashboard for future records.",
+    "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. The receipt language does not translate this text. You can change it in the dashboard for future records.",
   "venue.help.address_line1": "Enter the location's street and building number.",
   "venue.help.address_line2": "Add a floor, unit or other address detail if needed.",
   "venue.help.postal_code":
@@ -81,7 +81,7 @@ export const venueEn = {
   "venue.help.rectificative_series_code":
     "This prefix identifies correction invoices, for example FR/1. Use a different prefix from ordinary invoices. Keep FR unless you need another series.",
 
-  "venue.error.invoice_locales": "Choose one or two invoice languages.",
+  "venue.error.invoice_locales": "Choose the receipt language.",
   "venue.error.tax_id": "Enter a valid tax ID for the selected country.",
   "venue.error.postal_code": "Enter a valid postal code that matches the province.",
   "venue.error.territory_unsupported": "Setup is not available for this fiscal territory yet.",
@@ -93,7 +93,6 @@ export const venueEn = {
   "venue.locale.ca_es": "Catalan (Català)",
   "venue.locale.gl_es": "Galician (Galego)",
   "venue.locale.eu_es": "Basque (Euskara)",
-  "venue.locale.en_gb": "English",
 
   "venue.back": "Back",
   "venue.next": "Next",
@@ -111,7 +110,7 @@ export const venueEn = {
   "review.legal_name": "Legal name",
   "review.location": "Location",
   "review.address": "Address",
-  "review.invoice_locales": "Invoice languages",
+  "review.invoice_locales": "Receipt language",
   "review.operation_description": "Invoice operation description",
   "review.day_cutover": "Business day cutover",
   "review.till": "Till",
@@ -199,7 +198,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.label.tax_id": "Número de identificación fiscal",
   "venue.label.legal_name": "Razón social",
   "venue.label.location_name": "Nombre del local",
-  "venue.label.invoice_locales": "Idiomas de factura (elige uno o dos)",
+  "venue.label.invoice_locales": "Idioma del recibo",
   "venue.label.operation_description": "Descripción de la operación en la factura",
   "venue.label.address_line1": "Dirección (línea 1)",
   "venue.label.address_line2": "Dirección (línea 2, opcional)",
@@ -217,9 +216,9 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.combobox_no_results": "Sin resultados",
   "venue.fiscal_territory": "Territorio fiscal: {territory}",
   "venue.time_zone": "Zona horaria: {zone}",
-  "venue.invoice_locales_help_label": "Ayuda sobre los idiomas de factura",
+  "venue.invoice_locales_help_label": "Ayuda sobre el idioma del recibo",
   "venue.invoice_locales_help":
-    "Elige los idiomas que se imprimen en las facturas. El idioma del país se marca primero, y una provincia con idioma propio lo añade en segundo lugar; la descripción de la operación se guarda aparte.",
+    "Elige el idioma en que se imprimen los recibos. Donde la ley de la región lo fija, viene elegido y no se puede cambiar. La descripción de la operación se guarda aparte.",
 
   "venue.field.country": "el país",
   "venue.field.tax_id": "el número de identificación fiscal",
@@ -247,7 +246,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Usa la razón social registrada del negocio, tal como aparece en sus documentos fiscales.",
   "venue.help.name": "Elige el nombre que usas para este local en Waitron.",
   "venue.help.operation_description":
-    "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto para las ventas habituales en tienda. Los idiomas de factura no traducen este texto. Puedes cambiarlo en el panel de control para los registros futuros.",
+    "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto para las ventas habituales en tienda. El idioma del recibo no traduce este texto. Puedes cambiarlo en el panel de control para los registros futuros.",
   "venue.help.address_line1": "Introduce la calle y el número del local.",
   "venue.help.address_line2":
     "Añade el piso, la puerta u otro detalle de la dirección si hace falta.",
@@ -265,7 +264,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.help.rectificative_series_code":
     "Este prefijo identifica las facturas rectificativas, por ejemplo FR/1. Usa un prefijo distinto al de las facturas ordinarias. Deja FR salvo que necesites otra serie.",
 
-  "venue.error.invoice_locales": "Elige uno o dos idiomas de factura.",
+  "venue.error.invoice_locales": "Elige el idioma del recibo.",
   "venue.error.tax_id": "Introduce un número de identificación fiscal válido para el país elegido.",
   "venue.error.postal_code": "Introduce un código postal válido que corresponda a la provincia.",
   "venue.error.territory_unsupported":
@@ -279,7 +278,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.locale.ca_es": "Catalán (Català)",
   "venue.locale.gl_es": "Gallego (Galego)",
   "venue.locale.eu_es": "Vasco (Euskara)",
-  "venue.locale.en_gb": "Inglés (English)",
 
   "venue.back": "Volver",
   "venue.next": "Siguiente",
@@ -297,7 +295,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.legal_name": "Razón social",
   "review.location": "Local",
   "review.address": "Dirección",
-  "review.invoice_locales": "Idiomas de factura",
+  "review.invoice_locales": "Idioma del recibo",
   "review.operation_description": "Descripción de la operación en la factura",
   "review.day_cutover": "Cambio de día comercial",
   "review.till": "Caja",

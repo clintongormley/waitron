@@ -388,6 +388,12 @@ importers:
       '@waitron/catalogue':
         specifier: workspace:*
         version: link:../../packages/catalogue
+      '@waitron/country':
+        specifier: workspace:*
+        version: link:../../packages/country
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../../packages/country-packs
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics

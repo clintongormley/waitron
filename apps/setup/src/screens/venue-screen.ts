@@ -4,12 +4,15 @@ import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
+  receiptLanguageRules,
   resolveFiscalJurisdiction,
   type AdministrativeArea,
   type CountryPack,
   type FiscalJurisdiction,
+  type ReceiptLanguageRules,
 } from "@waitron/country";
 import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/country-packs";
+import { resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -130,23 +133,14 @@ const LOCALE_LABELS: Readonly<Record<string, StringKey>> = {
   "ca-ES": "venue.locale.ca_es",
   "gl-ES": "venue.locale.gl_es",
   "eu-ES": "venue.locale.eu_es",
-  "en-GB": "venue.locale.en_gb",
 };
 
-/**
- * A province with a language of its own gets that language AND the country's, country first. Never
- * more than two, which `#next` and `planVenue` (`packages/provisioning/src/venue-plan.ts`) both
- * refuse.
- */
+/** The one receipt language a venue starts with: its region's fixed one, else the country's. */
 function defaultInvoiceLocales(
   pack: CountryPack | undefined,
   area: AdministrativeArea | undefined,
 ): string[] {
-  if (pack === undefined) return [];
-  const regional = area?.defaultLocale;
-  return regional === undefined || regional === pack.defaultLocale
-    ? [pack.defaultLocale]
-    : [pack.defaultLocale, regional];
+  return pack === undefined ? [] : [receiptLanguageRules(pack, area?.code).defaultLocale];
 }
 
 @customElement("setup-venue-screen")
@@ -181,6 +175,12 @@ export class SetupVenueScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
         padding: 0 var(--wt-space-2);
+      }
+
+      fieldset.locales .reason {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
       }
 
       .locale-option {
@@ -322,9 +322,6 @@ export class SetupVenueScreen extends LitElement {
     const defaults = defaultInvoiceLocales(pack, area);
     this.invoiceLocales = loc.invoiceLocales ?? (defaults.length > 0 ? defaults : ["es-ES"]);
     if (loc.invoiceLocales !== undefined) {
-      // Compared in order on purpose, unlike CLAUDE.md §3's compare-by-value rule: `planVenue`
-      // treats `locales[0]` apart from the rest, so a reordered list is a different choice and must
-      // stop the province from overwriting it.
       this.#invoiceLocalesFollowAreaDefault =
         pack !== undefined && JSON.stringify(loc.invoiceLocales) === JSON.stringify(defaults);
     }
@@ -391,13 +388,20 @@ export class SetupVenueScreen extends LitElement {
     return pack === undefined ? undefined : resolveFiscalJurisdiction(pack, area?.code);
   }
 
+  #receiptRules(pack = this.#pack(), area = this.#area(pack)): ReceiptLanguageRules | undefined {
+    return pack === undefined ? undefined : receiptLanguageRules(pack, area?.code);
+  }
+
+  /** What the venue will print in: the region's fixed language wherever it has one, else the
+   * selection, which is kept so that leaving that region gives the operator's choice back. */
+  #receiptLanguages(rules = this.#receiptRules()): string[] {
+    return rules?.fixed === undefined ? this.invoiceLocales : [rules.fixed.locale];
+  }
+
   #onLocaleToggle(locale: string, event: Event): void {
     event.stopPropagation();
     this.#invoiceLocalesFollowAreaDefault = false;
-    const checked = (event.target as HTMLInputElement).checked;
-    this.invoiceLocales = checked
-      ? [...this.invoiceLocales, locale]
-      : this.invoiceLocales.filter((l) => l !== locale);
+    this.invoiceLocales = (event.target as HTMLInputElement).checked ? [locale] : [];
   }
 
   #shows(key: FieldKey): boolean {
@@ -440,11 +444,9 @@ export class SetupVenueScreen extends LitElement {
     ) {
       invalid.add("province");
     }
-    if (
-      this.invoiceLocales.length < 1 ||
-      this.invoiceLocales.length > 2 ||
-      this.invoiceLocales.some((locale) => !pack?.invoiceLocales.includes(locale))
-    ) {
+    const receipt = this.#receiptRules(pack, area);
+    const languages = this.#receiptLanguages(receipt);
+    if (languages.length !== 1 || !receipt?.choices.includes(languages[0]!)) {
       invalid.add("invoiceLocales");
     }
     if (
@@ -503,7 +505,7 @@ export class SetupVenueScreen extends LitElement {
         location: {
           name: this.values.name,
           fiscalTerritory: selectedJurisdiction.id,
-          invoiceLocales: this.invoiceLocales,
+          invoiceLocales: this.#receiptLanguages(this.#receiptRules(pack, area)),
           operationDescription: this.values.operationDescription,
           addressLine1: this.values.addressLine1,
           addressLine2,
@@ -581,6 +583,11 @@ export class SetupVenueScreen extends LitElement {
     const timeZone = format("venue.time_zone", {
       zone: area?.timeZone ?? pack?.defaultTimeZone ?? "—",
     });
+    const receipt = this.#receiptRules(pack, area);
+    const receiptLanguages = this.#receiptLanguages(receipt);
+    const fixed = receipt?.fixed;
+    const fixedReason =
+      fixed === undefined ? "" : resolveContentText(fixed.reason, currentLocale(), "en");
     const errors = this.#errors;
     const fieldErrors = [...errors.keys()].filter((key) => this.#shows(key));
     const invalid = this.attempted && [...this.#invalidFields()].some((key) => this.#shows(key));
@@ -636,7 +643,12 @@ export class SetupVenueScreen extends LitElement {
                 tabindex="-1"
                 ?invalid=${errors.has("invoiceLocales")}
                 aria-invalid=${errors.has("invoiceLocales") ? "true" : "false"}
-                aria-describedby=${errors.has("invoiceLocales") ? "invoice-locales-error" : nothing}
+                aria-describedby=${
+                  [
+                    ...(fixedReason === "" ? [] : ["invoice-locales-fixed"]),
+                    ...(errors.has("invoiceLocales") ? ["invoice-locales-error"] : []),
+                  ].join(" ") || nothing
+                }
               >
                 <legend>
                   ${t("venue.label.invoice_locales")} *
@@ -644,15 +656,27 @@ export class SetupVenueScreen extends LitElement {
                     >${t("venue.invoice_locales_help")}</wt-help-tooltip
                   >
                 </legend>
-                ${(pack?.invoiceLocales ?? []).map(
+                ${
+                  fixedReason === ""
+                    ? nothing
+                    : html`<p
+                        class="reason"
+                        id="invoice-locales-fixed"
+                        data-test="invoice-locales-fixed"
+                      >
+                        ${fixedReason}
+                      </p>`
+                }
+                ${(receipt?.choices ?? []).map(
                   (locale) =>
                     html`<label class="locale-option">
                       <input
-                        type="checkbox"
+                        type="radio"
                         name="invoiceLocales"
                         value=${locale}
                         data-test=${`locale-${locale}`}
-                        .checked=${this.invoiceLocales.includes(locale)}
+                        .checked=${receiptLanguages.includes(locale)}
+                        ?disabled=${fixed !== undefined}
                         @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
                       />
                       ${LOCALE_LABELS[locale] === undefined ? locale : t(LOCALE_LABELS[locale])}

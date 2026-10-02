@@ -47,7 +47,7 @@ export async function resolveReceiptPrinter(
   return printer;
 }
 
-/** Use the filed issuer where available, current optional trim, and the invoice locale. */
+/** Use the filed issuer where available, current optional trim, and the language the sale was filed in. */
 async function buildReceiptBytes(
   tx: Transaction,
   cfg: TillConfig,
@@ -68,7 +68,7 @@ async function buildReceiptBytes(
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
-    invoiceLocale: cfg.locale,
+    invoiceLocale: ticket.locale,
     printer,
     simulated: cfg.practiceMode,
     duplicate,

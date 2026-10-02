@@ -4,6 +4,7 @@ import {
   contentLanguageRules,
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
+  receiptLanguageRules,
   resolveCountryLocale,
   resolveFiscalJurisdiction,
 } from "./country.js";
@@ -159,5 +160,37 @@ describe("contentLanguageRules", () => {
 
   it("names no official locale for a pack that declares none", () => {
     expect(contentLanguageRules(pack, "01")).toStrictEqual({ required: [], official: [] });
+  });
+});
+
+describe("receiptLanguageRules", () => {
+  const reason = { en: "North prints in its own language.", es: "El norte imprime en su idioma." };
+  const ruled: CountryPack = {
+    ...pack,
+    administrativeAreas: [
+      {
+        code: "01",
+        name: "North",
+        postalPrefixes: ["10"],
+        fixedReceiptLocale: { locale: "north-XY", reason },
+      },
+      { code: "02", name: "South", postalPrefixes: ["20"] },
+    ],
+  };
+
+  it("fixes a ruled area to its locale, with the reason, and makes that the default", () => {
+    expect(receiptLanguageRules(ruled, "north")).toStrictEqual({
+      choices: ["xy-XY", "en-GB"],
+      defaultLocale: "north-XY",
+      fixed: { locale: "north-XY", reason },
+    });
+  });
+
+  it("offers the pack's invoice locales with the pack default and nothing fixed elsewhere", () => {
+    for (const area of ["South", "missing", null, undefined])
+      expect(receiptLanguageRules(ruled, area)).toStrictEqual({
+        choices: ["xy-XY", "en-GB"],
+        defaultLocale: "xy-XY",
+      });
   });
 });

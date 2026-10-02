@@ -19,7 +19,7 @@ export const shellEn = {
   "shell.already_provisioned": "This server is already set up.",
 
   "shell.venue_error.territory_country_mismatch": "The country must match the fiscal territory.",
-  "shell.venue_error.invalid_locales": "Choose 1 or 2 invoice locales.",
+  "shell.venue_error.invalid_locales": "Choose the receipt language.",
   "shell.venue_error.duplicate_series_code":
     "The series code and rectificative series code must differ.",
   "shell.venue_error.regime_not_implemented": "That fiscal territory isn't supported yet.",
@@ -141,7 +141,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
 
   "shell.venue_error.territory_country_mismatch":
     "El país debe coincidir con el territorio fiscal.",
-  "shell.venue_error.invalid_locales": "Elige 1 o 2 idiomas de factura.",
+  "shell.venue_error.invalid_locales": "Elige el idioma del recibo.",
   "shell.venue_error.duplicate_series_code":
     "El código de serie y el de la serie rectificativa deben ser distintos.",
   "shell.venue_error.regime_not_implemented": "Ese territorio fiscal aún no está disponible.",

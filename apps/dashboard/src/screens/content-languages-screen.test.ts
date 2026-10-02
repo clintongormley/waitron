@@ -22,6 +22,11 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
     getContentLanguageRules: vi.fn().mockResolvedValue(NO_RULES),
     updateContentLanguages: vi.fn().mockResolvedValue(undefined),
     getContentTranslationGaps: vi.fn().mockResolvedValue([]),
+    getReceiptLanguage: vi.fn().mockResolvedValue({
+      language: "ca-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: null,
+    }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -1018,5 +1023,88 @@ describe("missing translations", () => {
     expect(disclosure(el, "ca")!.heading).toBe("Catalan · Required");
     expect(disclosure(el, "ca")!.summary).toBe("2 missing");
     expect(disclosure(el, "es")!.textContent!.trim()).toBe("Every name has a Spanish translation.");
+  });
+});
+
+describe("receipt language warning", () => {
+  const SPANISH_CATALAN: ContentLanguages = { defaultLanguage: "es", languages: ["es", "ca"] };
+  const receiptIn = (language: string) =>
+    vi
+      .fn()
+      .mockResolvedValue({ language, choices: OFFICIAL.map((code) => `${code}-ES`), fixed: null });
+  const receiptWarning = (el: ContentLanguagesScreen) =>
+    q(el, "[data-test=receipt-language-warning]");
+
+  it("says receipts print in a language the content lacks, naming it and the default", async () => {
+    setLocale("en-GB");
+    const el = await mount(
+      api({
+        getContentLanguages: vi.fn().mockResolvedValue(SPANISH_CATALAN),
+        getReceiptLanguage: receiptIn("gl-ES"),
+      }),
+    );
+    expect(receiptWarning(el)!.getAttribute("role")).toBe("note");
+    expect(receiptWarning(el)!.textContent!.trim()).toBe(
+      "Receipts print in Galician, which is not one of your content languages, so product names on them print in Spanish, the default language.",
+    );
+  });
+
+  it("goes once Galician is added", async () => {
+    const el = await mount(
+      api({
+        getContentLanguages: vi.fn().mockResolvedValue(SPANISH_CATALAN),
+        getReceiptLanguage: receiptIn("gl-ES"),
+      }),
+    );
+    expect(receiptWarning(el)).not.toBeNull();
+    q(el, "[data-test=add-language]")!.click();
+    await flush(el);
+    const add = dialog(el);
+    await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "gl");
+    await add.updateComplete;
+    add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
+    await vi.waitFor(() => expect(receiptWarning(el)).toBeNull());
+  });
+
+  it("follows a receipt language changed elsewhere", async () => {
+    const liveData = new LiveData();
+    const client = Object.assign(
+      api({ getContentLanguages: vi.fn().mockResolvedValue(SPANISH_CATALAN) }),
+      { liveData },
+    );
+    const el = await mount(client);
+    expect(receiptWarning(el)).toBeNull();
+    vi.mocked(client.getReceiptLanguage).mockResolvedValue({
+      language: "eu-ES",
+      choices: [],
+      fixed: null,
+    });
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() => expect(receiptWarning(el)).not.toBeNull());
+  });
+
+  it("shows no warning, and still shows the languages, when the receipt language cannot be read", async () => {
+    const el = await mount(
+      api({
+        getContentLanguages: vi.fn().mockResolvedValue(SPANISH_CATALAN),
+        getReceiptLanguage: vi.fn().mockRejectedValue(new Error("offline")),
+      }),
+    );
+    expect(receiptWarning(el)).toBeNull();
+    expect(q(el, "[role=alert]")).toBeNull();
+    expect(q(el, "[data-test=languages]")).not.toBeNull();
+  });
+
+  it("writes the warning in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(
+      api({
+        getContentLanguages: vi.fn().mockResolvedValue(SPANISH_CATALAN),
+        getReceiptLanguage: receiptIn("eu-ES"),
+      }),
+    );
+    expect(receiptWarning(el)!.textContent!.trim()).toBe(
+      "Los recibos se imprimen en euskera, que no es uno de tus idiomas del contenido, así que los nombres de los productos salen en español, el idioma predeterminado.",
+    );
   });
 });
