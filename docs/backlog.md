@@ -2728,8 +2728,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       PIN sent with that request is neither checked nor counted. The drawer, refund and
       unpaid-departure routes check the permission first. Moving it earlier changes who gets which
       refusal; not decided.
-    - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — built on
-      `feat/service-cancel-credit-till`, left for the owner to land.** On the table screen, a party
+    - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — open as
+      PR #1055 (`feat/service-cancel-credit-till`), left for the owner to land.** On the table screen, a party
       bill that is placed, has its sale filed and holds no payment shows "Cancel and credit" to
       anyone signed in (`#billRow`, `apps/till/src/screens/till-table-order-screen.ts`). Its dialog
       (`apps/till/src/widgets/cancel-credit-dialog.ts`) names the invoice and the amount, takes a
