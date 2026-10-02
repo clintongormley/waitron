@@ -1733,6 +1733,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  // Like the refund's list: any operator may see who could approve their cancel and credit.
+  app.get("/api/cancel-credit-authorizers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      return c.json(
+        await withTransaction(deps.db, (tx) => listActivePersonsWithPermission(tx, "sale.rectify")),
+      );
+    }),
+  );
+
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
       const { personId, sessionId, tillId } = await requireSession(deps, c);

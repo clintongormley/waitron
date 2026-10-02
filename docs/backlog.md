@@ -2542,10 +2542,11 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **No till screen offers the cancel yet.** A "Cancel and credit" action on an invoiced, unpaid
       bill, shown only to someone allowed to correct a sale (since B33, also to anyone else, asking for
       the PIN of someone who holds it), is queued as lane B's B32 (owner,
-      2026-10-02 ~12:05). Unlike the drawer, refund and unpaid-departure overrides
-      (`GET /api/drawer/authorizers`, `GET /api/refund-authorizers`,
-      `GET /api/unpaid-departure-authorizers`), the cancel has no route listing who may approve it,
-      so B32 needs one, listing the holders of `sale.rectify`.
+      2026-10-02 ~12:05). The PIN prompt's list of who may approve it is
+      `GET /api/cancel-credit-authorizers` (B33, owner 2026-10-02 ~16:50): the active holders of
+      `sale.rectify`, by id and name, for any signed-in operator, like the drawer's, refund's and
+      unpaid departure's lists. Every role holding `sale.rectify` today also holds `sale.refund`,
+      `sale.void` and `cash.drawer`, so its cases cannot tell which of those it reads.
     - **A credit note's lines do not record which invoice line each one reverses** — no column
       holds that link, so a credit note cannot be traced back line by line. Storing it on every
       corrective line `recordCorrection` writes is queued as lane C's C132 (owner, 2026-10-02).
