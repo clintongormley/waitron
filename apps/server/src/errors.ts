@@ -1185,5 +1185,13 @@ declare module "@waitron/shared" {
       orderNumber: number;
       orderLabel: string | null;
     };
+    /** Raised by the release alert for held work left at a closed station. */
+    "route.released_at_closed_station": {
+      station: string;
+      dishes: string;
+      workingOrderId: string;
+      orderNumber: number;
+      orderLabel: string | null;
+    };
   }
 }

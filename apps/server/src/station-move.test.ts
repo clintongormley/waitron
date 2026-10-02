@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { markIncidentHandled } from "@waitron/core";
 import {
   deviceMadeHereStations,
   deviceProfiles,
   devices,
   kitchenStations,
+  incidents,
   locations,
   orderGroups,
   printJobs,
@@ -113,6 +115,17 @@ async function jobs(printerId: string) {
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId)),
   );
+}
+
+async function handleOpenReleaseAlerts(at: Date) {
+  await inTx(venue, async (tx) => {
+    const alerts = await tx
+      .select()
+      .from(incidents)
+      .where(eq(incidents.code, "route.released_at_closed_station"));
+    for (const alert of alerts.filter((row) => row.acknowledgedAt === null))
+      await markIncidentHandled(tx, { id: alert.id, personId: OPERATOR, handledAt: at });
+  });
 }
 
 async function heldDish(name: string) {
@@ -308,6 +321,10 @@ describe("release", () => {
     expect(paper).not.toMatch(/^\s*(?:\*+\s*)?FIRE\b/m);
     const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
     expect(notices.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
+    const alerts = await inTx(venue, (tx) =>
+      tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+    );
+    expect(alerts.filter((alert) => alert.params.workingOrderId === tabId)).toEqual([]);
   });
 
   it("fires a paid bill's held dish at its closed station when no replacement exists", async () => {
@@ -334,6 +351,17 @@ describe("release", () => {
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
       );
       expect(item).toMatchObject({ stationId: bar, firedAt: at.toISOString() });
+      const alerts = await inTx(venue, (tx) =>
+        tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+      );
+      expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([
+        expect.objectContaining({
+          acknowledgedAt: null,
+          severity: "error",
+          detectedAt: at.toISOString(),
+          params: expect.objectContaining({ station: "Bar", dishes: "Burger" }),
+        }),
+      ]);
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
@@ -454,6 +482,7 @@ describe("release", () => {
       }),
     );
     const at = new Date("2026-10-02T18:45:00.000Z");
+    await handleOpenReleaseAlerts(at);
     await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", at));
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
@@ -470,6 +499,10 @@ describe("release", () => {
       firedAt: at.toISOString(),
       stationChosenAt: expect.any(String),
     });
+    const alerts = await inTx(venue, (tx) =>
+      tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+    );
+    expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([]);
   });
 
   it("fires a course at the replacement station without correcting an unprinted HOLD", async () => {
@@ -566,6 +599,7 @@ describe("release", () => {
 
   it("routes a hand-chosen record again when that station is switched off", async () => {
     const group = await heldBurger();
+    await handleOpenReleaseAlerts(new Date());
     await inTx(venue, (tx) =>
       moveDishesToStation(tx, venue.cfg, group.tabId, {
         submissionId: randomUUID(),
@@ -582,6 +616,10 @@ describe("release", () => {
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
       );
       expect(item!.stationId).toBe(bar);
+      const alerts = await inTx(venue, (tx) =>
+        tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+      );
+      expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([]);
     } finally {
       await inTx(venue, (tx) =>
         tx.update(kitchenStations).set({ active: true }).where(eq(kitchenStations.id, grill)),
@@ -640,6 +678,7 @@ describe("release", () => {
   it("leaves held work at a closed station when the rules now say no preparation", async () => {
     const group = await heldDish("Vino");
     const at = new Date("2026-10-02T18:45:00.000Z");
+    await handleOpenReleaseAlerts(at);
     const routeId = await inTx(venue, async (tx) => {
       const id = await createException(tx, venue.cfg, {
         zoneId: null,
@@ -663,6 +702,15 @@ describe("release", () => {
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
       );
       expect(item).toMatchObject({ stationId: bar, firedAt: at.toISOString() });
+      const alerts = await inTx(venue, (tx) =>
+        tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+      );
+      expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([
+        expect.objectContaining({
+          acknowledgedAt: null,
+          params: expect.objectContaining({ station: "Bar", dishes: "Vino" }),
+        }),
+      ]);
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
@@ -898,6 +946,17 @@ describe("release", () => {
         .where(eq(ticketItems.id, chips!.id)),
     );
     expect(after).toEqual({ stationId: split.stations.fryer, firedAt: at.toISOString() });
+    const alerts = await splitTx((tx) =>
+      tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+    );
+    expect(alerts.filter((alert) => alert.params.workingOrderId === split.party.tabId)).toEqual([
+      expect.objectContaining({
+        acknowledgedAt: null,
+        severity: "error",
+        detectedAt: at.toISOString(),
+        params: expect.objectContaining({ station: "Fryer", dishes: "Chips" }),
+      }),
+    ]);
   });
 
   it.each([

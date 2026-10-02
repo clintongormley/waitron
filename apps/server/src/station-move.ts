@@ -3,6 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { ticketItems, tills, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
 import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kitchen-print.js";
 import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -28,6 +29,7 @@ export async function rerouteHeldAtRelease(
     .select({
       id: ticketItems.id,
       lineId: ticketItems.workingOrderLineId,
+      lineNo: workingOrderLines.lineNo,
       stationId: ticketItems.stationId,
       stationChosenAt: ticketItems.stationChosenAt,
       parentLineId: workingOrderLines.parentLineId,
@@ -62,8 +64,25 @@ export async function rerouteHeldAtRelease(
   });
   const dishes = unchosen.filter((row) => row.parentLineId === null && row.productId !== null);
   const stranded = unchosen.filter((row) => row.parentLineId !== null);
+  const alertStranded = async () => {
+    if (stranded.length === 0) return;
+    const byStation = new Map<
+      string,
+      { stationId: string; stationName: string; lineIds: string[] }
+    >();
+    for (const row of [...stranded].sort((a, b) => a.lineNo - b.lineNo)) {
+      const station = byStation.get(row.stationId) ?? {
+        stationId: row.stationId,
+        stationName: states.get(row.stationId)?.name ?? row.stationId,
+        lineIds: [],
+      };
+      station.lineIds.push(row.lineId);
+      byStation.set(row.stationId, station);
+    }
+    await raiseReleasedAtClosedStation(tx, cfg, orderId, routing.at, [...byStation.values()]);
+  };
   if (dishes.length === 0) {
-    void stranded;
+    await alertStranded();
     return new Map();
   }
   const zoneId = (await VENUE_SERVICE.findOrderContext(tx, cfg, orderId))?.zoneId ?? null;
@@ -116,7 +135,7 @@ export async function rerouteHeldAtRelease(
       rerouted.set(row.lineId, { stationId: row.stationId, stationName: old.name });
     }
   }
-  void stranded;
+  await alertStranded();
   return rerouted;
 }
 
