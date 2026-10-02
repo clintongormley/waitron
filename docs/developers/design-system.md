@@ -1115,9 +1115,10 @@ Three rules make the fold safe rather than merely tidy.
 
 **Every collapsed section carries a summary of what is inside it**, passed as `summary`, as named
 values in `summaryFields`, or as rows in `summaryRows`, so nothing a person has filled in becomes
-invisible. Build it from the values themselves, each after its field's name in bold, skipping the
-empty ones, joined with a middot: the Kitchen section reads "**Kitchen name:** Café c/leche ·
-**Course:** Drinks". The product editor's Descriptors section has one row per field, its languages
+invisible. Build it from the values themselves, skipping the empty ones, joined with a middot. The
+product editor's Kitchen and Pricing sections give each value after its field's name in bold
+(`summaryFields`); its Nutritional info section still lists bare values (A211). The Kitchen section
+reads "**Kitchen name:** Café c/leche · **Course:** Drinks". The product editor's Descriptors section has one row per field, its languages
 side by side and only the field name bold — "**Name:** EN: Beef tenderloin · ES: Solomillo de
 ternera", cut after one line, then "**Description:** EN: … · ES: …", cut after two — so it stays two
 rows however many languages the venue has. An empty summary means an empty section, which is a

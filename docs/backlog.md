@@ -1190,8 +1190,8 @@ Kitchen line now use it, and the Descriptors line uses `summaryRows`, built for 
 
 **The product editor's folded sections follow the same pattern, with real values (owner,
 2026-10-02):** _"regarding products, i think we should include the field values not just the fact
-that they're filled in, and we should show a thumbnail of the image too"_. Today
-`product-editor.ts` writes the Kitchen section as "SOLOMILLO · Mains" and the Descriptors section as
+that they're filled in, and we should show a thumbnail of the image too"_. Before A200,
+`product-editor.ts` wrote the Kitchen section as "SOLOMILLO · Mains" and the Descriptors section as
 "customer name (EN, ES) · description (EN) · image". **Decided (owner, 2026-10-02, from mockups):**
 
 - the Kitchen line gives each value after its bold field name: "**Kitchen name:** SOLOMILLO ·
@@ -1204,9 +1204,9 @@ that they're filled in, and we should show a thumbnail of the image too"_. Today
   of the editor, as the product list (`product-list.ts`) shows it beside each product's name (the
   owner's suggestion). **Clicking it opens the image picker, and the picker moves out of the
   Descriptors section** (owner, 2026-10-02: _"it should open the image picker, in fact the image
-  picker should move out of the descriptions box i think"_). Today `dashboard-image-upload` is
-  drawn inside that section, with its error under it, and `SECTION_FIELDS.descriptors` lists
-  `image`, so an image error forces the section open; both move with the picker, and an image
+  picker should move out of the descriptions box i think"_). Before A200, `dashboard-image-upload` was
+  drawn inside that section, with its error under it, and `SECTION_FIELDS.descriptors` listed
+  `image`, so an image error forced the section open; both move with the picker, and an image
   error then shows beside the photo. The picker is drawn only when the editor has an `api`; the
   photo's slot needs a state for that too. With no photo, the slot shows a placeholder that still
   opens the picker (the list's `thumb-placeholder` look). A variant with no photo of its own shows
