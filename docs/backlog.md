@@ -215,18 +215,13 @@ Track C.
 **Product folders, menus that include menus, and prep station routing: partly built
 (design approved 2026-09-30).** The
 [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
-1, 2, 3a and 3c-1 have landed (above). **Owner decision (2026-10-01):** deleting only empty folders
+1, 2, 3a, 3b and 3c-1 have landed (above). Slice 3b ([#1024](https://github.com/clintongormley/waitron/pull/1024)) adds station opening hours, by-hand open and close, fallbacks, the till's dead-end question before sending or payment, and down-printer and dark-screen alerts; a station with no replacement asks the waiter where to make its dishes or to remove them. It follows the [approved plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md) and needs no venue reset. **Owner decision (2026-10-01):** deleting only empty folders
 stays immediate, including any routing rules attached to them; a confirmation is shown when the
 selected folders contain products or subfolders. Each dev venue needs `wa-wt reset demo
 <worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
 older build before using the new published document. What is left:
 
-- **3b**, opening hours, by-hand open and close, fallbacks (a real replacement; a station with
-  none is a dead end, and the till asks the waiter where to make such a dish, or to remove it,
-  before sending or taking payment), and down-printer and dark-screen alerts
-  ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), approved by the owner
-  on 2026-10-01, built 2026-10-02 and awaiting branch review, CI and landing) — lane D's PF4.
 - **3c-2**, extras made at their own station, with the dish's and the extra's tickets naming each
   other ([plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md), starts once 3b has
   landed) — lane D's PF6.
