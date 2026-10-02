@@ -553,7 +553,7 @@ describe("wt-language-chooser", () => {
   });
 
   it("in a right-to-left page, lines its menu up with the trigger's trailing edge, which is the left one", async () => {
-    await page.viewport(390, 844);
+    await page.viewport(844, 844);
     await mount(
       '<div dir="rtl" style="display: flex; justify-content: flex-end; padding-left: 100px"><wt-language-chooser active="en-GB"></wt-language-chooser></div>',
     );
@@ -567,6 +567,8 @@ describe("wt-language-chooser", () => {
     const menu = menuOf(el)!.getBoundingClientRect();
     expect(trigger.left).toBeCloseTo(100, 0);
     expect(menu.width).toBeGreaterThan(trigger.width);
+    // The precondition: lined up with the trigger, the menu stays clear of the right edge's gap.
+    expect(trigger.left + menu.width).toBeLessThanOrEqual(innerWidth - 8);
     expect(Math.abs(menu.left - trigger.left)).toBeLessThanOrEqual(1);
   });
 
