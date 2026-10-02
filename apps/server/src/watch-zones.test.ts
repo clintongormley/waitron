@@ -5,14 +5,17 @@ import { diningTables } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { moveGuests } from "./table-actions.js";
+import { joinTables, moveGuests } from "./table-actions.js";
 import { createZone } from "./tables.js";
 import { createOpenOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   commandFor,
   counterOrder,
+  billRow,
   inTx,
+  order,
+  pay,
   placeByHand,
   seat,
   setupPartyVenue,
@@ -81,23 +84,41 @@ describe("orderWatchZones", () => {
     );
   });
 
-  it("uses the surviving party's table after a merge", async () => {
-    const outside = await v.table("Watch merged outside", terrace);
-    const inside = await v.table("Watch surviving inside");
-    const merged = await seat(v, outside);
-    const survivor = await seat(v, inside);
-    const from = await commandFor(v, merged.partyId);
-    const into = await commandFor(v, survivor.partyId);
-    await inTx(v, async (tx) =>
-      moveGuests(tx, v.cfg, merged.partyId, inside, {
-        ...from,
+  it("uses the surviving party's current table for a joined party's settled bill", async () => {
+    const oldTable = await v.table("Watch joined old", terrace);
+    const survivorTable = await v.table("Watch joined survivor", terrace);
+    const indoorTable = await v.table("Watch joined indoor");
+    const merged = await seat(v, oldTable);
+    const survivor = await seat(v, survivorTable);
+    await order(v, merged.tabId, "Burger");
+    await pay(v, merged.tabId, "12.00");
+
+    const sent = await commandFor(v, survivor.partyId);
+    const other = await commandFor(v, merged.partyId);
+    await inTx(v, (tx) =>
+      joinTables(tx, v.cfg, survivor.partyId, oldTable, {
+        ...sent,
         bills: "separate",
-        otherPartyId: survivor.partyId,
-        expectedOtherPartyRevision: into.expectedPartyRevision,
+        otherPartyId: merged.partyId,
+        expectedOtherPartyRevision: other.expectedPartyRevision,
       }),
     );
+    const moved = await commandFor(v, survivor.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, survivor.partyId, indoorTable, {
+        ...moved,
+        bills: "separate",
+        otherPartyId: null,
+      }),
+    );
+
+    const actualPartyId = (await billRow(v, merged.tabId)).partyId;
+    expect(actualPartyId).toBe(merged.partyId);
+    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, v.cfg, [merged.tabId]))).toEqual(
+      new Map([[merged.tabId, terrace]]),
+    );
     expect(
-      await inTx(v, (tx) => orderWatchZones(tx, v.cfg, [partyBill(merged.tabId, merged.partyId)])),
+      await inTx(v, (tx) => orderWatchZones(tx, v.cfg, [partyBill(merged.tabId, actualPartyId!)])),
     ).toEqual(new Map([[merged.tabId, v.tables.zoneId]]));
   });
 
