@@ -3887,6 +3887,7 @@ interface EditableLine {
   makeAtStationId: string | null;
   sentAt: string | null;
   groupId: string | null;
+  groupState: string | null;
   creditedTo: string | null;
   /** A comp or discount has set its price (`list_unit_price_gross` is set). */
   adjusted: boolean;
@@ -4131,6 +4132,7 @@ async function readEditableOrder(
     makeAtStationId: row.makeAtStationId,
     sentAt: row.sentAt,
     groupId: row.groupId,
+    groupState: row.groupState,
     creditedTo: row.creditedTo,
     adjusted: row.listUnitPriceGross !== null,
     ticket:
@@ -4243,18 +4245,23 @@ async function applyLineEdits(
   },
   operatorId: string | undefined,
 ): Promise<{ changed: boolean }> {
+  const routing = routingOnce(tx, cfg, new Date());
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
   let editSentLines: boolean | undefined;
   /** Refuses what the kitchen state forbids; answers whether the kitchen holds fired work. */
   const kitchenHas = async (line: EditableParent): Promise<boolean> => {
-    if (line.sentAt !== null && line.ticket !== null) {
+    const records = [line, ...line.children].flatMap((part) =>
+      part.ticket === null ? [] : [part.ticket],
+    );
+    if (line.sentAt !== null && records.length > 0) {
       editSentLines ??= await VENUE_SERVICE.readEditSentLines(tx);
       if (!editSentLines) throw new AppError("ticket.already_fired", { workingOrderId: orderId });
     }
-    if (line.ticket !== null && isStarted(line.ticket.state)) {
-      throw new AppError("ticket.already_started", { ticketItemId: line.ticket.id });
+    const started = records.find((record) => isStarted(record.state));
+    if (started !== undefined) {
+      throw new AppError("ticket.already_started", { ticketItemId: started.id });
     }
-    return line.ticket !== null && line.ticket.firedAt !== null;
+    return records.some((record) => record.firedAt !== null);
   };
   const menuItemOf = (line: EditableParent): string => {
     if (line.menuItemId === undefined) {
@@ -4488,14 +4495,15 @@ async function applyLineEdits(
   await refusePaidLines(tx, orderId, plan.removed.flatMap(paidLineParts), paid);
   const voided: CorrectionItem[] = [];
   for (const parent of plan.removed) {
-    if (await kitchenHas(parent)) {
-      voided.push({
-        workingOrderLineId: parent.id,
-        stationId: parent.ticket!.stationId,
-        quantity: parent.ticket!.firedQuantity,
-        wasStarted: false,
-      });
-    }
+    await kitchenHas(parent);
+    for (const part of [parent, ...parent.children])
+      if (part.ticket !== null && part.ticket.firedAt !== null)
+        voided.push({
+          workingOrderLineId: part.id,
+          stationId: part.ticket.stationId,
+          quantity: part.ticket.firedQuantity,
+          wasStarted: false,
+        });
   }
 
   // Priced before anything is written, so a refused line leaves the order as it was.
@@ -4546,14 +4554,23 @@ async function applyLineEdits(
 
   // Before any line changes: a notice and a slip copy the line as it stands.
   const held = await planHeldCorrections(tx, orderId, changes, plan.removed);
+  const correctionFor = (part: EditableLine, quantity: number): CorrectionItem => ({
+    workingOrderLineId: part.id,
+    stationId: part.ticket!.stationId,
+    quantity,
+    wasStarted: false,
+  });
   const recalled = changes
     .filter(({ action }) => action === "change")
-    .map(({ parent }) => ({
-      workingOrderLineId: parent.id,
-      stationId: parent.ticket!.stationId,
-      quantity: parent.ticket!.firedQuantity,
-      wasStarted: false,
-    }));
+    .flatMap(({ parent, kept }) =>
+      [parent, ...kept.map(({ child }) => child)]
+        .filter((part) => part.ticket?.firedAt != null)
+        .map((part) => correctionFor(part, part.ticket!.firedQuantity)),
+    );
+  const removedExtras = changes
+    .flatMap(({ removedChildren }) => removedChildren)
+    .filter((child) => child.ticket?.firedAt != null)
+    .map((child) => correctionFor(child, child.ticket!.firedQuantity));
   const dropped = changes
     .filter(({ action }) => action === "drop")
     .map(({ parent, quantity, kept }) => ({
@@ -4568,12 +4585,18 @@ async function applyLineEdits(
     orderId,
     [
       ...voided,
-      ...dropped.map(({ parent, removed }) => ({
-        workingOrderLineId: parent.id,
-        stationId: parent.ticket!.stationId,
-        quantity: removed,
-        wasStarted: false,
-      })),
+      ...removedExtras,
+      ...dropped.flatMap(({ parent, kept, removed }) => [
+        ...(parent.ticket === null ? [] : [correctionFor(parent, removed)]),
+        ...kept
+          .filter(({ child }) => child.ticket?.firedAt != null)
+          .map(({ child, perDish }) =>
+            correctionFor(
+              child,
+              decimalToThousandths(extraQuantityFor(perDish, thousandthsToDecimal(removed))),
+            ),
+          ),
+      ]),
     ],
     "VOID",
   );
@@ -4586,8 +4609,8 @@ async function applyLineEdits(
         id: parent.id,
         quantity: decimalToThousandths(parent.quantity),
         unitPriceGross: decimalToCents(parent.unitPriceGross),
-        ticketItemId: parent.ticket!.id,
-        firedQuantity: parent.ticket!.firedQuantity,
+        ticketItemId: parent.ticket?.id ?? null,
+        firedQuantity: parent.ticket?.firedQuantity ?? 0,
       },
       removed,
       kept,
@@ -4644,12 +4667,17 @@ async function applyLineEdits(
       }
     }
     if (change.action === "change") {
-      keepMadeHere.set(parent.id, {
-        madeHere: parent.ticket!.madeHere,
-        stationId: parent.ticket!.stationId,
-      });
-      await tx.delete(ticketItems).where(eq(ticketItems.id, parent.ticket!.id));
-      keepStations.set(parent.id, parent.ticket!.stationId);
+      if (parent.ticket !== null) {
+        keepMadeHere.set(parent.id, {
+          madeHere: parent.ticket.madeHere,
+          stationId: parent.ticket.stationId,
+        });
+        await tx.delete(ticketItems).where(eq(ticketItems.id, parent.ticket.id));
+        keepStations.set(parent.id, parent.ticket.stationId);
+      }
+      for (const { child } of kept)
+        if (child.ticket !== null)
+          await tx.delete(ticketItems).where(eq(ticketItems.id, child.ticket.id));
       fireNow.push({
         id: parent.id,
         productId: parent.productId,
@@ -4666,6 +4694,13 @@ async function applyLineEdits(
         .set({ quantity: decimalToThousandths(quantity), note })
         .where(eq(ticketItems.id, parent.ticket.id));
     }
+    if (change.action === "free")
+      for (const { child, perDish } of kept)
+        if (child.ticket !== null)
+          await tx
+            .update(ticketItems)
+            .set({ quantity: decimalToThousandths(extraQuantityFor(perDish, quantity)) })
+            .where(eq(ticketItems.id, child.ticket.id));
   }
 
   // Units added apart from an adjusted line join its group, so it and they are released together.
@@ -4723,10 +4758,72 @@ async function applyLineEdits(
     await tx.insert(workingOrderLines).values(inserted);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
   }
+  const addedToExisting = changes.filter(
+    (change) =>
+      change.action === "free" &&
+      change.addedAt !== null &&
+      (change.parent.ticket !== null ||
+        change.parent.sentAt !== null ||
+        change.parent.children.some((child) => child.ticket !== null)),
+  );
+  const insertedExtras = await insertSplitExtras(
+    tx,
+    cfg,
+    orderId,
+    context?.zoneId ?? null,
+    addedToExisting.map(({ parent }) => ({
+      dishLineId: parent.id,
+      stationId: parent.ticket?.stationId ?? null,
+      courseId: parent.ticket?.courseId ?? parent.courseId,
+      firedAt:
+        parent.ticket !== null
+          ? parent.ticket.firedAt
+          : parent.groupState === "held" ||
+              parent.children.some(
+                (child) => child.ticket !== null && child.ticket.firedAt === null,
+              )
+            ? null
+            : routing.at.toISOString(),
+    })),
+    routing,
+  );
+  await enqueueKitchenTickets(
+    tx,
+    cfg,
+    orderId,
+    insertedExtras.filter((item) => item.firedAt !== null),
+  );
+  const printedAdded = await printedHeldGroups(
+    tx,
+    addedToExisting.flatMap(({ parent }) => (parent.groupId === null ? [] : [parent.groupId])),
+  );
+  const givenExtras: HeldChange[] = insertedExtras.flatMap((item) => {
+    const parent = addedToExisting.find(({ parent }) =>
+      inserted.some((row) => row.id === item.workingOrderLineId && row.parentLineId === parent.id),
+    )?.parent;
+    const group =
+      parent?.groupId === null || parent === undefined
+        ? undefined
+        : printedAdded.get(parent.groupId);
+    return item.firedAt === null && group !== undefined
+      ? [
+          {
+            workingOrderId: orderId,
+            workingOrderLineId: item.workingOrderLineId,
+            stationId: item.stationId,
+            quantity: item.quantity,
+            group,
+          },
+        ]
+      : [];
+  });
   // After the extras a line gains are written: a slip reads the line as it now stands.
-  await correctHoldTickets(tx, cfg, held.given, { kind: "HOLD CHANGED", direction: "added" });
+  await correctHoldTickets(tx, cfg, [...held.given, ...givenExtras], {
+    kind: "HOLD CHANGED",
+    direction: "added",
+  });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
-  await fireLines(tx, cfg, orderId, fireNow, { keepStations, keepMadeHere });
+  await fireLines(tx, cfg, orderId, fireNow, { keepStations, keepMadeHere, routing });
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
@@ -4768,25 +4865,40 @@ async function applyLineEdits(
 async function planHeldCorrections(
   tx: Transaction,
   orderId: string,
-  changes: readonly { parent: EditableParent; quantity: Decimal; modified: boolean }[],
+  changes: readonly {
+    parent: EditableParent;
+    quantity: Decimal;
+    modified: boolean;
+    kept: { child: EditableLine; perDish: number }[];
+    removedChildren: EditableLine[];
+  }[],
   removed: readonly EditableParent[],
 ): Promise<{ cancelled: HeldChange[]; taken: HeldChange[]; given: HeldChange[] }> {
   const held = (parent: EditableParent) =>
-    parent.ticket !== null && parent.ticket.firedAt === null && parent.groupId !== null;
+    parent.groupId !== null &&
+    [parent, ...parent.children].some(
+      (part) => part.ticket !== null && part.ticket.firedAt === null,
+    );
   const heldChanges = changes.filter(({ parent }) => held(parent));
   const heldRemoved = removed.filter(held);
   const printed = await printedHeldGroups(tx, [
     ...heldChanges.map(({ parent }) => parent.groupId!),
     ...heldRemoved.map((parent) => parent.groupId!),
   ]);
-  const change = (parent: EditableParent, quantity: number): HeldChange[] => {
+  const change = (parent: EditableParent, part: EditableLine, quantity: number): HeldChange[] => {
     const group = printed.get(parent.groupId!);
-    if (group === undefined || quantity <= 0) return [];
+    if (
+      group === undefined ||
+      quantity <= 0 ||
+      part.ticket === null ||
+      part.ticket.firedAt !== null
+    )
+      return [];
     return [
       {
         workingOrderId: orderId,
-        workingOrderLineId: parent.id,
-        stationId: parent.ticket!.stationId,
+        workingOrderLineId: part.id,
+        stationId: part.ticket.stationId,
         quantity,
         group,
       },
@@ -4795,13 +4907,46 @@ async function planHeldCorrections(
   const before = (edit: { parent: EditableParent }) => decimalToThousandths(edit.parent.quantity);
   const after = (edit: { quantity: Decimal }) => decimalToThousandths(edit.quantity);
   return {
-    cancelled: heldRemoved.flatMap((parent) => change(parent, parent.ticket!.firedQuantity)),
-    taken: heldChanges.flatMap((edit) =>
-      change(edit.parent, edit.modified ? before(edit) : before(edit) - after(edit)),
-    ),
-    given: heldChanges.flatMap((edit) =>
-      change(edit.parent, edit.modified ? after(edit) : after(edit) - before(edit)),
-    ),
+    cancelled: [
+      ...heldRemoved.flatMap((parent) =>
+        [parent, ...parent.children].flatMap((part) =>
+          change(parent, part, part.ticket?.firedQuantity ?? 0),
+        ),
+      ),
+      ...heldChanges.flatMap(({ parent, removedChildren }) =>
+        removedChildren.flatMap((part) => change(parent, part, part.ticket?.firedQuantity ?? 0)),
+      ),
+    ],
+    taken: heldChanges.flatMap((edit) => [
+      ...change(
+        edit.parent,
+        edit.parent,
+        edit.modified ? before(edit) : before(edit) - after(edit),
+      ),
+      ...edit.kept.flatMap(({ child, perDish }) =>
+        change(
+          edit.parent,
+          child,
+          edit.modified
+            ? (child.ticket?.firedQuantity ?? 0)
+            : (child.ticket?.firedQuantity ?? 0) -
+                decimalToThousandths(extraQuantityFor(perDish, edit.quantity)),
+        ),
+      ),
+    ]),
+    given: heldChanges.flatMap((edit) => [
+      ...change(edit.parent, edit.parent, edit.modified ? after(edit) : after(edit) - before(edit)),
+      ...edit.kept.flatMap(({ child, perDish }) =>
+        change(
+          edit.parent,
+          child,
+          edit.modified
+            ? decimalToThousandths(extraQuantityFor(perDish, edit.quantity))
+            : decimalToThousandths(extraQuantityFor(perDish, edit.quantity)) -
+                (child.ticket?.firedQuantity ?? 0),
+        ),
+      ),
+    ]),
   };
 }
 
