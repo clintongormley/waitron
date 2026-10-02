@@ -36,6 +36,44 @@ named `routing*`, `prep-stations-screen*` or `exception-sentence*` is created by
 branch from a `main` that holds 3a. Where this plan says "3a's X", read X in the code, not in the
 3a plan: the code is what landed.
 
+> _2026-10-01 (slice 3c-1, "made here", landed first — `docs/superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md`):
+> **When you rebase 3b onto a `main` that holds 3c-1, resolve the conflicts like this, and do not
+> push until step 6 passes.**
+> 1. **`fireLines`:** its first statement stays the one clock reading. 3c-1's
+>    `readMadeHereStations(tx, cfg.sendingDeviceId)` call comes AFTER it.
+> 2. **`fireLines`' value builder:** 3c-1's check
+>    (`const kept = options.keepMadeHere?.get(line.id); const made = …`) goes AFTER the line's
+>    station is final — after the make-at station, `keepStations` and the fallback outcome. A
+>    check placed before the fallback would mark a lager whose closed Bar falls back to Downstairs
+>    bar as made here, and nobody would get a ticket for it.
+> 3. **`applyLineEdits`:** `keepStations` and 3c-1's `keepMadeHere` hold the same keys — each
+>    changed line sent again AND each new line carrying units added to a sent dish (a raise, a
+>    change with a raise, and `addedApart`). Keep every entry of both maps; neither replaces the
+>    other. If both branches gave the `{ kind: "line", kitchen: "fire" }` entry a field naming its
+>    dish, keep ONE of them.
+> 4. **Migrations — regenerate, never hand-edit (CLAUDE.md §3).** 3c-1 added one generated CORE
+>    migration (`*_rest_of_order_made_here.sql`); it touched no venue-service set, so only 3b's
+>    core migrations collide. BEFORE starting the rebase, copy 3b's hand-written trigger SQL
+>    (`*_line_make_at_station_trigger.sql`) to `/tmp`. At EACH commit where the rebase stops on
+>    `packages/db/drizzle`, take `main`'s copy of that folder
+>    (`git checkout origin/main -- packages/db/drizzle`), so the commit carries none of 3b's core
+>    migration files — the `.sql` files AND their `meta/*_snapshot.json` files and journal entries
+>    — and continue the rebase. At the tip, with every schema edit in place, regenerate the core set
+>    once, in one commit: `pnpm --filter @waitron/db db:generate --name line_make_at_station` (it
+>    now carries both make-at columns AND `ticket_items_waiting_idx`; READ it: two
+>    `ALTER TABLE … ADD … REFERENCES` and one `CREATE INDEX`, no `__new_` rebuild), then
+>    `pnpm --filter @waitron/db db:generate:custom --name line_make_at_station_trigger` and paste
+>    its body from the `/tmp` copy. Then run
+>    `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts`
+>    and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`.
+> 5. **Run** `pnpm --filter @waitron/server exec vitest run src/made-here.test.ts src/made-here.routes.test.ts`
+>    and every other file holding 3c-1's route cases (`grep -rln madeHere apps/server/src/*.test.ts`).
+> 6. **Add the failing case** to `apps/server/src/made-here.test.ts`: Bar closed by hand with
+>    Downstairs bar as its fallback, a till whose made-here list is `[Bar]`, a lager claimed by
+>    Bar, sent from that till → its record is at Downstairs bar with `madeHere: false`, and
+>    Downstairs bar's printer has a ticket for it. Move 3c-1's check before the fallback outcome
+>    and confirm this case fails; put it back._
+
 ## Decisions for the owner (S1–S18)
 
 The owner settled S1, S3, S7, S11, S12 and S17 on 2026-10-01. Every other decision is a default this plan takes,
@@ -929,6 +967,44 @@ it("says whether today's by-hand change lapses later today or tomorrow", async (
 ---
 
 ### Task 4: Sending reads the clock once, follows fallbacks, and refuses a dead end it was not told how to settle
+
+> _2026-10-01 (slice 3c-1, "made here", landed first — `docs/superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md`):
+> **When you rebase 3b onto a `main` that holds 3c-1, resolve the conflicts like this, and do not
+> push until step 6 passes.**
+> 1. **`fireLines`:** its first statement stays the one clock reading. 3c-1's
+>    `readMadeHereStations(tx, cfg.sendingDeviceId)` call comes AFTER it.
+> 2. **`fireLines`' value builder:** 3c-1's check
+>    (`const kept = options.keepMadeHere?.get(line.id); const made = …`) goes AFTER the line's
+>    station is final — after the make-at station, `keepStations` and the fallback outcome. A
+>    check placed before the fallback would mark a lager whose closed Bar falls back to Downstairs
+>    bar as made here, and nobody would get a ticket for it.
+> 3. **`applyLineEdits`:** `keepStations` and 3c-1's `keepMadeHere` hold the same keys — each
+>    changed line sent again AND each new line carrying units added to a sent dish (a raise, a
+>    change with a raise, and `addedApart`). Keep every entry of both maps; neither replaces the
+>    other. If both branches gave the `{ kind: "line", kitchen: "fire" }` entry a field naming its
+>    dish, keep ONE of them.
+> 4. **Migrations — regenerate, never hand-edit (CLAUDE.md §3).** 3c-1 added one generated CORE
+>    migration (`*_rest_of_order_made_here.sql`); it touched no venue-service set, so only 3b's
+>    core migrations collide. BEFORE starting the rebase, copy 3b's hand-written trigger SQL
+>    (`*_line_make_at_station_trigger.sql`) to `/tmp`. At EACH commit where the rebase stops on
+>    `packages/db/drizzle`, take `main`'s copy of that folder
+>    (`git checkout origin/main -- packages/db/drizzle`), so the commit carries none of 3b's core
+>    migration files — the `.sql` files AND their `meta/*_snapshot.json` files and journal entries
+>    — and continue the rebase. At the tip, with every schema edit in place, regenerate the core set
+>    once, in one commit: `pnpm --filter @waitron/db db:generate --name line_make_at_station` (it
+>    now carries both make-at columns AND `ticket_items_waiting_idx`; READ it: two
+>    `ALTER TABLE … ADD … REFERENCES` and one `CREATE INDEX`, no `__new_` rebuild), then
+>    `pnpm --filter @waitron/db db:generate:custom --name line_make_at_station_trigger` and paste
+>    its body from the `/tmp` copy. Then run
+>    `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts`
+>    and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`.
+> 5. **Run** `pnpm --filter @waitron/server exec vitest run src/made-here.test.ts src/made-here.routes.test.ts`
+>    and every other file holding 3c-1's route cases (`grep -rln madeHere apps/server/src/*.test.ts`).
+> 6. **Add the failing case** to `apps/server/src/made-here.test.ts`: Bar closed by hand with
+>    Downstairs bar as its fallback, a till whose made-here list is `[Bar]`, a lager claimed by
+>    Bar, sent from that till → its record is at Downstairs bar with `madeHere: false`, and
+>    Downstairs bar's printer has a ticket for it. Move 3c-1's check before the fallback outcome
+>    and confirm this case fails; put it back._
 
 **Files:**
 - Modify: `packages/module/src/module.ts`. In `VenueServiceContribution`, `resolveMakers` GAINS
