@@ -294,7 +294,6 @@ describe("till-lock-screen", () => {
   it("puts the language chooser at the top right on its own, above the sign-in content", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
     const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     const own = chooser.getBoundingClientRect();
     const screen = el.getBoundingClientRect();

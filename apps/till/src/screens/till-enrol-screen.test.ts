@@ -472,7 +472,6 @@ it("renders its own language chooser, so a fresh device can be set up in Spanish
 it("puts the language chooser at the top right on its own, above the join form", async () => {
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
   await flush(el);
-  expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
   const own = el.shadowRoot!.querySelector("wt-language-chooser")!.getBoundingClientRect();
   const screen = el.getBoundingClientRect();
   const form = el.shadowRoot!.querySelector(".screen")!.getBoundingClientRect();

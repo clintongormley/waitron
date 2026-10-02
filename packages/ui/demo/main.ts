@@ -21,7 +21,6 @@ import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
-import "../src/components/wt-language-footer.js";
 import "../src/components/wt-language-chooser.js";
 
 registerIcons({
@@ -201,7 +200,6 @@ const panel = (theme: "light" | "dark") => `
       </wt-form-actions>
     </wt-modal>
     <wt-language-chooser active="es-ES"></wt-language-chooser>
-    <wt-language-footer active="es-ES"></wt-language-footer>
   </div>
 `;
 

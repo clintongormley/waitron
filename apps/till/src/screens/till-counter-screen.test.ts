@@ -501,7 +501,6 @@ describe("till-counter-screen", () => {
     expect(chooser).not.toBeNull();
     expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector(".header .session"));
     expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
   });
 
   it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
@@ -515,7 +514,6 @@ describe("till-counter-screen", () => {
   it("draws no language chooser when embedded (the shell owns it)", async () => {
     const { el } = await mount({ embedded: true });
     expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
   });
 
   it("updates the standalone counter's chooser when the till locale changes", async () => {

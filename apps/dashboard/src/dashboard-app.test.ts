@@ -3428,10 +3428,7 @@ it.each([
       await flush(el);
       const screen = login(el)!;
       await (screen as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-      expect(
-        screen.shadowRoot!.querySelector("wt-language-footer, wt-language-chooser"),
-      ).toBeNull();
-      expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
+      expect(screen.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
       const banner = brandBanner(el)!;
       const bannerBox = banner.getBoundingClientRect();
       const trailingPadding = Number.parseFloat(getComputedStyle(banner).paddingRight);
@@ -3498,7 +3495,6 @@ describe.each([
     async (width, shown, part) => {
       const { el, unmount } = await mountInRealPage(api(), width, 844);
       try {
-        expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
         const chooser = el.shadowRoot!.querySelector(
           "[data-test=brand-banner] wt-language-chooser",
         )!;

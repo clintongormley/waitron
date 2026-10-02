@@ -74,7 +74,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 
 | # | Area | App | Status | Corrections logged |
 | --- | --- | --- | --- | --- |
-| 1 | First-run setup & onboarding wizard | setup | 🔧 | B1 connection flow implemented on its feature branch. Walked on the real box 2026-09-13; what that walk found is specced in onboarding flow corrections (#347) and fixed on the `onboarding` branch — the wizard is a centred modal instead of a full-width page, it asks your name before your display name, tooltips stay on screen, the province question comes before the answer derived from it, your account is created in your browser's language, and a first sign-in offers you a passkey. Not merged at the time of writing. Still open: the device trust walkthrough, and the A2 wizard items — chiefly that the wizard's own text is English only, with no language chooser. Since 2026-09-28 (C39) the wizard is a centred page with the Waitron logo, not a modal. Since 2026-09-29 (C40) the first choice screen's certificate note shows only when the connection step was skipped because the server offers no certificate to download (for example, when it presents one an installer supplied). Since 2026-09-29 (C42) the wizard reads in Spanish or English, opens in the browser's language, and has the language chooser at the bottom right of every screen. Since 2026-09-30 (C93) the chooser sits in a footer below each screen (`wt-language-footer`). |
+| 1 | First-run setup & onboarding wizard | setup | 🔧 | B1 connection flow implemented on its feature branch. Walked on the real box 2026-09-13; what that walk found is specced in onboarding flow corrections (#347) and fixed on the `onboarding` branch — the wizard is a centred modal instead of a full-width page, it asks your name before your display name, tooltips stay on screen, the province question comes before the answer derived from it, your account is created in your browser's language, and a first sign-in offers you a passkey. Not merged at the time of writing. Still open: the device trust walkthrough, and the A2 wizard items — chiefly that the wizard's own text is English only, with no language chooser. Since 2026-09-28 (C39) the wizard is a centred page with the Waitron logo, not a modal. Since 2026-09-29 (C40) the first choice screen's certificate note shows only when the connection step was skipped because the server offers no certificate to download (for example, when it presents one an installer supplied). Since 2026-09-29 (C42) the wizard reads in Spanish or English, opens in the browser's language, and has the language chooser at the bottom right of every screen. Since 2026-09-30 (C93) the chooser sits in a footer below each screen (`wt-language-footer`). Since 2026-10-02 (A187) it sits at the trailing end of the card's header, beside the logo, and `wt-language-footer` is gone. |
 | 2 | Till login & shift start (PIN) | till | 🔍 | shown 2026-09-01 — see candidates below, awaiting owner |
 | 3 | Counter / walk-up sales — menu, basket, modifiers, notes, park/retrieve, pay, receipt | till | 🔍 | shown 2026-09-01 — candidates below, awaiting owner |
 | 4 | Tables & tabs — floor view, open / move / join / merge / transfer / split | till | ⬜ | |
@@ -125,6 +125,8 @@ Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
   Since 2026-09-30 (C93) the setup wizard and the dashboard put it in a footer at the foot of the
   page (`wt-language-footer`); the till keeps it at the bottom right until lane B's B18. Since
   2026-10-01 (B18), the till uses the shared footer too, after its sign-in content or shell region.
+  Since 2026-10-02 (A187) every app puts it at the trailing end of its top bar, and a till screen
+  with no bar (sign-in, join, kitchen display) at the top right; its menu opens downwards.
 
 The setup wizard receives the form behavior. It has no translated UI or language chooser, and wizard
 steps are not tabs; this change does not persist setup credentials or unfinished form contents. (Since 2026-09-29, C42, the wizard is translated and has the language chooser.)
@@ -144,7 +146,8 @@ Candidates from the first look (awaiting owner confirmation — not yet fixes):
 - [x] Language label and placement decided 2026-09-06: **English**, bottom right throughout the UI.
       Implementation is covered by the general corrections above. Placement changed 2026-09-30
       (C93, owner): the setup wizard and the dashboard show the chooser in a footer below the
-      page's content instead of floating over it; the till moves later (lane B's B18).
+      page's content instead of floating over it; the till moves later (lane B's B18). Placement
+      changed again 2026-10-02 (A187, owner): the trailing end of the top bar, in every app.
 
 ### 3 — Counter / walk-up sales
 
@@ -163,7 +166,8 @@ Much more polished than the login screen (proper top bar, product grid, basket c
 - [ ] **Menu tab labels** — "Casa Delgado" (the venue name?) vs "Menú del Día"; confirm the à-la-carte
       tab should carry the venue name.
 - [x] The counter uses the same language-name and bottom-right placement decision as login.
-      Implementation is covered by the general corrections above.
+      Implementation is covered by the general corrections above. Since 2026-10-02 (A187) the
+      chooser sits in the till's top bar, before the operator's name.
 
 
 ### B1 — certificate installation and recovery, 2026-09-12

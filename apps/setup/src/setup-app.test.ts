@@ -2360,7 +2360,6 @@ describe("page shell", () => {
       await page.viewport(width, 844);
       try {
         const el = await mountSetupApp();
-        expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
         const header = wizard(el).querySelector<HTMLElement>(":scope > header")!;
         const chooser = header.querySelector<HTMLElement>("wt-language-chooser")!;
         expect(chooser).not.toBeNull();

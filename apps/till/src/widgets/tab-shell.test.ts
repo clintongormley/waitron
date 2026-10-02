@@ -119,7 +119,6 @@ describe("till-tab-shell", () => {
     expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
     expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
     expect(chooser.getAttribute("active")).toBe(currentLocale());
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
   });
 
   it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
@@ -260,7 +259,6 @@ it("keeps the language chooser on a kitchen display, at the top right on its own
     loadLocales: async () => [{ code: "en-GB", label: "English" }],
   });
   expect(el.shadowRoot!.querySelector("header")).toBeNull();
-  expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
   const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
   expect(chooser).not.toBeNull();
   const own = chooser.getBoundingClientRect();
