@@ -85,6 +85,31 @@ describe("unit-form", () => {
     expect((await submitted).detail.value.precision).toBe(1);
   });
 
+  it("shows the decimal-places help on demand from a help button beside the precision, a value always being chosen", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: null,
+    });
+    const box = precisionBox(el);
+    expect(await shownPrecision(el)).toBe("0");
+    const tip = box.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    expect(tip).not.toBeNull();
+    expect(tip.getAttribute("slot")).toBe("help");
+    expect(tip.getAttribute("aria-label")).toBe(t("units.precision_help_label"));
+    await tip.updateComplete;
+    const button = tip.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    expect(button.getBoundingClientRect().width).toBeGreaterThan(0);
+    await userEvent.click(button);
+    const popup = tip.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(tip.textContent?.trim()).toBe(t("units.precision_help"));
+    // Still the trigger's description for a screen reader.
+    expect(box.hint).toBe(t("units.precision_help"));
+  });
+
   it("offers precision as exactly 0, 1, 2 or 3", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,

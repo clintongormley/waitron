@@ -4,6 +4,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { Unit, UnitInput } from "../api/client.js";
@@ -254,7 +255,11 @@ export class UnitForm extends LitElement {
           error=${errors.precision ?? ""}
           ?disabled=${this.busy}
           @wt-change=${this.#changePrecision}
-        ></wt-combobox>
+        >
+          <wt-help-tooltip slot="help" aria-label=${t("units.precision_help_label")}
+            >${t("units.precision_help")}</wt-help-tooltip
+          >
+        </wt-combobox>
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"
