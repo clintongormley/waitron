@@ -3265,8 +3265,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     caption, the QR and the VERI\*FACTU line, then a blank line (on screen, a dividing line), then
     the venue's name and the rest in the order they had. A practice (Demo or Prepare) ticket still
     starts with its practice warning, above the QR, because that warning says the whole ticket is
-    not a real invoice. A sale with no QR is unchanged: its VERI\*FACTU line still comes after the
-    payment lines.
+    not a real invoice. The caption and the VERI\*FACTU line are no longer written into the
+    receipt code: the fiscal backend supplies them (`receiptQrText` on `FiscalBackend`,
+    `packages/fiscal/src/backend.ts`), the Veri\*Factu backend with those two Spanish texts and the
+    no-regime backend with none (owner, 2026-10-02). A receipt with no QR — the no-regime backend
+    never makes one — prints neither the caption nor the VERI\*FACTU line (owner, 2026-10-02); a
+    receipt printed with the QR but no words from the backend would print the QR alone. The
+    printer's sample receipt and the Receipts preview take the words from the venue's backend too,
+    and show no QR when it has none.
   - Left as it is (owner, 2026-10-01: "leave it"): the same section asks for the caption and the
     VERI\*FACTU line in a readable typeface and size, equal to or larger than the rest of the
     invoice's data. On the till's screen (read from its styles, not measured) both take the ticket's

@@ -1,8 +1,8 @@
 import type { ReceiptLabels } from "@waitron/country";
 
 /**
- * The fixed words of a printed receipt, per official language. The Veri*Factu legend and AEAT's
- * «QR tributario:» caption are not here: they print unchanged whatever the receipt's language.
+ * The fixed words of a printed receipt, per official language. The words printed around the
+ * receipt's QR are not here: the fiscal backend supplies them (`FiscalBackend.receiptQrText`).
  */
 export const SPAIN_RECEIPT_LABELS = {
   "es-ES": {
