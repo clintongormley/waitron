@@ -508,7 +508,7 @@ export class ExtraListForm extends LitElement {
     return html`<wt-disclosure
       data-test="names-section"
       heading=${t("extras.customer_names")}
-      summary=${namesLine(locales, this.customerName)}
+      .summaryFields=${namesLine(locales, this.customerName)}
       .hasError=${hasError}
     >
       <div class="names">

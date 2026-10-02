@@ -865,10 +865,13 @@ it("folds the customer-facing names into a closed section that lists them", asyn
   for (const name of ["customer-name-en", "customer-name-es"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summary).toBe("ES Añádele algo");
+  expect(section.summaryFields).toEqual([{ label: "ES", value: "Añádele algo" }]);
 
   await type(el, "customer-name-en", "Make it yours");
-  expect(section.summary).toBe("EN Make it yours · ES Añádele algo");
+  expect(section.summaryFields).toEqual([
+    { label: "EN", value: "Make it yours" },
+    { label: "ES", value: "Añádele algo" },
+  ]);
 });
 
 it.each([
@@ -942,7 +945,25 @@ it("never hints a customer-facing name with the kitchen name, which keeps its ow
 it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
   const { el } = await mount({ value: addons });
 
-  expect(disclosure(el).summary).toBe("EN Make it yours · ES Añádele algo");
+  expect(disclosure(el).summaryFields).toEqual([
+    { label: "EN", value: "Make it yours" },
+    { label: "ES", value: "Añádele algo" },
+  ]);
+});
+
+it("draws each language's code in bold with a colon, before its name, on the closed line", async () => {
+  const { el } = await mount({ value: addons });
+  const section = disclosure(el);
+  await section.updateComplete;
+  const line = section.shadowRoot!.querySelector(".summary")!;
+  expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "EN: Make it yours · ES: Añádele algo",
+  );
+  const codes = [...line.querySelectorAll(".summary-label")];
+  expect(codes.map((code) => code.textContent)).toEqual(["EN:", "ES:"]);
+  const bold = Number(getComputedStyle(codes[0]!).fontWeight);
+  expect(bold).toBeGreaterThan(Number(getComputedStyle(line).fontWeight));
+  expect(Number(getComputedStyle(codes[1]!).fontWeight)).toBe(bold);
 });
 
 it("shows a kitchen-name refusal under the kitchen field without marking the names section", async () => {
