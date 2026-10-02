@@ -1128,6 +1128,78 @@ test("a panel whose trigger overhangs the left edge starts at the viewport edge"
   expect(box.left).toBeCloseTo(0, 0);
 });
 
+/** Opens a compact combobox whose trigger is `width` px wide at `left`, with a short chosen row
+ * and one long row. */
+async function openNarrow(left: number, width: number, longLabel: string, search = "never") {
+  const { el, trigger, popup } = await mountCombobox(
+    `<wt-combobox label="Pricing unit" hide-label search="${search}"></wt-combobox>`,
+  );
+  el.options = [
+    { value: "kg", label: "kg" },
+    { value: "__add__", label: longLabel, action: true },
+  ];
+  el.value = "kg";
+  el.style.cssText = `position: fixed; left: ${left}px; top: 40px; width: ${width}px`;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const [short, long] = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".option-label")];
+  return { el, trigger, popup, short: short!, long: long! };
+}
+
+test("a narrow trigger's panel widens to fit its longest row on one line, inside the viewport", async () => {
+  const { trigger, popup, short, long } = await openNarrow(120, 60, "Add a new unit of measure");
+  const box = popup.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(trigger.getBoundingClientRect().width + 60);
+  // One line: the long label is no taller than the one-word label above it.
+  expect(long.getBoundingClientRect().height).toBeCloseTo(short.getBoundingClientRect().height, 0);
+  expect(box.left).toBeCloseTo(120, 0);
+  expect(box.right).toBeLessThanOrEqual(innerWidth - 8);
+});
+
+test("a narrow trigger near the right edge moves its widened panel left rather than wrapping a row", async () => {
+  const left = innerWidth - 100;
+  const { popup, short, long } = await openNarrow(left, 60, "Add a new unit of measure");
+  const box = popup.getBoundingClientRect();
+  expect(long.getBoundingClientRect().height).toBeCloseTo(short.getBoundingClientRect().height, 0);
+  expect(box.left).toBeLessThan(left);
+  expect(box.right).toBeCloseTo(innerWidth - 8, 0);
+});
+
+test("reopened near the right edge after a longer option arrives, the panel is measured at full width", async () => {
+  const left = innerWidth - 100;
+  const { el, trigger, popup } = await openNarrow(left, 60, "Add");
+  // Closed with the panel's position from this opening still written on it.
+  await userEvent.keyboard("{Escape}");
+  el.options = [
+    { value: "kg", label: "kg" },
+    { value: "__add__", label: "Add a new unit of measure", action: true },
+  ];
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const [short, long] = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".option-label")];
+  expect(long!.getBoundingClientRect().height).toBeCloseTo(
+    short!.getBoundingClientRect().height,
+    0,
+  );
+  expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth - 8);
+});
+
+test("a panel whose longest row is wider than the screen stops at both 8px gutters", async () => {
+  const { popup, long } = await openNarrow(120, 60, "Add a new unit ".repeat(20).trim());
+  const box = popup.getBoundingClientRect();
+  expect(box.left).toBeCloseTo(8, 0);
+  expect(box.right).toBeCloseTo(innerWidth - 8, 0);
+  // The row wraps inside the panel rather than running past it.
+  expect(long.getBoundingClientRect().right).toBeLessThanOrEqual(box.right);
+});
+
+test("the search box does not widen a narrow trigger's panel", async () => {
+  const { trigger, popup } = await openNarrow(120, 100, "Add", "always");
+  expect(popup.getBoundingClientRect().width).toBeCloseTo(trigger.getBoundingClientRect().width, 0);
+});
+
 // The filled field box, the list panel, and what a native select needs (A178).
 
 registerIcons({
