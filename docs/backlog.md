@@ -204,7 +204,9 @@ Track C.
 - The owner's dashboard fixes of 2026-10-01: Options rows open their editor (A168, #995); Add
   actions sit on the tab row (A174, #1001); body text 14px in the system font (A179, #988); a
   dragged row follows the pointer (A180, #994 and #1003); pickers leave out products already held
-  (A181 #990, A183 #997). The Extras and Options editor fixes, A64–A67 (#714, #716, #717, #718).
+  (A181 #990, A183 #997); form fields in the filled style, drawn by the shared field components
+  (A178: #1010, #1012, #1015, #1016, #1017, #1019). The Extras and Options editor fixes, A64–A67
+  (#714, #716, #717, #718).
 - Secret checks derive the key off the event loop (A126 #900, A125 #912, A146 #941); a product
   save reads the language setting once (A149, #943); `wt-tabs` sends `wt-tab-change` (A150, #937);
   undeclared token reads and the Cloud services typography and dates (C69 #865, C75 #867, C76 #879,
@@ -828,20 +830,9 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
   languages; a table with no Add action keeps just the sentence.
 
-**Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-DONE 2026-10-02: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, A178d (setup and the till) as #1016, A178e (the module screens, the table filter and the floor-plan zone name) as #1017, and A178f (the guard, the clean-up and the rule) as #1019.**
-The look the owner approved on 2026-10-01 ([the mockups](https://claude.ai/artifact/6qKuHL4qWPJAqFeL1CpWcz))
-is specified in `docs/superpowers/specs/2026-10-01-filled-form-fields-design.md` and built by
-`docs/superpowers/plans/2026-10-01-filled-form-fields.md`, both approved by the owner the same day:
-one dropdown primitive (`wt-combobox`, extended, with the keyboard of a select), a new
-`wt-textarea`, the till following, every hand-drawn field moved onto a primitive file by file, the
-new tokens, and a closing guard. **The change lives in the shared primitives** (owner, 2026-10-01),
-and a screen does not draw its own form field — it uses a primitive, or a primitive is added
-(owner, 2026-10-01); A178f made that a rule with a guard, `scripts/native-form-fields.test.ts`, and
-deleted `selectStyles`. A173 (a dropdown's arrow touching its border) went with the native
-dropdowns. Queued after A178: A178g (a
-stepper's box widens to fit its label) and A178h ("Each" drawn as a normal choice), both in lane A's
-queue. **Seen while building, not changed:**
+**Form fields after A178 (#1010 to #1019).** Queued: A178g (a stepper's box widens to fit its
+label) and A178h ("Each" drawn as a normal choice), both in lane A's queue. **Seen while building,
+not changed:**
 
 - a blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is
   on `main` before A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not
