@@ -52,7 +52,6 @@ test("defines the structural contract", () => {
     "--wt-duration-fade",
     "--wt-duration-move",
     "--wt-field-height",
-    "--wt-field-label-rest-size",
     "--wt-field-line-width",
     "--wt-field-line-width-active",
     "--wt-dropdown-row-height",

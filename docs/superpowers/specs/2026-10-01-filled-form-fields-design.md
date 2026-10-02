@@ -31,7 +31,8 @@ Two things make this more than a stylesheet change:
   plus the new `wt-textarea` this design adds.
 - **Field box** — the filled rectangle of one field: the fill, the bottom line, the label inside,
   and the value.
-- **Resting label** — the label drawn large (16px) in the middle of an empty field.
+- **Resting label** — the label drawn large (16px; 2026-10-02: now the value's size, A184) in the
+  middle of an empty field.
 - **Floated label** — the label drawn small (12px) at the top left of the field box.
 - **Hint** — the field's `hint` property, which the house rules already show inside the empty field
   as its placeholder (CLAUDE.md §3, Forms; `docs/developers/design-system.md` → Forms).
@@ -53,11 +54,11 @@ Two things make this more than a stylesheet change:
 6. With no other hint, the field's name IS the hint, drawn in the empty field; it moves up to the
    top left, small, once there is a value or the field is focused.
 7. Measurements from the approved mockups: a field is 56px tall, with 8px rounded top corners,
-   square bottom corners and a 1px bottom line; focused, the line is 2px in the primary blue and
-   the label turns blue. The label is 16px resting and 12px floated; the required `*` travels with
-   it. A hint is grey and italic. An error turns the line (2px) and the label red, with the message
-   under the field. Disabled: a paler fill, a dashed bottom line, greyed text. A filled-in value is
-   pure black in light and pure white in dark.
+   square bottom corners and a 1px bottom line; focused, the line is 2px in the primary blue and the
+   label turns blue. The label is 16px resting (2026-10-02: now the value's size, A184) and 12px
+   floated; the required `*` travels with it. A hint is grey and italic. An error turns the line
+   (2px) and the label red, with the message under the field. Disabled: a paler fill, a dashed
+   bottom line, greyed text. A filled-in value is pure black in light and pure white in dark.
 8. The open dropdown: a search box at the top, 48px rows, the hovered row tinted, the chosen row
    bold with a tick. While the list is open the FIELD loses its focus marking, because the search
    box is where typing goes. The search box is outlined, not filled: the list's own background, a
@@ -143,7 +144,7 @@ draws each:
 
 | State | When | Drawn |
 | --- | --- | --- |
-| `data-label="rest"` | empty, not focused, no hint, no placeholder, and the type is not a date or time type | label 16px, vertically centred, `--wt-color-text-muted` |
+| `data-label="rest"` | empty, not focused, no hint, no placeholder, and the type is not a date or time type | label 16px (2026-10-02: now the value's size, A184), vertically centred, `--wt-color-text-muted` |
 | `data-label="float"` | any other case | label 12px at the top left; value and hint sit under it |
 | `:focus-within` on `.field` | the control has focus (and, for a dropdown, its list is closed) | line 2px `--wt-color-primary`; label `--wt-color-field-label-focus` |
 | `data-invalid` | `invalid` or a non-empty `error` | line 2px `--wt-color-danger`; label `--wt-color-danger` |
@@ -232,6 +233,9 @@ relative-luminance formula (a short Python script, 2026-10-01) and agree with th
 | `--wt-field-line-width` | `1px` |
 | `--wt-field-line-width-active` | `2px` |
 | `--wt-dropdown-row-height` | `48px` |
+
+(2026-10-02: `--wt-field-label-rest-size` was removed — a resting label now takes the value's size;
+A184, design-system.md → Forms.)
 
 The focused label needs its own colour because `--wt-color-primary` as 12px text on the fill is
 4.10:1 in light and 4.49:1 in dark, under the 4.5:1 small text needs; the focused LINE uses
@@ -493,11 +497,12 @@ passes.
 - `docs/developers/conventions-ui.md` and CLAUDE.md §3: the Lit `<select>` `.selected` rule goes,
   in the same pull request as the guard; the new rule and its guard's hedge go in.
 - **Tests that pin today's LOOK change with the owner's approved mockups.** Examples read on
-  2026-10-01: `wt-input.test.ts`'s 12px-label case (a resting label is now 16px), the border cases
-  of each field primitive, `wt-combobox`'s pill-shaped search box, and `base-styles.test.ts`'s
-  `selectStyles` cases (deleted with `selectStyles`). The plan names each such test in its task, and
-  every pull request names them again. Every BEHAVIOURAL assertion — labels, `aria-*` wiring,
-  events, hints as descriptions, `focusFirstInvalid`, refusals placed under fields — is kept.
+  2026-10-01: `wt-input.test.ts`'s 12px-label case (a resting label is now 16px; 2026-10-02: the
+  value's size since A184), the border cases of each field primitive, `wt-combobox`'s pill-shaped
+  search box, and `base-styles.test.ts`'s `selectStyles` cases (deleted with `selectStyles`). The
+  plan names each such test in its task, and every pull request names them again. Every BEHAVIOURAL
+  assertion — labels, `aria-*` wiring, events, hints as descriptions, `focusFirstInvalid`, refusals
+  placed under fields — is kept.
 - **Tests that READ a native field's parts change where they read, not what they expect** — a
   third kind of edit: a test that counts or reads `<option>` elements reads the combobox's
   `options` instead, and one that reads an error paragraph the screen drew itself

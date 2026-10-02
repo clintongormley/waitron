@@ -727,10 +727,20 @@ function field(el: Element) {
   };
 }
 
+test("an empty price field's resting label is drawn at the size its typed amount is drawn at", async () => {
+  const el = await mount('<wt-price-input label="Price" unit="kg"></wt-price-input>');
+  const { field: box, label, input } = field(el);
+  expect(box.getAttribute("data-label")).toBe("rest");
+  expect(getComputedStyle(label!).fontSize).toBe(getComputedStyle(input).fontSize);
+  host.style.setProperty("--wt-font-size-md", "15px");
+  expect(getComputedStyle(input).fontSize).toBe("15px");
+  expect(getComputedStyle(label!).fontSize).toBe("15px");
+});
+
 test("draws the amount in a filled field box, its label resting large inside it while empty", async () => {
   const el = await mount('<wt-price-input label="Price" unit="kg"></wt-price-input>');
   host.style.setProperty("--wt-field-height", "70px");
-  host.style.setProperty("--wt-field-label-rest-size", "17px");
+  host.style.setProperty("--wt-font-size-md", "17px");
   host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
   host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
   host.style.setProperty("--wt-field-line-width", "1px");
