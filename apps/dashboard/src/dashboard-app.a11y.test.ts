@@ -8,6 +8,7 @@ import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { WtToast } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
+import type { WtInput } from "@waitron/ui";
 
 /**
  * The screens the shell mounts fetch their own data on connect, so the stub must resolve those
@@ -222,7 +223,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       await page.viewport(1280, 800);
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
       await flush(el);
-      const box = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=nav-search]")!;
+      const box = el.shadowRoot!.querySelector<WtInput>("[data-test=nav-search]")!;
       const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-search-empty]")!;
       await expectNoA11yViolations(box);
 

@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/client.js";
 import { PlannedActualScreen } from "./planned-actual-screen.js";
+import type { WtInput } from "@waitron/ui";
 
 const staff: PersonSummary[] = [
   {
@@ -78,7 +79,7 @@ describe("planned-actual-screen", () => {
       api,
     });
     await flush(el);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
     chooseWeek(week, "2026-04-08"); // a Wednesday → Monday 2026-04-06, to 2026-04-13
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("loc-1", "2026-04-06", "2026-04-13");
@@ -167,7 +168,7 @@ describe("planned-actual-screen", () => {
     });
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
     chooseWeek(week, "");
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
@@ -206,7 +207,7 @@ describe("planned-actual-screen", () => {
       api,
     });
     await flush(el);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
     chooseWeek(week, "2026-04-08");
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("convenio.not_found");

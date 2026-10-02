@@ -1432,7 +1432,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("puts a refused language under the language select until that select changes, leaving Save working", async () => {
+  it("puts a refused language under the language dropdown until that dropdown changes, leaving Save working", async () => {
     const { el, host } = await mount({
       saveProfile: vi.fn().mockRejectedValue({ code: "locale.unsupported" }),
     });

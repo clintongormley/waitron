@@ -7,6 +7,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
+import type { WtInput } from "@waitron/ui";
 
 afterEach(cleanupWidgets);
 
@@ -1264,11 +1265,13 @@ describe("backup-screen failures and edit-mode prefill", () => {
       schedule: { kind: "wall-clock", days: [0, 3], at: { hour: 2, minute: 5 } },
     });
 
-    expect((q(el, "[data-test=days-mode]") as HTMLSelectElement).value).toBe("weekdays");
+    expect((q(el, "[data-test=days-mode]") as HTMLElement & { value: string }).value).toBe(
+      "weekdays",
+    );
     expect((q(el, "[data-test=weekday-0]") as HTMLInputElement).checked).toBe(true);
     expect((q(el, "[data-test=weekday-3]") as HTMLInputElement).checked).toBe(true);
     expect((q(el, "[data-test=weekday-1]") as HTMLInputElement).checked).toBe(false);
-    expect((q(el, "[data-test=at-time]") as HTMLInputElement).value).toBe("02:05");
+    expect((q(el, "[data-test=at-time]") as WtInput).value).toBe("02:05");
 
     q(el, "[data-test=save-settings]")!.click();
 

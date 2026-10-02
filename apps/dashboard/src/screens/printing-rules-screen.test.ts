@@ -103,6 +103,12 @@ async function flush(el: PrintingRulesScreen): Promise<void> {
 }
 
 const q = (el: PrintingRulesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+type Dropdown = HTMLElement & {
+  options: { value: string; label: string }[];
+  value: string;
+  name: string;
+  disabled: boolean;
+};
 const text = (el: PrintingRulesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
 /** Exercise the native switch change event after the browser toggles its checked property. */
@@ -234,7 +240,7 @@ describe("printing rules", () => {
     });
     await flush(el);
 
-    const select = q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement;
+    const select = q(el, "[data-test=till-receipt-printer-t1]") as Dropdown;
     expect(select).not.toBeNull();
     const values = [...select.options].map((o) => o.value);
     // The clear option ("") first, then only the ACTIVE printer p1 — the inactive p2 is not offered.
@@ -242,15 +248,14 @@ describe("printing rules", () => {
     expect(select.options[0]!.label).toContain(t("printers.receipt_no_printer", "es-ES"));
   });
 
-  it("reflects each till's PERSISTED receipt printer in its select (set → the id, unset → the clear option)", async () => {
+  it("reflects each till's PERSISTED receipt printer in its dropdown (set → the id, unset → the clear option)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api,
     });
     await flush(el);
-    // t1 has p1 set; t2 has none — the selects are reconciled to those values in updated().
-    expect((q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement).value).toBe("p1");
-    expect((q(el, "[data-test=till-receipt-printer-t2]") as HTMLSelectElement).value).toBe("");
+    expect((q(el, "[data-test=till-receipt-printer-t1]") as Dropdown).value).toBe("p1");
+    expect((q(el, "[data-test=till-receipt-printer-t2]") as Dropdown).value).toBe("");
   });
 
   it("picks a till's receipt printer from a labelled dropdown showing the stored one, prompting no printer while it has none", async () => {
@@ -546,7 +551,7 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
       theme,
     );
     await flush(el);
-    expect((q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement).name).toBe(
+    expect((q(el, "[data-test=till-receipt-printer-t1]") as Dropdown).name).toBe(
       "receiptPrinterId",
     );
     await expectNoA11yViolations(host);
@@ -600,9 +605,7 @@ it("ignores a second change while a save is still in flight", async () => {
   release();
   await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   await vi.waitFor(() =>
-    expect((q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement).disabled).toBe(
-      false,
-    ),
+    expect((q(el, "[data-test=till-receipt-printer-t1]") as Dropdown).disabled).toBe(false),
   );
   expect(api.setTillReceiptPrinter).toHaveBeenCalledTimes(1);
 });

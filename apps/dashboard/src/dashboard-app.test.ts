@@ -52,6 +52,7 @@ import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
+import type { WtInput } from "@waitron/ui";
 
 const stubRequest: DashboardRequest = async () => [] as never;
 
@@ -4419,7 +4420,7 @@ describe("the nav search", () => {
       listStaff: vi.fn().mockResolvedValue([]),
     });
   const searchBox = (el: DashboardApp) =>
-    el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=nav-search]")!;
+    el.shadowRoot!.querySelector<WtInput>("[data-test=nav-search]")!;
   const shownItems = (el: DashboardApp) =>
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-item")]
       .filter((item) => item.checkVisibility())

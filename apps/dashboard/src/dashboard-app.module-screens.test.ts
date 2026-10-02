@@ -8,6 +8,7 @@ import { setLocale } from "./i18n/t.js";
 import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
+import type { WtInput } from "@waitron/ui";
 
 // One module with three screens: its primary one and a second anyone with `test.use` may open, and
 // a third that asks for a permission this session does not hold.
@@ -131,7 +132,7 @@ it("finds a further screen by the nav search, and never the one not permitted", 
   await page.viewport(1280, 800);
   onTestFinished(() => page.viewport(width, height));
   const el = await mount();
-  const box = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=nav-search]")!;
+  const box = el.shadowRoot!.querySelector<WtInput>("[data-test=nav-search]")!;
   const found = () =>
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-item")]
       .filter((item) => item.checkVisibility())

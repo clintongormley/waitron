@@ -5,6 +5,7 @@ import type { DailyCloseDto, DashboardApi, SalesOverview, SalesPeriodDto } from 
 import { setLocale, t } from "../i18n/t.js";
 import { today } from "../date-utils.js";
 import { SalesScreen } from "./dashboard-sales-screen.js";
+import type { WtInput } from "@waitron/ui";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -94,7 +95,7 @@ async function flush(el: SalesScreen): Promise<void> {
   await el.updateComplete;
 }
 function setDate(el: SalesScreen, test: string, value: string): void {
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${test}]`)!;
+  const input = el.shadowRoot!.querySelector<WtInput>(`[data-test=${test}]`)!;
   input.value = value;
   input.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -124,10 +125,10 @@ describe("dashboard-sales-screen", () => {
       "at_time_of_sale",
       false,
     );
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=from-picker]")!.value).toBe(
       "2026-09-26",
     );
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=to-picker]")!.value).toBe(
       "2026-09-26",
     );
   });
@@ -142,10 +143,10 @@ describe("dashboard-sales-screen", () => {
     await flush(el);
 
     expect(api.getDailyClose).toHaveBeenCalledWith("2026-09-26");
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=from-picker]")!.value).toBe(
       "2026-09-26",
     );
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=to-picker]")!.value).toBe(
       "2026-09-26",
     );
   });
@@ -162,10 +163,10 @@ describe("dashboard-sales-screen", () => {
     expect(api.getSalesOverview).toHaveBeenCalledOnce();
     expect(api.getDailyClose).toHaveBeenCalledTimes(1);
     expect(api.getDailyClose).toHaveBeenCalledWith("2026-09-27");
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=from-picker]")!.value).toBe(
       "2026-09-27",
     );
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=to-picker]")!.value).toBe(
       "2026-09-27",
     );
   });
@@ -210,10 +211,10 @@ describe("dashboard-sales-screen", () => {
     await flush(el);
 
     expect(api.getSalesOverview).toHaveBeenCalledOnce();
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=from-picker]")!.value).toBe(
       "2026-09-27",
     );
-    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=to-picker]")!.value).toBe(
       "2030-06-15",
     );
     expect(api.getSalesPeriod).toHaveBeenLastCalledWith("2026-09-27", "2030-06-15");

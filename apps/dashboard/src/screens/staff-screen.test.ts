@@ -192,8 +192,17 @@ describe("staff-screen", () => {
     const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1000);
-    const search = el.shadowRoot!.querySelector<HTMLElement>("[data-test=search]")!;
-    await chooseOption(search, "User 999");
+    const search = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=search]",
+    )!;
+    search.value = "User 999";
+    search.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "User 999" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await flush(el);
     expect(list(el).people.map((person) => person.personId)).toEqual(["p999"]);
     const role = el.shadowRoot!.querySelector<HTMLElement>("[data-test=role-filter]")!;
