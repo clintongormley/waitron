@@ -3567,6 +3567,7 @@ export class TillApp extends LitElement {
   #onTabSelect(key: string, fromHistory = false): void {
     const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);
     if (tab === undefined) return;
+    this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
     this.#setActiveTab(key, fromHistory, fromHistory);
     if (key === "counter") void this.#loadStations();
@@ -6107,6 +6108,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#dismissStationChoices();
     this.#endReloadLock();
     this.#menuPoll.stop();
     this.#tableZoneId = undefined;
@@ -6633,8 +6635,17 @@ export class TillApp extends LitElement {
     await this.#rereadPayingOrder(open, balance);
   }
 
+  /** A pending station read belongs to the face and session where its choice started. */
+  #dismissStationChoices(): void {
+    this.#makeAtOpening = null;
+    this.#moveStationOpening = null;
+    this.makingAt = null;
+    this.movingStation = null;
+  }
+
   /** Every face change goes through here, so the diagnostics trail records it. */
   #setScreen(screen: Screen): void {
+    if (screen !== this.screen) this.#dismissStationChoices();
     diag.record("info", "nav", { screen });
     this.screen = screen;
   }
@@ -6655,12 +6666,14 @@ export class TillApp extends LitElement {
       if (!this.#allowsDestination(drill.kind)) return;
       this.#url.write({ "till-view": drill.kind, "till-station": null });
     }
+    this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
     this.drill = drill;
   }
 
   /** Records the `nav` trail for the tab it returns to. */
   #popDrill(): void {
+    this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
       this.#url.write({ "till-view": null, "till-station": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
@@ -6722,9 +6735,6 @@ export class TillApp extends LitElement {
     this.#url.write({ "till-zone": null }, true);
     this.#floorLoaded = false;
     this.errorKey = undefined;
-    this.movingStation = null;
-    this.makingAt = null;
-    this.#moveStationOpening = null;
     this.#stationsRead++;
     this.stations = [];
     this.#stationsLoaded = false;
