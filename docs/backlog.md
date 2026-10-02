@@ -997,6 +997,18 @@ section and Available, and its `wt-disclosure` starts closed. **Wanted:** the se
 expanded, on both Add and Edit, and can still be collapsed. Read as the single option's form, which
 the screenshots show; the options LIST form's section is left as it is — ask if both were meant.
 
+**A folded names section's line puts a colon after each field's name (A200, owner 2026-10-02) —
+OPEN.** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
+rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
+· ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
+line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
+list, option and extras list forms. **Wanted:** "EN:", "ES:" and "Kitchen:" (Spanish "Cocina:"),
+and the field names bold — the owner's "maybe", so LOOK at it and keep it unless it reads worse.
+Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give the primitive a
+way to take the parts (a slot, or name/value pairs) rather than building markup in each screen. The
+product editor's own summaries (`product-editor.ts`) are written differently and are not part of
+this unless they should match — ask.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
