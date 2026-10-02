@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import type { Station } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -18,6 +19,8 @@ const moveRefusals: Record<string, StringKey> = {
   "ticket.made_here": "move_station.refused.ticket.made_here",
 };
 
+const NO_STATION = "__station_choice_none__";
+
 @customElement("till-station-choice-dialog")
 export class TillStationChoiceDialog extends LitElement {
   static override styles = [
@@ -26,23 +29,6 @@ export class TillStationChoiceDialog extends LitElement {
       .body {
         display: grid;
         gap: var(--wt-space-3);
-      }
-      label {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
-      select {
-        width: 100%;
-        padding: var(--wt-space-2);
-        color: var(--wt-color-text);
-        background: var(--wt-color-surface);
-        border: var(--wt-field-line-width) solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        font: inherit;
-      }
-      select:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
       }
       .refusal {
         margin: 0;
@@ -93,6 +79,23 @@ export class TillStationChoiceDialog extends LitElement {
     const moving = this.mode === "move";
     const currentListed = this.stations.some((station) => station.id === this.currentStationId);
     const label = t(moving ? "move_station.move_to" : "move_station.make_at");
+    const firstOption = moving
+      ? currentListed
+        ? []
+        : [{ value: NO_STATION, label: t("move_station.choose") }]
+      : [{ value: NO_STATION, label: t("move_station.rules") }];
+    const options = [
+      ...firstOption,
+      ...this.stations.map((station) => ({
+        value: station.id,
+        label:
+          moving && station.id === this.currentStationId
+            ? t("move_station.now").replace("{station}", () => station.name)
+            : station.open
+              ? station.name
+              : t("dead_end.station_closed").replace("{station}", () => station.name),
+      })),
+    ];
     return html`
       <wt-dialog
         ${trackDialog()}
@@ -101,40 +104,17 @@ export class TillStationChoiceDialog extends LitElement {
         @wt-close=${() => this.#emit("close")}
       >
         <div class="body" data-body>
-          <label>
-            <span>${label}</span>
-            <select
-              name="station"
-              @change=${(event: Event) => {
-                const value = (event.target as HTMLSelectElement).value;
-                this.selected = value === "" ? null : value;
-              }}
-            >
-              ${
-                moving
-                  ? currentListed
-                    ? nothing
-                    : html`<option value="" .selected=${choice === null}>
-                        ${t("move_station.choose")}
-                      </option>`
-                  : html`<option value="" .selected=${choice === null}>
-                      ${t("move_station.rules")}
-                    </option>`
-              }
-              ${this.stations.map(
-                (station) =>
-                  html`<option value=${station.id} .selected=${choice === station.id}>
-                    ${
-                      moving && station.id === this.currentStationId
-                        ? t("move_station.now").replace("{station}", () => station.name)
-                        : station.open
-                          ? station.name
-                          : t("dead_end.station_closed").replace("{station}", () => station.name)
-                    }
-                  </option>`,
-              )}
-            </select>
-          </label>
+          <wt-combobox
+            name="station"
+            label=${label}
+            search="never"
+            .options=${options}
+            .value=${choice ?? NO_STATION}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.selected = event.detail.value === NO_STATION ? null : event.detail.value;
+            }}
+          ></wt-combobox>
           ${
             this.refusal === null
               ? nothing
