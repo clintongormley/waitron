@@ -2303,7 +2303,6 @@ function firstOption(el: ProductEditor, name: string) {
 function hint(el: ProductEditor, name: string) {
   return el.shadowRoot!.querySelector(`[data-test="${name}"]`)?.textContent?.trim();
 }
-const sameAs = (value: string) => t("editor.same_as").replace("{value}", value);
 
 it("titles a variant's page as a variant, with no Modifiers and no Variants section", async () => {
   const el = await mountVariant();
@@ -2449,13 +2448,13 @@ it("never hints a variant's names from the parent's", async () => {
     expect(control<{ placeholder: string }>(el, name).placeholder, name).toBe(hint);
 });
 
-it("offers each inherited choice first as 'Same as' the parent's value, with an empty value", async () => {
+it("offers each inherited choice first as the parent's value, with an empty value", async () => {
   const el = await mountVariant();
   await openUnits(el);
   const expected = {
-    tax: sameAs("Reduced (10%)"),
-    unit: sameAs("Litre (l)"),
-    "product-course": sameAs("Mains"),
+    tax: "Reduced (10%)",
+    unit: "Litre (l)",
+    "product-course": "Mains",
   };
   for (const [name, text] of Object.entries(expected)) {
     const option = firstOption(el, name);
@@ -2494,7 +2493,7 @@ it.each([
   },
 );
 
-it("marks a variant's own choice selected over the 'Same as' option", async () => {
+it("marks a variant's own choice selected over the parent's value", async () => {
   const el = await mountVariant({
     ...glass,
     vatClass: "general",
@@ -2508,17 +2507,53 @@ it("marks a variant's own choice selected over the 'Same as' option", async () =
 
 it("hints the parent's category, allergens, dietary declarations and photo beside their controls", async () => {
   const el = await mountVariant();
-  expect(combobox(el, "primary")!.placeholder).toBe(sameAs("Bebidas"));
-  expect(combobox(el, "primary")!.options[0]).toEqual({ value: "", label: sameAs("Bebidas") });
-  expect(hint(el, "allergens-hint")).toBe(
-    `${t("modifiers.allergens")}: ${sameAs(allergenName("milk"))}`,
-  );
+  expect(combobox(el, "primary")!.placeholder).toBe("Bebidas");
+  expect(combobox(el, "primary")!.options[0]).toEqual({ value: "", label: "Bebidas" });
+  expect(hint(el, "allergens-hint")).toBe(`${t("modifiers.allergens")}: ${allergenName("milk")}`);
   expect(hint(el, "dietary-hint")).toBe(
-    `${t("modifiers.dietary_preferences")}: ${sameAs(t("editor.diet.vegetarian"))}`,
+    `${t("modifiers.dietary_preferences")}: ${t("editor.diet.vegetarian")}`,
   );
   const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
   expect(upload.inheritedImage).toBe("coffee.png");
   expect(upload.image).toBeNull();
+});
+
+it("hints what a variant will actually use where its parent names nothing there", async () => {
+  const el = await mountVariant({
+    ...glass,
+    inherited: {
+      ...parentValues,
+      vatClass: "retired" as never,
+      primaryCategoryId: null,
+      courseId: null,
+      allergens: {},
+      dietaryDeclarations: [],
+    },
+  });
+  expect(combobox(el, "primary")!.placeholder).toBe(t("categories.uncategorised"));
+  expect(combobox(el, "product-course")!.placeholder).toBe(t("product.no_course"));
+  expect(combobox(el, "tax")!.placeholder).toBe("retired");
+  expect(hint(el, "allergens-hint")).toBe(
+    `${t("modifiers.allergens")}: ${t("editor.allergens_none")}`,
+  );
+  expect(hint(el, "dietary-hint")).toBe(
+    `${t("modifiers.dietary_preferences")}: ${t("editor.diet_none")}`,
+  );
+});
+
+it("hints a parent's allergens not yet reviewed as that, never as none", async () => {
+  const el = await mountVariant({ ...glass, inherited: { ...parentValues, allergens: null } });
+  expect(hint(el, "allergens-hint")).toBe(
+    `${t("modifiers.allergens")}: ${t("editor.allergens_unreviewed")}`,
+  );
+});
+
+it("draws a variant's inherited allergens and dietary hints in grey italic, like a field's hint", async () => {
+  const el = await mountVariant();
+  for (const name of ["allergens-hint", "dietary-hint"]) {
+    const shown = el.shadowRoot!.querySelector(`[data-test="${name}"]`)!;
+    expect(getComputedStyle(shown).fontStyle, name).toBe("italic");
+  }
 });
 
 it("drops a hint once the variant sets that field itself", async () => {
@@ -2975,13 +3010,13 @@ it("picks the unit from a shared dropdown behind the price field, Each being its
   expect(sharedField(el, "wt-combobox", "unit").error).toBe("That unit is gone");
 });
 
-it("keeps a variant's 'Same as' choice as each inherited dropdown's prompt and first row", async () => {
+it("keeps a variant's inherited choice as each inherited dropdown's prompt and first row", async () => {
   const el = await mountVariant();
   await openUnits(el);
   const expected = {
-    tax: sameAs("Reduced (10%)"),
-    unit: sameAs("Litre (l)"),
-    "product-course": sameAs("Mains"),
+    tax: "Reduced (10%)",
+    unit: "Litre (l)",
+    "product-course": "Mains",
   };
   for (const [name, text] of Object.entries(expected)) {
     const box = sharedField(el, "wt-combobox", name);

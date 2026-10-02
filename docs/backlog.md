@@ -761,6 +761,14 @@ receipt): with default Spanish and an option named
 tries the default language, read from the frozen staff name's key, before any other (cases in
 `packages/catalogue/src/option-snapshot-labels.test.ts`); the receipt and the till's settled ticket
 both read through it.
+On the owner's answer on #1053 (2026-10-02: _"I don't think we want 'same as', we just want to show
+the value. The same everywhere."_), a variant's values taken from its parent drop "Same as" too:
+the product editor's category, VAT, unit and course dropdowns and the allergen and dietary lines
+show the parent's value itself, and the variant table shows the product's price, all in grey
+italic; where the parent names nothing they show what will be used ("Uncategorised", the course's
+"— none —", "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
+photo caption ("Same as the main product's photo") stays: it is the only sign a photo is
+inherited.
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
 language name hint should be the name field, and the secondary languages should be the main
 language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while
@@ -1245,8 +1253,8 @@ kg)". All eleven are in `apps/dashboard/src/widgets/product-editor.ts` unless an
 named. All eleven were settled from mockups on 2026-10-02 (A216 on the reading its entry
 records); the decisions follow each entry. A214, A217 and A219 all reshape the Pricing section:
 build them together.
-LOOK at each on a product AND on a variant's page (the editor shows a variant with "Same as …"
-choices), at 1280 and 390, light and dark.
+LOOK at each on a product AND on a variant's page (the editor shows a variant with its parent's
+values as the blank choices), at 1280 and 390, light and dark.
 
 **No Add category button, and the category shown as a path (A209) — DECIDED, ready to build.**
 The owner: _"we no longer need the add category button. i'm questioning whether we need the
@@ -1325,7 +1333,7 @@ pressing Enter on a line turns it into a `wt-combobox` with `multiple` set, and 
 back into the line. Each line is a button for a keyboard and a screen reader ("Allergens: Nuts,
 Seeds, edit"). The product picker offers no "may contain" today (only the ingredient form's
 `allergen-picker.ts` does), and the draft keeps each allergen's stored presence when the list
-changes; keep that. A variant's "Same as …" hints (`nutritionHints`) stay meaningful.
+changes; keep that. A variant's hints of its parent's values (`nutritionHints`) stay meaningful.
 
 **No box around Pricing (A214) — OPEN.** The owner: _"Pricing also doesn't need the box around
 it"_. `renderPrice` draws a `fieldset class="bordered-group"` with a "Pricing" legend. **Wanted:**
@@ -1447,7 +1455,7 @@ was not saved yet or the list misses it; reproduce before assuming either.
 **A variant always has its product's unit (A222, owner 2026-10-02) — OPEN.** The owner:
 _"currently variants can have different units from their parents. i think that's a bad idea"_.
 A variant's page offers its own unit today (`renderUnit` in `product-editor.ts`, whose blank
-choice is "Same as …"). **Wanted:** a variant takes its product's unit and cannot set one; the
+choice is the parent's unit). **Wanted:** a variant takes its product's unit and cannot set one; the
 field goes from the variant's page and the variant window, the server refuses or ignores a
 variant's unit, and variants holding a unit of their own are cleared (allowed before go-live,
 §3). The unit decides how a line's quantity and price are worked out, which reaches a sale

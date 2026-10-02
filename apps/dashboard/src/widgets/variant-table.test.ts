@@ -288,9 +288,7 @@ it("moves each price under its name on a narrow table, and back to its own colum
   expect(shown(el.shadowRoot!.querySelector("thead th:nth-child(3)"))).toBe(false);
   const stacked = (index: number) =>
     el.shadowRoot!.querySelector(`[data-test="stacked-price-${index}"]`)!.textContent!;
-  expect(stacked(0).replace(/\s+/g, " ").trim()).toBe(
-    `${t("product.price")} ${t("editor.same_as").replace("{value}", "9,00 €")}`,
-  );
+  expect(stacked(0).replace(/\s+/g, " ").trim()).toBe(`${t("product.price")} 9,00 €`);
   expect(stacked(2).replace(/\s+/g, " ").trim()).toBe(`${t("product.price")} 20,00 €`);
   el.style.width = "40rem";
   await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -298,11 +296,7 @@ it("moves each price under its name on a narrow table, and back to its own colum
     expect(shown(row.children[2]!)).toBe(true);
     expect(shown(row.querySelector(".stacked-price"))).toBe(false);
   }
-  expect(cells(el, 2)).toEqual([
-    t("editor.same_as").replace("{value}", euros("9,00")),
-    euros("12,00"),
-    euros("20,00"),
-  ]);
+  expect(cells(el, 2)).toEqual([euros("9,00"), euros("12,00"), euros("20,00")]);
 });
 
 it("caps the name cell with the shared sizing token, not a literal width", async () => {
@@ -481,11 +475,7 @@ it("shows a variant with no price of its own as the base price it sells at", asy
       index === 0 ? { ...variant, unitPrice: null } : variant,
     ),
   });
-  expect(cells(el, 2)).toEqual([
-    t("editor.same_as").replace("{value}", euros("9,00")),
-    euros("12,00"),
-    euros("20,00"),
-  ]);
+  expect(cells(el, 2)).toEqual([euros("9,00"), euros("12,00"), euros("20,00")]);
 });
 
 it("hides Inactive variants until the status filter asks for them", async () => {
@@ -709,10 +699,9 @@ it.each([
           index === 0 ? { ...variant, unitPrice: null } : variant,
         ),
       });
-      const sameAs = t("editor.same_as").replace("{value}", base);
       const amounts = (at: Element) =>
         [...at.querySelectorAll(".amount")].map((a) => a.textContent);
-      expect(cells(el, 2).slice(0, 2)).toEqual([sameAs, own]);
+      expect(cells(el, 2).slice(0, 2)).toEqual([base, own]);
       expect(amounts(rows(el)[1]!.children[2]!)).toEqual([own]);
       // The copy under the name, which a narrow table shows, is written the same way.
       expect(amounts(el.shadowRoot!.querySelector('[data-test="stacked-price-0"]')!)).toEqual([
@@ -727,6 +716,25 @@ it.each([
   },
 );
 
+it("draws the base price a variant sells at in grey italic, like a field's hint", async () => {
+  const el = await mountTable({
+    basePrice: "9.00",
+    variants: threeVariants().map((variant, index) =>
+      index === 0 ? { ...variant, unitPrice: null } : variant,
+    ),
+  });
+  for (const at of [
+    rows(el)[0]!.children[2]!,
+    el.shadowRoot!.querySelector('[data-test="stacked-price-0"]')!,
+  ]) {
+    const amount = at.querySelector(".amount")!;
+    expect(getComputedStyle(amount).fontStyle).toBe("italic");
+  }
+  expect(getComputedStyle(rows(el)[1]!.children[2]!.querySelector(".amount")!).fontStyle).toBe(
+    "normal",
+  );
+});
+
 it("shows a base price still being typed as it stands, not as a sign beside NaN", async () => {
   const el = await mountTable({
     basePrice: "9,5x",
@@ -734,7 +742,7 @@ it("shows a base price still being typed as it stands, not as a sign beside NaN"
       index === 0 ? { ...variant, unitPrice: null } : variant,
     ),
   });
-  expect(cells(el, 2)[0]).toBe(t("editor.same_as").replace("{value}", "9,5x"));
+  expect(cells(el, 2)[0]).toBe("9,5x");
 });
 
 /** The control a click anywhere on a row's free space lands on: the row is an Edit button. */

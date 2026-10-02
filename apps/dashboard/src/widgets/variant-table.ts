@@ -174,6 +174,9 @@ export class VariantTable extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
+      .inherited {
+        font-style: italic;
+      }
       .notice {
         margin: var(--wt-space-2) 0 0;
         color: var(--wt-color-text-muted);
@@ -297,12 +300,6 @@ export class VariantTable extends LitElement {
     return variant?.name.trim() || t("editor.variant");
   }
 
-  /** "Same as" the product's price, with the amount kept whole while the words around it wrap. */
-  #sameAs() {
-    const [before = "", after = ""] = t("editor.same_as").split("{value}");
-    return html`${before}<span class="amount">${priceText(this.basePrice)}</span>${after}`;
-  }
-
   #emit(name: string, detail: Record<string, unknown>): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
@@ -350,7 +347,9 @@ export class VariantTable extends LitElement {
       variant.unitPrice !== null
         ? html`<span class="amount">${priceText(variant.unitPrice)}</span>`
         : this.basePrice
-          ? html`<span class="muted">${this.#sameAs()}</span>`
+          ? html`<span class="muted inherited"
+              ><span class="amount">${priceText(this.basePrice)}</span></span
+            >`
           : nothing;
     return html`<tr class=${error ? "invalid" : ""} data-test=${`row-${index}`}>
       <td>${this.#reorder.handle(row.key)}</td>

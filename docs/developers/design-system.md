@@ -1012,15 +1012,22 @@ record's own value applies and its blank languages show no placeholder hint.
   4.5:1 text needs. axe does not check placeholder contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
   (`packages/ui-core/src/components/wt-input.a11y.test.ts`).
 - **A single-choice `wt-combobox`** (the product editor's main category, VAT, unit and course): its
-  first option has an empty value and reads "Same as &lt;fallback value&gt;" (`editor.same_as`,
-  e.g. "Same as Reduced (10%)"; when there is nothing to name, "Same as the main product",
-  `editor.same_as_parent`), and so does its placeholder, which is what it shows while the stored
-  value is null; it has no separate hint line. A choice that means "none" on a record of its own
+  first option has an empty value and reads as the fallback value itself, with no "Same as" before
+  it (owner, 2026-10-02: "we just want to show the value"), e.g. "Reduced (10%)"; where the parent
+  names nothing it reads as what will be used instead — `categories.uncategorised` for the main
+  category, `product.no_course` for the course, `editor.unit_each` for the unit. Its placeholder
+  reads the same, in the combobox's grey italic, and is what it shows while the stored value is
+  null; it has no separate hint line. A choice that means "none" on a record of its own
   (`editor.unit_each` for the unit and `product.no_course` for the course) is left out where the empty value already means "fall
   back": offering both would read as one thing and save as another.
-- **Any other control** (the allergen and dietary picker, an image): a muted
-  hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
-  goes away once the record sets its own. An image shows the fallback picture itself under the hint
+- **Any other control** (the allergen and dietary picker, an image): a muted hint line beside it
+  shows the fallback value while the stored value is empty, and goes away once the record sets its
+  own. The allergen and dietary lines name the values in grey italic ("Allergens: Milk"), "None"
+  where the parent has none (`editor.allergens_none`, `editor.diet_none`) and, for allergens the
+  parent has not had reviewed, "Not yet reviewed" (`editor.allergens_unreviewed`) — never "None",
+  which would claim a reviewed empty set. A variant's price in the variant table, where it has none of
+  its own, is the product's price in the same grey italic. An image keeps its caption, "Same as the
+  main product's photo" (`editor.inherited_image`), and shows the fallback picture itself under it
   (`dashboard-image-upload`'s `inheritedImage`), with no Remove action, because there is nothing of
   the record's own to remove. A control whose empty state could also mean "none" (an allergen set,
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
