@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-combobox.js";
 import {
@@ -675,7 +675,7 @@ test("an empty value means nothing selected, even when an option carries an empt
   expect(el.shadowRoot!.querySelector(".value")!.textContent?.trim()).toBe("Choose a tag");
 });
 
-test("the popup stays inside the bottom gutter once its width matches the trigger", async () => {
+test("the popup stays inside the bottom gutter once its width is set", async () => {
   const { el, trigger, popup } = await mountCombobox();
   el.options = TAGS.map((tag) => ({
     ...tag,
@@ -689,6 +689,39 @@ test("the popup stays inside the bottom gutter once its width matches the trigge
   await new Promise(requestAnimationFrame);
   expect(popup.matches(":popover-open")).toBe(true);
   expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+});
+
+test("a panel whose rows wrap at its widest stays inside the bottom gutter after the window narrows", async () => {
+  const [viewportWidth, viewportHeight] = [innerWidth, innerHeight];
+  const { el, trigger, popup } = await mountCombobox();
+  el.options = TAGS.map((tag) => ({
+    ...tag,
+    label: `${tag.label}: a description long enough to run well past the right edge of a narrow window, so that it wraps onto several lines there`,
+  }));
+  const openNearTheBottom = async () => {
+    el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 100}px; width: 150px`;
+    await el.updateComplete;
+    const { width, height } = trigger.getBoundingClientRect();
+    await userEvent.click(trigger, { position: { x: width - 20, y: height - 8 } });
+    await new Promise(requestAnimationFrame);
+  };
+  // A first opening alone cannot show that the width is set before the panel is measured: unsized,
+  // the panel is as wide as the viewport, within 16px of its final width, so these rows wrap the same.
+  // Opened first in a window wide enough for each row to fit on one line, it keeps the width limit
+  // set for that window.
+  await page.viewport(1600, viewportHeight);
+  try {
+    await openNearTheBottom();
+    await userEvent.keyboard("{Escape}");
+    await page.viewport(viewportWidth, viewportHeight);
+    await openNearTheBottom();
+    const lines = document.createRange();
+    lines.selectNodeContents(el.shadowRoot!.querySelector(".option-label")!);
+    expect(lines.getClientRects().length).toBeGreaterThan(1);
+    expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+  } finally {
+    await page.viewport(viewportWidth, viewportHeight);
+  }
 });
 
 test("reopening after a filtered search fits the full list, not the filtered one", async () => {
@@ -1087,7 +1120,7 @@ test("moving to an option that is already in view does not jog the list", async 
   expect(list.scrollTop).toBe(0);
 });
 
-test("the open panel is as wide as its trigger and sits under it when there is room", async () => {
+test("a panel whose rows are narrower than its trigger is as wide as the trigger and sits under it when there is room", async () => {
   const { el, trigger, popup } = await mountCombobox();
   el.options = [{ value: "a", label: "A" }];
   el.style.cssText = "position: fixed; left: 120px; top: 40px; width: 240px";
