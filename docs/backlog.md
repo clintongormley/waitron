@@ -892,6 +892,30 @@ The label already floats for an autofilled field (`:has(:autofill)` in
 into. Check in a real Chromium that the browser's own autofill colour is what draws the blue before
 choosing the fix, and LOOK with a saved password.
 
+**The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
+owner 2026-10-02) — OPEN.** The owner, on the passkey page: _"this page also looks a bit messy"_.
+**Decided (owner, 2026-10-02, layout A of three mockups, then "i love it" to the version with more
+providers):** this replaces C96's arrangement (one bulleted list, Log in on its first row).
+
+- every step of `apps/dashboard/src/screens/login-screen.ts` sits in a white card with the Waitron
+  logo above the heading, as the setup wizard's steps do;
+- the method the page is for is the one primary button, full width;
+- under an "or" divider, every other way in is a full-width outlined button with its own icon or
+  logo ("Use your password", "Log in with passkey", "Continue with Google");
+- "I've forgotten my password" is a small link under the password field on the password page,
+  and appears nowhere else among the methods — not on the passkey page (owner: "we probably don't
+  need it on the passkey page");
+- the chosen email is the read-only field of A189;
+- if the list of other ways in passes three or four, the outside providers (Google and later
+  others) may become a row of logo-only buttons.
+
+**Also wanted, if it holds:** "Continue with Google" on the first page, under the email field's
+Continue, since it does not need the email. Today Google is offered only after the email step,
+when the venue has it set up (`googleConfigured`). Check whether the Google sign-in needs the email
+first; if it does, leave it where it is and say so in the PR. The login rules in CLAUDE.md §3 stand:
+the first page shows the same choices to everyone. Sign in with Apple does not exist; the mockup
+only showed where it would go.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
