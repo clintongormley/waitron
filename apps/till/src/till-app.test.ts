@@ -558,8 +558,8 @@ function fakeSessionActivity() {
 /** Boots the app, settles boot, and logs a person in — leaving the app on the counter. */
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  // Log in as a NON-configuring operator by default (the common case) — the capability tests below
-  // drive a configuring one explicitly.
+  // Log in as an operator without `venue.configure` by default — the permission tests below drive
+  // one holding it.
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   return counter(el)!;
@@ -4752,7 +4752,7 @@ describe("till-app", () => {
       expect(floor(el)!.tables).toEqual([]);
     });
 
-    it("threads the api + the canEdit gate to the floor screen (FP-2)", async () => {
+    it("gives a floor-plan card's floor screen the app's api and no editing (FP-2)", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4761,8 +4761,7 @@ describe("till-app", () => {
       selectTab(el, "floor");
       await flush(el);
 
-      // The floor screen gets the app's api (for the on-till placement writes) and the manager gate.
-      // `toCounter` logged in as STAFF, so `canEdit` is false here (the manager path is covered below).
+      // A floor-plan card's floor screen is not editable; the editor card's lock is covered below.
       expect(floor(el)!.api).toBe(currentApi);
       expect(floor(el)!.canEdit).toBe(false);
     });
@@ -9537,6 +9536,156 @@ describe("the device profile decides which screens a device offers", () => {
     });
     expect(shell(el)!.activeTabKey).toBe("counter");
     expect(counter(el)).not.toBeNull();
+  });
+
+  describe("a sign-in that something newer replaced while it loaded", () => {
+    const signedIn = (el: TillApp) =>
+      el as unknown as {
+        screen: string;
+        operatorName: string;
+        operatorPersonId: string;
+        permissions: string[];
+      };
+
+    /** The next catalogue load waits until the returned function lets it load or fail. */
+    async function holdCatalogue(): Promise<(outcome?: "loads" | "fails") => void> {
+      const catalogue = await currentApi.listDefaultZoneOffers();
+      let finish!: (value: typeof catalogue) => void;
+      let fail!: (error: unknown) => void;
+      vi.mocked(currentApi.listDefaultZoneOffers).mockImplementationOnce(
+        () =>
+          new Promise((done, refuse) => {
+            finish = done;
+            fail = refuse;
+          }),
+      );
+      return (outcome = "loads") =>
+        outcome === "loads" ? finish(catalogue) : fail({ code: "server.internal" });
+    }
+
+    it.each(["loads", "fails"] as const)(
+      "leaves the newer person signed in when an older sign-in's catalogue %s last",
+      async (outcome) => {
+        const { el } = await mountApp();
+        await flush(el);
+        const release = await holdCatalogue();
+        emit(lock(el)!, "logged-in", {
+          personId: "manager",
+          displayName: "Manager",
+          permissions: ["venue.configure"],
+        });
+        await flush(el);
+        emit(lock(el)!, "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
+        await flush(el);
+        release(outcome);
+        await flush(el);
+        expect(signedIn(el).permissions).toEqual([]);
+        expect(signedIn(el).operatorPersonId).toBe("staff");
+        expect(signedIn(el).operatorName).toBe("Staff");
+      },
+    );
+
+    it("asks for no further counter list once a logout comes while the held orders load", async () => {
+      let release!: (rows: never[]) => void;
+      const { el } = await mountApp({
+        // Not pay-first, so the station queue is a real read the counter lists would make next.
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        listWorkingOrders: vi.fn(() => new Promise((done) => (release = done))),
+      });
+      await toCounter(el);
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
+      emit(shell(el)!, "logout");
+      await flush(el);
+      release([]);
+      await flush(el);
+      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
+      expect(currentApi.listCounterWaiting).not.toHaveBeenCalled();
+    });
+
+    it("keeps the roster it had when a logout comes while the sign-in's roster loads", async () => {
+      const { el } = await mountApp();
+      await flush(el);
+      let release!: (staff: { personId: string; displayName: string }[]) => void;
+      vi.mocked(currentApi.listStaff).mockImplementationOnce(
+        () => new Promise((done) => (release = done)),
+      );
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      // The lock screen's own read, then the sign-in's.
+      expect(currentApi.listStaff).toHaveBeenCalledTimes(2);
+      emit(shell(el)!, "logout");
+      await flush(el);
+      release([{ personId: "p2", displayName: "Ben" }]);
+      await flush(el);
+      expect((el as unknown as { staff: unknown[] }).staff).toEqual([]);
+    });
+
+    it("stays locked when the idle logout comes while a sign-in waits for the floor", async () => {
+      const sa = fakeSessionActivity();
+      let resolve!: (value: TableState[]) => void;
+      currentApi = stubApi({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities: [] }),
+        getTablesState: vi.fn(() => new Promise<TableState[]>((done) => (resolve = done))),
+      });
+      const { el } = await mountWidget<TillApp>("till-app", {
+        api: currentApi,
+        sessionActivity: sa as never,
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      (sa.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+      await flush(el);
+      resolve([freeTable]);
+      await flush(el);
+      expect(signedIn(el).screen).toBe("lock");
+      expect(shell(el)).toBeNull();
+      expect((el as unknown as { tables: TableState[] }).tables).toEqual([]);
+    });
+
+    it("installs no floor when a logout comes while a restored floor tab loads after the counter", async () => {
+      history.replaceState(null, "", "/tabs/floor");
+      let resolve!: (value: TableState[]) => void;
+      const { el } = await mountApp({
+        getTablesState: vi.fn(() => new Promise<TableState[]>((done) => (resolve = done))),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(currentApi.getTablesState).toHaveBeenCalledOnce();
+      emit(shell(el)!, "logout");
+      await flush(el);
+      resolve([freeTable]);
+      await flush(el);
+      expect(signedIn(el).screen).toBe("lock");
+      expect((el as unknown as { tables: TableState[] }).tables).toEqual([]);
+    });
+
+    it("stays locked when the till moves to another server while a sign-in loads", async () => {
+      const router = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(),
+        storage: memoryStorage(),
+      });
+      currentApi = stubApi();
+      const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
+      await flush(el);
+      const release = await holdCatalogue();
+      emit(lock(el)!, "logged-in", {
+        personId: "manager",
+        displayName: "Manager",
+        permissions: ["venue.configure"],
+      });
+      await flush(el);
+      router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+      await flush(el);
+      release();
+      await flush(el);
+      expect(signedIn(el).screen).toBe("lock");
+      expect(signedIn(el).operatorName).toBe("");
+      expect(signedIn(el).permissions).toEqual([]);
+    });
   });
 });
 

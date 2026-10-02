@@ -1217,7 +1217,8 @@ export class TillApp extends LitElement {
   #markedRounds = new Set<WorkingOrderStore>();
   /** The signed-in person's draft on the open order's party. */
   #draftSync?: DraftSync;
-  /** Moved on by each sign-in, so a sign-out still saving its draft leaves a later session alone. */
+  /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
+   * loading, leaves a later session alone. */
   #signIns = 0;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
@@ -1660,13 +1661,18 @@ export class TillApp extends LitElement {
     const { personId, displayName, permissions, locale } = (event as CustomEvent<LoggedInDetail>)
       .detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
-    this.#signIns++;
+    const signIn = ++this.#signIns;
+    const session = this.#operatorSession;
+    // While this loads, the lock screen can start a newer sign-in, and a logout (idle, or from the
+    // shell once it shows) or a server move can end this one.
+    const replaced = () => signIn !== this.#signIns || session !== this.#operatorSession;
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
     let offerLoadFailed = false;
     try {
       const catalogue = await this.api.listDefaultZoneOffers();
+      if (replaced()) return;
       const { zones, context } = catalogue;
       this.#loadCounterOffers(catalogue);
       this.counterServiceZones = zones ?? [];
@@ -1675,6 +1681,7 @@ export class TillApp extends LitElement {
       if (zones !== undefined && context.serviceMode !== "table_tab")
         this.orderFlow = context.serviceMode;
     } catch {
+      if (replaced()) return;
       offerLoadFailed = true;
       this.#loadCounterOffers({ offers: [], menus: [] }, false);
       this.counterServiceZones = [];
@@ -1693,7 +1700,8 @@ export class TillApp extends LitElement {
     this.#menuPoll.start();
     const firstTab = this.canvas?.tabs[0];
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
-    if (landsOnFloor) await this.#loadFloorData();
+    if (landsOnFloor) await this.#loadFloorData(replaced);
+    if (replaced()) return;
     // History may change while login data loads and the lock screen still owns the page.
     this.#setActiveTab(this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
@@ -1701,14 +1709,22 @@ export class TillApp extends LitElement {
     const showsCounterLists = this.#showsCounterLists();
     if (showsCounterLists) {
       // Each list says its own failure, so one that fails never stops the others loading.
-      await this.#refreshList("held", "refresh.held");
-      await this.#refreshList("station", "refresh.station");
-      await this.#refreshWaiting();
+      const lists = [
+        ["held", "refresh.held"],
+        ["station", "refresh.station"],
+        ["waiting", "refresh.waiting"],
+      ] as const;
+      for (const [list, messageKey] of lists) {
+        await this.#refreshList(list, messageKey);
+        if (replaced()) return;
+      }
     }
     if (showsCounterLists || this.#affordances().includes("schedule")) {
       // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
-        this.staff = await this.api.listStaff();
+        const staff = await this.api.listStaff();
+        if (replaced()) return;
+        this.staff = staff;
       } catch {
         // Non-fatal: the picker keeps the roster it had.
       }
@@ -1716,7 +1732,7 @@ export class TillApp extends LitElement {
     // A restored floor tab needs its data on first paint, unless the landing already loaded it.
     if (this.#inShell() && !this.#floorLoaded) {
       const tab = this.#activeTab();
-      if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData();
+      if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData(replaced);
     }
   }
 
@@ -3401,13 +3417,14 @@ export class TillApp extends LitElement {
    * A shell tab reached through `tab-select` must load the floor itself, or the floor-plan card renders
    * with no table to tap. A failed load leaves the last-known floor.
    */
-  async #loadFloorData(): Promise<void> {
+  async #loadFloorData(replaced: () => boolean = () => false): Promise<void> {
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
         this.api.listZones(),
         this.api.listStatuses(),
       ]);
+      if (replaced()) return;
       this.tables = tables;
       this.zones = zones;
       this.statuses = statuses;
