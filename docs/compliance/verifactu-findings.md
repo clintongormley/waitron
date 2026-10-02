@@ -1106,6 +1106,8 @@ an operator configuration choice, not a code defect; flagged for the asesor, not
   simplificadas**, each with its own number, QR, legend and chained registro. Already built and proven
   on real Postgres (`apps/server/src/split-bill.fiscal.test.ts`); only the till button is still a
   `Split (soon)` placeholder (`apps/till/src/i18n/strings.ts`).
+  > **Update, 2026-10-02 (#1042).** That suite now runs on SQLite and passes (3 of 3), and the till no
+  > longer shows `Split (soon)`: `apps/till/src/i18n/strings.ts` offers `Split by item`.
 - **Guests who split the MONEY on one bill** are one operation. Either one invoice (with the payments
   as separate tenders, which the pay path does not yet support — `payWorkingOrder` takes a single
   `tender`), or the art. 14.2.a) duplicado route with a per-person base/cuota split. Open — Q17.

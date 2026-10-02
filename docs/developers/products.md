@@ -425,18 +425,15 @@ key: `packages/media/drizzle/0001_image_references.sql` protects it with **four 
 insert, one on an update of `image`, one on deleting the parent image, one on renaming it.
 That file's own header states what a trigger is not, and two of its points matter to anyone reading
 this page: `pragma foreign_key_list('products')` does not list the rule, so nothing that enumerates
-keys from the engine sees it; and the refusal arrives as errcode 1811
-(`SQLITE_CONSTRAINT_TRIGGER`), not 787 (`SQLITE_CONSTRAINT_FOREIGNKEY`). Guard:
+keys from the engine sees it; and a write naming a missing filename is refused with errcode 1811
+(`SQLITE_CONSTRAINT_TRIGGER`), where a declared key refuses it with 787
+(`SQLITE_CONSTRAINT_FOREIGNKEY`), while a refused delete of an image in use is 1811 either way when
+the key is `on delete restrict`. Guard:
 `packages/media/src/image-references.test.ts`, whose cases use top-level products. For a variant
 row, measured 2026-09-23 with a throwaway suite over the core, catalogue and media migration sets:
 inserting a variant naming a photo that does not exist, and deleting with raw SQL a photo a variant
 uses, were each refused with errcode 1811 by `products_media_image_fk`, while a variant naming a
-photo that exists was accepted. That header also has a paragraph about `product_variants.image`: it
-was written while that table still existed, and the table has since been dropped
-(`packages/catalogue/drizzle/0004_drop_product_variants.sql`). The file is left as it shipped: a
-box's boot check compares the hash of each migration the database recorded with the image's files,
-and reports an edited file as a migration the image does not have (the case "reports an EDITED
-migration, whose hash changed although the count did not", `packages/provisioning/src/schema-ahead.test.ts`).
+photo that exists was accepted.
 
 ## The editor form
 

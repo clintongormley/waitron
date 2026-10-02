@@ -488,11 +488,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   empty result as a specific cause. Untargeted calls remain in the tree and nothing guards this.
   See [conventions-data.md](docs/developers/conventions-data.md).
 - **Rewriting rows one at a time inside a transaction can break a unique index the FINAL state
-  satisfies.** Two items swapping products were refused midway through — on this engine
-  `UNIQUE constraint failed: <table>.<column>`, errcode 2067. Replacing the set — delete then
-  insert — needs the `REFERENCES` grep first: nothing outside the table may hold a key into it. The
-  writers are already serialised: one write transaction at a time per file, because
-  `withTransaction` IS `withWriteLock` (`packages/db/src/tenancy.ts`). See
+  satisfies.** A row-by-row swap under a two-column unique index is refused midway through —
+  measured on a bare table on this engine: `UNIQUE constraint failed: <table>.<col>, <table>.<col>`,
+  errcode 2067. Replacing the set — delete then insert — needs the `REFERENCES` grep first:
+  nothing outside the table may hold a key into it. The writers are already serialised: one write
+  transaction at a time per file, because `withTransaction` IS `withWriteLock`
+  (`packages/db/src/tenancy.ts`). See
   [conventions-data.md](docs/developers/conventions-data.md).
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
@@ -742,6 +743,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   Measured 2026-09-22 on `node:sqlite` (Node v26.7.0), with the control: the same insert passes the
   moment the index is created. So a green migrate is no evidence a new key is sound — write through
   it. See
+  [conventions-data.md](docs/developers/conventions-data.md).
+- **Editing a shipped migration file — even only its comments — makes every venue it already
+  migrated refuse to start** with `provisioning.database_ahead`: drizzle stores a hash of the whole
+  file, and the ahead check on the boot path and the bucket rebuild reads a hash the image does not
+  ship as a newer image's. Such an edit ships only with a venue reset, said in the PR's first line.
+  Nothing guards it. Cost: #1036 restored two edited files byte for byte. See
   [conventions-data.md](docs/developers/conventions-data.md).
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:

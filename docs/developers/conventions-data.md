@@ -756,7 +756,8 @@ The live instance of the trigger edge is `packages/media`. Its
 `drizzle/0001_image_references.sql` carries eight triggers standing in for two foreign keys, and four
 of them sit on tables another set owns: `products`, created by core in
 `packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
-`0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue.
+`0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue (catalogue
+`0013` and media `0004` have since dropped the two on `category_details`).
 `drizzle/0002_section_image_references.sql` adds four more of the same shape for `sections.image`,
 two of them on catalogue's `sections`. `drizzle/0003_published_image_references.sql` adds three for
 `menu_version_images.filename`: one on catalogue's `menu_version_images`, and two on `media_images`
@@ -1323,6 +1324,33 @@ copy, the upgrade test found it empty; recorded in the commit "Photos keep only 
 text and labels from the image table"), so the copy aside and the copy back sit in the same file as
 the rebuild and no migration step ends with the bytes gone.
 
+## Editing a shipped migration file, even a comment, needs a venue reset
+
+Drizzle records a hash of each migration file's whole text in the database's journal table, and
+`assertNotAhead` (`packages/provisioning/src/schema-ahead.ts`) treats a recorded hash the image does
+not ship as a migration from a NEWER image, refusing the start with `provisioning.database_ahead`.
+`packages/migrations/src/journal-hashes.test.ts` pins how drizzle computes the hash. Measured
+2026-10-02 with drizzle's own `readMigrationFiles` (`drizzle-orm@0.45.3`): editing only comment
+lines in `packages/db/drizzle/0001_behavioural_triggers.sql` and
+`packages/media/drizzle/0001_image_references.sql` changed exactly those two files' hashes, index 1
+of 68 and index 1 of 8. So such an edit ships only with a reset of every venue already migrated,
+said in the pull request's first line. Cost: #1036 had to restore both files byte for byte; the
+owner then chose to edit them and reset the venues.
+
+The unit case "reports an EDITED migration, whose hash changed although the count did not"
+(`packages/provisioning/src/schema-ahead.test.ts`) covers the comparison on plain strings. The
+review of the 2026-10-02 edit also ran it against real databases: one migrated with the files as
+they shipped was refused with `provisioning.database_ahead` by `assertNotAhead` against the edited
+files (`findAheadSets` listed the core and media sets; the refusal names only the first, core), and
+one migrated with the edited files was accepted. A rebuild from the bucket runs the same check
+(`apps/server/src/restore-stream.ts` calls `assertNotAhead`), so a copy streamed before the edit
+carries the old hashes too, and so does an archive taken before it: a cold restore runs no ahead
+check of its own, and the start after it does (`apps/server/src/node-entry.ts`). Nothing guards
+against such an edit: the 2026-10-02 one passed `scripts/migrations-match-schema.test.ts`,
+`scripts/migration-upgrade.test.ts`, `scripts/schema-constraints.test.ts`,
+`scripts/behavioural-triggers.test.ts`, `scripts/append-only-triggers.test.ts` and
+`packages/migrations`'s suite.
+
 ## Drizzle picks what to apply from `max(created_at)` alone
 
 Never from a position in the journal file, so an entry whose `when` sits AT OR BELOW one the database
@@ -1341,8 +1369,8 @@ which is also where they are kept current.
 and `packages/provisioning/src/errors.ts` — point at `CLAUDE.md` §3, and so here, instead of
 repeating the citation. That is where the pointer stops: the citation is still restated under
 `packages/`, `scripts/`, `apps/` and `docs/` — `git ls-files | xargs grep -ln 'dialect.js'` finds
-every copy, one of them inside a migration `.sql` file — and nothing enforces the pointer, so a
-drizzle bump starts with that grep and fixes each one by hand.
+every copy — and nothing enforces the pointer, so a drizzle bump starts with that grep and fixes
+each one by hand.
 
 **The core journal's contradictory shape went with the history that had it.** A database at core
 release point 2 and one at release point 3 both carried entry 1's `when` as their watermark, because

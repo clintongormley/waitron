@@ -1244,10 +1244,6 @@ plans to retire the editor.
 **Variants as products (#511–#556) — what is left open.** How the model works is in
 [products.md](developers/products.md), under _Variants_.
 
-- **The header of the shipped `packages/media/drizzle/0001_image_references.sql` is stale** — its
-  counts of `products`' columns, keys and checks, and its description of `product_variants.image`,
-  a dropped table. It stays unedited, because editing a shipped migration changes the hash
-  `packages/migrations/src/journal-hashes.ts` compares.
 - **Reopening a held order still removes a sold-out extra on the first edit.** The owner chose
   option A on 2026-09-23 (lane B question Q1): keep a sold-out line in held work, flag it on the
   till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
@@ -4314,8 +4310,6 @@ approved.
     file's comment to what testing-guide itself measured (the per-test timer does not fire during
     a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
     matches.
-    `packages/media/drizzle/0001_image_references.sql` (about lines 22-24) says `workspace-cycles`
-    refuses an "import"; that guard reads `package.json` files (a shipped migration, likely left).
     Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
     top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
     decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
@@ -4485,8 +4479,6 @@ approved.
     `ATTACH`; #568's probe (Node v26.7.0) found one naming a file that does not exist IS refused
     there (errcode 14, no file created), while an existing file and `:memory:` attach — narrow that
     sentence in a pull request, since a root `CLAUDE.md` change takes the normal flow.
-    `packages/db/drizzle/0001_behavioural_triggers.sql` still points at `packages/store/src/index.ts`
-    by line number, which the prune moved; it is a migration file, so it was left.
   - `packages/payments-stripe`, found by #570 and not changed (each a code or config change, not a
     comment): the two `provider.test.ts` cases named "throws payment.not_found" assert only
     `rejects.toThrow()`, not the code (CLAUDE.md §4); `tenant-scoping.test.ts` is named for tenant
@@ -4506,10 +4498,6 @@ approved.
     `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
     reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
   - Found by #585's review in files outside `packages/db/src/schema`, not changed there:
-    the shipped migration `packages/db/drizzle/0001_behavioural_triggers.sql:348` says
-    `requireDevice` touches `last_seen_at` "on every authenticated request", which the review found
-    too wide (the migration cannot be edited). Stale line pointer: the shipped migration's line 378
-    points at history deleted from `device-profiles.trigger.test.ts`.
     `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
     dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
     making them static imports is a small code follow-up.
@@ -4542,9 +4530,7 @@ approved.
     `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number
     23001; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
     says the error construction typechecks "ONLY because" of one import — #588's review measured the
-    same claim false for printing and layouts. The shipped
-    `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts` tells 787 from 1811; it
-    reads only 1811 (`device-profile-store.ts` reads both). Both layouts database suites create a
+    same claim false for printing and layouts. Both layouts database suites create a
     manager session in `beforeAll`, while `useVenueDb` empties every data table after each test by
     default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's first test can
     use that session; they pass today because only the first does.
@@ -4763,8 +4749,9 @@ was fixed only for the last 28 documents. Find the rest with
 into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
 so check which document each one names before cutting it. Two were left on purpose:
 `packages/db/drizzle/0004_variant_one_level.sql` ("spec §1.2, §15.7"), because a shipped migration
-is not edited, and `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could
-not be traced to a deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
+is not edited without a venue reset (`CLAUDE.md` §3), and
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
+deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
 each to the pull request that built the work, or drop the tag. A test title is not a comment, so
 changing one does not pass `scripts/comments-only.mjs` as a comments-only change.
 
@@ -5867,15 +5854,6 @@ real `sh`.
 - **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test
   helpers, and production functions (`apps/server/src/working-order.ts` holds several) that take
   `cfg` and discard it.
-- **Pointers in shipped `drizzle/` SQL are left on purpose** (such as
-  `packages/media/drizzle/0001_image_references.sql` and
-  `packages/db/drizzle/0001_behavioural_triggers.sql`, which still points at `origin/main` for the
-  originals): editing a shipped migration, even a comment, changes its hash, and the boot path's
-  ahead check would then read an already-migrated box as ahead. For the same reason both files keep
-  their PostgreSQL comparisons, including, in both, the false claim that SQLite's `raise` takes only
-  a fixed message: measured 2026-10-02 on `node:sqlite` (Node v26.7.0, SQLite 3.53.4), a trigger's
-  `raise(abort, 'row ' || new.a || ' refused')` refused an insert of 7 with `row 7 refused`, errcode
-  1811.
 - **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
   5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
   that writes another attached database, so either `change_log` is reclassified to the file its
