@@ -82,6 +82,9 @@ export class PrintingRulesScreen extends LitElement {
     (error) => {
       this.errorKey = codeOf(error);
     },
+    (error) => {
+      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    },
   );
   @state() private printers: Printer[] = [];
   @state() private stations: Station[] = [];

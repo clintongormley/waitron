@@ -4536,6 +4536,52 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
   });
 
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+        codeMessage("connection.failed"),
+      ),
+    );
+    vi.mocked(api.listPrinters).mockResolvedValue(
+      printers.map((printer) => (printer.id === "p1" ? { ...printer, name: "Cocina 2" } : printer)),
+    );
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
+    await flush(el);
+    expect(text(el, "[data-test=printer-row-p1]")).toBe("Cocina 2");
+  });
+
+  it("reads the discovered printers once the server answers again after a failed first load", async () => {
+    const api = Object.assign(
+      stubApi({
+        listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+        listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredRegisteredNetwork),
+      }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+      codeMessage("connection.failed"),
+    );
+    expect(api.listDiscoveredPrinters).not.toHaveBeenCalled();
+    vi.mocked(api.listPrinters).mockResolvedValue(printers);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
+    await vi.waitFor(() => expect(api.listDiscoveredPrinters).toHaveBeenCalled());
+    await flush(el);
+    expect(text(el, "[data-test=printer-last-seen-p1]")).toBe(
+      t("printers.seen_at")
+        .replace("{agent}", "Cocina agent")
+        .replace("{time}", "2023-11-14 22:13"),
+    );
+  });
+
   it("shows a network printer with no port by its host alone", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({

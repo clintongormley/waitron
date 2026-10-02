@@ -312,6 +312,41 @@ describe("catalogue-screen", () => {
     expect(list(el).routing).toBeNull();
   });
 
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]");
+    vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed")),
+    );
+    const more: Unit = { ...units[0]!, id: "u2" };
+    vi.mocked(api.listUnits).mockResolvedValue([...units, more]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert()).toBeNull());
+    expect(editor(el).units.map(({ id }) => id)).toEqual(["u1", "u2"]);
+  });
+
+  it("loads the products once the server answers again after a failed first load", async () => {
+    const api = Object.assign(
+      stubApi({ listCatalogues: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]");
+    await vi.waitFor(() =>
+      expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed")),
+    );
+    expect(api.listProducts).not.toHaveBeenCalled();
+    vi.mocked(api.listCatalogues).mockResolvedValue(catalogues);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(list(el).products).toEqual(products));
+    expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
+    expect(alert()).toBeNull();
+  });
+
   it("leaves the content languages to their own Settings page while still handing them to the editor", async () => {
     const api = stubApi({
       getContentLanguages: vi
@@ -1742,6 +1777,24 @@ describe("catalogue-screen", () => {
       expect(step(el).open).toBe(true);
       expect(control(el, "load-error").textContent).toContain(codeMessage("server.internal"));
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    it("offers the menus once the server answers again after they failed to load", async () => {
+      const api = Object.assign(
+        stubApi({ getMenuStructure: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+        { liveData: new LiveData() },
+      );
+      const el = await create(api);
+      await vi.waitFor(() =>
+        expect(control(el, "load-error").textContent).toContain(codeMessage("connection.failed")),
+      );
+      vi.mocked(api.getMenuStructure).mockImplementation((id: string) =>
+        Promise.resolve(structures[id]!),
+      );
+      api.liveData.refresh();
+      await vi.waitFor(() => expect(control(el, "load-error")).toBeNull());
+      await step(el).updateComplete;
+      expect(place(el, "cat-a", "root-a")).not.toBeNull();
     });
 
     it("does not follow a save of an existing product with the step", async () => {
