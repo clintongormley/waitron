@@ -848,8 +848,9 @@ owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is w
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
 
-**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178 and A175 (#1029) are
-done; next A169–A172 and A176–A177, built in the new style rather than restyled twice.
+**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029)
+and A169 (#1026) are done; next A170–A172 and A176–A177, built in the new style rather than
+restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
