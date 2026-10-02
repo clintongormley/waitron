@@ -1086,6 +1086,55 @@ it("shows a failed initial load and retries", async () => {
   );
 });
 
+describe("after the server comes back", () => {
+  const down = { code: "connection.failed" };
+  const loadError = (el: ModifiersScreen) =>
+    el.shadowRoot!.querySelector('[data-test="load-error"]');
+
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const client = Object.assign(api(), { liveData: new LiveData() });
+    const el = await mount(client);
+    vi.mocked(client.listExtraLists).mockRejectedValue(down);
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(loadError(el)).not.toBeNull());
+    vi.mocked(client.listExtraLists).mockResolvedValue([extraList]);
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(loadError(el)).toBeNull());
+    expect(el.shadowRoot!.querySelector('[data-test="extra-lists"]')).not.toBeNull();
+  });
+
+  it("loads the products a failed first load never asked for once the server answers again", async () => {
+    const client = Object.assign(api({ listExtraLists: vi.fn().mockRejectedValue(down) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<ModifiersScreen>("dashboard-modifiers-screen", {
+      api: client,
+    });
+    await vi.waitFor(() => expect(loadError(el)).not.toBeNull());
+    expect(client.listProducts).not.toHaveBeenCalled();
+    vi.mocked(client.listExtraLists).mockResolvedValue([extraList]);
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(loadError(el)).toBeNull());
+    await vi.waitFor(() => expect(extraForm(el).products).toEqual(products));
+    expect(client.listProducts).toHaveBeenCalledWith("cat-1");
+  });
+
+  it("opens the list the path names once a failed first load recovers", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
+    const client = Object.assign(api({ listOptionLists: vi.fn().mockRejectedValue(down) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<ModifiersScreen>("dashboard-modifiers-screen", {
+      api: client,
+    });
+    await vi.waitFor(() => expect(loadError(el)).not.toBeNull());
+    vi.mocked(client.listOptionLists).mockResolvedValue([optionList]);
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(optionForm(el).open).toBe(true));
+    expect(optionForm(el).value).toEqual(optionList);
+  });
+});
+
 it("refreshes with the passive client without replacing an open draft", async () => {
   const background = api();
   const liveData = new LiveData();

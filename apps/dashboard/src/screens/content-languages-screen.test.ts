@@ -264,6 +264,40 @@ describe("required content languages", () => {
   });
 });
 
+describe("content languages after the server comes back", () => {
+  const down = { code: "connection.failed" };
+
+  it("reads the languages a failed first read of the rules never asked for once the server answers again", async () => {
+    const client = Object.assign(
+      api({ getContentLanguageRules: vi.fn().mockRejectedValue(down) }),
+      { liveData: new LiveData() },
+    );
+    const el = await mount(client);
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(t("content_languages.load_error")),
+    );
+    expect(client.getContentLanguages).not.toHaveBeenCalled();
+    vi.mocked(client.getContentLanguageRules).mockResolvedValue(BARCELONA);
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(shown(el)).toEqual(["Catalán", "Alemán", "Inglés"]));
+    expect(q(el, "[role=alert]")).toBeNull();
+    expect(rowOf(el, "ca").textContent).toContain(t("content_languages.required"));
+  });
+
+  it("shows the missing translations once the server answers again", async () => {
+    const client = Object.assign(
+      api({ getContentTranslationGaps: vi.fn().mockRejectedValue(down) }),
+      { liveData: new LiveData() },
+    );
+    const el = await mount(client);
+    await vi.waitFor(() => expect(q(el, "[data-test=gaps-error]")).not.toBeNull());
+    vi.mocked(client.getContentTranslationGaps).mockResolvedValue([]);
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=gaps-error]")).toBeNull());
+    expect(q(el, "[data-test=gaps-loading]")).toBeNull();
+  });
+});
+
 describe("content languages screen", () => {
   it("lists the default first, then the others alphabetically by their Spanish names, each starting with a capital", async () => {
     const el = await mount(api());

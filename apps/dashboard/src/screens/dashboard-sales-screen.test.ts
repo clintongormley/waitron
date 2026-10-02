@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DailyCloseDto, DashboardApi, SalesOverview, SalesPeriodDto } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { today } from "../date-utils.js";
 import { SalesScreen } from "./dashboard-sales-screen.js";
 import type { WtInput } from "@waitron/ui";
@@ -458,6 +459,73 @@ it("refreshes the selected daily report after a sale", async () => {
   vi.mocked(api.getDailyClose).mockResolvedValue(updated);
   liveData.invalidate([{ type: "sales", id: "new-sale" }]);
   await vi.waitFor(() => expect((el as unknown as { close: unknown }).close).toEqual(updated));
+});
+
+describe("dashboard-sales-screen after the server comes back", () => {
+  const down = { code: "connection.failed" };
+
+  it("clears the could-not-connect messages and shows the reports once the server answers again", async () => {
+    const api = Object.assign(
+      stubApi({
+        getSalesOverview: vi.fn().mockRejectedValue(down),
+        getDailyClose: vi.fn().mockRejectedValue(down),
+        getCategorySales: vi.fn().mockRejectedValue(down),
+        getReportPrinters: vi.fn().mockRejectedValue(down),
+      }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    const root = el.shadowRoot!;
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-test=error]")?.textContent?.trim()).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+    expect(root.querySelector("[data-test=categories-error]")).not.toBeNull();
+    expect(root.querySelector("[data-test=printers-error]")).not.toBeNull();
+
+    vi.mocked(api.getSalesOverview).mockResolvedValue(overview(today()));
+    vi.mocked(api.getDailyClose).mockResolvedValue(close);
+    vi.mocked(api.getCategorySales).mockResolvedValue({
+      mode: "at_time_of_sale",
+      tree: [],
+      gross: "0.00",
+      net: "0.00",
+      grossComplete: true,
+      linesWithoutGross: 0,
+    });
+    vi.mocked(api.getReportPrinters).mockResolvedValue([]);
+    api.liveData.refresh();
+
+    await vi.waitFor(() => expect(root.querySelector("[data-test=error]")).toBeNull());
+    expect(root.querySelector("[data-test=tender-table]")).not.toBeNull();
+    expect(root.querySelector("[data-test=categories-error]")).toBeNull();
+    expect(root.querySelector("[data-test=printers-error]")).toBeNull();
+  });
+
+  it("opens on Overview's business day once the server answers again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-27T01:00:00Z"));
+    const api = Object.assign(
+      stubApi({
+        getSalesOverview: vi.fn().mockRejectedValue(down),
+        getDailyClose: vi.fn().mockRejectedValue(down),
+      }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=error]")).not.toBeNull(),
+    );
+
+    vi.mocked(api.getSalesOverview).mockResolvedValue(overview("2026-09-26"));
+    vi.mocked(api.getDailyClose).mockResolvedValue(close);
+    api.liveData.refresh();
+
+    await vi.waitFor(() => expect(api.getDailyClose).toHaveBeenLastCalledWith("2026-09-26"));
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull());
+    expect(el.shadowRoot!.querySelector("[data-test=tender-table]")).not.toBeNull();
+  });
 });
 
 describe("dashboard-sales-screen date fields", () => {

@@ -197,7 +197,12 @@ export class ContentLanguagesScreen extends LitElement {
     () => {
       this.loadFailed = true;
     },
+    () => {
+      this.loadFailed = false;
+      if (!this.#loaded) void this.#load();
+    },
   );
+  #loaded = false;
   readonly #gapQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -259,6 +264,7 @@ export class ContentLanguagesScreen extends LitElement {
         this.loadFailed = false;
         setContentLanguages(value);
       });
+      this.#loaded = true;
     } catch {
       this.loadFailed = true;
     }

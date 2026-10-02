@@ -139,7 +139,12 @@ export class ModifiersScreen extends LitElement {
     () => {
       this.loadError = true;
     },
+    () => {
+      this.loadError = false;
+      if (!this.#loaded) void this.#load();
+    },
   );
+  #loaded = false;
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -171,6 +176,7 @@ export class ModifiersScreen extends LitElement {
         }),
       ]);
       await this.#loadProducts();
+      this.#loaded = true;
       this.#openLinkedList();
     } catch {
       this.loadError = true;
