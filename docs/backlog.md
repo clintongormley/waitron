@@ -779,18 +779,19 @@ Each hint follows the field it copies as the owner types: change Name and the bl
 change with it.
 
 **An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
-— OPEN.** The owner, on the Extras tab with no lists: _"The "No extras lists to show" could be
-inset a bit. How could we improve the styling?"_ Today, when a table has no rows at all,
-`wt-data-table` stops drawing the table — no header row, no border — and leaves the message as a
-bare muted paragraph flush with the left edge (`render()`, the `rows.length === 0` branch, and the
-`.message` rule, `packages/ui/src/components/wt-data-table.ts`). **Decided (owner, 2026-10-01,
-choosing the second of two looks offered):** when nothing exists yet, the table draws a padded box
-with the table's own border and corners, holding the screen's empty sentence (A177) and the
-screen's Add button under it, centred. The table does not know a screen's Add button today, so it
-needs a place for the screen to put one (a slot or similar), in the shared table so every screen
-gets it. With A174 the same Add button also sits on the tab row; showing it in both places on an
-empty screen is intended. The "nothing matches" case (A177) keeps the table's toolbar and gets the
-same padded box without a button.
+— DONE** (this change). `wt-data-table` draws a table with no rows as a padded box with the
+table's own border, corners and background, the sentence centred and, under it, whatever the
+screen puts in the new `empty-action` slot; the "nothing matches" case keeps the toolbar and gets
+the same box without the slot. Every dashboard table whose screen has an Add action for its own
+rows renders that Add button into the slot while its list is empty (the commit lists them); a
+table with no Add action keeps just the sentence. The till and setup draw no `wt-data-table`, so
+nothing changed there. The empty case still shows the toolbar when the table has one, as before.
+Left open: the Payments screen's readers table gets no button, because "Add reader" sits beside
+each connected provider (none, one or several), so there is no single Add to put there, and the
+list is pre-filtered by status. Found while building it, not fixed: on the Venue operations
+screen, making a department from the top Add button leaves keyboard focus on the page,
+because the button is still greyed out (saving) when the screen tries to focus it — reproduced on
+the code before this change.
 
 **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177, owner
 2026-10-01) — OPEN.** `wt-data-table` already separates two cases: nothing exists (`emptyMessage`)
