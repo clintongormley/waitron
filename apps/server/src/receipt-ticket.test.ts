@@ -1597,6 +1597,12 @@ describe("the receipt's fixed words follow its language", () => {
         refund: "Devolució -2,00 €",
         charged: "Cobrat 21,90 €",
       },
+      single: {
+        cash: "Efectiu 30,00 €",
+        change: "Canvi 9,10 €",
+        card: "Targeta",
+        reference: "Ref. 4471",
+      },
     },
     {
       locale: "gl-ES",
@@ -1619,6 +1625,12 @@ describe("the receipt's fixed words follow its language", () => {
         tip: "Propina 1,00 €",
         refund: "Devolución -2,00 €",
         charged: "Cobrado 21,90 €",
+      },
+      single: {
+        cash: "Efectivo 30,00 €",
+        change: "Cambio 9,10 €",
+        card: "Tarxeta",
+        reference: "Ref. 4471",
       },
     },
     {
@@ -1643,17 +1655,31 @@ describe("the receipt's fixed words follow its language", () => {
         refund: "Itzulketa -2,00 €",
         charged: "Kobratua 21,90 €",
       },
+      single: {
+        cash: "Eskudirua 30,00 €",
+        change: "Itzulia 9,10 €",
+        card: "Txartela",
+        reference: "Erref. 4471",
+      },
     },
-  ])("prints every fixed word in $locale", ({ locale, words }) => {
+  ])("prints every fixed word in $locale", ({ locale, words, single }) => {
     const sale = printed(LABELLED_SALE, locale);
     const card = printed(CARD_WITH_TIP, locale);
+    const cash = printed(FILED_SALE, locale);
     const { charged, date, practice, ...rows } = words;
     for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
     expect(sale.filter((line) => line === practice)).toHaveLength(2);
     expect(sale.some((line) => line.startsWith(date))).toBe(true);
     expect(card).toContain(charged);
-    for (const spanish of ["Fecha", "Tarjeta", "PRUEBA"])
-      expect(sale.join("\n"), spanish).not.toContain(spanish);
+    expect(card).toContain(single.card);
+    expect(card).toContain(single.reference);
+    expect(cash).toContain(single.cash);
+    expect(cash).toContain(single.change);
+    for (const [name, ticket] of Object.entries({ sale, card, cash })) {
+      for (const spanish of ["Fecha", "Tarjeta", "PRUEBA"]) {
+        expect(ticket.join("\n"), `${name}: ${spanish}`).not.toContain(spanish);
+      }
+    }
   });
 
   it("prints the Veri*Factu legend and the QR caption identically in every language", () => {

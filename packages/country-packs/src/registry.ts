@@ -109,7 +109,9 @@ export function resolveInstalledDefaultContentLanguage(input: VenueGeography): s
 
 /** What a receipt prints in when the venue's country has no installed pack: `loadTillConfig`'s
  * default when `WAITRON_TILL_LOCALE` is unset. */
-const FALLBACK_RECEIPT_LOCALE = "es-ES";
+const FALLBACK_RECEIPT_LOCALE = SPAIN.defaultLocale;
+const FALLBACK_RECEIPT_LABELS: ReceiptLabels =
+  SPAIN_RECEIPT_LABELS[SPAIN.defaultLocale as keyof typeof SPAIN_RECEIPT_LABELS];
 
 /** The receipt languages the venue's installed country pack offers, and the one it fixes, if any. */
 export function resolveInstalledReceiptLanguageRules(input: VenueGeography): ReceiptLanguageRules {
@@ -125,5 +127,5 @@ export function receiptLabelsFor(locale: string): ReceiptLabels {
     const labels = pack.receiptLabels?.[locale];
     if (labels !== undefined) return labels;
   }
-  return SPAIN_RECEIPT_LABELS["es-ES"];
+  return FALLBACK_RECEIPT_LABELS;
 }

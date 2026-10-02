@@ -142,8 +142,13 @@ export function formatReceipt({
   const text = (s: string, indent = 0): void => {
     for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };
-  const row = (label: string, amount: string, indent = 0): void => {
-    for (const line of labelAmountLines(prepareText(label), prepareText(amount), columns, indent)) {
+  const row = (caption: string, amount: string, indent = 0): void => {
+    for (const line of labelAmountLines(
+      prepareText(caption),
+      prepareText(amount),
+      columns,
+      indent,
+    )) {
       b.line(line);
     }
   };
@@ -193,15 +198,15 @@ export function formatReceipt({
     );
     // The dish's frozen answers to its options lists, each under the dish it was asked about. An
     // extras pick is NOT here: it is its own priced child line, printed by the loop below.
-    for (const label of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], locale)) {
-      text(`  ${label}`, 2);
+    for (const answer of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], locale)) {
+      text(`  ${answer}`, 2);
     }
     for (const option of options) {
       // No quantity prefix: an option is priced per dish. A "×N" badge shows a per-dish count above 1.
       const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
       const name = lineName(option.descriptions, locale);
-      const label = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
-      row(label, formatMoney(option.listGross ?? option.gross, locale), 2);
+      const caption = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
+      row(caption, formatMoney(option.listGross ?? option.gross, locale), 2);
     }
     for (const line of [dish, ...options]) {
       for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2);

@@ -17,7 +17,9 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
+import { decimal } from "@waitron/shared";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -25,7 +27,8 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { payWorkingOrderIntegrated } from "./till-sale.js";
+import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -351,19 +354,27 @@ describe("a receipt follows its location's saved language", () => {
   );
 });
 
-describe("a bill paid in parts and an invoice issued at placing file the location's language", () => {
-  async function catalanBillVenue(): Promise<BillVenue> {
-    const venue = await provisionBillVenue(suite.db);
-    expect(venue.cfg.locale).toBe("es-ES");
-    await inTx(venue, (tx) =>
-      tx
-        .update(locations)
-        .set({ invoiceLocales: ["ca-ES"] })
-        .where(eq(locations.id, venue.cfg.locationId)),
-    );
-    return venue;
-  }
+/** A bill venue whose location is saved as Catalan while its configuration still says Spanish. */
+async function catalanBillVenue(): Promise<BillVenue> {
+  const venue = await provisionBillVenue(suite.db);
+  expect(venue.cfg.locale).toBe("es-ES");
+  await inTx(venue, (tx) =>
+    tx
+      .update(locations)
+      .set({ invoiceLocales: ["ca-ES"] })
+      .where(eq(locations.id, venue.cfg.locationId)),
+  );
+  return venue;
+}
 
+/** The one customer receipt among the jobs printed so far. */
+async function takeReceipt(db: Database): Promise<string[]> {
+  const receipts = (await takePrinted(db)).filter((lines) => lines.includes("VERI*FACTU"));
+  expect(receipts).toHaveLength(1);
+  return receipts[0]!;
+}
+
+describe("a bill paid in parts and an invoice issued at placing file the location's language", () => {
   function cashContribution(venue: BillVenue, billId: string, amount: string) {
     return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
       submissionId: randomUUID(),
@@ -403,7 +414,76 @@ describe("a bill paid in parts and an invoice issued at placing file the locatio
       zoneId,
       operatorId: venue.operatorId,
     });
+    await takePrinted(suite.db);
     await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+    const receipt = await takeReceipt(suite.db);
+    expect(startsWith(receipt, "Data"), "Data").toBe(true);
+    expect(startsWith(receipt, "Fecha")).toBe(false);
+  });
+});
+
+describe("a card-reader sale files and prints in the location's language", () => {
+  async function catalanCounter() {
+    const venue = await catalanBillVenue();
+    const { zoneId, offerFor } = await inTx(venue, async (tx) => {
+      const offers = await offerProducts(tx, venue.cfg, { zone: "counter" });
+      return { zoneId: offers.zoneId, offerFor: offers.offerFor };
+    });
+    const [tarta] = suite.db.all<{ id: string }>(sql`select id from products where name = 'Tarta'`);
+    const deps = {
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+      provider: new SimulatorPaymentProvider(venue.db),
+    };
+    await takePrinted(suite.db);
+    return { venue, deps, zoneId, menuItemId: offerFor(tarta!.id) };
+  }
+
+  it("files and prints a captured card sale in Catalan", async () => {
+    const { venue, deps, zoneId, menuItemId } = await catalanCounter();
+    const id = randomUUID();
+
+    const out = await payWorkingOrderIntegrated(deps, venue.cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId, quantity: "1" }],
+      simulationOutcome: "captured",
+    });
+
+    expect(out.outcome).toBe("captured");
+    if (out.outcome !== "captured") throw new Error("unreachable");
+    expect(out.ticket.locale).toBe("ca-ES");
+    expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+    const receipt = await takeReceipt(suite.db);
+    expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
+    expect(startsWith(receipt, "Tarjeta")).toBe(false);
+  });
+
+  it("files and prints in Catalan a card payment captured before a lost response", async () => {
+    const { venue, deps, zoneId, menuItemId } = await catalanCounter();
+    const id = randomUUID();
+    await inTx(venue, async (tx) => {
+      await createOpenOrder(tx, venue.cfg, id, [{ menuItemId, quantity: "1" }], null, { zoneId });
+      await insertCapturedPayment(tx, {
+        workingOrderId: id,
+        provider: "simulator",
+        paymentRef: `sim-ref-${randomUUID()}`,
+        amount: decimal("18.00"),
+        settledAt: new Date(),
+        externalRef: `sim-lost-${randomUUID()}`,
+      });
+    });
+
+    const out = await payWorkingOrderIntegrated(deps, venue.cfg, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    if (out.outcome !== "captured") throw new Error("unreachable");
+    expect(out.ticket.locale).toBe("ca-ES");
+    expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+    const receipt = await takeReceipt(suite.db);
+    expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
+    expect(startsWith(receipt, "Tarjeta")).toBe(false);
   });
 });

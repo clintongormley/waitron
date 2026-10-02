@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
@@ -117,7 +117,9 @@ describe("readVenueReceiptLanguageRules", () => {
   it("fixes the Barcelona venue's receipts in Catalan, giving the pack's reason", async () => {
     const catalonia = getCountryPack("ES")!.administrativeAreas.find(({ code }) => code === "08")!;
     expect(catalonia.fixedReceiptLocale?.locale).toBe("ca-ES");
-    expect(await readVenueReceiptLanguageRules(suite.db, { locationId })).toStrictEqual({
+    expect(
+      await withTransaction(suite.db, (tx) => readVenueReceiptLanguageRules(tx, { locationId })),
+    ).toStrictEqual({
       choices: SPAIN_RECEIPT,
       defaultLocale: "ca-ES",
       fixed: catalonia.fixedReceiptLocale,
@@ -134,16 +136,20 @@ describe("readVenueReceiptLanguageRules", () => {
         operationDescription: "Retail",
       })
       .returning({ id: locations.id });
-    expect(await readVenueReceiptLanguageRules(suite.db, { locationId: madrid!.id })).toStrictEqual(
-      { choices: SPAIN_RECEIPT, defaultLocale: "es-ES" },
-    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        readVenueReceiptLanguageRules(tx, { locationId: madrid!.id }),
+      ),
+    ).toStrictEqual({ choices: SPAIN_RECEIPT, defaultLocale: "es-ES" });
   });
 
   it("offers nothing when there is no taxpayer row to read a country from", async () => {
     await suite.db.execute(sql`delete from tenants`);
     try {
       expect(
-        await readVenueReceiptLanguageRules(suite.db, { locationId: randomUUID() }),
+        await withTransaction(suite.db, (tx) =>
+          readVenueReceiptLanguageRules(tx, { locationId: randomUUID() }),
+        ),
       ).toStrictEqual({ choices: [], defaultLocale: "es-ES" });
     } finally {
       await seedTenant(suite.db);
