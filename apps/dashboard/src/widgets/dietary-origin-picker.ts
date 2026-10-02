@@ -1,6 +1,7 @@
 import { LitElement, type PropertyValues, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "../i18n/t.js";
 import { DIETARY_ORIGINS, type DietaryOrigin } from "../api/client.js";
 
@@ -14,19 +15,9 @@ import { DIETARY_ORIGINS, type DietaryOrigin } from "../api/client.js";
 export class DietaryOriginPicker extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
-      }
-      label {
-        display: block;
-        margin-bottom: var(--wt-space-2);
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-sm);
-      }
-      select {
-        width: 100%;
       }
     `,
   ];
@@ -40,9 +31,9 @@ export class DietaryOriginPicker extends LitElement {
     if (changed.has("value")) this.selected = this.value;
   }
 
-  #onChange(event: Event): void {
+  #onChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const raw = (event.target as HTMLSelectElement).value;
+    const raw = event.detail.value;
     this.selected = raw === "" ? null : (raw as DietaryOrigin);
     this.#emit();
   }
@@ -59,16 +50,21 @@ export class DietaryOriginPicker extends LitElement {
 
   override render() {
     return html`
-      <label for="origin">${t("origin.label")}</label>
-      <select id="origin" data-test="origin" @change=${(e: Event) => this.#onChange(e)}>
-        <option value="" ?selected=${this.selected === null}>${t("origin.uncategorised")}</option>
-        ${DIETARY_ORIGINS.map(
-          (origin) =>
-            html`<option value=${origin} ?selected=${this.selected === origin}>
-              ${t(`origin.${origin}`)}
-            </option>`,
-        )}
-      </select>
+      <wt-combobox
+        name="origin"
+        data-test="origin"
+        label=${t("origin.label")}
+        search="auto"
+        placeholder=${t("origin.uncategorised")}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${[
+          { value: "", label: t("origin.uncategorised") },
+          ...DIETARY_ORIGINS.map((origin) => ({ value: origin, label: t(`origin.${origin}`) })),
+        ]}
+        .value=${this.selected ?? ""}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onChange(e)}
+      ></wt-combobox>
     `;
   }
 }
