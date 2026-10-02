@@ -2021,9 +2021,10 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     2026-09-01 and 2026-09-02, choose Unpaid → the Any date switch stays off, both date fields keep
     their days and stay enabled, the address is `/manage/orders/status/unpaid/from/2026-09-01/to/2026-09-02`,
     and `listOrderPages` was called with those dates.
-  - "a staff session can filter today's finished bills" (decision 13): mounted with
-    `permissions: []`, the status combobox offers Paid, Cancelled and Voided alongside the
-    unfinished statuses; `/manage/orders/status/paid` reads Paid and asks for Paid.
+  - "a staff session can filter today's finished bills" (decision 13): the status combobox
+    offers Paid, Cancelled and Voided alongside the unfinished statuses;
+    `/manage/orders/status/paid` reads Paid and asks for Paid. The server applies the
+    staff session's business-day scope.
   - "the date fields say the range is by the day the bill was opened": their labels read
     "Opened from" and "Opened to".
   - "the Staff filter offers everyone the server names, a person with no name as Unknown person":
@@ -2408,9 +2409,10 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
   printers, says where the copy went, and the Printers screen shows one new document job and no
   drawer job; the detail then lists the copy. Then sign in as a staff-role person (if the demo seed
   has none with a password, invite one from the Staff screen; the invitation lands in the dev
-  stack's Mailpit): the sidebar holds My schedule and Orders only, Orders shows the open and
-  departed bills and not the paid one, and no row offers a reprint. Take a screenshot of each of
-  the eight combinations, and of the staff view, for the PR description.
+  stack's Mailpit): the sidebar holds My schedule and Orders only. Orders shows unfinished bills
+  and today's finished bills, including the paid one, but no older finished bill; a bill with an
+  invoice offers reprint. Take a screenshot of each of the eight combinations, and of the staff
+  view, for the PR description.
 
 - [ ] **Step 10: Guards and the rest.**
   - `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/pinned-actions-column.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts`
