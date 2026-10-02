@@ -4,8 +4,9 @@
  * Weaker than its name: it reads TEXT — the template and string literals of each non-test `.ts`
  * file under `apps/` and `packages/` — so a field built with `document.createElement`, inserted
  * with `unsafeHTML`, written in an `.html`, `.js` or `.mjs` file, or whose tag name is split across
- * a `${…}` boundary is invisible to it; and the files in EXEMPT_FILES are not read at all, so a
- * second field added inside one passes.
+ * a `${…}` boundary is invisible to it; the files in EXEMPT_FILES are not read at all, so a
+ * second field added inside one passes; and an ALLOWED file is held to its count of LINES, so a
+ * field moved to another line, or added on a line that already has one, passes.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -38,17 +39,20 @@ const EXEMPT_FILES = new Set([
 ]);
 
 /** Fields that are not fields: the list shrinks; it does not grow. */
-const ALLOWED: ReadonlyArray<{ file: string; reason: string }> = [
+const ALLOWED: ReadonlyArray<{ file: string; lines: number; reason: string }> = [
   {
     file: "apps/dashboard/src/screens/login-screen.ts",
+    lines: 3,
     reason: "hidden username inputs for the browser's password manager",
   },
   {
     file: "apps/dashboard/src/widgets/autofill-username.ts",
+    lines: 1,
     reason: "hidden username input for the browser's password manager",
   },
   {
     file: "apps/print-agent/src/setup-page.ts",
+    lines: 2,
     reason:
       "a string-built page served by the print agent, which may import no other workspace package (CLAUDE.md §3)",
   },
@@ -168,9 +172,9 @@ describe("the tree", () => {
     expect(offenders.sort()).toEqual([]);
   });
 
-  test("every allowed file still draws one", () => {
-    const stale = ALLOWED.filter((entry) => (read.get(entry.file) ?? []).length === 0);
-    expect(stale).toEqual([]);
+  test("every allowed file draws exactly the fields it is allowed", () => {
+    const drawn = ALLOWED.map((entry) => [entry.file, read.get(entry.file)?.length ?? 0]);
+    expect(drawn).toEqual(ALLOWED.map((entry) => [entry.file, entry.lines]));
   });
 
   test("every exempt file exists", () => {

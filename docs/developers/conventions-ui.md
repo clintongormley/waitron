@@ -41,9 +41,10 @@ the module screens onto the primitives (#1012, #1015, #1016, #1017). Guard:
 `scripts/native-form-fields.test.ts`, weaker than its name — it reads text, so a field made with
 `document.createElement`, inserted with `unsafeHTML`, written in an `.html`, `.js` or `.mjs` file,
 or with its tag name split across a `${…}` is invisible to it; the field primitives' own files, and
-`wt-data-table`'s (its search box), are not read at all, so a second field added inside one passes; and three files are allowed by name
-(the two hidden username inputs for the browser's password manager, and the print agent's setup
-page). See design-system.md → Forms.
+`wt-data-table`'s (its search box), are not read at all, so a second field added inside one
+passes; and three files are allowed by name (the two hidden username inputs for the browser's
+password manager, and the print agent's setup page), each held to the number of LINES it draws a
+field on, so a field added on a line that already has one passes. See design-system.md → Forms.
 
 ## A refusal reaches a field by what the error carries, not by one parameter name
 

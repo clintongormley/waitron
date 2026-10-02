@@ -300,8 +300,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   a native dropdown cannot take the approved look, and hand-drawn fields did not follow the shared
   ones (A178). Guard: `scripts/native-form-fields.test.ts`, weaker than its name — it reads text,
   so a field made with `createElement` or `unsafeHTML`, written in an `.html`, `.js` or `.mjs`
-  file, or with its tag name split across a `${…}` is unseen, and the primitives' own files are not
-  read. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  file, or with its tag name split across a `${…}` is unseen; the primitives' own files are not
+  read; and the three files it allows are held only to how many lines draw a field. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a

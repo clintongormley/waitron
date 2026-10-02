@@ -880,7 +880,9 @@ takes text is drawn by a field primitive; where none fits, add to one or add one
 `document.createElement`, inserted with `unsafeHTML`, written in an `.html`, `.js` or `.mjs` file,
 or with its tag name split across a `${…}` is invisible to it, and the field primitives' own files,
 and `wt-data-table`'s (its search box), are not read at all. It allows three files by name: the two
-hidden username inputs the browser's password manager reads, and the print agent's setup page.
+hidden username inputs the browser's password manager reads, and the print agent's setup page,
+each held to the number of lines it draws a field on, so a field added on a line that already has
+one passes.
 
 #### The field box
 
