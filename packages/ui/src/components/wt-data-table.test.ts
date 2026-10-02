@@ -1138,7 +1138,7 @@ test("a phone-width tree indents each level half as far, and no deeper than four
 });
 
 // The width compared is the scroll box's inside its border, which is what clientWidth reports here.
-test("the phone indent starts at a 380px box, not at 381px, and a flat table never takes it", async () => {
+test("the phone indent starts at a 440px box, not at 441px, and a flat table never takes it", async () => {
   const el = await treeTable();
   host.style.setProperty("--wt-space-2", "8px");
   host.style.setProperty("--wt-space-4", "16px");
@@ -1147,13 +1147,13 @@ test("the phone indent starts at a 380px box, not at 381px, and a flat table nev
       el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="break"] .tree-cell')!,
     ).paddingInlineStart;
   const box = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
-  el.style.width = "383px";
+  el.style.width = "443px";
   await frames();
-  expect(box.clientWidth).toBe(381);
+  expect(box.clientWidth).toBe(441);
   expect(indent()).toBe("16px");
-  el.style.width = "382px";
+  el.style.width = "442px";
   await frames();
-  expect(box.clientWidth).toBe(380);
+  expect(box.clientWidth).toBe(440);
   expect(indent()).toBe("8px");
   cleanup();
   const flat = await table();
@@ -1175,6 +1175,7 @@ test("a tree that becomes a flat table drops its phone indent", async () => {
 
 test("a tree stops watching its width while it is out of the page, and watches again when it returns", async () => {
   const el = await treeTable();
+  el.style.width = "600px";
   await frames();
   expect(el.hasAttribute("narrow")).toBe(false);
   el.remove();

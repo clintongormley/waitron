@@ -37,7 +37,7 @@ type SortDirection = "ascending" | "descending";
 
 /** The tree's box width, in px, at or below which each level indents `--wt-space-2` rather than
  * `--wt-space-4` and stops deepening after four levels. */
-const NARROW_TREE_WIDTH = 380;
+const NARROW_TREE_WIDTH = 440;
 
 @customElement("wt-data-table")
 export class WtDataTable<Row = unknown> extends LitElement {

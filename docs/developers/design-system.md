@@ -536,7 +536,7 @@ the table opens that branch without showing an ineffective collapse control; cle
 the branch's own collapsed state. With `searchOpensPath`, as the Products tree sets it, every row above a match is held open
 while a search is typed, even one that matches itself, and what passes the filters under a match
 stays reachable, closed as the person left it. With filters alone, only a row kept solely to hold a
-match's place is held open. A tree whose box is 380px wide or less indents each level
+match's place is held open. A tree whose box is 440px wide or less indents each level
 `--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels. A CSS condition cannot read
 a token, so the table watches a tree's box in code and sets a `narrow` attribute on itself while the
 box is that narrow; a flat table is not watched.
