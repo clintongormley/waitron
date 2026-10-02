@@ -1125,11 +1125,19 @@ describe("moveDishesToStation", () => {
     expect(item.stationId).toBe(bar);
     const oldBarJobs = (await jobs(barPrinter)).length;
     const oldGrillJobs = (await jobs(grillPrinter)).length;
+    const oldBarNotices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    const latestBarNotice = oldBarNotices.at(-1)?.createdAt;
     const oldGrillNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill)))
       .length;
     const s1 = { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill };
-    // This shared venue keeps earlier notices, so this notice must sort after fixed and live clock cases.
-    const movedAt = new Date(Math.max(Date.now(), Date.parse("2026-10-02T18:45:00.000Z")) + 1000);
+    // This shared venue keeps earlier notices, so this move must sort after its latest Bar notice.
+    const movedAt = new Date(
+      Math.max(
+        Date.now(),
+        Date.parse("2026-10-02T18:45:00.000Z"),
+        latestBarNotice === undefined ? 0 : Date.parse(latestBarNotice),
+      ) + 1000,
+    );
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(movedAt);
     let first: Awaited<ReturnType<typeof moveDishesToStation>>;
@@ -1170,6 +1178,7 @@ describe("moveDishesToStation", () => {
       oldGrillNotices,
     );
     const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    expect(notices.at(-1)?.workingOrderId).toBe(tabId);
     expect(notices.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
     const back = await inTx(venue, (tx) =>
       moveDishesToStation(tx, venue.cfg, tabId, {
