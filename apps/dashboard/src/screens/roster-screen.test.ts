@@ -672,3 +672,63 @@ describe("roster-screen week field", () => {
     expect(api.getRoster).toHaveBeenLastCalledWith(expect.any(String), "2026-04-06");
   });
 });
+
+describe("roster-screen — recovery after the server answers again", () => {
+  const published: RosterSnapshot = {
+    version: {
+      id: "v1",
+      locationId: "loc-1",
+      periodStart: "2026-03-02",
+      periodEnd: "2026-03-08",
+      status: "published",
+      publishedAt: "2026-03-01T10:00:00Z",
+      publishedByPersonId: "p9",
+    },
+    shifts: [],
+  };
+  const errorText = (el: RosterScreen) =>
+    el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim();
+
+  it("clears a failed roster read's message once the server answers again", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getRoster: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(published),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    liveData.refresh();
+    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
+    expect(el.shadowRoot!.querySelector("[data-test=readonly]")).not.toBeNull();
+  });
+
+  it("reads the roster once the locations read that failed on opening succeeds", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getLocations: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(locations),
+        getRoster: vi.fn().mockResolvedValue(published),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await vi.waitFor(() =>
+      expect((el as unknown as { errorKey: string | null }).errorKey).toBe("connection.failed"),
+    );
+    expect(api.getRoster).not.toHaveBeenCalled();
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=readonly]")).not.toBeNull(),
+    );
+    expect(api.getRoster).toHaveBeenCalledWith("loc-1", expect.any(String));
+    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
+  });
+});

@@ -873,6 +873,28 @@ it("refreshes displayed profile data after an external change", async () => {
   );
 });
 
+it("clears a failed refresh's message from the open form once the server answers again", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(apiStub(), { liveData });
+  const { el } = await mountWidget<ProfileScreen>("dashboard-profile-screen", {
+    api: api as unknown as DashboardApi,
+  });
+  await vi.waitFor(() => expect((el as unknown as { profile: unknown }).profile).not.toBeNull());
+  await editDetails(el);
+  const value = await api.getProfile();
+  api.getProfile.mockRejectedValue({ code: "connection.failed" });
+  liveData.refresh();
+  await vi.waitFor(async () => expect(await bottomOf(el)).toBe(codeMessage("connection.failed")));
+  api.getProfile.mockResolvedValue({ ...value, displayName: "Back again" });
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect((el as unknown as { profile: { displayName: string } }).profile.displayName).toBe(
+      "Back again",
+    ),
+  );
+  expect(await bottomOf(el)).toBe("");
+});
+
 describe("your profile — validation, refusals and the remaining actions", () => {
   async function baseProfile(overrides: Record<string, unknown> = {}) {
     return { ...(await apiStub().getProfile()), ...overrides };

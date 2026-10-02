@@ -464,12 +464,18 @@ export class MenusScreen extends LitElement {
     () => {
       this.loadError = true;
     },
+    () => {
+      this.loadError = false;
+    },
   );
   readonly #structureQueries = new DashboardQueries(
     this,
     () => this.api,
     () => {
       this.structureError = true;
+    },
+    () => {
+      this.structureError = false;
     },
   );
   readonly #priceQueries = new DashboardQueries(

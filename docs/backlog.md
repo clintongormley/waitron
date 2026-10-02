@@ -1011,17 +1011,41 @@ folder's row opens the folder, as its name does today — ask if folder rows wer
 they are. LOOK at 1280 and 390, light and dark.
 
 **The dashboard recovers by itself when the server comes back after a restart (A206, owner
-2026-10-02) — OPEN, not reproduced.** The owner: _"when i restart waitron the dashboard says
-"couldn't connect to waitron", but then it doesn't keep trying. i had to refresh the page"_. The
-message is `connection.failed`, raised by the shared request helper when a request gets no answer
-at all (`packages/dashboard-kit/src/request.ts`). The live connection already retries on its own,
-backing off up to 30 seconds (`packages/dashboard-kit/src/live-connection.ts`); read, not run: what
-looks to stay stuck is the request that loaded the screen, which nothing tries again. **Wanted:**
-while the server cannot be reached the dashboard keeps trying, and once it answers again the message
-goes away and the open screen reloads its data, with no page refresh. An unsaved edit in an open
-form is kept. **First** reproduce it: the dashboard open on a few screens (a table screen, a form,
-the Backups screen), restart the server, and note which ones stay stuck, and whether the live
-connection's return reaches them.
+2026-10-02) — DONE.** Reproduced with the server serving the built dashboard itself, as the box does
+(the dev stack's page server answers `502` instead, so it never shows `connection.failed`): of 34
+screens open across a restart, 20 kept "This browser could not connect…" or "could not be loaded"
+after their data had come back. The live connection already re-reads every watched query when its
+stream returns; what was missing was telling the screen. `QueryController`
+(`packages/dashboard-kit/src/query-controller.ts`) now takes an optional fourth argument, called
+once every failed read it still watches has applied a value with no new failure reported meanwhile.
+Each screen that keeps a read error clears it there, or already did in its apply callback: a stored
+message only if it is still the one the failed read set, a yes/no flag always (Menus' flag is also
+set by the read in `#openMenuForm`, which a recovery clears too). Profile, Recipe, the two order
+dialogs and the catalogue's placement step, not among the 20, take the same callback. Screens whose
+first load stopped before starting its later reads (Products, Printers, Modifiers, Content
+languages, Approvals, Sales' business day) start them on recovery. Measured before the review's
+fixes of 2026-10-02: all 34 screens recover from a 20 s and a 90 s outage, and 32 of 34 opened
+during the outage; an unsaved form edit is kept. Not covered — below, "Screens that load outside the
+shared queries never retry".
+
+**Screens that load outside the shared queries never retry (A224, from A206's review, 2026-10-02) —
+OPEN.** A206 fixed every read made through the shared query layer. A screen opened while the server
+is down and loading through a one-off request stays on its message until the page is refreshed:
+Payments (`listPaymentProviders`/`listReaders` in `#load`), Cloud services, and Profile's language
+list (`getLocales`). Also from that review: no read has a time limit, so a request that never
+answers keeps its read loading for ever; and where a save's failure is shown in the same field as a
+read's, a save that failed with `connection.failed` during the outage loses its message when the
+reads recover. Most of the screens where that happens store the message as a code; Profile and the
+reprint dialog store its text. Units compares the error itself and keeps it, and the placement step
+keeps a save's failures in a list of their own. Sales releases its `getSalesOverview` watch in a
+`finally`, so if only that read fails while the daily-close read succeeds, no recovery is announced
+and the business day is not loaded until the screen is reopened — traced by reading, not tested.
+Roster and Planned vs actual show their "no locations" prompt instead of the error when the
+locations read fails.
+
+**The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
+2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
+the dark banner; the running figure stays visible. Seen at 1280 wide on every screen.
 
 **The Products screen as a category tree (A208, owner 2026-10-02) — OPEN, spec and plan
 approved, queued in lane A.** The owner, on two screenshots: _"this layout is messy, needs tidying"_,

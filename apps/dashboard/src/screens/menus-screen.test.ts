@@ -5248,3 +5248,126 @@ it("passes a product-only resolve through without replacing variant settings", a
   );
   expect(client.setMenuVariants).not.toHaveBeenCalled();
 });
+
+describe("after the server comes back", () => {
+  const down = { code: "connection.failed" };
+
+  function failing(client: Api, ...names: (keyof DashboardApi)[]): () => void {
+    const reads = names.map(
+      (name) => [client[name], client[name].getMockImplementation()] as const,
+    );
+    for (const [read] of reads) read.mockRejectedValue(down);
+    return () => {
+      for (const [read, answer] of reads) read.mockImplementation(answer!);
+    };
+  }
+
+  function rowKeys(el: MenusScreen): (string | null)[] {
+    return [...table(el).shadowRoot.querySelectorAll("tbody tr")].map((row) =>
+      row.getAttribute("data-row-key"),
+    );
+  }
+
+  function statusCell(el: MenusScreen, menuId: string): string {
+    return text(table(el).shadowRoot.querySelector(`[data-test="status-${menuId}"]`));
+  }
+
+  it("replaces the could-not-load message with the menus once the server answers again", async () => {
+    const live = new LiveData();
+    const client = api({
+      liveData: live,
+      listCatalogues: vi.fn().mockResolvedValue(menus),
+      listLibraryProducts: vi.fn().mockResolvedValue(products),
+      listCategories: vi.fn().mockResolvedValue(categories),
+    });
+    const answer = failing(
+      client,
+      "listCatalogues",
+      "listLibraryProducts",
+      "listCategories",
+      "getContentLanguages",
+      "getMenuStatuses",
+    );
+    const el = await mount(client);
+    expect(q(el, '[data-test="load-error"]')).not.toBeNull();
+
+    answer();
+    live.refresh();
+
+    await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).toBeNull());
+    await vi.waitFor(() => expect(table(el)).not.toBeNull());
+    await table(el).updateComplete;
+    expect(rowKeys(el).sort()).toEqual(["menu-dinner", "menu-lunch"]);
+    await vi.waitFor(() => expect(statusCell(el, "menu-lunch")).not.toBe(t("menus.status_error")));
+  });
+
+  it("replaces the could-not-load message for the open menu's structure once the server answers again", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const answer = failing(client, "getMenuStructure", "getMenuStatus");
+    const el = await mount(client, LUNCH_PATH);
+    await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(t("menus.status_error")),
+    );
+
+    answer();
+    live.refresh();
+
+    await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+    expect(q(el, '[data-test="structure-error"]')).toBeNull();
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(t("menus.status_error")),
+    );
+  });
+
+  it("shows the open menu's prices once the server answers again", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const answer = failing(client, "getMenuPrices");
+    const el = await mount(client, PRICES_PATH);
+    await vi.waitFor(() => expect(prices(el)?.failed).toBe(true));
+
+    answer();
+    live.refresh();
+
+    await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+    expect(prices(el).failed).toBe(false);
+  });
+
+  it("shows the open menu's preview and state once the server answers again", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const answer = failing(client, "getMenuPreview");
+    const el = await mount(client, PREVIEW_PATH);
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(t("menus.status_error")),
+    );
+
+    answer();
+    live.refresh();
+
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(t("menus.status_error")),
+    );
+    const preview = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(
+      el,
+      "dashboard-menu-preview",
+    )!;
+    expect(preview.failed).toBe(false);
+  });
+
+  it("shows the open menu's home page layouts once the server answers again", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const answer = failing(client, "listHomeLayouts");
+    const el = await mount(client, HOME_PATH);
+    await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
+
+    answer();
+    live.refresh();
+
+    await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).toBeNull());
+    expect(q<HomeLayoutEditor>(el, "dashboard-home-layout-editor")?.layouts.length).toBe(2);
+  });
+});

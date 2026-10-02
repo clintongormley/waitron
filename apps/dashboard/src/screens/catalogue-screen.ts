@@ -141,7 +141,12 @@ export class CatalogueScreen extends LitElement {
     (error) => {
       this.errorKey = codeOf(error);
     },
+    (error) => {
+      if (this.errorKey === codeOf(error)) this.errorKey = null;
+      if (this.#loadFailed) void this.#load();
+    },
   );
+  #loadFailed = false;
   readonly #routingQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -154,6 +159,9 @@ export class CatalogueScreen extends LitElement {
     this,
     () => this.api,
     () => undefined,
+    (error) => {
+      if (this.placementLoadError === codeMessage(codeOf(error))) this.placementLoadError = null;
+    },
   );
   readonly #url = new UrlStateController(
     this,
@@ -186,11 +194,12 @@ export class CatalogueScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.errorKey = null;
     void this.#load();
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#loadFailed = false;
     try {
       await Promise.all([
         this.#queries.watch("getContentLanguages", [], (value) => {
@@ -227,6 +236,7 @@ export class CatalogueScreen extends LitElement {
         this.selectedCatalogueId = this.catalogues[0]?.id ?? "";
       await this.#reloadProducts();
     } catch (error) {
+      this.#loadFailed = true;
       this.errorKey = codeOf(error);
     }
   }

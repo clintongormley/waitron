@@ -194,6 +194,10 @@ export class SalesScreen extends LitElement {
     (error) => {
       this.errorKey = codeOf(error);
     },
+    (error) => {
+      if (this.errorKey === codeOf(error)) this.errorKey = null;
+      if (!this.#rangeChosen) void this.#loadInitialRange();
+    },
   );
 
   // The category report and the printer list keep their own errors, so a refused current report

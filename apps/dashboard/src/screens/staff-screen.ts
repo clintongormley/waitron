@@ -76,6 +76,11 @@ export class StaffScreen extends LitElement {
     (error) => {
       this.#fail(error);
     },
+    (error) => {
+      if (this.errorKey !== codeOf(error)) return;
+      this.errorKey = null;
+      this.errorField = null;
+    },
   );
   @property({ attribute: false }) currentPersonId: string | null = null;
   @state() private people: PersonSummary[] = [];

@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PendingAbsence, PendingSwap, PersonSummary } from "../api/client.js";
 import { ApprovalsScreen } from "./approvals-screen.js";
 
@@ -192,5 +193,65 @@ describe("approvals-screen — remaining decisions", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=reject-absence-ab1]")!.click();
     await flush(el);
     expect(api.decideAbsence).toHaveBeenCalledExactlyOnceWith("ab1", "approved");
+  });
+});
+
+describe("approvals-screen — recovery after the server answers again", () => {
+  const errorText = (el: ApprovalsScreen) =>
+    el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim();
+
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).not.toBeNull(),
+    );
+    vi.mocked(api.listPendingSwaps).mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    vi.mocked(api.listPendingSwaps).mockResolvedValue([swap]);
+    liveData.refresh();
+    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
+    expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).not.toBeNull();
+  });
+
+  it("loads both queues once the staff read that failed on opening succeeds", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        listStaff: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(staff),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
+    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    expect(api.listPendingSwaps).not.toHaveBeenCalled();
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=approve-swap-sw1]")).not.toBeNull(),
+    );
+    const text = el.shadowRoot!.textContent ?? "";
+    expect(text).toContain("Ana");
+    expect(text).toContain("Vacaciones");
+    expect(errorText(el)).toBeUndefined();
+  });
+
+  it("reads the queues again when reattached while the staff read fails, once it succeeds", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el, host } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
+    await vi.waitFor(() => expect(api.listPendingSwaps).toHaveBeenCalledOnce());
+    el.remove();
+    vi.mocked(api.listStaff).mockRejectedValueOnce({ code: "connection.failed" });
+    host.appendChild(el);
+    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    liveData.refresh();
+    await vi.waitFor(() => expect(api.listPendingSwaps).toHaveBeenCalledTimes(2));
+    expect(api.listPendingAbsences).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
   });
 });

@@ -19,8 +19,9 @@ export class DashboardQueries {
     host: ReactiveControllerHost,
     private readonly api: () => DashboardApi,
     error: (error: unknown) => void,
+    recovered?: (error: unknown) => void,
   ) {
-    this.#queries = new QueryController(host, () => this.api().liveData, error);
+    this.#queries = new QueryController(host, () => this.api().liveData, error, recovered);
   }
 
   release(name: DashboardQueryName): void {

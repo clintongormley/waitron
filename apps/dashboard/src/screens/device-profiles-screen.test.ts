@@ -113,6 +113,25 @@ describe("device-profiles-screen list mode", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
   });
 
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const el = await mount(api);
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]");
+    vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed")),
+    );
+    vi.mocked(api.listDeviceProfiles).mockResolvedValue([
+      ...profiles,
+      { ...profiles[1]!, id: "p3", name: "Bar screen" },
+    ]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert()).toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p3]")).toBeTruthy();
+  });
+
   it("Delete confirms then calls deleteDeviceProfile and reloads", async () => {
     const api = stubApi();
     const el = await mount(api);

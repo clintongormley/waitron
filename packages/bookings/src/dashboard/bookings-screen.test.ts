@@ -619,3 +619,23 @@ it("refreshes the tables through the api itself when it has no background copy",
   );
   expect(api.listTables).toHaveBeenCalledTimes(2);
 });
+
+it("clears a failed load's message once the server answers again", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({ listBookings: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    { liveData },
+  );
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed", "es-ES"),
+    ),
+  );
+  vi.mocked(api.listBookings).mockResolvedValue(BOOKINGS);
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelectorAll("[data-test=row]")).toHaveLength(2),
+  );
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+});

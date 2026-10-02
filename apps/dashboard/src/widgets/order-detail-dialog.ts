@@ -73,6 +73,9 @@ export class OrderDetailDialog extends LitElement {
     (error) => {
       this.error = codeMessage(codeOf(error));
     },
+    (error) => {
+      if (this.error === codeMessage(codeOf(error))) this.error = null;
+    },
   );
 
   override willUpdate(changed: PropertyValues<this>): void {

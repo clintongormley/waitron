@@ -226,6 +226,26 @@ describe("canvas-editor-screen list mode", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
   });
 
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]");
+    vi.mocked(api.listCanvases).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed")),
+    );
+    vi.mocked(api.listCanvases).mockResolvedValue([
+      ...canvases,
+      { ...canvases[0]!, id: "c2", name: "Bar till" },
+    ]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert()).toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c2]")).toBeTruthy();
+  });
+
   it("shows a mutation error in a banner when a delete fails", async () => {
     const api = stubApi({ deleteCanvas: vi.fn().mockRejectedValue({ code: "canvas.not_found" }) });
     const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });

@@ -518,6 +518,23 @@ describe("printing rules", () => {
     await flush(el);
     expect(q(el, "[role=alert]")?.textContent).toContain(codeMessage("server.internal", "es-ES"));
   });
+  it("clears a failed load's message and shows the printers once the server answers again", async () => {
+    const api = Object.assign(
+      stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await vi.waitFor(() =>
+      expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES")),
+    );
+    vi.mocked(api.listPrinters).mockResolvedValue(printers);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeTruthy());
+    expect(api.listPrinterStations).toHaveBeenCalledWith("p1");
+  });
   it("shows the empty printer state", async () => {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {

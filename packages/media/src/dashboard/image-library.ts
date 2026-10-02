@@ -180,6 +180,9 @@ export class ImageLibrary extends LitElement {
     () => {
       this.loadError = true;
     },
+    () => {
+      this.loadError = false;
+    },
   );
   constructor() {
     super();

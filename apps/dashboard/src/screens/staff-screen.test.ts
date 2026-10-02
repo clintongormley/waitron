@@ -935,6 +935,69 @@ it("refreshes displayed people when their data changes elsewhere", async () => {
   expect(api.listStaff).toHaveBeenCalledTimes(2);
 });
 
+describe("staff-screen after the server comes back", () => {
+  const down = { code: "connection.failed" };
+  const alert = (el: StaffScreen) =>
+    el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim() ?? null;
+  const shownPeople = (el: StaffScreen) =>
+    (el as unknown as { people: PersonSummary[] }).people.map(({ personId }) => personId);
+  const rowError = (el: StaffScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-dialog wt-form-actions")!
+      .error;
+
+  it("clears a failed first load's message once the server answers again", async () => {
+    const api = Object.assign(stubApi({ listStaff: vi.fn().mockRejectedValue(down) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await vi.waitFor(() => expect(alert(el)).toBe(codeMessage("connection.failed")));
+    vi.mocked(api.listStaff).mockResolvedValue(people);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert(el)).toBeNull());
+    expect(shownPeople(el)).toEqual(["p1", "p2"]);
+  });
+
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await vi.waitFor(() => expect(shownPeople(el)).toEqual(["p1", "p2"]));
+    vi.mocked(api.listStaff).mockRejectedValue(down);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert(el)).toBe(codeMessage("connection.failed")));
+    vi.mocked(api.listStaff).mockResolvedValue([people[0]!]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert(el)).toBeNull());
+    expect(shownPeople(el)).toEqual(["p1"]);
+  });
+
+  it("keeps a later refusal's message when an earlier failed refresh recovers", async () => {
+    const api = Object.assign(
+      stubApi({ resetPin: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await vi.waitFor(() => expect(shownPeople(el)).toEqual(["p1", "p2"]));
+    vi.mocked(api.listStaff).mockRejectedValue(down);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert(el)).toBe(codeMessage("connection.failed")));
+    list(el).dispatchEvent(
+      new CustomEvent("person-action", {
+        detail: { personId: "p1", action: "reset-pin" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-row-action]")!.click();
+    await vi.waitFor(() => expect(rowError(el)).toBe(codeMessage("server.internal")));
+    vi.mocked(api.listStaff).mockResolvedValue(people);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listStaff).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(rowError(el)).toBe(codeMessage("server.internal"));
+  });
+});
+
 describe("staff-screen — row actions, filters and edit races", () => {
   function rowAction(el: StaffScreen, personId: string, action: string): void {
     list(el).dispatchEvent(

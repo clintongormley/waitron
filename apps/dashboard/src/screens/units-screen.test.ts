@@ -846,6 +846,45 @@ describe("units-screen", () => {
     expect(listedKeys(el).sort()).toEqual(["u1", "u2"]);
   });
 
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    vi.mocked(api.background.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+    vi.mocked(api.background.listUnits).mockResolvedValue(units);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
+    expect(listedKeys(el).sort()).toEqual(["u1", "u2"]);
+  });
+
+  it("keeps a later refusal's message when an earlier failed refresh recovers", async () => {
+    const api = stubApi({ deleteUnit: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const el = await mount(api);
+    vi.mocked(api.background.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
+      .click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        codeMessage("server.internal"),
+      ),
+    );
+    vi.mocked(api.background.listUnits).mockResolvedValue(units);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.background.listUnits).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+      codeMessage("server.internal"),
+    );
+  });
+
   it("edits a unit from its row action and replaces only that row with the saved unit", async () => {
     setLocale("es-ES");
     const saved: Unit = { ...units[0]!, name: { es: "pieza", en: "piece" } };

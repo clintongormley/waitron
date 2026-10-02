@@ -303,6 +303,40 @@ it("refreshes displayed statuses when their data changes elsewhere", async () =>
   expect(api.listStatuses).toHaveBeenCalledTimes(2);
 });
 
+describe("service-status after the server comes back", () => {
+  it("clears a failed first load's message once the server answers again", async () => {
+    const api = Object.assign(
+      stubApi({ listStatuses: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(codeMessage("connection.failed")),
+    );
+    vi.mocked(api.listStatuses).mockResolvedValue(SEED.map((s) => ({ ...s })));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+    expect(q(el, "[data-test=row-s1]")).not.toBeNull();
+  });
+
+  it("clears a failed refresh's message once the server answers again", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s1]")).not.toBeNull());
+    vi.mocked(api.listStatuses).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).not.toBeNull());
+    vi.mocked(api.listStatuses).mockResolvedValue(TWO_SEED.map((s) => ({ ...s })));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+    expect(q(el, "[data-test=row-s2]")).not.toBeNull();
+  });
+});
+
 describe("service-status row edges", () => {
   function pressEnter(el: ServiceStatusScreen, sel: string): void {
     const input = q(el, sel)!.shadowRoot!.querySelector("input")!;

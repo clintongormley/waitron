@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi, OrderRowDto } from "../api/client.js";
 import "./order-reprint-dialog.js";
@@ -75,4 +76,26 @@ it("keeps a refused print open and shows the printer refusal under its control",
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-combobox")?.error).toBeTruthy());
   expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+});
+
+it("clears a failed load's message once the server answers again", async () => {
+  setLocale("en-GB");
+  const liveData = new LiveData();
+  const getOrderPrinters = vi.fn().mockRejectedValue({ code: "connection.failed" });
+  const api = { getOrderPrinters, liveData } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      codeMessage("connection.failed"),
+    ),
+  );
+  getOrderPrinters.mockResolvedValue([{ id: "printer-1", name: "Barra" }]);
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
+  );
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });

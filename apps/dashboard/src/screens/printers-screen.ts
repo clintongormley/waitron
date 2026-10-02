@@ -456,7 +456,12 @@ export class PrintersScreen extends LitElement {
     (error) => {
       this.refreshErrorKey = codeOf(error);
     },
+    (error) => {
+      if (this.refreshErrorKey === codeOf(error)) this.refreshErrorKey = null;
+      if (this.#loadFailed) void this.#watchLists();
+    },
   );
+  #loadFailed = false;
 
   @state() private view = "";
   @state() private selectedPrinterId: string | null = null;
@@ -650,6 +655,11 @@ export class PrintersScreen extends LitElement {
     this.armedRevokeId = null;
     this.armedAllowId = null;
     this.armedDenyId = null;
+    await this.#watchLists();
+  }
+
+  async #watchLists(): Promise<void> {
+    this.#loadFailed = false;
     try {
       await Promise.all([
         this.#queries.watch("listAgents", [], (agents) => {
@@ -680,6 +690,7 @@ export class PrintersScreen extends LitElement {
         this.#liveReadFloor = ++this.#readCount;
       });
     } catch (error) {
+      this.#loadFailed = true;
       this.refreshErrorKey = codeOf(error);
     } finally {
       this.loading = false;

@@ -69,6 +69,10 @@ export class ApprovalsScreen extends LitElement {
     (error) => {
       this.errorKey = codeOf(error);
     },
+    (error) => {
+      if (this.errorKey === codeOf(error)) this.errorKey = null;
+      if (!this.#queuesWatched) void this.#loadQueues().catch((failure) => this.#fail(failure));
+    },
   );
 
   @state() private swaps: PendingSwap[] = [];
@@ -76,6 +80,7 @@ export class ApprovalsScreen extends LitElement {
   @state() private errorKey: string | null = null;
   @state() private busy = false;
   #names = new Map<string, string>();
+  #queuesWatched = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -84,6 +89,7 @@ export class ApprovalsScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.errorKey = null;
+    this.#queuesWatched = false;
     try {
       await this.#queries.watch("listStaff", [], (value) => {
         this.#names = personNameMap(value);
@@ -96,6 +102,7 @@ export class ApprovalsScreen extends LitElement {
   }
 
   async #loadQueues(): Promise<void> {
+    this.#queuesWatched = true;
     await Promise.all([
       this.#queries.watch("listPendingSwaps", [], (value) => {
         this.swaps = value;

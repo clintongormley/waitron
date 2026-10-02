@@ -206,6 +206,9 @@ export class ProfileScreen extends LitElement {
     (error) => {
       this.error = codeMessage(codeOf(error));
     },
+    (error) => {
+      if (this.error === codeMessage(codeOf(error))) this.error = "";
+    },
   );
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
     window.location.assign(url);

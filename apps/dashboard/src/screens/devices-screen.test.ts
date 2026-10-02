@@ -463,6 +463,22 @@ describe("devices-screen", () => {
     expect(banner).not.toContain("server.internal");
   });
 
+  it("clears a failed load's message and lists the devices once the server answers again", async () => {
+    const api = Object.assign(
+      stubApi({ listDevices: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() =>
+      expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES")),
+    );
+    vi.mocked(api.listDevices).mockResolvedValue(devices);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+    await flush(el);
+    expect(q(el, `[data-test=device-row-${devices[0]!.id}]`)).not.toBeNull();
+  });
+
   it("falls back to server.internal when the rejected load carries no code", async () => {
     const api = stubApi({ listStations: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
