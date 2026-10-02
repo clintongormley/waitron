@@ -1922,10 +1922,23 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       of its credit notes, `readIssuedSales` in `apps/server/src/sale-due.ts`), but Pay loads the
       basket from `GET /api/working-orders/:id/placed`, which carries the order's lines. Reported
       by B16's review fixer from reading; no test shows it.
-    - The till keeps a handheld off the counter screen and gives its bill-pay dialog no card
-      reader (`HANDHELD_FACES` and the `cardReader` binding, `apps/till/src/till-app.ts`): queued
-      as B31 (owner, 2026-10-02). The Devices screen's per-device "Receipt printer" is read by
-      nothing that prints.
+    - Lane B item B31 (owner, 2026-10-02): a handheld whose layout has a Counter tab, or a
+      held-orders or prep-queue card, loads the counter's lists at login as a till does, and a
+      handheld is offered the card reader, on any pay card and on a bill, only when its device
+      profile has integrated card payment (`#showsCounterLists` and `#cardReader`,
+      `apps/till/src/till-app.ts`). A till is still offered the reader whatever its profile says,
+      and the server refuses one without the capability (`device.forbidden_action`). At login each
+      counter list shows its own failure with a retry notice, so one list that fails no longer
+      stops the others loading (they are still read one after another, so a read that hangs still
+      delays the rest); this changed for tills too. Left as they were: a handheld gets no Station,
+      Expo or Schedule button (an existing test pins it), and never opens the drawer.
+    - **Open — who may use the card reader.** Neither reader route (`/api/pay`, and
+      `POST /api/working-orders/:id/payments` with `entry: "reader"`) checks the signed-in
+      person's permissions: beyond being signed in on an enrolled device with a till, the device
+      profile's capability is the only check. `device.forbidden_action` has no message of its own
+      in the till: a bill shows "Something went wrong, try again" and the counter "Could not
+      complete the sale, try again".
+    - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
       manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
@@ -1952,8 +1965,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       full uses `POST /api/working-orders/:id/collect`.
     - **A dish never sent, on hold or recalled blocks the departure**
       (`unpaid_departure.unfired_dishes`); staff cancel it first.
-    - **Handhelds never see the list.** It sits in the counter's held-orders card, which the
-      default phone and tablet layouts lack. The owner kept the counter list as a stopgap and wants
+    - **Handhelds on the default phone and tablet layouts never see the list.** It sits in the
+      counter's held-orders card, which those layouts lack; since B31 a handheld whose layout adds
+      a held-orders card loads and shows it. The owner kept the counter list as a stopgap and wants
       the dashboard Orders screen (B27s; queued as lane E's B27a–B27c; the till-cancel question is
       lane C's C126).
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
@@ -4361,7 +4375,7 @@ run without the code):
 - `till-app.ts`: the handlers for `show-station`, `show-expo`, `show-schedule`, `open-allergens`,
   `close-allergens`, `new-sale`, `back-to-counter` and `back-to-floor` each keep an arm for when
   the shell is not active, which after a successful boot only the lock screen is, and nothing on the
-  lock screen emits them; `#goToScreen` is reached only through one of those arms.
+  lock screen emits them. `back-to-counter`'s arm checks for the lock screen first (B31).
 - `#onShowFloor` in `till-app.ts` has no shell split at all: the one control that emits
   `show-floor`, the counter screen's floor button (`screens/till-counter-screen.ts`), is drawn only
   when the counter is not `embedded`, and the app mounts it only as its `embedded` counter tab. It
