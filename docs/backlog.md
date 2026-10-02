@@ -869,6 +869,29 @@ demo user cannot find the emails the dashboard sends. **Wanted:** an "Email inbo
 dashboard banner, beside the language chooser (A187), shown only in a demo, to the same address the
 done page uses.
 
+**The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — OPEN.**
+The owner, on the "Login with password" screen: _"the login screen doesn't use the new form field
+layout. also, the Email/clintongormley@gmail.com isn't aligned with the text in the password field
+which makes it look messy"_. The email above the password is plain text with a pencil button
+(`#renderLoginContext`, `apps/dashboard/src/screens/login-screen.ts`), starting at the field box's
+outer edge while a field's text is inset inside its box. **Decided (owner, 2026-10-02):** draw it as
+a filled field that cannot be typed in — the same box, "Email" as its label inside, the address as
+its value, the pencil ("Use another account") at the box's trailing end — so it lines up with the
+password field by being the same shape. `#renderLoginContext` is also used by the reset and
+account-setup page (`changeable = false`, no pencil), which takes the same look. `wt-input` has no
+read-only mode today; add one to the primitive (it must still be announced as the email, and must
+not look like an empty or disabled field), or a read-only variant of the field look, rather than
+drawing a field in the screen (CLAUDE.md §3).
+
+**A field the browser fills in keeps the field's own look (A190, owner 2026-10-02) — OPEN.** On the
+sign-in screen and the setup wizard, a field the browser autofilled is drawn pale blue with no
+bottom line, unlike every other field. **Decided (owner, 2026-10-02):** an autofilled field looks
+like a typed one — the field fill and the bottom line — in every field primitive and both themes.
+The label already floats for an autofilled field (`:has(:autofill)` in
+`packages/ui-core/src/field-styles.ts` and `wt-price-input`); the colour and line were not looked
+into. Check in a real Chromium that the browser's own autofill colour is what draws the blue before
+choosing the fix, and LOOK with a saved password.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
