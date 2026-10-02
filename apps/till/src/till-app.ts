@@ -1363,15 +1363,12 @@ export class TillApp extends LitElement {
   @state() private originalReceiptAvailable = false;
   /** The working order that produced the ticket currently shown, a bill split off another included. */
   private ticketWorkingOrderId?: string;
-  /**
-   * The location's receipt language: the on-screen ticket's language for a result that names none, and
-   * the printed allergen sheet's. NEVER the operator-UI `currentLocale()`.
-   */
+  /** The location's receipt language, never the operator-UI `currentLocale()`. */
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages a copy may be reprinted in; with more than one, a reprint asks which. */
   @state() private receiptLanguages: string[] = [];
   /** The sale whose receipt copy is waiting for its language to be chosen, and the language it was
-   * filed in, which the question starts on. */
+   * filed in. */
   @state() private reprintAsking: { workingOrderId: string; filedLanguage?: string } | null = null;
   /**
    * The server resolves a canvas for every boot, so this is `undefined` only after a boot failure, where
@@ -6618,7 +6615,12 @@ export class TillApp extends LitElement {
             ? nothing
             : html`<till-reprint-language-dialog
                 .languages=${this.receiptLanguages}
-                .defaultLanguage=${this.reprintAsking.filedLanguage ?? this.invoiceLocale}
+                .defaultLanguage=${
+                  [this.reprintAsking.filedLanguage, this.invoiceLocale].find(
+                    (language) =>
+                      language !== undefined && this.receiptLanguages.includes(language),
+                  ) ?? ""
+                }
                 @reprint-language-confirm=${(event: CustomEvent<ReprintLanguageDetail>) =>
                   void this.#onReprintLanguage(event)}
                 @reprint-language-cancel=${() => (this.reprintAsking = null)}

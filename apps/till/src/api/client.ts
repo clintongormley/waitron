@@ -828,7 +828,7 @@ export interface TillSaleResult {
   /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
   payments?: BillTenderLine[];
   qr: string;
-  /** The language the sale was filed and printed in. */
+  /** The language the sale was filed in. */
   locale?: string;
 }
 

@@ -108,7 +108,10 @@ export class TillReprintLanguageDialog extends LitElement {
                   name="language"
                   .value=${language}
                   .checked=${this.chosen === language}
-                  @change=${() => (this.chosen = language)}
+                  @change=${(event: Event) => {
+                    event.stopPropagation();
+                    this.chosen = language;
+                  }}
                 />
                 <span>${languageDisplayName(language, currentLocale())}</span>
               </label>`,

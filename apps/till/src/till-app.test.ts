@@ -2590,6 +2590,18 @@ describe("till-app", () => {
       expect(radio(el, "eu-ES").checked).toBe(true);
     });
 
+    it("starts on the location's language when the sale's is not one of the receipt languages", async () => {
+      const { el } = await soldWith(
+        { invoiceLocale: "eu-ES", receiptLanguages: SPAIN },
+        { recordSale: vi.fn().mockResolvedValue({ ...saleResult, locale: "en-GB" }) },
+      );
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+
+      expect(radio(el, "eu-ES").checked).toBe(true);
+    });
+
     it("reprints nothing when the language question is cancelled", async () => {
       const { el } = await soldWith({ receiptLanguages: SPAIN });
 

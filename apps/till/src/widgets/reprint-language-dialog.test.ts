@@ -103,6 +103,17 @@ describe("till-reprint-language-dialog", () => {
     expect(seen.cancelled).toBe(0);
   });
 
+  it("keeps a radio's change to itself", async () => {
+    const el = await mountDialog();
+    const changes = vi.fn();
+    el.shadowRoot!.addEventListener("change", changes);
+
+    radios(el)[2]!.click();
+
+    expect(radios(el)[2]!.checked).toBe(true);
+    expect(changes).not.toHaveBeenCalled();
+  });
+
   it("cancels from its button and on Escape without reprinting", async () => {
     const el = await mountDialog();
     const seen = captured(el);

@@ -640,8 +640,9 @@ export async function printSaleReceipt(
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
     if (language !== undefined) {
-      // Any of the pack's languages, even where the region fixes one (`fixed`): the set includes
-      // Spanish, which a customer there may ask for (TC 88/2017).
+      // Any of the pack's languages, even where the region fixes one (`fixed`), is a product
+      // choice (docs/backlog.md, C114); it includes Spanish, which a customer there may ask for
+      // (TC 88/2017).
       const { choices } = await readVenueReceiptLanguageRules(tx, { locationId: cfg.locationId });
       if (!choices.includes(language)) {
         throw new AppError("management.request_invalid", { field: "language" });

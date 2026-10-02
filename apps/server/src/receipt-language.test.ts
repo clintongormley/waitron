@@ -491,7 +491,7 @@ describe("a card-reader sale files and prints in the location's language", () =>
   });
 });
 
-/** Every row of the tables a sale writes or moves, so a reprint that changed one is seen. */
+/** Every row of these tables, so a reprint that changed one of them is seen. */
 const SALE_TABLES = [
   "registros_facturacion",
   "cadenas",
@@ -502,6 +502,9 @@ const SALE_TABLES = [
   "tenders",
   "sale_settlements",
   "drawer_opens",
+  "working_orders",
+  "working_order_lines",
+  "receipt_reprints",
 ] as const;
 
 function saleTables(db: Database): Record<string, unknown[]> {

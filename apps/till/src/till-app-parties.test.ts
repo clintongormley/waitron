@@ -1151,6 +1151,34 @@ describe("till-app: the party's bills and Finish table", () => {
     ).toBe(true);
   });
 
+  it("starts a paid bill's receipt copy on the location's language when the bill's is not offered", async () => {
+    const paid: PartyBill = {
+      ...tabBill,
+      workingOrderId: "wo-old",
+      status: "settled",
+      outstanding: "0.00",
+      receiptAvailable: true,
+      receiptLanguage: "en-GB",
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        invoiceLocale: "eu-ES",
+        receiptLanguages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      }),
+      getPartyBills: vi.fn().mockResolvedValue([paid, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "reprint-bill", { workingOrderId: "wo-old" });
+    await flush(el);
+
+    const dialog = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLInputElement>('input[value="eu-ES"]')!.checked,
+    ).toBe(true);
+  });
+
   it("prints a paid bill's receipt copy at once when there is one receipt language", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),

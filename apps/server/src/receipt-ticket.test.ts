@@ -1727,8 +1727,10 @@ describe("the receipt's fixed words follow its language", () => {
 });
 
 describe("a receipt's goods names can be looked up in another language than its fixed words", () => {
-  // A reprint in another language keeps the names the sale was filed with: every name below differs
-  // between the two languages, so a lookup in the wrong one prints a word the assertions refuse.
+  // A reprint in another language keeps the names the sale was filed with: every translated name below
+  // differs between the two languages, and each option name between its staff, customer and kitchen
+  // wording, so a lookup in the wrong language or the wrong wording prints a name the assertions
+  // refuse.
   const BILINGUAL: TillSaleResult = {
     ...FILED_SALE,
     total: "4.00",
@@ -1744,11 +1746,11 @@ describe("a receipt's goods names can be looked up in another language than its 
         optionSnapshots: [
           {
             listName: { "ca-ES": "Pa", "es-ES": "Pan" },
-            listCustomerName: null,
-            listKitchenName: null,
+            listCustomerName: { "ca-ES": "Tipus de pa", "es-ES": "Tipo de pan" },
+            listKitchenName: "Cocina pan",
             labelName: { "ca-ES": "Integral de sègol", "es-ES": "Integral de centeno" },
-            labelCustomerName: null,
-            labelKitchenName: null,
+            labelCustomerName: { "ca-ES": "Sègol sencer", "es-ES": "Centeno entero" },
+            labelKitchenName: "Cocina centeno",
           },
         ],
       },
@@ -1778,10 +1780,18 @@ describe("a receipt's goods names can be looked up in another language than its 
     expect(text).toContain("Data ");
     expect(text).toContain("Efectiu 4,00 €");
     expect(text).toMatch(/2 ud Pan con tomate 3,50 €/u);
-    expect(text).toContain("Pan: Integral de centeno");
+    expect(text).toContain("Tipo de pan: Centeno entero");
     expect(text).toContain("Jamón extra 0,50 €");
-    for (const catalan of ["Pa amb tomàquet", "unit.", "Integral de sègol", "Pernil extra"]) {
-      expect(text).not.toContain(catalan);
+    for (const other of [
+      "Pa amb tomàquet",
+      "unit.",
+      "Tipus de pa",
+      "Sègol sencer",
+      "Integral",
+      "Cocina",
+      "Pernil extra",
+    ]) {
+      expect(text).not.toContain(other);
     }
     expect(text).not.toContain("Fecha");
   });
@@ -1799,7 +1809,7 @@ describe("a receipt's goods names can be looked up in another language than its 
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
     expect(text).toMatch(/2 unit\. Pa amb tomàquet 3,50 €/u);
-    expect(text).toContain("Pa: Integral de sègol");
+    expect(text).toContain("Tipus de pa: Sègol sencer");
     expect(text).toContain("Pernil extra 0,50 €");
   });
 });

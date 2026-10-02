@@ -4,7 +4,9 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   diningTables,
+  invoiceSeries,
   locations,
+  sales,
   tills,
   parties,
   serviceCommands,
@@ -665,6 +667,42 @@ describe("GET /api/parties/:id/bills", () => {
         hasPayments: false,
         receiptAvailable: false,
       },
+    ]);
+  });
+
+  it("names the language a bill's sale was filed in", async () => {
+    const { partyId, tabId } = await seat();
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: cfg.nodeId, code: `R${randomUUID()}` })
+      .returning({ id: invoiceSeries.id });
+    await suite.db.insert(sales).values({
+      tillId: cfg.tillId,
+      nodeId: cfg.nodeId,
+      seriesId: series!.id,
+      invoiceNumber: 1,
+      issuedAt: new Date().toISOString(),
+      issuedOffsetMinutes: 0,
+      total: 0,
+      vatBreakdown: [],
+      locale: "ca-ES",
+      invoiceLocales: ["ca-ES"],
+      fiscalBackend: "fake",
+      fiscalState: "recorded",
+      workingOrderId: tabId,
+    });
+
+    const res = await app(suite.db).request(`/api/parties/${partyId}/bills`, {
+      headers: { cookie: await cookie() },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([
+      expect.objectContaining({
+        workingOrderId: tabId,
+        receiptAvailable: true,
+        receiptLanguage: "ca-ES",
+      }),
     ]);
   });
 

@@ -252,7 +252,8 @@ older build before using the new published document. What is left:
   Improve how the alert distinguishes a kitchen using paper and how the dev chooser records check-ins.
 - **Opening or closing a station from the till** (S11, owner, 2026-10-01). Add a core till route
   calling a new `VENUE_SERVICE` seat method, so staff can open or close the station from the till.
-  Take a manager's PIN as the cash drawer route does (`apps/server/src/till-api.ts:1631-1659`).
+  Take a manager's PIN as the cash drawer route does (`POST /api/drawer/open`,
+  `apps/server/src/till-api.ts`).
 - **Deleting or moving a folder does not show which products change station** (slice 3a, approved
   R6). The delete dialog counts claims and exceptions removed but lists no products whose
   destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that
@@ -3067,8 +3068,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   - **A copy can be printed in another receipt language (C114, 2026-10-02, branch
     `feat/receipt-reprint-language`).** Where the till reprints an issued receipt (the finished
     sale's Reprint and a paid bill's Receipt), a venue whose country offers more than one receipt
-    language asks which, starting on the language the sale was filed in (the location's, when the
-    till was not told it); a country with one reprints at once. Only the
+    language asks which, starting on the first of these it offers: the language the sale was filed
+    in, the location's, the first offered; a country with one reprints at once. Only the
     fixed words, money, date and percentages follow the choice; dish names, unit names and option
     answers print as the sale was filed. The copy is marked as one, files nothing and opens no
     drawer. `POST /api/sales/:id/reprint` takes an optional `language`, refused with

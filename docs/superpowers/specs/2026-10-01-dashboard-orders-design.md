@@ -279,10 +279,10 @@ still no HTTP route that issues one (scripts call core `recordCorrection`, secti
   sale was filed in (`sales.locale`), is laid out for the picked printer's paper width and
   resolution (as the category report is, `report-api.ts:389-418`), and carries the practice
   warning on a Demo or Prepare venue, as the till's does (`receipt-ticket.ts:160-163`).
-  _(2026-10-02, C114: `enqueueReceiptReprint` now takes an optional `language`, so the till's copy
-  may print its fixed words and formatting in another of the country pack's receipt languages,
-  with names still in `sales.locale`; the split must carry it. See `docs/backlog.md`, C113's
-  entry.)_
+  _(2026-10-02, C114: `enqueueReceiptReprint` and `enqueueReceiptCopy` (split by #1027) take an
+  optional `language`, so the till's copy may print its fixed words and formatting in another of
+  the pack's receipt languages, names still in `sales.locale`. The Orders screen's copy passes
+  none, so it prints in the language the sale was filed in.)_
 - **It files nothing and changes no stored fiscal value.** It reads the invoice, its lines, its
   payments and its filed record (`backend.filedReceiptFor`, `till-sale.ts:600`), and writes no
   `sales` row, no fiscal record, no settlement and no tender: only the print job, the reprint
@@ -491,8 +491,8 @@ receipt's caption, QR and VERI\*FACTU line, and the reprint lays out its copy wi
 `formatReceipt`, so whichever lands second rebases; a copy then follows C123's layout with no
 change here. C124 narrows the order-line triggers behind C113's language-change refusal, not these
 routes. _(2026-10-02: C114, branch `feat/receipt-reprint-language`, gives
-`enqueueReceiptReprint` an optional `language`, which the split behind section 4.5's reprint must
-carry.)_ Lane C's C126 may change the till's cancel (section 4.2). The plan's tasks check
+`enqueueReceiptReprint` and `enqueueReceiptCopy` (split by #1027) an optional `language`; section
+4.5's reprint passes none, so it prints in the language the sale was filed in.)_ Lane C's C126 may change the till's cancel (section 4.2). The plan's tasks check
 open pull requests before starting, as every lane does.
 
 ## 12. The owner's answers, and what is left

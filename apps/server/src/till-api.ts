@@ -172,7 +172,8 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
-import { readVenueReceiptLanguageRules } from "./venue-locale.js";
+import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
+import { geographyOf } from "./venue-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
@@ -955,6 +956,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             bumpMode: locations.bumpMode,
             fireControl: locations.fireControl,
             receiptPrintMode: locations.receiptPrintMode,
+            province: locations.province,
           })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
@@ -1013,9 +1015,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         });
         return {
           invoiceLocale: (await readReceiptLanguage(tx, deps.cfg.locationId)).locale,
-          receiptLanguages: (
-            await readVenueReceiptLanguageRules(tx, { locationId: deps.cfg.locationId })
-          ).choices,
+          receiptLanguages: resolveInstalledReceiptLanguageRules(geographyOf(taxpayer, loc))
+            .choices,
           issuer:
             taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,

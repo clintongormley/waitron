@@ -22,13 +22,24 @@ export interface ContentLanguageRules {
 
 const languageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
 
+const displayNamesByLocale = new Map<string, Intl.DisplayNames>();
+
+function languageNamesFor(locale: string): Intl.DisplayNames {
+  let names = displayNamesByLocale.get(locale);
+  if (!names) {
+    names = new Intl.DisplayNames([locale], { type: "language", fallback: "none" });
+    displayNamesByLocale.set(locale, names);
+  }
+  return names;
+}
+
 const choicesByLocale = new Map<string, readonly { code: string; name: string }[]>();
 
 /** The picker uses the runtime's named canonical language codes, including three-letter codes. */
 export function contentLanguageChoices(displayLocale: string): { code: string; name: string }[] {
   const cached = choicesByLocale.get(displayLocale);
   if (cached) return cached.map((choice) => ({ ...choice }));
-  const names = new Intl.DisplayNames([displayLocale], { type: "language", fallback: "none" });
+  const names = languageNamesFor(displayLocale);
   const choices: { code: string; name: string }[] = [];
   const add = (code: string): void => {
     if (["und", "mul", "zxx"].includes(code)) return;
@@ -62,8 +73,6 @@ export function contentLanguageCode(value: string): string {
   return language;
 }
 
-const displayNamesByLocale = new Map<string, Intl.DisplayNames>();
-
 /** A tag's language named in `locale`, capitalised when it stands alone rather than inside a
  * sentence. A tag that is not a language, or that `locale` has no name for, comes back as it is. */
 export function languageDisplayName(tag: string, locale: string, standalone = true): string {
@@ -73,12 +82,7 @@ export function languageDisplayName(tag: string, locale: string, standalone = tr
   } catch {
     return tag;
   }
-  let names = displayNamesByLocale.get(locale);
-  if (!names) {
-    names = new Intl.DisplayNames([locale], { type: "language", fallback: "none" });
-    displayNamesByLocale.set(locale, names);
-  }
-  const name = names.of(code);
+  const name = languageNamesFor(locale).of(code);
   if (name === undefined) return tag;
   return standalone ? capitaliseFirst(name, locale) : name;
 }
