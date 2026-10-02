@@ -25,6 +25,10 @@ export class TillFindBillDialog extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-4);
+        width: min(
+          var(--wt-form-max-width),
+          calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5))
+        );
       }
       .results {
         display: flex;

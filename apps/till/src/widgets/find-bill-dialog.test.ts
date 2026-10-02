@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./find-bill-dialog.js";
@@ -159,5 +160,19 @@ describe("Find a bill", () => {
     ]);
     await click(el, "[slot=cancel]");
     expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
+  });
+
+  it("keeps the search field readable at phone width", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mount();
+      const dialog = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(dialog.getBoundingClientRect().width).toBeGreaterThanOrEqual(300);
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    } finally {
+      await page.viewport(1280, 720);
+    }
   });
 });
