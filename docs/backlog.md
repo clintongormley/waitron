@@ -2282,9 +2282,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
     at the reader in this process. No till screen calls the route. The owner dropped the dashboard
     Orders screen's "Invoice not credited" mark (2026-10-02 ~12:05): such a bill is to show as Cancelled
-    with its credit note. Whichever of C126 and B27a (`feat/orders-list-routes`) lands second
-    removes the mark and updates B27a's cases in `apps/server/src/orders-list.test.ts`
-    (owner-approved). Open:
+    with its credit note. B27a landed first (#1027) with the mark — `invoiceNotCredited` in
+    `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
+    landing second, removes them and updates those cases (owner-approved), and checks an
+    abandoned bill before Paid in `BILL_STATUS`, since the cancel settles the invoice. Open:
     - **Whether the cancel should accept a manager-PIN override is a question for the owner, not
       a decision.** As built it takes none, so a waiter cancelling an invoiced order is refused 403
       with no way round it, while the sibling till actions accept one: an unpaid departure

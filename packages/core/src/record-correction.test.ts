@@ -710,7 +710,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     ["1000000000", "shared.decimal_overflow"],
     ["abc", "shared.invalid_decimal"],
   ])(
-    "refuses a line whose quantity %s no column can store before a number is allocated",
+    "refuses a line whose quantity %s the converters refuse (overflow, or not a decimal) before a number is allocated",
     async (quantity, code) => {
       const backend = new FakeFiscalBackend(suite.db);
       const { saleId: originalId } = await sellMosto(backend);

@@ -86,8 +86,9 @@ export interface RecordCorrectionInput {
  * codes, and before the number is allocated, so a correction it refuses burns no number. A
  * derived breakdown's `sale.total_mismatch` refusal comes before all three; a whole-invoice
  * credit's refusals come after the gate and `sale.correction_exceeds_total`, because they read
- * what is on the invoice, and before the number, the refusal of a line no column can store
- * included. A failed integrity check records an incident and the correction proceeds anyway.
+ * what is on the invoice, and before the number, a line value the converters refuse (overflow,
+ * or not a decimal) included. A failed integrity check records an incident and the correction
+ * proceeds anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
@@ -191,8 +192,9 @@ export async function recordCorrection(
   // The stored `sales.vat_breakdown` and the filed breakdown are this one value.
   const vatBreakdown =
     derived ?? wholeInvoiceBreakdown(input.correctsSaleId, original, totalCents, input.lines);
-  // A whole-invoice credit converts its lines before a number is allocated, so one no column can
-  // store is refused with nothing written; the sale's id is filled in once it exists.
+  // A whole-invoice credit converts its lines before a number is allocated, so a line value the
+  // converters refuse (overflow, or not a decimal) is refused with nothing written; the sale's id
+  // is filled in once it exists.
   const wholeLineRows = input.wholeInvoice === true ? saleLineRows("", input.lines) : undefined;
 
   // Nothing branches on `verification.ok`: a failed check records one incident carrying every

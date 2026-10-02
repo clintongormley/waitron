@@ -35,11 +35,11 @@
 > _(2026-10-02, C126: built in lane B — the cancel now credits an issued invoice in full and needs
 > `sale.rectify`, so row 7's three cancel cases in Task 1 Step 2 no longer yield what they expect as
 > written; the pointer at that step says what each yields. Owner, 2026-10-02 ~12:05: the Invoice
-> not credited mark is dropped. B27a builds no such mark: no `invoiceNotCredited` field on a row,
-> no `orders.invoice_not_credited` key, and no mark text in the Status column — such a bill reads
-> Cancelled with its credit note. Whichever of C126 and B27a lands second updates B27a's cases in
-> `apps/server/src/orders-list.test.ts` to match (owner-approved). The mark's text below is kept
-> as written, with a pointer back here.)_
+> not credited mark is dropped: such a bill reads Cancelled with its credit note. B27a landed
+> first (#1027) with the mark — `invoiceNotCredited` in `apps/server/src/orders-list.ts` and its
+> cases in `apps/server/src/orders-list.test.ts`. C126, landing second, removes them and updates
+> those cases (owner-approved). The mark's text below is kept as written, with a pointer back
+> here.)_
 >
 > The owner confirmed the append-only reprint record and amended the scope, voided-copy and
 > permission choices on 2026-10-02 ~09:50. The code and tests in B27a carry those decisions.
@@ -609,17 +609,25 @@ export async function billlessSale(venue: OrderVenue): Promise<string> {
   are read one at a time through the detail route, so cases do not depend on how many bills earlier
   cases left behind (`resetPerTest: false`, as `unpaid-departure.test.ts:72` does):
 
-  _(2026-10-02, C126 — read against `apps/server/src/cancel-invoiced-order.test.ts` and
-  `packages/core/src/record-correction.ts`, not run here. The three cancel cases below cancel with
-  `venue.cookie`, the staff operator Ana's till session, which is now refused for an invoiced bill:
-  403, `authorization.not_permitted`, because the credit needs `sale.rectify`. Run with a
-  supervisor's till session instead, "reads a sent bill cancelled at the till…" and "reads a debt
-  cancelled at the till afterwards…" credit the invoice in full and read Cancelled with Credited in
-  full; the `invoiceNotCredited` field they assert no longer exists (dropped by the owner 2026-10-02
-  ~12:05, see the banner). "drops the Invoice not credited mark…" credits the invoice first and then
-  cancels; the cancel's credit in full would take the invoice below zero, so it is refused with
-  `sale.correction_exceeds_total`. The cancel route no longer leaves an issued invoice uncredited;
-  whether any other path can abandon an invoiced bill was not traced.)_
+  _(2026-10-02, C126 — run on the C126 branch after B27a landed as #1027, with
+  `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/orders-list.test.ts src/orders-list.reads.test.ts src/orders-api.test.ts src/orders-reprint.test.ts src/cancel-invoiced-order.test.ts`.
+  The three cancel cases below cancel with `venue.cookie`, the staff operator Ana's till session,
+  which is now refused for an invoiced bill: 403, `authorization.not_permitted`, because the credit
+  needs `sale.rectify`. With a supervisor's till session (`venue.supervisorTill`), "reads a sent
+  bill cancelled at the till…" and "reads a debt cancelled at the till afterwards…" credited the
+  invoice in full but the row read Paid, not Cancelled: the cancel leaves the credited invoice
+  owing nothing, and B27a's `BILL_STATUS` (`apps/server/src/orders-list.ts`) checked for a
+  settlement before it looked at an abandoned bill. C126 adds
+  `when wo.status = 'abandoned' then 'cancelled'` after the Voided check; both cases now read
+  Cancelled, credited in full, with one `R/n` credit note. The `invoiceNotCredited` field they
+  asserted no longer exists (dropped by the owner 2026-10-02 ~12:05, see the banner). "drops the
+  Invoice not credited mark…" credits −3.00 on the 3.00 invoice first and then cancels; the run
+  showed the cancel refused 409 `sale.correction_exceeds_total`, and in
+  `apps/server/src/orders-list.test.ts` it is now "refuses to cancel a bill whose credit notes
+  already bring its invoice to nothing, leaving its row as it was". By reading only, not run: each
+  of the other paths that abandon a bill refuses or skips a bill that is not open —
+  `apps/server/src/bill-actions.ts:197`, `apps/server/src/parties.ts:513` and `abandonHeldOrder` in
+  `apps/server/src/working-order.ts`.)_
 
 ```ts
 import { randomUUID } from "node:crypto";

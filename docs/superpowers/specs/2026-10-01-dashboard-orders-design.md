@@ -177,10 +177,8 @@ Each row shows exactly one status, decided in this order:
    bill is still `placed`. A debt cancelled at the till afterwards reads Cancelled (rule 6), since
    the cancel route accepts any `placed` bill. _(2026-10-02, C126: no longer any. Such a bill has
    an issued invoice once its table has left, and the cancel now refuses an invoiced bill in
-   several cases, listed at `cancelPlacedOrder` (`apps/server/src/working-order.ts`) and, for the
-   whole-invoice credit, at `recordCorrection`'s `wholeInvoice` input
-   (`packages/core/src/record-correction.ts`); otherwise it credits the invoice in full, so the row
-   reads Cancelled with Credited in full.)_ A
+   several cases, some listed in `docs/backlog.md`, C126's entry; otherwise it credits the invoice
+   in full, so the row reads Cancelled with Credited in full.)_ A
    debt whose credit notes bring it to nothing keeps this status, with the "Credited in full" mark
    and nothing in Still owed; the till's lookup (section 5) leaves it out, as today's till list
    does (`listUnpaidDepartures`, `apps/server/src/unpaid-departure.ts`, around `:265`).
@@ -195,8 +193,9 @@ Each row shows exactly one status, decided in this order:
    till should refuse that cancel, or credit the invoice as it cancels, is queued separately as
    lane C's C126, which measures the gap first. This design does not change the cancel.
    _(2026-10-02, C126: the cancel now credits the whole invoice with an R5 corrective invoice in the
-   same transaction, needs `sale.rectify`, and settles the invoice at nothing owed, so a bill
-   cancelled after that reads Cancelled with Credited in full. Owner, 2026-10-02 ~12:05: drop the
+   same transaction, needs `sale.rectify`, and settles the invoice owing nothing, which alone
+   would read Paid; since C126 `BILL_STATUS` (`apps/server/src/orders-list.ts`) checks an
+   abandoned bill right after Voided, so such a bill reads Cancelled with Credited in full. Owner, 2026-10-02 ~12:05: drop the
    Invoice not credited mark — such bills show as Cancelled with their credit note. See
    `docs/backlog.md`, C126's entry.)_
 

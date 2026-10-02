@@ -383,7 +383,8 @@ channel is that breakdown, whichever of the three ways it was built. When the ca
 which groups each line's `lineTotal`, rounded to the cent, by its `vatRate`; a substitution always
 takes that path, and so does a correction unless it credits the whole invoice (`wholeInvoice`,
 `packages/core/src/record-correction.ts`), which files the invoice's own stored breakdown negated
-after checking that the lines, summed per rate at the cent, are its bases. When the caller
+after checking that the lines, summed per rate at the cent, are its bases and, where they state
+one, that their gross amounts are its base plus tax. When the caller
 supplies its own — which the till's filing routes do — it is filed with each base and tax rounded to
 the cent, but it too was grouped per rate over the priced lines a moment earlier
 (`packages/catalogue/src/pricing.ts`). In each of the three an extras child line's base and its own
