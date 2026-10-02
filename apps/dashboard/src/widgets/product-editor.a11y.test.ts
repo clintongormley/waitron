@@ -171,13 +171,19 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     );
     if (state === "ordering" || state === "ordering-refused") {
       // Without these the scan could pass on an editor that drew no choices, no help and no refusal.
-      const radios = el.shadowRoot!.querySelectorAll<HTMLInputElement>("input[name=ordering]");
-      expect([...radios].map((radio) => radio.checked)).toEqual(
-        state === "ordering" ? [false, true, false] : [true, false, false],
-      );
-      expect(el.shadowRoot!.getElementById("ordering-staff_only-hint")!.textContent).not.toBe("");
-      if (state === "ordering-refused")
-        expect(el.shadowRoot!.getElementById("ordering-error")!.textContent).not.toBe("");
+      const field = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; error: string; updateComplete: Promise<unknown> }
+      >("wt-combobox[name=ordering]")!;
+      expect(field.value).toBe(state === "ordering" ? "staff_only" : "public");
+      if (state === "ordering-refused") expect(field.error).not.toBe("");
+      await field.updateComplete;
+      if (state === "ordering") {
+        // Open, so the scan reads each choice with its explanation as the operator sees them.
+        field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+        await field.updateComplete;
+        const lines = [...field.shadowRoot!.querySelectorAll<HTMLElement>(".option-description")];
+        expect(lines.map((line) => line.checkVisibility())).toEqual([true, true, true]);
+      }
     }
     if (state === "errors") el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     if (state === "categories") {
