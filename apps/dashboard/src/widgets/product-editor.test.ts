@@ -1240,6 +1240,22 @@ it("applies a reorder, an availability toggle and an edit from the variants tabl
   expect(el.currentValue.variants[1]).toEqual({ ...small, name: "Very small", unitPrice: "1.50" });
 });
 
+it("opens a variant's edit window when its row is clicked", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const table = variantTable(el)! as HTMLElement & { updateComplete: Promise<unknown> };
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-row-1"]')!.click();
+  await el.updateComplete;
+  expect(variantForm(el).open).toBe(true);
+  expect(variantForm(el).value).toEqual(large);
+});
+
 it("names the product's unit in the variants table's price column", async () => {
   await atDesktopWidth(async () => {
     const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {

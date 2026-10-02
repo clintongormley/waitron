@@ -87,6 +87,14 @@ describe.each(["light", "dark"] as const)("variant table (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("is accessible with a row's Edit focused", async () => {
+    const { el, host } = await mount(false, theme);
+    const row = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="edit-row-0"]')!;
+    row.focus();
+    expect(el.shadowRoot!.activeElement).toBe(row);
+    await expectNoA11yViolations(host);
+  });
+
   it("is accessible with its row menu open", async () => {
     const { el, host } = await mount(false, theme);
     el.shadowRoot!.querySelector("wt-row-actions")!.show();

@@ -396,6 +396,8 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
 - Each row's menu offers **Open**, **Edit** and **Remove** (or **Restore**). **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
   save first, while the product form has unsaved changes, because opening the page replaces the form.
+- A click on a variant's row, or Enter on it, opens its edit window, as the menu's **Edit** does. The
+  drag handle, the Available switch and the row menu keep their own clicks.
 - **Remove** marks a saved variant Inactive in the draft, and **Restore** marks it Active again; one
   that was never saved is simply dropped from the draft. The table's "Show variants" dropdown filters
   rows by status and starts on Active; it switches to showing every row when a reported problem or a

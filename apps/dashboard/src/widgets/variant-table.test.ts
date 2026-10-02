@@ -1,7 +1,7 @@
 import { reorder } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { EACH_CHOICE, type VariantTable } from "./variant-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
@@ -386,6 +386,8 @@ it("changes nothing while the product is being saved", async () => {
   const first = handles(el)[0]!;
   expect(first.disabled).toBe(true);
   first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  expect(activator(el, 0)!.disabled).toBe(true);
+  await click(el, "edit-row-0");
   await click(el, "edit-0");
   await click(el, "remove-0");
   el.shadowRoot!.querySelector('[data-test="available-0"]')!.dispatchEvent(
@@ -734,3 +736,190 @@ it("shows a base price still being typed as it stands, not as a sign beside NaN"
   });
   expect(cells(el, 2)[0]).toBe(t("editor.same_as").replace("{value}", "9,5x"));
 });
+
+/** The control a click anywhere on a row's free space lands on: the row is an Edit button. */
+function activator(el: VariantTable, index: number) {
+  return el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test="edit-row-${index}"]`);
+}
+/** What a pointer at the middle of `target` would land on, as the table's shadow root sees it. */
+function hit(el: VariantTable, target: Element): Element | null {
+  const box = target.getBoundingClientRect();
+  return el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+}
+
+it("opens a variant's edit window from a click anywhere on its row", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable({ variants: withRemoved() });
+    const edit = listen(el, "wt-edit");
+    await showStatus(el, "all");
+    // What is under the pointer on the name and on the price is what gets the click.
+    const onName = hit(el, rows(el)[2]!.children[1]!);
+    const onPrice = hit(el, rows(el)[0]!.children[2]!);
+    expect(onName).toBe(activator(el, 2));
+    expect(onPrice).toBe(activator(el, 0));
+    (onName as HTMLElement).click();
+    (onPrice as HTMLElement).click();
+    expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([{ index: 2 }, { index: 0 }]);
+    expect(edit.mock.calls[0]![0].bubbles).toBe(true);
+    expect(edit.mock.calls[0]![0].composed).toBe(true);
+  });
+});
+
+it("opens a variant's edit window from Enter on its row, named for a screen reader", async () => {
+  const el = await mountTable();
+  const edit = listen(el, "wt-edit");
+  const row = activator(el, 1)!;
+  expect(row).not.toBeNull();
+  expect(row.getAttribute("aria-label")).toBe(`${t("action.edit")}: Entera`);
+  row.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([{ index: 1 }]);
+});
+
+it("leaves the drag handle, the Available switch and the row menu under the pointer", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable();
+    const row = rows(el)[0]!;
+    expect(activator(el, 0)).not.toBeNull();
+    for (const control of [
+      row.querySelector("button.handle")!,
+      row.querySelector('[data-test="available-0"]')!,
+      row.querySelector('[data-test="actions-0"]')!,
+    ]) {
+      const under = hit(el, control);
+      expect(under === control || control.contains(under)).toBe(true);
+    }
+  });
+});
+
+/** A point inside `cell` that is not on `control`: the strip of padding above it. */
+function besideControl(cell: Element, control: Element): { x: number; y: number } {
+  const room = cell.getBoundingClientRect();
+  const y = room.top + 2;
+  expect(y).toBeLessThan(control.getBoundingClientRect().top);
+  return { x: room.left + room.width / 2, y };
+}
+
+it("opens a variant's edit window from the empty space beside the handle, the switch and the menu", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable();
+    const edit = listen(el, "wt-edit");
+    const row = rows(el)[1]!;
+    const button = activator(el, 1)!;
+    for (const control of [
+      row.querySelector("button.handle")!,
+      row.querySelector('[data-test="available-1"]')!,
+      row.querySelector('[data-test="actions-1"]')!,
+    ]) {
+      const { x, y } = besideControl(control.closest("td")!, control);
+      expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(button);
+      // A real click: Playwright refuses one whose point some other element would take.
+      const box = button.getBoundingClientRect();
+      await userEvent.click(button, { position: { x: x - box.left, y: y - box.top } });
+    }
+    expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([
+      { index: 1 },
+      { index: 1 },
+      { index: 1 },
+    ]);
+  });
+});
+
+it("keeps every part of the Available switch above the row's button", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable();
+    const edit = listen(el, "wt-edit");
+    const toggle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="available-0"]')!;
+    const box = toggle.getBoundingClientRect();
+    const thumb = toggle.shadowRoot!.querySelector(".thumb")!.getBoundingClientRect();
+    const points = [
+      { x: box.left + 1, y: box.top + 1 },
+      { x: box.right - 1, y: box.top + 1 },
+      { x: box.left + 1, y: box.bottom - 1 },
+      { x: box.right - 1, y: box.bottom - 1 },
+      { x: box.left + box.width / 2, y: box.top + box.height / 2 },
+      { x: thumb.left + thumb.width / 2, y: thumb.top + thumb.height / 2 },
+    ];
+    for (const { x, y } of points) expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(toggle);
+    for (const { x, y } of points) {
+      await userEvent.click(toggle, { position: { x: x - box.left, y: y - box.top } });
+    }
+    expect(edit).not.toHaveBeenCalled();
+  });
+});
+
+it("draws a dragged row over the controls of the rows it passes", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable();
+    const [dragged, passed] = rows(el) as HTMLElement[];
+    const start = dragged!.getBoundingClientRect();
+    const centre = start.top + start.height / 2;
+    const pointer = (target: EventTarget, type: string, clientY: number) =>
+      target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
+    pointer(handles(el)[0]!, "pointerdown", centre);
+    try {
+      // Not far enough to swap the rows: the dragged one now overlaps the top of the next.
+      pointer(document, "pointermove", centre + 0.4 * start.height);
+      await el.updateComplete;
+      expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble"]);
+      const toggle = passed!.querySelector('[data-test="available-1"]')!.getBoundingClientRect();
+      const y = toggle.top + 2;
+      expect(y).toBeLessThan(dragged!.getBoundingClientRect().bottom);
+      const under = el.shadowRoot!.elementFromPoint(toggle.left + toggle.width / 2, y);
+      expect(dragged!.contains(under)).toBe(true);
+    } finally {
+      pointer(document, "pointerup", centre);
+    }
+  });
+});
+
+/** The colour `token` resolves to where the table is mounted, read off a probe painted with it. */
+function resolved(el: VariantTable, token: string): string {
+  const probe = document.createElement("div");
+  probe.style.background = `var(${token})`;
+  el.parentElement!.appendChild(probe);
+  const colour = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return colour;
+}
+
+it.each(["light", "dark"] as const)(
+  "tints a hovered or focused row in a colour the dialog's panel is not, and leaves a dragged row lifted (%s)",
+  async (theme) => {
+    const { el } = await mountWidget<VariantTable>(
+      "dashboard-variant-table",
+      { variants: threeVariants() },
+      theme,
+    );
+    const tint = resolved(el, "--wt-color-bg");
+    // In the app the table sits inside a dialog painted with the raised surface.
+    expect(tint).not.toBe(resolved(el, "--wt-color-surface-raised"));
+    const name = (index: number) => rows(el)[index]!.children[1]!;
+    expect(getComputedStyle(name(0)).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    // Aimed at the name, which nothing but the row's button covers.
+    const button = activator(el, 0)!.getBoundingClientRect();
+    const onName = name(0).getBoundingClientRect();
+    const y = onName.top + onName.height / 2;
+    await userEvent.hover(activator(el, 0)!, {
+      position: { x: onName.left + onName.width / 2 - button.left, y: y - button.top },
+    });
+    expect(getComputedStyle(name(0)).backgroundColor).toBe(tint);
+    activator(el, 1)!.focus();
+    expect(getComputedStyle(name(1)).backgroundColor).toBe(tint);
+
+    const row = rows(el)[0] as HTMLElement;
+    handles(el)[0]!.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, clientY: y }),
+    );
+    try {
+      expect(row.hasAttribute("data-dragging")).toBe(true);
+      expect(row.matches(":hover")).toBe(true);
+      expect(getComputedStyle(name(0)).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(row).backgroundColor).toBe(resolved(el, "--wt-color-surface-lifted"));
+    } finally {
+      document.dispatchEvent(
+        new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientY: y }),
+      );
+    }
+  },
+);
