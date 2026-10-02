@@ -852,7 +852,7 @@ report's, a printer scan's, the Servers screen's and a list's "No products use t
 Screens that filter before the table (Orders, the catalogue browser while searching, Users and
 Payments while their filters hide what exists, and the Units delete dialog's products) show the
 no-matches sentence themselves. Not covered: empty sentences outside a `wt-data-table` (floor,
-kitchen, devices and others) still use "Aún no hay" and other shapes.
+kitchen, devices and others) still use "Aún no hay" and other shapes. (2026-10-02: since A208 the Products tree searches inside the table, so the catalogue browser no longer chooses its own empty sentence.)
 
 **An empty field's label is the same size as a typed value (A184, owner 2026-10-02) — DONE (#1035).** The
 owner, on a screenshot of a form with Password and PIN empty: _"the fieldname inside the field is
@@ -1251,9 +1251,8 @@ dropdown goes too. Two things it does that dragging may not: a variant's empty c
 parent's, and the dropdown is where a variant is given a category of its own — A208's tree
 cannot drag a variant on its own, because a press on a variant row starts no drag; and a product made from "All
 products" has no category until it is dragged. **Clash with A208:** its spec keeps the category
-form (`apps/dashboard/src/widgets/category-form.ts`) for one reason, this button, so if this
-lands after A208 the form has no caller left; if it lands before, A208's spec and plan change
-too.
+form (`apps/dashboard/src/widgets/category-form.ts`) for one reason, this button, so once this
+lands the form has no caller left.
 **Decided (owner, 2026-10-02, from mockups, choosing B of three):** the "Main category" field
 goes. Under the window's title the product's path reads "Drinks › Alcoholic drinks › Cocktails"
 with a small "Change" link after it; Change opens the category list as an indented tree, anchored

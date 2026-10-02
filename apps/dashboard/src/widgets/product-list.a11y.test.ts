@@ -151,6 +151,8 @@ const products: Product[] = [
 ];
 
 afterEach(cleanupWidgets);
+// The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
+// a choice one test makes would otherwise be restored into the next one.
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
