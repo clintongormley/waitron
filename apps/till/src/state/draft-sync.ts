@@ -139,6 +139,7 @@ function lineKey(input: DraftLineInput): string {
     input.menuVersionId,
     input.note,
     input.courseId,
+    input.makeAt ?? null,
     input.noMerge,
     input.options.map((answer) => `${answer.listId} ${answer.labelId}`).sort(),
     input.extras

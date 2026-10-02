@@ -33,8 +33,10 @@ import {
   DraftSync,
   asRefusal,
   limited,
+  pause,
   resendUnanswered,
   type DraftRefused,
+  type DraftSaveOutcome,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
@@ -88,6 +90,8 @@ import type {
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
 import "./widgets/unpaid-departure-dialog.js";
+import "./widgets/dead-ends-section.js";
+import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import {
   confirmationOf,
@@ -113,6 +117,7 @@ import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
@@ -131,6 +136,7 @@ import type {
   UnpaidDeparture,
   UnpaidDepartureRequest,
   DeviceStation,
+  DeadEndAnswer,
   DraftSubmission,
   FloorZone,
   HeldOrder,
@@ -252,7 +258,13 @@ const TABLE_REQUEST_LIMIT_MS = 150_000;
  * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
  * one it was sent to.
  */
-type DraftFollowUp = "read-tab" | "find-tab" | "mark-unsellable" | { landedOn: string } | undefined;
+type DraftFollowUp =
+  | "read-tab"
+  | "find-tab"
+  | "mark-unsellable"
+  | "recheck-dead-ends"
+  | { landedOn: string }
+  | undefined;
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
  * when its read failed. Undefined when the operator session it was opened in has ended. */
@@ -906,6 +918,12 @@ export class TillApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-align: center;
       }
+      .edit-dead-ends-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        inline-size: 100%;
+      }
     `,
   ];
 
@@ -1300,6 +1318,14 @@ export class TillApp extends LitElement {
   @state() private editSentLines = true;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
   @state() private cancelOffer: number | null = null;
+  @state() private editDeadEnds: {
+    answer: DeadEndAnswer;
+    change: ChangeLineDetail;
+    orderId: string;
+    visit: number;
+    stationId?: string;
+  } | null = null;
+  #previewSaveOutcome?: { sent: readonly OrderLine[]; outcome: DraftSaveOutcome };
   /** Defaults to prepay, so an unresolved boot never shows the Place/Collect controls. */
   @state() private orderFlow: OrderFlow = "prepay";
   @state() private onboardingIntent?: TillInfo["onboardingIntent"];
@@ -3834,6 +3860,12 @@ export class TillApp extends LitElement {
       await this.#markUnsellable(store);
       return;
     }
+    if (followUp === "recheck-dead-ends") {
+      this.renderRoot
+        .querySelector<TillTableOrderScreen>("till-table-order-screen")
+        ?.reopenDraftPreview(sent);
+      return;
+    }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
     if (followUp !== "find-tab" && draft !== undefined) this.#tally(draft, groups, joinGroupId);
     if (followUp === "find-tab" && onSentTable()) {
@@ -3857,6 +3889,64 @@ export class TillApp extends LitElement {
     this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
     this.#returnToFloor();
+  }
+
+  async #onCheckDeadEnds(event: Event): Promise<void> {
+    event.preventDefault();
+    const { sent, checkId } = (
+      event as CustomEvent<{ sent: readonly OrderLine[]; checkId: number }>
+    ).detail;
+    const screen = event.target as TillTableOrderScreen;
+    this.#previewSaveOutcome = undefined;
+    const sync = this.#draftSync;
+    const party = this.orderParty;
+    if (sync === undefined || party === null) {
+      screen.answerDeadEnds(sent, undefined, checkId);
+      return;
+    }
+    const session = this.#operatorSession;
+    const request = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const saved = await sync.flush(request.signal);
+      if (saved !== "saved") {
+        if (screen.currentDeadEndsCheck(checkId))
+          this.#previewSaveOutcome = { sent, outcome: saved };
+        return;
+      }
+      const positions = sent.map((line) => sync.store.lines.indexOf(line));
+      const ids = positions.includes(-1) ? null : sync.lineIds(positions);
+      if (ids === null || sync.draftId === null) return;
+      screen.beginDeadEndsQuestion(sent, checkId);
+      const question = limited(3_000, request.signal);
+      let answer: DeadEndAnswer | undefined;
+      try {
+        answer = await Promise.race([
+          this.api.askDraftDeadEnds(party.id, sync.draftId, ids, { signal: question.signal }),
+          pause(question.signal).then(() => undefined),
+        ]);
+      } finally {
+        question.done();
+      }
+      if (answer === undefined) return;
+      if (session !== this.#operatorSession) return;
+      const byId = new Map(ids.map((id, index) => [id, index]));
+      screen.answerDeadEnds(
+        sent,
+        {
+          ...answer,
+          deadEnds: answer.deadEnds.flatMap((row) => {
+            const index = byId.get(row.key);
+            return index === undefined ? [] : [{ ...row, key: String(index) }];
+          }),
+        },
+        checkId,
+      );
+    } catch {
+      // A check may have no answer; the submit still enforces station routing.
+    } finally {
+      request.done();
+      if (session === this.#operatorSession) screen.answerDeadEnds(sent, undefined, checkId);
+    }
   }
 
   #tally({ tally }: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
@@ -3887,7 +3977,14 @@ export class TillApp extends LitElement {
     const send = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
     try {
-      const saved = await sync.flush(send.signal);
+      const checked = this.#previewSaveOutcome;
+      this.#previewSaveOutcome = undefined;
+      const saved =
+        checked !== undefined &&
+        checked.sent.length === sent.length &&
+        checked.sent.every((line, index) => line === sent[index])
+          ? checked.outcome
+          : await sync.flush(send.signal);
       if (!live()) return;
       if (saved !== "saved") {
         this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
@@ -3940,6 +4037,7 @@ export class TillApp extends LitElement {
         return;
       }
       const refusal = asRefusal(error);
+      if (refusal?.refused === "station.no_replacement") return "recheck-dead-ends";
       if (refusal !== undefined && DRAFT_REFUSALS.has(refusal.refused)) {
         await sync.load();
         if (!live()) return;
@@ -4499,7 +4597,8 @@ export class TillApp extends LitElement {
    * take the order off screen without that counter moving.
    */
   async #onChangeLine(event: Event): Promise<void> {
-    const { lineNo, lineName, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
+    const change = (event as CustomEvent<ChangeLineDetail>).detail;
+    const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
     const visit = this.#orderVisit;
@@ -4533,6 +4632,18 @@ export class TillApp extends LitElement {
       };
       return;
     }
+    if (code === "station.no_replacement" && change.saleLine !== undefined) {
+      try {
+        const answer = await this.api.askSaleDeadEnds([change.saleLine], orderId);
+        if (left()) return;
+        if (answer.deadEnds.length > 0) {
+          this.editDeadEnds = { answer, change, orderId, visit };
+          return;
+        }
+      } catch {
+        // The original refusal remains available below when the question has no answer.
+      }
+    }
     this.errorKey =
       code === "working_order.out_of_date"
         ? "held.changed_elsewhere"
@@ -4547,6 +4658,60 @@ export class TillApp extends LitElement {
 
   /** Leaving an order clears the banner, except a failed change to a line of an order already left,
    * which has to outlive the switch. */
+  #retryEditDeadEnd(): void {
+    const pending = this.editDeadEnds;
+    if (pending === null || pending.stationId === undefined) return;
+    this.editDeadEnds = null;
+    if (this.activeTabId !== pending.orderId || this.#hasLeftOrder(pending.orderId, pending.visit))
+      return;
+    void this.#onChangeLine(
+      new CustomEvent<ChangeLineDetail>("change-line", {
+        detail: {
+          ...pending.change,
+          patch: { ...pending.change.patch, makeAt: pending.stationId },
+        },
+      }),
+    );
+  }
+
+  #renderEditDeadEnds(): TemplateResult | typeof nothing {
+    const pending = this.editDeadEnds;
+    if (
+      pending === null ||
+      this.activeTabId !== pending.orderId ||
+      this.#hasLeftOrder(pending.orderId, pending.visit)
+    )
+      return nothing;
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-edit-dead-ends
+      .open=${true}
+      .heading=${t("table.preview_title")}
+      @wt-close=${() => (this.editDeadEnds = null)}
+    >
+      <till-dead-ends-section
+        .answer=${pending.answer}
+        .choices=${new Map(pending.stationId === undefined ? [] : [["0", pending.stationId]])}
+        .allowRemove=${false}
+        @make-at=${(event: CustomEvent<{ key: string; stationId: string }>) => {
+          this.editDeadEnds = { ...pending, stationId: event.detail.stationId || undefined };
+        }}
+      ></till-dead-ends-section>
+      <div slot="footer" class="edit-dead-ends-actions">
+        <wt-button variant="secondary" @click=${() => (this.editDeadEnds = null)}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-edit-dead-ends-retry
+          ?disabled=${pending.stationId === undefined}
+          @click=${() => this.#retryEditDeadEnd()}
+          >${t("table.preview_confirm")}</wt-button
+        >
+      </div>
+    </wt-dialog>`;
+  }
+
   #clearErrorKeepingLateChange(): void {
     const late = this.#lateChangeShown();
     this.errorKey = late === undefined ? undefined : { lateChange: late };
@@ -6085,6 +6250,7 @@ export class TillApp extends LitElement {
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
+        @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}
         @take-over-draft=${(event: Event) => void this.#onTakeOverDraft(event)}
         @fire-group=${(event: Event) => void this.#onFireGroup(event)}
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
@@ -6179,6 +6345,7 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
+        ${this.#renderEditDeadEnds()}
         ${
           this.basketRefresh === undefined
             ? nothing
