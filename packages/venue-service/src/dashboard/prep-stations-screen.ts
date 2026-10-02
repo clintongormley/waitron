@@ -3,7 +3,6 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
-  selectStyles,
   submitOnEnter,
   ReorderController,
   reorder,
@@ -66,7 +65,6 @@ const targetFor = (id: string): RouteTarget =>
 export class PrepStationsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     ReorderController.styles,
     ReorderController.tableStyles,
     css`
@@ -105,10 +103,10 @@ export class PrepStationsScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-1);
       }
-      .tester-when select {
+      .tester-when wt-combobox {
         min-height: var(--wt-tap-min);
       }
-      .tester-when input {
+      .tester-when wt-input {
         min-height: var(--wt-tap-min);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -618,57 +616,56 @@ export class PrepStationsScreen extends LitElement {
         ></wt-combobox>
       </div>
       <div class="tester-when">
-        <label
-          >${t("prep.test_when")}
-          <select
-            name="when"
-            data-test="test-when"
-            .value=${this.testWhen}
-            @change=${(event: Event) => {
-              this.testWhen = (event.target as HTMLSelectElement).value;
-              void this.#explain();
-            }}
-          >
-            <option value="now">${t("prep.test_now")}</option>
-            <option value="at">${t("prep.test_at")}</option>
-          </select>
-        </label>
+        <wt-combobox
+          name="when"
+          data-test="test-when"
+          label=${t("prep.test_when")}
+          .value=${this.testWhen}
+          .options=${[
+            { value: "now", label: t("prep.test_now") },
+            { value: "at", label: t("prep.test_at") },
+          ]}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.testWhen = event.detail.value;
+            void this.#explain();
+          }}
+        >
+        </wt-combobox>
         ${
           this.testWhen === "at"
             ? html`
-                <label
-                  >${t("prep.weekday")}
-                  <select
-                    name="weekday"
-                    data-test="test-weekday"
-                    .value=${String(this.testWeekday)}
-                    @change=${(event: Event) => {
-                      this.testWeekday = Number((event.target as HTMLSelectElement).value);
-                      void this.#explain();
-                    }}
-                  >
-                    ${[0, 1, 2, 3, 4, 5, 6].map((day) => html`<option value=${day} ?selected=${day === this.testWeekday}>${t(`venue.day.${day}` as "venue.day.0")}</option>`)}
-                  </select>
-                </label>
-                <label
-                  >${t("prep.test_time")} *
-                  <input
+                <wt-combobox
+                  name="weekday"
+                  data-test="test-weekday"
+                  label=${t("prep.weekday")}
+                  .value=${String(this.testWeekday)}
+                  .options=${[0, 1, 2, 3, 4, 5, 6].map((day) => ({ value: String(day), label: t(`venue.day.${day}` as "venue.day.0") }))}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    this.testWeekday = Number(event.detail.value);
+                    void this.#explain();
+                  }}
+                >
+                </wt-combobox>
+                <div>
+                  <wt-input
                     name="time"
                     data-test="test-time"
                     type="time"
+                    label=${t("prep.test_time")}
                     required
                     .value=${live(this.testTime)}
                     aria-invalid=${!this.testTime}
+                    .invalid=${!this.testTime}
                     aria-describedby="test-time-error"
-                    @input=${(event: Event) => {
-                      this.testTime = (event.target as HTMLInputElement).value;
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      this.testTime = event.detail.value;
                       void this.#explain();
                     }}
-                  />
+                  ></wt-input>
                   <span id="test-time-error" class="error"
                     >${!this.testTime ? t("prep.test_time_required") : nothing}</span
                   >
-                </label>
+                </div>
               `
             : nothing
         }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { DeadEndAnswer } from "../api/client.js";
+import type { WtCombobox } from "@waitron/ui";
 import "./dead-ends-section.js";
 import type { TillDeadEndsSection } from "./dead-ends-section.js";
 
@@ -44,15 +45,14 @@ it("shows each reason, closed option, required station, and removal events", asy
   expect(root.querySelector(".name")!.textContent).toBe("Beer ×2");
   expect(text).toContain("Upstairs bar is closed, and no station can replace it.");
   expect(text).toContain("Upstairs bar is switched off, and no station can replace it.");
-  const selects = root.querySelectorAll<HTMLSelectElement>('select[name="make-at"]');
+  const selects = root.querySelectorAll<WtCombobox>('wt-combobox[name="make-at"]');
   expect(selects).toHaveLength(2);
   expect(selects[0]!.required).toBe(true);
-  expect(selects[0]!.options[0]!.text).toBe("Choose a station");
-  expect(selects[0]!.options[1]!.text).toBe("Upstairs bar (closed)");
+  expect(selects[0]!.placeholder).toBe("Choose a station");
+  expect(selects[0]!.options[0]!.label).toBe("Upstairs bar (closed)");
   const events: unknown[] = [];
   host.addEventListener("make-at", (event) => events.push((event as CustomEvent).detail));
-  selects[0]!.value = "kitchen";
-  selects[0]!.dispatchEvent(new Event("change"));
+  selects[0]!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "kitchen" } }));
   expect(events).toEqual([{ key: "first", stationId: "kitchen" }]);
   expect(root.textContent).toContain("Choose where to make each dish, or remove it.");
 });

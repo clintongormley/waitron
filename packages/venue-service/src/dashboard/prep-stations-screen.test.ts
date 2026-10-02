@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
@@ -1860,9 +1860,8 @@ it("keeps the edited hours through a live routing refresh and saves that draft",
   q(el, '[data-test="edit-hours-upstairs"]')!.click();
   await settle(el);
   const form = q(el, "station-hours-form")!;
-  const closes = form.shadowRoot!.querySelector<HTMLInputElement>('[data-test="closes-0"]')!;
-  closes.value = "03:00";
-  closes.dispatchEvent(new Event("input", { bubbles: true }));
+  const closes = form.shadowRoot!.querySelector<WtInput>('[data-test="closes-0"]')!;
+  closes.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "03:00" } }));
   await settle(el);
   liveData.invalidate([{ type: "products", id: "bread" }]);
   await vi.waitFor(() => expect(a.load).toHaveBeenCalledTimes(2));
@@ -1876,9 +1875,8 @@ it("keeps the edited hours through a live routing refresh and saves that draft",
   q(el, '[data-test="edit-hours-upstairs"]')!.click();
   await settle(el);
   expect(
-    q(el, "station-hours-form")!.shadowRoot!.querySelector<HTMLInputElement>(
-      '[data-test="closes-0"]',
-    )!.value,
+    q(el, "station-hours-form")!.shadowRoot!.querySelector<WtInput>('[data-test="closes-0"]')!
+      .value,
   ).toBe("02:00");
 });
 
@@ -2077,21 +2075,17 @@ it("sends both the chosen weekday and time and returns to now", async () => {
     new CustomEvent("wt-change", { detail: { value: "bread" } }),
   );
   await settle(el);
-  const when = q(el, '[data-test="test-when"]') as HTMLSelectElement;
+  const when = q(el, '[data-test="test-when"]') as WtCombobox;
   expect(when.value).toBe("now");
-  when.value = "at";
-  when.dispatchEvent(new Event("change"));
+  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "at" } }));
   await settle(el);
-  const day = q(el, '[data-test="test-weekday"]') as HTMLSelectElement;
-  day.value = "5";
-  day.dispatchEvent(new Event("change"));
-  const time = q(el, '[data-test="test-time"]') as HTMLInputElement;
-  time.value = "22:00";
-  time.dispatchEvent(new Event("input"));
+  const day = q(el, '[data-test="test-weekday"]')!;
+  day.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "5" } }));
+  const time = q(el, '[data-test="test-time"]') as WtInput;
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "22:00" } }));
   await settle(el);
   expect(a.explain).toHaveBeenLastCalledWith("bread", null, { weekday: 5, timeOfDay: "22:00" });
-  when.value = "now";
-  when.dispatchEvent(new Event("change"));
+  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "now" } }));
   await settle(el);
   expect(a.explain).toHaveBeenLastCalledWith("bread", null);
 });
@@ -2112,15 +2106,13 @@ it("clears the scheduled answer and shows the required-time problem when time is
   q(el, '[data-test="test-product"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "bread" } }),
   );
-  const when = q(el, '[data-test="test-when"]') as HTMLSelectElement;
-  when.value = "at";
-  when.dispatchEvent(new Event("change"));
+  const when = q(el, '[data-test="test-when"]')!;
+  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "at" } }));
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Made at: Bar");
   const count = vi.mocked(a.explain).mock.calls.length;
-  const time = q(el, '[data-test="test-time"]') as HTMLInputElement;
-  time.value = "";
-  time.dispatchEvent(new Event("input"));
+  const time = q(el, '[data-test="test-time"]') as WtInput;
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
   await settle(el);
   expect(q(el, "#test-time-error")!.textContent).toContain("Choose a time.");
   expect(time.getAttribute("aria-invalid")).toBe("true");

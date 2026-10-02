@@ -328,9 +328,8 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
         await expectNoA11yViolations(host);
-        const when = root.querySelector<HTMLSelectElement>('[data-test="test-when"]')!;
-        when.value = "at";
-        when.dispatchEvent(new Event("change"));
+        const when = root.querySelector('[data-test="test-when"]')!;
+        when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "at" } }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
         for (const selector of [
@@ -348,9 +347,8 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
           locale === "en" ? "so its work goes to Downstairs bar" : "su trabajo va a Downstairs bar",
         );
         await expectNoA11yViolations(host);
-        const time = root.querySelector<HTMLInputElement>('[data-test="test-time"]')!;
-        time.value = "";
-        time.dispatchEvent(new Event("input"));
+        const time = root.querySelector('[data-test="test-time"]')!;
+        time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
         await el.updateComplete;
         await expectNoA11yViolations(host);
       } finally {

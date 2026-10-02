@@ -1,8 +1,10 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { WeeklyInterval } from "../routing.js";
 import { t } from "./strings.js";
@@ -13,7 +15,6 @@ type Row = { weekday: number; opensAt: string; closesAt: string };
 export class StationHoursForm extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       .rows {
         display: grid;
@@ -25,18 +26,15 @@ export class StationHoursForm extends LitElement {
         align-items: end;
         gap: var(--wt-space-2);
       }
+      .row > wt-combobox,
+      .row > div {
+        flex: 1 1 145px;
+        min-width: 145px;
+        max-width: 170px;
+      }
       label {
         display: grid;
         gap: var(--wt-space-1);
-      }
-      input {
-        min-height: var(--wt-tap-min);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        padding-inline: var(--wt-space-2);
-        font: inherit;
       }
       .error {
         color: var(--wt-color-danger);
@@ -93,43 +91,43 @@ export class StationHoursForm extends LitElement {
               ? t("venue.time_distinct")
               : "");
         return html`<div class="row" data-test="hours-row">
-          <label
-            >${t("prep.weekday")}
-            <select
-              name=${`weekday-${index}`}
-              data-test=${`weekday-${index}`}
-              .value=${String(row.weekday)}
-              @change=${(event: Event) => this.change(index, { weekday: Number((event.target as HTMLSelectElement).value) })}
-            >
-              ${[0, 1, 2, 3, 4, 5, 6].map((day) => html`<option value=${day} ?selected=${row.weekday === day}>${t(`venue.day.${day}` as "venue.day.0")}</option>`)}
-            </select>
-          </label>
-          <label
-            >${t("prep.opens_at")} *
-            <input
+          <wt-combobox
+            name=${`weekday-${index}`}
+            data-test=${`weekday-${index}`}
+            label=${t("prep.weekday")}
+            .value=${String(row.weekday)}
+            .options=${[0, 1, 2, 3, 4, 5, 6].map((day) => ({ value: String(day), label: t(`venue.day.${day}` as "venue.day.0") }))}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => this.change(index, { weekday: Number(event.detail.value) })}
+          >
+          </wt-combobox>
+          <div>
+            <wt-input
               name=${`opens-${index}`}
               data-test=${`opens-${index}`}
               type="time"
+              label=${t("prep.opens_at")}
               required
               .value=${row.opensAt}
               aria-invalid=${message ? "true" : "false"}
-              @input=${(event: Event) => this.change(index, { opensAt: (event.target as HTMLInputElement).value })}
-            />
+              .invalid=${Boolean(message)}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.change(index, { opensAt: event.detail.value })}
+            ></wt-input>
             ${message ? html`<span class="error" role="alert" data-field-error=${`hours.${index}`}>${message}</span>` : nothing}
-          </label>
-          <label
-            >${t("prep.closes_at")} *
-            <input
+          </div>
+          <div>
+            <wt-input
               name=${`closes-${index}`}
               data-test=${`closes-${index}`}
               type="time"
+              label=${t("prep.closes_at")}
               required
               .value=${row.closesAt}
               aria-invalid=${message ? "true" : "false"}
-              @input=${(event: Event) => this.change(index, { closesAt: (event.target as HTMLInputElement).value })}
-            />
+              .invalid=${Boolean(message)}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.change(index, { closesAt: event.detail.value })}
+            ></wt-input>
             ${message ? html`<span class="error" role="alert" data-field-error=${`hours.${index}`}>${message}</span>` : nothing}
-          </label>
+          </div>
           ${row.closesAt && row.opensAt && row.closesAt < row.opensAt ? html`<span class="hint" data-test=${`next-day-${index}`}>${t("prep.until_next_day").replace("{time}", row.closesAt)}</span>` : nothing}
           <wt-button
             variant="secondary"

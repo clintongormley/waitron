@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "../i18n/t.js";
 import type { DeadEndAnswer } from "../api/client.js";
 import { trimQuantity } from "./dish-format.js";
@@ -9,7 +10,6 @@ import { trimQuantity } from "./dish-format.js";
 export class TillDeadEndsSection extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -24,11 +24,7 @@ export class TillDeadEndsSection extends LitElement {
       .reason {
         margin: var(--wt-space-2) 0;
       }
-      label {
-        display: block;
-      }
-      select {
-        display: block;
+      wt-combobox {
         margin-top: var(--wt-space-1);
       }
       .remove {
@@ -61,19 +57,20 @@ export class TillDeadEndsSection extends LitElement {
           <p class="reason">
             ${t(row.why === "closed" ? "dead_end.closed" : "dead_end.switched_off").replace("{station}", () => row.stationName)}
           </p>
-          <label
-            >${t("dead_end.make_at")} *
-            <select
-              name="make-at"
-              required
-              @change=${(event: Event) => this.#emit("make-at", { key: row.key, stationId: (event.target as HTMLSelectElement).value })}
-            >
-              <option value="" .selected=${!this.choices.get(row.key)}>
-                ${t("dead_end.choose_station")}
-              </option>
-              ${this.answer.stations.map((station) => html`<option value=${station.id} .selected=${this.choices.get(row.key) === station.id}>${station.open ? station.name : t("dead_end.station_closed").replace("{station}", () => station.name)}</option>`)}
-            </select>
-          </label>
+          <wt-combobox
+            name="make-at"
+            label=${t("dead_end.make_at")}
+            required
+            placeholder=${t("dead_end.choose_station")}
+            search="auto"
+            .options=${this.answer.stations.map((station) => ({ value: station.id, label: station.open ? station.name : t("dead_end.station_closed").replace("{station}", () => station.name) }))}
+            .value=${this.choices.get(row.key) ?? ""}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.#emit("make-at", { key: row.key, stationId: event.detail.value });
+            }}
+          >
+          </wt-combobox>
           ${this.allowRemove ? html`<wt-button class="remove" variant="secondary" @click=${() => this.#emit("remove", { key: row.key })}>${t("action.remove")}</wt-button>` : nothing}
         </div>
       `,

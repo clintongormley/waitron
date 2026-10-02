@@ -44,9 +44,8 @@ it("refuses equal times beside both fields, and accepts an overnight interval", 
   await form.updateComplete;
   expect(form.shadowRoot!.querySelectorAll('[data-field-error="hours.0"]')).toHaveLength(2);
   expect(saved).not.toHaveBeenCalled();
-  const close = form.shadowRoot!.querySelector<HTMLInputElement>('[data-test="closes-0"]')!;
-  close.value = "02:00";
-  close.dispatchEvent(new Event("input", { bubbles: true }));
+  const close = form.shadowRoot!.querySelector('[data-test="closes-0"]')!;
+  close.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "02:00" } }));
   await form.updateComplete;
   expect(form.shadowRoot!.querySelector('[data-test="next-day-0"]')?.textContent).toContain(
     "until 02:00 the next day",
@@ -65,9 +64,8 @@ it("keeps Save disabled after an invalid attempt until the row is corrected", as
   save.click();
   await form.updateComplete;
   expect(save.disabled).toBe(true);
-  const close = form.shadowRoot!.querySelector<HTMLInputElement>('[data-test="closes-0"]')!;
-  close.value = "02:00";
-  close.dispatchEvent(new Event("input", { bubbles: true }));
+  const close = form.shadowRoot!.querySelector('[data-test="closes-0"]')!;
+  close.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "02:00" } }));
   await form.updateComplete;
   expect(save.disabled).toBe(false);
   expect(form.shadowRoot!.querySelector("[data-field-error]")).toBeNull();
@@ -92,9 +90,8 @@ it("adds and removes intervals without dropping edits in the other row", async (
   const form = await mount([{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }]);
   form.shadowRoot!.querySelector<HTMLElement>('[data-test="add-hours"]')!.click();
   await form.updateComplete;
-  const weekday = form.shadowRoot!.querySelector<HTMLSelectElement>('[data-test="weekday-1"]')!;
-  weekday.value = "6";
-  weekday.dispatchEvent(new Event("change", { bubbles: true }));
+  const weekday = form.shadowRoot!.querySelector('[data-test="weekday-1"]')!;
+  weekday.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "6" } }));
   await form.updateComplete;
   form.shadowRoot!.querySelector<HTMLElement>('[aria-label="Remove hours 1"]')!.click();
   await form.updateComplete;
@@ -135,9 +132,8 @@ it("clears a server row refusal when that interval is edited and permits retry",
       }
     ).disabled,
   ).toBe(false);
-  const close = form.shadowRoot!.querySelector<HTMLInputElement>('[data-test="closes-0"]')!;
-  close.value = "03:00";
-  close.dispatchEvent(new Event("input", { bubbles: true }));
+  const close = form.shadowRoot!.querySelector('[data-test="closes-0"]')!;
+  close.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "03:00" } }));
   await form.updateComplete;
   expect(form.shadowRoot!.querySelector('[data-field-error="hours.0"]')).toBeNull();
 });
