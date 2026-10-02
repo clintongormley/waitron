@@ -267,8 +267,6 @@ function filterClauses(filter: OrderListFilter): SQL[] {
   if (filter.table !== undefined) clauses.push(tableClause(filter.table));
   if (filter.search !== undefined) clauses.push(searchClause(filter.search));
   if (filter.collectable === true) {
-    // The same sums `readIssuedSales` and the lines total give, and `holdsPayment`'s states
-    // (`apps/server/src/bill-payments.ts:362`), so the limit counts only what the till can collect.
     clauses.push(sql`r.kind = 'bill'
       and (case when r.sale_id is not null
                 then cast(r.sale_total as integer) + cast(r.corrections as integer)

@@ -84,6 +84,8 @@ describe("Orders routes", () => {
       expect.arrayContaining([open, oldOpen, waiting, left, paid, cancelled]),
     );
     expect(staffIds).not.toEqual(expect.arrayContaining([oldPaid, sale]));
+    expect(staffIds).not.toContain(oldPaid);
+    expect(staffIds).not.toContain(sale);
     expect(managerIds).toEqual(
       expect.arrayContaining([open, oldOpen, waiting, left, paid, oldPaid, cancelled, sale]),
     );
@@ -93,6 +95,11 @@ describe("Orders routes", () => {
     });
     expect((await get(venue.staffDashboard, `/${paid}`)).status).toBe(200);
     expect((await get(venue.supervisorDashboard, `/${paid}`)).status).toBe(200);
+    expect(await get(venue.staffDashboard, `/${sale}`)).toMatchObject({
+      status: 404,
+      json: { code: "working_order.not_found" },
+    });
+    expect((await get(venue.supervisorDashboard, `/${sale}`)).status).toBe(200);
     const staffPaid = await get(venue.staffDashboard, "?status=paid&anyDate=true");
     expect(staffPaid.status).toBe(200);
     expect((staffPaid.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(

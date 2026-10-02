@@ -1554,7 +1554,11 @@ async function bootServer(
     { db, cfg: { nodeId: dataNodeId, locationId: till.locationId }, venueLocale },
     log,
   );
-  mountOrdersApi(app, { db, backend: tillBackend, cfg: { nodeId: dataNodeId }, till }, log);
+  mountOrdersApi(
+    app,
+    { db, backend: tillBackend, cfg: { nodeId: dataNodeId }, till, devMode: config.devMode },
+    log,
+  );
   mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
   mountScheduleApi(app, { db }, log);
   mountMeApi(

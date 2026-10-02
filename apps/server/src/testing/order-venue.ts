@@ -30,9 +30,9 @@ export interface OrderVenue extends BillVenue {
   supervisorTill: string;
   /** The supervisor's dashboard session: holds `report.view`. */
   supervisorDashboard: string;
-  /** The staff operator Ana's dashboard session: holds no permission, so reads scope `unfinished`. */
+  /** The staff operator Ana's dashboard session: sees unfinished bills and today's finished bills. */
   staffDashboard: string;
-  /** The administrator's dashboard session: holds `print.resend`. */
+  /** The administrator's dashboard session. */
   adminDashboard: string;
   orders: Hono;
 }

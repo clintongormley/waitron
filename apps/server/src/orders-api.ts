@@ -41,7 +41,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_found": 404,
   "printer.not_found": 404,
 };
-const run = createErrorBoundary(STATUS, "report.failed");
+const run = createErrorBoundary(STATUS, "orders.failed");
 
 const CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)_(.+)$/;
 const PAGE_SIZE = /^[1-9]\d{0,2}$/;
@@ -103,6 +103,7 @@ export interface OrdersApiDeps {
   backend: FiscalBackend;
   cfg: { nodeId: string };
   till: TillConfig;
+  devMode?: boolean;
 }
 
 export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): void {

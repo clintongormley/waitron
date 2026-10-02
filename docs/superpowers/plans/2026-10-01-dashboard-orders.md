@@ -318,15 +318,16 @@ export function listOrderStaff(tx: Transaction): Promise<{ id: string; name: str
 export function ordersPageSql(filter: OrderListFilter): SQL;
 
 // apps/server/src/orders-api.ts
-export interface OrdersApiDeps { db: Database; backend: FiscalBackend; cfg: { nodeId: string }; till: TillConfig }
+export interface OrdersApiDeps { db: Database; backend: FiscalBackend; cfg: { nodeId: string }; till: TillConfig; devMode?: boolean }
 export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): void;
-// Every route: any dashboard session (decision 13); a session without report.view gets scope "unfinished".
+// Every route: any dashboard session (decision 13); one without report.view gets today's business-day scope.
 // GET /management-api/orders?status&from&to&anyDate&credited&staff&table&q&limit&after
 //   → { rows: OrderRow[]; next: string | null; from: string | null; to: string | null }
 //   `next` and `after` are "<at>_<id>". `from`/`to` are the business days applied; null for Any date.
 // GET /management-api/orders/staff → { staff: { id: string; name: string | null }[] }
 // GET /management-api/orders/:id → OrderDetail
-// POST /management-api/orders/:id/reprint { printerId } → 202 { jobId }   (print.resend; decision 14)
+// GET /management-api/orders/printers → active printers at the till's location
+// POST /management-api/orders/:id/reprint { printerId } → 202 { jobId }   (print-receipt device gate; decision 14)
 
 // apps/server/src/orders-list.ts (detail), decision 15
 export interface OrderReprint { requestedAt: string; personId: string; personName: string | null; printerName: string }
@@ -339,9 +340,10 @@ export async function enqueueReceiptCopy(
   ticket: TillSaleResult,
   saleId: string,
   printer: { id: string } & EscSetting, // the picked printer's id, paper width and resolution
-): Promise<{ jobId: string }>;
+): Promise<{ jobId: string } | undefined>;
 // `enqueueReceiptReprint(tx, cfg, ticket, saleId)` keeps its signature: it resolves the till's
-// printer and, when there is one, calls `enqueueReceiptCopy`.
+// printer and, when there is one, calls `enqueueReceiptCopy`. A missing taxpayer skips that till copy;
+// the dashboard request fails without writing a job or audit row.
 
 // packages/db/src/schema/receipt-reprints.ts
 export const receiptReprints: /* table "receipt_reprints" */ {
@@ -1457,15 +1459,14 @@ describe("which index a read starts from", () => {
   `provisionOrderVenue` as above, covering:
   - no cookie → 401 `management_session.required`; Ana's (`staffDashboard`, no permission) → 200;
     the supervisor's → 200.
-  - decision 13's scope, Ana against the supervisor: with one open bill, one sent under
-    invoice-first, one departed, one collected (`placedInvoiceFirst` then `collect`), one cancelled
-    and one `billlessSale`, `anyDate=true&limit=200` gives Ana the first three and none of the
-    other three, and the supervisor all six; Ana's `GET /management-api/orders/<the collected bill>`
-    → 404 `working_order.not_found`, the supervisor's → 200; Ana's `status=paid`, `status=cancelled`
-    and `status=voided` → 400 `management.request_invalid` `{ field: "status" }`, her `status=unpaid`
-    → 200; and her `GET /management-api/orders/staff` → 200. Prove the scope by deletion: remove the
-    `scope === "unfinished"` clause from `filterClauses` and watch the "none of the other three"
-    assertion fail, then put it back.
+  - decision 13's scope, Ana against the supervisor: with bills opened today in Open, Waiting for
+    payment, Left without paying, Paid and Cancelled, an older Open bill, an older Paid bill and a
+    `billlessSale`, `anyDate=true&limit=200` gives Ana every bill but the older Paid one and gives
+    her no billless sale; the supervisor sees all rows. Ana's detail for the older Paid bill and
+    the billless sale answers 404 `working_order.not_found`, while today's Paid detail answers 200.
+    Every status filter remains available to Ana, scoped to what she may see. Assert each excluded
+    id separately, then delete the `r.kind = 'bill'` clause in `filterClauses` and watch the
+    billless-sale assertion fail; restore it.
   - each malformed filter → 400 `management.request_invalid` with that `field`, one `it.each` row
     each: `status=bogus` → `status`; `from=2026-02-30&to=2026-03-01` → `from`;
     `from=2026-03-02&to=2026-03-01` → `range`; `from=2026-03-01` alone → `to`;
@@ -1489,8 +1490,9 @@ describe("which index a read starts from", () => {
 
 - [ ] **Step 9: Write the failing reprint tests** (decisions 14–16; spec §4.5). Create
   `apps/server/src/orders-reprint.test.ts` on its own `provisionOrderVenue`, sending
-  `POST /management-api/orders/:id/reprint` to `venue.orders` with `venue.adminDashboard` (the
-  administrator holds `print.resend`). The till's receipt printer, "Recibos", has a cash drawer
+  `POST /management-api/orders/:id/reprint` to `venue.orders` with `venue.adminDashboard`. A bound
+  device needs `print-receipt`; a dashboard session with no device binding may request a copy. The
+  till's receipt printer, "Recibos", has a cash drawer
   (`hasCashDrawer: true`, `apps/server/src/testing/bill-venue.ts:185-193`, set as every till's
   receipt printer at `:230`), which is what makes the drawer case below a real one; add a second
   printer with `createPrinter` as that helper does, "Oficina", for the "picked, not the till's"
@@ -1512,13 +1514,13 @@ describe("which index a read starts from", () => {
   - "prints on the printer picked, not the till's" — on "Oficina" → the job is on "Oficina".
   - "prints a copy of an invoice not yet paid" — `placedInvoiceFirst` alone → 202 and one job (the
     till's receipt route prints a filed unpaid invoice too: `apps/server/src/till-api.ts:1468-1469`).
-  - "refuses, writing nothing" — `it.each`, each asserting no new `print_jobs` and no new
-    `receipt_reprints` row: the supervisor's session → 403 `authorization.not_permitted` (a
-    supervisor does not hold `print.resend`); Ana's → 403; a voided invoice (`voidInvoice`) → 409
-    `sale.voided`; an open bill with no invoice, a `billlessSale` id and an unknown uuid → 404
+  - "refuses, writing nothing" — each case asserts no new `print_jobs` and no new
+    `receipt_reprints` row: a bound device without `print-receipt` → 403
+    `device.forbidden_action`; an older finished bill requested by staff, an open bill with no
+    invoice, a `billlessSale` id and an unknown uuid → 404
     `working_order.not_found`; a printer id that names no printer, and "Oficina" after it is made
     inactive → 404 `printer.not_found`; no `printerId` → 400 `management.request_invalid`
-    `{ field: "printerId" }`.
+    `{ field: "printerId" }`. A voided invoice is copied and carries `DUPLICADO`.
   - "the till's reprint still prints its copy on the configured till's printer, unrecorded" — the
     regression for Step 11's split: `POST /api/sales/<bill>/reprint` through `venue.app` with the
     till session alone (`venue.cookie.split("; ")[0]`, as `receipt-language.test.ts:290-292` sends a

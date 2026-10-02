@@ -246,6 +246,26 @@ describe("credit notes and what is still owed", () => {
 });
 
 describe("filters and search", () => {
+  it("limits a till lookup to bills that still owe money", async () => {
+    const waiting = await placedInvoiceFirst(venue, "Caña");
+    const fullyCredited = await departed(venue, "Botella tinto");
+    await credit(venue, fullyCredited.tabId, "24.79", "-30.00");
+    const sale = await billlessSale(venue);
+    const rows = await withTransaction(venue.db, (tx) =>
+      listOrders(tx, {
+        status: "all",
+        dates: "any",
+        credited: false,
+        limit: 50,
+        scope: "all",
+        collectable: true,
+      }),
+    );
+    expect(ids(rows.rows)).toContain(waiting);
+    expect(ids(rows.rows)).not.toContain(fullyCredited.tabId);
+    expect(ids(rows.rows)).not.toContain(sale);
+  });
+
   it("Unpaid takes Waiting for payment and Left without paying, and nothing else", async () => {
     const waiting = await placedInvoiceFirst(venue, "Caña");
     const debt = await departed(venue, "Caña");

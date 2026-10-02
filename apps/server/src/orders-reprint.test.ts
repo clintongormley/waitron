@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { deviceProfiles, printJobs, printers, receiptReprints, sales } from "@waitron/db";
+import { deviceProfiles, printJobs, printers, receiptReprints, sales, tenants } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { inTx, send } from "./testing/bill-venue.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { DEVICE_COOKIE } from "./device-session.js";
+import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
+import { mountOrdersApi } from "./orders-api.js";
 import {
   billlessSale,
   collect,
@@ -60,6 +63,43 @@ async function counts() {
 }
 
 describe("dashboard receipt reprint", () => {
+  it("does not queue a job or audit row when a copy cannot be built", async () => {
+    const billId = await placedInvoiceFirst(venue, "Caña");
+    const before = await counts();
+    const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
+    await inTx(venue, (tx) => tx.delete(tenants));
+    try {
+      expect(await post(venue.adminDashboard, billId, venue.printerId)).toMatchObject({
+        status: 500,
+        json: { code: "server.internal" },
+      });
+      expect(await counts()).toEqual(before);
+    } finally {
+      await inTx(venue, (tx) => tx.insert(tenants).values(taxpayer!));
+    }
+  });
+
+  it("logs an Orders failure when receipt reconstruction throws, without queuing a copy", async () => {
+    const billId = await placedInvoiceFirst(venue, "Caña");
+    const backend = Object.create(venue.backend) as FiscalBackend;
+    vi.spyOn(backend, "filedReceiptFor").mockRejectedValue(new Error("reconstruction probe"));
+    const events: string[] = [];
+    const app = new Hono();
+    mountOrdersApi(
+      app,
+      { db: venue.db, backend, cfg: { nodeId: venue.cfg.nodeId }, till: venue.cfg },
+      (_level, event) => events.push(event),
+    );
+    const before = await counts();
+    expect(
+      await send(app, venue.adminDashboard, "POST", `/management-api/orders/${billId}/reprint`, {
+        printerId: venue.printerId,
+      }),
+    ).toMatchObject({ status: 500, json: { code: "server.internal" } });
+    expect(events).toContain("orders.failed");
+    expect(await counts()).toEqual(before);
+  });
+
   it("prints one marked copy on the picked printer without opening a drawer or filing", async () => {
     const billId = await placedInvoiceFirst(venue, "Caña");
     expect((await collect(venue, billId, "3.00")).status).toBe(200);
@@ -169,6 +209,46 @@ describe("dashboard receipt reprint", () => {
     expect(await post(cookie, billId, venue.printerId)).toMatchObject({
       status: 403,
       json: { code: "device.forbidden_action", params: { action: "reprint" } },
+    });
+  });
+
+  it("checks a development device header through the same print-receipt gate", async () => {
+    const billId = await placedInvoiceFirst(venue, "Caña");
+    const [profile] = await inTx(venue, (tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({ name: `No copy ${randomUUID()}`, formFactor: "phone-portrait", capabilities: [] })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const device = await enrolDeviceForTest(venue.db, venue.cfg, {
+      name: "No copy",
+      profileId: profile!.id,
+      registerId: venue.cfg.tillId,
+    });
+    const app = new Hono();
+    mountOrdersApi(
+      app,
+      {
+        db: venue.db,
+        backend: venue.backend,
+        cfg: { nodeId: venue.cfg.nodeId },
+        till: venue.cfg,
+        devMode: true,
+      },
+      () => {},
+    );
+    const response = await app.request(`/management-api/orders/${billId}/reprint`, {
+      method: "POST",
+      headers: {
+        cookie: venue.staffDashboard,
+        [DEV_DEVICE_HEADER]: device.deviceId,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ printerId: venue.printerId }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: { code: "device.forbidden_action", params: { action: "reprint" } },
     });
   });
 

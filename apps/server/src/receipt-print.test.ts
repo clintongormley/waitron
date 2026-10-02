@@ -12,6 +12,7 @@ import {
   readTenant,
   sales,
   tenantReceipts,
+  tenants,
   tills,
   withTransaction,
 } from "@waitron/db";
@@ -1281,6 +1282,23 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 });
 
 describe("receipt issuer", () => {
+  it("leaves a manual till reprint unqueued when its taxpayer row is missing", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    const filed = await recordTillSale(deps(), cfg, {
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      tender: { method: "card", amount: "1.50" },
+    });
+    const saleId = await onlySaleId(cfg);
+    await withTransaction(suite.db, (tx) => tx.delete(tenants));
+
+    await expect(
+      withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, filed, saleId)),
+    ).resolves.toBeUndefined();
+    expect(await printJobsFor(cfg)).toEqual([]);
+  });
+
   it("prints the taxpayer's own name and NIF when the ticket carries no filed issuer", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });

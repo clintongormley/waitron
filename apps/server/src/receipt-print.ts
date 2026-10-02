@@ -149,9 +149,9 @@ export async function enqueueReceiptCopy(
   ticket: TillSaleResult,
   saleId: string,
   printer: { id: string } & EscSetting,
-): Promise<{ jobId: string }> {
+): Promise<{ jobId: string } | undefined> {
   const bytes = await buildReceiptBytes(tx, cfg, ticket, true, printer);
-  if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
+  if (bytes === undefined) return undefined;
   return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", { saleId });
 }
 

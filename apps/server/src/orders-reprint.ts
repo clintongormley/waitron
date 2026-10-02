@@ -32,7 +32,9 @@ export async function reprintOrderReceipt(
     );
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
   const ticket = await readSettledTicket(deps.backend, tx, deps.till, billId);
-  const { jobId } = await enqueueReceiptCopy(tx, deps.till, ticket, sale.id, printer);
+  const copy = await enqueueReceiptCopy(tx, deps.till, ticket, sale.id, printer);
+  if (copy === undefined) throw new Error("Cannot build a receipt without the taxpayer");
+  const { jobId } = copy;
   await tx.insert(receiptReprints).values({ saleId: sale.id, printJobId: jobId, personId });
   return { jobId };
 }
