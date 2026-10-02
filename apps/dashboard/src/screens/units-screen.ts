@@ -101,6 +101,9 @@ export class UnitsScreen extends LitElement {
     (error) => {
       this.error = error as UnitError;
     },
+    (error) => {
+      if (this.error === error) this.error = null;
+    },
   );
   @state() private units: Unit[] = [];
   @state() private languages: ContentLanguages | null = null;
