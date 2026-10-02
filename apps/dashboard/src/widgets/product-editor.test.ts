@@ -1446,17 +1446,9 @@ it("sends the Available switch as available and leaves active as it was", async 
   expect(el.shadowRoot!.querySelector("[data-test=restore]")).toBeNull();
 });
 
-type OrderingField = Combobox & {
-  label: string;
-  error: string;
-  updateComplete: Promise<unknown>;
-};
-function orderingField(el: ProductEditor): OrderingField | null {
-  return el.shadowRoot!.querySelector<OrderingField>('wt-combobox[name="ordering"]');
-}
 /** Opens the ordering list and reads each row's name and the line under it, as drawn. */
 async function orderingTexts(el: ProductEditor): Promise<[string, string][]> {
-  const field = orderingField(el)!;
+  const field = sharedField(el, "wt-combobox", "ordering");
   await field.updateComplete;
   field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
   await field.updateComplete;
@@ -1467,14 +1459,8 @@ async function orderingTexts(el: ProductEditor): Promise<[string, string][]> {
     row.querySelector(".option-description")?.textContent!.trim() ?? "",
   ]);
 }
-/** What the closed field shows on its trigger. */
-async function orderingShown(el: ProductEditor): Promise<string> {
-  const field = orderingField(el)!;
-  await field.updateComplete;
-  return field.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
-}
 async function pickOrdering(el: ProductEditor, value: string): Promise<void> {
-  await chooseOption(orderingField(el)!, value);
+  await chooseOption(sharedField(el, "wt-combobox", "ordering"), value);
   await el.updateComplete;
 }
 
@@ -1486,7 +1472,7 @@ it("offers who may order the product on its own as one dropdown of three choices
     units: [unit],
     taxChoices: reduced,
   });
-  const field = orderingField(el)!;
+  const field = sharedField(el, "wt-combobox", "ordering");
   expect(section(el, "ordering").contains(field)).toBe(true);
   expect(field.label).toBe(t("product.ordering"));
   expect(field.options.map((option) => option.value)).toEqual([
@@ -1495,13 +1481,13 @@ it("offers who may order the product on its own as one dropdown of three choices
     "not_sold_separately",
   ]);
   expect(field.value).toBe("not_sold_separately");
-  expect(await orderingShown(el)).toBe(t("product.ordering_not_sold_separately"));
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_not_sold_separately"));
   expect(el.shadowRoot!.querySelectorAll('input[type="radio"]')).toHaveLength(0);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await pickOrdering(el, "staff_only");
   expect(el.currentValue.ordering).toBe("staff_only");
-  expect(await orderingShown(el)).toBe(t("product.ordering_staff_only"));
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_staff_only"));
   save(el);
   expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("staff_only");
 });
@@ -1514,13 +1500,12 @@ it("shows the chosen ordering's name alone while the dropdown is closed, with no
     units: [unit],
     taxChoices: reduced,
   });
-  expect(await orderingShown(el)).toBe(t("product.ordering_staff_only"));
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_staff_only"));
+  const field = sharedField(el, "wt-combobox", "ordering");
   const shown = section(el, "ordering").textContent!;
   for (const ordering of ["public", "staff_only", "not_sold_separately"] as const)
     expect(shown).not.toContain(t(`product.ordering_${ordering}_hint`));
-  const lines = [
-    ...orderingField(el)!.shadowRoot!.querySelectorAll<HTMLElement>(".option-description"),
-  ];
+  const lines = [...field.shadowRoot!.querySelectorAll<HTMLElement>(".option-description")];
   expect(lines.map((line) => line.checkVisibility())).toEqual([false, false, false]);
 });
 
@@ -1531,8 +1516,8 @@ it("starts a new product Public", async () => {
     units: [unit],
     taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
   });
-  expect(orderingField(el)!.value).toBe("public");
-  expect(await orderingShown(el)).toBe(t("product.ordering_public"));
+  expect(sharedField(el, "wt-combobox", "ordering").value).toBe("public");
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_public"));
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await input(el, "name", "Water");
@@ -1553,7 +1538,7 @@ it("says what each ordering choice means, Staff only working like Public until g
   setLocale("en-GB");
   try {
     const { el } = await mount();
-    expect(orderingField(el)!.label).toBe("Standalone ordering");
+    expect(sharedField(el, "wt-combobox", "ordering").label).toBe("Standalone ordering");
     expect(await orderingTexts(el)).toEqual([
       ["Public", "Can be ordered on its own."],
       [
@@ -1565,7 +1550,7 @@ it("says what each ordering choice means, Staff only working like Public until g
     cleanupWidgets();
     setLocale("es-ES");
     const { el: spanish } = await mount();
-    expect(orderingField(spanish)!.label).toBe("Pedido por separado");
+    expect(sharedField(spanish, "wt-combobox", "ordering").label).toBe("Pedido por separado");
     expect(await orderingTexts(spanish)).toEqual([
       ["Público", "Se puede pedir por sí solo."],
       [
@@ -1588,10 +1573,10 @@ it("locks the ordering dropdown while a save is in flight", async () => {
     taxChoices: reduced,
     busy: true,
   });
-  expect((orderingField(el) as OrderingField & { disabled: boolean }).disabled).toBe(true);
+  expect(sharedField(el, "wt-combobox", "ordering").disabled).toBe(true);
   el.busy = false;
   await el.updateComplete;
-  expect((orderingField(el) as OrderingField & { disabled: boolean }).disabled).toBe(false);
+  expect(sharedField(el, "wt-combobox", "ordering").disabled).toBe(false);
 });
 
 it("puts a refusal of the ordering under its dropdown, focusing it, until another choice is picked", async () => {
@@ -1605,14 +1590,14 @@ it("puts a refusal of the ordering under its dropdown, focusing it, until anothe
   });
   el.fieldErrors = { ordering: t("editor.field_rejected") };
   await el.updateComplete;
-  const field = orderingField(el)!;
+  const field = sharedField(el, "wt-combobox", "ordering");
   expect(field.error).toBe(t("editor.field_rejected"));
   await field.updateComplete;
   expect(field.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
     t("editor.field_rejected"),
   );
   await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("ordering");
-  expect((el.shadowRoot!.activeElement as OrderingField).value).toBe("staff_only");
+  expect((el.shadowRoot!.activeElement as Field).value).toBe("staff_only");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   await pickOrdering(el, "not_sold_separately");
@@ -2327,7 +2312,7 @@ it("titles a variant's page as a variant, with no Modifiers and no Variants sect
 it("shows no standalone ordering choice on a variant's page, and keeps the variant's own value", async () => {
   const el = await mountVariant({ ...glass, ordering: "public" });
   expect(section(el, "ordering")).toBeNull();
-  expect(orderingField(el)).toBeNull();
+  expect(combobox(el, "ordering")).toBeNull();
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -2988,6 +2973,7 @@ type Field = HTMLElement & {
   options: { value: string; label: string }[];
   value: string;
   error: string;
+  disabled: boolean;
   updateComplete: Promise<unknown>;
 };
 function sharedField(el: ProductEditor, tag: "wt-combobox" | "wt-textarea", name: string) {

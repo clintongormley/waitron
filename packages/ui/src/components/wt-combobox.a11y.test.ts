@@ -32,6 +32,12 @@ const TAGS = [
   { value: "vegetarian", label: "Vegetarian" },
 ];
 
+const DESCRIBED: ComboboxOption[] = [
+  { value: "public", label: "Público", description: "Se puede pedir por sí solo." },
+  { value: "staff", label: "Solo personal", description: "Solo el personal puede pedirlo." },
+  { value: "plain", label: "Sin descripción" },
+];
+
 describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme) => {
   test("closed, empty", async () => {
     await mountThemed('<wt-combobox label="Dietary tags"></wt-combobox>', theme);
@@ -135,14 +141,41 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     const el = await openThemed(
       '<wt-combobox label="Pedido por separado" search="never" value="staff"></wt-combobox>',
       theme,
-      [
-        { value: "public", label: "Público", description: "Se puede pedir por sí solo." },
-        { value: "staff", label: "Solo personal", description: "Solo el personal puede pedirlo." },
-        { value: "plain", label: "Sin descripción" },
-      ],
+      DESCRIBED,
     );
     // Without this the scan could pass on a list that drew no descriptions.
     expect(el.shadowRoot!.querySelectorAll(".option-description")).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
+  // A hovered row is painted --wt-color-bg, so its description is muted text on a different colour
+  // from the panel's.
+  test("open, with the cursor over a described row", async () => {
+    const el = await openThemed(
+      '<wt-combobox label="Pedido por separado" search="never" value="staff"></wt-combobox>',
+      theme,
+      DESCRIBED,
+    );
+    const row = el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!;
+    await userEvent.hover(row);
+    expect(row.matches(":hover")).toBe(true);
+    expect(row.querySelector(".option-description")).not.toBeNull();
+    expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(host).backgroundColor);
+    await expectNoA11yViolations(host);
+  });
+
+  test("opened from the keyboard, with a described row active", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Pedido por separado" search="never" value="staff"></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = DESCRIBED;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    const active = el.shadowRoot!.querySelector(".option.active")!;
+    expect(active.getAttribute("aria-selected")).toBe("true");
+    expect(active.querySelector(".option-description")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

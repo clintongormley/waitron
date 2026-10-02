@@ -1593,7 +1593,28 @@ test("a screen reader names a described option by its label and reads the descri
   await expect.element(page.elementLocator(plain!)).toHaveAccessibleDescription("");
 });
 
-test("an option without a description, or with an empty one, renders as it did before descriptions existed", async () => {
+test("after filtering, the active row is still named by its own label and described by its own line", async () => {
+  const el = await mountWith('<wt-combobox label="Ordering" search="always"></wt-combobox>', [
+    ...DESCRIBED,
+    { value: "meal", label: "Staff meal", description: "Given to staff at no charge." },
+  ]);
+  await userEvent.click(fieldParts(el).trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "staff");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(optionRows(el).map((row) => row.querySelector(".option-label")!.textContent)).toEqual([
+    "Staff only",
+    "Staff meal",
+  ]);
+  const active = el.shadowRoot!.getElementById(search.getAttribute("aria-activedescendant")!)!;
+  expect(active).toBe(optionRows(el)[1]);
+  await expect.element(page.elementLocator(active)).toHaveAccessibleName("Staff meal");
+  await expect
+    .element(page.elementLocator(active))
+    .toHaveAccessibleDescription("Given to staff at no charge.");
+});
+
+test("an option without a description, or with an empty one, draws its label alone, with no second line and no labelledby or describedby", async () => {
   const el = await mountWith('<wt-combobox label="Ordering"></wt-combobox>', [
     ...DESCRIBED,
     { value: "blank", label: "Blank", description: "" },

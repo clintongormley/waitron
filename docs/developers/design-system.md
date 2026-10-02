@@ -1631,7 +1631,8 @@ value chosen, open with the chosen row ticked, with icons, with groups, with an 
 without a search box, with focus back on the trigger, compact, with a hint shown as the
 placeholder, with a help button, disabled with a value chosen, and opened from the keyboard with
 and without a search box — verified 2026-10-01, and open with options described by a second line
-— verified 2026-10-02, by running
+— verified 2026-10-02, and with the pointer over a described row and opened from the keyboard with
+a described row active — verified 2026-10-03, by running
 `packages/ui-core/src/components/wt-input.a11y.test.ts`, `wt-textarea.a11y.test.ts` beside it, and
 `packages/ui/src/components/wt-price-input.a11y.test.ts`, `wt-number-stepper.a11y.test.ts` and
 `wt-combobox.a11y.test.ts`, each state in both themes). No token values needed changing. (axe does flag unrelated `incomplete` — not

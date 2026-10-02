@@ -1276,8 +1276,8 @@ resolution of a variant's reported category (`variant.effective`, which the Prod
 reporting read) becomes "always the product's", and variants holding a category of their own are
 cleared (allowed before go-live, §3). Trace every consumer of a variant's `categoryId` first.
 
-**Standalone ordering becomes one dropdown (A210) — DONE (this branch).** The owner: _"Standalone ordering can
-be reduced to a single dropdown"_. Today `renderOrdering` draws three radio buttons, Public, Staff
+**Standalone ordering becomes one dropdown (A210) — DONE.** The owner: _"Standalone ordering can
+be reduced to a single dropdown"_. Before this, `renderOrdering` drew three radio buttons, Public, Staff
 only and Not sold separately, each with an explanation under it. **Wanted:** one `wt-combobox`
 with the three choices. The explanations need a new place: the design system's Forms rule makes a
 field's hint its placeholder, which a dropdown that always holds a value never shows. The
@@ -1292,8 +1292,8 @@ Built: `renderOrdering` draws one `wt-combobox` named `ordering`, and `ComboboxO
 `description`, drawn under the label in `--wt-color-text-muted` at `--wt-font-size-sm`. A described
 row is named by its label (`aria-labelledby`) and the description is its `aria-describedby`; a
 long description wraps inside the list rather than widening it. A refusal of `ordering` shows
-under the field as the other dropdowns' do, and the field is disabled while a save is in flight,
-as the radio buttons were.
+under the field as the other dropdowns' do, and the field is disabled while the product saves or
+another of the editor's windows is open, as the radio buttons were.
 
 **A folded section says what is missing, not only what is filled in (A211) — OPEN.** The owner:
 _"we should show the missing values under kitchen and descriptors and nutritional info when
