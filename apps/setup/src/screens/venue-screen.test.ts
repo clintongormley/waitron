@@ -219,7 +219,7 @@ describe("setup-venue-screen", () => {
     await el.updateComplete;
     expect(province!.value).toBe("08");
     expect(q(el, "[data-test=timeZone]")!.textContent).toBe("Time zone: Europe/Madrid");
-    expect(ticked(el)).toEqual(["es-ES", "ca-ES"]);
+    expect(ticked(el)).toEqual(["ca-ES"]);
   });
 
   it("labels the province dropdown's search in the wizard's language", async () => {

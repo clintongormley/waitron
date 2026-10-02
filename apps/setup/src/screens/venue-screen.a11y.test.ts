@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./venue-screen.js";
 import type { SetupVenueScreen } from "./venue-screen.js";
@@ -50,9 +51,7 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
 
   it("has no violations with Barcelona's receipt language fixed, its reason shown and the choice disabled", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {}, theme);
-    const province = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=province]")!;
-    province.value = "08";
-    province.dispatchEvent(new Event("change"));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=province]")!, "08");
     await el.updateComplete;
     const reason = el.shadowRoot!.querySelector("#invoice-locales-fixed")!;
     expect(reason.textContent!.trim()).not.toBe("");

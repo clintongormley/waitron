@@ -1060,9 +1060,7 @@ describe("receipt language warning", () => {
     q(el, "[data-test=add-language]")!.click();
     await flush(el);
     const add = dialog(el);
-    const select = add.shadowRoot!.querySelector<HTMLSelectElement>("select[name=language]")!;
-    select.value = "gl";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "gl");
     await add.updateComplete;
     add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     await vi.waitFor(() => expect(receiptWarning(el)).toBeNull());
