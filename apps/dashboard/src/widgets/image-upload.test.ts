@@ -148,9 +148,11 @@ describe("image-upload", () => {
         api: stubApi(),
         inheritedImage: "parent.png",
       });
-      const hint = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=inherited-preview]")!;
-      expect(hint.getAttribute("src")).toBe("/media/parent.png");
-      expect(hint.alt).toBe(t("editor.inherited_image_alt"));
+      const inherited = el.shadowRoot!.querySelector<HTMLImageElement>(
+        "[data-test=inherited-preview]",
+      )!;
+      expect(inherited.getAttribute("src")).toBe("/media/parent.png");
+      expect(inherited.alt).toBe(t("editor.inherited_image_alt"));
       expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
