@@ -50,6 +50,7 @@ export class ImageUpload extends LitElement {
       }
       :host([thumbnail]) {
         display: grid;
+        max-width: var(--wt-field-max-width);
         grid-template-columns: auto minmax(0, 1fr);
         align-items: center;
         column-gap: var(--wt-space-3);
