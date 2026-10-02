@@ -238,6 +238,16 @@ describe("till-schedule-screen", () => {
     expect(colleague!.value).toBe("");
   });
 
+  it("draws each dropdown wide enough for its whole label, before anything is chosen", async () => {
+    const { el } = await mount(stubApi());
+    for (const name of ["cover-shift", "cover-colleague", "absence-kind"]) {
+      const box = root(el).querySelector<WtCombobox>(`wt-combobox[name="${name}"]`)!;
+      await box.updateComplete;
+      const label = box.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+      expect({ name, cut: label.scrollWidth > label.clientWidth }).toEqual({ name, cut: false });
+    }
+  });
+
   it("excludes the operator from the colleague picker (you cannot offer to yourself)", async () => {
     const { el } = await mount(stubApi());
     const options = root(el)

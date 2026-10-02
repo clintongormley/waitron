@@ -130,6 +130,15 @@ export class TillScheduleScreen extends LitElement {
         align-items: flex-end;
         gap: var(--wt-space-3);
       }
+
+      .form wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 7);
+        min-width: 0;
+      }
+
+      .form wt-combobox[name="cover-shift"] {
+        flex-basis: calc(var(--wt-space-6) * 10);
+      }
     `,
   ];
 
