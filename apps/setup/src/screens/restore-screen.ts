@@ -1,9 +1,12 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, selectStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import {
   type RestoreRequestDetail,
@@ -25,7 +28,6 @@ export type RestoreField = "artifact" | "recoveryKey" | "environment";
 export class SetupRestoreScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,
@@ -47,6 +49,7 @@ export class SetupRestoreScreen extends LitElement {
   @property({ attribute: false }) request?: RestoreRequestDetail;
   @state() private artifact?: File;
   @state() private recoveryKey = "";
+  @state() private recoveryKeyVisible = false;
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
@@ -190,54 +193,61 @@ export class SetupRestoreScreen extends LitElement {
         />
       </label>
       ${artifactError === undefined ? nothing : html`<p class="error" id="artifact-error">${artifactError}</p>`}
-      <label class="field">
-        ${t("restore.recovery_key")} <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label=${t("restore.recovery_key_help_label")}
+      <wt-input
+        class="field"
+        label=${t("restore.recovery_key")}
+        name="recovery-key"
+        type=${this.recoveryKeyVisible ? "text" : "password"}
+        autocomplete="off"
+        required
+        data-test="recovery-key"
+        error=${keyError ?? ""}
+        .value=${this.recoveryKey}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.recoveryKey = event.detail.value;
+          this.#edited("recoveryKey");
+        }}
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("restore.recovery_key_help_label")}
           >${t("restore.recovery_key_help")}</wt-help-tooltip
         >
-        <input
-          name="recovery-key"
-          type="password"
-          autocomplete="off"
-          required
-          aria-invalid=${keyError === undefined ? "false" : "true"}
-          aria-describedby="recovery-key-error"
-          data-test="recovery-key"
-          .value=${this.recoveryKey}
-          @input=${(event: Event) => {
-            this.recoveryKey = (event.currentTarget as HTMLInputElement).value;
-            this.#edited("recoveryKey");
-          }}
-        />
-      </label>
-      ${keyError === undefined ? nothing : html`<p class="error" id="recovery-key-error">${keyError}</p>`}
-      <label class="field">
-        ${t("restore.environment")} <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label=${t("restore.environment_help_label")}
+        <wt-button
+          slot="end"
+          variant="ghost"
+          data-test="toggle-recovery-key"
+          aria-label=${
+            this.recoveryKeyVisible
+              ? t("restore.hide_recovery_key")
+              : t("restore.show_recovery_key")
+          }
+          @click=${() => (this.recoveryKeyVisible = !this.recoveryKeyVisible)}
+          >${passwordIcon(this.recoveryKeyVisible)}</wt-button
+        >
+      </wt-input>
+      <wt-combobox
+        class="field"
+        label=${t("restore.environment")}
+        name="environment"
+        required
+        search="auto"
+        data-test="environment"
+        error=${environmentError ?? ""}
+        .options=${[
+          { value: "production", label: t("restore.environment_live") },
+          { value: "preproduction", label: t("restore.environment_preproduction") },
+        ]}
+        .value=${this.environment}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.environment = event.detail.value as "production" | "preproduction";
+          this.#edited("environment");
+        }}
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("restore.environment_help_label")}
           >${t("restore.environment_help")}</wt-help-tooltip
         >
-        <select
-          name="environment"
-          required
-          data-test="environment"
-          aria-invalid=${environmentError === undefined ? "false" : "true"}
-          aria-describedby=${environmentError === undefined ? nothing : "environment-error"}
-          .value=${this.environment}
-          @change=${(event: Event) => {
-            this.environment = (event.currentTarget as HTMLSelectElement).value as
-              "production" | "preproduction";
-            this.#edited("environment");
-          }}
-        >
-          <option value="production" .selected=${this.environment === "production"}>
-            ${t("restore.environment_live")}
-          </option>
-          <option value="preproduction" .selected=${this.environment === "preproduction"}>
-            ${t("restore.environment_preproduction")}
-          </option>
-        </select>
-      </label>
-      ${environmentError === undefined ? nothing : html`<p class="error" id="environment-error">${environmentError}</p>`}
+      </wt-combobox>
       <label class="field">
         <input
           name="no-running-server"

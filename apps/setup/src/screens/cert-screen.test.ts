@@ -1,5 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./cert-screen.js";
@@ -39,9 +40,7 @@ async function typePassphrase(el: SetupCertScreen, value: string): Promise<void>
 }
 
 async function pickKind(el: SetupCertScreen, value: string): Promise<void> {
-  const select = q(el, "[data-test=certKind]") as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(q(el, "[data-test=certKind]")!, value);
   await el.updateComplete;
 }
 
@@ -97,6 +96,47 @@ describe("setup-cert-screen", () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     expect((q(el, "[data-test=pfx]") as HTMLInputElement).name).toBe("certificate-file");
     expect((q(el, "[data-test=certKind]") as HTMLSelectElement).name).toBe("certificate-kind");
+  });
+
+  it("picks the certificate type from the shared dropdown, with its help beside the box", async () => {
+    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const events = collect(host);
+    const kind = q(el, 'wt-combobox[name="certificate-kind"]') as
+      | (HTMLElement & {
+          options: { value: string; label: string }[];
+          value: string;
+          required: boolean;
+          label: string;
+          search: string;
+        })
+      | null;
+    expect(kind).not.toBeNull();
+    expect({
+      label: kind!.label,
+      required: kind!.required,
+      search: kind!.search,
+      value: kind!.value,
+      options: kind!.options.map(({ value, label }) => ({ value, label: label.trim() })),
+    }).toEqual({
+      label: "Certificate type",
+      required: true,
+      search: "auto",
+      value: "sello",
+      options: [
+        { value: "sello", label: "Company seal (sello)" },
+        { value: "representante", label: "Representative (representante)" },
+      ],
+    });
+    expect(kind!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
+      "Help with certificate type",
+    );
+    await chooseFile(el, PFX_SOURCE);
+    await typePassphrase(el, "unlock-2026");
+    await chooseOption(kind!, "representante");
+    await el.updateComplete;
+    q(el, "[data-test=next]")!.click();
+    const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
+    expect(patch.aeatCert?.certKind).toBe("representante");
   });
 
   it("lets the operator reveal and hide the certificate passphrase", async () => {
@@ -509,8 +549,8 @@ describe("setup-cert-screen in Spanish", () => {
         "Acceso a Llaveros",
       );
       expect(
-        [...(q(el, "[data-test=certKind]") as HTMLSelectElement).options].map((option) =>
-          option.textContent?.trim(),
+        (q(el, "[data-test=certKind]") as unknown as { options: { label: string }[] }).options.map(
+          (option) => option.label.trim(),
         ),
       ).toEqual(["Sello electrónico", "Representante"]);
       q(el, "[data-test=next]")!.click();

@@ -1,8 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { live } from "lit/directives/live.js";
+import { type WtCombobox, baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-language-footer.js";
-import { selectStyles } from "../select-styles.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { type DietPredicate, hasDietData } from "../menu-filter.js";
@@ -46,7 +47,6 @@ export class TillCounterScreen extends LitElement {
 
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -184,23 +184,15 @@ export class TillCounterScreen extends LitElement {
     this.selectedDiet = predicate;
   }
 
-  #pickServiceZone(event: Event): void {
-    const select = event.currentTarget as HTMLSelectElement;
+  #pickServiceZone(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    const requestedZoneId = event.detail.value;
     if (this.store.lines.length > 0) {
-      const requestedZoneId = select.value;
-      select.value = this.selectedServiceZoneId;
-      this.dispatchEvent(
-        new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
-          detail: { zoneId: requestedZoneId },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      return;
+      (event.currentTarget as WtCombobox).value = this.selectedServiceZoneId;
     }
     this.dispatchEvent(
       new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
-        detail: { zoneId: select.value },
+        detail: { zoneId: requestedZoneId },
         bubbles: true,
         composed: true,
       }),
@@ -235,13 +227,16 @@ export class TillCounterScreen extends LitElement {
       ${
         this.serviceZones.length > 0
           ? html`<div class="service-zone">
-              <label for="service-zone">${t("service_zone.label")}</label>
-              <select id="service-zone" name="service-zone" @change=${this.#pickServiceZone}>
-                ${this.serviceZones.map((zone) => {
-                  const chosen = zone.id === this.selectedServiceZoneId;
-                  return html`<option value=${zone.id} .selected=${chosen}>${zone.name}</option>`;
-                })}
-              </select>
+              <wt-combobox
+                name="service-zone"
+                label=${t("service_zone.label")}
+                search="auto"
+                searchPlaceholder=${t("form.combobox_search")}
+                noResultsLabel=${t("form.combobox_no_results")}
+                .options=${this.serviceZones.map((zone) => ({ value: zone.id, label: zone.name }))}
+                .value=${live(this.selectedServiceZoneId)}
+                @wt-change=${this.#pickServiceZone}
+              ></wt-combobox>
               <wt-button
                 class="service-zone-refresh"
                 variant="secondary"

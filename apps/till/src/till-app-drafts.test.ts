@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WtCombobox } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { page } from "vitest/browser";
 import {
   cleanupWidgets,
@@ -533,10 +535,8 @@ describe("till-app: a table's draft is kept on the server", () => {
     const { el } = await mountApp();
     await openMesa(el);
     await tap(el, "Flan");
-    const picker =
-      tableOrder(el)!.shadowRoot!.querySelector<HTMLSelectElement>("[data-round-course]")!;
-    picker.value = "mains";
-    picker.dispatchEvent(new Event("change"));
+    const picker = tableOrder(el)!.shadowRoot!.querySelector<WtCombobox>("[data-round-course]")!;
+    await chooseOption(picker, "mains");
     await back(el);
 
     expect(server.drafts[0]!.lines.map((line) => line.courseId)).toEqual(["mains"]);

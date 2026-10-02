@@ -1,7 +1,9 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, selectStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
@@ -33,7 +35,6 @@ export type BucketField = "kit" | "environment" | "oldBoxGone" | "venueConfirmed
 export class SetupRestoreBucketScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,
@@ -44,27 +45,14 @@ export class SetupRestoreBucketScreen extends LitElement {
       .sensitive {
         font-weight: var(--wt-font-weight-bold);
       }
-      textarea,
-      select,
       input[type="file"] {
         display: block;
+        max-width: 100%;
         margin-top: var(--wt-space-2);
       }
-      textarea {
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
+      wt-textarea::part(control) {
         font-family: var(--wt-font-family-mono);
         font-size: var(--wt-font-size-sm);
-        overflow-wrap: anywhere;
-        resize: vertical;
-      }
-      input[type="file"] {
-        max-width: 100%;
       }
     `,
   ];
@@ -267,54 +255,49 @@ export class SetupRestoreBucketScreen extends LitElement {
           @change=${(e: Event) => void this.#readFile(e)}
         />
       </label>
-      <label class="field">
-        ${t("restore_bucket.kit")} <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label=${t("restore_bucket.kit_help_label")}
+      <wt-textarea
+        class="field"
+        label=${t("restore_bucket.kit")}
+        name="recovery-kit"
+        required
+        rows="6"
+        autocapitalize="off"
+        .spellcheck=${false}
+        data-test="kit"
+        error=${kitError ?? ""}
+        .value=${this.kit}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.#setKit(e.detail.value);
+        }}
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("restore_bucket.kit_help_label")}
           >${t("restore_bucket.kit_help")}</wt-help-tooltip
         >
-        <textarea
-          name="recovery-kit"
-          required
-          rows="6"
-          autocomplete="off"
-          autocapitalize="off"
-          spellcheck="false"
-          data-test="kit"
-          aria-invalid=${kitError === undefined ? "false" : "true"}
-          aria-describedby=${kitError === undefined ? nothing : "kit-error"}
-          .value=${this.kit}
-          @input=${(e: Event) => {
-            this.#setKit((e.currentTarget as HTMLTextAreaElement).value);
-          }}
-        ></textarea>
-      </label>
-      ${kitError === undefined ? nothing : html`<p class="error" id="kit-error">${kitError}</p>`}
-      <label class="field">
-        ${t("restore_bucket.environment")} <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label=${t("restore_bucket.environment_help_label")}
+      </wt-textarea>
+      <wt-combobox
+        class="field"
+        label=${t("restore_bucket.environment")}
+        name="environment"
+        required
+        search="auto"
+        data-test="environment"
+        error=${environmentError ?? ""}
+        .options=${[
+          { value: "production", label: t("restore_bucket.environment_live") },
+          { value: "preproduction", label: t("restore_bucket.environment_preproduction") },
+        ]}
+        .value=${this.environment}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.environment = e.detail.value as "production" | "preproduction";
+          this.#edited("environment");
+        }}
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("restore_bucket.environment_help_label")}
           >${t("restore_bucket.environment_help")}</wt-help-tooltip
         >
-        <select
-          name="environment"
-          required
-          data-test="environment"
-          aria-invalid=${environmentError === undefined ? "false" : "true"}
-          aria-describedby=${environmentError === undefined ? nothing : "environment-error"}
-          @change=${(e: Event) => {
-            this.environment = (e.currentTarget as HTMLSelectElement).value as
-              "production" | "preproduction";
-            this.#edited("environment");
-          }}
-        >
-          <option value="production" .selected=${this.environment === "production"}>
-            ${t("restore_bucket.environment_live")}
-          </option>
-          <option value="preproduction" .selected=${this.environment === "preproduction"}>
-            ${t("restore_bucket.environment_preproduction")}
-          </option>
-        </select>
-      </label>
-      ${environmentError === undefined ? nothing : html`<p class="error" id="environment-error">${environmentError}</p>`}
+      </wt-combobox>
       <label class="field">
         <input
           name="no-running-server"

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { WtTextarea } from "@waitron/ui";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -237,8 +238,7 @@ describe("till-table-order-screen: a note being written while other lines move",
   /** The dish whose row the open note editor sits under, and what the editor holds. */
   function openNote(el: TillTableOrderScreen): { dish: string; note: string } | null {
     for (const basket of el.shadowRoot!.querySelectorAll("till-basket")) {
-      const editor =
-        basket.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
+      const editor = basket.shadowRoot!.querySelector<WtTextarea>('[data-test="line-note"]');
       if (editor === null) continue;
       const open = basket.shadowRoot!.querySelector('.note-toggle[aria-expanded="true"]')!;
       return {

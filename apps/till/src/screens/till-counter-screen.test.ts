@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import type { TabDef } from "../layout.js";
@@ -80,6 +82,12 @@ const cardGrid = (el: TillCounterScreen) =>
     }
   >("till-card-grid");
 
+/** The text the dropdown's closed box shows, which is the chosen zone's name. */
+async function shownText(select: WtCombobox): Promise<string> {
+  await select.updateComplete;
+  return select.shadowRoot!.querySelector(".value")!.textContent!.trim();
+}
+
 afterEach(cleanupWidgets);
 
 describe("till-counter-screen", () => {
@@ -109,34 +117,67 @@ describe("till-counter-screen", () => {
     el.addEventListener("counter-zone-selected", (event) =>
       seen.push((event as CustomEvent<{ zoneId: string }>).detail.zoneId),
     );
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
+    const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
     expect(select.value).toBe("upstairs");
-    expect(select.labels![0]!.textContent).toContain(t("service_zone.label"));
+    expect(select.label).toContain(t("service_zone.label"));
+    await select.updateComplete;
+    const shownLabel = select.shadowRoot!.querySelector<HTMLElement>(".field-label-text");
+    expect(shownLabel?.textContent).toContain(t("service_zone.label"));
+    expect(shownLabel!.checkVisibility()).toBe(true);
 
-    select.value = "downstairs";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "downstairs");
     el.shadowRoot!.querySelector<HTMLElement>(".service-zone-refresh")!.click();
     expect(seen).toEqual(["downstairs", "upstairs"]);
   });
 
+  it("picks the service zone from the shared dropdown, labelled and searchable in the till's language", async () => {
+    const { el } = await mount({ serviceZones: deliSecond, selectedServiceZoneId: "deli" });
+    const seen: string[] = [];
+    el.addEventListener("counter-zone-selected", (event) =>
+      seen.push((event as CustomEvent<{ zoneId: string }>).detail.zoneId),
+    );
+    const zone = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]');
+    expect(zone).not.toBeNull();
+    expect(zone!.label).toBe(t("service_zone.label"));
+    expect(zone!.getAttribute("search")).toBe("auto");
+    expect(zone!.searchPlaceholder).toBe(t("form.combobox_search"));
+    expect(zone!.noResultsLabel).toBe(t("form.combobox_no_results"));
+    expect(zone!.options).toEqual([
+      { value: "downstairs", label: "Downstairs bar" },
+      { value: "deli", label: "Deli counter" },
+    ]);
+    expect(zone!.value).toBe("deli");
+
+    await chooseOption(zone!, "downstairs");
+    expect(seen).toEqual(["downstairs"]);
+  });
+
   it("shows the chosen service zone on first render when it is not the first zone listed", async () => {
     const { el } = await mount({ serviceZones: deliSecond, selectedServiceZoneId: "deli" });
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
-    expect(select.selectedOptions[0]!.textContent).toBe("Deli counter");
+    const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
+    expect(await shownText(select)).toBe("Deli counter");
   });
 
   it("follows the chosen service zone when the app switches it after a pick", async () => {
     const { el } = await mount({ serviceZones: deliSecond, selectedServiceZoneId: "deli" });
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
-    select.value = "downstairs";
-    select.dispatchEvent(new Event("change"));
+    const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
+    await chooseOption(select, "downstairs");
     el.selectedServiceZoneId = "downstairs";
     await el.updateComplete;
-    expect(select.selectedOptions[0]!.textContent).toBe("Downstairs bar");
+    expect(await shownText(select)).toBe("Downstairs bar");
 
     el.selectedServiceZoneId = "deli";
     await el.updateComplete;
-    expect(select.selectedOptions[0]!.textContent).toBe("Deli counter");
+    expect(await shownText(select)).toBe("Deli counter");
+  });
+
+  it("shows the zone the till serves again on its next render when the app kept it", async () => {
+    const { el } = await mount({ serviceZones: deliSecond, selectedServiceZoneId: "deli" });
+    const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
+    await chooseOption(select, "downstairs");
+    el.operatorName = "Luis";
+    await el.updateComplete;
+    expect(select.value).toBe("deli");
   });
 
   it("keeps the service zone fixed while the basket has lines", async () => {
@@ -161,12 +202,12 @@ describe("till-counter-screen", () => {
     const { el } = await mount({ store, serviceZones, selectedServiceZoneId: "upstairs" });
     const spy = vi.fn();
     el.addEventListener("counter-zone-selected", spy);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
-    select.value = "downstairs";
-    select.dispatchEvent(new Event("change"));
+    const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
+    await chooseOption(select, "downstairs");
     el.shadowRoot!.querySelector<HTMLElement>(".service-zone-refresh")!.click();
 
     expect(select.value).toBe("upstairs");
+    expect(await shownText(select)).toBe("Upstairs bar");
     expect(spy).toHaveBeenCalledOnce();
     expect(spy.mock.calls[0]![0].detail).toEqual({ zoneId: "downstairs" });
   });

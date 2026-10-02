@@ -1,8 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { focusFirstInvalid, submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
@@ -40,7 +41,6 @@ function readFileAsBase64(file: Blob): Promise<string> {
 export class SetupCertScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,
@@ -58,7 +58,6 @@ export class SetupCertScreen extends LitElement {
         display: block;
       }
 
-      .field.select > span,
       .field.file > span {
         display: block;
         margin-bottom: var(--wt-space-1);
@@ -149,9 +148,9 @@ export class SetupCertScreen extends LitElement {
     this.passphrase = event.detail.value;
   }
 
-  #onCertKind(event: Event): void {
+  #onCertKind(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.certKind = (event.target as HTMLSelectElement).value as AeatCertDraft["certKind"];
+    this.certKind = event.detail.value as AeatCertDraft["certKind"];
   }
 
   #errors(): Partial<Record<"pfx" | "passphrase", string>> {
@@ -251,27 +250,21 @@ export class SetupCertScreen extends LitElement {
           >${passwordIcon(this.passphraseVisible)}</wt-button
         >
       </wt-input>
-      <label class="field select">
-        <span
-          >${t("cert.kind_label")} *
-          <wt-help-tooltip aria-label=${t("cert.kind_help_label")}
-            >${t("cert.kind_help")}</wt-help-tooltip
-          ></span
+      <wt-combobox
+        class="field"
+        name="certificate-kind"
+        label=${t("cert.kind_label")}
+        required
+        search="auto"
+        data-test="certKind"
+        .options=${CERT_KINDS.map((kind) => ({ value: kind.value, label: t(kind.label) }))}
+        .value=${this.certKind}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCertKind(e)}
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("cert.kind_help_label")}
+          >${t("cert.kind_help")}</wt-help-tooltip
         >
-        <select
-          name="certificate-kind"
-          required
-          data-test="certKind"
-          @change=${(e: Event) => this.#onCertKind(e)}
-        >
-          ${CERT_KINDS.map(
-            (kind) =>
-              html`<option value=${kind.value} .selected=${kind.value === this.certKind}>
-                ${t(kind.label)}
-              </option>`,
-          )}
-        </select>
-      </label>
+      </wt-combobox>
       <wt-form-actions .error=${hasFieldErrors ? t("cert.fix_fields") : ""}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("cert.back")}</wt-button

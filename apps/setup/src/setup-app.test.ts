@@ -206,6 +206,36 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
   return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
 }
 
+/** The message under the field `data-test` names: a shared field's own `error`, or else the
+ * screen's `#<name>-error` paragraph. */
+function messageUnder(screen: HTMLElement, name: string): string | null {
+  const field = screen.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+    `:is(wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
+  );
+  if (field !== null) return field.error;
+  return screen.shadowRoot!.querySelector(`#${name}-error`)?.textContent ?? null;
+}
+
+/** The kit and environment are shared fields, whose invalid marking is inside their own shadow roots,
+ * where a `[aria-invalid=true]` query of the screen cannot see it. */
+async function expectBucketSharedFieldsUnmarked(screen: HTMLElement): Promise<void> {
+  for (const [field, control] of [
+    ["kit", "textarea"],
+    ["environment", ".trigger"],
+  ] as const) {
+    const box = screen.shadowRoot!.querySelector<
+      HTMLElement & { error: string; invalid: boolean; updateComplete: Promise<unknown> }
+    >(`[data-test=${field}]`)!;
+    await box.updateComplete;
+    expect({ field, error: box.error, invalid: box.invalid }).toEqual({
+      field,
+      error: "",
+      invalid: false,
+    });
+    expect(box.shadowRoot!.querySelector(control)!.getAttribute("aria-invalid")).toBe("false");
+  }
+}
+
 /** The one message above a screen's primary action, or "" when it shows none. */
 async function bottomOf(host: HTMLElement): Promise<string> {
   const actions = host.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
@@ -2850,7 +2880,7 @@ describe("restore from my bucket", () => {
     if (field === undefined) {
       expect(await bottomOf(screen)).toBe(message);
     } else {
-      expect(screen.shadowRoot!.querySelector(`#${field}-error`)!.textContent).toBe(message);
+      expect(messageUnder(screen, field)).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
       const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
         disabled: boolean;
@@ -2865,9 +2895,7 @@ describe("restore from my bucket", () => {
       params: { field: "environment" },
       status: 400,
     });
-    expect(screen.shadowRoot!.querySelector("#environment-error")!.textContent).toBe(
-      "Check the environment.",
-    );
+    expect(messageUnder(screen, "environment")).toBe("Check the environment.");
     expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
   });
 
@@ -2928,6 +2956,7 @@ describe("restore from my bucket", () => {
       });
       expect(await bottomOf(screen)).toBe(message);
       expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+      await expectBucketSharedFieldsUnmarked(screen);
     },
   );
 
@@ -2973,6 +3002,7 @@ describe("restore from my bucket", () => {
       "The server rejected the details. Check your entries, then try again.",
     );
     expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+    await expectBucketSharedFieldsUnmarked(screen);
   });
 
   // Review Focus 5, the wizard's half.
@@ -3174,7 +3204,7 @@ describe("restoring a backup file whose old server may still be running", () => 
       const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
       expect(screen.invalidField).toBe(field);
       const id = field === "recoveryKey" ? "recovery-key" : field;
-      expect(screen.shadowRoot!.querySelector(`#${id}-error`)!.textContent).toBe(message);
+      expect(messageUnder(screen, id)).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
       const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
         disabled: boolean;

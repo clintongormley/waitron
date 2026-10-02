@@ -29,6 +29,7 @@ export default defineConfig({
       "qrcode-generator",
       "lit/directives/unsafe-html.js",
       "lit/directives/keyed.js",
+      "lit/directives/live.js",
       "lit/async-directive.js",
     ],
   },

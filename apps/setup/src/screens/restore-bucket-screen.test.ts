@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
@@ -9,7 +10,7 @@ const q = <T extends HTMLElement>(el: SetupRestoreBucketScreen, selector: string
   el.shadowRoot!.querySelector<T>(selector);
 
 function paste(el: SetupRestoreBucketScreen, text: string): void {
-  const area = q<HTMLTextAreaElement>(el, "[data-test=kit]")!;
+  const area = q(el, "[data-test=kit]")!.shadowRoot!.querySelector("textarea")!;
   area.value = text;
   area.dispatchEvent(new Event("input"));
 }
@@ -31,13 +32,41 @@ async function bottomOf(el: SetupRestoreBucketScreen): Promise<string> {
   await actions.updateComplete;
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
-/** The messages shown under the fields, in page order. */
+/** The messages shown under the fields, in page order: the screen's own paragraphs, and each
+ * shared field's `error`. */
 function fieldMessages(el: SetupRestoreBucketScreen): string[] {
-  return [...el.shadowRoot!.querySelectorAll("p.error[id$='-error']")].map((p) =>
-    p.textContent!.trim(),
-  );
+  return [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement & { error?: string }>(
+      "p.error[id$='-error'], wt-textarea, wt-combobox",
+    ),
+  ]
+    .map((node) => (node instanceof HTMLParagraphElement ? node.textContent! : node.error!).trim())
+    .filter((message) => message !== "");
+}
+/** The shared field's own control, which carries its invalid state. */
+function controlOf(el: SetupRestoreBucketScreen, field: "kit" | "environment"): HTMLElement {
+  return q(el, `[data-test=${field}]`)!.shadowRoot!.querySelector<HTMLElement>(
+    field === "kit" ? "textarea" : ".trigger",
+  )!;
 }
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
+
+/** The kit and environment are shared fields, whose invalid marking is inside their own shadow roots,
+ * where a `[aria-invalid=true]` query of the screen cannot see it. */
+async function expectSharedFieldsUnmarked(el: SetupRestoreBucketScreen): Promise<void> {
+  for (const field of ["kit", "environment"] as const) {
+    const box = q<
+      HTMLElement & { error: string; invalid: boolean; updateComplete: Promise<unknown> }
+    >(el, `[data-test=${field}]`)!;
+    await box.updateComplete;
+    expect({ field, error: box.error, invalid: box.invalid }).toEqual({
+      field,
+      error: "",
+      invalid: false,
+    });
+    expect(controlOf(el, field).getAttribute("aria-invalid")).toBe("false");
+  }
+}
 
 const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
 
@@ -58,7 +87,9 @@ describe("SetupRestoreBucketScreen", () => {
       "Upload or paste the recovery kit.",
       "Confirm that no other running server has newer data.",
     ]);
-    expect(q(el, "#kit-error")!.textContent).toBe("Upload or paste the recovery kit.");
+    expect((q(el, "[data-test=kit]") as unknown as { error: string }).error).toBe(
+      "Upload or paste the recovery kit.",
+    );
     expect(q(el, "#acknowledge-error")!.textContent).toBe(
       "Confirm that no other running server has newer data.",
     );
@@ -91,6 +122,78 @@ describe("SetupRestoreBucketScreen", () => {
     });
   });
 
+  it("takes the kit in the shared multi-line field, in the monospace font and never spell-checked", async () => {
+    const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      {},
+    );
+    host.style.setProperty("--wt-font-family-mono", "fantasy");
+    host.style.setProperty("--wt-font-size-sm", "11px");
+    const kit = q<HTMLElement & { label: string; required: boolean; rows: number }>(
+      el,
+      'wt-textarea[name="recovery-kit"]',
+    );
+    expect(kit).not.toBeNull();
+    expect({ label: kit!.label, required: kit!.required, rows: kit!.rows }).toEqual({
+      label: "Recovery kit",
+      required: true,
+      rows: 6,
+    });
+    const control = kit!.shadowRoot!.querySelector("textarea")!;
+    expect({
+      spellcheck: control.spellcheck,
+      autocapitalize: control.getAttribute("autocapitalize"),
+      font: getComputedStyle(control).fontFamily,
+      size: getComputedStyle(control).fontSize,
+    }).toEqual({ spellcheck: false, autocapitalize: "off", font: "fantasy", size: "11px" });
+    expect(kit!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
+      "Help with the recovery kit",
+    );
+  });
+
+  it("picks the environment from the shared dropdown, with its help beside the box", async () => {
+    const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      {},
+    );
+    const environment = q<
+      HTMLElement & {
+        options: { value: string; label: string }[];
+        value: string;
+        required: boolean;
+        label: string;
+        search: string;
+      }
+    >(el, 'wt-combobox[name="environment"]');
+    expect(environment).not.toBeNull();
+    expect({
+      label: environment!.label,
+      required: environment!.required,
+      search: environment!.search,
+      value: environment!.value,
+      options: environment!.options.map(({ value, label }) => ({ value, label })),
+    }).toEqual({
+      label: "Environment",
+      required: true,
+      search: "auto",
+      value: "production",
+      options: [
+        { value: "production", label: "Live" },
+        { value: "preproduction", label: "Preparation or demo" },
+      ],
+    });
+    expect(
+      environment!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label"),
+    ).toBe("Help with environment");
+    paste(el, "k");
+    tick(el, "[data-test=acknowledge]");
+    await chooseOption(environment!, "preproduction");
+    await el.updateComplete;
+    const outcome = requested(host);
+    q(el, "[data-test=restore]")!.click();
+    await expect(outcome).resolves.toMatchObject({ environment: "preproduction" });
+  });
+
   it("sends the environment the owner picks", async () => {
     const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",
@@ -98,9 +201,7 @@ describe("SetupRestoreBucketScreen", () => {
     );
     paste(el, "k");
     tick(el, "[data-test=acknowledge]");
-    const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
-    environment.value = "preproduction";
-    environment.dispatchEvent(new Event("change"));
+    await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
     await el.updateComplete;
     const outcome = requested(host);
     q(el, "[data-test=restore]")!.click();
@@ -344,7 +445,7 @@ describe("SetupRestoreBucketScreen", () => {
       });
       await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=kit]")));
       expect(fieldMessages(el)).toEqual([REFUSAL]);
-      expect(q(el, "[data-test=kit]")!.getAttribute("aria-invalid")).toBe("true");
+      expect(controlOf(el, "kit").getAttribute("aria-invalid")).toBe("true");
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
       expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!.disabled).toBe(
         false,
@@ -363,15 +464,18 @@ describe("SetupRestoreBucketScreen", () => {
           "The copy comes from the other environment. Choose the environment it came from.",
         invalidField: "environment",
       });
-      const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
-      expect(environment.getAttribute("aria-invalid")).toBe("true");
+      const environment = q<HTMLElement & { updateComplete: Promise<unknown> }>(
+        el,
+        "[data-test=environment]",
+      )!;
+      expect(controlOf(el, "environment").getAttribute("aria-invalid")).toBe("true");
       expect(fieldMessages(el)).toEqual([
         "The copy comes from the other environment. Choose the environment it came from.",
       ]);
-      environment.value = "preproduction";
-      environment.dispatchEvent(new Event("change"));
+      await chooseOption(environment, "preproduction");
       await el.updateComplete;
-      expect(environment.getAttribute("aria-invalid")).toBe("false");
+      await environment.updateComplete;
+      expect(controlOf(el, "environment").getAttribute("aria-invalid")).toBe("false");
       expect(fieldMessages(el)).toEqual([]);
     });
 
@@ -386,8 +490,8 @@ describe("SetupRestoreBucketScreen", () => {
         },
       );
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
-      expect(getComputedStyle(environment).borderColor).toBe("rgb(4, 5, 6)");
+      const box = q(el, "[data-test=environment]")!.shadowRoot!.querySelector("[part=field]")!;
+      expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
     });
 
     it("drops it on the next press and sends the request again", async () => {
@@ -435,6 +539,7 @@ describe("SetupRestoreBucketScreen", () => {
         expect(q(el, `[data-test=${box}]`)).toBeNull();
         expect(await bottomOf(el)).toBe("");
         expect(q(el, "[aria-invalid=true]")).toBeNull();
+        await expectSharedFieldsUnmarked(el);
       },
     );
 
@@ -455,6 +560,7 @@ describe("SetupRestoreBucketScreen", () => {
         expect(fieldMessages(el)).toEqual([]);
         expect(await bottomOf(el)).toBe("");
         expect(q(el, "[aria-invalid=true]")).toBeNull();
+        await expectSharedFieldsUnmarked(el);
       },
     );
 
@@ -472,6 +578,7 @@ describe("SetupRestoreBucketScreen", () => {
         await el.updateComplete;
         expect(await bottomOf(el)).toBe("");
         expect(q(el, "[aria-invalid=true]")).toBeNull();
+        await expectSharedFieldsUnmarked(el);
       },
     );
   });

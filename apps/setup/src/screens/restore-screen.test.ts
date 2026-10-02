@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { RestoreRequestDetail } from "../events.js";
@@ -10,6 +11,16 @@ const q = <T extends HTMLElement>(el: SetupRestoreScreen, selector: string): T |
 
 const BACKUP = new File(["encrypted"], "waitron.backup");
 
+/** The recovery key's own `<input>`, inside the shared field. */
+const keyControl = (el: SetupRestoreScreen): HTMLInputElement =>
+  q(el, "[data-test=recovery-key]")!.shadowRoot!.querySelector("input")!;
+
+function typeKey(el: SetupRestoreScreen, value: string): void {
+  const key = keyControl(el);
+  key.value = value;
+  key.dispatchEvent(new Event("input"));
+}
+
 async function fill(
   el: SetupRestoreScreen,
   decisions: { artifact?: boolean; recoveryKey?: boolean; acknowledge?: boolean },
@@ -19,11 +30,7 @@ async function fill(
     Object.defineProperty(file, "files", { value: [BACKUP] });
     file.dispatchEvent(new Event("change"));
   }
-  if (decisions.recoveryKey) {
-    const key = q<HTMLInputElement>(el, "[data-test=recovery-key]")!;
-    key.value = "recovery-key";
-    key.dispatchEvent(new Event("input"));
-  }
+  if (decisions.recoveryKey) typeKey(el, "recovery-key");
   if (decisions.acknowledge) {
     const ack = q<HTMLInputElement>(el, "[data-test=acknowledge]")!;
     ack.checked = true;
@@ -39,11 +46,16 @@ async function bottomOf(el: SetupRestoreScreen): Promise<string> {
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
-/** The messages shown under the fields, in page order. */
+/** The messages shown under the fields, in page order: the screen's own paragraphs, and each
+ * shared field's `error`. */
 function fieldMessages(el: SetupRestoreScreen): string[] {
-  return [...el.shadowRoot!.querySelectorAll("p.error[id$='-error']")].map((p) =>
-    p.textContent!.trim(),
-  );
+  return [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement & { error?: string }>(
+      "p.error[id$='-error'], wt-input, wt-combobox",
+    ),
+  ]
+    .map((node) => (node instanceof HTMLParagraphElement ? node.textContent! : node.error!).trim())
+    .filter((message) => message !== "");
 }
 
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
@@ -76,9 +88,7 @@ describe("SetupRestoreScreen", () => {
     const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
     Object.defineProperty(file, "files", { value: [artifact] });
     file.dispatchEvent(new Event("change"));
-    const key = q<HTMLInputElement>(el, "[data-test=recovery-key]")!;
-    key.value = "recovery-key";
-    key.dispatchEvent(new Event("input"));
+    typeKey(el, "recovery-key");
     const ack = q<HTMLInputElement>(el, "[data-test=acknowledge]")!;
     ack.checked = true;
     ack.dispatchEvent(new Event("change"));
@@ -98,12 +108,81 @@ describe("SetupRestoreScreen", () => {
     });
   });
 
+  it("asks for the recovery key in the shared field, hidden until the owner reveals it", async () => {
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    const key = q<HTMLElement & { label: string; required: boolean; type: string }>(
+      el,
+      'wt-input[name="recovery-key"]',
+    );
+    expect(key).not.toBeNull();
+    expect({ label: key!.label, required: key!.required, type: key!.type }).toEqual({
+      label: "Recovery key",
+      required: true,
+      type: "password",
+    });
+    expect(key!.shadowRoot!.querySelector("input")!.autocomplete).toBe("off");
+    expect(key!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
+      "Help with recovery key",
+    );
+    const reveal = key!.querySelector<HTMLElement>("wt-button[slot=end]")!;
+    expect(reveal.getAttribute("aria-label")).toBe("Show recovery key");
+    expect(reveal.querySelector("svg")).not.toBeNull();
+    reveal.click();
+    await el.updateComplete;
+    expect(key!.type).toBe("text");
+    expect(reveal.getAttribute("aria-label")).toBe("Hide recovery key");
+    reveal.click();
+    await el.updateComplete;
+    expect(key!.type).toBe("password");
+  });
+
+  it("picks the environment from the shared dropdown, with its help beside the box", async () => {
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    const environment = q<
+      HTMLElement & {
+        options: { value: string; label: string }[];
+        value: string;
+        required: boolean;
+        label: string;
+        search: string;
+      }
+    >(el, 'wt-combobox[name="environment"]');
+    expect(environment).not.toBeNull();
+    expect({
+      label: environment!.label,
+      required: environment!.required,
+      search: environment!.search,
+      value: environment!.value,
+      options: environment!.options.map(({ value, label }) => ({ value, label })),
+    }).toEqual({
+      label: "Backup environment",
+      required: true,
+      search: "auto",
+      value: "production",
+      options: [
+        { value: "production", label: "Live" },
+        { value: "preproduction", label: "Preparation or demo" },
+      ],
+    });
+    expect(
+      environment!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label"),
+    ).toBe("Help with backup environment");
+    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await chooseOption(environment!, "preproduction");
+    await el.updateComplete;
+    const listener = vi.fn();
+    host.addEventListener("restore-requested", listener);
+    q(el, "[data-test=restore]")!.click();
+    expect(
+      (listener.mock.calls[0]![0] as CustomEvent<{ request: RestoreRequestDetail }>).detail.request
+        .environment,
+    ).toBe("preproduction");
+  });
+
   it("restores a preparation backup when the operator picks that environment", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
-    const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
-    environment.value = "preproduction";
-    environment.dispatchEvent(new Event("change"));
+    await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
     await el.updateComplete;
     const listener = vi.fn();
     host.addEventListener("restore-requested", listener);
@@ -285,9 +364,7 @@ describe("SetupRestoreScreen", () => {
       await el.updateComplete;
       await fill(el, { recoveryKey: true });
       expect(fieldMessages(el)).toEqual([]);
-      const key = q<HTMLInputElement>(el, "[data-test=recovery-key]")!;
-      key.value = "";
-      key.dispatchEvent(new Event("input"));
+      typeKey(el, "");
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual(["Enter the recovery key."]);
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
@@ -330,31 +407,35 @@ describe("SetupRestoreScreen", () => {
       await new Promise((resolve) => setTimeout(resolve));
       const key = q<HTMLInputElement>(el, "[data-test=recovery-key]")!;
       expect(fieldMessages(el)).toEqual([REFUSAL.recoveryKey]);
-      expect(key.getAttribute("aria-invalid")).toBe("true");
+      expect(keyControl(el).getAttribute("aria-invalid")).toBe("true");
       expect(el.shadowRoot!.activeElement).toBe(key);
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
       expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!.disabled).toBe(
         false,
       );
 
-      key.value = "another-key";
-      key.dispatchEvent(new Event("input"));
+      typeKey(el, "another-key");
       await el.updateComplete;
+      await (key as unknown as { updateComplete: Promise<unknown> }).updateComplete;
       expect(fieldMessages(el)).toEqual([]);
-      expect(key.getAttribute("aria-invalid")).toBe("false");
+      expect(keyControl(el).getAttribute("aria-invalid")).toBe("false");
       expect(await bottomOf(el)).toBe("");
     });
 
     it.each([
-      ["artifact", "[data-test=artifact]"],
-      ["environment", "[data-test=environment]"],
-    ] as const)("marks the %s field it names", async (field, selector) => {
+      ["artifact", (el: SetupRestoreScreen) => q(el, "[data-test=artifact]")!],
+      [
+        "environment",
+        (el: SetupRestoreScreen) =>
+          q(el, "[data-test=environment]")!.shadowRoot!.querySelector(".trigger")!,
+      ],
+    ] as const)("marks the %s field it names", async (field, control) => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,
         errorMessage: REFUSAL[field],
         invalidField: field,
       });
-      expect(q(el, selector)!.getAttribute("aria-invalid")).toBe("true");
+      expect(control(el).getAttribute("aria-invalid")).toBe("true");
       expect(fieldMessages(el)).toEqual([REFUSAL[field]]);
     });
 
@@ -365,8 +446,8 @@ describe("SetupRestoreScreen", () => {
         invalidField: "environment",
       });
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
-      expect(getComputedStyle(environment).borderColor).toBe("rgb(4, 5, 6)");
+      const box = q(el, "[data-test=environment]")!.shadowRoot!.querySelector("[part=field]")!;
+      expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
     });
 
     it("drops it when the named field changes", async () => {
@@ -375,9 +456,7 @@ describe("SetupRestoreScreen", () => {
         errorMessage: REFUSAL.environment,
         invalidField: "environment",
       });
-      const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
-      environment.value = "preproduction";
-      environment.dispatchEvent(new Event("change"));
+      await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual([]);
       expect(await bottomOf(el)).toBe("");

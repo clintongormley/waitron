@@ -8,8 +8,8 @@
  * The keys are the server's paths; `key` is the venue form's own name for the same field.
  *
  * Every field here is a `wt-input`: the venue form clears a mark in `#onField`, and its handlers for
- * the select-backed `country` and `province` do not, so a select-backed field added here would stay
- * marked however the operator corrects it.
+ * the dropdown-backed `country` and `province` do not, so a dropdown-backed field added here would
+ * stay marked however the operator corrects it.
  */
 
 import { t } from "./i18n/t.js";

@@ -1425,7 +1425,8 @@ gap. The filter is a native `<select class="table-filter">` drawn by `wt-data-ta
 (`packages/ui/src/base-styles.ts`), which gives it `padding: var(--wt-space-2)` (8px) on every side
 and leaves the arrow to the browser. Not yet checked whether every dashboard dropdown using
 `selectStyles` shows the same thing, or only the filter — the till's own select styles
-(`apps/till/src/select-styles.ts`) are separate and use 12px side padding. **Next action:**
+(`apps/till/src/select-styles.ts`) are separate and use 12px side padding (_2026-10-02: A178d
+deleted that file; the till's dropdowns are now `wt-combobox`_). **Next action:**
 reproduce in the dashboard on Chromium and Safari, then give the shared select room at the
 right-hand end for its arrow (more end padding, or draw the arrow ourselves so its position is
 ours rather than the browser's), and look at a couple of other screens' dropdowns afterwards.
@@ -1479,7 +1480,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, and A178c (the dashboard widgets) as #1015; A178d–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, and A178d (setup and the till) as #1016; A178e–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1656,6 +1657,24 @@ as wide as its field and otherwise as wide as its longest row, never wider than 
 variants table's narrow unit dropdown no longer wraps "Add unit". **Seen, not changed:** once other
 fields in a purchase line show errors, its VAT-kind dropdown sits lower than its neighbours —
 `.line { align-items: flex-end }` in `purchase-form.ts`, from commit `6b299998ba` (2026-08-16).
+
+**A178d — DONE (#1016).** Every field spec §9.3 and §9.4 list for setup and the till is drawn by a
+primitive: the native selects are `wt-combobox` (`search="auto"`; the table order screen's two
+course boxes `hide-label`, at least `--wt-tap-min` tall), setup's recovery key is a password
+`wt-input` with its reveal button in the `end` slot as on the certificate screen, and the recovery
+kit and the till's kitchen note are `wt-textarea`. Setup's file inputs and tick boxes, and the
+table order screen's bill radio buttons, stay. `apps/till/src/select-styles.ts` is deleted, so the
+mentions of it elsewhere in this file describe the till before A178d. Setup's help buttons sit in
+each field's `help` slot; the province is required, so its empty first row is now the placeholder.
+The kit keeps its smaller monospace text. The till schedule's shift and colleague dropdowns take the
+dashboard schedule screen's flex basis, so an empty one no longer cuts its own label. **Existing
+tests changed** are the three approved kinds, each listed in the pull request, and the tick-box cases
+that checked no field on the bucket restore screen was marked invalid now also check the kit and
+environment fields, whose marking moved inside the primitives. **Seen, not changed:** the recovery
+kit lost `autocomplete="off"`, which `wt-textarea` does not offer; and the till's fallback unit for
+a product with no `unit` (`productUnit`, `apps/till/src/widgets/product-name.ts`) names itself in
+English only, so a Spanish till drawing such a product shows the unit's id — seen only with test
+products; whether the server ever sends a product without a unit was not checked.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
@@ -2865,9 +2884,11 @@ dropdown style (`selectStyles`, `packages/ui/src/base-styles.ts`) draws a `selec
 `aria-invalid="true"` with the `--wt-color-danger` border, and the two restore screens
 (`apps/setup/src/screens/restore-screen.ts`, `restore-bucket-screen.ts`) now use that style; the
 venue screen already used it, so its country and province dropdowns gain the outline too (the
-province one is the case tested). Two dashboard screens also use that style, mark their dropdowns
-`aria-invalid` and have no invalid-dropdown rule of their own, so they gain the outline too: the
-product editor (`apps/dashboard/src/widgets/product-editor.ts`, its routing, VAT and unit
+province one is the case tested; _2026-10-02: the restore screens' environment dropdowns and the
+venue screen's country and province dropdowns moved to `wt-combobox` in A178d_). Two dashboard
+screens also use that style, mark their dropdowns `aria-invalid` and have no invalid-dropdown rule
+of their own, so they gain the outline too: the product editor
+(`apps/dashboard/src/widgets/product-editor.ts`, its routing, VAT and unit
 dropdowns; _2026-10-02: those moved to `wt-combobox` in A178c_) and the venue operations screen
 (`packages/venue-service/src/dashboard/venue-operations-screen.ts`). Looked at after the review
 (#944's comment): the product editor's kitchen station and course dropdowns refused, and the venue
@@ -2882,8 +2903,10 @@ danger-colour cases in the two restore screens' and the venue screen's tests.
 **Still OPEN, seen while doing A151 (2026-09-30), not changed:** on the backup restore screen the
 refused backup-file and recovery-key inputs, and on the bucket restore screen the refused recovery
 kit text box, get no red outline — both screens' own styles have no rule for an invalid input or
-text box (seen in screenshots of the refused state; only the dropdown was in A151's scope). Four
-stylesheets that already include `selectStyles` still carry their own identical
+text box (seen in screenshots of the refused state; only the dropdown was in A151's scope).
+_2026-10-02: A178d moved the recovery key to `wt-input` and the recovery kit to `wt-textarea`,
+which draw their own invalid state (read, not run), so the open part is now the backup-file input
+alone._ Four stylesheets that already include `selectStyles` still carry their own identical
 `select[aria-invalid="true"]` rule — `reasons-screen.ts` (adjustments), `sumup-connect-form.ts`
 (payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard). They were left because none of their own test
 files asserts a border colour, so removing them would go unchecked.
@@ -7831,10 +7854,13 @@ ongoing overhaul listed at the top of Track A.
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
   dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
   `wt-data-table`'s locale-less `localeCompare` at the same time.
-- **The till's schedule screen still has the My Schedule defects the dashboard fixed.** Its three
-  dropdowns bind `.value` alone over options from a list (found 2026-09-14 by a text scan;
-  re-checked 2026-09-27): `apps/till/src/screens/till-schedule-screen.ts:356`, `:370`, `:423`. Each
-  binds `.value` on a `<select>` whose options come from a `.map(…)` and marks no option
+- **The till's schedule screen still has the My Schedule defects the dashboard fixed.**
+  _2026-10-02: the dropdown half below is retired — A178d made the three dropdowns (shift,
+  colleague, absence kind) `wt-combobox`es, and the counter screen no longer has a `<select>`; the
+  other three defects stay open; read, not run._ Its three dropdowns bind `.value` alone over
+  options from a list (found 2026-09-14 by a text scan; re-checked 2026-09-27):
+  `apps/till/src/screens/till-schedule-screen.ts:356`, `:370`, `:423`. Each binds `.value` on a
+  `<select>` whose options come from a `.map(…)` and marks no option
   `selected` — the shape that showed "Downstairs bar" on the till while it sold from Deli counter,
   fixed by #365 (CLAUDE.md §3).
   The dashboard's My Schedule screen had the same three, fixed by lane C's C16 (2026-09-27, branch
@@ -7850,27 +7876,27 @@ ongoing overhaul listed at the top of Track A.
   reuses options by position, and accepting a swap adds a shift. Units' list was fixed by #382. The
   same screen also still carries the other defects the dashboard's branch fixed, found 2026-09-27 by
   reading `apps/till/src/screens/till-schedule-screen.ts`, not run: its failed-load catch
-  (`:193`-`:198`) fills the lists with `[]`, so the sections say "none" (`:303`, `:324`, `:397`)
-  beside the load-failed alert (`:289`); its loading line (`:284`) has no `role="status"`; and a
+  (`:187`-`:193`) fills the lists with `[]`, so the sections say "none" (`:297`, `:318`, `:407`)
+  beside the load-failed alert (`:283`); its loading line (`:278`) has no `role="status"`; and a
   chosen shift or colleague that a reload removes stays chosen (`coverShiftId` and
-  `coverColleagueId` are cleared only after a cover request is sent, `:228`-`:229`). **Next
-  action:** mark each till option `.selected` and drop the `<select>`'s `.value` binding, the way
-  `apps/till/src/screens/till-counter-screen.ts` does, with tests that reorder a list AND insert an
-  entry above the chosen one through the till's own triggers (not the dashboard's
-  `LiveData.invalidate`) and read `select.selectedOptions[0]`; and fix the three defects above the
-  way the dashboard screen now does.
+  `coverColleagueId` are cleared only after a cover request is sent, `:222`-`:223`). **Next
+  action:** fix those three defects the way the dashboard screen now does.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
   (`packages/venue-service/src/operations.ts`): the device's default, else the zone marked
   `is_counter_default`, neither filtered by service mode. In real Chromium, a chosen zone missing
-  from the list makes the dropdown show the first zone (checked while reviewing #365). **Next
-  action:** find whether a `table_tab` zone can be the counter default or a device default; if it
-  can, decide whether that is refused where it is set or handled by the till.
+  from the list makes the dropdown show the first zone (checked while reviewing #365; _2026-10-02:
+  since A178d the box is a `wt-combobox`, which shows an empty box for a value with no matching
+  option — read, not run_). **Next action:** find whether a `table_tab` zone can be the counter
+  default or a device default; if it can, decide whether that is refused where it is set or handled
+  by the till.
   A device's default is set only through `PUT
   /management-api/venue-service/devices/:deviceId/default-zone` (`packages/venue-service/src/routes.ts`),
   and nothing in the tree calls that route — grepped across `apps/` and `packages/` on 2026-09-24,
-  which found only the route and its tests — so no screen sets one today.
+  which found only the route and its tests — so no screen sets one today. _2026-10-02: no longer
+  true — since #1004 the dashboard's venue operations screen sets a device's default zone through
+  that route (`packages/venue-service/src/dashboard/client.ts`)._
 - **The built-in doneness picker is gone; doneness is a modifier the venue adds itself — DONE as Task
   10**: the demo seed's steak carries a cooking options list, the till offers it (Task 12), and an
   options answer prints on the kitchen ticket as an indented

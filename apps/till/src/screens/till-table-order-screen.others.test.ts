@@ -114,6 +114,7 @@ describe("till-table-order-screen: other people's drafts", () => {
         "till-basket, input, select, [data-draft-select], [data-draft-action], [data-split-draft-line], [data-last-added-step]",
       ),
     ).toHaveLength(0);
+    expect(panel!.querySelectorAll("wt-combobox, wt-textarea, wt-input")).toHaveLength(0);
     expect([...panel!.querySelectorAll("wt-button, button")]).toEqual([takeOverButton(panel!)]);
   });
 
