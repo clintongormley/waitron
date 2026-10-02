@@ -199,7 +199,6 @@ export class SumUpConnectForm extends LitElement {
                 searchPlaceholder=${t("payments.sumup.search")}
                 noResultsLabel=${t("payments.sumup.no_results")}
                 .options=${this.merchants.map((m) => ({ value: m.code, label: m.name }))}
-                .value=${this.merchantCode}
                 error=${errors.merchant}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onMerchant(e)}
               ></wt-combobox>
