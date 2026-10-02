@@ -1187,6 +1187,126 @@ for a menu outside its hours (an order already open on it, a held dish), the bus
 ends after midnight (`when the day ends` in setup), and what a scheduled version does if a newer
 one is published before it goes live. Needs a brainstorm and spec before building.
 
+**The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
+2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
+kg)". All eleven are in `apps/dashboard/src/widgets/product-editor.ts` unless another file is
+named. A209, A212, A217, A218 and A219 need a decision or mockups before building; the others are
+ready to build. A214, A217 and A219 all reshape the Pricing section: design them together.
+LOOK at each on a product AND on a variant's page (the editor shows a variant with "Same as …"
+choices), at 1280 and 390, light and dark.
+
+**No Add category button, and perhaps no category dropdown (A209) — OPEN, needs a decision.**
+The owner: _"we no longer need the add category button. i'm questioning whether we need the
+category dropdown at all now that we can drag products from category to category (although we
+should show the path to the product eg Drinks > Alcoholic drinks > Cocktails) on that page"_. A
+product has one category (`products.categoryId`). **Decided:** the Add category button goes, with
+`editor.add_category`. **Wanted:** the product's full path, "Drinks › Alcoholic drinks ›
+Cocktails", shown on the editor. **Open, ask before building:** whether the "Main category"
+dropdown goes too. Two things it does that dragging may not: a variant's empty category means its
+parent's, and the dropdown is where a variant is given a category of its own — check whether
+A208's tree can drag a variant on its own before dropping it; and a product made from "All
+products" has no category until it is dragged. **Clash with A208:** its spec keeps the category
+form (`apps/dashboard/src/widgets/category-form.ts`) for one reason, this button, so if this
+lands after A208 the form has no caller left; if it lands before, A208's spec and plan change
+too.
+
+**Standalone ordering becomes one dropdown (A210) — OPEN.** The owner: _"Standalone ordering can
+be reduced to a single dropdown"_. Today `renderOrdering` draws three radio buttons, Public, Staff
+only and Not sold separately, each with an explanation under it. **Wanted:** one `wt-combobox`
+with the three choices. The explanations need a new place: the design system's Forms rule makes a
+field's hint its placeholder, which a dropdown that always holds a value never shows. The
+combobox's option `group` heading is no help; decide between a line under the field for the
+chosen value and a second, muted line inside each option, and ask if neither fits. A variant's
+page shows no ordering choice and keeps showing none.
+
+**A folded section says what is missing, not only what is filled in (A211) — OPEN.** The owner:
+_"we should show the missing values under kitchen and descriptors and nutritional info when
+collapsed"_. Today each folded section's line lists only the filled values
+(`renderKitchen`, `renderNutrition` and the Descriptors section), so a product with no kitchen
+name, course, allergens or dietary preferences shows a heading and a blank line. **Wanted:**
+every field is named on the line whether or not it has a value, e.g. "**Kitchen name:** none ·
+**Course:** none", "**Allergens:** none specified · **Dietary preferences:** none specified". Build
+it with A200's product-editor decision above (each value after its bold field name, the
+Descriptors line one row per field), which this extends to the empty case. Choose the wording for
+"nothing set" once, in both languages; on a variant's page an empty value means "same as the
+parent" and must say so, as the fields themselves do.
+
+**An Add course button beside the course dropdown (A212) — OPEN, needs design.** The owner:
+_"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
+and order the course list. Currently this lives on the kitchen page, not as a modal. need to
+figure that out"_. The course list is edited, added to and reordered on the Kitchen screen
+(`apps/dashboard/src/screens/kitchen-screen.ts`, its "Kitchen courses" section). **To decide:**
+whether the dialog reuses that screen's editor (moved into a widget both use) or the course list
+moves into the dialog alone and the Kitchen screen opens it too; and what the dropdown does when
+the dialog closes — select a course just added, keep the choice if it still exists. Unsaved edits
+to the product must survive the dialog, as they do around Add unit today (`related()`).
+
+**Allergens and dietary preferences are edited in place (A213) — OPEN.** The owner: _"for
+nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified. And
+when you click on one it converts into a multi-value combobox (ie no need for the Edit button)"_,
+and _"each one doesn't need a box around it, like we've removed them for descriptors etc"_.
+Today `dashboard-allergen-dietary-picker` (`allergen-dietary-picker.ts`) draws a bordered card
+for each with "None selected" and an Edit button. **Wanted:** two plain lines, "Allergens: Nuts,
+Seeds" and "Dietary preferences: None specified", with no card and no Edit button; clicking or
+pressing Enter on a line turns it into a `wt-combobox` with `multiple` set, and leaving it turns it
+back into the line. Each line is a button for a keyboard and a screen reader ("Allergens: Nuts,
+Seeds, edit"). The product picker offers no "may contain" today (only the ingredient form's
+`allergen-picker.ts` does), and the draft keeps each allergen's stored presence when the list
+changes; keep that. A variant's "Same as …" hints (`nutritionHints`) stay meaningful.
+
+**No box around Pricing (A214) — OPEN.** The owner: _"Pricing also doesn't need the box around
+it"_. `renderPrice` draws a `fieldset class="bordered-group"` with a "Pricing" legend. **Wanted:**
+no border; the section keeps its heading, drawn like the editor's other section headings. Check
+that nothing else uses `.bordered-group` before deleting its styles, and that the comment about a
+fieldset's minimum width (the variants table) still applies to whatever replaces it.
+
+**Clicking a variant's row opens its edit window (A215) — OPEN.** The owner: _"variants when
+clicked should open the edit modal"_. In `variant-table.ts` a row's click does nothing today; its
+menu holds Open (the variant's own page), Edit (the edit window, `wt-edit`) and Remove or Restore.
+**Wanted:** a click on the row, or Enter on it, does what Edit does. The drag handle, the
+Available switch and the row menu keep doing their own thing, as A197 asks for the options list.
+
+**The price's unit button says "Each" or "per kg", never "per Each" (A216) — OPEN.** The owner:
+_"I don't like "per Each", it should either be "Each" or "per Unit""_. The button text is
+`editor.per_unit` ("per {unit}") filled with the unit's short label, which is "Each" when the
+product has no unit. **Read as, not confirmed:** with no unit the button says "Each" (Spanish
+"Unidad"), with a unit "per kg" ("por kg"); ask if "per unit" was meant for the no-unit case
+instead. The field's label has the same shape — "Price per Each", "Base price per Each"
+(`editor.base_price_unit`, `priceLabel`) — and is read as wanted the same way: "Price" with no
+unit, "Price per kg" with one.
+
+**The variants' status filter sits somewhere tidier (A217) — OPEN, needs mockups.** The owner:
+_"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
+(`variant-status`, `variant-table.ts`) stands alone between the base price and the table. Offer
+mockups: for example in the table's header row, beside the Add variant button, or shown only once
+some variant is inactive. Keep its rule that a reported problem or a variant just added never sits
+on a hidden row.
+
+**"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — OPEN,
+needs mockups.** The owner: _"i don't like the new extras list and new options list in the
+modifiers dropdown. how else could we organise those? at the very least they should be at the end
+of the list, separated from the others with a line. could we make it a single "add new
+modifier"? although then we'd need a second click to choose which, or to open a modal with two
+tabs or something"_. Today the two actions (`editor.create_extra_list`,
+`editor.create_option_list`) are the first two choices in "Add extras or options", above the
+lists themselves. **The minimum:** they move to the end, after a dividing line, which
+`wt-combobox` cannot draw today (it has group headings, no divider). Mock up the alternatives for
+the owner: that minimum; one "New modifier…" choice opening a window with Extras and Options
+tabs; and a "New modifier" button beside the dropdown instead of inside it.
+
+**With variants, the VAT, base price and status filter fold away (A219) — OPEN, needs mockups.**
+The owner: _"when we have variants the vat and base price and status filter are overwhelming.
+they overshadow the variants, which are the interesting bits. perhaps they should be collapsed?"_.
+Once a product has an active variant, the base price is the price each variant falls back to
+(the label switches to `editor.base_price_unit`), and VAT and the base price fill the top of the
+Pricing section above the table. **Wanted:** with variants, VAT and the base price fold into one
+line above the table, in A211's pattern (e.g. "**VAT:** Reduced (10%) · **Base price:** €38.00
+each"), opened by a click; the variants table and Add variant are what the section shows. Without
+variants nothing changes: VAT and the price stay open, since they ARE the product's price. The
+status filter is A217's question; mock up both together. A VAT or base-price error must open the
+fold, as an error in a folded section does today (`SECTION_FIELDS`), and a new product with
+variants but no VAT yet starts with the fold open.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
