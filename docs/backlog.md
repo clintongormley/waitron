@@ -1326,14 +1326,13 @@ are lifted above it and keep their own clicks. Left open from its review: a clic
 Available switch's round knob does not flip it — the run-it reviewer reported the same on `main`
 before the branch, so it is in the shared `wt-switch`, not the row; not measured further.
 
-**The price's unit button says "Each" or "per kg", never "per Each" (A216) — OPEN.** The owner:
-_"I don't like "per Each", it should either be "Each" or "per Unit""_. The button text is
-`editor.per_unit` ("per {unit}") filled with the unit's short label, which is "Each" when the
-product has no unit. **Read as, not confirmed:** with no unit the button says "Each" (Spanish
-"Unidad"), with a unit "per kg" ("por kg"); ask if "per unit" was meant for the no-unit case
-instead. The field's label has the same shape — "Price per Each", "Base price per Each"
-(`editor.base_price_unit`, `priceLabel`) — and is read as wanted the same way: "Price" with no
-unit, "Price per kg" with one.
+**The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE.** The owner:
+_"I don't like "per Each", it should either be "Each" or "per Unit""_. Built: with no unit the
+price field's button says "Each" ("Unidad") and its label "Price" ("Precio"), or "Base price"
+("Precio base", the new `editor.base_price`) while a variant is Active; with a unit, "per kg" and
+"Price per kg" or "Base price per kg" as before. The same holds on a variant's own page and in the
+variant window (`unitShortLabel` and `renderPrice` in `apps/dashboard/src/widgets/product-editor.ts`,
+`editor.price` in `apps/dashboard/src/i18n/strings.ts`).
 
 **The variants' status filter becomes a "Show inactive" link (A217) — DECIDED, ready to build.** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
@@ -1366,7 +1365,7 @@ read as a list. No divider is needed.
 The owner: _"when we have variants the vat and base price and status filter are overwhelming.
 they overshadow the variants, which are the interesting bits. perhaps they should be collapsed?"_.
 Once a product has an active variant, the base price is the price each variant falls back to
-(the label switches to `editor.base_price_unit`), and VAT and the base price fill the top of the
+(the label switches to `editor.base_price`, or `editor.base_price_unit` with a unit), and VAT and the base price fill the top of the
 Pricing section above the table. **Wanted:** with variants, VAT and the base price fold into one
 line above the table, in A211's pattern (e.g. "**VAT:** Reduced (10%) · **Base price:** €38.00
 each"), opened by a click; the variants table and Add variant are what the section shows. Without

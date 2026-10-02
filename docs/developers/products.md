@@ -393,7 +393,8 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
 - **Add variant** opens the Add window for one variant, and saving that window adds one row.
   Cancelling it adds nothing.
 - The price field stays on screen with variants. While at least one variant is Active its label
-  reads "Base price per" and the unit (`editor.base_price_unit`), and a variant with no price of its
+  reads "Base price per" and the unit (`editor.base_price_unit`), or "Base price" alone
+  (`editor.base_price`) for a product with no unit, and a variant with no price of its
   own shows the base price as its hint, in its window and in its table row.
 - Each row's menu offers **Open**, **Edit** and **Remove** (or **Restore**). **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
