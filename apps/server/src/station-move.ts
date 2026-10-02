@@ -51,8 +51,11 @@ export async function rerouteHeldAtRelease(
       ),
     );
   if (held.length === 0) return new Map();
-  const resolver = await routing();
-  const states = await resolver.stations();
+  const opened = routing.opened();
+  const states =
+    opened === undefined
+      ? await VENUE_SERVICE.stationStates(tx, cfg, routing.at)
+      : await (await opened).stations();
   const closed = held.filter((row) => {
     const state = states.get(row.stationId);
     return !state || !state.active || !state.open;
@@ -86,6 +89,7 @@ export async function rerouteHeldAtRelease(
     await alertStranded();
     return new Map();
   }
+  const resolver = await routing();
   const zoneId = (await VENUE_SERVICE.findOrderContext(tx, cfg, orderId))?.zoneId ?? null;
   const routes = await resolver.makers(zoneId, [...new Set(dishes.map((row) => row.productId!))]);
   const moving = dishes.flatMap((row) => {

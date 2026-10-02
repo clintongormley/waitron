@@ -1174,11 +1174,17 @@ type FireableLine = {
   [K in keyof typeof fireableLineColumns]: GetColumnData<(typeof fireableLineColumns)[K]>;
 };
 
-export type RoutingOnce = (() => Promise<MakerResolver>) & { readonly at: Date };
+export type RoutingOnce = (() => Promise<MakerResolver>) & {
+  readonly at: Date;
+  readonly opened: () => Promise<MakerResolver> | undefined;
+};
 
 export function routingOnce(tx: Transaction, cfg: TillConfig, at: Date): RoutingOnce {
   let opened: Promise<MakerResolver> | undefined;
-  return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, cfg, at)), { at });
+  return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, cfg, at)), {
+    at,
+    opened: () => opened,
+  });
 }
 
 interface DishKitchenPlace {

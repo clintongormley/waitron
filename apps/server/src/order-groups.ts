@@ -459,6 +459,8 @@ async function releaseGroup(
     .where(eq(orderGroups.id, groupId));
   // The marker, not the setting: a group whose HOLD ticket was queued is fired by a FIRE slip.
   const mark = group!.holdPrintedAt === null ? undefined : "FIRE";
+  // Every bill in this group must use the same station snapshot at the release instant.
+  await routing();
   for (const [orderId, lineIds] of byOrder) {
     await fireOrderLines(tx, cfg, orderId, lineIds, mark, routing);
   }
