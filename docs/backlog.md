@@ -3169,6 +3169,35 @@ approved.
     change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the
     new image, is the test that matches what a box does.
 
+- **Automatic upgrades that can be undone until the first order** (owner, 2026-10-02). Today an
+  upgrade is `waitron.sh install`, run by hand at the box's terminal: it pulls the new images,
+  restarts, and waits about three minutes for the app to report healthy (`wait_healthy`,
+  `deploy/waitron.sh`). It takes no backup first, and once the new image has migrated the database
+  there is no way back — an older image then refuses to start with `provisioning.database_ahead`
+  (`deploy/README.md`, "It can migrate the box's database one way"). Wanted: the box upgrades
+  itself, in this order:
+  1. take a copy of the database and the rest of the state a restore needs;
+  2. start the new image and let it migrate, with sales refused;
+  3. check that it started properly;
+  4. only then take orders. If the check fails, put back the copy and the old image.
+
+  The point of no return is the first order taken on the new version, not the restart: rolling
+  back after that would lose the order. Questions to settle in the brainstorm:
+  - **What counts as "started properly".** `/health` returning 200 says the duty loop runs; that
+    may be too little — every module opened, the fiscal chain read back and checked, the till able
+    to load its menu.
+  - **Nothing fiscal before the check passes.** The new version must not file a record with AEAT
+    or use an invoice number before step 4, or a rollback would leave AEAT holding a record the
+    restored database does not, or a gap in the series.
+  - **The bucket stream.** The new version streams `venue.db` while it starts; a rollback must not
+    put back a copy that the bucket's newer data then overrides, or the reverse.
+  - **When it runs and who starts it.** A quiet hour outside trading, and something outside the app
+    container, since it replaces that container (a timer on the host running `waitron.sh`, or a
+    small updater with access to Docker). Where the box learns a release exists is B3's open
+    question, "unattended updates for a box we did not sell".
+  - **Depends on upgrade testing above**: rolling back hides a failed migration; it does not
+    prevent one.
+
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.**
   `conventions-data.md` holds the list, and it is longer than what CLAUDE.md §3 names — it adds a
   readiness runner and the dev, demo and Cloud fixture scripts under `apps/server/scripts`, two of
@@ -3271,6 +3300,20 @@ approved.
   `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
 
 ### B7. Provisioning and build debt
+
+- **Resetting a box without a terminal** (owner, 2026-10-02). An operator who set the box up in
+  Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
+  `waitron.sh reset` (`cmd_reset`, `deploy/waitron.sh`), run with `sudo` at the box's terminal —
+  which a box operator does not have. Going from Prepare to Live needs a fresh database too (one
+  database per environment, CLAUDE.md §5): the Backups screen can export the venue's configuration
+  and setup can import it (`apps/server/src/configuration-export-api.ts`,
+  `apps/server/src/configuration-import.ts`), but the wipe between them is again only the script.
+  Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a
+  box that will not start is the one an operator most wants to reset. It keeps the script's rules:
+  refused on a production box, confirmed by typing a word, and keeping the box's certificate so
+  devices need not trust it again. Open: who may press it (the owner only?), and whether a reset
+  started from inside the app container can remove the Docker volumes the script removes, or has
+  to empty them instead.
 
 - **The bucket-stream reader still passes a missing field on unchecked.** `readStreamSettings`
   (`apps/server/src/stream-host.ts`) hands each `backup.stream` field on as read, so a row sealed
@@ -4958,6 +5001,18 @@ The membership, promotion and rejoin arc (#197–#272) is still in the tree. Wha
 - **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document and pick one
   rule: every role change is a restart, or the worker-lifecycle manager — not both.
 - **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box TLS).
+- **Adding a mirror while the internet is down** (owner, 2026-10-02). Today the only way a second
+  machine gets a copy of `venue.db` is from the owner's bucket — the rebuild
+  (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
+  Adoption (`apps/server/src/adopt.ts`) fetches its identity bundle from the primary by URL but
+  carries no data, and nothing in the tree follows a stream yet. So with the internet down there is
+  no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a new mirror
+  takes its first copy straight from the primary over the LAN. The topology design's §4.4 already
+  has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
+  new place should begin with a full copy of the database (to be checked on the pinned Litestream),
+  so the design may cover it — but it never says so, and it does not list what else enrolling needs
+  from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
+  internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
 - **The two-node end-to-end proof over LAN and over WireGuard**, including the same-site cookie
   browser receipt still owed from the till reroute, #257 (needs interactive Chrome + mkcert +
   `/etc/hosts`).
