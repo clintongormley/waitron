@@ -1066,6 +1066,23 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products: [] });
     expect((await tableRoot(el)).querySelectorAll("tbody tr").length).toBe(0);
   });
+
+  it.each([
+    ["en-GB", "Any ordering"],
+    ["es-ES", "Cualquier pedido por separado"],
+  ])(
+    "names the ordering filter's empty choice like the status filter's (%s)",
+    async (locale, label) => {
+      setLocale(locale);
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: [product()],
+      });
+      const select = (await tableRoot(el)).querySelector<WtCombobox>(
+        'wt-combobox[data-filter="ordering"]',
+      )!;
+      expect(select.options[0]).toEqual({ value: "", label });
+    },
+  );
 });
 
 it("drags a product outside the selection alone and never offers a variant as a drag source", async () => {

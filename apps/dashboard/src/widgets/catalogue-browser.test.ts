@@ -7,6 +7,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { CatalogueBrowser } from "./catalogue-browser.js";
 import "./catalogue-browser.js";
@@ -123,7 +124,7 @@ it("marks only folders without an active own or inherited routing claim and clea
   expect(await marker("d")).toBeNull();
   expect(await marker("f")).not.toBeNull();
   expect((await marker("f"))?.getAttribute("title")).toBe(
-    "No kitchen routing rule covers this folder",
+    "No kitchen routing rule covers this category",
   );
   el.folderId = "d";
   await el.updateComplete;
@@ -152,7 +153,7 @@ it("marks only folders without an active own or inherited routing claim and clea
   setLocale("es");
   await el.updateComplete;
   expect((await marker("b"))?.getAttribute("title")).toBe(
-    "Ninguna regla de envío a cocina cubre esta carpeta",
+    "Ninguna regla de envío a cocina cubre esta categoría",
   );
 });
 
@@ -897,7 +898,7 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
   const el = await mountBrowser();
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 folder and 2 products"));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
   expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
   const radio = el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!;
   expect(el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.checked).toBe(
@@ -989,7 +990,7 @@ it("counts overlapping selected folders once in the delete consent", async () =>
   ]);
   await selectKeys(el, ["folder:d", "folder:b"]);
   await press(el, "delete");
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 folder and 2 products"));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
   expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
   await press(el, "confirm");
   await vi.waitFor(() =>
@@ -1113,3 +1114,18 @@ it("places dialog Cancel on the left and its primary action on the right", async
   expect(buttons[0]!.getBoundingClientRect().right).toBeLessThan(midpoint);
   expect(buttons[1]!.getBoundingClientRect().left).toBeGreaterThan(midpoint);
 });
+
+it.each([
+  ["English", en],
+  ["Spanish", es],
+] as const)(
+  "says category, never folder, in every Products-screen string (%s)",
+  (_name, strings) => {
+    const screen = Object.entries(strings).filter(
+      ([key]) =>
+        /^(folders|catalogue|categories)\./.test(key) || key === "product.filter_ordering_all",
+    );
+    expect(screen.length).toBeGreaterThan(40);
+    expect(screen.filter(([, text]) => /folder|carpeta/i.test(text))).toEqual([]);
+  },
+);

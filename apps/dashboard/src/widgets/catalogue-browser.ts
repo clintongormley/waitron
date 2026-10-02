@@ -370,7 +370,7 @@ export class CatalogueBrowser extends LitElement {
                               value="delete"
                               .checked=${this.contents === "delete"}
                               @change=${() => (this.contents = "delete")}
-                            />${t("folders.contents_delete").replace("{folders}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#plural("folders.product_count", totals.products))}</label
+                            />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#plural("folders.product_count", totals.products))}</label
                           >
                         </fieldset>
                         ${totals.routes ? html`<p>${this.#plural("folders.routes_warning", totals.routes)}</p>` : nothing}`
