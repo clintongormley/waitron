@@ -1153,12 +1153,17 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   it("hands them to the table screen a handheld mounts as a card too", async () => {
+    const stations: Station[] = [
+      { id: "bar", name: "Bar", displayOrder: 0, isDefault: true, active: true, open: true },
+      { id: "grill", name: "Grill", displayOrder: 1, isDefault: false, active: true, open: true },
+    ];
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
       listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
+      listStations: vi.fn().mockResolvedValue(stations),
       getTabLines: vi
         .fn()
         .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: false }),
@@ -1172,6 +1177,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(screen.embedded).toBe(true);
     expect(screen.revision).toBe(7);
     expect(screen.editSentLines).toBe(false);
+    expect(screen.stations).toEqual(stations);
   });
 
   it("reloads the order and says so when another device changed it first", async () => {

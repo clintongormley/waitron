@@ -8,6 +8,7 @@ import type { TillMenuBrowser } from "./menu-browser.js";
 import type {
   DietProfile,
   HeldOrderSummary,
+  Station,
   StationQueueGroup,
   TableState,
   TillProduct,
@@ -367,6 +368,10 @@ describe("till-card-grid", () => {
 
   it("renders an embedded table-order screen for a table-order card", async () => {
     const store = new WorkingOrderStore();
+    const stations: Station[] = [
+      { id: "bar", name: "Bar", displayOrder: 0, isDefault: true, active: true, open: true },
+      { id: "grill", name: "Grill", displayOrder: 1, isDefault: false, active: true, open: true },
+    ];
     const groups = [
       {
         id: "g-1",
@@ -382,6 +387,7 @@ describe("till-card-grid", () => {
       tab: orderTab,
       selectedDiet: "vegetarian",
       tabGroups: groups,
+      stations,
       store,
     });
     const to = el.shadowRoot!.querySelector<
@@ -391,6 +397,7 @@ describe("till-card-grid", () => {
     expect(to.embedded).toBe(true);
     expect(to.selectedDiet).toBe("vegetarian");
     expect(to.groups).toBe(groups);
+    expect((to as HTMLElement & { stations: Station[] }).stations).toBe(stations);
   });
 
   it("shows a big card with a visibleWhen gate the host cannot evaluate (fail open, follow-up d)", async () => {

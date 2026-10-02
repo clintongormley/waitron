@@ -3118,6 +3118,7 @@ export class TillApp extends LitElement {
     id: string,
     left?: () => boolean,
     signal?: AbortSignal,
+    stationChoiceOwner: object | null = null,
   ): Promise<boolean | undefined> {
     const [order, listed] = await Promise.all([
       signal === undefined
@@ -3126,15 +3127,22 @@ export class TillApp extends LitElement {
       this.#readStoredLines(id, signal),
     ]);
     if (left?.() === true) return undefined;
-    this.#loadIntoBasket(order, listed);
+    this.#loadIntoBasket(order, listed, stationChoiceOwner);
     this.stage = "order";
     return listed !== null;
   }
 
   /** Replaces the basket with `order`, rebuilt against today's live offer. */
-  #loadIntoBasket(order: HeldOrder, listed: StoredLines | null): void {
-    // A submitted counter Move keeps its refusal choice while the order is reread.
-    if (this.#counterMoveSubmitting === null) this.#dismissStationChoices();
+  #loadIntoBasket(
+    order: HeldOrder,
+    listed: StoredLines | null,
+    stationChoiceOwner: object | null = null,
+  ): void {
+    // Only a counter Move's own reread keeps its refusal choice.
+    if (stationChoiceOwner === null || stationChoiceOwner !== this.#counterMoveSubmitting) {
+      this.#dismissStationChoices();
+      this.#counterMoveSubmitting = null;
+    }
     const lines: OrderLine[] = [];
     let droppedAProduct = false;
     let extraNotOffered = false;
@@ -3224,7 +3232,11 @@ export class TillApp extends LitElement {
    * meanwhile; an answer the basket has moved past (cleared, or loaded again, the same order
    * included) is dropped. `unread` when the order or its lines could not be read, or the answer was
    * dropped; `gone` when the order no longer exists and that has been said. */
-  async #reloadCounterOrder(orderId: string, session: number): Promise<Reread> {
+  async #reloadCounterOrder(
+    orderId: string,
+    session: number,
+    stationChoiceOwner: object | null = null,
+  ): Promise<Reread> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const unlock = this.#store.lockEdits();
     this.#endReloadLock = unlock;
@@ -3237,6 +3249,7 @@ export class TillApp extends LitElement {
         orderId,
         () => limit.signal.aborted || movedOn(),
         limit.signal,
+        stationChoiceOwner,
       );
       if (read !== undefined) load = this.#store.loadGeneration;
       if (read !== true) failure = "held.reread_failed";
@@ -4814,7 +4827,7 @@ export class TillApp extends LitElement {
           session === this.#operatorSession &&
           visit === this.#orderVisit
         )
-          await this.#reloadCounterOrder(open.workingOrderId, session);
+          await this.#reloadCounterOrder(open.workingOrderId, session, counterSubmission);
       } else await this.#loadTabLines();
     } catch (error) {
       const refusal = lineWriteError(error);
@@ -4833,7 +4846,7 @@ export class TillApp extends LitElement {
           session === this.#operatorSession &&
           visit === this.#orderVisit
         )
-          await this.#reloadCounterOrder(open.workingOrderId, session);
+          await this.#reloadCounterOrder(open.workingOrderId, session, counterSubmission);
       } else await this.#loadTabLines();
     } finally {
       limit.done();
@@ -6868,6 +6881,7 @@ export class TillApp extends LitElement {
       .store=${this.#store}
       .storedLines=${this.#basketStoredLines()}
       .makeAtStations=${tableTab ? [] : this.stations}
+      .stations=${this.stations}
       .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
       .permissions=${this.permissions}
