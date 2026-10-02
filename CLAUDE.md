@@ -982,9 +982,11 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   receipt printer's drawer only while its "Opens the cash drawer" setting (`tills.opens_drawer`, on
   by default, on the Printing rules screen) is on, and several tills sharing one printer may all
   have it on (owner 2026-10-02). A handheld never opens it, even with `cash.drawer` and a profile
-  capability, on a route that builds its configuration through `deviceTillCfg`
-  (`apps/server/src/device-session.ts`); a configuration leaving `allowCashDrawer` unset opens a
-  drawer, and nothing guards a new route that builds it another way. The manual open needs an
+  capability: the automatic openings read `allowCashDrawer` through `drawerPrinter`
+  (`apps/server/src/receipt-print.ts`), which `deviceTillCfg` (`apps/server/src/device-session.ts`)
+  sets only for a till, and the manual open refuses a handheld through `assertNotHandheld`. A
+  configuration leaving `allowCashDrawer` unset allows a drawer, and nothing guards a new route that
+  builds it another way. The manual open needs an
   enrolled device. The one exception is the dashboard's "Test open drawer" calibration
   (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's drawer for a
   manager holding `printer.manage` and `cash.drawer`. Drawer jobs cannot be manually resent. The

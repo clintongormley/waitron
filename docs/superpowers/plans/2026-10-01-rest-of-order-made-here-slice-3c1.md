@@ -5,8 +5,10 @@
 > **Update (2026-10-02, B29, branch `feat/service-handheld-permissions`):** `deviceSaleCfgOf`, which
 > this plan cites, is now the local `deviceSaleCfg` in `apps/server/src/bill-payments-api.ts`. Only
 > its till-and-drawer part (`tillId`, `allowCashDrawer`) moved, to `deviceTillCfg` in
-> `apps/server/src/device-session.ts`, which `POST /api/sales`, collect and the bill-payment routes
-> use. This plan's `sendingDeviceId` and `madeHereSink` stay in that local `deviceSaleCfg` and are
+> `apps/server/src/device-session.ts`. `POST /api/sales`, `POST /api/drawer/open` and collect (in
+> `apps/server/src/till-api.ts`) call it directly, and so does the local `deviceSaleCfg`, through
+> which the bill-payment, line-edit, split and adjustment routes reach it (via
+> `withSaleTillWhenIssuing`). This plan's `sendingDeviceId` and `madeHereSink` stay in that local `deviceSaleCfg` and are
 > added inline in `POST /api/sales`; collect gets neither.
 
 **Goal:** Two kitchen-ticket settings from the routing design. First, a station can be set to "Show

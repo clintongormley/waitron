@@ -294,7 +294,7 @@ export async function requireSaleTillId(
 }
 
 /**
- * The configuration a sale taken during a device's request runs under: the device's own till, and a
+ * The configuration a device's request runs under: the device's own till, and a
  * cash drawer only for a till form factor. Refuses as {@link requireSaleTillId} does. `device` as
  * there.
  */

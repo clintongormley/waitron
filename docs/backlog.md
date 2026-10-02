@@ -5205,8 +5205,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `drawerPrinter`) each call `resolveReceiptPrinter`. Resolve it once and pass it to both.
       - Follow-up, same review: every change on the dashboard's Printing rules screen, the new
         switch included, reloads all the screen's data through `#mutate` → `#load()`
-        (`apps/dashboard/src/screens/printing-rules-screen.ts`), where `#setPrintMode` and
-        `#setDrawerPolicy` update their own state in place.
+        (`apps/dashboard/src/screens/printing-rules-screen.ts`); even `#setPrintMode` and
+        `#setDrawerPolicy`, which already update their own state in place, reload everything
+        afterwards.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the

@@ -595,7 +595,7 @@ export const en = {
   "drawer.error": "Could not open the cash drawer, try again",
   "drawer.not_attached": "No cash drawer is attached to this printer",
   "drawer.till_switched_off":
-    "This till is not set to open the cash drawer — a manager can switch it on on the dashboard's Printing rules screen",
+    "This till is not set to open the cash drawer — a manager can switch it on from the dashboard's Printing rules screen",
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
