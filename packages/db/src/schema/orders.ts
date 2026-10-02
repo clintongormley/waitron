@@ -222,6 +222,7 @@ export const workingOrderLines = table(
       foreignColumns: [t.id],
       name: "working_order_lines_parent_fk",
     }),
+    index("working_order_lines_parent_idx").on(t.parentLineId),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
     check(
       "working_order_lines_unit_precision_ck",
