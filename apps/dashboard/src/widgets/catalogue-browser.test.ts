@@ -256,6 +256,10 @@ it("moves a dragged product into a folder", async () => {
 });
 it("real pointer drag moves a product into a folder", async () => {
   const el = await mountBrowser();
+  // The table turns narrow a frame after it is drawn in the 414 px test window and the rows move;
+  // a drag started before then often lost its press.
+  const table = await tableOf(el);
+  await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
   await userEvent.dragAndDrop(
     (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="bread"] .row-activate')!,
     (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="folder:f"] .row-activate')!,
