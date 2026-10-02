@@ -986,6 +986,248 @@ test("revealRow stops at parents that point at each other", async () => {
   await expect(el.revealRow("x")).resolves.toBeUndefined();
 });
 
+test("a tree row with rowClick opens from its stretched activator, and its arrow still only toggles", async () => {
+  const opened: string[] = [];
+  const el = await treeTable({
+    rowClick: (row: TreeRow) => opened.push(row.id),
+    rowClickLabel: (row: TreeRow) => `Open ${row.name}`,
+  });
+  const activator = el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="eggs"] .row-activate',
+  )!;
+  expect(activator.getAttribute("aria-label")).toBe("Open Eggs");
+  expect(activator.closest("tr")!.classList.contains("clickable")).toBe(true);
+  activator.click();
+  expect(opened).toEqual(["eggs"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(opened).toEqual(["eggs"]);
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("a toggling branch opens and closes from its row, says which it will do, and draws its arrow as a picture", async () => {
+  const opened: string[] = [];
+  const el = await treeTable({
+    rowActivation: (row: TreeRow) => (row.id === "eggs" ? "click" : "toggle"),
+    rowClick: (row: TreeRow) => opened.push(row.id),
+    rowToggleLabel: (row: TreeRow, expanded: boolean) =>
+      `${expanded ? "Close" : "Open"} ${row.name}`,
+  });
+  const activator = () =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="break"] .row-activate')!;
+  const arrow = () => el.shadowRoot!.querySelector('tr[data-row-key="break"] .tree-arrow')!;
+  expect(activator().getAttribute("aria-label")).toBe("Close Breakfast");
+  expect(activator().getAttribute("aria-expanded")).toBe("true");
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
+  expect(arrow().getAttribute("aria-hidden")).toBe("true");
+  expect(arrow().textContent!.trim()).toBe("▾");
+  activator().click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  expect(activator().getAttribute("aria-label")).toBe("Open Breakfast");
+  expect(activator().getAttribute("aria-expanded")).toBe("false");
+  expect(arrow().textContent!.trim()).toBe("▸");
+  expect(opened).toEqual([]);
+  // A toggling row with nothing under it has nothing to do, so it is not clickable.
+  const drinks = el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!;
+  expect(drinks.querySelector(".row-activate")).toBeNull();
+  expect(drinks.classList.contains("clickable")).toBe(false);
+});
+
+test("a row whose activation is none draws no activator, even with rowClick set", async () => {
+  const el = await treeTable({
+    rowActivation: (row: TreeRow) => (row.id === "food" ? "none" : "click"),
+    rowClick: (row: TreeRow) => row.id,
+  });
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] .row-activate')).toBeNull();
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="drinks"] .row-activate')).not.toBeNull();
+});
+
+test("Enter on a toggling row opens and closes it, and reports each change once", async () => {
+  const el = await treeTable({ rowActivation: () => "toggle" });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-expand-change", (event) => seen.push((event as CustomEvent).detail));
+  const activator = () =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] .row-activate')!;
+  activator().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  activator().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  expect(seen).toEqual([
+    { key: "food", expanded: false },
+    { key: "food", expanded: true },
+  ]);
+});
+
+test("a real click on a control inside a toggling row does not toggle it", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [
+      ...treeColumns,
+      {
+        key: "action",
+        label: "Actions",
+        cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElement>('button[aria-label="Edit Food"]')!,
+  );
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+});
+
+test("a real click on a pinned cell's empty space toggles a toggling tree row once", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [
+      ...treeColumns,
+      {
+        key: "action",
+        label: "Actions",
+        pinned: "end",
+        cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  const cell = el.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="food"] td[data-pinned="end"]',
+  )!;
+  const box = cell.getBoundingClientRect();
+  await userEvent.click(cell, { position: { x: box.width - 2, y: 2 } });
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("a phone-width tree indents each level half as far, and no deeper than four levels", async () => {
+  const ids = ["a", "b", "c", "d", "e", "f"];
+  const deep: TreeRow[] = ids.map((id, index) => ({
+    id,
+    parent: index === 0 ? null : ids[index - 1]!,
+    name: id.toUpperCase(),
+  }));
+  const el = await treeTable({ rows: deep });
+  host.style.setProperty("--wt-space-2", "8px");
+  host.style.setProperty("--wt-space-4", "16px");
+  const indent = (key: string) =>
+    getComputedStyle(
+      el.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
+    ).paddingInlineStart;
+  el.style.width = "360px";
+  expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "8px", "32px", "32px"]);
+  el.style.width = "600px";
+  expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "16px", "64px", "80px"]);
+});
+
+// A container query measures the box inside its border, which is what clientWidth reports here.
+test("the phone indent starts at a 380px box, not at 381px, and a flat table is no size container", async () => {
+  const el = await treeTable();
+  host.style.setProperty("--wt-space-2", "8px");
+  host.style.setProperty("--wt-space-4", "16px");
+  const indent = () =>
+    getComputedStyle(
+      el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="break"] .tree-cell')!,
+    ).paddingInlineStart;
+  const box = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  el.style.width = "383px";
+  expect(box.clientWidth).toBe(381);
+  expect(indent()).toBe("16px");
+  el.style.width = "382px";
+  expect(box.clientWidth).toBe(380);
+  expect(indent()).toBe("8px");
+  cleanup();
+  const flat = await table();
+  expect(getComputedStyle(flat.shadowRoot!.querySelector(".scroll")!).containerType).toBe("normal");
+});
+
+test("lines a toggling branch's name up with the text beside it", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [...treeColumns, { key: "id", label: "Key", cell: (r: TreeRow) => r.id }],
+  });
+  for (const row of el.shadowRoot!.querySelectorAll("tbody tr")) {
+    const [name, key] = row.querySelectorAll("td");
+    expect(
+      Math.abs(textBox(name!.querySelector(".tree-cell")!).bottom - textBox(key!).bottom),
+      row.getAttribute("data-row-key")!,
+    ).toBeLessThanOrEqual(1);
+  }
+});
+
+test("a tree without rowClick draws no activator on a row left to click", async () => {
+  const el = await treeTable();
+  expect(el.shadowRoot!.querySelector(".row-activate")).toBeNull();
+  expect(el.shadowRoot!.querySelector("tr.clickable")).toBeNull();
+});
+
+test("a toggling row's activator stops its click once it has toggled", async () => {
+  const el = await treeTable({ rowActivation: () => "toggle" });
+  const clicks = vi.fn();
+  el.addEventListener("click", clicks);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] .row-activate')!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  expect(clicks).not.toHaveBeenCalled();
+});
+
+test("a real click on a control inside a toggling tree row's pinned cell does not toggle it", async () => {
+  const el = await treeTable({
+    rowActivation: () => "toggle",
+    columns: [
+      ...treeColumns,
+      {
+        key: "action",
+        label: "Actions",
+        pinned: "end",
+        cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElement>('button[aria-label="Edit Food"]')!,
+  );
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+});
+
+test.each([
+  { position: "unpinned", pinned: undefined },
+  { position: "pinned", pinned: "end" as const },
+])(
+  "a $position tree column can keep its blank space outside row activation",
+  async ({ pinned }) => {
+    const el = await treeTable({
+      rowActivation: () => "toggle",
+      columns: [
+        ...treeColumns,
+        {
+          key: "action",
+          label: "Actions",
+          pinned,
+          activatesRow: false,
+          cell: (row: TreeRow) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+        },
+      ],
+    });
+    const cell = el.shadowRoot!.querySelector<HTMLElement>(
+      'tr[data-row-key="food"] td:last-child',
+    )!;
+    const box = cell.getBoundingClientRect();
+    expect(el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2)).toBe(cell);
+    await userEvent.click(cell, { position: { x: 2, y: 2 } });
+    await el.updateComplete;
+    expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  },
+);
+
 test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only", async () => {
   const treeRows: TreeRow[] = [
     { id: "food", parent: null, name: "Food" },

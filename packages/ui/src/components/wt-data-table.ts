@@ -52,6 +52,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
+      /* The indent follows the table's own width, not the window's; a flat table needs neither. */
+      .scroll.tree {
+        container-type: inline-size;
+      }
+
       .scroll:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
@@ -317,9 +322,26 @@ export class WtDataTable<Row = unknown> extends LitElement {
         width: var(--wt-tap-min);
       }
 
+      .tree-arrow {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        font-size: var(--wt-font-size-lg);
+        line-height: 1;
+      }
+
       .tree-cell {
         display: inline-flex;
         align-items: baseline;
+        padding-inline-start: calc(var(--tree-depth, 0) * var(--wt-space-4));
+      }
+
+      @container (max-width: 380px) {
+        .tree-cell {
+          padding-inline-start: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-2));
+        }
       }
     `,
   ];
@@ -335,11 +357,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** In tree mode, a branch this returns false for is always open: it draws no toggle, is never seeded
    * closed, and `setExpanded` cannot close it. */
   @property({ attribute: false }) rowCollapsible: (row: Row) => boolean = () => true;
-  /** When set (plain, non-tree tables only), each row becomes activatable: a stretched, focusable
-   * button covers the row and calls this on click. Per-row controls (the selection checkbox, the
-   * Edit/Delete menu) sit above the activator, so they are never swallowed. A tree table ignores it. */
+  /** When set, each row becomes activatable: a stretched, focusable button covers the row and calls
+   * this on click. Per-row controls (the selection checkbox, the Edit/Delete menu) sit above the
+   * activator, so they are never swallowed. In a tree, `rowActivation` can give a row a toggle instead. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
+  /** In tree mode, what a click or Enter anywhere on a row does: "toggle" opens and closes a branch,
+   * "click" calls `rowClick`, "none" leaves the row to its own controls. Unset, every row clicks. */
+  @property({ attribute: false }) rowActivation?: (row: Row) => "toggle" | "click" | "none";
   @property({ type: Boolean }) loading = false;
   @property() loadingMessage = "Loading";
   @property() emptyMessage = "No results";
@@ -1161,17 +1186,33 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
     return html`
       ${this.#renderToolbar()}
-      <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
+      <div class="scroll tree" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table role="treegrid">
           ${this.#renderHead(visibleKeys, shown)}
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
               const collapsible = this.rowCollapsible(row);
-              const expanded = !collapsible || !this.collapsed.has(key) || ancestorOnly.has(key);
-              const cellContext = { ancestorOnly: ancestorOnly.has(key) };
+              const held = ancestorOnly.has(key);
+              const expanded = !collapsible || !this.collapsed.has(key) || held;
+              const cellContext = { ancestorOnly: held };
+              const branch = hasChildren && collapsible && !held;
+              const mode = this.rowActivation?.(row) ?? "click";
+              const toggles = mode === "toggle" && branch;
+              const clicks = mode === "click" && this.rowClick !== undefined;
+              const toggleLabel = this.rowToggleLabel
+                ? this.rowToggleLabel(row, expanded)
+                : expanded
+                  ? this.collapseLabel
+                  : this.expandLabel;
+              const activate = toggles
+                ? () => this.#toggle(key)
+                : clicks
+                  ? () => this.rowClick!(row)
+                  : undefined;
               return html`<tr
                 data-row-key=${key}
                 role="row"
+                class=${classMap({ clickable: activate !== undefined })}
                 aria-level=${depth + 1}
                 aria-expanded=${hasChildren ? String(expanded) : nothing}
               >
@@ -1182,35 +1223,56 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       role="gridcell"
                       data-align=${column.align ?? "start"}
                       data-pinned=${column.pinned ?? nothing}
+                      data-row-activate=${column.activatesRow === false ? "false" : nothing}
+                      @click=${
+                        column.pinned && column.activatesRow !== false && activate !== undefined
+                          ? (event: Event) => {
+                              if (event.target === event.currentTarget) activate();
+                            }
+                          : nothing
+                      }
                     >
                       ${
                         ci === 0
-                          ? html`<span
-                              class="tree-cell"
-                              style=${`padding-inline-start: calc(${depth} * var(--wt-space-4))`}
-                            >
-                              ${
-                                hasChildren && collapsible && !cellContext.ancestorOnly
+                          ? html`${
+                                toggles
                                   ? html`<button
-                                      class="tree-toggle"
-                                      aria-label=${
-                                        this.rowToggleLabel
-                                          ? this.rowToggleLabel(row, expanded)
-                                          : expanded
-                                            ? this.collapseLabel
-                                            : this.expandLabel
-                                      }
+                                      class="row-activate"
+                                      aria-label=${toggleLabel}
+                                      aria-expanded=${String(expanded)}
                                       @click=${(event: Event) => {
                                         event.stopPropagation();
                                         this.#toggle(key);
                                       }}
-                                    >
-                                      ${expanded ? "▾" : "▸"}
-                                    </button>`
-                                  : html`<span class="tree-spacer"></span>`
-                              }
-                              ${column.cell(row, cellContext)}
-                            </span>`
+                                    ></button>`
+                                  : clicks
+                                    ? html`<button
+                                        class="row-activate"
+                                        aria-label=${this.rowClickLabel(row)}
+                                        @click=${() => this.rowClick!(row)}
+                                      ></button>`
+                                    : nothing
+                              }<span class="tree-cell" style=${`--tree-depth: ${depth}`}>
+                                ${
+                                  !branch
+                                    ? html`<span class="tree-spacer"></span>`
+                                    : toggles
+                                      ? html`<span class="tree-arrow" aria-hidden="true"
+                                          >${expanded ? "▾" : "▸"}</span
+                                        >`
+                                      : html`<button
+                                          class="tree-toggle"
+                                          aria-label=${toggleLabel}
+                                          @click=${(event: Event) => {
+                                            event.stopPropagation();
+                                            this.#toggle(key);
+                                          }}
+                                        >
+                                          ${expanded ? "▾" : "▸"}
+                                        </button>`
+                                }
+                                ${column.cell(row, cellContext)}
+                              </span>`
                           : column.cell(row, cellContext)
                       }
                     </td>`,

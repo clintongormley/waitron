@@ -162,6 +162,30 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("tree mode with rows that toggle from the row and rows that open", async () => {
+    type TreeRow = { id: string; parent: string | null; name: string };
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Categories"></wt-data-table>',
+      theme,
+    )) as WtDataTable<TreeRow>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+    ] satisfies DataTableColumn<TreeRow>[];
+    el.rows = [
+      { id: "food", parent: null, name: "Food" },
+      { id: "break", parent: "food", name: "Breakfast" },
+      { id: "eggs", parent: "break", name: "Eggs" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowParent = (row) => row.parent;
+    el.rowActivation = (row) => (row.id === "eggs" ? "click" : "toggle");
+    el.rowClick = (row) => void row.id;
+    el.rowClickLabel = (row) => `Open ${row.name}`;
+    el.rowToggleLabel = (row, expanded) => `${expanded ? "Close" : "Open"} ${row.name}`;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("toolbar with a search box and a filter dropdown", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',
