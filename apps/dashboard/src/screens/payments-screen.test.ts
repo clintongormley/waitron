@@ -14,7 +14,11 @@ import type {
   StuckPaymentRow,
 } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
@@ -300,9 +304,8 @@ describe("payments-screen", () => {
           .mockResolvedValue([{ ...READERS[0], active: false, canEnable: false }]),
       }),
     );
-    const filter = q(el, "select[name=reader-status-filter]") as HTMLSelectElement;
-    filter.value = "disabled";
-    filter.dispatchEvent(new Event("change"));
+    const filter = q(el, "wt-combobox[name=reader-status-filter]")!;
+    await chooseOption(filter, "disabled");
     await flush(el);
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Disabled");
     expect(qCell(el, "[data-test=enable-r-1]")).toBeNull();
@@ -580,6 +583,34 @@ describe("reader discovery and status", () => {
     expect(api.readerStatus).toHaveBeenCalledExactlyOnceWith("r-1");
   });
 
+  it("filters readers by status from a labelled dropdown showing Active first", async () => {
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi
+          .fn()
+          .mockResolvedValue([...READERS, { ...READERS[0], id: "disabled", active: false }]),
+      }),
+    );
+    const filter = q(el, "wt-combobox[name=reader-status-filter]") as HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      label: string;
+      search: string;
+    };
+    expect(filter.label).toBe(t("payments.reader_col_status"));
+    expect(filter.search).toBe("auto");
+    expect(filter.options).toEqual([
+      { value: "active", label: t("payments.filter_active") },
+      { value: "disabled", label: t("payments.filter_disabled") },
+      { value: "all", label: t("payments.filter_all") },
+    ]);
+    expect(filter.value).toBe("active");
+    await chooseOption(filter, "disabled");
+    await flush(el);
+    expect(qCell(el, "[data-test=reader-status-r-1]")).toBeNull();
+    expect(qCell(el, "[data-test=reader-status-disabled]")).not.toBeNull();
+  });
+
   it("filters active, disabled and all readers and enables a disabled row", async () => {
     const { el, api } = await mount(
       stubApi({
@@ -589,17 +620,15 @@ describe("reader discovery and status", () => {
       }),
     );
     expect(qCell(el, "[data-test=reader-status-disabled]")).toBeNull();
-    const filter = q(el, "select[name=reader-status-filter]") as HTMLSelectElement;
-    filter.value = "disabled";
-    filter.dispatchEvent(new Event("change"));
+    const filter = q(el, "wt-combobox[name=reader-status-filter]")!;
+    await chooseOption(filter, "disabled");
     await flush(el);
     expect(qCell(el, "[data-test=reader-status-r-1]")).toBeNull();
     expect(qCell(el, "[data-test=reader-status-disabled]")!.textContent).toBe("Disabled");
     qCell(el, "[data-test=enable-disabled]")!.click();
     await flush(el);
     expect(api.enableReader).toHaveBeenCalledWith("disabled");
-    filter.value = "all";
-    filter.dispatchEvent(new Event("change"));
+    await chooseOption(filter, "all");
     await flush(el);
     expect(qCell(el, "[data-test=reader-status-r-1]")).not.toBeNull();
     expect(qCell(el, "[data-test=reader-status-disabled]")).not.toBeNull();

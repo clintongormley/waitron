@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -221,23 +222,11 @@ export class PaymentsScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .bill-outcome {
-        display: grid;
-        gap: var(--wt-space-2);
         margin-block: var(--wt-space-3);
       }
-      .bill-outcome select {
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        box-sizing: border-box;
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
-      .bill-outcome select[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
+      .reader-tools wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 7);
+        min-width: 0;
       }
     `,
   ];
@@ -857,30 +846,35 @@ export class PaymentsScreen extends LitElement {
       <p>
         ${t("payments.bill.attest_body").replace("{order}", this.#billOrder(action.target.row))}
       </p>
-      <label class="bill-outcome"
-        >${t("payments.bill.outcome")} *
-        <select
-          name="outcome"
-          required
-          data-test="bill-attest-outcome"
-          aria-invalid=${errors.outcome ? "true" : "false"}
-          aria-describedby=${errors.outcome ? "bill-outcome-error" : nothing}
-          .value=${this.billOutcome}
-          ?disabled=${this.billBusy}
-          @change=${(event: Event) => {
-            this.billOutcome = (event.target as HTMLSelectElement).value;
-          }}
-        >
-          <option value="">${t("payments.bill.choose_outcome")}</option>
-          <option value=${payment ? "received" : "completed"}>
-            ${t(payment ? "payments.bill.received_option" : "payments.bill.completed_option")}
-          </option>
-          <option value="failed">
-            ${t(payment ? "payments.bill.failed_payment_option" : "payments.bill.failed_refund_option")}
-          </option>
-        </select>
-      </label>
-      ${errors.outcome ? html`<p class="error" id="bill-outcome-error" data-test="bill-outcome-error">${errors.outcome}</p>` : nothing}
+      <wt-combobox
+        class="bill-outcome"
+        name="outcome"
+        required
+        data-test="bill-attest-outcome"
+        label=${t("payments.bill.outcome")}
+        search="auto"
+        placeholder=${t("payments.bill.choose_outcome")}
+        .options=${[
+          {
+            value: payment ? "received" : "completed",
+            label: t(payment ? "payments.bill.received_option" : "payments.bill.completed_option"),
+          },
+          {
+            value: "failed",
+            label: t(
+              payment
+                ? "payments.bill.failed_payment_option"
+                : "payments.bill.failed_refund_option",
+            ),
+          },
+        ]}
+        .value=${this.billOutcome}
+        error=${errors.outcome ?? ""}
+        ?disabled=${this.billBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.billOutcome = event.detail.value;
+        }}
+      ></wt-combobox>
       <wt-input
         name="note"
         required
@@ -1454,20 +1448,20 @@ export class PaymentsScreen extends LitElement {
 
       <h2>${t("payments.readers_heading")}</h2>
       <div class="reader-tools">
-        <label
-          >${t("payments.reader_col_status")}
-          <select
-            name="reader-status-filter"
-            .value=${this.readerFilter}
-            @change=${(event: Event) => {
-              this.readerFilter = (event.target as HTMLSelectElement).value;
-            }}
-          >
-            <option value="active">${t("payments.filter_active")}</option>
-            <option value="disabled">${t("payments.filter_disabled")}</option>
-            <option value="all">${t("payments.filter_all")}</option>
-          </select></label
-        >
+        <wt-combobox
+          name="reader-status-filter"
+          label=${t("payments.reader_col_status")}
+          search="auto"
+          .options=${[
+            { value: "active", label: t("payments.filter_active") },
+            { value: "disabled", label: t("payments.filter_disabled") },
+            { value: "all", label: t("payments.filter_all") },
+          ]}
+          .value=${this.readerFilter}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.readerFilter = event.detail.value;
+          }}
+        ></wt-combobox>
         <wt-button
           variant="secondary"
           data-test="refresh-readers"
