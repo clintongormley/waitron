@@ -1300,10 +1300,10 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
 
 /**
  * Every order routes by exceptions, folder claims and the active default station. Station and
- * course are snapshotted at fire time: later rule edits never move work already sent. A made-here
- * item is recorded and never printed. Extras are decided after their dish against the same routing
- * snapshot. An extra made elsewhere copies the dish's course and hold, unless made here: then it is
- * ready and fired at the send, even when its dish is held.
+ * course are chosen at fire time. A made-here item is recorded and never printed. Extras are
+ * decided after their dish against the same routing snapshot. An extra made elsewhere copies the
+ * dish's course and hold, unless made here: then it is ready and fired at the send, even when its
+ * dish is held.
  * An unroutable outcome refuses the send, unless payment uses `unroutable: "skip"` to leave
  * the dish unfired and unstamped and return it for the paid-order alert.
  */

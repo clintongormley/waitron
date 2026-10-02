@@ -160,6 +160,7 @@ and approving the plan approves them.
   held dish released after its station closed is re-routed by the rules, with a "moved" slip at
   the old station when its HOLD ticket printed there; and any waiter can send a single dish to
   another station from the till, closed stations included — when sending, or after.
+  _2026-10-01: [slice 3c-3](2026-10-01-moving-dishes-slice-3c3.md) implements this change._
 - **S11. Opening and closing by hand is on the dashboard only (owner).** The till gets it later,
   through a backlog entry.
 - **S12. Hours, fallback and by-hand changes get a one-line confirmation, not the full routing
@@ -271,7 +272,8 @@ and approving the plan approves them.
   illustrative. The generator picks the next free number, and `main` moves.
 - The one fire point stays `fireLines` (`apps/server/src/working-order.ts`). The station is chosen
   and recorded when the work is sent. Neither a rule change nor a station closing moves work already
-  sent.
+  sent. _2026-10-01: [slice 3c-3](2026-10-01-moving-dishes-slice-3c3.md) lets a waiter move a sent
+  dish and re-routes held work when its station has closed at release._
 - Module boundary: core code reaches venue-service only through the `VENUE_SERVICE` seat
   (`apps/server/src/modules.ts`, contract `packages/module/src/module.ts`). Core dashboard code never
   calls `/management-api/venue-service/*`. venue-service never imports `apps/server` or

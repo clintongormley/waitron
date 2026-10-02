@@ -307,6 +307,11 @@ replaces the fallback policy above. Closed and switched-off stations follow thei
 no replacement is a dead end, and the till asks where to make the dish before sending or taking
 payment. Printer and screen failures raise alerts. Closing a station moves only new work._
 
+_2026-10-01 (slice 3c-3, owner): a waiter can move a dish the kitchen has not started to another
+station, and a held dish released after its station closed goes where the rules send it then
+([plan](../plans/2026-10-01-moving-dishes-slice-3c3.md)). A rule change alone still moves nothing
+already sent._
+
 ### 5.4 Delivery area
 
 _2026-10-01, approved R10: you set a till's default service zone on Venue operations › Service

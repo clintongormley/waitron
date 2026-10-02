@@ -228,14 +228,12 @@ stays immediate, including any routing rules attached to them; a confirmation is
 selected folders contain products or subfolders. Each dev venue needs `wa-wt reset demo
 <worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
-older build before using the new published document. What is left:
-
-- **3c-3**, "Make at" on any dish before sending, moving a dish that has not been started to
-  another station (a slip at the old station whenever it was sent there), and re-routing a held
-  dish whose station closed before it was released, which, with no replacement, goes to its old
-  station with an alert ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md), starts
-  once 3c-2 has landed; amended after approval so a dish made at the till is never moved or
-  re-routed) — lane D's PF7.
+older build before using the new published document. **Slice 3c-3 is built on PF7**: "Make at" on
+any dish before sending, moving a dish the kitchen has not started (with a slip at the old station
+when its ticket printed there), and re-routing a held dish whose station closed before release. With
+no replacement, the dish stays at its old station and raises an alert. A dish made at the till is
+never moved or re-routed ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md); add the PR
+number when it lands). What is left:
 - **3d**, watchers ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): named watchers on
   Prep Stations that screens and printers attach to, each with its own Done, Away unchanged, and
   the "one ticket per order" printer setting retired (owner, 2026-10-01); approved and queued as
@@ -252,6 +250,14 @@ older build before using the new published document. What is left:
 - **Current orders hides kitchen progress for an extra made at another station** (P6). The till's
   Current orders read attaches extras under each dish but reads kitchen state only from the dish's
   record (`readCurrentOrders`, `apps/server/src/order-groups.ts`). Show the extra's own progress.
+- **Move to station on a paid counter order.** The move route accepts an order that is paid but not
+  yet handed over (`apps/server/src/station-move.ts`). Add the button to B16's "Paid, not handed
+  over" list ([Task 16](superpowers/plans/2026-09-26-service-ordering-and-billing.md)).
+- **A till-session station view can bump a dish another station now has.** The till-session
+  `POST /api/ticket-items/:id/advance` route does not check the item's station
+  (`apps/server/src/till-api.ts`); the device route does (`apps/server/src/device-api.ts`) and refuses
+  `device.forbidden_station`. Until its next 15-second poll, a till's station view can still show a
+  moved dish and advance it at its new station. The route predates PF7; moves make this more likely.
 - **A following extra has different names on paper and on screen.** Its `+` line prints the frozen
   staff name (`buildTicketItems`, `apps/server/src/kitchen-print.ts`), while the kitchen screen and
   pass read its frozen customer `descriptions` (`readQueueSubItems`,
@@ -2036,6 +2042,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   does not. (2) A Printers-screen resend of a kitchen ticket carries no kitchen links, so when that
   resend runs out of attempts, a later printed till Reprint does not clear it from the printer's
   alert (the table clears).
+- _2026-10-01 (3c-3): a dish moved to another station leaves its ticket at the old station's
+  printer counted by that printer's stuck alert in the same way, because nothing reprints there._
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
