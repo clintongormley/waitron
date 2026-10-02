@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { formatInvoiceNumber } from "@waitron/core";
 import {
   diningTables,
+  invoiceSeries,
   nowIso,
   sales,
   serviceCommands,
@@ -17,6 +19,7 @@ import type { TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
+import { readCreditNotes } from "./orders-list.js";
 import "./errors.js";
 
 /** One bill of a party, as the table screen lists it. */
@@ -38,6 +41,10 @@ export interface PartyBill {
   receiptAvailable: boolean;
   /** The language the bill's sale was filed in; absent while no sale is filed. */
   receiptLanguage?: string;
+  /** The number the bill's sale was filed under ("A/1"); absent while no sale is filed. */
+  invoiceNumber?: string;
+  /** The numbers of the sales correcting the bill's sale, oldest first; absent while no sale is filed. */
+  creditNotes?: string[];
 }
 
 export type CommandScope =
@@ -378,21 +385,29 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
     throw new AppError("party.not_open", { partyId });
   }
   const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
-  const filed = new Map(
-    (
-      await tx
-        .select({ workingOrderId: sales.workingOrderId, locale: sales.locale })
-        .from(sales)
-        .where(
-          inArray(
-            sales.workingOrderId,
-            bills.map((bill) => bill.workingOrderId),
-          ),
-        )
-    ).map((sale) => [sale.workingOrderId, sale.locale]),
+  const filedSales = await tx
+    .select({
+      id: sales.id,
+      workingOrderId: sales.workingOrderId,
+      locale: sales.locale,
+      code: invoiceSeries.code,
+      number: sales.invoiceNumber,
+    })
+    .from(sales)
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(
+      inArray(
+        sales.workingOrderId,
+        bills.map((bill) => bill.workingOrderId),
+      ),
+    );
+  const filed = new Map(filedSales.map((sale) => [sale.workingOrderId, sale]));
+  const notes = await readCreditNotes(
+    tx,
+    filedSales.map((sale) => sale.id),
   );
   return bills.map((bill) => {
-    const receiptLanguage = filed.get(bill.workingOrderId);
+    const sale = filed.get(bill.workingOrderId);
     return {
       workingOrderId: bill.workingOrderId,
       partyId: bill.partyId,
@@ -401,14 +416,22 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
       total: bill.total,
       outstanding: bill.outstanding,
       hasPayments: bill.hasPayments,
-      receiptAvailable: receiptLanguage !== undefined,
-      ...(receiptLanguage === undefined ? {} : { receiptLanguage }),
+      receiptAvailable: sale !== undefined,
+      ...(sale === undefined
+        ? {}
+        : {
+            receiptLanguage: sale.locale,
+            invoiceNumber: formatInvoiceNumber(sale.code, sale.number),
+            creditNotes: notes.get(sale.id) ?? [],
+          }),
     };
   });
 }
 
 /** A bill as {@link readBillsOfParties} reads it, with how many lines it holds. */
-export type FamilyBill = Omit<PartyBill, "receiptAvailable"> & { lines: number };
+export type FamilyBill = Omit<PartyBill, "receiptAvailable" | "invoiceNumber" | "creditNotes"> & {
+  lines: number;
+};
 
 /**
  * {@link readPartyBills} for several parties at once, keyed by each party asked about, without

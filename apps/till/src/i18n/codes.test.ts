@@ -361,3 +361,28 @@ it("says what to do about each refusal of an unpaid departure, in both languages
     expect(codeMessage(code, "es")).toBe(text.es);
   }
 });
+
+it("words each refusal a cancel and credit can meet, in both languages, naming no identifier", () => {
+  const generic = {
+    en: codeMessage("server.internal", "en"),
+    es: codeMessage("server.internal", "es"),
+  };
+  for (const code of [
+    "working_order.not_placed",
+    "working_order.reason_required",
+    "series.no_rectificative_for_node",
+    "sale.correction_exceeds_total",
+    "sale.correction_not_whole",
+    "device.till_required",
+  ]) {
+    expect(codeMessage(code, "en")).not.toBe(generic.en);
+    expect(codeMessage(code, "es")).not.toBe(generic.es);
+    expect(codeMessage(code, "en")).not.toContain(code);
+  }
+});
+
+it("words a device that is not a till for any action, naming no cancel or credit", () => {
+  // Other routes receive it too, the unpaid departure and the shift sign-in among them.
+  expect(codeMessage("device.till_required", "en")).not.toMatch(/cancel|credit/i);
+  expect(codeMessage("device.till_required", "es")).not.toMatch(/cancel|anul|abon|rectific/i);
+});

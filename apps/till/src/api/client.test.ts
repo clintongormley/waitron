@@ -1214,6 +1214,55 @@ describe("TillApi", () => {
     );
   });
 
+  it("cancelOrder sends a supervisor's PIN beside the reason when one is given", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await new TillApi("", fetchStub).cancelOrder("wo1", "Wrong table", {
+      personId: "sup-1",
+      pin: "1234",
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/cancel",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          reason: "Wrong table",
+          override: { personId: "sup-1", pin: "1234" },
+        }),
+      }),
+    );
+  });
+
+  it("cancelOrder hands the caller's signal to the request, still sending the reason alone", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const { signal } = new AbortController();
+
+    await new TillApi("", fetchStub).cancelOrder("wo1", "Wrong table", undefined, { signal });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/cancel",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "Wrong table" }),
+        signal,
+      }),
+    );
+  });
+
+  it("listCancelCreditAuthorizers GETs who may approve cancelling an invoiced bill", async () => {
+    const roster = [{ personId: "sup-1", displayName: "Responsable" }];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
+
+    const r = await new TillApi("", fetchStub).listCancelCreditAuthorizers();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/cancel-credit-authorizers",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(roster);
+  });
+
   it("cancelOrder surfaces { code } for a blank reason", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { code: "working_order.reason_required" } }), {

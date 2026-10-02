@@ -115,6 +115,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments",
     es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta",
   },
+  "working_order.not_placed": {
+    en: "This bill is no longer waiting for payment",
+    es: "Esta cuenta ya no está pendiente de cobro",
+  },
+  "working_order.reason_required": {
+    en: "Say why",
+    es: "Indica el motivo",
+  },
+  "series.no_rectificative_for_node": {
+    en: "This venue has no credit note series set up. Tell a manager",
+    es: "Este local no tiene una serie de facturas rectificativas. Avisa a un responsable",
+  },
+  "sale.correction_exceeds_total": {
+    en: "That correction is more than is left of the invoice after its earlier corrections",
+    es: "Esa rectificación supera lo que queda de la factura tras sus rectificaciones anteriores",
+  },
+  "sale.correction_not_whole": {
+    en: "This invoice has already been corrected, so it cannot be credited in full",
+    es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
+  },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",
     es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
@@ -313,6 +333,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "device.unauthorized": {
     en: "This device isn't set up — ask to join this venue",
     es: "Este dispositivo no está configurado. Solicita el alta en este local",
+  },
+  "device.till_required": {
+    en: "This device is not set up as a till. Enrol it as a till first",
+    es: "Este dispositivo no está dado de alta como caja. Dalo de alta como caja primero",
   },
   "session.required": {
     en: "Your shift session has ended — please log in again",

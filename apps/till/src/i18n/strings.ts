@@ -825,6 +825,32 @@ export const en = {
     "The departure got no answer, so it may have been recorded. Check the floor before trying again.",
   "departure.probably_recorded":
     "The first try got no answer and the table is now closed, so the departure was probably recorded. Look it up with Find a bill.",
+  // Cancel and credit: an invoiced, unpaid bill is credited in full and cancelled
+  "cancel_credit.action": "Cancel and credit",
+  "cancel_credit.title": "Cancel and credit",
+  "cancel_credit.scope":
+    "Invoice {invoice} ({amount}) will be credited in full: a credit note is issued and the bill is cancelled.",
+  "cancel_credit.scope_unnumbered":
+    "This bill's invoice ({amount}) will be credited in full: a credit note is issued and the bill is cancelled.",
+  "cancel_credit.reason": "Reason",
+  "cancel_credit.reason_invalid": "Say why the bill is cancelled",
+  "cancel_credit.reason_long": "Keep the reason to 500 characters or fewer",
+  "cancel_credit.approval_next":
+    "If you cannot issue credit notes yourself, someone who can approves it with their PIN next.",
+  "cancel_credit.confirm": "Cancel and credit",
+  "cancel_credit.keep": "Keep the bill",
+  "cancel_credit.approvers_failed": "Could not read who can approve this. Try again.",
+  "cancel_credit.unconfirmed":
+    "The cancel got no answer, so it may have been made. Check the table's bills before trying again.",
+  "cancel_credit.refused_payments":
+    "This bill holds a payment, so it cannot be cancelled and credited.",
+  "cancel_credit.refused_payment_in_flight":
+    "A card payment on this bill is in progress. Wait for it to finish.",
+  "cancel_credit.refused_not_permitted":
+    "The person who approved this cannot issue credit notes. Choose someone who can.",
+  "cancel_credit.done": "Credit note {number} issued. The bill is cancelled.",
+  "cancel_credit.done_unnumbered": "A credit note was issued and the bill is cancelled.",
+  "cancel_credit.done_action": "Done",
   "bill_refund.done_cash": "Given back: {amount}. Hand it over in cash.",
   "bill_refund.done_card": "Given back: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
@@ -1676,6 +1702,32 @@ export const es: Record<StringKey, string> = {
     "La salida no obtuvo respuesta, así que puede que se haya registrado. Revisa el plano antes de volver a intentarlo.",
   "departure.probably_recorded":
     "El primer intento no obtuvo respuesta y la mesa ya está cerrada, así que la salida probablemente se registró. Búscala con Buscar cuenta.",
+  "cancel_credit.action": "Cancelar y abonar",
+  "cancel_credit.title": "Cancelar y abonar",
+  "cancel_credit.scope":
+    "La factura {invoice} ({amount}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.",
+  "cancel_credit.scope_unnumbered":
+    "La factura de esta cuenta ({amount}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.",
+  "cancel_credit.reason": "Motivo",
+  "cancel_credit.reason_invalid": "Indica por qué se cancela la cuenta",
+  "cancel_credit.reason_long": "Usa 500 caracteres como mucho para el motivo",
+  "cancel_credit.approval_next":
+    "Si tú no puedes emitir facturas rectificativas, a continuación lo aprueba alguien que pueda con su PIN.",
+  "cancel_credit.confirm": "Cancelar y abonar",
+  "cancel_credit.keep": "Mantener la cuenta",
+  "cancel_credit.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
+  "cancel_credit.unconfirmed":
+    "La cancelación no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
+  "cancel_credit.refused_payments":
+    "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
+  "cancel_credit.refused_payment_in_flight":
+    "Se está cobrando esta cuenta con tarjeta. Espera a que termine.",
+  "cancel_credit.refused_not_permitted":
+    "La persona que lo ha aprobado no puede emitir facturas rectificativas. Elige a alguien que pueda.",
+  "cancel_credit.done": "Factura rectificativa {number} emitida. La cuenta queda cancelada.",
+  "cancel_credit.done_unnumbered":
+    "Se emitió la factura rectificativa y la cuenta queda cancelada.",
+  "cancel_credit.done_action": "Hecho",
   "bill_refund.done_cash": "Devuelto: {amount}. Entrégalo en efectivo.",
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",

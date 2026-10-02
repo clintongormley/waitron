@@ -375,7 +375,8 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
   return { rows, next };
 }
 
-async function readCreditNotes(
+/** The formatted numbers of the sales correcting each sale, oldest first, keyed by the sale. */
+export async function readCreditNotes(
   tx: Transaction,
   saleIds: readonly string[],
 ): Promise<Map<string, string[]>> {

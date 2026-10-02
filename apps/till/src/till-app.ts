@@ -92,9 +92,11 @@ import type {
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
 import "./widgets/unpaid-departure-dialog.js";
+import "./widgets/cancel-credit-dialog.js";
 import "./widgets/dead-ends-section.js";
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
+import type { CancelCreditDone } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
   isTakePaymentRefusal,
@@ -584,6 +586,20 @@ interface Departing {
   busy: boolean;
 }
 
+/** The cancel and credit dialog, opened from bill `workingOrderId` of party `partyId`. */
+interface CancelCrediting {
+  id: number;
+  partyId: string;
+  workingOrderId: string;
+  invoiceNumber: string | null;
+  amount: string;
+  /** The reason last pressed, which an approver's PIN is sent with. */
+  reason: string;
+  refusal: DialogRefusal | null;
+  busy: boolean;
+  done: CancelCreditDone | null;
+}
+
 /** A card the reader did not charge: nothing was recorded on the bill. */
 const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
   "declined",
@@ -603,6 +619,10 @@ const APPROVER_REFUSALS = new Set([
   "person.not_found",
   "person.suspended",
 ]);
+
+/** Refusals after which the bill may already be cancelled: no answer, and `working_order.not_placed`,
+ * which a cancel gets once an earlier cancel of the same bill has been made. */
+const CANCEL_MAY_HAVE_LANDED = new Set(["network", "working_order.not_placed"]);
 
 /** Refusals about the reason chosen, after which the reasons are read again. */
 const REASON_REFUSALS = new Set([
@@ -1438,6 +1458,11 @@ export class TillApp extends LitElement {
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
   @state() private departureApproverError: string | null = null;
+  @state() private cancelCrediting: CancelCrediting | null = null;
+  #cancelCreditings = 0;
+  /** The people who may approve the cancel being sent; set, their PIN prompt is open. */
+  @state() private cancelCreditApprovers?: StaffMember[];
+  @state() private cancelCreditApproverError: string | null = null;
   /** The open refund dialog, over the bill payment dialog. */
   @state() private billRefunding: BillRefunding | null = null;
   #billRefunds = 0;
@@ -5548,6 +5573,194 @@ export class TillApp extends LitElement {
     if (!this.#hasLeftParty(open.partyId, sent)) await this.#loadPartyBills();
   }
 
+  /** Cancel and credit, offered on an invoiced bill nothing is paid on: its dialog opens. */
+  #onCancelCreditBill(event: Event): void {
+    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    const party = this.orderParty;
+    const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
+    if (party === null || bill === undefined || this.cancelCrediting !== null) return;
+    this.cancelCrediting = {
+      id: ++this.#cancelCreditings,
+      partyId: party.id,
+      workingOrderId,
+      invoiceNumber: bill.invoiceNumber ?? null,
+      amount: bill.total,
+      reason: "",
+      refusal: null,
+      busy: false,
+      done: null,
+    };
+  }
+
+  #cancelCreditingNow(id: number): CancelCrediting | null {
+    return this.cancelCrediting?.id === id ? this.cancelCrediting : null;
+  }
+
+  #closeCancelCrediting(): void {
+    this.cancelCrediting = null;
+    this.#closeCancelCreditApprovers();
+  }
+
+  #closeCancelCreditApprovers(): void {
+    this.cancelCreditApprovers = undefined;
+    this.cancelCreditApproverError = null;
+  }
+
+  /** The reason confirmed: sent in the operator's own name first, as a departure is. */
+  async #onCancelCreditContinue(event: Event): Promise<void> {
+    const { reason } = (event as CustomEvent<{ reason: string }>).detail;
+    // The dialog's events come only while it is open. A press while a request is out is dropped.
+    const open = this.cancelCrediting!;
+    if (open.busy) return;
+    await this.#sendCancelCredit({ ...open, reason });
+  }
+
+  /** The approver's PIN leaves in the request and is never kept. */
+  async #onCancelCreditApproverConfirm(event: Event): Promise<void> {
+    event.stopPropagation();
+    const override = (event as CustomEvent<{ personId: string; pin: string }>).detail;
+    // The PIN prompt is drawn only over an open cancel dialog.
+    const open = this.cancelCrediting!;
+    if (open.busy) return;
+    this.cancelCreditApproverError = null;
+    await this.#sendCancelCredit(open, { personId: override.personId, pin: override.pin });
+  }
+
+  /** Sent once per press, never resent through `resendUnanswered`: after no answer the bills are
+   * read again, and a later press that finds the cancel made is refused `working_order.not_placed`,
+   * after which the bills are read again too. */
+  async #sendCancelCredit(
+    open: CancelCrediting,
+    override?: { personId: string; pin: string },
+  ): Promise<void> {
+    if (this.orderParty?.id !== open.partyId) {
+      this.#closeCancelCrediting();
+      return;
+    }
+    const sending: CancelCrediting = { ...open, refusal: null, busy: true };
+    this.cancelCrediting = sending;
+    const sent = this.#sentNow();
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
+        signal: limit.signal,
+      });
+    } catch (error) {
+      await this.#onCancelCreditRefused(sending, error, override === undefined, sent);
+      return;
+    } finally {
+      limit.done();
+    }
+    if (this.#cancelCreditingNow(open.id) === null) return;
+    this.#closeCancelCreditApprovers();
+    await this.#onCancelCredited(open.id, sent);
+  }
+
+  /** The bills are read again, which carry the credit note; a read that fails leaves the bill
+   * cancelled all the same, with no number to name. */
+  async #onCancelCredited(id: number, sent: Sent): Promise<void> {
+    const open = this.#cancelCreditingNow(id);
+    if (open === null) return;
+    const bills = this.#hasLeftParty(open.partyId, sent)
+      ? null
+      : (await this.#loadPartyBills()).bills;
+    this.#showCancelCredited(id, bills);
+  }
+
+  #showCancelCredited(id: number, bills: PartyBill[] | null): void {
+    const now = this.#cancelCreditingNow(id);
+    if (now === null) return;
+    const bill = bills?.find((row) => row.workingOrderId === now.workingOrderId);
+    this.cancelCrediting = {
+      ...now,
+      refusal: null,
+      busy: false,
+      done: { creditNote: bill?.creditNotes?.at(-1) ?? null },
+    };
+  }
+
+  /** The people who can approve the cancel in dialog `id` are read, and their PIN prompt opens. */
+  async #askCancelCreditApprover(id: number): Promise<void> {
+    try {
+      const approvers = await this.api.listCancelCreditAuthorizers();
+      const now = this.#cancelCreditingNow(id);
+      if (now === null) return;
+      this.cancelCrediting = { ...now, busy: false };
+      this.cancelCreditApproverError = null;
+      this.cancelCreditApprovers = approvers;
+    } catch {
+      const now = this.#cancelCreditingNow(id);
+      if (now !== null)
+        this.cancelCrediting = { ...now, refusal: { code: "approvers" }, busy: false };
+    }
+  }
+
+  /**
+   * Not permitted, with no approver's PIN sent, opens the approvers' PIN prompt; a refusal of the
+   * PIN shows there. Any other refusal stays in the dialog, after the party's bills are read again
+   * unless the operator has left the party; a bill that then reads abandoned after a refusal
+   * {@link CANCEL_MAY_HAVE_LANDED} names is shown cancelled.
+   */
+  async #onCancelCreditRefused(
+    open: CancelCrediting,
+    error: unknown,
+    unapproved: boolean,
+    sent: Sent,
+  ): Promise<void> {
+    if (this.#cancelCreditingNow(open.id) === null) return;
+    const refusal = refusalOf(error);
+    if (unapproved && refusal.code === "authorization.not_permitted") {
+      await this.#askCancelCreditApprover(open.id);
+      return;
+    }
+    if (APPROVER_REFUSALS.has(refusal.code)) {
+      this.cancelCreditApproverError = refusal.code;
+      this.cancelCrediting = { ...open, busy: false };
+      return;
+    }
+    this.#closeCancelCreditApprovers();
+    const bills = this.#hasLeftParty(open.partyId, sent)
+      ? null
+      : (await this.#loadPartyBills()).bills;
+    const bill = bills?.find((row) => row.workingOrderId === open.workingOrderId);
+    if (CANCEL_MAY_HAVE_LANDED.has(refusal.code) && bill?.status === "abandoned") {
+      this.#showCancelCredited(open.id, bills);
+      return;
+    }
+    const now = this.#cancelCreditingNow(open.id);
+    if (now !== null) this.cancelCrediting = { ...now, refusal, busy: false };
+  }
+
+  /** The cancel dialog and, over it, its approver's PIN prompt, whose events stop here so the
+   * drawer's override handlers on the wrapper never see them. */
+  #renderCancelCrediting(): TemplateResult | typeof nothing {
+    const open = this.cancelCrediting;
+    if (open === null) return nothing;
+    return html`<till-cancel-credit-dialog
+        .invoiceNumber=${open.invoiceNumber}
+        .amount=${open.amount}
+        .refusal=${open.refusal}
+        .busy=${open.busy}
+        .done=${open.done}
+        @cancel-credit-continue=${(event: Event) => void this.#onCancelCreditContinue(event)}
+        @cancel-credit-close=${() => this.#closeCancelCrediting()}
+      ></till-cancel-credit-dialog>
+      ${
+        this.cancelCreditApprovers === undefined
+          ? nothing
+          : html`<till-supervisor-override-dialog
+              data-cancel-credit-approval
+              .authorizers=${this.cancelCreditApprovers}
+              .error=${this.cancelCreditApproverError}
+              @override-confirm=${(event: Event) => void this.#onCancelCreditApproverConfirm(event)}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                this.#closeCancelCreditApprovers();
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
+  }
+
   /** The departure dialog and, over it, its approver's PIN prompt, whose events stop here so the
    * drawer's override handlers on the wrapper never see them. */
   #renderDeparting(): TemplateResult | typeof nothing {
@@ -5646,6 +5859,7 @@ export class TillApp extends LitElement {
     this.#closeAdjust();
     this.#closeBillPaying();
     this.#closeDeparting();
+    this.#closeCancelCrediting();
     this.findingBill = false;
     this.#operatorSession++;
   }
@@ -6588,6 +6802,7 @@ export class TillApp extends LitElement {
         @split-lines=${(event: Event) => void this.#onSplitLines(event)}
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
+        @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onTakePayment(event)}
         @reprint-bill=${(event: Event) => void this.#onReprintBill(event)}
@@ -6662,7 +6877,7 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
-        ${this.#renderEditDeadEnds()}
+        ${this.#renderCancelCrediting()} ${this.#renderEditDeadEnds()}
         ${
           this.deadEndsQuestion === null
             ? nothing

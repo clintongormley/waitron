@@ -2722,8 +2722,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     (B33, below), and an enrolled device, whose till the credit
     note is filed on, and refuses a bill holding a payment or with one in flight. Any placed order,
     invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
-    at the reader in this process. No till screen calls the route. The owner dropped the dashboard
-    Orders screen's "Invoice not credited" mark (2026-10-02 ~12:05): such a bill is to show as Cancelled
+    at the reader in this process. The till's table screen calls it (B32, below). The owner
+    dropped the dashboard Orders screen's "Invoice not credited" mark (2026-10-02 ~12:05): such a bill is to show as Cancelled
     with its credit note. B27a landed first (#1027) with the mark — `invoiceNotCredited` in
     `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
     landing second, removes them and updates those cases (owner-approved), and checks an
@@ -2746,7 +2746,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       with no invoice the override's PIN is neither checked nor counted, though a malformed
       override is still refused. Cases:
       `apps/server/src/cancel-invoiced-order.test.ts`, "cancelling an invoiced order on a
-      supervisor's PIN". No till screen sends the PIN yet: that is B32's.
+      supervisor's PIN". The till sends the PIN since B32 (below).
     - **For the owner, from B33's review: the cancel checks the permission after its payment
       refusals.** A bill holding a payment, or with a card payment in flight, is refused for that
       before `sale.rectify` or an override is looked at — the order C126 built, which B33 kept. So
@@ -2754,14 +2754,32 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       PIN sent with that request is neither checked nor counted. The drawer, refund and
       unpaid-departure routes check the permission first. Moving it earlier changes who gets which
       refusal; not decided.
-    - **No till screen offers the cancel yet.** A "Cancel and credit" action on an invoiced, unpaid
-      bill, offered to anyone signed in — someone without `sale.rectify` is asked for the PIN of
-      someone who holds it — is queued as lane B's B32 (owner, 2026-10-02 ~12:05). The PIN
-      prompt's list of who may approve it is
-      `GET /api/cancel-credit-authorizers` (B33, owner 2026-10-02 ~16:50): the active holders of
-      `sale.rectify`, by id and name, for any signed-in operator, like the drawer's, refund's and
-      unpaid departure's lists. Every role holding `sale.rectify` today also holds `sale.refund`,
-      `sale.void` and `cash.drawer`, so its cases cannot tell which of those it reads.
+    - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — open as
+      PR #1055 (`feat/service-cancel-credit-till`), left for the owner to land.** On the table screen, a party
+      bill that is placed, has its sale filed and holds no payment shows "Cancel and credit" to
+      anyone signed in (`#billRow`, `apps/till/src/screens/till-table-order-screen.ts`). Its dialog
+      (`apps/till/src/widgets/cancel-credit-dialog.ts`) names the invoice and the amount, takes a
+      required reason and sends the cancel in the operator's name; a 403 `authorization.not_permitted`
+      opens the PIN prompt of the people `GET /api/cancel-credit-authorizers` lists, as the unpaid
+      departure's does. The result names the credit note, read from `GET /api/parties/:id/bills`,
+      whose bills now carry `invoiceNumber` and `creditNotes` once a sale is filed
+      (`readPartyBills`, `apps/server/src/parties.ts`), because the cancel's own answer is an
+      empty 200. When a cancel gets no answer the till does not send it again by itself:
+      it reads the bills again, and a bill now cancelled shows the result. Otherwise the operator
+      may press "Cancel and credit" again; if the first cancel was made after all, the server
+      refuses the second with `working_order.not_placed` ("refuses a second cancel, leaving exactly
+      one credit note", `apps/server/src/cancel-invoiced-order.test.ts`), and the till reads the
+      bills again; when that read shows the bill cancelled, it shows it cancelled, naming the credit
+      note. The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
+      shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
+      cancel's answer empty, so the till goes on reading the credit note's number from the bills.
+      Open:
+      - **Counter orders are not offered it.** A counter order placed and invoiced but unpaid (the
+        `invoice_first` mode) has no "Cancel and credit"; the counter's waiting list carries no
+        invoice field. Queued as lane B's B34 (owner, 2026-10-02).
+    - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
+      Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
+      `cash.drawer`, so its cases cannot tell which of those it reads.
     - **A credit note's lines do not record which invoice line each one reverses** — no column
       holds that link, so a credit note cannot be traced back line by line. Storing it on every
       corrective line `recordCorrection` writes is queued as lane C's C132 (owner, 2026-10-02).
@@ -4257,6 +4275,19 @@ approved.
 
 ### B9. CI and test infra
 
+- **The stream pause test's last restore failed once in CI, about 31 s after the stream resumed
+  (PR #1055, run 37042034082, job 110955048468, 2026-10-02; not fixed).** In
+  `apps/server/src/stream-pause.e2e.test.ts` step 10, the probe that restores the generation to
+  find the sale made while the bucket was frozen threw `backup.stream_restore_failed` from
+  `restoreGeneration` (`packages/stream/src/restore.ts`) instead of returning, so the wait ended
+  at once. The six green runs of the same job read that day went from the resume to the end of the
+  test in about 2.5 s. Since 31 s is just past the probe's 30 s `RESTORE_MS` ceiling, the likeliest
+  reading is a `litestream restore` against versitygw that never finished and was stopped there.
+  That is inferred: the error's `exitCode` is not in the log, and the run was not repeated before
+  this was written down. The PR's own change is not on that path; the test's sales go through
+  `POST /api/sales`, which does not reach `readPartyBills`. Next action: have the probe log the
+  restore's exit code and Litestream's output when it fails, then find out whether the restore
+  hangs or exits refused.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
   container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
