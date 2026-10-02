@@ -2854,7 +2854,9 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
         t(step === "password" ? "login.password_heading" : "account.offer_passkey", "en-GB"),
       );
-      expect(screen.shadowRoot!.textContent).toContain("typed@example.com");
+      expect(screen.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")!.value).toBe(
+        "typed@example.com",
+      );
       expect(screen).toMatchObject({
         step,
         password: "current secret",

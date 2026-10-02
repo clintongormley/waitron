@@ -89,6 +89,24 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
+  test("read-only field holding a value", async () => {
+    await mountThemed(
+      '<wt-input label="Correo" name="chosen-email" type="email" value="ana@example.com" readonly></wt-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+    const input = host.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+    expect(input.readOnly).toBe(true);
+  });
+
+  test("read-only field with an action at its end", async () => {
+    await mountThemed(
+      '<wt-input label="Correo" value="ana@example.com" readonly><button slot="end" aria-label="Usar otra cuenta">✎</button></wt-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("field with a help button beside it", async () => {
     await mountThemed(
       '<wt-input label="Correo"><button slot="help" aria-label="Ayuda">?</button></wt-input>',

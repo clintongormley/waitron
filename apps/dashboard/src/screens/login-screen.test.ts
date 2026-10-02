@@ -717,7 +717,7 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=login-context]")?.textContent).toContain(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")?.value).toBe(
       "owner@example.com",
     );
     expect(navigator.credentials.get).not.toHaveBeenCalled();
@@ -814,7 +814,7 @@ describe("login-screen", () => {
     await flush(el);
 
     expect(api.inspectAccountAction).toHaveBeenCalledWith("token-1", "invitation");
-    expect(el.shadowRoot!.querySelector("[data-test=login-context] strong")?.textContent).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")?.value).toBe(
       "pending@example.test",
     );
     expect(el.shadowRoot!.querySelector("wt-input[name=new-password]")).not.toBeNull();
@@ -867,7 +867,7 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=passkey-login]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=submit]")).toBeNull();
     await continueWithEmail(el);
-    expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelectorAll<WtInput>("wt-input:not([readonly])")).toHaveLength(1);
     expect(el.shadowRoot!.querySelector("[data-test=passkey-login]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=try-another-way]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=submit]")).not.toBeNull();
@@ -878,15 +878,15 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await openPassword(el, "bea@x.com");
 
-    expect(el.shadowRoot!.querySelector("[data-test=login-context]")?.textContent?.trim()).toBe(
-      `${t("login.email")}bea@x.com`,
-    );
+    const context = el.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")!;
+    expect(context.label).toBe(t("login.email"));
+    expect(context.value).toBe("bea@x.com");
   });
 
   it("reveals and hides the password without losing its value", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await openPassword(el);
-    const field = el.shadowRoot!.querySelector("wt-input")!;
+    const field = el.shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!;
     field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "secret words" } }));
     await el.updateComplete;
 
@@ -922,7 +922,9 @@ describe("login-screen", () => {
     });
 
     await openPassword(el);
-    input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+    input = el
+      .shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!
+      .shadowRoot!.querySelector("input")!;
     expect({
       name: input.name,
       autocomplete: input.autocomplete,
@@ -987,7 +989,7 @@ describe("login-screen", () => {
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await el.updateComplete;
-    const fields = [...el.shadowRoot!.querySelectorAll("wt-input")];
+    const fields = [...el.shadowRoot!.querySelectorAll<WtInput>("wt-input:not([readonly])")];
     const inputs = fields.map((field) => {
       const input = field.shadowRoot!.querySelector("input")!;
       return { name: input.name, autocomplete: input.autocomplete, required: input.required };
@@ -1033,7 +1035,7 @@ describe("login-screen", () => {
     await flush(el);
     const submit = el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!;
     const click = vi.spyOn(submit, "click").mockImplementation(() => undefined);
-    const fields = [...el.shadowRoot!.querySelectorAll("wt-input")];
+    const fields = [...el.shadowRoot!.querySelectorAll<WtInput>("wt-input:not([readonly])")];
     expect(fields).toHaveLength(2);
     for (const field of fields) {
       const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
@@ -1112,7 +1114,7 @@ describe("login-screen", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
     await el.updateComplete;
-    const password = el.shadowRoot!.querySelector("wt-input")!;
+    const password = el.shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!;
     password.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "hunter2" } }));
     await el.updateComplete;
 
@@ -1130,7 +1132,7 @@ describe("login-screen", () => {
       const api = stubApi({ login: vi.fn().mockRejectedValue({ code: "password.invalid" }) });
       const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
       await openPassword(el);
-      el.shadowRoot!.querySelector("wt-input")!.dispatchEvent(
+      el.shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!.dispatchEvent(
         new CustomEvent("wt-change", { detail: { value: password } }),
       );
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
@@ -1145,8 +1147,8 @@ describe("login-screen", () => {
       expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("");
       await openPassword(el);
       expect(await errors()).toBe("");
-      expect(el.shadowRoot!.querySelector("wt-input")!.error).toBe("");
-      expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("");
+      expect(el.shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!.error).toBe("");
+      expect(el.shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!.value).toBe("");
     },
   );
 
@@ -1172,7 +1174,7 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=use-password]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=reset-by-email]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=change-account]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=login-context]")?.textContent).toContain(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")?.value).toBe(
       "bea@x.com",
     );
 
@@ -1243,7 +1245,7 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=submit]")).not.toBeNull();
     expect(
       el
-        .shadowRoot!.querySelector("wt-input")!
+        .shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!
         .shadowRoot!.querySelector<HTMLInputElement>("input")!.type,
     ).toBe("password");
     const username = el.shadowRoot!.querySelector<HTMLInputElement>("[data-autofill-username]")!;
@@ -1544,7 +1546,9 @@ it("Enter submits current shadow input values once while login is pending", asyn
   input.focus();
   await userEvent.keyboard("{Enter}");
   await el.updateComplete;
-  input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+  input = el
+    .shadowRoot!.querySelector<WtInput>("wt-input:not([readonly])")!
+    .shadowRoot!.querySelector("input")!;
   input.value = "secret";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   input.focus();
@@ -1623,7 +1627,7 @@ describe("login-screen: Google configuration", () => {
     await flush(el);
     expect(field(el, "password")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=google-login]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=login-context] strong")!.textContent).toBe(
+    expect(el.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")!.value).toBe(
       "owner@example.com",
     );
     expect(navigator.credentials.get).not.toHaveBeenCalled();
@@ -2815,7 +2819,10 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
       }
       expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
       expect(action(el, test).disabled).toBe(false);
-      expect([...el.shadowRoot!.querySelectorAll("wt-input")].map((f) => f.error)).toEqual([""]);
+      expect([...el.shadowRoot!.querySelectorAll("wt-input")].map((f) => f.error)).toEqual([
+        "",
+        "",
+      ]);
 
       click(el, test);
       await el.updateComplete;
@@ -3239,6 +3246,103 @@ describe("login-screen: a passkey Waitron no longer holds", () => {
       await flush(el);
       expect(await bottomOf(el)).toBe(codeMessage(code));
       expect(unknown).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("login-screen: the chosen email is a read-only field", () => {
+  function chosenEmail(el: LoginScreen): WtInput {
+    return el.shadowRoot!.querySelector<WtInput>("wt-input[data-test=login-context]")!;
+  }
+
+  function nativeInput(fieldEl: WtInput): HTMLInputElement {
+    return fieldEl.shadowRoot!.querySelector("input")!;
+  }
+
+  /** Where a single-line field's text starts: its control's left edge plus the inset before it. */
+  function textStart(fieldEl: WtInput): number {
+    const control = nativeInput(fieldEl);
+    const style = getComputedStyle(control);
+    return (
+      control.getBoundingClientRect().left +
+      parseFloat(style.borderLeftWidth) +
+      parseFloat(style.paddingLeft)
+    );
+  }
+
+  it("shows the address as the value of a read-only field labelled Email", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPassword(el, "bea@x.com");
+    const chosen = chosenEmail(el);
+    expect(chosen).not.toBeNull();
+    await chosen.updateComplete;
+    expect(chosen.readonly).toBe(true);
+    expect(chosen.shadowRoot!.querySelector("label")!.textContent!.trim()).toBe(t("login.email"));
+    expect(nativeInput(chosen).readOnly).toBe(true);
+    expect(nativeInput(chosen).value).toBe("bea@x.com");
+  });
+
+  it("starts the address's text where the password field's text starts", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPassword(el, "bea@x.com");
+    const chosen = chosenEmail(el);
+    expect(chosen).not.toBeNull();
+    await chosen.updateComplete;
+    const password = field(el, "password");
+    expect(Math.abs(textStart(chosen) - textStart(password))).toBeLessThanOrEqual(1);
+    expect(chosen.getBoundingClientRect().width).toBe(password.getBoundingClientRect().width);
+  });
+
+  it("puts Use another account inside the field at its trailing end, and it returns to the email step", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPassword(el, "bea@x.com");
+    const chosen = chosenEmail(el);
+    expect(chosen).not.toBeNull();
+    await flush(el);
+    await chosen.updateComplete;
+    const pencil = el.shadowRoot!.querySelector<HTMLElement>("[data-test=change-account]")!;
+    expect(pencil.parentElement).toBe(chosen);
+    expect(pencil.slot).toBe("end");
+    const box = chosen.shadowRoot!.querySelector(".field")!.getBoundingClientRect();
+    const pencilBox = pencil.getBoundingClientRect();
+    expect(pencilBox.right).toBeLessThanOrEqual(box.right);
+    expect(pencilBox.left).toBeGreaterThan(box.left + box.width / 2);
+    expect(pencilBox.top).toBeGreaterThanOrEqual(box.top);
+    expect(pencilBox.bottom).toBeLessThanOrEqual(box.bottom);
+    pencil.click();
+    await el.updateComplete;
+    expect(field(el, "email")).not.toBeNull();
+    expect(chosenEmail(el)).toBeNull();
+  });
+
+  it("keeps one field named email, the hidden username for password managers", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPassword(el, "bea@x.com");
+    const chosen = chosenEmail(el);
+    expect(chosen).not.toBeNull();
+    await chosen.updateComplete;
+    expect(nativeInput(chosen).name).toBe("chosen-email");
+    expect(nativeInput(chosen).autocomplete).toBe("off");
+    const named = el.shadowRoot!.querySelectorAll("[name=email]");
+    expect(named).toHaveLength(1);
+    expect(named[0]!.hasAttribute("data-autofill-username")).toBe(true);
+  });
+
+  it.each(["invitation", "password_reset"])(
+    "shows the %s page's address in the same read-only field, with no way to change it",
+    async (purpose) => {
+      history.replaceState(null, "", `/manage/account?token=token-1&purpose=${purpose}`);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      const chosen = chosenEmail(el);
+      expect(chosen).not.toBeNull();
+      await chosen.updateComplete;
+      expect(nativeInput(chosen).readOnly).toBe(true);
+      expect(nativeInput(chosen).value).toBe("new@example.test");
+      expect(el.shadowRoot!.querySelector("[data-test=change-account]")).toBeNull();
+      expect(
+        Math.abs(textStart(chosen) - textStart(field(el, "new-password"))),
+      ).toBeLessThanOrEqual(1);
     },
   );
 });
