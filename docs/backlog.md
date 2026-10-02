@@ -4657,8 +4657,13 @@ approved.
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **Comments naming a PostgreSQL SQLSTATE as today's behaviour — OPEN (split out of the T2 sweep,
-  2026-09-23). Owner, 2026-10-02: "Postgres comments should go" — queued as C127.** `grep -rn "22P02\|22003\|23505\|23503\|42703\|42P01" apps/server/src`
+- **Comments naming a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, 2026-10-02).** No
+  comment or test title under `apps/` or `packages/` names a SQLSTATE now. Each "never a 500" title
+  was checked by switching its screen off and re-running the test: only the printer-in-location
+  check and the absence date-range check still stop a 500, and only those titles say so. Still
+  unprobed, and naming no engine: about a dozen "not an opaque 500" titles in
+  `apps/server/src/till-api.test.ts`. The entry as first written follows.
+  Split out of the T2 sweep, 2026-09-23. Owner, 2026-10-02: "Postgres comments should go". `grep -rn "22P02\|22003\|23505\|23503\|42703\|42P01" apps/server/src`
   returns lines across many files, some already converted and many not, and the unconverted ones read
   in the present tense — a route comment saying a malformed id "`22P02`s → 500" when the column is
   plain `text` and a malformed id now matches no row. **Why T2 left it:** correcting one honestly
@@ -4668,7 +4673,7 @@ approved.
   is not comment-only. **Next action:** its own pass, route by route, with the un-screened path
   actually exercised rather than reasoned about.
 
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92).**
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92; the `pg` handles, the `.sqlite.` infix and the `bytea` title are C127's second pull request).**
   Still open: the `.sqlite.` infix in
   `packages/db/src/constraint-target.sqlite.test.ts` and `migrate.sqlite.test.ts`;
   the `packages/media` title that says `bytea` (the importer still checks that format);
@@ -4705,8 +4710,10 @@ approved.
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
-- **The topic files still carry PostgreSQL history — OPEN (2026-09-23, from #496). Owner, 2026-10-02:
-  "Postgres comments should go" — queued as C127.**
+- **The topic files still carry PostgreSQL history — DONE (C127, 2026-10-02).** The topic files,
+  the package READMEs and `CLAUDE.md` no longer describe the old engine, except where they name the
+  `bench/pglite-throughput` rig or the guards that refuse PostgreSQL leftovers. The entry as first
+  written follows. (2026-09-23, from #496. Owner, 2026-10-02: "Postgres comments should go".)
   #496 took it out of `CLAUDE.md` and fixed every topic-file passage that contradicted the new
   `CLAUDE.md`, but did not sweep `docs/developers/conventions-data.md` or `testing-guide.md`. Most
   mentions are dated receipts, which is where history belongs. **Next action, if wanted:** read both
