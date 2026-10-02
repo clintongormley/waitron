@@ -628,7 +628,11 @@ export class CatalogueScreen extends LitElement {
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
               .units=${this.units}
-              .unitLanguage=${this.contentLanguages?.languages[0] ?? "en"}
+              .unitLanguage=${
+                this.contentLanguages?.languages[0] ??
+                this.contentLanguages?.defaultLanguage ??
+                "en"
+              }
               .canAddProduct=${locales.length > 0 && this.units.length > 0}
               .loaded=${this.productsLoaded}
               @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {

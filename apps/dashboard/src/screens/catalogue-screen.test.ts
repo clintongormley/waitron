@@ -1831,6 +1831,16 @@ describe("catalogue-screen", () => {
     expect(products.unitLanguage).toBe("es");
   });
 
+  it("reads unit names in the venue's default language when no content language is listed", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi({
+        getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: [] }),
+      }),
+    });
+    await flush(el);
+    expect(list(el).unitLanguage).toBe("es");
+  });
+
   it("tells the product list the catalogue has loaded only once its products have", async () => {
     const pending: ((value: Product[]) => void)[] = [];
     const api = stubApi({
