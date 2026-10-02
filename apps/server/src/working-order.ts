@@ -5330,7 +5330,8 @@ function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]
 
 /**
  * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected
- * order drops out; items are not filtered by state, so a `ready` line stays until its order collects.
+ * order drops out; kitchen items are not filtered by state, so a `ready` line stays until its order collects.
+ * Items made at the till are absent from the station queue.
  * When the station shows the rest of the order, each card also carries its unserved items at other stations.
  */
 export async function listStationQueue(
@@ -5553,9 +5554,9 @@ export interface ExpoOrder {
 
 /**
  * The cross-station expo read: every order in the venue that is not abandoned, not collected, and
- * has at least one item not yet away (open, placed and settled orders alike), its items gathered
+ * has at least one kitchen item not yet away (open, placed and settled orders alike), its kitchen items gathered
  * across all stations and sectioned by group in position order for a seated party's bill, by course
- * for any other. A surviving order carries ALL its items, away ones included, so a per-section `away`
+ * for any other. A surviving order carries all its kitchen items, away ones included, so a per-section `away`
  * flag can be rolled up. `locationId` scopes only the table found for an order of no party.
  */
 export async function listExpoQueue(
@@ -5611,6 +5612,7 @@ export async function listExpoQueue(
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
+        eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
         // An order leaves once every item is away. `served_at` is a separate floor marker, not
@@ -5618,6 +5620,7 @@ export async function listExpoQueue(
         sql`exists (
           select 1 from ${ticketItems} tix
           where tix.working_order_id = ${workingOrders.id}
+            and tix.made_here = 0
             and tix.away_at is null)`,
       ),
     )
@@ -5841,7 +5844,8 @@ export interface TableState {
  * party's bills: the open ones for its line count and total, and for the dishes still to serve every
  * bill of its family that is not abandoned, since a paid or presented bill's dishes are still
  * carried to the table. A party takes precedence over a delivery. A pending delivery has kitchen
- * items and is neither collected nor abandoned.
+ * items and is neither collected nor abandoned. Made-here items count as bill lines but do not
+ * contribute kitchen readiness, delivery presence or kitchen waiting time.
  */
 export async function listTablesWithState(
   tx: Transaction,
@@ -5908,7 +5912,7 @@ export async function listTablesWithState(
              -- yet carried out (served_at is null). The ticket item is joined 1:1 on the line -- its
              -- (working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
-             -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
+             -- unfired, made-here or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
              cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
              -- KDS-3 section 3c "en camino": lines the pass has DISPATCHED (ti.away_at is not null, set by
              -- markCourseAway) that the waiter has not yet carried out (served_at is null). Same 1:1
@@ -5920,7 +5924,7 @@ export async function listTablesWithState(
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
              -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved
-             -- line with a ticket item (ti.id is not null), a HELD one included, one JSON object per
+             -- kitchen line with a ticket item (ti.id is not null), a HELD one included, one JSON object per
              -- line -- never a band label (§3's raw-material-in-SQL, classified-in-JS split), reduced
              -- with classifyBand/worstBand in JS below. A line never sent has no ticket_items row and
              -- is excluded, same as a served one.
@@ -5943,7 +5947,7 @@ export async function listTablesWithState(
       left join working_order_lines wol
         on wol.working_order_id = wo.id
       left join ticket_items ti
-        on ti.working_order_line_id = wol.id
+        on ti.working_order_line_id = wol.id and ti.made_here = 0
       -- The unserved line's OWN station thresholds, for the JSON aggregate above. LEFT (not INNER): a row
       -- with no ticket item (ti null) must survive so line_count/tab_total/the other aggregates above
       -- are unaffected by this join — such a row is excluded from unserved_lines by the FILTER instead.
@@ -5962,6 +5966,7 @@ export async function listTablesWithState(
         and exists (
           select 1 from ticket_items ti
           where ti.working_order_id = d.id
+            and ti.made_here = 0
         )
       group by d.delivery_table_id
     ) del on del.delivery_table_id = dt.id

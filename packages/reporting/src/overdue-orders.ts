@@ -22,7 +22,8 @@ function minutesSince(stamp: string, nowMs: number): number {
 
 /**
  * The manager overview's "orders taking too long" query — THIS node's currently-open kitchen orders
- * whose worst UNSERVED line has crossed into `overdue` or `forgotten`, worst-first. The age model and
+ * whose worst UNSERVED kitchen line has crossed into `overdue` or `forgotten`, worst-first. Items
+ * made at the till do not age in this report. The age model and
  * join shape are `apps/server/src/working-order.ts`'s `listExpoQueue`'s: a line ages from
  * `ticket_items.queued_at` until it is served (`working_order_lines.served_at`) or the order is
  * collected (`working_orders.collected_at`), and an order stays "open" while it is not abandoned and
@@ -59,6 +60,7 @@ export async function computeOverdueOrders(
     .where(
       and(
         eq(ticketItems.nodeId, input.nodeId),
+        eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
       ),

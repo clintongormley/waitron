@@ -30,7 +30,7 @@ interface KitchenLine {
   forgottenAfterMinutes: number;
 }
 
-/** The fired dish lines of these bills still to serve, in one query. */
+/** The fired kitchen lines of these bills still to serve, excluding items made at the till. */
 async function readKitchenLines(
   tx: Transaction,
   billIds: readonly string[],
@@ -60,6 +60,7 @@ async function readKitchenLines(
         isNull(workingOrderLines.servedAt),
         isNull(workingOrderLines.parentLineId),
         isNotNull(ticketItems.firedAt),
+        eq(ticketItems.madeHere, false),
       ),
     );
   return rows.map(({ quantity, servedQuantity, unitPrecision, ...line }) => ({
