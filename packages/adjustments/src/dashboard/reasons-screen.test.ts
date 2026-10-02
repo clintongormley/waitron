@@ -272,6 +272,18 @@ describe("the reasons list", () => {
     );
   });
 
+  it("returns focus to the empty table's Add reason after Cancel", async () => {
+    const api = fakeApi({ listReasons: vi.fn().mockResolvedValue([]) });
+    const el = await mount(api);
+    const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    button.click();
+    await settle(el);
+    await press(el, "cancel-editor");
+    expect(modal(el)).toBeNull();
+    expect(el.shadowRoot!.activeElement).toBe(button);
+    expect(api.createReason).not.toHaveBeenCalled();
+  });
+
   it("lists the active reasons in their order, with what each allows, its limits and roles", async () => {
     const el = await mount(fakeApi());
     expect(rowKeys(el)).toEqual(["e", "c", "d"]);

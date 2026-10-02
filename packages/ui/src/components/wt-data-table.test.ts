@@ -3027,3 +3027,24 @@ test("when nothing matches, the same box holds the sentence and no empty-action 
   expect(button.assignedSlot).toBeNull();
   expect(button.getBoundingClientRect().width).toBe(0);
 });
+
+test("an empty table whose screen puts nothing in the empty-action slot draws a box the same height as the no-matches box", async () => {
+  const sentence = "Nothing to show.";
+  const empty = await table({ rows: [], emptyMessage: sentence });
+  const searched = await emptyTable({
+    rows,
+    searchable: true,
+    noMatchesMessage: sentence,
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
+    ],
+  });
+  const input = searched.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "zzz";
+  input.dispatchEvent(new Event("input"));
+  await searched.updateComplete;
+  const box = (el: Element) => el.shadowRoot!.querySelector(".empty")!.getBoundingClientRect();
+  expect(box(empty).width).toBeCloseTo(box(searched).width, 1);
+  expect(box(empty).height).toBeGreaterThan(0);
+  expect(box(empty).height).toBeCloseTo(box(searched).height, 1);
+});
