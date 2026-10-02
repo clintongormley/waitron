@@ -473,7 +473,6 @@ const LINE_REFUSALS = new Set([
   "working_order.already_collected",
   "route.station_inactive",
   "station.not_found",
-  "tab.line_not_found",
   "tab.serve_quantity_invalid",
   "group.not_held",
   "group.not_waiting",
@@ -498,20 +497,6 @@ const ACTIONABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
-  "ticket.already_started",
-  "ticket.already_fired",
-  "ticket.not_sent",
-  "ticket.made_here",
-  "working_order.already_collected",
-  "route.station_inactive",
-  "station.not_found",
-  "tab.line_not_found",
-  "tab.serve_quantity_invalid",
-  "group.not_held",
-  "group.not_waiting",
-  "group.not_found",
-  "group.line_held",
-  "submission.id_reused",
 ]);
 
 /** Hand-over refusals shown in their code's own words. */

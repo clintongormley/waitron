@@ -1383,7 +1383,8 @@ whenever a table's order screen opens, the counter basket is shown, and a statio
   the table's Change patch sends `makeAt` only on 3b's dead-end retry, which names a station the
   waiter just chose. The counter does hold one (Task 9).
 - `LINE_REFUSALS` gains `ticket.not_sent`, `ticket.made_here`, `working_order.already_collected`, `route.station_inactive`,
-  `station.not_found` and `tab.line_not_found` (`working_order.not_open` already reaches the screen
+  `station.not_found`; the Move dialog handles `tab.line_not_found` itself so other table actions
+  retain their existing generic refusal (`working_order.not_open` already reaches the screen
   through `TABLE_REFUSALS`, `till-app.ts:265-287`). `codes.ts` gains, in both languages: `ticket.not_sent` ("This dish has not
   gone to the kitchen yet. Choose where it is made before sending it" / "Este plato aún no ha ido a
   cocina. Elige dónde se prepara antes de enviarlo"), `ticket.made_here` ("This dish is made here at
@@ -1459,8 +1460,8 @@ whenever a table's order screen opens, the counter basket is shown, and a statio
   reloading: Move to station… is offered only while the basket is unchanged (`adjustableListing`),
   so there is no unsaved edit to keep. A PAID counter order shows no line view, so
   it offers nothing (M9).
-- `ACTIONABLE_REFUSALS` gains the codes Task 8 added to `LINE_REFUSALS`, plus `ticket.already_started`;
-  the counter's dialog shows refusals through `counterError`'s code.
+- The counter's Move dialog shows refusals through its own map. `ACTIONABLE_REFUSALS` serves
+  counter pay, place and hold; it does not need move codes.
 
 - [ ] **Step 1: Write the failing tests**: the basket shows Make at… on an unsent row only with
   `makeAtStations` of two or more, shows the chosen station's name, and dispatches `open-make-at`;
@@ -1600,7 +1601,7 @@ coordinator's rulings on it, all applied:
 - **m1** M19 compares make-at with the record's own station; **m2** "not open" is
   `missing || !active || !open`; **m3** moot (no ongoing source); **m4** Task 10's grep no longer
   enumerates expected hits; **m5** `fireLines` is "the only place that ROUTES a new record"; **m6** the
-  Move dialog words five refusals itself, and `tab.line_not_found` joins `LINE_REFUSALS`; **m7** the
+  Move dialog words five refusals itself, including `tab.line_not_found`; **m7** the
   counter clears a stale make-at; **m8** P3 says a split-off extra on another presented bill has no
   button; **m9** fixture fan-out named in Tasks 6 and 7; **m10** `packages/migrations/src/apply.ts:69`
   cited; **m11** the Move dialog's empty option when the current station is not listed; **m12** a
@@ -1715,7 +1716,7 @@ held.) Changed then:
   checked before `ticket.already_started`. `stillMovable` takes the mark, so `movable` is false for
   one and the till never offers Move to station…. New cases for the refusal and the `movable` flag.
 - **Tasks 7 and 8:** English and Spanish wording for `ticket.made_here` in the Move dialog and the
-  till's code table; it joins `LINE_REFUSALS` (and so, through Task 9, `ACTIONABLE_REFUSALS`).
+  till's code table; it joins `LINE_REFUSALS`.
 - **Builds after:** 3c-1 is now required, not "most likely" — the amendment reads its column.
 
 ## Amended 2026-10-01 (owner, after approval) — second

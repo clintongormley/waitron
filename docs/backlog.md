@@ -255,6 +255,11 @@ number when it lands). What is left:
 - **Move to station on a paid counter order.** The move route accepts an order that is paid but not
   yet handed over (`apps/server/src/station-move.ts`). Add the button to B16's "Paid, not handed
   over" list ([Task 16](superpowers/plans/2026-09-26-service-ordering-and-billing.md)).
+- **The Alerts table makes long station warnings hard to read on a phone.** A 390 px mounted
+  dashboard fixture for `route.released_at_closed_station` showed only the start of its warning at
+  first; its 340 px table viewport had 906 px of scrollable content, and a 566 px horizontal pan
+  reached the remaining text. Give the alert text more room at phone width while keeping its
+  handling action reachable.
 - **A till-session station view can bump a dish another station now has.** The till-session
   `POST /api/ticket-items/:id/advance` route does not check the item's station
   (`apps/server/src/till-api.ts`); the device route does (`apps/server/src/device-api.ts`) and refuses
