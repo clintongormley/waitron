@@ -111,6 +111,15 @@ like any menu; it does not reopen until the screen is next opened empty.
 - A category can be dragged too, as today, with the same rules; a category cannot be dropped into
   itself or its own descendants (`acceptsCatalogueDrop` already refuses that).
 - On a touch screen a drag starts from the grip only, as today (`#startDrag`).
+- **Several at once** (owner, 2026-10-02): in Select mode, dragging any selected row drags every
+  selected row, whichever categories they sit in. All of them fade in place, and the lifted copy
+  reads, for example, "3 items" with the first one's picture. Dragging a row that is NOT selected
+  drags that row alone and leaves the selection as it was. Today's code already drags the whole
+  selection when the drag starts on a selected row (`#dragged` in `product-list.ts`, read, not run);
+  what is new is the look, and selection across categories, which the tree makes possible. A
+  selection holding a category and something inside it moves the category, and its contents go
+  with it; a category that is, or lies inside, one of the dragged categories is not offered as a
+  drop place for any of them, as today (`acceptsCatalogueDrop` in `product-list.ts`).
 
 ## 5. Words
 
@@ -128,14 +137,15 @@ free; say which in the PR. The till's menu sections are not touched.
    every category closed.
 2. **Expand all** opens every category and **Collapse all** closes them; it is the flat view that
    "All products" used to be.
-3. **The address keeps `folder=`** (`apps/dashboard/src/navigation.ts`): opening one opens the tree
-   with that category and its parents open and the category scrolled into view. `view=all` is
-   ignored and dropped from the address. Nothing outside the screen links with either today.
+3. **The address names a category with `category=`** (owner, 2026-10-02), replacing `folder=` and
+   `view=` in `apps/dashboard/src/navigation.ts`; old addresses are not supported (pre-live). Opening
+   one opens the tree with that category and its parents open and the category scrolled into view.
+   Nothing outside the screen links with either today.
 4. **Phone width (390 px):** each level is indented less than on a wide screen, and the ⋮ column
    stays pinned at the edge (CLAUDE.md §3). Rows deeper than the indent can show still line up at
    the deepest indent rather than run off the screen.
-5. **Select** mode is unchanged: boxes on every row except "All products", and the Move to… and
-   Delete bar.
+5. **Select** mode keeps its boxes on every row except "All products", and its Move to… and Delete
+   bar.
 
 ## 7. How it is built
 
@@ -165,7 +175,8 @@ the box; Rename the same; the empty screen shows the open menu without moving fo
 reads "€19.00 each" and "€48.00 / kg"; search opens a match's ancestors and clearing restores the
 previous open set; the open set survives a reload; a drag keeps the origin row in place, opens a
 closed category after the hover delay, moves on drop, and cancels on Esc and on a drop where it
-started; "folder" appears in no Products-screen string in either language.
+started; in Select mode, a drag of a selected row moves every selected row, from two different
+categories, in one drop, and a drag of an unselected row moves only that row; "folder" appears in no Products-screen string in either language.
 
 Existing tests that assert the breadcrumb, the Folders / All products switch, the header's Add
 product button, the New folder button, the folder-at-a-time listing or the word "folder" will
