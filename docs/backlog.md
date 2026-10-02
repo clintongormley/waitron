@@ -726,9 +726,11 @@ shows the kitchen name as its own field directly above the customer-facing names
 (owner, 2026-10-01, mockup B):** in the three editors the kitchen name is a plain field, always
 shown, directly under Name; only the customer-facing names stay in the folding section, now headed
 "Customer-facing names". The product editor and the variant form already keep the two apart and are
-left as they are. Done together with A169 and A170. The section heading strings
+left as they are. Done together with A170. The section heading strings
 (`options.names_section`, `extras.names_section` in `apps/dashboard/src/i18n/strings.ts`, English
-and Spanish) change with it.
+and Spanish) change with it, and so does the closed section's summary: A169 (#1026) landed first
+and its summary lists the kitchen name with the customer-facing names (`namesLine`,
+`apps/dashboard/src/widgets/form-fields.ts`).
 
 **A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — OPEN.**
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
