@@ -144,6 +144,17 @@ export function nameFields(
   });
 }
 
+/** The default language's text in `value`, as the hint of a blank field in any OTHER language; ""
+ * in the default language itself, which has nothing to fall back to. */
+export function defaultLanguageHint(
+  value: Record<string, string>,
+  locale: string,
+  defaultLanguage: string | undefined,
+): string {
+  if (defaultLanguage === undefined || locale === defaultLanguage) return "";
+  return value[defaultLanguage]?.trim() ?? "";
+}
+
 /**
  * Unlike {@link nameFields} no language is required: a customer-facing name left blank falls back to
  * the staff name rather than being a missing value. `placeholder` is what it falls back TO, shown
@@ -159,7 +170,6 @@ export function optionalTextFields(
   placeholder = "",
   defaultLanguage?: string,
 ) {
-  const defaultText = defaultLanguage === undefined ? "" : (value[defaultLanguage]?.trim() ?? "");
   return context.locales.map((locale) =>
     textField(
       context,
@@ -168,7 +178,7 @@ export function optionalTextFields(
       value[locale] ?? "",
       (text) => change({ ...value, [locale]: text }),
       false,
-      locale !== defaultLanguage && defaultText ? defaultText : placeholder,
+      defaultLanguageHint(value, locale, defaultLanguage) || placeholder,
     ),
   );
 }

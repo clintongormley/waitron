@@ -28,6 +28,7 @@ import { EACH_CHOICE } from "./variant-table.js";
 import { categoryPath } from "./category-form.js";
 import { categoryField } from "./classification-fields.js";
 import {
+  defaultLanguageHint,
   nonBlankNames,
   optionalTextFields,
   priceLabel,
@@ -859,8 +860,19 @@ export class ProductEditor extends LitElement {
     const customer = named(this.draft.customerName);
     const described = named(this.draft.description);
     // Storage inherits a variant's description as one value across every language, so a parent's
-    // text is a truthful hint only while the variant describes itself in none of them.
-    const descriptionHints = described.length ? null : this.inherited?.description;
+    // text is a hint only while the variant describes itself in none of them.
+    const hintSource =
+      this.inherited === null
+        ? this.draft.description
+        : described.length
+          ? null
+          : this.inherited.description;
+    const descriptionHint = (locale: string) => {
+      if (!hintSource || (this.draft.description?.[locale] ?? "").trim()) return "";
+      return hintSource[locale]?.trim()
+        ? hintSource[locale]
+        : defaultLanguageHint(hintSource, locale, this.language);
+    };
     const summary = [
       customer.length
         ? t("editor.summary_customer_name").replace("{languages}", customer.join(", "))
@@ -892,7 +904,7 @@ export class ProductEditor extends LitElement {
           return html`<wt-textarea
             name=${`description-${locale}`}
             label=${`${t("editor.description")} (${locale})`}
-            placeholder=${descriptionHints?.[locale] ?? ""}
+            placeholder=${descriptionHint(locale)}
             .value=${this.draft.description?.[locale] ?? ""}
             error=${this.error(`description-${locale}`)}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
