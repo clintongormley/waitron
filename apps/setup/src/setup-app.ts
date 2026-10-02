@@ -1240,6 +1240,8 @@ export class SetupApp extends LitElement {
       case "provisioning":
         return html`<setup-provisioning-screen
           data-test="screen-provisioning"
+          .legalName=${this.draft.venue?.legalName}
+          .onboardingIntent=${this.draft.mode}
           .message=${this.provisionMessage?.()}
           .canRetry=${this.provisionCanRetry}
           .reloadLabel=${this.provisionReloadLabel?.()}

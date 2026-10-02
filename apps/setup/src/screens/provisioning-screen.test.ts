@@ -13,11 +13,28 @@ afterEach(() => {
 });
 
 describe("setup-provisioning-screen", () => {
-  it("shows a non-spinner in-flight state with a DISABLED provision control when no message is set", async () => {
+  it.each([
+    ["demo", "Demo"],
+    ["prepare", "Preparation"],
+    ["live", "Live"],
+  ] as const)("shows the restaurant and %s mode while setup is running", async (mode, label) => {
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      legalName: "The Olive Table SL",
+      onboardingIntent: mode,
+    });
+    expect(q(el, "h1")?.textContent?.trim()).toBe("Setting up The Olive Table SL");
+    expect(q(el, "[data-test=mode-indicator]")?.textContent?.trim()).toBe(label);
+    expect(q(el, "wt-spinner")?.getBoundingClientRect().width).toBe(32);
+    expect(q(el, "wt-spinner")?.getBoundingClientRect().height).toBe(32);
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe("Keep this page open.");
+    expect(q(el, "wt-button")).toBeNull();
+  });
+
+  it("shows a spinner without a provision control while the request is pending", async () => {
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {});
     expect(q(el, "[data-test=status]")).not.toBeNull();
-    const provision = q(el, "[data-test=provision]")!;
-    expect(provision.hasAttribute("disabled")).toBe(true);
+    expect(q(el, "wt-spinner")).not.toBeNull();
+    expect(q(el, "[data-test=provision]")).toBeNull();
     expect(q(el, "[data-test=error]")).toBeNull();
     expect(q(el, "[data-test=retry]")).toBeNull();
   });
@@ -131,9 +148,10 @@ describe("setup-provisioning-screen", () => {
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {});
     expect(q(el, "h1")!.textContent!.trim()).toBe("Configurando este servidor");
     expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
-      "Configurando… puede tardar un momento. Mantén esta página abierta.",
+      "Mantén esta página abierta.",
     );
-    expect(q(el, "[data-test=provision]")!.textContent!.trim()).toBe("Configurando…");
+    expect(q(el, "wt-spinner")).not.toBeNull();
+    expect(q(el, "[data-test=provision]")).toBeNull();
   });
 
   it("shows the failure state's help and actions in Spanish", async () => {

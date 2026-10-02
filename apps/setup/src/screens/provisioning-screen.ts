@@ -2,10 +2,11 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-spinner.js";
 import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { t } from "../i18n/t.js";
+import { format, t } from "../i18n/t.js";
 
 /** Renders the provision state the shell maps onto its props; the shell does the POST
  * (`apps/setup/src/setup-app.ts`). */
@@ -21,11 +22,38 @@ export class SetupProvisioningScreen extends LitElement {
       :host {
         display: block;
       }
+      .in-flight {
+        display: grid;
+        justify-items: center;
+        gap: var(--wt-space-4);
+        padding: var(--wt-space-8) var(--wt-space-4);
+        text-align: center;
+      }
+      .in-flight h1,
+      .in-flight p {
+        margin: 0;
+      }
+      .mode-indicator {
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        padding: var(--wt-space-1) var(--wt-space-3);
+        background: var(--wt-color-surface-raised);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .in-flight wt-spinner {
+        width: var(--wt-space-6);
+        height: var(--wt-space-6);
+        color: var(--wt-color-primary);
+      }
     `,
   ];
 
   /** `undefined` while the POST is in flight. */
   @property() message?: string;
+
+  @property() legalName?: string;
+
+  @property() onboardingIntent?: "demo" | "prepare" | "live";
 
   @property({ type: Boolean }) canRetry = false;
 
@@ -83,13 +111,24 @@ export class SetupProvisioningScreen extends LitElement {
         }
       `;
     }
-    return html`
-      <h1>${t("provisioning.heading")}</h1>
-      <p class="status" data-test="status">${t("provisioning.status")}</p>
-      <wt-button variant="primary" data-test="provision" ?disabled=${true}
-        >${t("provisioning.busy")}</wt-button
-      >
-    `;
+    return html`<div class="in-flight">
+      <h1>
+        ${
+          this.legalName
+            ? format("provisioning.setting_up", { legalName: this.legalName })
+            : t("provisioning.heading")
+        }
+      </h1>
+      ${
+        this.onboardingIntent
+          ? html`<p class="mode-indicator" data-test="mode-indicator">
+              ${t(`done.mode.${this.onboardingIntent}`)}
+            </p>`
+          : nothing
+      }
+      <wt-spinner size="lg" label=${t("provisioning.busy")}></wt-spinner>
+      <p class="status" data-test="status">${t("provisioning.keep_open")}</p>
+    </div>`;
   }
 }
 
