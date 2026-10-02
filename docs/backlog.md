@@ -941,6 +941,17 @@ noted under A178 below have it too. Pick one fix for all of them, in the combobo
 rather than a stand-in per screen — and the filter's "nothing chosen" must still mean "no filter"
 to the table's saved view (`#persistView`) and to `wt-filter-change` listeners.
 
+**A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — OPEN.**
+The owner, on a screenshot of the Modifiers screen's status filter showing "Active" after "Any
+status": _"the dropdown shouldn't resize based on the current value - it should be a fixed size"_.
+`wt-data-table` sets no width on its `.table-filter` comboboxes, so each trigger is as wide as the
+text it shows, and choosing a value moves every control after it on the toolbar. **Wanted:** each
+filter keeps one width while its value changes. Read here, not confirmed with the owner: that width
+fits the filter's longest choice, so no choice is cut; if one fixed width for every filter was
+meant, ask. Measuring the longest choice is the combobox's job if it is to hold for every
+dropdown, the table's if only for filters — decide which, and LOOK at phone width, where the
+filters wrap below the search box.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
