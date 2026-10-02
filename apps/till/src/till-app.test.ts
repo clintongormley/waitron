@@ -719,7 +719,11 @@ describe("till-app", () => {
     );
     const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "simulator" }),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "simulator",
+        capabilities: ["print-receipt", "integrated-card-payment"],
+      }),
       askSaleDeadEnds,
       pay,
     });
