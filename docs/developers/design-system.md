@@ -446,8 +446,8 @@ header and `align: "center" | "end"` for non-text values; cell rendering stays w
 
 In the options and extras list forms, the reorder grip and other control columns take only the
 width their contents need. The option name takes the spare width; the extras product, quantity and
-price columns share it. A long translated control heading may wrap above its control instead of
-widening that column.
+price columns share it. Control headings can break inside a word, even in English, to stay as
+narrow as the controls below them.
 
 A table with no rows draws `emptyMessage` in a padded box with the table's own border, corners and
 background, centred, and under it whatever the screen puts in its `empty-action` slot: the screen's

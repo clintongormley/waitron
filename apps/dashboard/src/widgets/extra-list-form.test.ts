@@ -1004,6 +1004,10 @@ it.each([
     expect(cells[3]!.getBoundingClientRect().width, "Preselected column").toBeLessThanOrEqual(
       preselected.getBoundingClientRect().width + 8,
     );
+    expect(
+      getComputedStyle(preselected.shadowRoot!.querySelector('[part~="label"]')!).whiteSpace,
+      "switch label keeps its wrapping behavior",
+    ).toBe("normal");
     expect(cells[5]!.getBoundingClientRect().width, "remove column").toBeLessThanOrEqual(
       remove.getBoundingClientRect().width + 2,
     );

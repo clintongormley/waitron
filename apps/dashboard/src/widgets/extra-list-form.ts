@@ -114,13 +114,16 @@ export class ExtraListForm extends LitElement {
       td:last-child {
         padding-inline: 0;
       }
+      /* The last heading spans Price and Remove, so only the Remove cell takes its own width. */
       th:first-child,
       td:first-child,
       th:nth-child(4),
-      td:nth-child(4),
       td:last-child {
         width: 1%;
         white-space: nowrap;
+      }
+      td:nth-child(4) {
+        width: 1%;
       }
       th:nth-child(4) {
         white-space: normal;

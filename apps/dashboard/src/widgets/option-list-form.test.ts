@@ -1244,14 +1244,19 @@ it.each([
         .querySelectorAll("td");
       const widths = [...cells].map((cell) => cell.getBoundingClientRect().width);
       const handle = cells[0]!.querySelector<HTMLElement>("[data-test^=drag-]")!;
+      const pick = cells[2]!.querySelector<HTMLElement>(".pick")!;
       const menu = cells[3]!.querySelector("wt-row-actions")!;
 
       expect(widths[0], "handle column").toBeLessThanOrEqual(
         handle.getBoundingClientRect().width + 2,
       );
-      expect(widths[2], "Default column").toBeLessThanOrEqual(72);
+      expect(widths[2], "Default column").toBeLessThanOrEqual(
+        pick.getBoundingClientRect().width + 8,
+      );
       expect(widths[3], "menu column").toBeLessThanOrEqual(menu.getBoundingClientRect().width + 2);
-      expect(widths[1], "Name receives the spare space").toBeGreaterThan(widths[0]);
+      expect(widths[1], "Name receives the spare space").toBeGreaterThan(
+        el.shadowRoot!.querySelector("table")!.getBoundingClientRect().width / 2,
+      );
     } finally {
       setLocale("en");
       await page.viewport(width, height);
