@@ -581,6 +581,7 @@ export class OptionListForm extends LitElement {
 
   override render() {
     const { errors, fieldKeys } = this.#messages();
+    const fields = this.#fields(errors);
     const byLabel = this.#errorsByLabel(errors);
     // The options table shows its own message, even one that marks no field.
     const bottom = [
@@ -606,7 +607,7 @@ export class OptionListForm extends LitElement {
         >
           <div class="names">
             ${textField(
-              this.#fields(errors),
+              fields,
               "name",
               t("options.name"),
               this.name,
@@ -614,7 +615,7 @@ export class OptionListForm extends LitElement {
               true,
             )}
             ${textField(
-              this.#fields(errors),
+              fields,
               "kitchen-name",
               t("options.kitchen_name"),
               this.kitchenName,

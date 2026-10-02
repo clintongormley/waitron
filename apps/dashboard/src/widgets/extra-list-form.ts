@@ -662,6 +662,7 @@ export class ExtraListForm extends LitElement {
 
   override render() {
     const { errors, fieldKeys } = this.#messages();
+    const fields = this.#fields(errors);
     // The items table shows its own message, even one that marks no field.
     const bottom = [
       ...Object.entries(errors)
@@ -686,7 +687,7 @@ export class ExtraListForm extends LitElement {
       >
         <div class="names">
           ${textField(
-            this.#fields(errors),
+            fields,
             "name",
             t("extras.name"),
             this.name,
@@ -694,7 +695,7 @@ export class ExtraListForm extends LitElement {
             true,
           )}
           ${textField(
-            this.#fields(errors),
+            fields,
             "kitchen-name",
             t("extras.kitchen_name"),
             this.kitchenName,
