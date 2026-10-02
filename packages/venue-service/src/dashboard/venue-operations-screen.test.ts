@@ -272,14 +272,14 @@ describe("venue operations screen", () => {
       departments: "No departments yet.",
       hours: "No opening hours yet.",
       zones: "No service zones yet.",
-      tills: "No tills yet.",
+      tills: "No active tills.",
       "zone-menus": "No menus in this service zone yet.",
     },
     es: {
       departments: "Todavía no hay departamentos.",
       hours: "Todavía no hay horarios de apertura.",
       zones: "Todavía no hay zonas de servicio.",
-      tills: "Todavía no hay cajas.",
+      tills: "No hay cajas activas.",
       "zone-menus": "Todavía no hay cartas en esta zona de servicio.",
     },
   };
@@ -307,6 +307,15 @@ describe("venue operations screen", () => {
       await selectTab(empty, "zones");
       expect(emptySentence(empty, "zones")).toBe(expected.zones);
       expect(emptySentence(empty, "tills")).toBe(expected.tills);
+
+      const allTillsOff = await mount({
+        load: vi.fn().mockResolvedValue({
+          ...model,
+          devices: [{ id: "t2", label: "Old till", kind: "till", active: false }],
+        }),
+      } as unknown as VenueServiceApi);
+      await selectTab(allTillsOff, "zones");
+      expect(emptySentence(allTillsOff, "tills")).toBe(expected.tills);
 
       const noMenus = await mount({
         load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
