@@ -1287,14 +1287,21 @@ Forget button.
 Every step sits in a card drawn like the setup wizard's: a 1px `--wt-color-border` border,
 `--wt-radius-lg` corners and the `--wt-color-surface-raised` background, with the Waitron lockup
 first, above any notice and the heading. The card's logo is decorative (`aria-hidden`), because the
-banner above the card already names Waitron. On the email, password, passkey and Google screens the
-step's own way in is ONE full-width primary `wt-button`, with the form's one message on its own line
-directly above it. When there is any other way in, an **or** line follows, then each other way in
-as a full-width outlined (`secondary`) button with a leading icon hidden from assistive technology:
-a key for **Use your password**, a person with a key for **Log in with passkey**, and Google's "G"
-for **Continue with Google** (`apps/dashboard/src/assets/google-g.svg`, so Google's colours stay out
-of the screen's styles); neither the drawing nor Google's branding terms were checked against
-Google's own sources. The email screen offers **Continue with Google** when the venue has Google
+banner above the card already names Waitron. On the email, password and passkey screens the step's
+own way in is ONE full-width primary `wt-button`, and on the Google screen it is the Google button,
+each with the form's one message on its own line directly above it. When there is any other way
+in, an **or** line follows, then each other way in as a full-width outlined (`secondary`) button
+with a leading icon hidden from assistive technology: a key for **Use your password**, a person
+with a key for **Log in with passkey**, and Google's "G" for **Continue with Google**. The Google
+button follows Google's custom-button rules
+(<https://developers.google.com/identity/branding-guidelines>) wherever it appears: the gradient
+"G" from Google's download bundle (`apps/dashboard/src/assets/google-g.svg`) at
+`--wt-google-mark-size`, `--wt-google-mark-gap` from its label, Google's light and dark colours
+through `--wt-color-google-button-fill`, `--wt-color-google-button-line` and
+`--wt-color-google-button-text`, and Google Sans Medium, bundled
+(`apps/dashboard/src/assets/google-sans-medium-latin.woff2`, registered on `document.fonts`). The
+Google screen has no blue button, because Google's button must carry its "G" on a light, dark or
+neutral fill (A228). The email screen offers **Continue with Google** when the venue has Google
 set up, because starting a Google sign-in takes no email; whether it shows depends on the venue's
 settings alone, so every visitor sees the same choices there. **I've forgotten my password** is a
 small link at the right directly under the password field, on the password screen only. On the code

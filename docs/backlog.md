@@ -593,7 +593,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
     (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
     A191 (#1074, 2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
-    steps put their one primary button outside the action row (design-system.md, login section).
+    steps put their own way in outside the action row (design-system.md, login section). Since A228
+    the Google step's is Google's own button, not a primary one.
 
 The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
 shared components. Whether they follow in this pass or later is open — decide it before the
@@ -992,7 +993,7 @@ email (`POST /management-api/google/login` reads no body, `apps/server/src/manag
 and whether it shows depends only on the venue's settings, so the first page still shows everyone
 the same choices. The Google "G" (`apps/dashboard/src/assets/google-g.svg`) is the commonly
 reproduced four-colour mark; neither the drawing nor Google's branding terms were checked against
-Google's own sources. Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md`. Two races it reasoned about but did not reproduce were reproduced and fixed by A229 (below).
+Google's own sources (2026-10-03: checked and replaced by A228, below). Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md` (done by A228, below). Two races it reasoned about but did not reproduce were reproduced and fixed by A229 (below).
 
 **Pressing Google stops a passkey autofill that is still starting, and an autofill failure before a
 passkey is picked keeps Google's message (A229, owner 2026-10-03) — DONE (#1080).** The two sign-in
@@ -1029,6 +1030,24 @@ prompt); turning the keep-the-message rule back into a plain assignment failed c
 the connection message instead of Google's; and deleting the line that clears the old message when
 a passkey is picked failed the picked-passkey refusal case, which showed Google's message instead
 of the passkey refusal.
+
+**The "Continue with Google" button follows Google's branding rules (A228, 2026-10-03) — DONE
+(branch `fix/google-sign-in-branding`).** Google's sign-in branding guidelines
+(<https://developers.google.com/identity/branding-guidelines>) require a custom Google button to
+carry the standard gradient "G" (the download bundle's), and give its light and dark fill, line and
+text colours and its font, Google Sans Medium. The flat four-colour "G" was the kind the guidelines call
+outdated, and the Google page's own button was blue with no "G". Now the button, on every page it
+appears, carries the bundle's gradient "G" at 20px, reads `--wt-color-google-button-fill`, `-line`
+and `-text` and `--wt-font-family-google`, and the dashboard bundles Google Sans Medium (latin,
+weight 500), registered on `document.fonts`. The Google page's own button is that same button, so
+that page has no blue button. `deploy/third-party/README.md` carries the font's SIL Open Font
+License notice (`google-sans/OFL.txt`) and Google's trademark line for the "G". It changed two
+existing assertions in `apps/dashboard/src/screens/login-screen.test.ts` (owner to review): the
+Google page now has 0 primary buttons, not 1, and the Google icon among the other ways in is
+`--wt-google-mark-size` wide, not `--wt-font-size-lg`. Kept from the house rather than Google's
+drawing: the 44px tap height (Google's drawing is 40px; its text allows scaling), the full card
+width and `wt-button`'s corner radius. Checked in Chromium only (the vitest browser suites and
+screenshots); Firefox and Safari not looked at.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
 2026-10-02) — DONE (A192).** The owner, on two screenshots of the Modifiers screen's "Search extras
