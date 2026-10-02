@@ -46,6 +46,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./widgets/station-choice-dialog.js";
+import { lineProductName } from "./widgets/product-name.js";
 import type {
   AdjustDetail,
   ChangeLineDetail,
@@ -497,6 +498,20 @@ const ACTIONABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
+  "ticket.already_started",
+  "ticket.already_fired",
+  "ticket.not_sent",
+  "ticket.made_here",
+  "working_order.already_collected",
+  "route.station_inactive",
+  "station.not_found",
+  "tab.line_not_found",
+  "tab.serve_quantity_invalid",
+  "group.not_held",
+  "group.not_waiting",
+  "group.not_found",
+  "group.line_held",
+  "submission.id_reused",
 ]);
 
 /** Hand-over refusals shown in their code's own words. */
@@ -1404,6 +1419,13 @@ export class TillApp extends LitElement {
     stationId: string | null;
     refusal: string | null;
     busy: boolean;
+    counter?: boolean;
+  } | null = null;
+  @state() private makingAt: {
+    index: number;
+    line: OrderLine;
+    orderId: string;
+    session: number;
   } | null = null;
   /** The default station's queue. Prepay enqueues nothing automatically, so a prepay till never fetches it. */
   @state() private stationQueue: StationQueueGroup[] = [];
@@ -1845,6 +1867,7 @@ export class TillApp extends LitElement {
         this.stations = stations;
         this.#stationsLoaded = true;
         this.#clearUnlistedDraftStations();
+        this.#clearUnlistedCounterStations();
       }
     } catch (error) {
       if (throwOnFailure) throw error;
@@ -1859,6 +1882,15 @@ export class TillApp extends LitElement {
     draft.lines.forEach((line, index) => {
       if (line.makeAt !== undefined && !available.has(line.makeAt))
         draft.setLineMakeAt(index, undefined);
+    });
+  }
+
+  #clearUnlistedCounterStations(): void {
+    if (!this.#stationsLoaded) return;
+    const available = new Set(this.stations.map((station) => station.id));
+    this.#store.lines.forEach((line, index) => {
+      if (line.makeAt !== undefined && !available.has(line.makeAt))
+        this.#store.setLineMakeAt(index, undefined);
     });
   }
 
@@ -3158,6 +3190,7 @@ export class TillApp extends LitElement {
     else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
+    this.#clearUnlistedCounterStations();
     this.counterLines = listed;
     this.cardOutcome = undefined;
     this.collectFlow = undefined;
@@ -3570,6 +3603,7 @@ export class TillApp extends LitElement {
     this.#orderVisit++;
     this.#moveStationOpening = null;
     this.movingStation = null;
+    this.makingAt = null;
     this.#clearErrorKeepingLateChange();
     this.cancelOffer = null;
     this.#tableOpensPending++;
@@ -4634,20 +4668,21 @@ export class TillApp extends LitElement {
         lineId: string;
         name: string;
         stationId: string | null;
+        counter?: boolean;
       }>
     ).detail;
     const opening = {};
     this.#moveStationOpening = opening;
     const session = this.#operatorSession;
     const visit = this.#orderVisit;
-    const orderId = this.activeTabId;
+    const orderId = detail.counter === true ? this.#store.id : this.activeTabId;
     try {
       await this.#loadStations();
       if (
         this.#moveStationOpening !== opening ||
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
-        orderId !== this.activeTabId
+        orderId !== (detail.counter === true ? this.#store.id : this.activeTabId)
       )
         return;
       this.movingStation = { ...detail, refusal: null, busy: false };
@@ -4656,7 +4691,36 @@ export class TillApp extends LitElement {
     }
   }
 
+  async #onOpenMakeAt(event: Event): Promise<void> {
+    if (this.makingAt !== null || this.movingStation !== null) return;
+    const index = (event as CustomEvent<number>).detail;
+    const orderId = this.#store.id;
+    const session = this.#operatorSession;
+    const line = this.#store.lines[index];
+    if (line === undefined) return;
+    await this.#loadStations();
+    if (
+      orderId !== this.#store.id ||
+      session !== this.#operatorSession ||
+      this.#store.lines[index] !== line
+    )
+      return;
+    this.makingAt = { index, line, orderId, session };
+  }
+
   async #onStationChosen(event: Event): Promise<void> {
+    if (this.makingAt !== null) {
+      const open = this.makingAt;
+      const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
+      this.makingAt = null;
+      if (
+        open.orderId === this.#store.id &&
+        open.session === this.#operatorSession &&
+        this.#store.lines[open.index] === open.line
+      )
+        this.#store.setLineMakeAt(open.index, stationId ?? undefined);
+      return;
+    }
     const open = this.movingStation;
     const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
     if (open === null || open.busy || stationId === null || stationId === open.stationId) return;
@@ -4671,7 +4735,8 @@ export class TillApp extends LitElement {
         () => session === this.#operatorSession,
       );
       if (this.movingStation?.lineId === open.lineId) this.movingStation = null;
-      await this.#loadTabLines();
+      if (open.counter === true) await this.#reloadCounterOrder(open.workingOrderId, session);
+      else await this.#loadTabLines();
     } catch (error) {
       const refusal = lineWriteError(error);
       if (this.movingStation?.lineId === open.lineId)
@@ -4683,7 +4748,8 @@ export class TillApp extends LitElement {
               ? refusal.code
               : ((error as { code?: string }).code ?? "server.internal"),
         };
-      await this.#loadTabLines();
+      if (open.counter === true) await this.#reloadCounterOrder(open.workingOrderId, session);
+      else await this.#loadTabLines();
     } finally {
       limit.done();
     }
@@ -6575,6 +6641,7 @@ export class TillApp extends LitElement {
     this.#floorLoaded = false;
     this.errorKey = undefined;
     this.movingStation = null;
+    this.makingAt = null;
     this.#moveStationOpening = null;
     this.#stationsRead++;
     this.stations = [];
@@ -6693,6 +6760,7 @@ export class TillApp extends LitElement {
         .defaultReaderId=${this.defaultReaderId}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
+        .makeAtStations=${this.stations}
         .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;
     }
@@ -6702,6 +6770,7 @@ export class TillApp extends LitElement {
       .tab=${tab}
       .store=${this.#store}
       .storedLines=${this.#basketStoredLines()}
+      .makeAtStations=${tableTab ? [] : this.stations}
       .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
       .permissions=${this.permissions}
@@ -6907,6 +6976,7 @@ export class TillApp extends LitElement {
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
         @move-station=${(event: Event) => void this.#onMoveStation(event)}
+        @open-make-at=${(event: Event) => void this.#onOpenMakeAt(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
@@ -7011,6 +7081,18 @@ export class TillApp extends LitElement {
                 .refusal=${this.movingStation.refusal}
                 @station-chosen=${(event: Event) => void this.#onStationChosen(event)}
                 @close=${() => (this.movingStation = null)}
+              ></till-station-choice-dialog>`
+        }
+        ${
+          this.makingAt === null
+            ? nothing
+            : html`<till-station-choice-dialog
+                mode="make-at"
+                .dishName=${lineProductName(this.makingAt.line.product)}
+                .stations=${this.stations}
+                .currentStationId=${this.makingAt.line.makeAt ?? null}
+                @station-chosen=${(event: Event) => void this.#onStationChosen(event)}
+                @close=${() => (this.makingAt = null)}
               ></till-station-choice-dialog>`
         }
         ${this.#renderEditDeadEnds()}

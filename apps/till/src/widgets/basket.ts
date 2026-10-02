@@ -32,7 +32,7 @@ import {
 } from "../state/adjust-target.js";
 import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
-import type { TabLine } from "../api/client.js";
+import type { Station, TabLine } from "../api/client.js";
 
 /** The same `×` (U+00D7) the printed receipt and the settled-ticket view use. */
 const QTY_BADGE = "×";
@@ -301,6 +301,7 @@ export class TillBasket extends LitElement {
   #listedById = new Map<string, TabLine>();
   #listedExtras = new Map<number, TabLine[]>();
   #listedTotal: Decimal = decimal("0");
+  @property({ attribute: false }) makeAtStations: Station[] = [];
 
   /** The line whose note editor is open, by the line itself rather than its place: other lines move
    * under it (a remove elsewhere, another basket showing the same order), and a note, which can
@@ -465,6 +466,19 @@ export class TillBasket extends LitElement {
             }
           </div>
           ${
+            !sent && this.makeAtStations.length > 1
+              ? html`<div class="line-actions">
+                  <wt-button
+                    size="sm"
+                    variant="ghost"
+                    data-make-at=${index}
+                    @click=${() => this.dispatchEvent(new CustomEvent("open-make-at", { detail: index, bubbles: true, composed: true }))}
+                    >${this.#makeAtLabel(line)}</wt-button
+                  >
+                </div>`
+              : nothing
+          }
+          ${
             // Each row's actions sit straight under it, so a dish's are not read as its extra's.
             adjustable !== null && listed !== undefined
               ? this.#lineActions(line, index, listed, sent, adjustable)
@@ -557,6 +571,13 @@ export class TillBasket extends LitElement {
 
   #toggleEditor(line: OrderLine): void {
     this.editingLine = this.editingLine === line ? null : line;
+  }
+
+  #makeAtLabel(line: OrderLine): string {
+    const station = this.makeAtStations.find((candidate) => candidate.id === line.makeAt);
+    return station === undefined
+      ? `${t("move_station.make_at")}…`
+      : `${t("move_station.make_at")}: ${station.name}`;
   }
 
   #extrasRow(line: OrderLine, index: number) {
@@ -677,6 +698,9 @@ export class TillBasket extends LitElement {
       name,
       () => lineAdjustTarget(listed, listing.lines, name),
       sent,
+      sent && listed.movable
+        ? { workingOrderId: listing.orderId, lineId: listed.id, name, stationId: listed.stationId }
+        : null,
     );
   }
 
@@ -707,8 +731,26 @@ export class TillBasket extends LitElement {
     name: string,
     target: () => AdjustTarget,
     sent: boolean,
+    move: {
+      workingOrderId: string;
+      lineId: string;
+      name: string;
+      stationId: string | null;
+    } | null = null,
   ) {
     return html`<div class="line-actions">
+      ${
+        move === null
+          ? nothing
+          : html`<wt-button
+              size="sm"
+              variant="secondary"
+              data-move-station=${place}
+              aria-label=${`${t("table.move_station")} · ${name}`}
+              @click=${() => this.dispatchEvent(new CustomEvent("move-station", { detail: { ...move, counter: true }, bubbles: true, composed: true }))}
+              >${t("table.move_station")}</wt-button
+            >`
+      }
       ${
         sent
           ? html`<wt-button

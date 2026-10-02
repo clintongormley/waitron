@@ -122,6 +122,42 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-basket: a stored counter order", () => {
+  it("offers Make at on unsent dishes only with a station choice, and names the chosen station", async () => {
+    const store = storedOrder();
+    store.setLineMakeAt(2, "bar");
+    const el = await mount(store);
+    expect(all(el, "[data-make-at]")).toBe(0);
+    el.makeAtStations = [
+      { id: "bar", name: "Bar", displayOrder: 1, isDefault: false, active: true, open: true },
+      { id: "grill", name: "Grill", displayOrder: 2, isDefault: true, active: true, open: true },
+    ];
+    await el.updateComplete;
+    expect(within(el, 0, "data-make-at")).toBeNull();
+    expect(within(el, 2, "data-make-at")!.textContent).toContain("Make at: Bar");
+    const heard: number[] = [];
+    el.addEventListener("open-make-at", (event) =>
+      heard.push((event as CustomEvent<number>).detail),
+    );
+    within(el, 2, "data-make-at")!.click();
+    expect(heard).toEqual([2]);
+  });
+
+  it("offers Move to station for a movable sent dish, and omits a started dish", async () => {
+    const el = await mount(storedOrder(), {
+      ...stored,
+      lines: listed.map((line) =>
+        line.id === "l-1" || line.id === "l-2" ? { ...line, movable: true } : line,
+      ),
+    });
+    expect(within(el, 0, "data-move-station")).not.toBeNull();
+    expect(within(el, 1, "data-move-station")).toBeNull();
+    el.storedLines = {
+      ...stored,
+      lines: listed.map((line) => (line.id === "l-1" ? { ...line, movable: false } : line)),
+    };
+    await el.updateComplete;
+    expect(within(el, 0, "data-move-station")).toBeNull();
+  });
   it("offers Cancel in place of remove and − on the dish the kitchen has, and keeps +", async () => {
     const el = await mount(storedOrder());
 

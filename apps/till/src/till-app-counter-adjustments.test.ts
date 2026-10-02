@@ -311,8 +311,125 @@ const offered = (el: TillApp) =>
     "[data-cancel-line], [data-comp-line], [data-discount-bill]",
   ).length;
 
+const stations = [
+  { id: "bar", name: "Bar", displayOrder: 1, isDefault: false, active: true, open: true },
+  { id: "grill", name: "Grill", displayOrder: 2, isDefault: true, active: true, open: true },
+];
+
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
+
+describe("till-app: counter station choice", () => {
+  it("clears a station absent from the arriving list and sends null on save", async () => {
+    const old = heldOrder(4);
+    old.lines[1]!.makeAt = "switched-off";
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(old),
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
+    });
+    expect(counter(el).store.lines[1]!.makeAt).toBeUndefined();
+    emit(counter(el), "park-order", {});
+    await flush(el);
+    expect(vi.mocked(api.updateWorkingOrder).mock.calls[0]![1].lines[1]!.makeAt).toBeNull();
+  });
+
+  it("keeps a move refusal at the bottom of the choice dialog", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      getTabLines: vi.fn().mockResolvedValue(lines),
+      moveDishStation: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+      stationId: "grill",
+    });
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    expect(chooser.shadowRoot!.querySelector(".body > :last-child")!.getAttribute("role")).toBe(
+      "alert",
+    );
+    expect(chooser.shadowRoot!.querySelector(".refusal")!.textContent).toContain("started");
+  });
+  it("saves Make at on an unsent line with the next pay request", async () => {
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
+      recordSale: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    inBasket(el, '[data-make-at="1"]')!.click();
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    expect(chooser.getAttribute("mode")).toBe("make-at");
+    emit(chooser, "station-chosen", { stationId: "bar" });
+    await flush(el);
+    expect(counter(el).store.lines[1]!.makeAt).toBe("bar");
+    emit(counter(el), "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+    expect(vi.mocked(api.updateWorkingOrder).mock.calls[0]![1].lines[1]!.makeAt).toBe("bar");
+    expect(vi.mocked(api.recordSale).mock.calls[0]![0][1]!.makeAt).toBe("bar");
+  });
+
+  it("rereads a moved counter dish and another till's line before the next save", async () => {
+    const before = heldOrder(4);
+    before.lines[0]!.makeAt = "bar";
+    const after = heldOrder(6);
+    after.lines[0]!.makeAt = "grill";
+    after.lines.push({
+      workingOrderLineId: "l-3",
+      productId: "toast",
+      quantity: "1.000",
+      product: product("toast", "Toast", "3.00"),
+    });
+    const moved = listing(6);
+    moved.lines[0] = { ...moved.lines[0]!, movable: true, stationId: "grill" };
+    const el = await retrieved({
+      listStations: vi.fn().mockResolvedValue(stations),
+      retrieveWorkingOrder: vi.fn().mockResolvedValueOnce(before).mockResolvedValue(after),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ...listing(4),
+          lines: [
+            { ...listing(4).lines[0]!, movable: true, stationId: "bar" },
+            ...listing(4).lines.slice(1),
+          ],
+        })
+        .mockResolvedValue(moved),
+      moveDishStation: vi.fn().mockResolvedValue({ revision: 6 }),
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 7 }),
+    });
+    inBasket(el, '[data-move-station="0"]')!.click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+      stationId: "grill",
+    });
+    await flush(el);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(counter(el).store.lines.map((line) => line.makeAt)).toEqual([
+      "grill",
+      undefined,
+      undefined,
+    ]);
+    expect(counter(el).store.lines).toHaveLength(3);
+    expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+    expect(inBasket(el, '[data-move-station="0"]')).not.toBeNull();
+    inBasket(el, ".line .step-inc")!.click();
+    await flush(el);
+    emit(counter(el), "park-order", {});
+    await flush(el);
+    const sent = vi.mocked(api.updateWorkingOrder).mock.calls[0]![1];
+    expect(sent.revision).toBe(6);
+    expect(sent.lines.map((line) => [line.workingOrderLineId, line.makeAt])).toEqual([
+      ["l-1", "grill"],
+      ["l-2", null],
+      ["l-3", null],
+    ]);
+  });
+});
 
 describe("till-app: giving away a dish on a stored counter order", () => {
   it("offers the adjustments once the order's lines are read, Cancel only on what the kitchen has", async () => {

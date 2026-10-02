@@ -41,14 +41,15 @@ export class TillStationChoiceDialog extends LitElement {
   @property() dishName = "";
   @property({ attribute: false }) stations: Station[] = [];
   @property() currentStationId: string | null = null;
-  @property() selected: string | null = null;
+  @property() selected: string | null | undefined = undefined;
   @property({ type: Boolean }) busy = false;
   @property() refusal: string | null = null;
 
   #choice(): string | null {
-    if (this.selected !== null)
-      return this.stations.some((station) => station.id === this.selected) ? this.selected : null;
-    if (this.mode === "make-at") return null;
+    if (this.selected !== undefined)
+      return this.selected !== null && this.stations.some((station) => station.id === this.selected)
+        ? this.selected
+        : null;
     return this.stations.some((station) => station.id === this.currentStationId)
       ? this.currentStationId
       : null;

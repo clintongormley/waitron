@@ -47,6 +47,15 @@ const submit = (el: TillStationChoiceDialog) =>
   root(el).querySelector<HTMLButtonElement>("[data-submit]")!;
 
 describe("till-station-choice-dialog", () => {
+  it("starts Make at on the line's chosen station and can return to routing rules", async () => {
+    const el = await mount({ mode: "make-at", currentStationId: "bar" });
+    expect(displayed(el)).toBe("Upstairs bar (closed)");
+    const heard: unknown[] = [];
+    el.addEventListener("station-chosen", (event) => heard.push((event as CustomEvent).detail));
+    await choose(el, 0);
+    submit(el).click();
+    expect(heard).toEqual([{ stationId: null }]);
+  });
   it("uses the shared field primitive for station choice", async () => {
     const el = await mount();
     expect(root(el).querySelector('wt-combobox[name="station"]')).not.toBeNull();
