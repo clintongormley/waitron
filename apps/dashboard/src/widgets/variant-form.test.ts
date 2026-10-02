@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { VariantForm } from "./variant-form.js";
 import "./variant-form.js";
@@ -389,6 +389,7 @@ it("saves on Enter and cancels on Escape from a focused field", async () => {
   await userEvent.keyboard("{Enter}");
   expect(submit).toHaveBeenCalledTimes(1);
   await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
   expect(cancel).toHaveBeenCalledTimes(1);
 });
 
