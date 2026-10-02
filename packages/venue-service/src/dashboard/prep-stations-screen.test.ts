@@ -1980,3 +1980,150 @@ it.each(["success", "refusal"] as const)(
     expect(q(el, "station-hours-form")).not.toBeNull();
   },
 );
+
+it.each([
+  [
+    "out_of_hours",
+    "Upstairs bar is closed outside its opening hours, so its work goes to Downstairs bar.",
+  ],
+  ["closed_by_hand", "Upstairs bar is closed by hand today, so its work goes to Downstairs bar."],
+  ["switched_off", "Upstairs bar is switched off, so its work goes to Downstairs bar."],
+])("explains %s before the destination", async (why, sentence) => {
+  const el = await mount(
+    api({
+      explain: vi.fn().mockResolvedValue({
+        route: { kind: "station", stationId: "downstairs" },
+        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        fallbacks: [{ stationId: "upstairs", why }],
+        noReplacement: false,
+        clockReadable: true,
+        stations: [
+          { id: "upstairs", name: "Upstairs bar", active: true },
+          { id: "downstairs", name: "Downstairs bar", active: true },
+        ],
+      }),
+    }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
+  expect(answer).toContain(sentence);
+  expect(answer).toContain("Because: Upstairs bar claims Cocktails");
+  expect(answer.indexOf(sentence)).toBeLessThan(answer.indexOf("Made at:"));
+});
+it("explains each fallback and the final dead end without saying no rule matched", async () => {
+  const el = await mount(
+    api({
+      explain: vi.fn().mockResolvedValue({
+        route: null,
+        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        fallbacks: [
+          { stationId: "upstairs", why: "out_of_hours" },
+          { stationId: "bar", why: "closed_by_hand" },
+        ],
+        noReplacement: true,
+        clockReadable: true,
+        stations: [
+          { id: "upstairs", name: "Upstairs bar", active: true },
+          { id: "bar", name: "Downstairs bar", active: true },
+        ],
+      }),
+    }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
+  expect(answer).toContain(
+    "Upstairs bar is closed outside its opening hours, so its work goes to Downstairs bar.",
+  );
+  expect(answer).toContain(
+    "Downstairs bar is closed by hand today, and it has no replacement, so the till asks the waiter where to make this.",
+  );
+  expect(answer).not.toContain("no rule matched");
+  expect(answer).not.toContain("Made at:");
+});
+it("keeps the no-default explanation and reports unreadable opening hours", async () => {
+  const el = await mount(
+    api({
+      explain: vi.fn().mockResolvedValue({
+        route: null,
+        decidedBy: null,
+        fallbacks: [],
+        noReplacement: false,
+        clockReadable: false,
+        stations: [],
+      }),
+    }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+    "Nothing can make this: no rule matched and no default station is switched on.",
+  );
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+    "The venue's time zone or day cutover cannot be read, so opening hours are not applied.",
+  );
+});
+it("sends both the chosen weekday and time and returns to now", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  const when = q(el, '[data-test="test-when"]') as HTMLSelectElement;
+  expect(when.value).toBe("now");
+  when.value = "at";
+  when.dispatchEvent(new Event("change"));
+  await settle(el);
+  const day = q(el, '[data-test="test-weekday"]') as HTMLSelectElement;
+  day.value = "5";
+  day.dispatchEvent(new Event("change"));
+  const time = q(el, '[data-test="test-time"]') as HTMLInputElement;
+  time.value = "22:00";
+  time.dispatchEvent(new Event("input"));
+  await settle(el);
+  expect(a.explain).toHaveBeenLastCalledWith("bread", null, { weekday: 5, timeOfDay: "22:00" });
+  when.value = "now";
+  when.dispatchEvent(new Event("change"));
+  await settle(el);
+  expect(a.explain).toHaveBeenLastCalledWith("bread", null);
+});
+
+it("clears the scheduled answer and shows the required-time problem when time is removed", async () => {
+  setLocale("en");
+  const a = api({
+    explain: vi.fn().mockResolvedValue({
+      route: { kind: "station", stationId: "bar" },
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+      noReplacement: false,
+      clockReadable: true,
+      stations: view.routing.stations,
+    }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  const when = q(el, '[data-test="test-when"]') as HTMLSelectElement;
+  when.value = "at";
+  when.dispatchEvent(new Event("change"));
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Made at: Bar");
+  const count = vi.mocked(a.explain).mock.calls.length;
+  const time = q(el, '[data-test="test-time"]') as HTMLInputElement;
+  time.value = "";
+  time.dispatchEvent(new Event("input"));
+  await settle(el);
+  expect(q(el, "#test-time-error")!.textContent).toContain("Choose a time.");
+  expect(time.getAttribute("aria-invalid")).toBe("true");
+  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
+  expect(vi.mocked(a.explain).mock.calls.length).toBe(count);
+});

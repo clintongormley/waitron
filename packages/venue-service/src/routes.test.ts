@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { setClaim } from "./routing-store.js";
+import { replaceStationHours, setStationToday } from "./station-times.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -1510,5 +1513,73 @@ describe("routing explanation route", () => {
         )
       ).status,
     ).toBe(400);
+  });
+});
+
+it.each([
+  "weekday=5",
+  "time=22:00",
+  "weekday=7&time=22:00",
+  "weekday=5&time=24:00",
+  "weekday=&time=22:00",
+  "weekday=1.5&time=22:00",
+  "weekday=5&time=2:00",
+])("refuses invalid explanation time: %s", async (query) => {
+  const fx = await fixture();
+  const response = await send(
+    fx.app,
+    "GET",
+    `/management-api/venue-service/routing/explain?productId=${fx.categoryId}&${query}`,
+    fx.managerCookie,
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "when" } },
+  });
+});
+
+it("applies scheduled hours through the explain route and honors manual open only for now", async () => {
+  const fx = await fixture();
+  const product = await withTransaction(db, async (tx) => {
+    await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, fx.locationId));
+    const cfg = { locationId: fx.locationId };
+    const [station] = await tx
+      .insert(kitchenStations)
+      .values({ ...cfg, name: "Upstairs" })
+      .returning();
+    await setClaim(tx, cfg, fx.categoryId, { kind: "station", stationId: station!.id });
+    await replaceStationHours(tx, cfg, station!.id, [
+      { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
+    ]);
+    await setStationToday(tx, cfg, station!.id, "open", new Date());
+    return {
+      id: (
+        await createProduct(tx, {
+          catalogueId: fx.menuId,
+          name: "Lager",
+          categoryId: fx.categoryId,
+          pricingUnit: "each",
+          unitPrice: "3.00",
+          vatClass: "general",
+        })
+      ).id,
+      stationId: station!.id,
+    };
+  });
+  const path = `/management-api/venue-service/routing/explain?productId=${product.id}`;
+  const now = await send(fx.app, "GET", path, fx.managerCookie);
+  expect(now.status).toBe(200);
+  expect(await now.json()).toMatchObject({
+    route: { kind: "station", stationId: product.stationId },
+    fallbacks: [],
+    clockReadable: true,
+  });
+  const scheduled = await send(fx.app, "GET", `${path}&weekday=5&time=22:00`, fx.managerCookie);
+  expect(scheduled.status).toBe(200);
+  expect(await scheduled.json()).toMatchObject({
+    route: null,
+    noReplacement: true,
+    clockReadable: true,
+    fallbacks: [{ stationId: product.stationId, why: "out_of_hours" }],
   });
 });

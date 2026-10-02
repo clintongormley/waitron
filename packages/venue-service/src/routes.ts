@@ -246,7 +246,20 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const productId = requireUuidParam(c.req.query("productId") ?? "", "ProductId");
         const zone = c.req.query("zoneId");
         const zoneId = zone ? requireUuidParam(zone, "ServiceZoneId") : null;
-        return c.json(await gated(sessionId, (tx) => explainRoute(tx, ctx.cfg, productId, zoneId)));
+        const weekday = c.req.query("weekday");
+        const time = c.req.query("time");
+        if (
+          (weekday === undefined) !== (time === undefined) ||
+          (weekday !== undefined && (!/^[0-6]$/.test(weekday) || !CLOCK_TIME.test(time!)))
+        )
+          throw new AppError("management.request_invalid", { field: "when" });
+        const when =
+          weekday === undefined
+            ? { kind: "now" as const, at: new Date() }
+            : { kind: "at" as const, moment: { weekday: Number(weekday), timeOfDay: time! } };
+        return c.json(
+          await gated(sessionId, (tx) => explainRoute(tx, ctx.cfg, productId, zoneId, when)),
+        );
       }),
     );
 

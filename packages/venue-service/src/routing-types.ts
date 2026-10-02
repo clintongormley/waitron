@@ -21,6 +21,7 @@ export interface RouteExplanation {
   decidedBy: RoutingDecision | null;
   fallbacks: FallbackStep[];
   noReplacement: boolean;
+  clockReadable: boolean;
   stations: { id: string; name: string; active: boolean }[];
 }
 

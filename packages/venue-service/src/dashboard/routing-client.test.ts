@@ -361,3 +361,15 @@ it("switches a station on through the core station PATCH", async () => {
   await new PrepStationsApi(request as DashboardRequest).activateStation("bar");
   expect(request).toHaveBeenCalledWith("/management-api/stations/bar", "PATCH", { active: true });
 });
+
+it("serializes the scheduled weekday and time together", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.explain("lager", null, { weekday: 5, timeOfDay: "22:00" });
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/venue-service/routing/explain?productId=lager&zoneId=&weekday=5&time=22%3A00",
+    "GET",
+    undefined,
+    { passive: false },
+  );
+});

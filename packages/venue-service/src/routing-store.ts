@@ -17,6 +17,7 @@ import {
   unreachableExceptions,
   type RouteTarget,
   type RoutingRules,
+  type RoutingMoment,
 } from "./routing.js";
 import { readLocationClock } from "@waitron/reporting";
 import { venueMoment } from "./station-times.js";
@@ -354,15 +355,20 @@ export async function loadRoutingRules(
   return (await snapshot(tx, cfg, businessDay)).rules;
 }
 
+export type ExplainWhen = { kind: "now"; at: Date } | { kind: "at"; moment: RoutingMoment };
+
 export async function explainRoute(
   tx: Transaction,
   cfg: VenueScope,
   productId: string,
   zoneId: string | null,
+  when: ExplainWhen,
 ): Promise<RouteExplanation> {
   const uuid = storedUuid(productId);
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  const { rules, stations } = await snapshot(tx, cfg);
+  const now = when.kind === "now" ? await venueMoment(tx, cfg, when.at) : null;
+  const moment = when.kind === "at" ? when.moment : now;
+  const { rules, stations } = await snapshot(tx, cfg, now?.businessDay ?? null);
   const [product] = await tx
     .select({
       id: products.id,
@@ -382,10 +388,11 @@ export async function explainRoute(
       categoryId: product.categoryId,
     },
     zoneId,
-    null,
+    moment,
   );
   return {
     ...choice,
+    clockReadable: moment !== null,
     fallbacks: [...choice.fallbacks],
     stations: stations.map(({ id, name, active }) => ({ id, name, active })),
   };

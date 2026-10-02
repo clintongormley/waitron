@@ -3,6 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  selectStyles,
   submitOnEnter,
   ReorderController,
   reorder,
@@ -65,6 +66,7 @@ const targetFor = (id: string): RouteTarget =>
 export class PrepStationsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     ReorderController.styles,
     ReorderController.tableStyles,
     css`
@@ -92,6 +94,28 @@ export class PrepStationsScreen extends LitElement {
       .form {
         display: grid;
         gap: var(--wt-space-4);
+      }
+      .tester-when {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: var(--wt-space-2);
+      }
+      .tester-when label {
+        display: grid;
+        gap: var(--wt-space-1);
+      }
+      .tester-when select {
+        min-height: var(--wt-tap-min);
+      }
+      .tester-when input {
+        min-height: var(--wt-tap-min);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        padding-inline: var(--wt-space-2);
+        font: inherit;
       }
       .cards {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-field-max-width)), 1fr));
@@ -187,6 +211,9 @@ export class PrepStationsScreen extends LitElement {
   @state() private assignmentChoiceKey = 0;
   @state() private testProduct = "";
   @state() private testZone = "";
+  @state() private testWhen = "now";
+  @state() private testWeekday = 0;
+  @state() private testTime = "12:00";
   @state() private explanation?: RouteExplanation;
   @state() private testError = "";
   @state() private stationAction?: StationAction;
@@ -508,9 +535,15 @@ export class PrepStationsScreen extends LitElement {
     const request = ++this.#testRequest;
     this.explanation = undefined;
     this.testError = "";
-    if (!this.testProduct) return;
+    if (!this.testProduct || (this.testWhen === "at" && !this.testTime)) return;
     try {
-      const explanation = await this.api.explain(this.testProduct, this.testZone || null);
+      const explanation =
+        this.testWhen === "now"
+          ? await this.api.explain(this.testProduct, this.testZone || null)
+          : await this.api.explain(this.testProduct, this.testZone || null, {
+              weekday: this.testWeekday,
+              timeOfDay: this.testTime,
+            });
       if (request === this.#testRequest) this.explanation = explanation;
     } catch {
       if (request === this.#testRequest) this.testError = t("prep.test_error");
@@ -529,14 +562,29 @@ export class PrepStationsScreen extends LitElement {
         return t("prep.test_no_prep_claim")
           .replace("{folder}", folder)
           .replace("{target}", t("prep.no_preparation"));
-      const name =
-        this.explanation?.route?.kind === "station"
-          ? this.#testStationName(this.explanation.route.stationId)
-          : t("prep.no_preparation");
+      const claimed =
+        this.explanation?.fallbacks[0]?.stationId ??
+        (this.explanation?.route?.kind === "station" ? this.explanation.route.stationId : null);
+      const name = claimed === null ? t("prep.no_preparation") : this.#testStationName(claimed);
       return t("prep.test_claim").replace("{station}", name).replace("{folder}", folder);
     }
     const exception = this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId);
     return t("prep.test_exception").replace("{rule}", this.#exceptionText(exception));
+  }
+  #testFallback(step: RouteExplanation["fallbacks"][number], index: number): string {
+    const explanation = this.explanation!;
+    const reason = format(`prep.test_${step.why}`, {
+      station: this.#testStationName(step.stationId),
+    });
+    const next = explanation.fallbacks[index + 1]?.stationId;
+    if (next === undefined && explanation.noReplacement)
+      return format("prep.test_no_replacement", { reason });
+    const destination =
+      next ?? (explanation.route?.kind === "station" ? explanation.route.stationId : "");
+    return format("prep.test_fallback_step", {
+      reason,
+      destination: this.#testStationName(destination),
+    });
   }
   #tester() {
     const explanation = this.explanation;
@@ -569,9 +617,67 @@ export class PrepStationsScreen extends LitElement {
           }}
         ></wt-combobox>
       </div>
+      <div class="tester-when">
+        <label
+          >${t("prep.test_when")}
+          <select
+            name="when"
+            data-test="test-when"
+            .value=${this.testWhen}
+            @change=${(event: Event) => {
+              this.testWhen = (event.target as HTMLSelectElement).value;
+              void this.#explain();
+            }}
+          >
+            <option value="now">${t("prep.test_now")}</option>
+            <option value="at">${t("prep.test_at")}</option>
+          </select>
+        </label>
+        ${
+          this.testWhen === "at"
+            ? html`
+                <label
+                  >${t("prep.weekday")}
+                  <select
+                    name="weekday"
+                    data-test="test-weekday"
+                    .value=${String(this.testWeekday)}
+                    @change=${(event: Event) => {
+                      this.testWeekday = Number((event.target as HTMLSelectElement).value);
+                      void this.#explain();
+                    }}
+                  >
+                    ${[0, 1, 2, 3, 4, 5, 6].map((day) => html`<option value=${day} ?selected=${day === this.testWeekday}>${t(`venue.day.${day}` as "venue.day.0")}</option>`)}
+                  </select>
+                </label>
+                <label
+                  >${t("prep.test_time")} *
+                  <input
+                    name="time"
+                    data-test="test-time"
+                    type="time"
+                    required
+                    .value=${live(this.testTime)}
+                    aria-invalid=${!this.testTime}
+                    aria-describedby="test-time-error"
+                    @input=${(event: Event) => {
+                      this.testTime = (event.target as HTMLInputElement).value;
+                      void this.#explain();
+                    }}
+                  />
+                  <span id="test-time-error" class="error"
+                    >${!this.testTime ? t("prep.test_time_required") : nothing}</span
+                  >
+                </label>
+              `
+            : nothing
+        }
+      </div>
       <div data-test="test-answer" aria-live="polite">
         ${this.testError ? html`<p class="error" role="alert">${this.testError}</p>` : nothing}
-        ${explanation?.route === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
+        ${explanation?.clockReadable === false ? html`<p>${t("prep.test_clock_unreadable")}</p>` : nothing}
+        ${explanation?.fallbacks.map((step, index) => html`<p>${this.#testFallback(step, index)}</p>`)}
+        ${explanation?.route === null && explanation.decidedBy === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
         ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
         ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${this.#testRule(explanation.decidedBy)}</p>` : nothing}
       </div>

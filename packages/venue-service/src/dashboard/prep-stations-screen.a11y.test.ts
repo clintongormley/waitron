@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -286,5 +287,75 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       expect((form?.shadowRoot ?? el.shadowRoot)!.querySelector('[role="alert"]')).not.toBeNull();
     }
     await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
+  describe.each(["light", "dark"] as const)("theme %s", (theme) => {
+    it.each([390, 1280])("keeps controls and fallback answer readable at %s px", async (width) => {
+      const previous = { width: window.innerWidth, height: window.innerHeight };
+      setLocale(locale);
+      try {
+        await page.viewport(width, 900);
+        await mountThemed("<div></div>", theme);
+        host.style.width = `${width}px`;
+        expect(host.getBoundingClientRect().width).toBe(width);
+        host.style.boxSizing = "border-box";
+        const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+        el.api = {
+          load: vi
+            .fn()
+            .mockResolvedValue({ ...empty, testProducts: [{ id: "mojito", name: "Mojito" }] }),
+          explain: vi.fn().mockResolvedValue({
+            route: { kind: "station", stationId: "downstairs" },
+            decidedBy: { kind: "exception", exceptionId: "rule" },
+            fallbacks: [{ stationId: "upstairs", why: "out_of_hours" }],
+            noReplacement: false,
+            clockReadable: true,
+            stations: [
+              { id: "upstairs", name: "Upstairs bar", active: true },
+              { id: "downstairs", name: "Downstairs bar", active: true },
+            ],
+          }),
+        } as unknown as PrepStationsApi;
+        host.append(el);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        const root = el.shadowRoot!;
+        root
+          .querySelector('[data-test="test-product"]')!
+          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "mojito" } }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+        const when = root.querySelector<HTMLSelectElement>('[data-test="test-when"]')!;
+        when.value = "at";
+        when.dispatchEvent(new Event("change"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        for (const selector of [
+          '[data-test="test-when"]',
+          '[data-test="test-weekday"]',
+          '[data-test="test-time"]',
+        ]) {
+          const box = root.querySelector(selector)!.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(host.getBoundingClientRect().left);
+          expect(box.right).toBeLessThanOrEqual(host.getBoundingClientRect().right);
+          expect(box.height).toBeGreaterThanOrEqual(44);
+        }
+        const answer = root.querySelector('[data-test="test-answer"]')!.textContent!;
+        expect(answer).toContain(
+          locale === "en" ? "so its work goes to Downstairs bar" : "su trabajo va a Downstairs bar",
+        );
+        await expectNoA11yViolations(host);
+        const time = root.querySelector<HTMLInputElement>('[data-test="test-time"]')!;
+        time.value = "";
+        time.dispatchEvent(new Event("input"));
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(previous.width, previous.height);
+      }
+    });
   });
 });

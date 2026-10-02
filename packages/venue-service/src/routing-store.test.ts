@@ -145,7 +145,12 @@ describe("route explanation", () => {
   it("rejects an unknown product", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await expect(explainRoute(tx, f.cfg, randomUUID(), null)).rejects.toMatchObject({
+      await expect(
+        explainRoute(tx, f.cfg, randomUUID(), null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).rejects.toMatchObject({
         code: "route.subject_not_found",
         params: { subject: "product" },
       });
@@ -189,7 +194,12 @@ describe("route explanation", () => {
         productId: f.mojito,
         target: { kind: "station", stationId: f.terraceBar },
       });
-      expect(await explainRoute(tx, f.cfg, f.variant, f.terrace)).toMatchObject({
+      expect(
+        await explainRoute(tx, f.cfg, f.variant, f.terrace, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
         route: { kind: "station", stationId: f.terraceBar },
         decidedBy: { kind: "exception", exceptionId: id },
         fallbacks: [],
@@ -212,7 +222,12 @@ describe("route explanation", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
-      expect(await explainRoute(tx, f.cfg, f.mojito, f.terrace)).toMatchObject({
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, f.terrace, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
         route: null,
         decidedBy: { kind: "exception", exceptionId: id },
         fallbacks: [{ stationId: f.terraceBar, why: "switched_off" }],
@@ -226,12 +241,22 @@ describe("route explanation", () => {
   it("names the default and reports no route when no active default remains", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      expect(await explainRoute(tx, f.cfg, f.bread, null)).toMatchObject({
+      expect(
+        await explainRoute(tx, f.cfg, f.bread, null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
         route: { kind: "station", stationId: f.bar },
         decidedBy: { kind: "default" },
       });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      expect(await explainRoute(tx, f.cfg, f.bread, null)).toMatchObject({
+      expect(
+        await explainRoute(tx, f.cfg, f.bread, null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
         route: null,
         decidedBy: null,
       });
@@ -1272,3 +1297,80 @@ describe("routing previews", () => {
       ).toHaveLength(1);
     }));
 });
+
+describe("timed routing explanation", () => {
+  it("uses Friday hours and names the fallback, while now honors today's open", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
+      ]);
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      const at = new Date("2026-10-02T22:00:00Z");
+      const scheduled = await explainRoute(tx, f.cfg, f.mojito, null, {
+        kind: "at",
+        moment: { weekday: 5, timeOfDay: "22:00" },
+      });
+      expect(scheduled).toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+        fallbacks: [{ stationId: f.terraceBar, why: "out_of_hours" }],
+        noReplacement: false,
+        clockReadable: true,
+      });
+      await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
+      expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
+        route: { kind: "station", stationId: f.terraceBar },
+        fallbacks: [],
+        clockReadable: true,
+      });
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, null, {
+          kind: "at",
+          moment: { weekday: 5, timeOfDay: "22:00" },
+        }),
+      ).toEqual(scheduled);
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+      expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+        fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
+      });
+    }));
+  it("reports an unreadable venue clock and does not apply hours", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
+      ]);
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, null, {
+          kind: "now",
+          at: new Date("2026-10-02T22:00:00Z"),
+        }),
+      ).toMatchObject({
+        route: { kind: "station", stationId: f.terraceBar },
+        clockReadable: false,
+        fallbacks: [],
+      });
+    }));
+});
+
+it("explains now with today's manual closure", async () =>
+  scoped(async (tx) => {
+    const f = await fixture(tx);
+    const at = new Date("2026-10-02T22:00:00Z");
+    await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+    await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+    await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+    await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+    expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
+      route: { kind: "station", stationId: f.bar },
+      fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
+    });
+  }));

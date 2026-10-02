@@ -1,7 +1,7 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
-import type { WeeklyInterval } from "../routing.js";
+import type { WeeklyInterval, RoutingMoment } from "../routing.js";
 
 export interface OutputsDown {
   printersDown: {
@@ -108,8 +108,16 @@ export class PrepStationsApi {
       change,
     );
   }
-  explain(productId: string, zoneId: string | null): Promise<RouteExplanation> {
+  explain(
+    productId: string,
+    zoneId: string | null,
+    moment?: RoutingMoment,
+  ): Promise<RouteExplanation> {
     const query = new URLSearchParams({ productId, zoneId: zoneId ?? "" });
+    if (moment) {
+      query.set("weekday", String(moment.weekday));
+      query.set("time", moment.timeOfDay);
+    }
     return this.#read<RouteExplanation>(`/management-api/venue-service/routing/explain?${query}`);
   }
   async createStation(input: StationInput): Promise<{ id: string }> {
