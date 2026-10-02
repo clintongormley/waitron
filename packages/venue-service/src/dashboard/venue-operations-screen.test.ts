@@ -1168,8 +1168,6 @@ describe("an editor's messages", () => {
     expect(saveDisabled(el)).toBe(false);
   });
 
-  // Fails if a change reported after the editor has gone is judged: the field holding focus as
-  // Escape closes the editor reports its change then.
   it("leaves no message behind when Escape closes an editor with a blank field", async () => {
     const el = await newDepartment();
     await action(el, "save-editor");
