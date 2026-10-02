@@ -155,10 +155,12 @@ export class PrintingRulesScreen extends LitElement {
     if (this.saving) return;
     this.saving = true;
     this.errorKey = null;
-    if (printerId) this.printerErrors = { ...this.printerErrors, [printerId]: "" };
     try {
       await action();
       await this.#load();
+      if (printerId && (this.printerStations[printerId] ?? []).length === 0) {
+        this.printerErrors = { ...this.printerErrors, [printerId]: "" };
+      }
     } catch (error) {
       const code = codeOf(error);
       if (printerId && code === "printer.makes_and_watches") {

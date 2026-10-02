@@ -587,6 +587,35 @@ describe("printing rules", () => {
     await flush(el);
     expect(select.closest("wt-card")!.textContent).not.toContain(t("printers.watcher_conflict"));
   });
+  it("keeps the watcher refusal until every conflicting station is detached", async () => {
+    const attached = new Set(["s1", "s2"]);
+    const api = stubApi({
+      setPrinterWatcher: vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" }),
+      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
+        printerId === "p1" ? [...attached].map((stationId) => ({ stationId, printerId })) : [],
+      ),
+      detachPrinterFromStation: vi.fn(async (stationId: string) => {
+        attached.delete(stationId);
+      }),
+    });
+    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+      api,
+    });
+    await flush(el);
+    const card = q(el, "[data-test=printer-watcher-p1]")!.closest("wt-card")!;
+    const select = q(el, "[data-test=printer-watcher-p1]") as HTMLSelectElement;
+    select.value = "w1";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush(el);
+    expect(card.textContent).toContain(t("printers.watcher_conflict"));
+
+    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", false);
+    await flush(el);
+    expect(card.textContent).toContain(t("printers.watcher_conflict"));
+    toggleSwitch(el, "[data-test=station-toggle-p1-s2]", false);
+    await flush(el);
+    expect(card.textContent).not.toContain(t("printers.watcher_conflict"));
+  });
   it("reports loading failures", async () => {
     const api = stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
