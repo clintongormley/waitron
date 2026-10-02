@@ -147,6 +147,7 @@ export class OptionListForm extends LitElement {
    * held against the label's ID rather than the position the server named, so moving a label
    * carries its message with it. */
   @state() private serverErrors: Record<string, string> = {};
+  #rowPointerStart: EventTarget | null = null;
 
   readonly #reorder = new ReorderController(
     this,
@@ -468,9 +469,18 @@ export class OptionListForm extends LitElement {
       data-label=${label.id}
       tabindex=${this.busy ? -1 : 0}
       aria-label=${`${t("options.edit_option")}: ${label.name}`}
+      @pointerdown=${(event: PointerEvent) => {
+        this.#rowPointerStart = event.target;
+      }}
       @click=${(event: MouseEvent) => {
+        const pointerStart = this.#rowPointerStart;
+        this.#rowPointerStart = null;
+        // A drag across cells sends its click to the row, losing the control where it began.
         if (
           this.busy ||
+          (event.detail > 0 &&
+            event.target === event.currentTarget &&
+            pointerStart !== event.currentTarget) ||
           event
             .composedPath()
             .some(
