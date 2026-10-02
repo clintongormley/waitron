@@ -1329,7 +1329,7 @@ Seeds, edit"). The product picker offers no "may contain" today (only the ingred
 `allergen-picker.ts` does), and the draft keeps each allergen's stored presence when the list
 changes; keep that. A variant's hints of its parent's values (`nutritionHints`) stay meaningful.
 
-**No box around Pricing (A214) — DONE.** The owner: _"Pricing also doesn't need the box around it"_.
+**No box around Pricing (A214) — DONE (#1065).** The owner: _"Pricing also doesn't need the box around it"_.
 Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the same upper-case
 muted group label as Classification and Modifiers, or, once A219 folds it, a `wt-disclosure` headed
 like Kitchen. `.bordered-group` had no other user and is gone, with its comment about the variants
@@ -1356,7 +1356,7 @@ window, which has no unit button, labels it "Price" (`unitShortLabel` and `rende
 (`feat/products-category-tree`) has a comment in `product-list.ts` citing `unitShortLabel` as
 returning Each, which is no longer true; fix it when that branch is rebased.
 
-**The variants' status filter becomes a "Show inactive" link (A217) — DONE.** The owner:
+**The variants' status filter becomes a "Show inactive" link (A217) — DONE (#1065).** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
 (`variant-status`, `variant-table.ts`) stood alone between the base price and the table. Offer
 mockups: for example in the table's header row, beside the Add variant button, or shown only once
@@ -1388,7 +1388,7 @@ group headings (`wt-combobox`'s existing `group`), and each group ends with its 
 choice, "+ New extras list…" and "+ New options list…", drawn in the primary blue so it does not
 read as a list. No divider is needed.
 
-**With variants, Pricing folds and Variants becomes its own section (A219) — DONE.**
+**With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
 The owner: _"when we have variants the vat and base price and status filter are overwhelming.
 they overshadow the variants, which are the interesting bits. perhaps they should be collapsed?"_.
 Once a product has an active variant, the base price is the price each variant falls back to
@@ -1406,6 +1406,12 @@ Descriptors — heading and arrow, then a muted line "**Base price:** €38.00 p
 Reduced (10%)" — not as a grey box, which reads as a field (the owner). The variants move to
 their own section, "Variants", below it and always open, ending with Add variant and A217's link.
 Without variants, Pricing stays open as today and Variants is just the Add variant button.
+**Built as decided (#1065)**, with these readings: Pricing folds only while some variant is
+Active (the same rule that switches the label to "Base price"); the link toggles back as "Hide
+inactive" / "Ocultar inactivas"; the fold starts open only on a product never saved. **Open:** in
+Spanish the folded line reads "**IVA:** Reduced (10%)". The VAT class name is the stored label,
+which `taxLabel` shows untranslated, and on `main` before #1065 the VAT dropdown already read it
+the same way. Where those labels come from, and whether they should be translated, is not checked.
 Built: the fold follows the base-price label, so it needs an ACTIVE variant; with only Inactive
 ones the price is the product's own and Pricing stays open. The bold names come from a new
 `summaryFields` property on `wt-disclosure` (A200 asked for a way to pass name and value pairs). A
