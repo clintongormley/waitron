@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -21,7 +21,7 @@ import {
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, MadeAt, Product } from "../api/client.js";
+import type { CategorySummary, MadeAt, Product, Unit } from "../api/client.js";
 import {
   PRODUCT_ORDERINGS,
   type ProductOrdering,
@@ -139,6 +139,10 @@ export class ProductList extends LitElement {
       wt-data-table::part(context) {
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(price-unit) {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       wt-data-table::part(vat-note) {
         display: block;
         color: var(--wt-color-text-muted);
@@ -165,6 +169,10 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) unroutedFolderIds: string[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
+  /** The venue's stored units; a product whose unit is not among them is sold by the each. */
+  @property({ attribute: false }) units: readonly Unit[] = [];
+  /** The content language a stored unit's abbreviation is read in. */
+  @property() unitLanguage = "en";
   @property({ attribute: false }) emptyAction?: () => TemplateResult;
   /** What the table says with no rows; a caller that filters before the table names its own. */
   @property() emptyMessage?: string;
@@ -397,6 +405,18 @@ export class ProductList extends LitElement {
     return low === high ? text : `${text}–${formatMoney(String(high), locale)}`;
   }
 
+  /** The rule the product editor's `unitShortLabel` uses: Each for a unit that is not stored, else
+   * the abbreviation, or the name when it has none. A listed product with no stored unit still
+   * carries one, the server's Each, so only the stored list tells the two apart. */
+  #unitWord(product: Product): string {
+    if (!this.units.some(({ id }) => id === product.unitId)) return t("product.price_each");
+    const language = this.unitLanguage;
+    const name =
+      resolveContentText(product.unit.abbreviation, language, language) ||
+      resolveContentText(product.unit.name, language, language);
+    return t("product.price_per").replace("{unit}", name);
+  }
+
   #productColumns(): DataTableColumn<ProductRow>[] {
     return [
       {
@@ -473,7 +493,8 @@ export class ProductList extends LitElement {
         // its price, since nothing else on the row would show it.
         cell: (row) => {
           const vat = row.variant?.effective.vatClass;
-          return html`<span data-test="price">${this.#price(row)}</span>${
+          return html`<span data-test="price">${this.#price(row)}</span>
+            <span part="price-unit" data-test="price-unit">${this.#unitWord(row.product)}</span>${
               vat === undefined || vat === row.product.vatClass
                 ? nothing
                 : html`<span part="vat-note" data-test="vat-note"

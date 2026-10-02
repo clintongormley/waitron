@@ -654,6 +654,8 @@ export class CatalogueScreen extends LitElement {
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
+              .units=${this.units}
+              .unitLanguage=${this.contentLanguages?.languages[0] ?? "en"}
               .emptyAction=${this.#emptyAction}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();

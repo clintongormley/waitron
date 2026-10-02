@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
-import type { Product } from "../api/client.js";
+import type { Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { ProductList } from "./product-list.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -371,17 +371,23 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe(
-      `${euros("4,00")}–${euros("5,50")}`,
-    );
+    expect(
+      cellUnder(root, "wine", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(`${euros("4,00")}–${euros("5,50")}`);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe(
-      euros("4,00"),
-    );
-    expect(cellUnder(root, "wine:w175", t("product.price")).textContent!.trim()).toBe(
-      euros("5,50"),
-    );
+    expect(
+      cellUnder(root, "wine:w125", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("4,00"));
+    expect(
+      cellUnder(root, "wine:w175", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("5,50"));
   });
 
   // The Modifiers column names the lists a manager attached through `Product.modifiers`. Two things
@@ -773,10 +779,16 @@ describe("product-list", () => {
       ],
     });
     const root = await tableRoot(el);
-    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe(
-      `${euros("4,50")}–${euros("5,50")}`,
-    );
-    expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe(euros("3,00"));
+    expect(
+      cellUnder(root, "wine", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(`${euros("4,50")}–${euros("5,50")}`);
+    expect(
+      cellUnder(root, "beer", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("3,00"));
   });
 
   // Every field differs between Wine 175 and its product, and its three names differ from one
@@ -876,9 +888,11 @@ describe("product-list", () => {
       ["wine:w125", "Wine 125"],
     ] as const)
       expect(cellUnder(root, rowKey, t("product.name")).textContent!.trim()).toBe(name);
-    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe(
-      euros("4,00"),
-    );
+    expect(
+      cellUnder(root, "wine:w125", t("product.price"))
+        .querySelector('[data-test="price"]')!
+        .textContent!.trim(),
+    ).toBe(euros("4,00"));
     // Cell markup lives in the table's shadow root, so only ::part reaches it.
     const style = getComputedStyle(note("wine:w175")!);
     expect(style.display).toBe("block");
@@ -1083,6 +1097,64 @@ describe("product-list", () => {
       expect(select.options[0]).toEqual({ value: "", label });
     },
   );
+
+  const kilo: Unit = {
+    id: "kg",
+    name: { en: "Kilogram", es: "Kilogramo" },
+    abbreviation: { en: "kg", es: "kg" },
+    precision: 3,
+  };
+
+  // \s+ also folds the no-break space Spanish writes before the sign.
+  it.each([
+    { locale: "en-GB", language: "en", each: "€19.00 each", weighed: "€48.00 / kg" },
+    { locale: "es-ES", language: "es", each: "19,00 € la unidad", weighed: "48,00 € / kg" },
+  ])("names the unit after each price in $locale", async ({ locale, language, each, weighed }) => {
+    setLocale(locale);
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "plate", unitPrice: "19.00" }),
+        product({ id: "ham", name: "Jamón", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
+      ],
+      units: [kilo],
+      unitLanguage: language,
+    });
+    const root = await tableRoot(el);
+    const price = (key: string) =>
+      cellUnder(root, key, t("product.price")).textContent!.replace(/\s+/g, " ").trim();
+    expect(price("plate")).toBe(each);
+    expect(price("ham")).toBe(weighed);
+  });
+
+  it("names a stored unit with no abbreviation by its name, and a variant by its product's unit", async () => {
+    const tray: Unit = { id: "tray", name: { es: "bandeja" }, abbreviation: {}, precision: 0 };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun", unitId: "tray", unit: tray, variants: [bunVariant] })],
+      units: [tray],
+      unitLanguage: "es",
+    });
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    const unit = (key: string) =>
+      cellUnder(root, key, t("product.price"))
+        .querySelector('[data-test="price-unit"]')!
+        .textContent!.trim();
+    expect(unit("bun")).toBe("/ bandeja");
+    expect(unit("bun:small")).toBe("/ bandeja");
+  });
+
+  it("draws the unit quietly, in the muted colour and the small size", async () => {
+    const { el, host } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product()],
+    });
+    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-font-size-sm", "11px");
+    const unit = (await tableRoot(el)).querySelector<HTMLElement>('[data-test="price-unit"]')!;
+    expect(unit.getAttribute("part")).toBe("price-unit");
+    expect(getComputedStyle(unit).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(unit).fontSize).toBe("11px");
+  });
 });
 
 it("drags a product outside the selection alone and never offers a variant as a drag source", async () => {

@@ -1811,6 +1811,19 @@ describe("catalogue-screen", () => {
       expect(api.getMenuStructure).not.toHaveBeenCalled();
     });
   });
+
+  it("hands the product list the stored units and the content language their names are read in", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    expect(list(el).units).toEqual(units);
+    expect(list(el).unitLanguage).toBe("es");
+    await list(el).updateComplete;
+    const products = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
+    expect(products.units).toEqual(units);
+    expect(products.unitLanguage).toBe("es");
+  });
 });
 
 it("reads and writes folder paths and passes the folder to new products", async () => {

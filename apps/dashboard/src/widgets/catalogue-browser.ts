@@ -13,6 +13,7 @@ import type {
   DashboardApi,
   Product,
   MadeAt,
+  Unit,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
 import {
@@ -124,6 +125,8 @@ export class CatalogueBrowser extends LitElement {
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
+  @property({ attribute: false }) units: readonly Unit[] = [];
+  @property() unitLanguage = "en";
   @property({ attribute: false }) folderId: string | null = null;
   @property() view: "folders" | "all" = "folders";
   /** The screen's Add button, drawn under an empty list's sentence; not while a search is typed. */
@@ -615,6 +618,8 @@ export class CatalogueBrowser extends LitElement {
         .categories=${this.categories}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
+        .units=${this.units}
+        .unitLanguage=${this.unitLanguage}
         .emptyAction=${this.search.trim() ? undefined : this.emptyAction}
         .emptyMessage=${this.search.trim() ? tableNoMatches() : t("catalogue.no_products")}
         @open-folder=${(event: CustomEvent<{ folderId: string }>) => {
