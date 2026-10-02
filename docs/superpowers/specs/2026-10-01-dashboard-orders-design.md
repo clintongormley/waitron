@@ -225,7 +225,7 @@ the credit notes' numbers under it) · Status · Total · Still owed · Staff ·
 owed** uses the same figures the till's collect uses (`readIssuedSales` for an invoice; lines less
 received bill payments before one), so the two can never disagree; it is blank when nothing is
 owed. The row menu is the `actions` column, `pinned: "end"` (CLAUDE.md §3). It holds View details,
-and Reprint receipt (section 4.5) for a person holding `print.resend`. Status, Staff and Still owed
+and Reprint receipt (section 4.5) for a bill with an invoice. Status, Staff and Still owed
 are choosable columns.
 
 ### 4.5 What a row opens
@@ -248,23 +248,22 @@ which printer (from the reprint record below).
 
 #### Reprint receipt
 
-Owner, 2026-10-02 (choice 5): reprinting is in this build, to a printer the manager picks, gated on
-`print.resend`. Issuing a credit note from the dashboard stays a later item of its own: there is
+Owner, 2026-10-02 (choice 5, amended ~09:50): reprinting is in this build, to a printer the person
+picks. It uses the till copy's `print-receipt` device capability when a device is bound; a browser
+without a device binding needs a dashboard session. Issuing a credit note from the dashboard stays a later item of its own: there is
 still no HTTP route that issues one (scripts call core `recordCorrection`, section 3).
 
-- **Who.** A person holding `print.resend`: today managers and admins
-  (`packages/identity/src/permissions.ts:48-66`, the permission at `:63`). Supervisors do not hold
-  it (`:40-47`), so they see the Orders screen without the action.
+- **Who.** Any dashboard session. The till copy checks `print-receipt` on a bound device
+  (`apps/server/src/till-api.ts:1484-1489`; `device-session.ts:338-350`) and allows a caller with
+  no device binding. The dashboard applies the same device check and the Orders visibility scope:
+  a staff session cannot print an older finished bill hidden from its list and detail.
 - **Where.** In a row's menu and in its detail dialog, on a row that is a bill with an invoice,
-  whatever its status except Voided. An invoice with no bill (section 4.1) offers no reprint: the
+  including Voided. An invoice with no bill (section 4.1) offers no reprint: the
   copy is rebuilt from the bill (`readSettledTicket` reads the invoice by its bill,
   `apps/server/src/till-sale.ts:568-590`).
 - **Printer.** Chosen from the venue's active printers in a `wt-combobox`, read from
-  `GET /management-api/reports/printers` (`apps/server/src/report-api.ts:374-386`), exactly as the
-  Sales screen's category report picks one
-  (`apps/dashboard/src/screens/dashboard-sales-screen.ts:563-573`). That route needs
-  `report.view`, which every holder of `print.resend` also holds today (the manager set includes
-  the supervisor set, `permissions.ts:48-49`).
+  `GET /management-api/orders/printers`. It lists active printers at the sale till's location for
+  any dashboard session; the report's printer route requires `report.view` and cannot serve staff.
 - **Route.** `POST /management-api/orders/:id/reprint` with `{ printerId }`, `:id` the bill, the
   same id the till's reprint takes. It builds on the till's copy path, not on the Printers screen's
   resend: it rebuilds the receipt from the filed record with `readSettledTicket` and lays it out
@@ -286,19 +285,16 @@ still no HTTP route that issues one (scripts call core `recordCorrection`, secti
   `drawer` job, and writes no `drawer_opens` row, whether or not the picked printer has a cash
   drawer. The copy's own job can be resent from the Printers screen like any document, and a
   resend never kicks the drawer (section 3).
-- **Refusals.** No permission: `authorization.not_permitted` (403). A bill that does not exist, or
+- **Refusals.** A bound device without `print-receipt`: `device.forbidden_action` (403). A bill that does not exist, or
   has no invoice, or a row with no bill: `working_order.not_found` (404), one code for every "no
   bill with an invoice by this id", as `working_order.not_placed` covers several causes
-  (`apps/server/src/errors.ts:260-264`). A voided invoice: `sale.voided` (409,
-  `packages/core/src/errors.ts:58-61`, "the sale has been voided"). An unknown or inactive printer,
+  (`apps/server/src/errors.ts:260-264`). A voided invoice is copied as the till copies it. An unknown or inactive printer,
   or one at another location: `printer.not_found` (404), from the route's own look-up of the
   location's active printers, the code the print queue itself answers for an inactive one
   (`packages/printing/src/outbox.ts:35-39`). A missing or malformed `printerId`:
-  `management.request_invalid` naming `printerId`. No new code. The till's reprint does not
-  refuse a voided invoice today (`printSaleReceipt` checks only that an invoice exists,
-  `till-sale.ts:638-645`, read, not run); this design leaves the till as it is.
+  `management.request_invalid` naming `printerId`. No new code.
 
-**Owner point (recommended default): the reprint record.** Each dashboard reprint writes one row in
+**Owner decision, 2026-10-02 ~09:50: the reprint record.** Each dashboard reprint writes one row in
 a new core table, `receipt_reprints` — the invoice (`sale_id`), the print job (`print_job_id`), who
 asked (`person_id`) and when — in the same transaction as the print job, and the table is declared
 append-only, so the record cannot be edited or deleted afterwards. Today no reprint records who
@@ -401,45 +397,17 @@ Owner, 2026-10-02 (choice 2): every dashboard login sees the Orders screen, not 
 (section 3), gets a sidebar with two entries, My schedule and Orders, and no page search, which two
 entries do not need; every other role reaches Orders from the nav like Sales.
 
-Reprinting needs `print.resend` (section 4.5). Collecting at the till needs what collecting needs
-today: a till session and no extra permission. No new permission is proposed.
+The dashboard copy uses the till's `print-receipt` device capability when a device is bound
+(section 4.5). Collecting at the till still needs a till session and no extra permission.
 
-**Owner point (recommended default): what a person without `report.view` sees.** They see the
-bills not yet finished — Open, Waiting for payment and Left without paying — at whatever dates
-they choose, with everything the row and its detail show: amounts, Still owed, invoice numbers,
-tables, party names and who served. They are not shown finished bills — Paid, Cancelled or
-Voided — nor invoices with no bill: the list leaves those out for them, the detail of one answers
-`working_order.not_found` as an unknown id does, and the Status control offers All, Open, Waiting
-for payment, Left without paying and Unpaid only. The grounds:
-
-- **Who it is today.** Every core role but staff holds `report.view`: the supervisor set includes
-  it and the manager and admin sets include the supervisor's
-  (`packages/identity/src/permissions.ts:40-47`, `:48-49`, `:67-74`). The staff role holds no core
-  permission (`:70`), and every module permission registered today is granted from manager up
-  (`grantedFrom: "manager"` in `packages/adjustments/src/permissions.ts:4`,
-  `packages/bookings/src/permissions.ts:5`, `packages/venue-service/src/permissions.ts:4`,
-  `packages/media/src/module.ts:24`). So "a person without `report.view`" is, today, a staff-role
-  login.
-- **What `report.view` guards today is, above all, money already taken.** Every report route but
-  the modelo 303 export (which needs `report.export`) is gated on it — overview, daily close,
-  period, categories, the printers a report prints on, category printing and overdue orders
-  (`gated(…, REPORT_VIEW_PERMISSION, …)`, `apps/server/src/report-api.ts:270`, `:310`, `:339`,
-  `:366`, `:378`, `:399`, `:427`) — and so is the adjustments report
-  (`packages/adjustments/src/routes.ts:193`, `:207`). A list of every paid bill with its total is
-  the same takings, one row at a time: adding up a day's Paid rows gives that day's takings.
-- **What a staff member already sees at the till.** Any till session, with no permission, reads
-  every open bill (`GET /api/working-orders`, `apps/server/src/till-api.ts:1252-1257`), the
-  counter bills sent and waiting for payment (`GET /api/orders/counter-waiting`, `:1437-1442`), a
-  party's bills (`GET /api/parties/:id/bills`, `:1801`), and every debt with its amount and who
-  recorded it (`GET /api/unpaid-departures`, `apps/server/src/unpaid-departure-api.ts:75-80`). So
-  the default shows a staff login on the dashboard bills of the kinds the till already shows them,
-  and no finished bill. An open bill's detail does show any part-payment already taken on it.
-
-Alternatives: (b) a person without `report.view` sees everything a supervisor sees — the simplest
-build (no limit, one status list), but any staff login could then page through every paid bill and
-add up the takings the Sales screen withholds from them; (c) the default plus finished bills from
-today's business day, so staff can check whether a table paid, which shows today's takings row by
-row.
+**Owner decision, 2026-10-02 ~09:50: what a person without `report.view` sees.** They see
+unfinished bills — Open, Waiting for payment and Left without paying — at any business day, plus
+finished bills — Paid, Cancelled and Voided — opened on today's business day. "Today" uses the
+venue's time zone and day cutover, as the date filter does. A date filter still limits the rows
+within that permitted set. The detail route applies the same scope; an older finished bill answers
+`working_order.not_found`. An invoice with no bill stays outside this scope. The Status control
+offers every status because today's finished bills can be filtered. The bill's opened time, rather
+than payment or cancellation time, determines its business day.
 
 ## 7. Refusals
 
@@ -448,8 +416,7 @@ an unreadable cursor) with `management.request_invalid` and the offending `field
 routes do (`apps/server/src/report-api.ts:86`), so the screen can show the refusal beside that
 control. A backwards range names the field `range`, not `from` or `to` (`requireRange`,
 `packages/server-kit/src/request-screens.ts`), so the screen shows that refusal under the To date.
-A person without `report.view` asking for a status they are not shown (section 6) is refused the
-same way, naming `status`. A bill id that does not exist, or that the list would not show the
+A bill id that does not exist, or that the list would not show the
 caller, answers `working_order.not_found`, the code the till's routes use for it. A session that
 is missing or expired answers as every management route does. The reprint's refusals are in
 section 4.5. No new error code is expected.
@@ -468,21 +435,22 @@ cancel of an invoiced bill (C126, section 4.2).
   each; the order of precedence (a departure later collected reads Paid); search by `A/12`, by a bare
   number, by a credit note's number, by a table and by a name; paging across a page boundary with two
   bills opened at the same moment; the business-day window at the cut-over hour; a staff-role
-  session served the unfinished bills and not a paid one, its detail of a paid bill answering
-  `working_order.not_found`, and its `status=paid` refused; no session refused; and the number of
+  session served unfinished bills at any date and today's paid bill but not an older paid bill,
+  the detail of an older paid bill answering `working_order.not_found`, and `status=paid` showing
+  only today's paid bills; no session refused; and the number of
   queries per page staying the same for 1 row and 50.
-- Reprint: a manager's reprint enqueues exactly one `document` job on the picked printer, carrying
-  the "duplicate" line, and one `receipt_reprints` row naming the manager; no `drawer` job and no
-  `drawer_opens` row, on a printer that has a cash drawer; the count of `sales` rows and fiscal
-  records and the invoice's stored values the same before and after; a supervisor refused; a voided
-  invoice, a bill with no invoice and an inactive printer each refused with its code; the record
-  refusing an update and a delete.
+- Reprint: a staff session's reprint enqueues exactly one `document` job on the picked printer,
+  carrying the "duplicate" line, and one `receipt_reprints` row naming that person; no `drawer`
+  job and no `drawer_opens` row, on a printer that has a cash drawer; the count of `sales` rows and
+  fiscal records and the invoice's stored values the same before and after; a voided invoice also
+  gets a copy; a bound device without `print-receipt`, a bill with no invoice and an inactive
+  printer each refused with its code; the record refusing an update and a delete.
 - Still owed: the same figure the till's collect would charge, asserted against the collect route on
   the same bill, including a bill with a credit note.
 - Dashboard (browser mode): filters write the address and restore from it; choosing Unpaid keeps
   the dates; the row menu column is pinned; the detail dialog shows each section; refreshes after
   the first read are passive; a staff session sees My schedule and Orders in its sidebar and only
-  the statuses it may use; Reprint receipt shows only with `print.resend`, sends the picked
+  every status; Reprint receipt shows for a bill with an invoice, sends the picked
   printer, and says where it went. LOOK at the screen in both themes and at phone width.
 - Till: Find a bill finds a debt by each key; paying it settles the invoice and removes it from the
   dashboard's Unpaid filter; the counter list is gone.
@@ -523,23 +491,17 @@ open pull requests before starting, as every lane does.
 Owner, 2026-10-02 (~07:50, relayed by the supervising watcher):
 
 1. **How the till finds a debt:** (a) a "Find a bill" box on the till, as recommended (section 5).
-2. **Who sees the Orders screen:** every dashboard login, not only `report.view`. What a person
-   without `report.view` is not shown is this document's recommended default (section 6).
+2. **Who sees the Orders screen:** every dashboard login, not only `report.view`; the later owner
+   decision in section 6 limits older finished bills for a session without it.
 3. **Dates when filtering Unpaid:** keep the chosen range; no switch to Any date (section 4.3).
 4. **Who counts as a bill's "staff":** anyone a line is credited to, as recommended (section 4.3).
-5. **Reprint from the dashboard:** included, to a printer the manager picks, gated on
-   `print.resend` (section 4.5). Credit notes stay a later item.
+5. **Reprint from the dashboard:** included, to a picked printer, using the till copy's
+   `print-receipt` device gate (section 4.5). Credit notes stay a later item.
 6. **Cancelled bills:** listed only when sent or holding lines, as recommended (section 4.1).
 7. **A sent bill cancelled after its invoice was issued:** Cancelled with an "Invoice not credited"
    mark on this screen; the till's cancel is queued separately as C126 (section 4.2).
 
-Left for the owner to confirm or overturn — the plan builds each default:
-
-- **What a person without `report.view` is not shown** (section 6): finished bills and invoices
-  with no bill.
-- **How a reprint is recorded** (section 4.5): a new append-only `receipt_reprints` table, the one
-  migration in this build.
-- **A voided invoice is not reprinted from the dashboard** (section 4.5), while the till's reprint
-  still prints one, as it does today.
-- **The till's own reprint still records nobody** (section 3). Recording it in the same table would
-  be a small later item; it is not in this build.
+The owner confirmed the append-only `receipt_reprints` table on 2026-10-02 ~09:50. The same
+answer allows a voided invoice's copy and limits staff to today's finished bills, as described
+above. The till's own reprint still records nobody (section 3); recording it in the same table is
+outside this build.

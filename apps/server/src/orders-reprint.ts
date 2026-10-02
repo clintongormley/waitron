@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
-import { printers, receiptReprints, saleVoids, sales, type Transaction } from "@waitron/db";
+import { printers, receiptReprints, sales, type Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { enqueueReceiptCopy } from "./receipt-print.js";
@@ -16,12 +16,10 @@ export async function reprintOrderReceipt(
   personId: string,
 ): Promise<{ jobId: string }> {
   const [sale] = await tx
-    .select({ id: sales.id, voidId: saleVoids.id })
+    .select({ id: sales.id })
     .from(sales)
-    .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
     .where(eq(sales.workingOrderId, billId));
   if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId: billId });
-  if (sale.voidId !== null) throw new AppError("sale.voided", { saleId: sale.id });
   const [printer] = await tx
     .select({ id: printers.id, paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)

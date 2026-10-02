@@ -1,11 +1,12 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { and, asc, eq } from "drizzle-orm";
 import { AppError, isUuid } from "@waitron/shared";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { printers, withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { currentBusinessDay } from "@waitron/reporting";
-import { authorizeManager, resolveManagementSession, roleHasPermission } from "@waitron/identity";
+import { resolveManagementSession, roleHasPermission } from "@waitron/identity";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -19,7 +20,6 @@ import {
   DEFAULT_ORDER_PAGE_SIZE,
   MAX_ORDER_PAGE_SIZE,
   ORDER_STATUS_FILTERS,
-  UNFINISHED_FILTERS,
   listOrderStaff,
   listOrders,
   readOrderDetail,
@@ -29,16 +29,17 @@ import {
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { reprintOrderReceipt } from "./orders-reprint.js";
+import { assertDeviceCapability } from "./device-session.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
   "authorization.not_permitted": 403,
+  "device.forbidden_action": 403,
   "management.request_invalid": 400,
   "working_order.not_found": 404,
   "printer.not_found": 404,
-  "sale.voided": 409,
 };
 const run = createErrorBoundary(STATUS, "report.failed");
 
@@ -105,27 +106,39 @@ export interface OrdersApiDeps {
 }
 
 export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): void {
-  /** Every dashboard session may read orders, but only `report.view` permits finished bills. */
+  const orderScope = (
+    role: Parameters<typeof roleHasPermission>[0],
+    clock: Awaited<ReturnType<typeof resolveVenueClock>>,
+  ): OrderListFilter["scope"] => {
+    const today = currentBusinessDay(clock);
+    return roleHasPermission(role, "report.view")
+      ? "all"
+      : { today: { from: today, to: today, ...clock } };
+  };
+
+  /** Finished bills outside today's business day require `report.view`. */
   const scoped = <T>(
     sessionId: string,
-    fn: (tx: Transaction, scope: OrderListFilter["scope"]) => Promise<T>,
+    fn: (
+      tx: Transaction,
+      scope: OrderListFilter["scope"],
+      clock: Awaited<ReturnType<typeof resolveVenueClock>>,
+    ) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       const { role } = await resolveManagementSession(tx, sessionId);
-      return fn(tx, roleHasPermission(role, "report.view") ? "all" : "unfinished");
+      const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+      return fn(tx, orderScope(role, clock), clock);
     });
 
   app.get("/management-api/orders", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { dates, filter } = parseOrdersQuery((name) => c.req.query(name));
-      const answer = await scoped(sessionId, async (tx, scope) => {
-        if (scope === "unfinished" && !UNFINISHED_FILTERS.includes(filter.status))
-          throw invalid("status");
+      const answer = await scoped(sessionId, async (tx, scope, clock) => {
         let range: { from: string; to: string } | null = null;
         let window: OrderListFilter["dates"] = "any";
         if (dates !== "any") {
-          const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
           const today = currentBusinessDay(clock);
           range = dates ?? { from: today, to: today };
           window = { ...range, ...clock };
@@ -150,6 +163,20 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
     }),
   );
 
+  app.get("/management-api/orders/printers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await scoped(sessionId, (tx) =>
+        tx
+          .select({ id: printers.id, name: printers.name })
+          .from(printers)
+          .where(and(eq(printers.locationId, deps.till.locationId), eq(printers.active, true)))
+          .orderBy(asc(printers.name), asc(printers.id)),
+      );
+      return c.json(rows);
+    }),
+  );
+
   app.get("/management-api/orders/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -166,12 +193,23 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
       if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
       const body = await readJsonBody<Record<string, unknown>>(c);
       const printerId = requireBodyUuid(body.printerId, "printerId");
+      await assertDeviceCapability(deps, c, "print-receipt", "reprint");
       const queued = await withTransaction(deps.db, async (tx) => {
-        const { authorizedBy } = await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "print.resend",
-        });
-        return reprintOrderReceipt(tx, deps, id, printerId, authorizedBy);
+        const { personId, role } = await resolveManagementSession(tx, sessionId);
+        if (!roleHasPermission(role, "report.view")) {
+          const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+          const { rows } = await listOrders(tx, {
+            status: "all",
+            dates: "any",
+            credited: false,
+            limit: 1,
+            only: id,
+            scope: orderScope(role, clock),
+          });
+          if (rows.length === 0)
+            throw new AppError("working_order.not_found", { workingOrderId: id });
+        }
+        return reprintOrderReceipt(tx, deps, id, printerId, personId);
       });
       return c.json(queued, 202);
     }),

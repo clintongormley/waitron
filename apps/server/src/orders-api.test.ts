@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { hashPin, deactivatePerson, persons } from "@waitron/identity";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -40,12 +40,30 @@ describe("Orders routes", () => {
     expect((await get(venue.supervisorDashboard, "?anyDate=true")).status).toBe(200);
   });
 
-  it("shows a staff login only unfinished bills, including direct detail reads", async () => {
+  it("lists active receipt printers for a staff dashboard reprint", async () => {
+    expect(await get("", "/printers")).toMatchObject({ status: 401 });
+    const answer = await get(venue.staffDashboard, "/printers");
+    expect(answer).toMatchObject({ status: 200 });
+    expect(answer.json).toEqual(expect.arrayContaining([{ id: venue.printerId, name: "Recibos" }]));
+  });
+
+  it("shows staff unfinished bills at any date and finished bills only from today's business day", async () => {
     const open = await parked(venue, "Caña");
     const waiting = await placedInvoiceFirst(venue, "Caña");
     const left = (await departed(venue, "Caña")).tabId;
     const paid = await placedInvoiceFirst(venue, "Caña");
     expect((await collect(venue, paid, "3.00")).status).toBe(200);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+    let oldPaid: string;
+    let oldOpen: string;
+    try {
+      oldPaid = await placedInvoiceFirst(venue, "Caña");
+      expect((await collect(venue, oldPaid, "3.00")).status).toBe(200);
+      oldOpen = await parked(venue, "Caña");
+    } finally {
+      vi.useRealTimers();
+    }
     const cancelled = await placedInvoiceFirst(venue, "Caña");
     expect(
       (
@@ -62,22 +80,27 @@ describe("Orders routes", () => {
     expect(manager.status).toBe(200);
     const staffIds = (staff.json as { rows: { id: string }[] }).rows.map((row) => row.id);
     const managerIds = (manager.json as { rows: { id: string }[] }).rows.map((row) => row.id);
-    expect(staffIds).toEqual(expect.arrayContaining([open, waiting, left]));
-    expect(staffIds).not.toEqual(expect.arrayContaining([paid, cancelled, sale]));
-    expect(managerIds).toEqual(
-      expect.arrayContaining([open, waiting, left, paid, cancelled, sale]),
+    expect(staffIds).toEqual(
+      expect.arrayContaining([open, oldOpen, waiting, left, paid, cancelled]),
     );
-    expect(await get(venue.staffDashboard, `/${paid}`)).toMatchObject({
+    expect(staffIds).not.toEqual(expect.arrayContaining([oldPaid, sale]));
+    expect(managerIds).toEqual(
+      expect.arrayContaining([open, oldOpen, waiting, left, paid, oldPaid, cancelled, sale]),
+    );
+    expect(await get(venue.staffDashboard, `/${oldPaid}`)).toMatchObject({
       status: 404,
       json: { code: "working_order.not_found" },
     });
+    expect((await get(venue.staffDashboard, `/${paid}`)).status).toBe(200);
     expect((await get(venue.supervisorDashboard, `/${paid}`)).status).toBe(200);
-    for (const status of ["paid", "cancelled", "voided"]) {
-      expect(await get(venue.staffDashboard, `?status=${status}&anyDate=true`)).toMatchObject({
-        status: 400,
-        json: { code: "management.request_invalid", params: { field: "status" } },
-      });
-    }
+    const staffPaid = await get(venue.staffDashboard, "?status=paid&anyDate=true");
+    expect(staffPaid.status).toBe(200);
+    expect((staffPaid.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(
+      paid,
+    );
+    expect((staffPaid.json as { rows: { id: string }[] }).rows.map((row) => row.id)).not.toContain(
+      oldPaid,
+    );
     expect((await get(venue.staffDashboard, "?status=unpaid&anyDate=true")).status).toBe(200);
     expect((await get(venue.staffDashboard, "/staff")).status).toBe(200);
   });

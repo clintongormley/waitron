@@ -55,8 +55,8 @@ declare module "@waitron/shared" {
      * read of `sale_settlements` before writing, the `tenders_reject_post_settlement` trigger, or
      * the `sale_settlements_sale_key` unique violation. */
     "sale.already_settled": { saleId: string };
-    /** A voided sale cannot be settled, corrected, substituted, or reprinted. Each path refuses
-     * it before writing. A second void instead raises `sale.already_voided`. */
+    /** A voided sale cannot be settled, corrected, or substituted. Each path refuses it before
+     * writing. A second void instead raises `sale.already_voided`. */
     "sale.voided": { saleId: string };
     /** Thrown by `recordSubstitution` for a ticket that already has a `sale_substitutions` row:
      * the translation of `sale_substitutions_substituted_key`'s unique violation, so no ticket is

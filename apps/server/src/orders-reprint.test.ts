@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { printJobs, printers, receiptReprints, sales } from "@waitron/db";
+import { deviceProfiles, printJobs, printers, receiptReprints, sales } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { inTx, send } from "./testing/bill-venue.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import {
   billlessSale,
   collect,
@@ -124,10 +126,73 @@ describe("dashboard receipt reprint", () => {
     expect(job?.printerId).toBe(printer.id);
   });
 
-  it("refuses a session without print.resend, a void, an uninvoiced bill and an inactive printer without writing", async () => {
-    const valid = await placedInvoiceFirst(venue, "Caña");
+  it("lets a staff dashboard session copy a receipt and a voided invoice", async () => {
+    const paid = await placedInvoiceFirst(venue, "Caña");
     const voided = await placedInvoiceFirst(venue, "Caña");
     await voidInvoice(venue, voided);
+    const first = await post(venue.staffDashboard, paid, venue.printerId);
+    const second = await post(venue.staffDashboard, voided, venue.printerId);
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(202);
+    const ids = [first, second].map((answer) => (answer.json as { jobId: string }).jobId);
+    for (const jobId of ids) {
+      const [job] = await inTx(venue, (tx) =>
+        tx.select().from(printJobs).where(eq(printJobs.id, jobId)),
+      );
+      expect(job?.kind).toBe("document");
+      expect(decodeTicket(job!.payload)).toContain("DUPLICADO");
+    }
+    const audits = await inTx(venue, (tx) =>
+      tx.select().from(receiptReprints).where(eq(receiptReprints.personId, venue.operatorId)),
+    );
+    expect(audits.map((audit) => audit.printJobId)).toEqual(expect.arrayContaining(ids));
+  });
+
+  it("applies the till copy's print-receipt capability to a bound dashboard device", async () => {
+    const billId = await placedInvoiceFirst(venue, "Caña");
+    const [profile] = await inTx(venue, (tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({
+          name: `No receipt ${randomUUID()}`,
+          formFactor: "phone-portrait",
+          capabilities: [],
+        })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const device = await enrolDeviceForTest(venue.db, venue.cfg, {
+      name: "No receipt",
+      profileId: profile!.id,
+      registerId: venue.cfg.tillId,
+    });
+    const cookie = `${venue.staffDashboard}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    expect(await post(cookie, billId, venue.printerId)).toMatchObject({
+      status: 403,
+      json: { code: "device.forbidden_action", params: { action: "reprint" } },
+    });
+  });
+
+  it("does not let staff copy an older finished bill hidden from their Orders detail", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+    let oldPaid: string;
+    try {
+      oldPaid = await placedInvoiceFirst(venue, "Caña");
+      expect((await collect(venue, oldPaid, "3.00")).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+    const before = await counts();
+    expect(await post(venue.staffDashboard, oldPaid, venue.printerId)).toMatchObject({
+      status: 404,
+      json: { code: "working_order.not_found" },
+    });
+    expect(await counts()).toEqual(before);
+    expect((await post(venue.adminDashboard, oldPaid, venue.printerId)).status).toBe(202);
+  });
+
+  it("refuses an uninvoiced bill and an inactive printer without writing", async () => {
+    const valid = await placedInvoiceFirst(venue, "Caña");
     const open = await parked(venue, "Caña");
     const noBill = await billlessSale(venue);
     const other = await inTx(venue, (tx) =>
@@ -145,14 +210,6 @@ describe("dashboard receipt reprint", () => {
       tx.update(printers).set({ active: false }).where(eq(printers.id, other.id)),
     );
     const before = await counts();
-    expect(await post(venue.supervisorDashboard, valid, venue.printerId)).toMatchObject({
-      status: 403,
-      json: { code: "authorization.not_permitted" },
-    });
-    expect(await post(venue.staffDashboard, valid, venue.printerId)).toMatchObject({
-      status: 403,
-      json: { code: "authorization.not_permitted" },
-    });
     expect(await post(venue.adminDashboard, valid, randomUUID())).toMatchObject({
       status: 404,
       json: { code: "printer.not_found" },
@@ -160,10 +217,6 @@ describe("dashboard receipt reprint", () => {
     expect(await post(venue.adminDashboard, valid)).toMatchObject({
       status: 400,
       json: { code: "management.request_invalid", params: { field: "printerId" } },
-    });
-    expect(await post(venue.adminDashboard, voided, venue.printerId)).toMatchObject({
-      status: 409,
-      json: { code: "sale.voided" },
     });
     expect(await post(venue.adminDashboard, randomUUID(), venue.printerId)).toMatchObject({
       status: 404,

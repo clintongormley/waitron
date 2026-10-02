@@ -93,10 +93,20 @@ describe("which index a read starts from", () => {
     expect(await plan({ status: "unpaid" })).toMatch(/working_orders_tenant_status_idx/);
   });
 
-  it("a session without report.view reads bills through the status index, even for All", async () => {
-    expect(await plan({ status: "all", scope: "unfinished" })).toMatch(
-      /working_orders_tenant_status_idx/,
-    );
+  it("a session without report.view reads unfinished bills and today's finished bills", async () => {
+    expect(
+      await plan({
+        status: "all",
+        scope: {
+          today: {
+            from: "2026-10-02",
+            to: "2026-10-02",
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+          },
+        },
+      }),
+    ).toMatch(/working_orders_(tenant_status|opened_at)_idx/);
   });
 
   it("a date range reads bills through the opened-at index", async () => {

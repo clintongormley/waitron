@@ -61,7 +61,7 @@ export interface OrderListFilter {
   after?: OrderCursor;
   only?: string;
   collectable?: boolean;
-  scope: "all" | "unfinished";
+  scope: "all" | { today: { from: string; to: string; timeZone: string; dayCutover: string } };
 }
 export interface OrderRow {
   kind: "bill" | "sale";
@@ -119,21 +119,22 @@ const LIVE_FILTERS: readonly OrderStatusFilter[] = [
   "unpaid",
 ];
 
-export const UNFINISHED: readonly OrderStatus[] = [
-  "open",
-  "waiting_for_payment",
-  "left_without_paying",
-];
-export const UNFINISHED_FILTERS: readonly OrderStatusFilter[] = ["all", ...UNFINISHED, "unpaid"];
-
 /**
  * Filtering the bill half by its stored status lets the status index serve unfinished reads;
  * the derived status still decides which rows are returned.
  */
 function billScope(filter: OrderListFilter): SQL {
-  return filter.scope === "unfinished" || LIVE_FILTERS.includes(filter.status)
-    ? sql` and wo.status in ('open', 'placed')`
-    : sql``;
+  if (filter.scope !== "all") {
+    const { from, to, timeZone, dayCutover } = filter.scope.today;
+    const today = validatedRangeWindow({
+      fromBusinessDay: from,
+      toBusinessDay: to,
+      timeZone,
+      dayCutover,
+    })(sql`wo.opened_at`);
+    return sql` and (wo.status in ('open', 'placed') or ${today})`;
+  }
+  return LIVE_FILTERS.includes(filter.status) ? sql` and wo.status in ('open', 'placed')` : sql``;
 }
 
 // Money columns are cast to text: `rawCentsToDecimal` refuses the number an uncast integer arrives as.
@@ -237,9 +238,16 @@ function filterClauses(filter: OrderListFilter): SQL[] {
   const clauses: SQL[] = [];
   if (filter.only !== undefined) clauses.push(sql`r.id = ${filter.only}`);
   // An invoice with no bill can be waiting for payment, but is outside a staff session's scope.
-  if (filter.scope === "unfinished") {
+  if (filter.scope !== "all") {
+    const { from, to, timeZone, dayCutover } = filter.scope.today;
+    const today = validatedRangeWindow({
+      fromBusinessDay: from,
+      toBusinessDay: to,
+      timeZone,
+      dayCutover,
+    })(sql`r.at`);
     clauses.push(
-      sql`r.kind = 'bill' and r.status in ('open', 'waiting_for_payment', 'left_without_paying')`,
+      sql`r.kind = 'bill' and (r.status in ('open', 'waiting_for_payment', 'left_without_paying') or ${today})`,
     );
   }
   if (filter.status === "unpaid")

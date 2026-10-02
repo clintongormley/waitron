@@ -6,21 +6,29 @@
 > relayed by the supervising watcher). This plan was amended the same day to build those answers.
 > Lane E builds it as three items, one pull request each: **B27a** is Task 1, **B27b** is Task 2
 > and **B27c** is Task 3.
+> **Owner amendment, 2026-10-02 ~09:50:** Lane E's queue overrides earlier examples below where
+> they still show the first defaults. B27a serves unfinished bills at any date and today's finished
+> bills to sessions without `report.view`; the business day is determined by the bill's opened time.
+> A voided invoice may be copied. The copy uses the till's `print-receipt` device capability when
+> a device is bound, and any dashboard session may request one without a device binding. B27a
+> applies its visibility scope to that request too and exposes
+> `GET /management-api/orders/printers` so staff can pick a printer; the reports printer
+> route requires `report.view`. Task 2 uses all statuses, that printer route, and offers a copy on
+> every bill with an invoice, including Voided.
 > Where an answer changed the plan, the task named below carries it:
 >
 > | Spec §12 choice                          | Owner, 2026-10-02                                       | Built in                                                                                                                          |
 > | ---------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 > | 1. How the till finds a debt             | (a) a "Find a bill" box on the till, as recommended     | Task 3, as written.                                                                                                               |
-> | 2. Who sees the Orders screen            | every dashboard login, not only `report.view`           | Task 1 (the session gate and the `unfinished` scope, decision 13); Task 2 (no nav gate, the staff sidebar, the status list).     |
+> | 2. Who sees the Orders screen            | every dashboard login; staff see today's finished bills too | Task 1 (session gate and business-day scope); Task 2 (staff sidebar and all statuses). |
 > | 3. Dates when filtering Unpaid           | keep the chosen range                                   | Task 2 only (`withStatus` changes the status alone).                                                                              |
 > | 4. Who counts as a bill's staff          | anyone a line is credited to, as recommended            | Task 1, as written (`staffClause`, `readStaff`).                                                                                  |
-> | 5. Reprint and credit from the dashboard | include reprint, to a picked printer, on `print.resend` | Task 1 Steps 9–11 (the route, the shared copy function, the `receipt_reprints` record); Task 2 (the action and its dialog). Credit notes stay a later item. |
+> | 5. Reprint and credit from the dashboard | include a copy on a picked printer, using the till's device gate | Task 1 (the route, shared copy and `receipt_reprints`); Task 2 (the action and its dialog). Credit notes stay a later item. |
 > | 6. Cancelled bills                       | listed when sent or holding lines, as recommended       | Task 1, as written (`LISTED_BILL`).                                                                                               |
 > | 7. A sent bill cancelled with its invoice | Cancelled, marked Invoice not credited; the till's cancel is C126 | Task 1 and Task 2, as written. This plan does not change the cancel: lane C's C126 measures and decides it.            |
 >
-> Two of the spec's answers are **Owner points (recommended default)** that the owner may still
-> overturn: what a person without `report.view` is not shown (spec §6; here decision 13), and the
-> reprint record (spec §4.5; here decision 15). Each decision names what changes if overturned.
+> The owner confirmed the append-only reprint record and amended the scope, voided-copy and
+> permission choices on 2026-10-02 ~09:50. The code and tests in B27a carry those decisions.
 >
 > Each task's Step 0 says "stop and report" when an open pull request touches the same files.
 > Under lane E that reads as lane E's own rule: note the overlap in the pull request and go on;
@@ -31,7 +39,7 @@
 
 **Goal:** A dashboard screen, open to every dashboard login, listing every bill, filterable by
 status (including "Unpaid"), dates, staff, table and an invoice-number or name search, with a detail
-dialog and, for a person holding `print.resend`, a reprint of the receipt on a printer they pick;
+dialog and a receipt copy on a printer the dashboard user picks;
 and a "Find a bill" box on the till that collects a debt, replacing the counter's read-only "Left
 without paying" list.
 
@@ -127,23 +135,17 @@ the reply that delivered the plan.
     `GET /management-api/orders/staff`, reads every person a line is credited to, plus who rang an
     invoice with no bill, whether or not their `persons` row is still active or still there. A person
     with no `persons` row is shown as "Unknown person".
-13. **Every dashboard session reads Orders, limited without `report.view`.** A person without
-    it reads only unfinished bills (owner, 2026-10-02, choice 2; spec §6, an Owner point with a
-    recommended default). The
-    routes resolve the session with `resolveManagementSession` (exported by `@waitron/identity`,
-    `packages/identity/src/management-session.ts:47`) instead of `authorizeManager`, and set
-    `scope: roleHasPermission(role, "report.view") ? "all" : "unfinished"` (`roleHasPermission`,
-    `packages/identity/src/permissions.ts:121-129`). `unfinished` adds the bill-half status scope of
-    decision 10 and keeps only `open`, `waiting_for_payment` and `left_without_paying` rows, so a
-    paid, cancelled or voided bill and every invoice with no bill are left out, and `readOrderDetail`
-    answers `working_order.not_found` for them. A status filter outside those (`paid`, `cancelled`,
-    `voided`) is refused `management.request_invalid` `{ field: "status" }` for that session. If the
-    owner overturns the default: alternative (b) deletes the scope (every session gets `all`);
-    alternative (c) widens `unfinished` with "or opened on today's business day". Both are Task 1
-    `filterClauses` and its two scope cases, plus Task 2's status list.
+13. **Every dashboard session reads Orders, limited without `report.view`** (owner amendment,
+    2026-10-02 ~09:50; spec §6). A person without it reads unfinished bills at any date plus
+    finished bills opened on today's business day. The routes resolve the session with
+    `resolveManagementSession` and pass either `"all"` or a scope holding the venue's current
+    business-day window to `listOrders` and `readOrderDetail`. An older finished bill and every
+    billless sale are absent from the staff view; detail returns `working_order.not_found` for
+    them. Staff can filter by every status, with a finished status limited to today's bills.
 14. **The dashboard reprint builds on the till's copy path, not the Printers screen's resend**
     (owner, 2026-10-02, choice 5; spec §4.5). `POST /management-api/orders/:id/reprint` with
-    `{ printerId }`, gated on `print.resend`, keyed by the bill as the till's
+    `{ printerId }`, gated on the till copy's `print-receipt` device capability when a device is
+    bound, keyed by the bill as the till's
     `POST /api/sales/:id/reprint` is (`apps/server/src/till-api.ts:1484-1492`). The receipt is
     rebuilt with `readSettledTicket` (`apps/server/src/till-sale.ts:568`) and laid out with
     `formatReceipt(…, duplicate: true)` through a new `enqueueReceiptCopy` in
@@ -158,8 +160,8 @@ the reply that delivered the plan.
     CLAUDE.md §5 notes that an unset `allowCashDrawer` allows a drawer on the automatic paths
     (`drawerPrinter`, `receipt-print.ts:29-43`, since #1011). That is safe only because the copy path
     calls no drawer function at all; Task 1 Step 9's drawer case is what holds it.
-15. **Each dashboard reprint writes one `receipt_reprints` row** (spec §4.5, an Owner point with a
-    recommended default): `id`, `sale_id` (FK `sales`), `print_job_id` (FK `print_jobs`),
+15. **Each dashboard reprint writes one `receipt_reprints` row** (owner confirmed 2026-10-02
+    ~09:50; spec §4.5): `id`, `sale_id` (FK `sales`), `print_job_id` (FK `print_jobs`),
     `person_id` (a plain id, no FK, as `drawer_opens.person_id` is: `persons` is in identity's
     migration set, `packages/db/src/schema/drawer-opens.ts:18-19`) and `requested_at`, written in
     the reprint's transaction. Classified `ledger` and declared `appendOnly()` in
@@ -167,16 +169,10 @@ the reply that delivered the plan.
     never corrected"). This is the one new table and the one migration in the plan; the commit
     states the reason (CLAUDE.md §3: no new core table without one) — the record is about a core
     `sales` row and a core `print_jobs` row, written by a core route, and no module owns receipts.
-    The till's own reprint is NOT made to write one (spec §12 leaves it for later). If the owner
-    overturns the default: (b) a nullable `requested_by` on `print_jobs` replaces the table; (c) a
-    log line replaces it and Task 1 has no migration. Either is Task 1 Steps 9–11 and Task 2's
-    "Copies printed" section.
-16. **A voided invoice is not reprinted from the dashboard** (spec §4.5): the row menu and the
-    dialog do not offer it, and the route refuses it with the existing `sale.voided`
-    (`packages/core/src/errors.ts:58-61`, whose comment Task 1 widens to name the reprint). A bill
-    with no invoice, and a row with no bill, answer `working_order.not_found`. The till's reprint is
-    left as it is: it prints a voided invoice's copy today (`printSaleReceipt` checks only that an
-    invoice exists, `apps/server/src/till-sale.ts:638-645`, read, not run).
+    The till's own reprint is NOT made to write one (spec §12 leaves it for later).
+16. **A voided invoice may be copied from the dashboard** (owner amendment, 2026-10-02 ~09:50;
+    spec §4.5), just as the till copy path does. A bill with no invoice, and a row with no bill,
+    answer `working_order.not_found`.
 
 ## Global Constraints
 
@@ -227,9 +223,9 @@ the reply that delivered the plan.
 6. **A reprint on a printer with a cash drawer** — one `document` job, no `drawer` job, no
    `drawer_opens` row, no new `sales` row or fiscal record. Test: Task 1 Step 9 ("prints one copy
    on the picked printer and never opens its drawer").
-7. **A staff login reaching a paid bill** — by the list, by the detail, by a shared link with
-   `status/paid` — sees none of it. Tests: Task 1 Step 8 (the scope cases), Task 2 Step 3 ("a staff
-   session is offered only the unfinished statuses").
+7. **A staff login reaching a paid bill** sees it when the bill was opened on today's business
+   day; an older paid bill is absent from list and detail. Tests: Task 1's scope cases and Task 2's
+   status filter.
 
 ---
 
@@ -1742,8 +1738,6 @@ is about a core sale and a core print job, written by a core route, and no modul
 ```ts
 export const ORDER_STATUS_FILTERS = ["all", "open", "waiting_for_payment", "left_without_paying", "unpaid", "paid", "cancelled", "voided"] as const;
 export type OrderStatusFilter = (typeof ORDER_STATUS_FILTERS)[number];
-/** Decision 13: the statuses a session without `report.view` may ask for, as the server's `UNFINISHED_FILTERS`. */
-export const UNFINISHED_STATUS_FILTERS: readonly OrderStatusFilter[] = ["all", "open", "waiting_for_payment", "left_without_paying", "unpaid"];
 export type OrderStatus = Exclude<OrderStatusFilter, "all" | "unpaid">;
 export interface OrdersQuery { status: OrderStatusFilter; from?: string; to?: string; anyDate: boolean; credited: boolean; staff?: string; table?: string; q?: string }
 export interface OrderRowDto {
@@ -1769,8 +1763,8 @@ listOrderPages(query: OrdersQuery, pages: number): Promise<OrdersPageDto>;
 listOrderStaff(): Promise<{ staff: { id: string; name: string | null }[] }>;
 getOrder(id: string): Promise<OrderDetailDto>;
 reprintOrder(id: string, printerId: string): Promise<{ jobId: string }>;
-// The printer list is the existing `getReportPrinters()` (`client.ts:2770-2772`,
-// `GET /management-api/reports/printers`): every holder of print.resend holds report.view.
+getOrderPrinters(): Promise<{ id: string; name: string }[]>;
+// `GET /management-api/orders/printers` is session gated, so staff can pick a printer.
 ```
 
 - [ ] **Step 0: Re-map.** `gh pr list --state open`; stop and report if one touches
@@ -1782,10 +1776,10 @@ reprintOrder(id: string, printerId: string): Promise<{ jobId: string }>;
   (`apps/dashboard/src/navigation.ts:3-16`); `#mayOpen` honours `requiresPermission`
   (`apps/dashboard/src/dashboard-app.ts:1353-1360`); a staff session has no sidebar (`hasNav`,
   `:1165`) and is sent to `my-schedule` whatever it asks for (`#permittedScreen`, `:1363-1364`);
-  `GET /management-api/orders/staff` and `POST /management-api/orders/:id/reprint` exist (Task 1);
-  `getReportPrinters` is in the client (`apps/dashboard/src/api/client.ts:2770-2772`) and the Sales
-  screen picks a printer from it in a `wt-combobox`
-  (`apps/dashboard/src/screens/dashboard-sales-screen.ts:563-573`).
+  `GET /management-api/orders/staff`, `GET /management-api/orders/printers` and
+  `POST /management-api/orders/:id/reprint` exist (Task 1). The Sales screen's printer combobox
+  (`apps/dashboard/src/screens/dashboard-sales-screen.ts:563-573`) is the UI pattern;
+  `getReportPrinters` requires `report.view`, so Orders uses its own route.
   **The shared fields have changed since this plan was first written.** A178a–c landed for the
   dashboard (#1010, #1012, #1015; `grep -n A178 docs/backlog.md`): no non-test file under
   `apps/dashboard` draws a native `<select>` any more, and A178f, still to come, deletes
@@ -1805,7 +1799,6 @@ reprintOrder(id: string, printerId: string): Promise<{ jobId: string }>;
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { UNFINISHED_STATUS_FILTERS } from "../api/client.js";
 import { DEFAULT_ORDERS_FILTER, readOrdersFilter, withStatus, writeOrdersFilter, type OrdersFilter } from "./orders-filter.js";
 
 const reader = (values: Record<string, string>) => (key: string) => values[key] ?? null;
@@ -1835,9 +1828,8 @@ describe("orders filter in the address", () => {
     expect(withStatus(anyDate, "unpaid")).toEqual({ ...anyDate, status: "unpaid" });
   });
 
-  it("reads a status the session may not ask for as All (decision 13)", () => {
-    expect(readOrdersFilter(reader({ status: "paid" }), UNFINISHED_STATUS_FILTERS)).toEqual(DEFAULT_ORDERS_FILTER);
-    expect(readOrdersFilter(reader({ status: "unpaid" }), UNFINISHED_STATUS_FILTERS).status).toBe("unpaid");
+  it("accepts a paid status for staff; the server limits it to today's bills", () => {
+    expect(readOrdersFilter(reader({ status: "paid" })).status).toBe("paid");
   });
 });
 ```
@@ -1953,7 +1945,7 @@ export function withStatus(f: OrdersFilter, status: OrderStatusFilter): OrdersFi
     return this.#request<OrderDetailDto>(`/management-api/orders/${encodeURIComponent(id)}`, "GET");
   }
 
-  /** A copy of the bill's receipt on `printerId` (decision 14). Needs `print.resend`. */
+  /** A copy of the bill's receipt on `printerId` (decision 14). */
   reprintOrder(id: string, printerId: string): Promise<{ jobId: string }> {
     return this.#request<{ jobId: string }>(`/management-api/orders/${encodeURIComponent(id)}/reprint`, "POST", { printerId });
   }
@@ -1996,7 +1988,7 @@ const ANA = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const GONE = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const PRINTER = "9b2d7c8e-1f0a-4e5b-8c3d-6a7f2e1b0c9d";
 // The screen is mounted with `.permissions=` as the app passes it (Step 6): a manager's by default.
-const MANAGER = ["report.view", "print.resend"];
+const MANAGER = ["report.view"];
 
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
   const page: OrdersPageDto = { rows: [debtRow], next: "2026-09-30T20:00:00.000Z_" + debtRow.id, from: null, to: null };
@@ -2004,7 +1996,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listOrderPages: vi.fn().mockResolvedValue(page),
     getOrder: vi.fn().mockResolvedValue(debtDetail),
     listOrderStaff: vi.fn().mockResolvedValue({ staff: [{ id: ANA, name: "Ana" }, { id: GONE, name: null }] }),
-    getReportPrinters: vi.fn().mockResolvedValue([{ id: PRINTER, name: "Barra" }]),
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: PRINTER, name: "Barra" }]),
     reprintOrder: vi.fn().mockResolvedValue({ jobId: "4a6f0b0e-8f3e-4c1a-9a51-2b0c1f9d7e11" }),
     liveData: new LiveData(),
     ...overrides,
@@ -2022,9 +2014,9 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     2026-09-01 and 2026-09-02, choose Unpaid → the Any date switch stays off, both date fields keep
     their days and stay enabled, the address is `/manage/orders/status/unpaid/from/2026-09-01/to/2026-09-02`,
     and `listOrderPages` was called with those dates.
-  - "a staff session is offered only the unfinished statuses" (decision 13): mounted with
-    `permissions: []`, the status combobox's options are All, Open, Waiting for payment, Left without
-    paying and Unpaid, and a remount on `/manage/orders/status/paid` reads All and asks for All.
+  - "a staff session can filter today's finished bills" (decision 13): mounted with
+    `permissions: []`, the status combobox offers Paid, Cancelled and Voided alongside the
+    unfinished statuses; `/manage/orders/status/paid` reads Paid and asks for Paid.
   - "the date fields say the range is by the day the bill was opened": their labels read
     "Opened from" and "Opened to".
   - "the Staff filter offers everyone the server names, a person with no name as Unknown person":
@@ -2049,17 +2041,15 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     shows the lines with who served each, the invoice and credit note numbers, the cash tender, the
     party's tables, the departure's reason and who recorded and authorised it, and each copy printed
     ("Copy printed by Laura on Barra": give `debtDetail` one entry in `reprints`, by Laura on Barra).
-  - "Reprint receipt is offered only to print.resend, only on a bill with an invoice that is not
-    voided": with `MANAGER` the debt row's menu holds Reprint receipt, and so does its dialog; a row
-    with `invoiceNumber: null`, a row with `status: "voided"` and a row with `kind: "sale"` hold none;
-    mounted with `permissions: ["report.view"]` (a supervisor) no row holds it.
+  - "Reprint receipt follows the till's copy gate and includes a voided invoice": the debt and
+    voided bill rows offer it in their menus and dialogs, including with `permissions: []`; a row
+    with `invoiceNumber: null` and a row with `kind: "sale"` do not.
   - "Reprint receipt prints on the printer picked and says where it went": choose Reprint receipt →
-    the reprint dialog lists `getReportPrinters`' printers in a combobox, the first chosen; Print →
+    the reprint dialog lists `getOrderPrinters`' printers in a combobox, the first chosen; Print →
     `reprintOrder` called with the row's id and `PRINTER`, and the dialog reads "Copy sent to Barra".
-  - "a refused reprint says why and keeps the dialog open": `reprintOrder` rejects with
-    `{ code: "sale.voided" }` → the dialog shows that code's message at the end of its body and
-    stays open; with `{ code: "printer.not_found" }` the message is under the printer combobox, through
-    its `error` property.
+  - "a refused reprint says why and keeps the dialog open": with
+    `{ code: "printer.not_found" }` the message is under the printer combobox, through its
+    `error` property; a device refusal appears at the end of the dialog's body.
   - one case in Spanish (`setLocale("es-ES")`): the column headings and statuses read in Spanish.
 
   Add `orders-screen.a11y.test.ts` with axe over the loaded screen, the open detail dialog and the
@@ -2100,14 +2090,14 @@ export class OrdersScreen extends LitElement {
   @state() private reprintId: string | null = null;
   #textTimer?: ReturnType<typeof setTimeout>;
 
-  /** Decision 13: the statuses this session may ask for. */
+  /** Decision 13: every session may ask for each status; the server limits older finished bills. */
   get #statuses(): readonly OrderStatusFilter[] {
-    return this.permissions.includes("report.view") ? ORDER_STATUS_FILTERS : UNFINISHED_STATUS_FILTERS;
+    return ORDER_STATUS_FILTERS;
   }
 
-  /** Decisions 14 and 16: a bill with an invoice that is not voided, for a holder of print.resend. */
+  /** Decisions 14 and 16: a bill with an invoice, including one that was voided. */
   #mayReprint(row: OrderRowDto): boolean {
-    return this.permissions.includes("print.resend") && row.kind === "bill" && row.invoiceNumber !== null && row.status !== "voided";
+    return row.kind === "bill" && row.invoiceNumber !== null;
   }
 
   readonly #queries = new DashboardQueries(this, () => this.api, (error) => this.#refused(error));
@@ -2265,7 +2255,7 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
 - [ ] **Step 5b: Write the reprint dialog** (decision 14).
   `apps/dashboard/src/widgets/order-reprint-dialog.ts`: a `LitElement` with `api` and
   `row: OrderRowDto | null`, open while `row` is not null. Its own `DashboardQueries` watches
-  `getReportPrinters` while open, as the Sales screen does (`dashboard-sales-screen.ts:241-247`),
+  `getOrderPrinters` while open, as the Sales screen does (`dashboard-sales-screen.ts:241-247`),
   choosing the first printer when none is chosen. Body: one line naming the bill and its invoice
   ("Bill No. 12, invoice A/12"); a `wt-combobox name="printerId" search="auto"` of the printers
   (`orders.reprint.printer`), or, when there are none, `orders.reprint.no_printers` and a disabled
@@ -2393,8 +2383,8 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
 
   Interpolate with `t(key).replace("{name}", …)`, as `apps/dashboard/src/screens/alerts-screen.ts:212`
   does. In `apps/dashboard/src/i18n/codes.ts` add `"working_order.not_found": { en: "That bill was not found", es: "No se encontró esa cuenta" }`
-  and `"sale.voided": { en: "That invoice was voided, so no copy is printed", es: "Esa factura está anulada, así que no se imprime copia" }`
-  (`printer.not_found` and `authorization.not_permitted` are there already: `codes.ts:507`, `:263`).
+  (`printer.not_found` is already there: `codes.ts:507`; the device refusal uses
+  `device.forbidden_action`).
   Before adding `nav.my_schedule`, grep the strings for the My schedule screen's own heading and
   reuse that key if one reads the same.
 

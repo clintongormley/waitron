@@ -1890,8 +1890,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
       says, so B16 left it.
     - **Completed orders cannot be looked up on a screen.** B27a adds the server's list, detail,
-      staff and audited receipt-reprint routes; B27b's dashboard screen and B27c's till lookup
-      remain queued. Spec: `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`.
+      staff, printer choice and audited receipt-copy routes, with the owner’s 2026-10-02 scope and
+      copy decisions; B27b's dashboard screen and B27c's till lookup remain queued. Spec:
+      `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`.
     - **The waiting list is drawn only inside the held-orders card**, so a canvas without that
       card shows no waiting list.
     - **Not measured — Pay on a sent `invoice_first` order whose invoice was credited may show the
