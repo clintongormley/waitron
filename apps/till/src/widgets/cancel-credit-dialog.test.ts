@@ -63,6 +63,17 @@ describe("till-cancel-credit-dialog: what it will do", () => {
     );
   });
 
+  it("offers to keep the bill rather than a second Cancel beside Cancel and credit", async () => {
+    const el = await mount();
+    const keep = root(el).querySelector("[data-cancel-credit-close]");
+
+    expect(text(keep)).toBe("Keep the bill");
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(text(keep)).toBe("Mantener la cuenta");
+  });
+
   it("says the same of an invoice whose number it was not given", async () => {
     const el = await mount({ invoiceNumber: null });
 

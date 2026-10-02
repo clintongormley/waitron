@@ -838,6 +838,7 @@ export const en = {
   "cancel_credit.approval_next":
     "If you cannot issue credit notes yourself, someone who can approves it with their PIN next.",
   "cancel_credit.confirm": "Cancel and credit",
+  "cancel_credit.keep": "Keep the bill",
   "cancel_credit.approvers_failed": "Could not read who can approve this. Try again.",
   "cancel_credit.unconfirmed":
     "The cancel got no answer, so it may have been made. Check the table's bills before trying again.",
@@ -1713,6 +1714,7 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.approval_next":
     "Si tú no puedes emitir facturas rectificativas, a continuación lo aprueba alguien que pueda con su PIN.",
   "cancel_credit.confirm": "Cancelar y abonar",
+  "cancel_credit.keep": "Mantener la cuenta",
   "cancel_credit.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "cancel_credit.unconfirmed":
     "La cancelación no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",

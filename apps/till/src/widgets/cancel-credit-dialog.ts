@@ -175,7 +175,7 @@ export class TillCancelCreditDialog extends LitElement {
           .disabled=${this.busy}
           @click=${() => this.#emit("cancel-credit-close")}
         >
-          ${t("action.cancel")}
+          ${t("cancel_credit.keep")}
         </wt-button>
         <wt-button
           variant="primary"

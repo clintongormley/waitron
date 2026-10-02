@@ -2744,15 +2744,13 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       refuses the second with `working_order.not_placed` ("refuses a second cancel, leaving exactly
       one credit note", `apps/server/src/cancel-invoiced-order.test.ts`), and the till reads the
       bills again; when that read shows the bill cancelled, it shows it cancelled, naming the credit
-      note. Open:
+      note. The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
+      shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
+      cancel's answer empty, so the till goes on reading the credit note's number from the bills.
+      Open:
       - **Counter orders are not offered it.** A counter order placed and invoiced but unpaid (the
         `invoice_first` mode) has no "Cancel and credit"; the counter's waiting list carries no
-        invoice field.
-      - **The cancel could answer with the credit note's number itself**, saving the second read;
-        two cases pin its answer as empty (`apps/server/src/till-api.test.ts`,
-        `apps/server/src/cancel-invoiced-order.test.ts`), so changing it waits on the owner.
-      - **The dialog's dismiss button reads "Cancel"**, the shared label, beside "Cancel and credit"
-        (in Spanish, "Cancelar" beside "Cancelar y abonar").
+        invoice field. The owner asked for a follow-up (2026-10-02).
     - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
       Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
       `cash.drawer`, so its cases cannot tell which of those it reads.
