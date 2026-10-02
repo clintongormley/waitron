@@ -129,6 +129,24 @@ async function fixture(tx: Transaction) {
 const scoped = (fn: (tx: Transaction) => Promise<void>) => withTransaction(db, fn);
 
 describe("route explanation", () => {
+  it("names the unavailable station when an inactive maker has no fallback", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.cocktails, {
+        kind: "station",
+        stationId: f.terraceBar,
+      });
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      expect((await describeMakers(tx, f.cfg)).get(f.mojito)).toEqual({
+        route: null,
+        variesByZone: false,
+        noReplacement: true,
+        unavailableStationId: f.terraceBar,
+      });
+    }));
   it("omits variants whose parent product is inactive from maker descriptions", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -1572,6 +1590,30 @@ describe("extra maker resolution", () => {
 });
 
 describe("routingAt", () => {
+  it("answers an empty maker question without validating an unrelated zone", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const resolver = await routingAt(tx, f.cfg, fixedInstant);
+      expect(await resolver.makers(randomUUID(), [])).toEqual(new Map());
+    }));
+  it("keeps a station available when the venue clock cannot apply its hours", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
+      ]);
+      const resolver = await routingAt(tx, f.cfg, new Date("2026-10-02T22:00:00Z"));
+      expect(await resolver.makers(null, [f.mojito])).toEqual(
+        new Map([
+          [f.mojito, { kind: "made", route: { kind: "station", stationId: f.terraceBar } }],
+        ]),
+      );
+    }));
   it("answers both questions exactly as their wrappers do", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
