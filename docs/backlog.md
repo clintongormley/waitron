@@ -1003,14 +1003,11 @@ heading — and the spare width goes to the other columns. Its heading sets that
 "Acciones" is longer than "Actions": LOOK in both languages, and at phone width, where the column
 stays pinned at the screen's edge.
 
-**A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — OPEN.**
+**A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — DONE.**
 The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to
-the right of the header, at the moment you don't see it"_. `wt-disclosure`
-(`packages/ui/src/components/wt-disclosure.ts`) lays its header out as a grid of `1fr auto`, so on a
-wide form the chevron sits at the far edge, away from the "Customer-facing names" heading it
-belongs to. **Wanted:** the chevron directly after the heading text. It is the shared primitive, so
-every collapsible section moves with it — the extras list form, the product editor and the content
-languages screen as well (`grep -rln wt-disclosure apps`); LOOK at each, and at phone width.
+the right of the header, at the moment you don't see it"_. The shared `wt-disclosure` now puts it
+directly after the heading text, including in the extras list form, product editor and content
+languages screen. The focused Chromium test covers the position at desktop and phone widths.
 
 **Clicking an option's row on the options list form opens that option (A197, owner 2026-10-02) —
 OPEN.** The owner: _"clicking on the options rows should open the edit page, like the previous

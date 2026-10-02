@@ -73,16 +73,46 @@ function layout(el: HTMLElement) {
     el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
   const heading = box(".heading");
   const chevron = box(".chevron");
+  const headingText = document.createRange();
+  headingText.selectNodeContents(el.shadowRoot!.querySelector(".heading")!);
   return {
     headingLeft: heading.left,
+    headingRight: headingText.getBoundingClientRect().right,
     headingTop: heading.top,
+    chevronLeft: chevron.left,
     chevronRight: chevron.right,
     chevronTop: chevron.top,
     rowRight: box("button.header").right,
   };
 }
 
-test("the heading and chevron stay where they are when the section opens, the chevron at the row's end", async () => {
+test("the chevron follows the heading at desktop and phone widths", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Customer-facing names" summary="ES label"><p>body</p></wt-disclosure>',
+  );
+  for (const width of [600, 320]) {
+    host.style.width = `${width}px`;
+    const closed = layout(el);
+    expect(closed.chevronLeft).toBeGreaterThanOrEqual(closed.headingRight);
+    expect(closed.chevronLeft - closed.headingRight).toBeLessThanOrEqual(24);
+    expect(closed.rowRight).toBe(el.getBoundingClientRect().right);
+  }
+});
+
+test("a long heading wraps before its chevron leaves a phone-width row", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Catalán · Idioma predeterminado · Obligatorio" summary="Nada sin traducir"><p>body</p></wt-disclosure>',
+  );
+  host.style.width = "320px";
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
+  expect(header.scrollWidth).toBe(header.clientWidth);
+  expect(chevron.getBoundingClientRect().right).toBeLessThanOrEqual(
+    el.getBoundingClientRect().right,
+  );
+});
+
+test("the heading and chevron stay where they are when the section opens, the header spans the host", async () => {
   const el = await mount(
     '<wt-disclosure heading="Kitchen" summary="BAR · Starters"><p>body</p></wt-disclosure>',
   );
@@ -91,7 +121,8 @@ test("the heading and chevron stay where they are when the section opens, the ch
   await settle(el);
   const open = layout(el);
   expect(open).toEqual(closed);
-  expect(closed.chevronRight).toBe(closed.rowRight);
+  expect(closed.chevronLeft).toBeGreaterThanOrEqual(closed.headingRight);
+  expect(closed.chevronLeft - closed.headingRight).toBeLessThanOrEqual(24);
   expect(closed.rowRight).toBe(el.getBoundingClientRect().right);
 });
 
