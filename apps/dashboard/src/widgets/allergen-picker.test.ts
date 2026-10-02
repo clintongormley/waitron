@@ -69,6 +69,20 @@ describe("allergen-picker", () => {
     expect(changes).toEqual([{ milk: { presence: "contains" } }]);
   });
 
+  it("draws every row's dropdown the same width, whichever choice it shows, without cutting the longer one", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: { gluten: { presence: "contains" }, milk: { presence: "may_contain" } },
+    });
+    const gluten = presenceBox(el, "gluten");
+    const milk = presenceBox(el, "milk");
+    await Promise.all([gluten.updateComplete, milk.updateComplete]);
+    expect(await shownPresence(el, "milk")).toBe(t("allergen.may_contain", "es-ES"));
+    expect(gluten.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(gluten.getBoundingClientRect().width).toBeCloseTo(milk.getBoundingClientRect().width, 0);
+    const longer = milk.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
+    expect(longer.scrollWidth).toBeLessThanOrEqual(longer.clientWidth);
+  });
+
   it("is null (PENDING) while Revisado is off", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     expect(el.value).toBe(null);

@@ -54,6 +54,12 @@ export class AllergenPicker extends LitElement {
         flex: 1;
         font-size: var(--wt-font-size-sm);
       }
+      /* One width for every row, with room to spare for "Puede contener", the longest choice in either
+         language. */
+      .row wt-combobox {
+        flex: none;
+        width: calc(var(--wt-space-6) * 5 + var(--wt-space-4));
+      }
       .reviewed,
       .grid {
         margin-bottom: var(--wt-space-4);
