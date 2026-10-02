@@ -1002,12 +1002,22 @@ OPEN.** The owner: _"when rendering the names block "EN Medium, pink in the midd
 rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
 · ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
 line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
-list, option and extras list forms. **Wanted:** "EN:", "ES:" and "Kitchen:" (Spanish "Cocina:"),
-and the field names bold — the owner's "maybe", so LOOK at it and keep it unless it reads worse.
-Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give the primitive a
-way to take the parts (a slot, or name/value pairs) rather than building markup in each screen. The
-product editor's own summaries (`product-editor.ts`) are written differently and are not part of
-this unless they should match — ask.
+list, option and extras list forms. **Decided (owner, 2026-10-02, choosing B of three mockups,
+"although C is good too"):** "EN:", "ES:" and "Kitchen:" (Spanish "Cocina:") in bold, the values
+in the summary's usual muted text. (C, the field names in full-strength text rather than bold, was
+the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give
+the primitive a way to take the parts (a slot, or name/value pairs) rather than building markup in
+each screen.
+
+**The product editor's folded sections follow the same pattern, with real values (owner,
+2026-10-02):** _"regarding products, i think we should include the field values not just the fact
+that they're filled in, and we should show a thumbnail of the image too"_. Today
+`product-editor.ts` writes the Kitchen section as "SOLOMILLO · Mains" and the Descriptors section as
+"customer name (EN, ES) · description (EN) · image". **Wanted:** each value after its bold field
+name — "Kitchen name: SOLOMILLO · Course: Mains"; the customer name and the description given per
+language, as the names line gives them; and the image as a small thumbnail rather than the word.
+Not settled: how a long description is cut down to fit the line, and where the thumbnail sits
+(before the text or after it). Mock both up for the owner before building, at phone width too.
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
