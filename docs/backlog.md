@@ -215,7 +215,7 @@ Track C.
 **Product folders, menus that include menus, and prep station routing: partly built
 (design approved 2026-09-30).** The
 [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
-1, 2, 3a, 3b, 3c-1 and 3c-2 have landed (above). Slice 3c-2 makes extras at their own station and
+1, 2, 3a, 3b, 3c-1, 3c-2 and 3c-3 have landed (above). Slice 3c-2 makes extras at their own station and
 names the dish and extra on each other's tickets (PF6,
 [plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md), [#1046](https://github.com/clintongormley/waitron/pull/1046)). Slice 3b
 ([#1024](https://github.com/clintongormley/waitron/pull/1024)) adds station opening hours, by-hand
@@ -228,18 +228,17 @@ stays immediate, including any routing rules attached to them; a confirmation is
 selected folders contain products or subfolders. Each dev venue needs `wa-wt reset demo
 <worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
-older build before using the new published document. **Slice 3c-3 is built on PF7**: "Make at" on
+older build before using the new published document. **Slice 3c-3 landed as [#1068](https://github.com/clintongormley/waitron/pull/1068) (PF7)**: "Make at" on
 any dish before sending, moving a dish the kitchen has not started (with a slip at the old station
 when its ticket printed there), and checking a held dish whose station closed or switched off before
 release against the current rules. A station chosen by hand stays while switched on, even if closed,
 without an alert. Otherwise, with no replacement, the dish stays at its old station and raises an
 alert. A dish made at the till is never moved or re-routed
-([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md); add the PR
-number when it lands). What is left:
+([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md)). What is left:
 - **3d**, watchers ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): named watchers on
   Prep Stations that screens and printers attach to, each with its own Done, Away unchanged, and
   the "one ticket per order" printer setting retired (owner, 2026-10-01); approved and queued as
-  lane E's PF8, after 3c-3 lands.
+  lane E's PF8.
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now"); 3c-2, 3c-3 and 3d were amended to match.
 - **Three follow-ups 3c-1 left:** the kitchen screen's column view has no per-order card, so it
