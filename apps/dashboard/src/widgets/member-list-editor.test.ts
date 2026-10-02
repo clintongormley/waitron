@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { SectionMember } from "@waitron/catalogue/src/section-types.js";
@@ -7,7 +7,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
 import { MemberListEditor, sectionParents, sectionsHolding } from "./member-list-editor.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -119,8 +119,7 @@ it("picks what to add from the shared dropdown, products then sections under the
   expect(await shownMember(el)).toBe(t("members.tile_placeholder"));
   await chooseOption(box, "section:s-beer");
   await el.updateComplete;
-  expect(await shownMember(el)).toBe("Beer");
-  q(el, '[data-test="add"]').click();
+  expect(await shownMember(el)).toBe(t("members.tile_placeholder"));
   expect(adds).toEqual([{ ref: { kind: "section", sectionId: "s-beer" } }]);
 });
 
@@ -337,12 +336,10 @@ it("adds the chosen product and resets the picker", async () => {
   const el = await mount();
   const adds = capture<{ ref: unknown }>(el, "wt-member-add");
   await choose(el, "product:p-chips");
-  q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(memberBox(el).value).toBe("");
   expect(await shownMember(el)).toBe(t("members.add_placeholder"));
   await choose(el, "product:p-salad");
-  q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(adds).toEqual([
     { ref: { kind: "product", productId: "p-chips" } },
@@ -350,34 +347,120 @@ it("adds the chosen product and resets the picker", async () => {
   ]);
 });
 
-it("explains, rather than adding, when Add is pressed with nothing chosen", async () => {
+it.each([
+  ["en", "Add a product", "Chips added."],
+  ["es", "Añadir un producto", "Se ha añadido Chips."],
+] as const)(
+  "adds a menu product immediately and announces it in %s",
+  async (locale, prompt, announcement) => {
+    setLocale(locale);
+    try {
+      const el = await mount();
+      const adds = capture<{ ref: unknown }>(el, "wt-member-add");
+      const box = memberBox(el);
+      expect(box.placeholder).toBe(prompt);
+      expect(el.shadowRoot!.querySelector('[data-test="add"]')).toBeNull();
+
+      box.shadowRoot!.querySelector<HTMLElement>("button.trigger")!.click();
+      await box.updateComplete;
+      [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')]
+        .find((row) => row.querySelector(".option-label")?.textContent?.trim() === "Chips")!
+        .click();
+      await el.updateComplete;
+
+      expect(adds).toEqual([{ ref: { kind: "product", productId: "p-chips" } }]);
+      expect(box.value).toBe("");
+      expect(await shownMember(el)).toBe(prompt);
+      expect(box.shadowRoot!.activeElement).toBe(box.shadowRoot!.querySelector("button.trigger"));
+      expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe(announcement);
+    } finally {
+      setLocale("en");
+      cleanupWidgets();
+    }
+  },
+);
+
+it("adds nothing when the menu picker closes without a choice", async () => {
   const el = await mount();
   const adds = capture(el, "wt-member-add");
-  q(el, '[data-test="add"]').click();
-  await el.updateComplete;
+  const box = memberBox(el);
+  box.shadowRoot!.querySelector<HTMLElement>("button.trigger")!.click();
+  await box.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await box.updateComplete;
+
   expect(adds).toEqual([]);
-  expect(memberBox(el).error).toBe(t("members.choose_first"));
-  const control = memberBox(el).shadowRoot!.querySelector("button.trigger")!;
-  expect(control.getAttribute("aria-invalid")).toBe("true");
-  const describedBy = control.getAttribute("aria-describedby")!;
-  expect(memberBox(el).shadowRoot!.getElementById(describedBy)!.textContent!.trim()).toBe(
-    t("members.choose_first"),
+  expect(box.value).toBe("");
+  expect(box.shadowRoot!.querySelector("button.trigger")!.getAttribute("aria-expanded")).toBe(
+    "false",
   );
-  await choose(el, "product:p-chips");
-  expect(memberBox(el).error).toBe("");
 });
 
-it("keeps the add row, its Add button and its error within the standard form width in a modal on a wide window", async () => {
+it("announces a section in Spanish without assuming its grammatical gender", async () => {
+  setLocale("es");
+  try {
+    const el = await mount({ sectionChoices: true });
+    await choose(el, "section:s-beer");
+    expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("Se ha añadido Beer.");
+  } finally {
+    setLocale("en");
+    cleanupWidgets();
+  }
+});
+
+it("announces a product again after the person removes and re-adds it", async () => {
+  const el = await mount();
+  const adds = capture(el, "wt-member-add");
+  await choose(el, "product:p-chips");
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("Chips added.");
+  el.members = [
+    ...members(),
+    { id: "m-chips", position: 3, ref: { kind: "product", productId: "p-chips" } },
+  ];
+  await el.updateComplete;
+
+  q(el, '[data-test="remove-m-chips"]').click();
+  await el.updateComplete;
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("");
+  el.members = members();
+  await el.updateComplete;
+  await choose(el, "product:p-chips");
+  expect(adds).toHaveLength(2);
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("Chips added.");
+});
+
+it("adds nothing when the picker closes without a choice", async () => {
+  const el = await mount();
+  const adds = capture(el, "wt-member-add");
+  const box = memberBox(el);
+  box.shadowRoot!.querySelector<HTMLElement>("button.trigger")!.click();
+  await box.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(adds).toEqual([]);
+  expect(box.value).toBe("");
+  expect(box.error).toBe("");
+});
+
+it("keeps the add picker within the standard form width in a modal on a wide window", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
   await page.viewport(1280, 800);
   try {
-    const el = await mount();
+    const el = await mount({
+      members: [
+        ...members(),
+        { id: "m-gone", position: 3, ref: { kind: "missing", name: "Old special" } },
+      ],
+      replaceable: new Set(["m-gone"]),
+    });
     const modal = document.createElement("wt-modal") as WtModal;
     el.parentElement!.appendChild(modal);
     modal.appendChild(el);
     modal.open = true;
     await modal.updateComplete;
+    await el.updateComplete;
+    q(el, '[data-test="replace-m-gone"]').click();
     await el.updateComplete;
     q(el, '[data-test="add"]').click();
     await el.updateComplete;
@@ -387,16 +470,13 @@ it("keeps the add row, its Add button and its error within the standard form wid
     const form = probe.getBoundingClientRect().width;
     expect(modal.shadowRoot!.querySelector(".body")!.clientWidth).toBeGreaterThan(form);
     const row = q(el, ".add").getBoundingClientRect();
-    expect(q(el, '[data-test="add"]').getBoundingClientRect().right - row.left).toBeLessThanOrEqual(
-      form + 0.5,
-    );
     expect(row.width).toBeCloseTo(form, 0);
-    const error = memberBox(el).shadowRoot!.querySelector("[data-error]")!;
-    // The error is the dropdown's own, under its box, so it is as wide as the dropdown.
     const box = memberBox(el).shadowRoot!.querySelector(".field")!.getBoundingClientRect();
-    expect(error.getBoundingClientRect().width).toBeCloseTo(box.width, 0);
-    expect(error.getBoundingClientRect().width).toBeLessThanOrEqual(form);
-    expect(q(el, '[data-test="add"]').getBoundingClientRect().bottom).toBeCloseTo(box.bottom, 0);
+    expect(box.right - row.left).toBeLessThanOrEqual(form + 0.5);
+    expect(box.width).toBeLessThanOrEqual(form);
+    const error = memberBox(el).shadowRoot!.querySelector("[data-error]")!.getBoundingClientRect();
+    expect(error.width).toBeCloseTo(box.width, 0);
+    expect(error.width).toBeLessThanOrEqual(form);
   } finally {
     await page.viewport(width, height);
   }
@@ -452,8 +532,13 @@ it("while busy, disables every control and reports nothing", async () => {
     el.addEventListener(type, () => seen.push(type));
   expect(memberBox(el).disabled).toBe(true);
   expect(q<HTMLButtonElement>(el, '[data-test="drag-m-burger"]').disabled).toBe(true);
-  expect((q(el, '[data-test="add"]') as HTMLElement & { disabled: boolean }).disabled).toBe(true);
-  q(el, '[data-test="add"]').click();
+  memberBox(el).dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "product:p-chips" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   q(el, '[data-test="remove-m-burger"]').click();
   q(el, '[data-test="open-m-drinks"]').click();
   q(el, '[data-test="drag-m-burger"]').dispatchEvent(
@@ -462,6 +547,7 @@ it("while busy, disables every control and reports nothing", async () => {
   await el.updateComplete;
   expect(seen).toEqual([]);
   expect(memberBox(el).error).toBe("");
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("");
 });
 
 it("says the list is empty and still offers everything not excluded", async () => {
@@ -474,10 +560,11 @@ it("says the list is empty and still offers everything not excluded", async () =
   expect(options).toEqual(["Burger", "Chips", "Lemonade", "Salad"]);
 });
 
-it("drops a chosen product once the list comes to hold it, so Add explains rather than repeats it", async () => {
+it("drops a newly added product from the picker once the list holds it", async () => {
   const el = await mount();
   const adds = capture(el, "wt-member-add");
   await choose(el, "product:p-chips");
+  expect(adds).toEqual([{ ref: { kind: "product", productId: "p-chips" } }]);
   el.members = [
     ...members(),
     { id: "m-chips", position: 3, ref: { kind: "product", productId: "p-chips" } },
@@ -485,22 +572,46 @@ it("drops a chosen product once the list comes to hold it, so Add explains rathe
   await el.updateComplete;
   expect(memberBox(el).value).toBe("");
   expect(await shownMember(el)).toBe(t("members.add_placeholder"));
-  q(el, '[data-test="add"]').click();
-  await el.updateComplete;
-  expect(adds).toEqual([]);
-  expect(memberBox(el).error).not.toBe("");
+  expect(memberBox(el).options.some((option) => option.value === "product:p-chips")).toBe(false);
+  expect(adds).toHaveLength(1);
 });
 
-it("keeps a choice that is still on offer when the list changes around it", async () => {
+it("keeps an available product on offer when the list changes around it", async () => {
   const el = await mount();
   const adds = capture(el, "wt-member-add");
   await choose(el, "product:p-salad");
+  expect(adds).toEqual([{ ref: { kind: "product", productId: "p-salad" } }]);
   el.members = members().filter((member) => member.id !== "m-lemonade");
+  await el.updateComplete;
+  expect(memberBox(el).value).toBe("");
+  expect(await shownMember(el)).toBe(t("members.add_placeholder"));
+  expect(memberBox(el).options.some((option) => option.value === "product:p-salad")).toBe(true);
+  expect(adds).toEqual([{ ref: { kind: "product", productId: "p-salad" } }]);
+});
+
+it("keeps a replacement choice while an unrelated member changes", async () => {
+  const el = await mount({
+    members: [
+      ...members(),
+      { id: "m-gone", position: 3, ref: { kind: "missing", name: "Old special" } },
+    ],
+    replaceable: new Set(["m-gone"]),
+  });
+  const replaces = capture<{ memberId: string; ref: unknown }>(el, "wt-member-replace");
+  q(el, '[data-test="replace-m-gone"]').click();
+  await el.updateComplete;
+  await choose(el, "product:p-salad");
+  el.members = [
+    ...members().filter((member) => member.id !== "m-lemonade"),
+    { id: "m-gone", position: 2, ref: { kind: "missing", name: "Old special" } },
+  ];
   await el.updateComplete;
   expect(memberBox(el).value).toBe("product:p-salad");
   expect(await shownMember(el)).toBe("Salad");
   q(el, '[data-test="add"]').click();
-  expect(adds).toEqual([{ ref: { kind: "product", productId: "p-salad" } }]);
+  expect(replaces).toEqual([
+    { memberId: "m-gone", ref: { kind: "product", productId: "p-salad" } },
+  ]);
 });
 
 it("finds the section and every section holding it however deep, even round a loop", () => {
@@ -577,10 +688,9 @@ it("describes both tile choices in the Home mode and products alone in structura
   const el = await mount({ sectionChoices: true });
   const prompt = () => memberBox(el).options.find((option) => option.value === "")?.label;
   expect(prompt()).toBe(t("members.tile_placeholder"));
-  q(el, '[data-test="add"]').click();
-  await el.updateComplete;
-  expect(memberBox(el).error).toBe(t("members.tile_choose_first"));
+  expect(memberBox(el).placeholder).toBe(t("members.tile_placeholder"));
   el.sectionChoices = false;
   await el.updateComplete;
   expect(prompt()).toBe(t("members.add_placeholder"));
+  expect(memberBox(el).placeholder).toBe(t("members.add_placeholder"));
 });

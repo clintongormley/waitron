@@ -44,11 +44,14 @@ describe.each(["light", "dark"] as const)("member list editor (%s)", (theme) => 
         // Filtered: every section is excluded, so the picker offers products alone.
         excludeSectionIds: state === "filtered" ? ["s-drinks", "s-beer"] : [],
         busy: state === "busy",
+        replaceable: state === "invalid" ? new Set(["m-drinks"]) : new Set(),
         label: "Members of Lunch specials",
       },
       theme,
     );
     if (state === "invalid") {
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-m-drinks"]')!.click();
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
       await el.updateComplete;
     }

@@ -120,10 +120,6 @@ export class MemberListEditor extends LitElement {
         max-width: var(--wt-field-max-width);
         margin-top: var(--wt-space-4);
       }
-      /* Level with the bottom of the dropdown's box, not with the error line under it. */
-      .add > wt-button {
-        margin-top: calc(var(--wt-field-height) - var(--wt-tap-min));
-      }
       .replacement .field,
       wt-form-actions {
         flex-basis: 100%;
@@ -161,6 +157,7 @@ export class MemberListEditor extends LitElement {
   @state() private replacementAttempted = false;
   @state() private replacementError = "";
   @state() private replacementFieldError = "";
+  @state() private addedMessage = "";
 
   replacementCompletion(memberId: string): (message: string, field?: boolean) => void {
     const generation = this.#replacementGeneration;
@@ -360,7 +357,10 @@ export class MemberListEditor extends LitElement {
       .disabled=${this.busy}
       @click=${(event: Event) => {
         event.stopPropagation();
-        if (!this.busy) this.#emit(`wt-member-${name}`, detail);
+        if (!this.busy) {
+          if (name === "remove" || name === "delete") this.addedMessage = "";
+          this.#emit(`wt-member-${name}`, detail);
+        }
       }}
       >${text}</wt-button
     >`;
@@ -478,7 +478,11 @@ export class MemberListEditor extends LitElement {
 
   override render() {
     const prompt = t(this.sectionChoices ? "members.tile_placeholder" : "members.add_placeholder");
-    return html`${this.#reorder.liveRegion()} ${this.#list()}
+    return html`${this.#reorder.liveRegion()}
+      <div data-test="added-status" role="status" aria-live="polite" class="visually-hidden">
+        ${this.addedMessage}
+      </div>
+      ${this.#list()}
       <div class=${this.replacing === null ? "add" : "add replacement"}>
         <wt-combobox
           class="field"
@@ -495,7 +499,16 @@ export class MemberListEditor extends LitElement {
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (this.busy) return;
             this.choice = event.detail.value;
+            if (this.replacing === null && this.choice) {
+              const label = [...this.#offer.products, ...this.#offer.sections].find(
+                (option) => option.value === this.choice,
+              )?.label;
+              this.#add(event);
+              if (label) this.addedMessage = t("members.added").replace("{name}", label);
+              (event.currentTarget as HTMLElementTagNameMap["wt-combobox"]).value = "";
+            }
             this.addError =
               this.replacing !== null && this.replacementAttempted && this.choice === "";
             this.replacementFieldError = "";
@@ -503,12 +516,7 @@ export class MemberListEditor extends LitElement {
         ></wt-combobox>
         ${
           this.replacing === null
-            ? html`<wt-button
-                data-test="add"
-                .disabled=${this.busy}
-                @click=${(event: Event) => this.#add(event)}
-                >${t("action.add")}</wt-button
-              >`
+            ? nothing
             : html`<wt-form-actions
                 .error=${[this.replacementError, this.addError || this.replacementFieldError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
               >
