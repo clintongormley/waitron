@@ -11,6 +11,7 @@ import { countryName } from "../country-name.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { RECEIPT_LANGUAGES } from "../receipt-languages.js";
 import type { ProvisionBody } from "../api/client.js";
 
 const MODE_KEYS = {
@@ -18,13 +19,6 @@ const MODE_KEYS = {
   prepare: "review.badge.prepare",
   live: "review.badge.live",
 } as const satisfies Record<ProvisionBody["mode"], StringKey>;
-
-const RECEIPT_LANGUAGE_NAMES: Readonly<Record<string, string>> = {
-  "es-ES": "Español",
-  "ca-ES": "Català",
-  "gl-ES": "Galego",
-  "eu-ES": "Euskara",
-};
 
 /** Never renders a secret: no PIN, password, certificate passphrase or PFX bytes — the certificate
  * appears only as attached or not. */
@@ -94,6 +88,7 @@ export class SetupReviewScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
         overflow-wrap: anywhere;
+        align-self: center;
       }
       .row-edit {
         margin-inline-start: var(--wt-space-2);
@@ -118,12 +113,14 @@ export class SetupReviewScreen extends LitElement {
     new LocaleChangeController(this);
   }
 
-  #help(key: StringKey): TemplateResult {
-    return html`<wt-help-tooltip aria-label=${t("review.help_label")}>${t(key)}</wt-help-tooltip>`;
+  #help(key: StringKey, label: StringKey): TemplateResult {
+    return html`<wt-help-tooltip aria-label=${`${t("review.help_label")} ${t(label)}`}>
+      ${t(key)}
+    </wt-help-tooltip>`;
   }
 
   #row(label: StringKey, value: unknown, testId: string, help?: StringKey): TemplateResult {
-    return html`<dt>${t(label)}${help === undefined ? nothing : this.#help(help)}</dt>
+    return html`<dt>${t(label)}${help === undefined ? nothing : this.#help(help, label)}</dt>
       <dd data-test=${testId}>${value ?? "—"}</dd>`;
   }
 
@@ -137,7 +134,7 @@ export class SetupReviewScreen extends LitElement {
     return html`<section class="group" data-group=${id} aria-labelledby=${`group-${id}`}>
       <div class="group-header">
         <h2 id=${`group-${id}`}>${t(title)}</h2>
-        ${this.#help(help)}
+        ${this.#help(help, title)}
         <wt-button
           variant="ghost"
           data-test="edit"
@@ -188,7 +185,7 @@ export class SetupReviewScreen extends LitElement {
           html`
             ${this.#row("review.location", location?.name, "summary-location")}
             ${this.#row("review.address", [location?.addressLine1, location?.addressLine2, location?.postalCode, location?.city, location?.province].filter(Boolean).join(", ") || "—", "summary-address")}
-            ${this.#row("review.invoice_locales", location?.invoiceLocales?.map((locale) => RECEIPT_LANGUAGE_NAMES[locale] ?? locale).join(", "), "summary-invoiceLocales", "review.help.receipt_language")}
+            ${this.#row("review.invoice_locales", location?.invoiceLocales?.map((locale) => RECEIPT_LANGUAGES[locale]?.nativeName ?? locale).join(", "), "summary-invoiceLocales", "review.help.receipt_language")}
             ${this.#row("review.day_cutover", location?.dayCutover, "summary-dayCutover", "review.help.day_cutover")}
           `,
         )}
@@ -205,7 +202,7 @@ export class SetupReviewScreen extends LitElement {
             ${
               mode === "demo"
                 ? nothing
-                : html`<dt>${t("review.cert")}${this.#help("review.help.cert")}</dt>
+                : html`<dt>${t("review.cert")}${this.#help("review.help.cert", "review.cert")}</dt>
                     <dd>
                       <span data-test="summary-cert"
                         >${certAttached ? t("review.cert_attached") : t("review.cert_not_attached")}</span

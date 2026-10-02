@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { VENUE_SETUP_COUNTRY_PACKS } from "@waitron/country-packs";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./review-screen.js";
@@ -84,6 +86,7 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=mode-badge]")).toBe("Demo");
     expect(el.shadowRoot!.querySelectorAll("[data-test=demo-defaults]")).toHaveLength(1);
     expect(q(el, "[data-test=summary-mode]")).toBeNull();
+    expect(q(el, "[data-test=summary-cert]")).toBeNull();
     const actions = q(el, "wt-form-actions")!;
     expect(actions.querySelector("[data-test=back]")!.getAttribute("slot")).toBe("cancel");
     expect(actions.querySelector("[data-test=provision]")).not.toBeNull();
@@ -97,6 +100,16 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-invoiceLocales]")).toContain("Català");
     expect(text(el, "[data-test=summary-invoiceLocales]")).not.toContain("ca-ES");
     expect(q(el, "[data-test=summary-admin]")).toBeNull();
+  });
+
+  it("names every receipt language offered by the setup country packs", async () => {
+    for (const pack of VENUE_SETUP_COUNTRY_PACKS) {
+      const draft = fullDraft();
+      draft.venue!.location!.invoiceLocales = [...pack.invoiceLocales];
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+      const shown = text(el, "[data-test=summary-invoiceLocales]")!;
+      for (const locale of pack.invoiceLocales) expect(shown).not.toContain(locale);
+    }
   });
 
   it("explains every group and the values that need context", async () => {
@@ -134,6 +147,39 @@ describe("setup-review-screen", () => {
       const value = q(el, `[data-test=${field}]`)!;
       const label = value.closest("dd")?.previousElementSibling;
       expect(label?.querySelector("wt-help-tooltip")?.textContent?.trim()).toBe(explanation);
+    }
+  });
+
+  it("names each help control for the setting it explains", async () => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    const business = q(el, '[data-group="business"] .group-header wt-help-tooltip')!;
+    const series = q(el, '[data-test="summary-seriesCode"]')!.previousElementSibling!;
+    expect(business.getAttribute("aria-label")).toBe("About Business");
+    expect(series.querySelector("wt-help-tooltip")?.getAttribute("aria-label")).toBe(
+      "About Invoice series",
+    );
+  });
+
+  it("centres a value beside a taller label with a help control", async () => {
+    const original = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+        draft: fullDraft(),
+      });
+      const value = q(el, '[data-test="summary-seriesCode"]')!;
+      const label = value.previousElementSibling!;
+      const labelBox = label.getBoundingClientRect();
+      const text = document.createRange();
+      text.selectNodeContents(value);
+      const valueBox = text.getBoundingClientRect();
+      expect(
+        Math.abs((labelBox.top + labelBox.bottom) / 2 - (valueBox.top + valueBox.bottom) / 2),
+      ).toBeLessThan(2);
+    } finally {
+      await page.viewport(original.width, original.height);
     }
   });
   it("names the country in the wizard's language", async () => {

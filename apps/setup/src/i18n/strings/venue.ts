@@ -101,10 +101,6 @@ export const venueEn = {
   "review.intro": "Check the details below, then provision this server.",
   "review.demo_defaults":
     "Waitron generated a demo tax ID and supplied the business and invoice defaults below. Demo does not submit invoices to the tax agency.",
-  "review.mode": "Mode",
-  "review.mode_value.demo": "demo",
-  "review.mode_value.prepare": "prepare",
-  "review.mode_value.live": "live",
   "review.country": "Country",
   "review.tax_id": "Tax ID",
   "review.legal_name": "Legal name",
@@ -124,7 +120,7 @@ export const venueEn = {
   "review.group.invoicing": "Invoicing",
   "review.group.account": "Your account",
   "review.edit": "Edit",
-  "review.help_label": "About this setting",
+  "review.help_label": "About",
   "review.help.business": "These details identify the legal business on invoices and tax records.",
   "review.help.location":
     "These details describe the place where sales are made and receipts are issued.",
@@ -309,10 +305,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.intro": "Comprueba los datos de abajo y configura este servidor.",
   "review.demo_defaults":
     "Waitron ha generado un número de identificación fiscal de demostración y ha puesto los valores del negocio y de factura de abajo. La demostración no envía facturas a la Agencia Tributaria.",
-  "review.mode": "Modo",
-  "review.mode_value.demo": "demostración",
-  "review.mode_value.prepare": "preparación",
-  "review.mode_value.live": "en vivo",
   "review.country": "País",
   "review.tax_id": "Número de identificación fiscal",
   "review.legal_name": "Razón social",
@@ -332,7 +324,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.group.invoicing": "Facturación",
   "review.group.account": "Tu cuenta",
   "review.edit": "Editar",
-  "review.help_label": "Ayuda sobre este dato",
+  "review.help_label": "Sobre",
   "review.help.business":
     "Estos datos identifican al negocio en las facturas y los registros fiscales.",
   "review.help.location":
