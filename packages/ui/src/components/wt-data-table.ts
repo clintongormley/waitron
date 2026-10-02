@@ -329,6 +329,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) rowKey: (row: Row, index: number) => string = (_row, index) =>
     String(index);
   @property({ attribute: false }) rowParent?: (row: Row) => string | null;
+  /** Siblings sort by this number first, smallest first in either sort direction, and by the chosen
+   * column only within a group. */
+  @property({ attribute: false }) rowGroup?: (row: Row) => number;
+  /** In tree mode, a branch this returns false for is always open: it draws no toggle, is never seeded
+   * closed, and `setExpanded` cannot close it. */
+  @property({ attribute: false }) rowCollapsible: (row: Row) => boolean = () => true;
   /** When set (plain, non-tree tables only), each row becomes activatable: a stretched, focusable
    * button covers the row and calls this on click. Per-row controls (the selection checkbox, the
    * Edit/Delete menu) sit above the activator, so they are never swallowed. A tree table ignores it. */
@@ -397,13 +403,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.rowParent &&
       (changed.has("rows") || changed.has("rowParent") || changed.has("initiallyCollapsed"))
     ) {
-      const keys = new Set(this.rows.map((row, index) => this.rowKey(row, index)));
+      const byKey = this.#rowsByKey();
       const next = new Set(this.collapsed);
       let seeded = false;
       for (const row of this.rows) {
         const parent = this.rowParent(row);
-        if (parent === null || !keys.has(parent) || this.seededBranches.has(parent)) continue;
+        if (parent === null || !byKey.has(parent) || this.seededBranches.has(parent)) continue;
         this.seededBranches.add(parent);
+        if (!this.rowCollapsible(byKey.get(parent)!)) continue;
         next.add(parent);
         seeded = true;
       }
@@ -648,11 +655,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     column: DataTableColumn<Row> | undefined,
     indexOf: ReadonlyMap<Row, number>,
   ): Row[] {
-    if (column?.sortValue === undefined) return [...rows];
+    const group = this.rowGroup;
+    if (column?.sortValue === undefined && group === undefined) return [...rows];
     const direction = this.sortDirection === "ascending" ? 1 : -1;
     return [...rows]
-      .map((row) => ({ row, index: indexOf.get(row)!, value: column.sortValue!(row) }))
+      .map((row) => ({
+        row,
+        index: indexOf.get(row)!,
+        group: group?.(row) ?? 0,
+        value: column?.sortValue?.(row),
+      }))
       .sort((left, right) => {
+        if (left.group !== right.group) return left.group - right.group;
         if (left.value == null && right.value == null) return left.index - right.index;
         if (left.value == null) return 1;
         if (right.value == null) return -1;
@@ -767,18 +781,81 @@ export class WtDataTable<Row = unknown> extends LitElement {
         const key = keyOf(row, indexOf.get(row)!);
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
         out.push({ row, key, depth, hasChildren });
-        if (hasChildren && (!this.collapsed.has(key) || forcedOpen.has(key))) walk(key, depth + 1);
+        if (
+          hasChildren &&
+          (!this.collapsed.has(key) || forcedOpen.has(key) || !this.rowCollapsible(row))
+        )
+          walk(key, depth + 1);
       }
     };
     walk("", 0);
     return out;
   }
 
-  #toggle(key: string): void {
+  #rowsByKey(): Map<string, Row> {
+    const byKey = new Map<string, Row>();
+    this.rows.forEach((row, index) => {
+      const key = this.rowKey(row, index);
+      if (!byKey.has(key)) byKey.set(key, row);
+    });
+    return byKey;
+  }
+
+  #setOpen(keys: readonly string[], open: boolean): void {
     const next = new Set(this.collapsed);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+    for (const key of keys) {
+      if (open) next.delete(key);
+      else next.add(key);
+    }
     this.collapsed = next;
+  }
+
+  #toggle(key: string): void {
+    const expanded = this.collapsed.has(key);
+    this.#setOpen([key], expanded);
+    this.dispatchEvent(
+      new CustomEvent("wt-expand-change", {
+        detail: { key, expanded },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Whether a branch shows its children; a key the table has never closed reads as open. */
+  isExpanded(key: string): boolean {
+    return !this.collapsed.has(key);
+  }
+
+  /** Opens or closes one branch as its toggle would, without reporting it as a person's change. */
+  setExpanded(key: string, expanded: boolean): void {
+    const row = this.#rowsByKey().get(key);
+    if (!expanded && row !== undefined && !this.rowCollapsible(row)) return;
+    this.#setOpen([key], expanded);
+  }
+
+  /** The order the table draws these rows in when they share a parent. */
+  sortedSiblings(rows: readonly Row[]): Row[] {
+    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()));
+  }
+
+  /** Opens every closed branch above the row with this key, then scrolls the row into view. */
+  async revealRow(key: string): Promise<void> {
+    const byKey = this.#rowsByKey();
+    const closed: string[] = [];
+    const seen = new Set<string>();
+    const row = byKey.get(key);
+    let parent = row !== undefined && this.rowParent ? this.rowParent(row) : null;
+    while (parent !== null && byKey.has(parent) && !seen.has(parent)) {
+      seen.add(parent);
+      if (this.collapsed.has(parent)) closed.push(parent);
+      parent = this.rowParent!(byKey.get(parent)!);
+    }
+    if (closed.length > 0) this.#setOpen(closed, true);
+    await this.updateComplete;
+    this.shadowRoot!.querySelector(`tr[data-row-key="${CSS.escape(key)}"]`)?.scrollIntoView({
+      block: "nearest",
+    });
   }
 
   /** A pinned cell is layered above the row's activator, so a click on its empty space reaches the
@@ -1089,7 +1166,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
           ${this.#renderHead(visibleKeys, shown)}
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
-              const expanded = !this.collapsed.has(key) || ancestorOnly.has(key);
+              const collapsible = this.rowCollapsible(row);
+              const expanded = !collapsible || !this.collapsed.has(key) || ancestorOnly.has(key);
               const cellContext = { ancestorOnly: ancestorOnly.has(key) };
               return html`<tr
                 data-row-key=${key}
@@ -1112,7 +1190,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                               style=${`padding-inline-start: calc(${depth} * var(--wt-space-4))`}
                             >
                               ${
-                                hasChildren && !cellContext.ancestorOnly
+                                hasChildren && collapsible && !cellContext.ancestorOnly
                                   ? html`<button
                                       class="tree-toggle"
                                       aria-label=${
@@ -1122,7 +1200,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                             ? this.collapseLabel
                                             : this.expandLabel
                                       }
-                                      @click=${() => this.#toggle(key)}
+                                      @click=${(event: Event) => {
+                                        event.stopPropagation();
+                                        this.#toggle(key);
+                                      }}
                                     >
                                       ${expanded ? "▾" : "▸"}
                                     </button>`

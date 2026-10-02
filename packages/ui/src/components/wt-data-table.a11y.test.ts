@@ -140,6 +140,28 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("tree mode with an always-open top branch", async () => {
+    type TreeRow = { id: string; parent: string | null; name: string };
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Categories"></wt-data-table>',
+      theme,
+    )) as WtDataTable<TreeRow>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+    ] satisfies DataTableColumn<TreeRow>[];
+    el.rows = [
+      { id: "all", parent: null, name: "All products" },
+      { id: "food", parent: "all", name: "Food" },
+      { id: "eggs", parent: "food", name: "Eggs" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowParent = (row) => row.parent;
+    el.rowCollapsible = (row) => row.id !== "all";
+    el.initiallyCollapsed = true;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("toolbar with a search box and a filter dropdown", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',
