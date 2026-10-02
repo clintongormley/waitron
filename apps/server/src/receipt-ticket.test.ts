@@ -51,7 +51,7 @@ const PRINTER_58: EscSetting = {
  * and self-consistent — Σ(line.gross) === total, Σ(base + tax) === total, and total + change === the
  * cash tendered — so every printed amount can be asserted by its digit portion.
  */
-const FILED_SALE: TillSaleResult = {
+const FILED_WITHOUT_TEXT: TillSaleResult = {
   locale: "es-ES",
   orderLabel: "Mesa 6",
   orderNumber: 41,
@@ -77,6 +77,14 @@ const FILED_SALE: TillSaleResult = {
   tender: { method: "cash", change: "9.10" },
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=17-08-2026&importe=20.90",
 };
+
+const FILED_SALE: TillSaleResult = {
+  ...FILED_WITHOUT_TEXT,
+  qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
+};
+
+/** The same sale from a regime that minted no verification link and supplies no words for one. */
+const NO_QR_SALE: TillSaleResult = { ...FILED_WITHOUT_TEXT, qr: "" };
 
 const ISSUER: ReceiptIssuer = { venueName: "Charcutería La Buena", nif: "B12345678" };
 const TRIM: ReceiptTrim = {
@@ -121,7 +129,7 @@ it.each([PRINTER_80, PRINTER_58])(
   },
 );
 
-it("prints no «QR tributario:» label when no QR is printed, and still prints the legend", () => {
+it("prints neither the caption nor the legend when no QR is printed, even if the words are given", () => {
   const s = decodeTicket(
     formatReceipt({
       result: { ...FILED_SALE, qr: "" },
@@ -132,7 +140,40 @@ it("prints no «QR tributario:» label when no QR is printed, and still prints t
     }),
   );
   expect(s).not.toContain("QR tributario");
-  expect(s).toContain("VERI*FACTU");
+  expect(s).not.toContain("VERI*FACTU");
+});
+
+it("prints the caption and the legend the sale carries, not words of its own", () => {
+  const lines = drawn(
+    formatReceipt({
+      result: { ...FILED_SALE, qrText: { caption: "CAP-X", legend: "LEG-Y" } },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    }),
+  );
+  expect(lines.slice(0, 4)).toEqual([
+    centred(PRINTER_80, "CAP-X"),
+    "<QR>",
+    centred(PRINTER_80, "LEG-Y"),
+    "",
+  ]);
+  expect(lines.join("\n")).not.toContain("VERI*FACTU");
+  expect(lines.join("\n")).not.toContain("QR tributario");
+});
+
+it("prints a QR the regime gives no words for on its own, before the issuer", () => {
+  const lines = drawn(
+    formatReceipt({
+      result: { ...FILED_WITHOUT_TEXT, qr: FILED_SALE.qr },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    }),
+  );
+  expect(lines.slice(0, 3)).toEqual(["<QR>", "", ISSUER.venueName]);
 });
 
 /** A centred line on `printer`'s paper, padded as the receipt pads it. */
@@ -211,10 +252,10 @@ describe("the QR comes first on an invoice that carries one", () => {
     expect(lines.at(-1)).toBe("PRUEBA - SIN COBRO REAL");
   });
 
-  it("prints a sale with no QR issuer-first, with the legend after the tender", () => {
+  it("prints a sale with no QR issuer-first, and no legend anywhere: the footer follows the tender", () => {
     const lines = drawn(
       formatReceipt({
-        result: { ...FILED_SALE, qr: "" },
+        result: NO_QR_SALE,
         issuer: ISSUER,
         receipt: TRIM,
         invoiceLocale: "es-ES",
@@ -224,12 +265,8 @@ describe("the QR comes first on an invoice that carries one", () => {
     expect(lines[0]).toBe(ISSUER.venueName);
     const change = lines.findIndex((line) => line.startsWith("Cambio"));
     expect(change).toBeGreaterThan(0);
-    expect(lines.slice(change + 1)).toEqual([
-      "",
-      centred(PRINTER_80, "VERI*FACTU"),
-      "",
-      TRIM.footerMessage!,
-    ]);
+    expect(lines.slice(change + 1)).toEqual(["", TRIM.footerMessage!]);
+    expect(lines.join("\n")).not.toContain("VERI*FACTU");
   });
 });
 
@@ -456,9 +493,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(s).toContain(`NIF: ${ISSUER.nif}`);
   });
 
-  it("prints no QR command when the regime minted none, but still prints the legend", () => {
+  it("prints no QR command and no legend when the regime minted no QR", () => {
     const bytes = formatReceipt({
-      result: { ...FILED_SALE, qr: "" },
+      result: NO_QR_SALE,
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
@@ -468,8 +505,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     const commands = printedCommands(bytes);
     expect(commands.filter((c) => c.name === "GS v 0" && c.text === undefined)).toEqual([]);
     expect(commands.map((c) => c.name)).not.toContain("GS ( k");
-    // ...but the legend is unconditional in Veri*Factu mode (art. 20.1.b).
-    expect(decodeTicket(bytes)).toContain("VERI*FACTU");
+    expect(decodeTicket(bytes)).not.toContain("VERI*FACTU");
   });
 
   it("resolves a line name to another description when the invoice locale is missing, and to empty for an empty map", () => {
@@ -578,6 +614,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       ],
       tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
+      qrText: FILED_SALE.qrText,
     };
     const s = decodeTicket(
       formatReceipt({
@@ -638,6 +675,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       ],
       tender: { method: "cash", change: "0.00" },
       qr: FILED_SALE.qr,
+      qrText: FILED_SALE.qrText,
     };
     const s = decodeTicket(
       formatReceipt({

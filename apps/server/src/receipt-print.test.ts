@@ -55,6 +55,8 @@ import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
+import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
+import { venueModuleConfig } from "./provision.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
@@ -336,6 +338,54 @@ afterEach(() => {
 });
 
 const deps = () => ({ db: suite.db, backend, clock });
+
+describe("the words around a receipt's QR come from the venue's fiscal backend", () => {
+  async function sellOnce(backendForSale: FiscalBackend) {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "auto", printerId });
+    const ticket = await recordTillSale(
+      { db: suite.db, backend: backendForSale, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const papers = (await printJobsFor(cfg)).map((job) => new Uint8Array(job.payload));
+    const receipt = papers.find((payload) => decodeTicket(payload).includes("TOTAL"))!;
+    return { ticket, lines: printedLines(receipt).map((line) => line.trim()) };
+  }
+
+  it("prints the Veri*Factu backend's caption above the QR and its legend under it, first", async () => {
+    const { ticket, lines } = await sellOnce(backend);
+    expect(ticket.qr).not.toBe("");
+    expect(ticket.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
+    expect(lines.indexOf("QR tributario:")).toBe(0);
+    expect(lines.indexOf("VERI*FACTU")).toBeGreaterThan(0);
+    expect(lines.indexOf("VERI*FACTU")).toBeLessThan(
+      lines.findIndex((line) => line.startsWith("TOTAL")),
+    );
+  });
+
+  it("prints neither on a sale filed through a venue with no fiscal regime", async () => {
+    const config = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat");
+    const none = fiscalSlot(enabledModules(ALL_MODULES, config), null).makeBackend({
+      db: suite.db,
+      clock,
+      environment: deploymentEnvironment(process.env),
+    });
+    expect(none.id).toBe("none");
+    const { ticket, lines } = await sellOnce(none);
+    expect(ticket.qr).toBe("");
+    expect(ticket).not.toHaveProperty("qrText");
+    expect(lines.some((line) => line.startsWith("TOTAL"))).toBe(true);
+    expect(lines.join("\n")).not.toContain("VERI*FACTU");
+    expect(lines.join("\n")).not.toContain("QR tributario");
+  });
+});
 
 describe("receipt grouping after table changes", () => {
   it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
@@ -912,6 +962,10 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       const original = new Uint8Array(issuedJobs[0]!.payload);
       const text = decodeTicket(original);
       expect(text).toContain("TOTAL");
+      const caption = text.indexOf("QR tributario:");
+      expect(caption).toBeGreaterThanOrEqual(0);
+      expect(text.indexOf("VERI*FACTU")).toBeGreaterThan(caption);
+      expect(text.indexOf("VERI*FACTU")).toBeLessThan(text.indexOf("TOTAL"));
       expect(text).not.toContain("Efectivo");
       expect(text).not.toContain("Cambio");
       expect(text).not.toContain("Tarjeta");

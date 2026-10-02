@@ -555,6 +555,7 @@ describe("the invoice at full payment", () => {
     const billId = await tabWith("Caña");
     const paid = await take(billId, cash("3.00"));
     expect(paid.invoice).toBeDefined();
+    expect(paid.invoice!.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
 
     const again = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
 

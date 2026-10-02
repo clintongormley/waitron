@@ -170,7 +170,7 @@ import type { TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
-import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
+import { ordersWithUnfiledPayment, paymentAttemptIsLive, receiptQr } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
@@ -4913,7 +4913,7 @@ async function unpaidReceipt(
     invoiceNumber: await readInvoiceNumber(tx, issued.saleId),
     issuedAt: issued.fiscal.issuedAt.toISOString(),
     total: priced.total,
-    qr: issued.fiscal.verificationUrl ?? "",
+    ...receiptQr(backend, issued.fiscal.verificationUrl),
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
     ...(await receiptLines(tx, invoice.id, priced, invoice.identities)),
     tender: { method: "unpaid" },

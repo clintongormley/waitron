@@ -6,12 +6,11 @@
  * filed record, never a second source of fiscal truth.
  *
  * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
- * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1 plus the
- * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21), with AEAT's «QR tributario:» caption
- * above the QR and, when a QR is printed, the caption, the QR and the legend first (AEAT's QR
- * specification v0.5.0, §3), after any practice warning; sources in
- * `docs/compliance/verifactu-findings.md` §14 and the C115 entry in `docs/backlog.md`. The owner's
- * non-fiscal trim renders around that core and is never read by it.
+ * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1, plus,
+ * when the sale carries a verification link, its QR first (after any practice warning) with the
+ * fiscal backend's own caption above it and legend under it (`FiscalBackend.receiptQrText`). The
+ * Veri*Factu sources for that layout are in `docs/compliance/verifactu-findings.md` §14. The
+ * owner's non-fiscal trim renders around that core and is never read by it.
  *
  * The receipt is issued in the INVOICE locale, not the operator's UI language: its fixed words come
  * from the country pack's table for that locale (`receiptLabelsFor`), and money, discount
@@ -82,12 +81,6 @@ export interface FormatReceiptInput {
   duplicate?: boolean;
 }
 
-/** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
-const LEGEND = "VERI*FACTU";
-
-/** AEAT's caption above the QR (its QR specification v0.5.0, §3). Spanish; never translated. */
-const QR_CAPTION = "QR tributario:";
-
 /** The per-dish option-quantity badge (`×2`). */
 const QTY_BADGE = "×";
 
@@ -126,7 +119,7 @@ function issueDate(iso: string, locale: string): string {
 
 /**
  * Render one filed sale — the customer's factura simplificada. Total: empty `lines`/`vatBreakdown`
- * yield a header-and-total ticket, and an empty `result.qr` prints no QR but still the legend.
+ * yield a header-and-total ticket, and an empty `result.qr` prints no QR block at all.
  * Every string goes through `prepareText` before it is measured, so no line exceeds the column count.
  */
 export function formatReceipt({
@@ -169,9 +162,7 @@ export function formatReceipt({
     b.line();
   }
 
-  // AEAT's QR specification v0.5.0 §3 puts the QR at the start of the invoice, the caption above it
-  // and the legend (art. 20.1.b) directly under it. A practice ticket is not a real invoice, so its
-  // warning stays above the QR block (the C115 entry in `docs/backlog.md`).
+  // The QR block opens the invoice, after any practice warning.
   if (result.qr !== "") {
     const matrix = qrModules(result.qr);
     const dots = chooseQrDots(
@@ -179,9 +170,11 @@ export function formatReceipt({
       dpiValue(printer.resolution),
       safeWidthDots(printer.paperWidth),
     );
-    b.align("center").line(QR_CAPTION);
+    b.align("center");
+    if (result.qrText) b.line(prepareText(result.qrText.caption));
     b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
-    b.line(LEGEND).line().align("left");
+    if (result.qrText) b.line(prepareText(result.qrText.legend));
+    b.line().align("left");
   }
 
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
@@ -284,10 +277,6 @@ export function formatReceipt({
     }
   }
   b.line();
-
-  // A sale with no cotejo URL (the fiscal backend minted none) prints no QR block, but still the
-  // legend (art. 20.1.b), after the tender (the C115 entry in `docs/backlog.md`).
-  if (result.qr === "") b.align("center").line(LEGEND).line().align("left");
 
   if (receipt.footerMessage) text(receipt.footerMessage);
 

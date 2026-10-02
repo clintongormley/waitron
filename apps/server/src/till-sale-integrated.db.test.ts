@@ -643,6 +643,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     if (second.outcome !== "captured") throw new Error("unreachable");
     expect(second.ticket.invoiceNumber).toBe(first.ticket.invoiceNumber);
     expect(second.ticket.qr).toBe(first.ticket.qr);
+    expect(first.ticket.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
+    expect(second.ticket.qrText).toEqual(first.ticket.qrText);
     expect(client.lastCreateIntent).toBe(firstIntent); // no second createPaymentIntent
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
@@ -934,6 +936,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
     expect(out.ticket.qr).toBe("");
+    expect(out.ticket.qrText).toBeUndefined();
   });
 });
 
@@ -979,6 +982,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
     expect(out.ticket.total).toBe("1.50");
+    expect(out.ticket.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
     // Recovery skips P2: no second PaymentIntent, and still ONE payment row, now linked.
     expect(client.lastCreateIntent).toBeUndefined();
     expect(await paymentCount(id)).toBe(1);
