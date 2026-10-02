@@ -449,6 +449,13 @@
       "when": 1790922257981,
       "tag": "0063_till_opens_drawer",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "6",
+      "when": 1790927048222,
+      "tag": "0064_line_locale_triggers_text_only",
+      "breakpoints": true
     }
   ]
 }
