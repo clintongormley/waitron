@@ -1126,8 +1126,8 @@ it, as one opened by hand does.
 
 A search box sits at the top of the sidebar, above the groups: a `wt-input type="search"` with
 `hide-label`, named `nav-search`, whose hidden label (its accessible name) and placeholder are both
-**Search pages**. A staff session
-has no sidebar, so it has no search either. While the box holds a term (spaces trimmed), the nav
+**Search pages**. A staff session sees My schedule and Orders in its sidebar, without a search box.
+While the box holds a term (spaces trimmed), the nav
 shows only the pages whose label in the current language contains it, ignoring case and accents
 ("categorias" finds "Categorías"), plus every page of a group whose header contains it. The search
 narrows the rows the nav would already show, so a page this person may not open never appears,
@@ -1232,7 +1232,7 @@ The authenticator setup screen presents the enrolment URI as a QR code, keeps th
 a manual fallback, and enables the factor only after the server accepts a current six-digit code.
 
 Every authenticated dashboard banner includes a way to reach **Your profile** — the account menu's
-"Account settings" item — including for staff without a sidebar. Profile edits cannot expose role
+"Account settings" item — including for staff with their two-page sidebar. Profile edits cannot expose role
 or suspension controls.
 
 ### Empty slots don't reserve space

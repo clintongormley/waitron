@@ -1310,6 +1310,106 @@ export type BillRecoveryOutcome =
   | { outcome: "completed" }
   | { outcome: "failed" };
 
+export const ORDER_STATUS_FILTERS = [
+  "all",
+  "open",
+  "waiting_for_payment",
+  "left_without_paying",
+  "unpaid",
+  "paid",
+  "cancelled",
+  "voided",
+] as const;
+export type OrderStatusFilter = (typeof ORDER_STATUS_FILTERS)[number];
+export type OrderStatus = Exclude<OrderStatusFilter, "all" | "unpaid">;
+export interface OrdersQuery {
+  status: OrderStatusFilter;
+  from?: string;
+  to?: string;
+  anyDate: boolean;
+  credited: boolean;
+  staff?: string;
+  table?: string;
+  q?: string;
+}
+export interface OrderRowDto {
+  kind: "bill" | "sale";
+  id: string;
+  at: string;
+  orderNumber: number | null;
+  label: string | null;
+  partyId: string | null;
+  partyName: string | null;
+  tables: string[];
+  counter: boolean;
+  saleId: string | null;
+  invoiceNumber: string | null;
+  creditNotes: string[];
+  status: OrderStatus;
+  credited: "in_full" | "in_part" | null;
+  invoiceNotCredited: boolean;
+  total: string;
+  stillOwed: string | null;
+  staff: { id: string; name: string | null }[];
+  departedAt: string | null;
+}
+export interface OrdersPageDto {
+  rows: OrderRowDto[];
+  next: string | null;
+  from: string | null;
+  to: string | null;
+}
+export interface OrderDetailDto {
+  row: OrderRowDto;
+  lines: {
+    lineNo: number;
+    name: string;
+    variantName: string | null;
+    quantity: string;
+    total: string;
+    listUnitPrice: string | null;
+    creditedTo: string | null;
+  }[];
+  invoices: {
+    kind: "invoice" | "credit_note" | "substitution";
+    number: string;
+    issuedAt: string;
+    total: string;
+    rungBy: string | null;
+  }[];
+  tenders: { method: string; amount: string; tip: string }[];
+  payments: {
+    method: string;
+    state: string;
+    applied: string;
+    tip: string;
+    createdAt: string;
+    refunds: { applied: string; tip: string; state: string; reason: string; createdAt: string }[];
+  }[];
+  party: {
+    name: string | null;
+    guestCount: number | null;
+    openedAt: string;
+    closedAt: string | null;
+    openedBy: string | null;
+    closedBy: string | null;
+    tables: string[];
+  } | null;
+  departure: {
+    recordedAt: string;
+    reason: string;
+    recordedBy: string | null;
+    authorizedBy: string | null;
+    amount: string;
+  } | null;
+  reprints: {
+    requestedAt: string;
+    personId: string;
+    personName: string | null;
+    printerName: string;
+  }[];
+}
+
 export class DashboardApi {
   readonly liveData = new LiveData();
   #background?: DashboardApi;
@@ -2754,6 +2854,51 @@ export class DashboardApi {
       `/management-api/reports/period?from=${from}&to=${to}`,
       "GET",
     );
+  }
+
+  listOrders(query: OrdersQuery, page: { after?: string } = {}): Promise<OrdersPageDto> {
+    const params = new URLSearchParams();
+    if (query.status !== "all") params.set("status", query.status);
+    if (query.anyDate) params.set("anyDate", "true");
+    else if (query.from !== undefined && query.to !== undefined) {
+      params.set("from", query.from);
+      params.set("to", query.to);
+    }
+    if (query.credited) params.set("credited", "true");
+    if (query.staff !== undefined) params.set("staff", query.staff);
+    if (query.table !== undefined) params.set("table", query.table);
+    if (query.q !== undefined) params.set("q", query.q);
+    if (page.after !== undefined) params.set("after", page.after);
+    return this.#request<OrdersPageDto>(`/management-api/orders?${params}`, "GET");
+  }
+
+  /** Re-read every page on refresh so a row shown from an older page stays current. */
+  async listOrderPages(query: OrdersQuery, pages: number): Promise<OrdersPageDto> {
+    let page = await this.listOrders(query);
+    const rows = [...page.rows];
+    for (let n = 1; n < pages && page.next !== null; n++) {
+      page = await this.listOrders(query, { after: page.next });
+      rows.push(...page.rows);
+    }
+    return { ...page, rows };
+  }
+
+  listOrderStaff(): Promise<{ staff: { id: string; name: string | null }[] }> {
+    return this.#request("/management-api/orders/staff", "GET");
+  }
+
+  getOrder(id: string): Promise<OrderDetailDto> {
+    return this.#request(`/management-api/orders/${encodeURIComponent(id)}`, "GET");
+  }
+
+  getOrderPrinters(): Promise<{ id: string; name: string }[]> {
+    return this.#request("/management-api/orders/printers", "GET");
+  }
+
+  reprintOrder(id: string, printerId: string): Promise<{ jobId: string }> {
+    return this.#request(`/management-api/orders/${encodeURIComponent(id)}/reprint`, "POST", {
+      printerId,
+    });
   }
 
   getCategorySales(

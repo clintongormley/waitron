@@ -17,6 +17,9 @@ it("counts the initial screen read as activity and subsequent refreshes as passi
 });
 
 it.each([
+  ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
+  ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "bill_payments"],
+  ["getOrder", ["bill-1"], "receipt_reprints"],
   ["getOverdueOrders", [], "ticket_items"],
   ["getDailyClose", ["2026-09-11"], "sale_substitutions"],
   ["getDailyClose", ["2026-09-11"], "sale_lines"],
@@ -39,7 +42,14 @@ it.each([
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
   async (name, args, type) => {
-    const fetchImpl = vi.fn(async () => new Response("[]"));
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          name === "listOrderPages"
+            ? JSON.stringify({ rows: [], next: null, from: null, to: null })
+            : "[]",
+        ),
+    );
     const api = new DashboardApi("", fetchImpl);
     const observed = api.liveData.observe(dashboardQuery(api, name, [...args]), () => {});
     try {

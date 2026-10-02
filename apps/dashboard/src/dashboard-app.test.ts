@@ -153,6 +153,8 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
       topSellers: [],
     }),
+    listOrderPages: vi.fn().mockResolvedValue({ rows: [], next: null, from: null, to: null }),
+    listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),
@@ -197,7 +199,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     expect(modal.open).toBe(true);
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
-    if (role === "staff") expect(el.shadowRoot!.querySelector("nav")).toBeNull();
+    if (role === "staff") expect(el.shadowRoot!.querySelector("nav")).not.toBeNull();
     expect(new URL(location.href).pathname).toBe("/manage/profile");
     expect(
       el.shadowRoot!.querySelector(
@@ -849,7 +851,7 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  it("a staff session shows NO manager nav (its only face is self-service)", async () => {
+  it("a staff session sees Orders and My schedule, without manager pages", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
@@ -866,6 +868,9 @@ describe("dashboard-app", () => {
     expect(navStaff(el)).toBeNull();
     expect(navCatalogue(el)).toBeNull();
     expect(navRoster(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-orders]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-my-schedule]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-search]")).toBeNull();
     expect(logoutBtn(el)).toBeTruthy();
   });
 
@@ -2445,7 +2450,7 @@ describe("dashboard-app", () => {
     }
   });
 
-  it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {
+  it("a staff session can open its two-page drawer", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
@@ -2459,10 +2464,10 @@ describe("dashboard-app", () => {
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=nav-toggle]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-toggle]")).not.toBeNull();
   });
 
-  it("a staff session still gets no nav (no navigation landmark)", async () => {
+  it("a staff session's navigation landmark holds only My schedule and Orders", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
@@ -2476,7 +2481,12 @@ describe("dashboard-app", () => {
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    expect(sidebarNav(el)).toBeNull();
+    expect(sidebarNav(el)).not.toBeNull();
+    expect(
+      [...sidebarNav(el)!.querySelectorAll("[data-test^=nav-]")].map((item) =>
+        item.getAttribute("data-test"),
+      ),
+    ).toEqual(["nav-my-schedule", "nav-orders"]);
   });
 
   it("does not show the nav on the login screen", async () => {
@@ -4562,7 +4572,7 @@ describe("the nav search", () => {
       "nav-group-purchasing",
       "nav-group-configuration",
     ]);
-    expect(shownItems(el)).toEqual(["nav-overview", "nav-sales"]);
+    expect(shownItems(el)).toEqual(["nav-overview", "nav-sales", "nav-orders"]);
   });
 
   it("never offers a page the person may not open, typed with its exact label", async () => {

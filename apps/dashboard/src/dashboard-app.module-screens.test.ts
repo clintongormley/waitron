@@ -96,7 +96,7 @@ it("lists a module's further screen in its own nav group, and leaves out the one
   const reports = [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-reports [data-test]"),
   ].map((item) => item.dataset.test);
-  expect(reports).toEqual(["nav-overview", "nav-sales", "nav-widget-report"]);
+  expect(reports).toEqual(["nav-overview", "nav-sales", "nav-orders", "nav-widget-report"]);
   expect(navItem(el, "widget-report")!.textContent!.trim()).toBe("Widget report");
   expect(navItem(el, "widget-audit")).toBeNull();
   expect(

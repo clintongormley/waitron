@@ -31,6 +31,36 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("passes Orders filters and the chosen printer to the management routes", async () => {
+    const page = { rows: [], next: null, from: null, to: null };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page));
+    const api = new DashboardApi("", fetchImpl);
+
+    await api.listOrders(
+      {
+        status: "unpaid",
+        from: "2026-09-01",
+        to: "2026-09-02",
+        anyDate: false,
+        credited: true,
+        staff: "person-1",
+        table: "Mesa 5",
+        q: "A/12",
+      },
+      { after: "cursor" },
+    );
+    await api.reprintOrder("bill-1", "printer-2");
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/orders?status=unpaid&from=2026-09-01&to=2026-09-02&credited=true&staff=person-1&table=Mesa+5&q=A%2F12&after=cursor",
+        "GET",
+        undefined,
+      ],
+      ["/management-api/orders/bill-1/reprint", "POST", { printerId: "printer-2" }],
+    ]);
+  });
+
   it("sends the session-scoped account and second-factor requests and returns their answers", async () => {
     const enrolment = {
       enrollmentId: "enr-1",

@@ -1,5 +1,10 @@
 # The dashboard's Orders screen — Implementation Plan
 
+> **Update, 2026-10-02 (B27b):** The owner's C126 decision removes the "Invoice not credited"
+> mark from Task 2. C126 is to credit an invoiced bill cancelled at the till in full; the dashboard
+> shows Cancelled and the credit note. The older Task 1 examples below remain as their original
+> build record; Task 2 omits the mark and its translation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **The owner approved the spec on 2026-10-02**, with answers to its seven choices (~07:50,
@@ -2027,9 +2032,10 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     2026-09-01 and 2026-09-02, choose Unpaid → the Any date switch stays off, both date fields keep
     their days and stay enabled, the address is `/manage/orders/status/unpaid/from/2026-09-01/to/2026-09-02`,
     and `listOrderPages` was called with those dates.
-  - "a staff session can filter today's finished bills" (decision 13): mounted with
-    `permissions: []`, the status combobox offers Paid, Cancelled and Voided alongside the
-    unfinished statuses; `/manage/orders/status/paid` reads Paid and asks for Paid.
+  - "a staff session can filter today's finished bills" (decision 13): the status combobox
+    offers Paid, Cancelled and Voided alongside the unfinished statuses;
+    `/manage/orders/status/paid` reads Paid and asks for Paid. The server applies the
+    staff session's business-day scope.
   - "the date fields say the range is by the day the bill was opened": their labels read
     "Opened from" and "Opened to".
   - "the Staff filter offers everyone the server names, a person with no name as Unknown person":
@@ -2047,9 +2053,8 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     `form.fix_fields`.
   - "a debt row shows its status, its mark and what it owes": the row reads "Left without paying",
     "Credited in part", the still-owed money formatted for the locale.
-  - "a cancelled bill with an invoice shows the invoice and Invoice not credited": a row with
-    `status: "cancelled"`, an invoice number and `invoiceNotCredited: true` shows the number, the
-    mark, and a blank Still owed; the same row with `invoiceNotCredited: false` shows no mark.
+  - "a cancelled bill with an invoice shows its credit note": a row with `status: "cancelled"`,
+    an invoice number and a credit note shows both numbers, and a blank Still owed.
   - "the detail dialog shows each section": click the row → `getOrder` called with its id; the dialog
     shows the lines with who served each, the invoice and credit note numbers, the cash tender, the
     party's tables, the departure's reason and who recorded and authorised it, and each copy printed
@@ -2219,7 +2224,7 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
   from `orders.order_number`, or the label), `table` (`tables.join(", ")`, or "Counter" when
   `counter`, else blank), `invoice` (the number, then each credit note on its own line),
   `status` (`choosable: "shown"`; the status label, and under it in `part="mark"` the credited mark,
-  "Invoice not credited" when `invoiceNotCredited`, and, for a Paid or Cancelled row with
+  and, for a Paid or Cancelled row with
   `departedAt`, "Left without paying on <date>"), `total`
   (`formatMoney(row.total, currentLocale())`), `owed` (`choosable: "shown"`; blank when `stillOwed`
   is null; `part="owed"`), `staff` (`choosable: "shown"`; names joined, a null name as
@@ -2339,7 +2344,6 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
 | `orders.credited_only`               | Only credited                             | Solo con abono                                |
 | `orders.staff` / `orders.staff_anyone` | Staff / Anyone                          | Personal / Cualquiera                         |
 | `orders.staff_unknown`               | Unknown person                            | Persona desconocida                           |
-| `orders.invoice_not_credited`        | Invoice not credited                      | Factura sin abonar                            |
 | `orders.refused.status`              | Choose a status from the list             | Elige un estado de la lista                   |
 | `orders.refused.date`                | Enter a date as day, month and year       | Escribe la fecha con día, mes y año           |
 | `orders.refused.any_date`            | Choose Any date or a range, not both      | Elige Cualquier fecha o un intervalo, no ambos |
@@ -2416,9 +2420,10 @@ const FIELD_OF: Record<string, { control: OrdersField; message: StringKey }> = {
   printers, says where the copy went, and the Printers screen shows one new document job and no
   drawer job; the detail then lists the copy. Then sign in as a staff-role person (if the demo seed
   has none with a password, invite one from the Staff screen; the invitation lands in the dev
-  stack's Mailpit): the sidebar holds My schedule and Orders only, Orders shows the open and
-  departed bills and not the paid one, and no row offers a reprint. Take a screenshot of each of
-  the eight combinations, and of the staff view, for the PR description.
+  stack's Mailpit): the sidebar holds My schedule and Orders only. Orders shows unfinished bills
+  and today's finished bills, including the paid one, but no older finished bill; a bill with an
+  invoice offers reprint. Take a screenshot of each of the eight combinations, and of the staff
+  view, for the PR description.
 
 - [ ] **Step 10: Guards and the rest.**
   - `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/pinned-actions-column.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts`

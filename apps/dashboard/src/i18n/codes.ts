@@ -508,6 +508,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That printer no longer exists",
     es: "Esa impresora ya no existe",
   },
+  "working_order.not_found": {
+    en: "That bill was not found",
+    es: "No se encontró esa cuenta",
+  },
   "printer.already_registered": {
     en: "That device is already registered as a printer",
     es: "Ese dispositivo ya está dado de alta como impresora",
