@@ -566,7 +566,7 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 9. **Operator utilities** — `backup-screen.ts`, `diagnostics-screen.ts`, `email-screen.ts`.
 10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
     (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
-    A191 (2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
+    A191 (#1074, 2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
     steps put their one primary button outside the action row (design-system.md, login section).
 
 The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
@@ -948,7 +948,7 @@ profile accepted a saved test password through `navigator.credentials.store`, bu
 it after a reload or restart under automation; that saved-password visual check remains unverified.
 
 **The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
-owner 2026-10-02) — DONE.** The owner, on the passkey page: _"this page also looks a bit messy"_;
+owner 2026-10-02) — DONE (#1074).** The owner, on the passkey page: _"this page also looks a bit messy"_;
 layout A of three mockups was approved ("i love it"), replacing C96's single bulleted list. Every
 step of `apps/dashboard/src/screens/login-screen.ts` now sits in a card drawn like the setup
 wizard's, with the Waitron logo first (decorative there: the banner above already names Waitron, so
