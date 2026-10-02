@@ -228,6 +228,13 @@ export const en = {
     "Saved. Receipts printed from now on, and future tax records, use these settings.",
   "receipts.trim_save_error": "The header and footer could not be saved.",
   "receipts.trim_too_long": "Use at most {max} characters.",
+  "receipts.language": "Receipt language",
+  "receipts.language_invalid": "Choose one of the languages offered.",
+  "receipts.language_save_error": "The receipt language could not be saved.",
+  "receipts.language_stored": "Receipts print in {stored} until you switch to {fixed}.",
+  "receipts.language_use": "Use {fixed}",
+  "receipt_language.warning":
+    "Receipts print in {receipt}, which is not one of your content languages, so product names on them print in {default}, the default language.",
   "nav.content_languages": "Content languages",
   "location_settings.description": "Invoice operation description",
   "location_settings.help":
@@ -2175,6 +2182,13 @@ export const es: Record<StringKey, string> = {
     "Guardado. Los recibos que se impriman a partir de ahora y los futuros registros fiscales usarán estos ajustes.",
   "receipts.trim_save_error": "No se han podido guardar la cabecera y el pie.",
   "receipts.trim_too_long": "Usa como máximo {max} caracteres.",
+  "receipts.language": "Idioma del recibo",
+  "receipts.language_invalid": "Elige uno de los idiomas ofrecidos.",
+  "receipts.language_save_error": "No se ha podido guardar el idioma del recibo.",
+  "receipts.language_stored": "Los recibos se imprimen en {stored} hasta que cambies a {fixed}.",
+  "receipts.language_use": "Usar {fixed}",
+  "receipt_language.warning":
+    "Los recibos se imprimen en {receipt}, que no es uno de tus idiomas del contenido, así que los nombres de los productos salen en {default}, el idioma predeterminado.",
   "nav.content_languages": "Idiomas del contenido",
   "location_settings.description": "Descripción de la operación",
   "location_settings.help":

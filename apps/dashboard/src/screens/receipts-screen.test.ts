@@ -47,6 +47,15 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
     putLocationSettings: vi.fn().mockResolvedValue(undefined),
+    getReceiptLanguage: vi.fn().mockResolvedValue({
+      language: "ca-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: { locale: "ca-ES", reason: { en: "Fixed.", es: "Fijado." } },
+    }),
+    putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "ca", languages: ["ca", "es"] }),
     previewReceipt: vi.fn(async (config: ReceiptConfig) => fakePreview(config)),
     ...overrides,
   } as unknown as DashboardApi;

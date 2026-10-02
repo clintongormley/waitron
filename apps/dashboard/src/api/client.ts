@@ -389,6 +389,15 @@ export interface ReceiptPreview {
   paperWidths: PrintPaperWidth[];
 }
 
+/** The language this location's receipts print in, which the venue's region may fix. */
+export interface ReceiptLanguage {
+  /** As stored, even when it is not one of `choices`. */
+  language: string;
+  choices: string[];
+  /** `reason` is keyed by the dashboard's language code. */
+  fixed: { locale: string; reason: Record<string, string> } | null;
+}
+
 export interface TestEmailAddress {
   name: string;
   address: string;
@@ -2012,11 +2021,25 @@ export class DashboardApi {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
   }
 
-  /** Draws a sample receipt with this trim, at the given paper width if any; saves and prints nothing. */
-  previewReceipt(receipt: ReceiptConfig, paperWidth?: PrintPaperWidth): Promise<ReceiptPreview> {
+  getReceiptLanguage(): Promise<ReceiptLanguage> {
+    return this.#request<ReceiptLanguage>("/management-api/receipt-language", "GET");
+  }
+
+  putReceiptLanguage(language: string): Promise<void> {
+    return this.#request<void>("/management-api/receipt-language", "PUT", { language });
+  }
+
+  /** Draws a sample receipt with this trim, at the given paper width and in the given receipt
+   * language if any; saves and prints nothing. */
+  previewReceipt(
+    receipt: ReceiptConfig,
+    paperWidth?: PrintPaperWidth,
+    language?: string,
+  ): Promise<ReceiptPreview> {
     const width = paperWidth === undefined ? "" : `&paperWidth=${encodeURIComponent(paperWidth)}`;
+    const drawnIn = language === undefined ? "" : `&language=${encodeURIComponent(language)}`;
     return this.#request<ReceiptPreview>(
-      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}`,
+      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}${drawnIn}`,
       "GET",
     );
   }

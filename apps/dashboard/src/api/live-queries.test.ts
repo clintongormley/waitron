@@ -35,6 +35,7 @@ it.each([
   ["listStuckBillRefunds", [], "working_orders"],
   ["listServers", [], "node_membership"],
   ["listServers", [], "nodes"],
+  ["getReceiptLanguage", [], "locations"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
   async (name, args, type) => {

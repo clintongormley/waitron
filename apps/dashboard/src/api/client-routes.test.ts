@@ -263,6 +263,47 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("asks for a preview in another receipt language, with no paper width unless one is given", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+
+    await api.previewReceipt({}, undefined, "gl-ES");
+    await api.previewReceipt({}, "58mm", "eu-ES");
+
+    const receipt = encodeURIComponent(JSON.stringify({}));
+    expect(callsOf(fetchImpl)).toEqual([
+      [`/management-api/receipt-preview?receipt=${receipt}&language=gl-ES`, "GET", undefined],
+      [
+        `/management-api/receipt-preview?receipt=${receipt}&paperWidth=58mm&language=eu-ES`,
+        "GET",
+        undefined,
+      ],
+    ]);
+  });
+
+  it("reads and saves the location's receipt language", async () => {
+    const answer = {
+      language: "ca-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: { locale: "ca-ES", reason: { en: "Because.", es: "Porque." } },
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(answer))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getReceiptLanguage()).resolves.toEqual(answer);
+    await expect(api.putReceiptLanguage("gl-ES")).resolves.toBeUndefined();
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/receipt-language", "GET", undefined],
+      ["/management-api/receipt-language", "PUT", { language: "gl-ES" }],
+    ]);
+  });
+
   it("marks a preview passive only when it goes through the background client", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),

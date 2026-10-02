@@ -33,6 +33,13 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
     putLocationSettings: vi.fn().mockResolvedValue(undefined),
+    getReceiptLanguage: vi.fn().mockResolvedValue({
+      language: "es-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      fixed: null,
+    }),
+    putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
+    getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getReceipt: vi.fn().mockResolvedValue({ receipt: {} }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
