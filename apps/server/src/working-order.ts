@@ -4423,6 +4423,7 @@ async function applyLineEdits(
         creditedTo: operatorId ?? null,
         ...(as.inheritMakeAt &&
         as.origin !== undefined &&
+        row.parentLineId === null &&
         row.makeAtStationId == null &&
         as.origin.makeAtStationId !== null
           ? { makeAtStationId: as.origin.makeAtStationId }

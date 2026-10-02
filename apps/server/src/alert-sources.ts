@@ -331,11 +331,9 @@ export function stationOutputAlertSource(deps: {
     area: "kitchen",
     permission: "venue_service.manage",
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
-      const [printersDown, screensDark, states] = await Promise.all([
-        stationPrintersDown(tx, deps.locationId, now),
-        stationScreensDark(tx, deps.locationId, now),
-        deps.stationStates(tx, now),
-      ]);
+      const printersDown = await stationPrintersDown(tx, deps.locationId, now);
+      const screensDark = await stationScreensDark(tx, deps.locationId, now);
+      const states = await deps.stationStates(tx, now);
       const closed = printersDown
         .filter((p) => !states.get(p.stationId)?.open)
         .map((p) => p.stationId);

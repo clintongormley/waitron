@@ -3347,6 +3347,37 @@ describe("opening hours", () => {
     });
   });
 
+  it("sends a no-preparation dish only when its line chooses a station", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const station = await createStation(tx, cfg, { name: "Bar" });
+      const drinks = await createCategory(tx, { name: "Bottles" });
+      await setClaim(tx, cfg, drinks.id, { kind: "no_preparation" });
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [], null);
+      await insertContextlessLines(tx, orderId, [product, product]);
+      const lines = await fireableLines(tx, orderId);
+      await tx
+        .update(workingOrderLines)
+        .set({ makeAtStationId: station.id })
+        .where(eq(workingOrderLines.id, lines[1]!.id));
+      await fireLines(tx, cfg, orderId, lines);
+      const items = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        workingOrderLineId: lines[1]!.id,
+        stationId: station.id,
+      });
+    });
+  });
+
   it("refuses a closed station with no fallback before writing and honors a stored choice", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -6501,6 +6532,69 @@ describe("order path — extras and options", () => {
     expect(child!.unitPriceGross).toBe(450);
     expect(child!.quantity).toBe(2000);
     expect(child!.lineTotal).toBe(900);
+  });
+
+  it("keeps an extra child without a make-at station when a chosen dish gains units", async () => {
+    const seeded = await seedDish();
+    const extras = [
+      { listId: seeded.extraListId, picks: [{ productId: seeded.wineId, quantity: 1 }] },
+    ];
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, seeded.cfg, { name: "Kitchen", isDefault: true });
+      const station = await createStation(tx, seeded.cfg, { name: "Chosen station" });
+      const tableId = await makeTable(tx, seeded.cfg);
+      const { tabId } = await openPartyTab(tx, seeded.cfg, { tableId });
+      await addRound(tx, seeded.cfg, tabId, [
+        {
+          productId: seeded.dishId,
+          quantity: "1",
+          extras,
+          options: [{ listId: seeded.optionListId, labelId: seeded.labelId }],
+        },
+      ]);
+      const [parent] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(eq(workingOrderLines.workingOrderId, tabId), isNull(workingOrderLines.parentLineId)),
+        );
+      await tx
+        .update(workingOrderLines)
+        .set({ makeAtStationId: station.id })
+        .where(eq(workingOrderLines.id, parent!.id));
+      const [{ revision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      await updateOrderLine(
+        tx,
+        seeded.cfg,
+        tabId,
+        1,
+        { quantity: "2", extras },
+        revision!,
+        OPERATOR,
+      );
+      const lines = await tx
+        .select({
+          parentLineId: workingOrderLines.parentLineId,
+          makeAtStationId: workingOrderLines.makeAtStationId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId));
+      expect(lines.filter((line) => line.parentLineId !== null)).toHaveLength(2);
+      expect(lines.filter((line) => line.parentLineId === null)).toHaveLength(2);
+      expect(
+        lines
+          .filter((line) => line.parentLineId !== null)
+          .every((line) => line.makeAtStationId === null),
+      ).toBe(true);
+      expect(
+        lines
+          .filter((line) => line.parentLineId === null)
+          .every((line) => line.makeAtStationId === station.id),
+      ).toBe(true);
+    });
   });
 
   it("refuses a dish whose options list is left unanswered", async () => {
