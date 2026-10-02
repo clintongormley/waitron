@@ -286,6 +286,7 @@ const defaultStation = {
   displayOrder: 0,
   isDefault: true,
   active: true,
+  open: true,
 };
 
 /** A menu's structure listing one offer, and a layout with no shortcuts. */
@@ -1987,6 +1988,21 @@ describe("till-app", () => {
           expect(rejections).toEqual([]);
         },
       );
+
+      it("says the station list failed on a first read while leaving other counter lists available", async () => {
+        const el = await logIn("till", "prep-queue", {
+          listStations: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        });
+        await flush(el);
+
+        expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+        expect(currentApi.listStaff).toHaveBeenCalled();
+        expect(notice(el, "station").hasAttribute("data-active")).toBe(true);
+        expect(notice(el, "station").querySelector(".refresh-message")!.textContent!.trim()).toBe(
+          t("refresh.station"),
+        );
+        expect(rejections).toEqual([]);
+      });
     });
   });
 
@@ -4883,6 +4899,61 @@ describe("till-app", () => {
       expect(screen!.orderId).toBe("wo-new");
     });
 
+    it("refreshes station availability when a table order opens and keeps the last list if a read fails", async () => {
+      const listStations = vi
+        .fn()
+        .mockResolvedValueOnce([defaultStation])
+        .mockRejectedValue(new Error("offline"));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
+        listStations,
+      });
+      await toCounter(el);
+      expect(listStations).toHaveBeenCalledOnce();
+      expect(counter(el)!.defaultStationId).toBe(defaultStation.id);
+      selectTab(el, "floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t1", seated: false });
+      await flush(el);
+      expect(listStations).toHaveBeenCalledTimes(2);
+      expect(tableOrder(el)).not.toBeNull();
+      selectTab(el, "counter");
+      await flush(el);
+      expect(listStations).toHaveBeenCalledTimes(3);
+      expect(counter(el)!.defaultStationId).toBe(defaultStation.id);
+    });
+
+    it("keeps the newest station list when an earlier table read finishes last", async () => {
+      let finishTableRead!: (stations: (typeof defaultStation)[]) => void;
+      const newer = { ...defaultStation, id: "st-new" };
+      const listStations = vi
+        .fn()
+        .mockResolvedValueOnce([defaultStation])
+        .mockImplementationOnce(() => new Promise((resolve) => (finishTableRead = resolve)))
+        .mockResolvedValueOnce([newer]);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
+        listStations,
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t1", seated: false });
+      await flush(el);
+      selectTab(el, "counter");
+      await flush(el);
+      expect(counter(el)!.defaultStationId).toBe(newer.id);
+      finishTableRead([defaultStation]);
+      await flush(el);
+      expect(counter(el)!.defaultStationId).toBe(newer.id);
+    });
+
     it("open-table on an OCCUPIED table resumes its tab WITHOUT opening a new one", async () => {
       const seatTable = vi.fn();
       const { el } = await mountApp({
@@ -4947,6 +5018,8 @@ describe("till-app", () => {
 
     describe("table-order screen (FP-1)", () => {
       const tabLine: TabLine = {
+        stationId: null,
+        movable: false,
         id: "line-1",
         groupId: null,
         lineNo: 1,

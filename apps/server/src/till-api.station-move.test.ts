@@ -13,6 +13,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { fireLines, fireableLineColumns } from "./working-order.js";
+import { setStationToday } from "@waitron/venue-service";
 
 let venue: BillVenue;
 let bar: string;
@@ -32,6 +33,20 @@ useVenueDb({
 
 const call = (path: string, body: unknown, cookie = venue.cookie) =>
   send(venue.app, cookie, "POST", path, body);
+
+describe("GET /api/stations", () => {
+  it("reports the current open state of active stations", async () => {
+    await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", new Date()));
+    const response = await send(venue.app, venue.cookie, "GET", "/api/stations");
+    expect(response.status).toBe(200);
+    expect(response.json).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: bar, open: true }),
+        expect.objectContaining({ id: grill, open: false }),
+      ]),
+    );
+  });
+});
 
 describe("POST /api/working-orders/:id/lines/move-station", () => {
   it("moves a queued dish and exposes its station and move eligibility", async () => {

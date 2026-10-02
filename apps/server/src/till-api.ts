@@ -1488,7 +1488,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const stations = await withTransaction(deps.db, async (tx) => {
-        return listStations(tx, deps.cfg);
+        const listed = await listStations(tx, deps.cfg);
+        const states = await VENUE_SERVICE.stationStates(
+          tx,
+          { locationId: deps.cfg.locationId },
+          new Date(),
+        );
+        return listed.map((station) => ({
+          ...station,
+          open: states.get(station.id)?.open ?? false,
+        }));
       });
       return c.json(stations);
     }),

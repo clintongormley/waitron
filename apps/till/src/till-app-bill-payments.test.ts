@@ -110,6 +110,8 @@ function billOf(over: Partial<PartyBill> = {}): PartyBill {
 
 function line(over: Partial<TabLine>): TabLine {
   return {
+    stationId: null,
+    movable: false,
     id: `line-${over.lineNo}`,
     groupId: null,
     lineNo: 1,

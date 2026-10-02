@@ -510,6 +510,8 @@ export interface CurrentOrderKitchen {
   state: TicketState;
   firedAt: string | null;
   awayAt: string | null;
+  stationId: string | null;
+  movable: boolean;
 }
 
 /** A dish row of `GET /api/parties/:id/current-orders`, on any bill of the party but an abandoned
@@ -1135,6 +1137,7 @@ export interface Station {
   displayOrder: number;
   isDefault: boolean;
   active: boolean;
+  open: boolean;
 }
 
 /**
@@ -1742,6 +1745,8 @@ export interface TabLine {
   /** The row's id, which a group move names. A dish in an order group is listed by it in
    * {@link OrderGroup.lineIds}; a child extras row never is. */
   id: string;
+  stationId: string | null;
+  movable: boolean;
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live catalogue name. */
   name?: string;
@@ -2110,6 +2115,23 @@ export class TillApi {
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */
   listStations(): Promise<Station[]> {
     return this.#request<Station[]>("/api/stations", "GET");
+  }
+
+  moveDishStation(
+    orderId: string,
+    body: { submissionId: string; lineIds: string[]; stationId: string },
+    options: ReadOptions = {},
+  ): Promise<{
+    revision: number;
+    stationId: string;
+    moved: { workingOrderLineId: string; fromStationId: string }[];
+  }> {
+    return this.#request(
+      `/api/working-orders/${orderId}/lines/move-station`,
+      "POST",
+      body,
+      options.signal,
+    );
   }
 
   /**

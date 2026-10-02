@@ -283,6 +283,8 @@ describe("paidQuantities", () => {
 
 describe("payLines", () => {
   const row = (over: Partial<TabLine>): TabLine => ({
+    stationId: null,
+    movable: false,
     id: `line-${over.lineNo}`,
     lineNo: 1,
     productId: "p",

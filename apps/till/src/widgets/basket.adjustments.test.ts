@@ -27,6 +27,8 @@ const cana = product("cana", "Caña", "0.00");
 const burger = product("burger", "Hamburguesa", "10.00");
 
 const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLine => ({
+  stationId: null,
+  movable: false,
   name: "Stored name",
   productId: null,
   parentLineNo: null,

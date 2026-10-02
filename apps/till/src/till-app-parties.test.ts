@@ -125,6 +125,8 @@ const checkBill: PartyBill = {
 };
 
 const tabLine: TabLine = {
+  stationId: null,
+  movable: false,
   id: "line-1",
   groupId: null,
   lineNo: 1,

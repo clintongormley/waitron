@@ -1387,6 +1387,7 @@ export class TillApp extends LitElement {
    * before any load, or when they could not be read. */
   @state() private counterLines: StoredLines | null = null;
   @state() private stations: Station[] = [];
+  #stationsRead = 0;
   /** The default station's queue. Prepay enqueues nothing automatically, so a prepay till never fetches it. */
   @state() private stationQueue: StationQueueGroup[] = [];
   /** Defaults to per-line, which is always correct, until boot answers. */
@@ -1811,12 +1812,22 @@ export class TillApp extends LitElement {
   }
 
   async #loadStationQueue(): Promise<() => void> {
+    await this.#loadStations(true);
     if (this.orderFlow === "prepay") return () => (this.stationQueue = []);
-    if (this.stations.length === 0) this.stations = await this.api.listStations();
     const defaultStation = this.stations.find((station) => station.isDefault);
     const queue =
       defaultStation === undefined ? [] : (await this.api.getStationQueue(defaultStation.id)).items;
     return () => (this.stationQueue = queue);
+  }
+
+  async #loadStations(throwOnFailure = false): Promise<void> {
+    const read = ++this.#stationsRead;
+    try {
+      const stations = await this.api.listStations();
+      if (read === this.#stationsRead) this.stations = stations;
+    } catch (error) {
+      if (throwOnFailure) throw error;
+    }
   }
 
   /**
@@ -3407,10 +3418,12 @@ export class TillApp extends LitElement {
     if (this.#inShell()) {
       const home = this.canvas?.tabs[0];
       this.#setActiveTab(home?.key, true);
+      if (home?.key === "counter") void this.#loadStations();
       this.#popDrill();
       if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
     } else {
       this.#setScreen("counter");
+      void this.#loadStations();
     }
   }
 
@@ -3487,6 +3500,7 @@ export class TillApp extends LitElement {
     if (tab === undefined) return;
     const wasShowingOrder = this.#tableCatalogueActive();
     this.#setActiveTab(key, fromHistory, fromHistory);
+    if (key === "counter") void this.#loadStations();
     if (fromHistory) this.#restoreDestination();
     else if (this.drill !== undefined) this.#popDrill();
     const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
@@ -3630,6 +3644,7 @@ export class TillApp extends LitElement {
       // A late answer must not unlock a logged-out till.
       this.#setScreen("table-order");
     }
+    void this.#loadStations();
   }
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
@@ -6419,8 +6434,12 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     if (this.#inShell()) {
       this.#setActiveTab("counter");
+      void this.#loadStations();
       this.#popDrill();
-    } else if (this.screen !== "lock") this.#setScreen("counter");
+    } else if (this.screen !== "lock") {
+      this.#setScreen("counter");
+      void this.#loadStations();
+    }
   }
 
   /**
