@@ -141,10 +141,10 @@ export class ModifiersScreen extends LitElement {
     },
     () => {
       this.loadError = false;
-      if (!this.#loaded) void this.#load();
+      if (this.#loadFailed) void this.#load();
     },
   );
-  #loaded = false;
+  #loadFailed = false;
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -159,6 +159,7 @@ export class ModifiersScreen extends LitElement {
   }
   async #load(): Promise<void> {
     this.loadError = false;
+    this.#loadFailed = false;
     try {
       await Promise.all([
         this.#queries.watch("listExtraLists", [], (value) => {
@@ -176,9 +177,9 @@ export class ModifiersScreen extends LitElement {
         }),
       ]);
       await this.#loadProducts();
-      this.#loaded = true;
       this.#openLinkedList();
     } catch {
+      this.#loadFailed = true;
       this.loadError = true;
     } finally {
       this.loading = false;

@@ -7,8 +7,10 @@ export class QueryController implements ReactiveController {
   #lastError: unknown = undefined;
   #failures = 0;
 
-  /** `recovered` is called once every slot whose failure reached `error` has applied a value again,
-   * with the last error passed to `error`, so the view can clear the message it showed for it. */
+  /** `recovered` is called, with the last error passed to `error`, once every failed slot has since
+   * applied a value with no failure in any slot reported while it applied. A released slot is no
+   * longer waited for, and an apply that finishes after its observation was released or replaced
+   * does not count. */
   constructor(
     host: ReactiveControllerHost,
     private readonly data: () => LiveData | undefined,
@@ -55,7 +57,12 @@ export class QueryController implements ReactiveController {
             reject(error);
             return;
           }
-          if (failures === this.#failures && this.#failing.delete(slot) && this.#failing.size === 0)
+          if (
+            active &&
+            failures === this.#failures &&
+            this.#failing.delete(slot) &&
+            this.#failing.size === 0
+          )
             this.recovered?.(this.#lastError);
         }
         initial = false;

@@ -284,6 +284,24 @@ describe("content languages after the server comes back", () => {
     expect(rowOf(el, "ca").textContent).toContain(t("content_languages.required"));
   });
 
+  it("reads the languages again when reattached while the rules' read fails, once it succeeds", async () => {
+    const client = Object.assign(api(), { liveData: new LiveData() });
+    const { el, host } = await mountWidget<ContentLanguagesScreen>(
+      "dashboard-content-languages-screen",
+      { api: client },
+    );
+    await vi.waitFor(() => expect(client.getContentLanguages).toHaveBeenCalledOnce());
+    el.remove();
+    vi.mocked(client.getContentLanguageRules).mockRejectedValueOnce(down);
+    host.appendChild(el);
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(t("content_languages.load_error")),
+    );
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(client.getContentLanguages).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
+  });
+
   it("shows the missing translations once the server answers again", async () => {
     const client = Object.assign(
       api({ getContentTranslationGaps: vi.fn().mockRejectedValue(down) }),

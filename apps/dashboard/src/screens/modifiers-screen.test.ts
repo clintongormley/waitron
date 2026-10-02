@@ -1119,6 +1119,21 @@ describe("after the server comes back", () => {
     expect(client.listProducts).toHaveBeenCalledWith("cat-1");
   });
 
+  it("reads the products again when reattached while the lists' read fails, once it succeeds", async () => {
+    const client = Object.assign(api(), { liveData: new LiveData() });
+    const { el, host } = await mountWidget<ModifiersScreen>("dashboard-modifiers-screen", {
+      api: client,
+    });
+    await vi.waitFor(() => expect(client.listProducts).toHaveBeenCalledOnce());
+    el.remove();
+    vi.mocked(client.listExtraLists).mockRejectedValueOnce(down);
+    host.appendChild(el);
+    await vi.waitFor(() => expect(loadError(el)).not.toBeNull());
+    client.liveData.refresh();
+    await vi.waitFor(() => expect(client.listProducts).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(loadError(el)).toBeNull());
+  });
+
   it("opens the list the path names once a failed first load recovers", async () => {
     history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
     const client = Object.assign(api({ listOptionLists: vi.fn().mockRejectedValue(down) }), {

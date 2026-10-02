@@ -241,6 +241,7 @@ describe("query controller recovery", () => {
     data.refresh();
     await vi.waitFor(() => expect(order).toEqual(["apply jobs", "recovered", "apply jobs"]));
     expect(recovered).toHaveBeenCalledTimes(1);
+    controller.hostDisconnected();
   });
 
   it("waits for every failed slot before telling the view", async () => {
@@ -260,6 +261,7 @@ describe("query controller recovery", () => {
     printers.up();
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+    controller.hostDisconnected();
   });
 
   it("never tells the view about applies that followed no failure", async () => {
@@ -272,6 +274,7 @@ describe("query controller recovery", () => {
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     await Promise.resolve();
     expect(recovered).not.toHaveBeenCalled();
+    controller.hostDisconnected();
   });
 
   it("counts a view's own apply failure, and recovers when a later apply succeeds", async () => {
@@ -290,6 +293,7 @@ describe("query controller recovery", () => {
     refuse = false;
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledWith(refused));
+    controller.hostDisconnected();
   });
 
   it("recovers through a replacement watch of the same slot", async () => {
@@ -304,6 +308,7 @@ describe("query controller recovery", () => {
       () => {},
     );
     expect(recovered).toHaveBeenCalledWith(outage);
+    controller.hostDisconnected();
   });
 
   it("forgets a released slot's failure, so the others' recovery is still reported", async () => {
@@ -318,6 +323,7 @@ describe("query controller recovery", () => {
     printers.up();
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+    controller.hostDisconnected();
   });
 
   it("forgets every failure when the view disconnects", async () => {
@@ -333,6 +339,7 @@ describe("query controller recovery", () => {
     printers.up();
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+    owner.disconnect();
   });
 
   it("does not count an apply that finished after a newer read failed as a recovery", async () => {
@@ -368,6 +375,47 @@ describe("query controller recovery", () => {
     next = "ok";
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+    controller.hostDisconnected();
+  });
+
+  it("does not announce recovery from an apply its slot's replacement outlived", async () => {
+    const data = new LiveData();
+    const recovered = vi.fn();
+    const controller = new QueryController(host(), () => data, vi.fn(), recovered);
+    const old = failing("jobs?status=failed");
+    let finishOldApply!: () => void;
+    const oldApply = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOldApply = resolve;
+        }),
+    );
+    await expect(controller.watch("jobs", old.query, oldApply)).rejects.toEqual(outage);
+    old.up();
+    data.refresh();
+    await vi.waitFor(() => expect(oldApply).toHaveBeenCalledTimes(1));
+    let deliver!: (value: number) => void;
+    const replacementApply = vi.fn();
+    const replacement = controller.watch(
+      "jobs",
+      {
+        key: "jobs?status=all",
+        dependencies: [],
+        read: () =>
+          new Promise<number>((resolve) => {
+            deliver = resolve;
+          }),
+      },
+      replacementApply,
+    );
+    finishOldApply();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(recovered).not.toHaveBeenCalled();
+    deliver(2);
+    await replacement;
+    expect(replacementApply).toHaveBeenCalledWith(2);
+    expect(recovered).toHaveBeenCalledTimes(1);
+    controller.hostDisconnected();
   });
 
   it("reports the most recent failure it showed the view", async () => {
@@ -390,5 +438,6 @@ describe("query controller recovery", () => {
     next = undefined;
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledWith(second));
+    controller.hostDisconnected();
   });
 });
