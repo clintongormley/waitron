@@ -68,10 +68,6 @@ describe("till-cancel-credit-dialog: what it will do", () => {
     const keep = root(el).querySelector("[data-cancel-credit-close]");
 
     expect(text(keep)).toBe("Keep the bill");
-    setLocale("es");
-    el.requestUpdate();
-    await el.updateComplete;
-    expect(text(keep)).toBe("Mantener la cuenta");
   });
 
   it("says the same of an invoice whose number it was not given", async () => {
@@ -90,6 +86,7 @@ describe("till-cancel-credit-dialog: what it will do", () => {
       `La factura A/12 (${money("24.50")}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.`,
     );
     expect(text(confirm(el))).toBe("Cancelar y abonar");
+    expect(text(root(el).querySelector("[data-cancel-credit-close]"))).toBe("Mantener la cuenta");
   });
 });
 

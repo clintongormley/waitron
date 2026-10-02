@@ -6734,7 +6734,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     emit(tableOrder(el)!, "logout");
     await flush(el);
     expect(dialog(el)).toBeNull();
-    emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
     await flush(el);
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);

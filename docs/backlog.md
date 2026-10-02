@@ -2737,7 +2737,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       opens the PIN prompt of the people `GET /api/cancel-credit-authorizers` lists, as the unpaid
       departure's does. The result names the credit note, read from `GET /api/parties/:id/bills`,
       whose bills now carry `invoiceNumber` and `creditNotes` once a sale is filed
-      (`readPartyBills`, `apps/server/src/parties.ts`), because the cancel's own answer is still an
+      (`readPartyBills`, `apps/server/src/parties.ts`), because the cancel's own answer is an
       empty 200. When a cancel gets no answer the till does not send it again by itself:
       it reads the bills again, and a bill now cancelled shows the result. Otherwise the operator
       may press "Cancel and credit" again; if the first cancel was made after all, the server
@@ -2750,7 +2750,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       Open:
       - **Counter orders are not offered it.** A counter order placed and invoiced but unpaid (the
         `invoice_first` mode) has no "Cancel and credit"; the counter's waiting list carries no
-        invoice field. The owner asked for a follow-up (2026-10-02).
+        invoice field. Queued as lane B's B34 (owner, 2026-10-02).
     - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
       Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
       `cash.drawer`, so its cases cannot tell which of those it reads.
