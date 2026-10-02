@@ -64,7 +64,7 @@ export async function rerouteHeldAtRelease(
     );
   });
   const dishes = unchosen.filter((row) => row.parentLineId === null && row.productId !== null);
-  const stranded = unchosen.filter((row) => row.parentLineId !== null);
+  const stranded = unchosen.filter((row) => row.parentLineId !== null || row.productId === null);
   const alertStranded = async () => {
     if (stranded.length === 0) return;
     const byStation = new Map<

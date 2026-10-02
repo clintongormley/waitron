@@ -377,6 +377,53 @@ describe("release", () => {
     }
   });
 
+  it("alerts when a held line without a product is released at a closed station", async () => {
+    const group = await heldBurger();
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await handleOpenReleaseAlerts(at);
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ productId: null, makeAtStationId: null, name: "Handwritten" })
+        .where(eq(workingOrderLines.id, group.lineId));
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await fireHeldBurger(group);
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+    const [item] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+    );
+    expect(item).toMatchObject({ stationId: bar, firedAt: at.toISOString() });
+    const alerts = await inTx(venue, (tx) =>
+      tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+    );
+    expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({ station: "Bar", dishes: "Handwritten" }),
+      }),
+    ]);
+  });
+
   it("prints FIRE for work kept at its station and From for work rerouted in the same group", async () => {
     const at = new Date("2026-10-02T18:45:00.000Z");
     const routeId = await inTx(venue, async (tx) => {
