@@ -11,7 +11,7 @@ import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { CatalogueBrowser } from "./catalogue-browser.js";
 import "./catalogue-browser.js";
-import { ROOT_KEY } from "./product-list.js";
+import { HOVER_OPEN_MS, ROOT_KEY } from "./product-list.js";
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -245,21 +245,26 @@ function capturedTouch(from: Element, type: string, over: Element) {
   );
 }
 
-it("moves a dragged product into a folder", async () => {
+it("a dragged product stays in place, faded, under a lifted copy, and moves on the drop", async () => {
   const el = await mountBrowser();
-  const cell = await nameCell(el, "bread");
+  const table = await tableOf(el);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const from = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="bread"]')!;
+  const before = from.getBoundingClientRect().top;
   const destination = await nameCell(el, "folder:f");
-  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "bread"), "pointerdown");
   pointerEvent(destination, "pointermove");
-  expect(cell.closest("tr")!.getAttribute("part")).toContain("dragging");
-  expect(cell.closest<HTMLElement>("tr")!.style.transform).toContain("translateY(");
-  expect(
-    Math.abs(parseFloat(cell.closest<HTMLElement>("tr")!.style.transform.slice(11))),
-  ).toBeGreaterThan(5);
-  expect(destination.getAttribute("part")).toContain("drop-target");
-  const draggedBox = cell.closest("tr")!.getBoundingClientRect();
-  const targetBox = destination.closest("tr")!.getBoundingClientRect();
-  expect(draggedBox.bottom <= targetBox.top || draggedBox.top >= targetBox.bottom).toBe(true);
+  await list.updateComplete;
+  expect(from.part.contains("dragging")).toBe(true);
+  expect(getComputedStyle(from).opacity).toBe("0.5");
+  expect(from.style.transform).toBe("");
+  expect(from.getBoundingClientRect().top).toBe(before);
+  expect(list.shadowRoot!.querySelector('[data-test="drag-ghost"]')!.textContent!.trim()).toBe(
+    "Bread",
+  );
+  const bar = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:f"] td')!;
+  expect(bar.part.contains("drop-target")).toBe(true);
+  expect(getComputedStyle(bar).borderInlineStartStyle).toBe("solid");
   pointerEvent(destination, "pointerup");
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
@@ -267,6 +272,9 @@ it("moves a dragged product into a folder", async () => {
       "f",
     ),
   );
+  await list.updateComplete;
+  expect(from.part.contains("dragging")).toBe(false);
+  expect(list.shadowRoot!.querySelector('[data-test="drag-ghost"]')).toBeNull();
 });
 it("real pointer drag moves a product into a folder", async () => {
   const el = await mountBrowser();
@@ -293,7 +301,7 @@ it("finds a folder under a captured touch pointer", async () => {
   const to = await nameCell(el, "folder:f");
   capturedTouch(grip, "pointerdown", grip);
   capturedTouch(grip, "pointermove", to);
-  expect(to.getAttribute("part")).toContain("drop-target");
+  expect(to.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
   capturedTouch(grip, "pointerup", to);
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
@@ -339,7 +347,7 @@ it("a cancelled pointer over a valid folder does not move the product", async ()
   const to = await nameCell(el, "folder:f");
   pointerEvent(from, "pointerdown");
   pointerEvent(to, "pointermove");
-  expect(to.getAttribute("part")).toContain("drop-target");
+  expect(to.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
   pointerEvent(to, "pointercancel");
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
@@ -385,17 +393,17 @@ it("refuses a folder over itself or its descendants but highlights a sibling", a
   for (const key of ["folder:d", "folder:b"]) {
     const target = await nameCell(el, key);
     pointerEvent(target, "pointermove");
-    expect(target.getAttribute("part")).not.toContain("drop-target");
+    expect(target.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
   }
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
   const sibling = await nameCell(el, "folder:s");
   pointerEvent(sibling, "pointermove");
-  expect(sibling.getAttribute("part")).toContain("drop-target");
+  expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
   pointerEvent(el.shadowRoot!.querySelector('[name="catalogue-search"]')!, "pointermove");
-  expect(sibling.getAttribute("part")).not.toContain("drop-target");
+  expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
   pointerEvent(from, "pointercancel");
   pointerEvent(sibling, "pointermove");
-  expect(sibling.getAttribute("part")).not.toContain("drop-target");
+  expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
 });
 it("moves a product to the top level by dropping it on All products", async () => {
   const el = await mountBrowser();
@@ -426,6 +434,206 @@ it("shows a refused drop at the bottom and keeps the selection for correction", 
   );
   expect(count(el)).toBe("1 selected");
   expect(el.shadowRoot!.lastElementChild!.getAttribute("role")).toBe("alert");
+});
+it("marks a dragged row inactive only while it is dragged, as its faded text is not read", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "bread");
+  const row = cell.closest("tr")!;
+  expect(row.hasAttribute("aria-disabled")).toBe(false);
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "folder:f"), "pointermove");
+  expect(row.getAttribute("aria-disabled")).toBe("true");
+  pointerEvent(cell, "pointercancel");
+  await table.updateComplete;
+  expect(row.hasAttribute("aria-disabled")).toBe(false);
+});
+
+it("opens a closed category after the hover delay, not before, and shows the gap where the product will land", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const cell = await nameCell(el, "bread");
+    pointerEvent(cell, "pointerdown");
+    pointerEvent(await nameCell(el, "folder:d"), "pointermove");
+    vi.advanceTimersByTime(HOVER_OPEN_MS - 1);
+    await table.updateComplete;
+    expect(await rowKeys(el)).not.toContain("cola");
+    vi.advanceTimersByTime(1);
+    await table.updateComplete;
+    expect(await rowKeys(el)).toContain("cola");
+    expect(
+      table
+        .shadowRoot!.querySelector('tr[data-row-key="cola"] td')!
+        .part.contains("drop-gap-before"),
+    ).toBe(true);
+    pointerEvent(cell, "pointercancel");
+  } finally {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  }
+});
+
+it("leaves a closed category closed when a drag crosses it without stopping", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const cell = await nameCell(el, "bread");
+    pointerEvent(cell, "pointerdown");
+    pointerEvent(await nameCell(el, "folder:d"), "pointermove");
+    vi.advanceTimersByTime(HOVER_OPEN_MS - 100);
+    pointerEvent(await nameCell(el, "folder:f"), "pointermove");
+    vi.advanceTimersByTime(200);
+    await table.updateComplete;
+    expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
+    vi.advanceTimersByTime(HOVER_OPEN_MS);
+    await table.updateComplete;
+    expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
+    pointerEvent(cell, "pointercancel");
+  } finally {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  }
+});
+
+it("dropping on a product files the dragged row into that product's category", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  drag(await nameCell(el, "bread"), await nameCell(el, "cola"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "d",
+    ),
+  );
+});
+
+it("shows the gap after the last row when the dragged row would land last", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "cola");
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(
+    table.shadowRoot!.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!,
+    "pointermove",
+  );
+  const last = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="bread"] td')!;
+  expect(last.part.contains("drop-gap-after")).toBe(true);
+  expect(getComputedStyle(last).borderBottomStyle).toBe("dashed");
+  pointerEvent(cell, "pointercancel");
+});
+
+it("Esc cancels a drag with nothing moved, and the click that ends it opens nothing", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const target = table.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:f"] .row-activate',
+  )!;
+  pointerEvent(await nameCell(el, "bread"), "pointerdown");
+  pointerEvent(target, "pointermove");
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="bread"]')!.part.contains("dragging"),
+  ).toBe(false);
+  // A person lets go of the button a moment after Esc, never within the same task.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  pointerEvent(target, "pointerup");
+  target.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("a drop where the drag started moves nothing and is never marked", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "bread");
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "folder:f"), "pointermove");
+  pointerEvent(cell, "pointermove");
+  expect(table.shadowRoot!.querySelector('[part~="drop-target"]')).toBeNull();
+  pointerEvent(cell, "pointerup");
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("in Select mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  await selectKeys(el, ["cola", "burger"]);
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const table = await tableOf(el);
+  pointerEvent(await nameCell(el, "cola"), "pointerdown");
+  pointerEvent(await nameCell(el, "folder:b"), "pointermove");
+  await list.updateComplete;
+  for (const key of ["cola", "burger"])
+    expect(
+      table.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.part.contains("dragging"),
+      key,
+    ).toBe(true);
+  expect(list.shadowRoot!.querySelector('[data-test="drag-ghost"]')!.textContent!.trim()).toBe(
+    "2 items",
+  );
+  pointerEvent(await nameCell(el, "folder:b"), "pointerup");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["cola", "burger"], categoryIds: [] },
+      "b",
+    ),
+  );
+  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+});
+
+it("a selection holding a category and a product inside it moves the category alone, and the product goes with it", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["folder:d", "cola"]);
+  drag(await nameCell(el, "cola"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+});
+
+it("Move to… with a category and something inside it selected sends the category alone", async () => {
+  const el = await mountBrowser({ products: [...PRODUCTS, product("stout", "Stout", "b")] });
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "b");
+  await selectKeys(el, ["folder:d", "folder:b", "cola", "stout", "bread"]);
+  await press(el, "move");
+  expect(dialog(el)!.heading).toBe("Move 2 items");
+  await destination(el, "f");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+});
+
+it("dragging a row that is not selected moves only that row and keeps the selection", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["cola"]);
+  drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "f",
+    ),
+  );
+  await el.updateComplete;
+  expect(count(el)).toBe("1 selected");
 });
 export async function typeSearch(el: CatalogueBrowser, value: string) {
   el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(

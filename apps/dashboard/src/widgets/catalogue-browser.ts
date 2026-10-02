@@ -111,8 +111,8 @@ export class CatalogueBrowser extends LitElement {
     this.operationBusy = true;
     this.dropError = "";
     try {
-      await this.api.moveCatalogueItems(this.#selection(keys), folderId);
-      this.selected = [];
+      await this.api.moveCatalogueItems(this.#outermost(this.#selection(keys)), folderId);
+      this.selected = this.selected.filter((key) => !keys.includes(key));
     } catch (error) {
       this.dropError = codeMessage(codeOf(error));
     } finally {
@@ -175,10 +175,26 @@ export class CatalogueBrowser extends LitElement {
       categoryIds: keys.filter((key) => key.startsWith("folder:")).map((key) => key.slice(7)),
     };
   }
+  /** A row inside a category that moves goes with it; listed as well, the server would re-file it
+   * at the destination and pull it out of its category. */
+  #outermost(selection: CatalogueSelection): CatalogueSelection {
+    const under = (categoryId: string | null, self?: string) =>
+      categoryId !== null &&
+      selection.categoryIds.some(
+        (id) => id !== self && categoryWithDescendants(id, this.categories).has(categoryId),
+      );
+    return {
+      productIds: selection.productIds.filter(
+        (id) =>
+          !under(this.products.find((product) => product.id === id)?.primaryCategoryId ?? null),
+      ),
+      categoryIds: selection.categoryIds.filter((id) => !under(id, id)),
+    };
+  }
   #openMove(keys = this.selected): void {
     if (this.operationBusy || this.summaryLoading) return;
     this.summaryFailed = false;
-    this.operationSelection = this.#selection(keys);
+    this.operationSelection = this.#outermost(this.#selection(keys));
     this.destination = "";
     this.operationError = "";
     this.operation = "move";

@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import { formatMoney, resolveContentText } from "@waitron/shared";
@@ -29,6 +29,8 @@ import {
 } from "@waitron/catalogue/src/product-ordering.js";
 
 export const ROOT_KEY = "root";
+/** How long a drag must rest on a closed category before it opens. */
+export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
 
 export type CategoryNameDraft =
@@ -93,16 +95,45 @@ export class ProductList extends LitElement {
       wt-data-table::part(product-cell) {
         display: block;
       }
-      wt-data-table::part(drop-target) {
-        background: var(--wt-color-surface-lifted);
-        outline: var(--wt-selected-ring);
-      }
       wt-data-table::part(dragging) {
-        position: relative;
-        z-index: 1;
-        pointer-events: none;
+        opacity: var(--wt-opacity-disabled);
+      }
+      wt-data-table::part(drop-target) {
+        border-inline-start: var(--wt-selected-ring);
+      }
+      wt-data-table::part(drop-gap-before) {
+        padding-block-start: calc(var(--wt-space-3) + var(--wt-tap-min));
+        border-block-start: var(--wt-field-line-width-active) dashed var(--wt-color-primary);
+      }
+      wt-data-table::part(drop-gap-after) {
+        padding-block-end: calc(var(--wt-space-3) + var(--wt-tap-min));
+        border-block-end: var(--wt-field-line-width-active) dashed var(--wt-color-primary);
+      }
+      /* Placed by a transform from the pointer's own coordinates, which are physical. */
+      .drag-ghost {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin: var(--wt-space-3) 0 0 var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface-lifted);
+        color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
+        pointer-events: none;
+      }
+      .drag-ghost img,
+      .ghost-thumb {
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        border-radius: var(--wt-radius-md);
+        object-fit: cover;
+        background: var(--wt-color-surface);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -216,27 +247,19 @@ export class ProductList extends LitElement {
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
   #dragged: string[] = [];
-  #dropTarget: HTMLElement | null = null;
-  #pointerDrag: {
-    pointerId: number;
-    key: string;
-    row: HTMLElement;
-    x: number;
-    y: number;
-    top: number;
-    active: boolean;
-  } | null = null;
+  #pointerDrag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null =
+    null;
+  /** The row a drop would file into — a category's key, or ROOT_KEY — while one is offered. */
+  #target: string | undefined = undefined;
+  #hover: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
+  #pointer = { x: 0, y: 0 };
+  @state() private ghost: { label: string; image: string | null; folder: boolean } | null = null;
 
   override disconnectedCallback(): void {
-    if (this.#pointerDrag)
-      this.#endDrag(new PointerEvent("pointercancel", { pointerId: this.#pointerDrag.pointerId }));
+    if (this.#pointerDrag) this.#finishDrag();
     super.disconnectedCallback();
   }
 
-  #clearDropTarget(): void {
-    this.#dropTarget?.part.remove("drop-target");
-    this.#dropTarget = null;
-  }
   /** A mouse drags a category or product from anywhere on its row; a finger only from the grip, so it
    * can still scroll; a control on the row is never a drag handle. */
   readonly #pointerDown = (event: PointerEvent): void => {
@@ -254,25 +277,25 @@ export class ProductList extends LitElement {
     )
       return;
     const grip = path.some((item) => item.classList.contains("drag-grip"));
-    this.#startDrag(event, listed.key, row, grip);
+    this.#startDrag(event, listed.key, grip);
   };
 
-  #startDrag(event: PointerEvent, key: string, row: HTMLElement, grip: boolean): void {
+  #startDrag(event: PointerEvent, key: string, grip: boolean): void {
     if (this.#pointerDrag || event.button !== 0) return;
     if (event.pointerType === "touch" && !grip) return;
     this.#pointerDrag = {
       pointerId: event.pointerId,
       key,
-      row,
       x: event.clientX,
       y: event.clientY,
-      top: row.getBoundingClientRect().top,
       active: false,
     };
     document.addEventListener("pointermove", this.#moveDrag);
     document.addEventListener("pointerup", this.#endDrag);
     document.addEventListener("pointercancel", this.#endDrag);
+    document.addEventListener("keydown", this.#dragKey, true);
   }
+
   readonly #moveDrag = (event: PointerEvent): void => {
     const drag = this.#pointerDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
@@ -280,81 +303,202 @@ export class ProductList extends LitElement {
     event.preventDefault();
     if (!drag.active) {
       drag.active = true;
-      drag.row.part.add("dragging");
       holdPageCursor();
       this.#dragged = this.selected.includes(drag.key) ? [...this.selected] : [drag.key];
-      this.dispatchEvent(
-        new CustomEvent("drag-items", {
-          detail: { keys: this.#dragged },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      this.ghost = this.#ghostOf(this.#dragged);
+      this.#send("drag-items", { keys: this.#dragged });
+      void this.updateComplete
+        .then(() => {
+          this.#placeGhost();
+          return this.#table()?.updateComplete;
+        })
+        .then(() => this.#paint());
     }
-    this.#clearDropTarget();
-    const row = pointerElementsAt(event.clientX, event.clientY).find(
+    this.#pointer = { x: event.clientX, y: event.clientY };
+    this.#placeGhost();
+    const over = pointerElementsAt(event.clientX, event.clientY).find(
       (item): item is HTMLElement =>
-        item instanceof HTMLElement &&
-        item.matches(`tr[data-row-key^="folder:"], tr[data-row-key="${ROOT_KEY}"]`),
-    );
-    const key = row?.dataset.rowKey;
-    const cell = row?.querySelector<HTMLElement>('[part~="folder-cell"]');
-    if (
-      cell &&
-      key &&
-      acceptsCatalogueDrop(this.#dragged, key === ROOT_KEY ? null : key.slice(7), this.categories)
-    ) {
-      this.#dropTarget = cell;
-      cell.part.add("drop-target");
-    }
-    const hoverBox = this.#dropTarget?.closest("tr")?.getBoundingClientRect();
-    const below = hoverBox ? hoverBox.bottom + 8 : event.clientY - (drag.y - drag.top);
-    const top =
-      hoverBox && below + drag.row.offsetHeight > window.innerHeight
-        ? hoverBox.top - drag.row.offsetHeight - 8
-        : below;
-    drag.row.style.transform = `translateY(${top - drag.top}px)`;
+        item instanceof HTMLElement && item.matches("tr[data-row-key]"),
+    )?.dataset.rowKey;
+    const target = over === undefined ? undefined : this.#dropTargetFor(over);
+    const changed = target !== this.#target;
+    this.#target = target;
+    this.#hoverOpen(over);
+    // The marks and the gap change only with the target, or when a branch opens (#hoverOpen).
+    if (changed) this.#paint();
   };
+
   readonly #endDrag = (event: PointerEvent): void => {
     const drag = this.#pointerDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
+    const keys = this.#dragged;
+    const target = this.#target;
+    this.#finishDrag();
+    if (!drag.active || event.type !== "pointerup") return;
+    this.#blockNextClick(false);
+    if (target !== undefined)
+      this.#send("drop-items", { keys, folderId: target === ROOT_KEY ? null : target.slice(7) });
+  };
+
+  readonly #dragKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.#pointerDrag?.active) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#finishDrag();
+    this.#blockNextClick(true);
+  };
+
+  /** A released drag still sends a click, which must not open the row it ends on. After Esc the
+   * release comes later, so the block lasts until it. */
+  #blockNextClick(untilRelease: boolean): void {
+    document.addEventListener("click", this.#blockPostDragClick, true);
+    const lift = () =>
+      setTimeout(() => document.removeEventListener("click", this.#blockPostDragClick, true), 0);
+    if (untilRelease) document.addEventListener("pointerup", lift, { once: true, capture: true });
+    else lift();
+  }
+
+  #finishDrag(): void {
+    const drag = this.#pointerDrag;
     document.removeEventListener("pointermove", this.#moveDrag);
     document.removeEventListener("pointerup", this.#endDrag);
     document.removeEventListener("pointercancel", this.#endDrag);
+    document.removeEventListener("keydown", this.#dragKey, true);
+    if (this.#hover) clearTimeout(this.#hover.timer);
+    this.#hover = null;
     this.#pointerDrag = null;
-    drag.row.part.remove("dragging");
-    drag.row.style.removeProperty("transform");
-    if (drag.active) releasePageCursor();
-    if (drag.active && event.type === "pointerup") {
-      // Pointer drags still produce a click; keep it from activating the source or destination.
-      document.addEventListener("click", this.#blockPostDragClick, true);
-      setTimeout(() => document.removeEventListener("click", this.#blockPostDragClick, true), 0);
-    }
-    if (drag.active && event.type === "pointerup" && this.#dropTarget) {
-      const key = this.#dropTarget.closest<HTMLElement>("tr[data-row-key]")!.dataset.rowKey!;
-      this.#dropFolder(key === ROOT_KEY ? null : key.slice(7));
-    }
-    this.#clearDropTarget();
+    this.#target = undefined;
     this.#dragged = [];
-    this.dispatchEvent(
-      new CustomEvent("drag-items", { detail: { keys: [] }, bubbles: true, composed: true }),
+    this.ghost = null;
+    if (drag?.active) releasePageCursor();
+    this.#paint();
+    this.#send("drag-items", { keys: [] });
+  }
+
+  /** Over a category or All products a drop files into it; over a product or variant, into the
+   * category that product is in. A drop that would move nothing is not offered. */
+  #dropTargetFor(key: string): string | undefined {
+    const row = this.#rowByKey.get(key);
+    if (!row || row.kind === "draft") return undefined;
+    const target =
+      row.kind !== "product"
+        ? row.key
+        : row.variant === null
+          ? row.parentKey
+          : (this.#rowByKey.get(row.parentKey)?.parentKey ?? ROOT_KEY);
+    if (
+      !acceptsCatalogueDrop(
+        this.#dragged,
+        target === ROOT_KEY ? null : target.slice(7),
+        this.categories,
+      )
+    )
+      return undefined;
+    return this.#dragged.some((dragged) => this.#rowByKey.get(dragged)?.parentKey !== target)
+      ? target
+      : undefined;
+  }
+
+  #hoverOpen(over: string | undefined): void {
+    const table = this.#table();
+    const closed =
+      table !== null &&
+      over !== undefined &&
+      over === this.#target &&
+      over.startsWith("folder:") &&
+      !table.isExpanded(over);
+    if (closed && this.#hover?.key === over) return;
+    if (this.#hover) clearTimeout(this.#hover.timer);
+    this.#hover = null;
+    if (!closed || table === null || over === undefined) return;
+    this.#hover = {
+      key: over,
+      timer: setTimeout(() => {
+        this.#hover = null;
+        if (!this.#pointerDrag?.active) return;
+        table.setExpanded(over, true);
+        void table.updateComplete.then(() => this.#paint());
+      }, HOVER_OPEN_MS),
+    };
+  }
+
+  /** The table re-renders rows in place as a branch opens, so the marks are set again by key. */
+  #paint(): void {
+    const root = this.#table()?.shadowRoot;
+    if (!root) return;
+    for (const row of root.querySelectorAll('[part~="dragging"]'))
+      row.removeAttribute("aria-disabled");
+    for (const name of ["dragging", "drop-target", "drop-gap-before", "drop-gap-after"])
+      for (const element of root.querySelectorAll(`[part~="${name}"]`)) element.part.remove(name);
+    if (!this.#pointerDrag?.active) return;
+    const rowOf = (key: string) =>
+      root.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(key)}"]`);
+    for (const key of this.#dragged) {
+      const row = rowOf(key);
+      row?.part.add("dragging");
+      // Faded text needs no contrast only as part of an inactive control, which the row is until the drop.
+      row?.setAttribute("aria-disabled", "true");
+    }
+    if (this.#target === undefined) return;
+    rowOf(this.#target)?.querySelector("td")?.part.add("drop-target");
+    const gap = this.#gap(this.#target);
+    if (!gap) return;
+    for (const cell of rowOf(gap.key)?.querySelectorAll(":scope > td") ?? [])
+      cell.part.add(gap.side === "before" ? "drop-gap-before" : "drop-gap-after");
+  }
+
+  /** Where the first dragged row would land among the target's children, in the table's sort order:
+   * products and categories have no order of their own. */
+  #gap(target: string): { key: string; side: "before" | "after" } | undefined {
+    const table = this.#table()!;
+    const root = table.shadowRoot!;
+    const moving = this.#rowByKey.get(this.#dragged[0]!);
+    if (!moving || !table.isExpanded(target)) return undefined;
+    const shown = (key: string) =>
+      root.querySelector(`tr[data-row-key="${CSS.escape(key)}"]`) !== null;
+    const siblings = [...this.#rowByKey.values()].filter(
+      (row) => row.parentKey === target && !this.#dragged.includes(row.key) && shown(row.key),
     );
-  };
+    const order = table.sortedSiblings([...siblings, moving]);
+    const next = order[order.indexOf(moving) + 1];
+    if (next) return { key: next.key, side: "before" };
+    const rows = [...root.querySelectorAll<HTMLElement>("tbody tr[data-row-key]")];
+    const at = rows.findIndex((row) => row.dataset.rowKey === target);
+    if (at === -1) return undefined;
+    const level = Number(rows[at]!.getAttribute("aria-level"));
+    let last = at;
+    while (last + 1 < rows.length && Number(rows[last + 1]!.getAttribute("aria-level")) > level)
+      last++;
+    return { key: rows[last]!.dataset.rowKey!, side: "after" };
+  }
+
+  #ghostOf(keys: readonly string[]): { label: string; image: string | null; folder: boolean } {
+    const first = this.#rowByKey.get(keys[0]!);
+    const name =
+      first?.kind === "folder"
+        ? first.folder.name
+        : first?.kind === "product"
+          ? first.product.name
+          : "";
+    return {
+      label:
+        keys.length > 1 ? t("folders.drag_count").replace("{count}", String(keys.length)) : name,
+      image: first?.kind === "product" ? first.product.image : null,
+      folder: first?.kind === "folder",
+    };
+  }
+
+  #placeGhost(): void {
+    this.renderRoot
+      .querySelector<HTMLElement>(".drag-ghost")
+      ?.style.setProperty("transform", `translate(${this.#pointer.x}px, ${this.#pointer.y}px)`);
+  }
+
   readonly #blockPostDragClick = (event: MouseEvent): void => {
     event.preventDefault();
     event.stopImmediatePropagation();
     document.removeEventListener("click", this.#blockPostDragClick, true);
   };
-  #dropFolder(folderId: string | null): void {
-    this.dispatchEvent(
-      new CustomEvent("drop-items", {
-        detail: { keys: [...this.#dragged], folderId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
@@ -1001,63 +1145,75 @@ export class ProductList extends LitElement {
     const rows = this.#rows();
     this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
     return html`<wt-data-table
-      noMatchesMessage=${tableNoMatches()}
-      filterSearchPlaceholder=${t("categories.combobox_search")}
-      filterNoResultsLabel=${t("categories.combobox_no_results")}
-      aria-label=${t("catalogue.title")}
-      viewKey="waitron.products.table"
-      rememberExpanded
-      searchOpensPath
-      columnsLabel=${t("table.columns")}
-      sortKey="name"
-      sortDirection="ascending"
-      collapseLabel=${t("categories.collapse")}
-      expandLabel=${t("categories.expand")}
-      expandAllLabel=${t("folders.expand_all")}
-      collapseAllLabel=${t("folders.collapse_all")}
-      initiallyCollapsed
-      .searchTerm=${this.search}
-      .selectable=${this.selecting}
-      .selected=${this.selected}
-      .rowSelectable=${(row: ListRow) =>
-        row.kind === "folder" || (row.kind === "product" && row.variant === null)}
-      .selectionLabel=${(row: ListRow) =>
-        row.kind === "folder"
-          ? row.folder.name
-          : row.kind === "product"
-            ? (row.variant?.name ?? row.product.name)
-            : ""}
-      .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
-      .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
-      .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
-      .rowActivation=${(row: ListRow) =>
-        row.kind === "folder" && !this.#renaming(row.folder.id)
-          ? "toggle"
-          : row.kind === "product"
-            ? "click"
-            : "none"}
-      .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
-        row.kind === "folder"
-          ? t(expanded ? "folders.close_named" : "folders.open_named").replace(
-              "{name}",
-              row.folder.name,
-            )
-          : t(expanded ? "categories.collapse" : "categories.expand")}
-      .rowClick=${(row: ListRow) => {
-        if (row.kind === "product")
-          this.#send("edit-product", { productId: (row.variant ?? row.product).id });
-      }}
-      .rowClickLabel=${(row: ListRow) =>
-        row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
-      .rows=${rows}
-      .columns=${this.#columns()}
-      .rowKey=${(row: ListRow) => row.key}
-      .rowParent=${(row: ListRow) => row.parentKey}
-      @pointerdown=${this.#pointerDown}
-      @wt-expand-change=${this.#expandChange}
-      ><slot name="toolbar-start" slot="toolbar-start"></slot
-      ><slot name="toolbar-end" slot="toolbar-end"></slot
-    ></wt-data-table>`;
+        noMatchesMessage=${tableNoMatches()}
+        filterSearchPlaceholder=${t("categories.combobox_search")}
+        filterNoResultsLabel=${t("categories.combobox_no_results")}
+        aria-label=${t("catalogue.title")}
+        viewKey="waitron.products.table"
+        rememberExpanded
+        searchOpensPath
+        columnsLabel=${t("table.columns")}
+        sortKey="name"
+        sortDirection="ascending"
+        collapseLabel=${t("categories.collapse")}
+        expandLabel=${t("categories.expand")}
+        expandAllLabel=${t("folders.expand_all")}
+        collapseAllLabel=${t("folders.collapse_all")}
+        initiallyCollapsed
+        .searchTerm=${this.search}
+        .selectable=${this.selecting}
+        .selected=${this.selected}
+        .rowSelectable=${(row: ListRow) =>
+          row.kind === "folder" || (row.kind === "product" && row.variant === null)}
+        .selectionLabel=${(row: ListRow) =>
+          row.kind === "folder"
+            ? row.folder.name
+            : row.kind === "product"
+              ? (row.variant?.name ?? row.product.name)
+              : ""}
+        .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
+        .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
+        .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
+        .rowActivation=${(row: ListRow) =>
+          row.kind === "folder" && !this.#renaming(row.folder.id)
+            ? "toggle"
+            : row.kind === "product"
+              ? "click"
+              : "none"}
+        .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
+          row.kind === "folder"
+            ? t(expanded ? "folders.close_named" : "folders.open_named").replace(
+                "{name}",
+                row.folder.name,
+              )
+            : t(expanded ? "categories.collapse" : "categories.expand")}
+        .rowClick=${(row: ListRow) => {
+          if (row.kind === "product")
+            this.#send("edit-product", { productId: (row.variant ?? row.product).id });
+        }}
+        .rowClickLabel=${(row: ListRow) =>
+          row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
+        .rows=${rows}
+        .columns=${this.#columns()}
+        .rowKey=${(row: ListRow) => row.key}
+        .rowParent=${(row: ListRow) => row.parentKey}
+        @pointerdown=${this.#pointerDown}
+        @wt-expand-change=${this.#expandChange}
+        ><slot name="toolbar-start" slot="toolbar-start"></slot
+        ><slot name="toolbar-end" slot="toolbar-end"></slot></wt-data-table
+      >${
+        this.ghost
+          ? html`<div class="drag-ghost" data-test="drag-ghost" aria-hidden="true">
+              ${
+                this.ghost.image
+                  ? html`<img src=${`/media/${this.ghost.image}`} alt="" draggable="false" />`
+                  : this.ghost.folder
+                    ? html`<wt-icon name="folder"></wt-icon>`
+                    : html`<span class="ghost-thumb"></span>`
+              }<span>${this.ghost.label}</span>
+            </div>`
+          : nothing
+      }`;
   }
 }
 

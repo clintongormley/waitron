@@ -220,9 +220,16 @@ switches silently otherwise (`apps/till/src/till-app.ts`).
 
 Use **Select**, tick products and folders, and choose **Move to…**. Pick a destination folder or
 **All products (top level)**. A selected folder and its descendants are excluded as destinations,
-and the server also refuses such a move with `category.parent_cycle`. On a pointer device you
-can drag a product, folder or selection onto a folder or breadcrumb. Touch and keyboard users use
-the same selection actions.
+and the server also refuses such a move with `category.parent_cycle`. Anything selected inside a
+selected category moves with that category rather than being filed beside it.
+
+On a pointer device you can drag a product, a category, or in Select mode every selected row,
+onto a category, onto a product (to file beside it) or onto **All products** (to file in no
+category). The row stays in place, faded, while a copy follows the pointer; the target shows a bar
+on its left edge and a dashed gap where the row will land in the current sort; a closed category
+opens after `HOVER_OPEN_MS` (600 ms, `apps/dashboard/src/widgets/product-list.ts`) of hovering.
+Esc, or a drop where the drag started, moves nothing. Touch and keyboard users use the same
+selection actions.
 
 Navigating, searching or changing a filter clears the selection, so actions do not reach items you
 have hidden. **Cancel** clears it and restores the ordinary toolbar. A Delete you already

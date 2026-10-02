@@ -253,4 +253,34 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       .show();
     await expectNoA11yViolations(host);
   });
+
+  it("renders accessibly mid-drag", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products, categories: [{ id: "drinks", name: "Bebidas", parentId: null }] },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const at = (element: Element, type: string) => {
+      const box = element.getBoundingClientRect();
+      element.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          composed: true,
+          pointerId: 1,
+          clientX: box.x + 8,
+          clientY: box.y + 8,
+        }),
+      );
+    };
+    const over = table.shadowRoot!.querySelector(
+      'tr[data-row-key="folder:drinks"] [part~="folder-cell"]',
+    )!;
+    at(table.shadowRoot!.querySelector('[part~="product-cell"]')!, "pointerdown");
+    at(over, "pointermove");
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    at(over, "pointercancel");
+  });
 });
