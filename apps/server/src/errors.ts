@@ -269,6 +269,24 @@ declare module "@waitron/shared" {
      */
     "working_order.reason_required": { workingOrderId: string };
     /**
+     * Cancelling a placed order would credit its issued invoice, but the node has no live
+     * `rectificative` invoice series to number the credit note from. Thrown by `cancelPlacedOrder`
+     * before anything is written.
+     */
+    "series.no_rectificative_for_node": { nodeId: string };
+    /**
+     * Cancelling a placed order would credit its issued invoice, but the credit note's VAT
+     * breakdown, derived from the invoice's lines with their signs reversed as `recordCorrection`
+     * derives it, is not the exact negative of the invoice's stored breakdown, rate by rate, or
+     * does not sum to minus the invoice's total. Thrown by `cancelPlacedOrder` before anything is
+     * written. `invoice` and `correction` are the two breakdowns.
+     */
+    "sale.correction_breakdown_mismatch": {
+      saleId: string;
+      invoice: { rate: string; base: string; tax: string }[];
+      correction: { rate: string; base: string; tax: string }[];
+    };
+    /**
      * A working order this caller tried to send to prep (`sendToPrep`, the pickup mode) is not
      * `settled` (open, placed, abandoned, or absent — one code for all). A placed order enqueues its
      * own prep at placing, so reaching here with one means the wrong path was called. Also

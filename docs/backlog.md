@@ -5157,7 +5157,8 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
    filters by `cfg.locationId`, falling back to `cfg.orderFlow` when that finds none;
    `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's
-   till and node; `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
+   till and node and, for an order whose invoice was issued, to give the credit note its till, node
+   and series; `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
    it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`, which the filing sites in
    `till-sale.ts` and `working-order.ts` call.
 2. **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/

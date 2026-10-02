@@ -172,6 +172,7 @@ import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
+import { creditWholeInvoice } from "./cancel-credit.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
@@ -4946,6 +4947,10 @@ export async function markOrderPlaced(
 /**
  * Cancel a placed order and append its reasoned amendment in one transaction. A second cancel reads
  * `abandoned` and is refused `working_order.not_placed`.
+ *
+ * An order whose invoice was issued has the whole invoice credited and settled owing nothing in the
+ * same transaction ({@link creditWholeInvoice}), which needs `sessionId`, and is refused, writing
+ * nothing, while its bill holds a payment or has one in flight.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
@@ -4953,6 +4958,7 @@ export async function cancelPlacedOrder(
   id: string,
   reason: string,
   operatorId: string,
+  sessionId?: string,
 ): Promise<void> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
   // is a request-shape error, not the state conflict `not_placed` names.
@@ -4967,6 +4973,14 @@ export async function cancelPlacedOrder(
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: id });
+    }
+
+    const issued = (await readIssuedSales(tx, [id])).get(id);
+    if (issued !== undefined) {
+      if (sessionId === undefined) throw new AppError("session.required", {});
+      await refusePaymentInFlight(tx, [id]);
+      await refuseBillWithPayments(tx, id);
+      await creditWholeInvoice(tx, deps, cfg, issued.saleId, sessionId);
     }
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));

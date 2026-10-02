@@ -333,6 +333,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.out_of_date": 409,
   "order.payment_in_flight": 409,
   "working_order.not_placed": 409,
+  "series.no_rectificative_for_node": 409,
+  "sale.correction_breakdown_mismatch": 409,
   "working_order.not_settled": 409,
   "working_order.already_collected": 409,
   "ticket.not_fired": 409,
@@ -1724,7 +1726,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId, sessionId } = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ reason: string }>(c);
       await cancelPlacedOrder(
@@ -1733,6 +1735,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         id,
         body.reason,
         personId,
+        sessionId,
       );
       return c.body(null, 200);
     }),
