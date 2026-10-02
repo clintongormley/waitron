@@ -601,6 +601,10 @@ declare module "@waitron/shared" {
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
+    /** No watcher with this id in this venue. */
+    "watcher.not_found": { watcherId: string };
+    /** A switched-on watcher already has this name in this venue. */
+    "watcher.name_taken": { name: string };
     // `station.not_found` is declared in @waitron/db's errors.ts.
     /**
      * No kitchen notice with this id in this venue (for a station's own display, at its station).

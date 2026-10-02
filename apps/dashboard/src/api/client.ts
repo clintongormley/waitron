@@ -483,6 +483,19 @@ export interface Station {
   forgottenAfterMinutes: number;
 }
 
+export interface Watcher {
+  id: string;
+  name: string;
+  everyStation: boolean;
+  stationIds: string[];
+  everyZone: boolean;
+  zoneIds: string[];
+  runsPass: boolean;
+  displayOrder: number;
+  active: boolean;
+  printerIds: string[];
+}
+
 export type BumpMode = "line" | "ticket";
 
 export interface Course {
@@ -2226,6 +2239,10 @@ export class DashboardApi {
 
   listStations(): Promise<Station[]> {
     return this.#request<Station[]>("/management-api/stations", "GET");
+  }
+
+  listWatchers(): Promise<Watcher[]> {
+    return this.#request<Watcher[]>("/management-api/watchers", "GET");
   }
 
   createStation(input: {
