@@ -25,14 +25,12 @@ describe("receipt reprint record", () => {
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture" });
-    await db
-      .insert(locations)
-      .values({
-        id: LOCATION,
-        name: "Fixture",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      });
+    await db.insert(locations).values({
+      id: LOCATION,
+      name: "Fixture",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
     await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till" });
     const nodeId = await seedNode(db, brandLocationId(LOCATION));
     const [series] = await db
@@ -67,13 +65,11 @@ describe("receipt reprint record", () => {
 
     const missing = await captureError(() =>
       withTransaction(db, (tx) =>
-        tx
-          .insert(receiptReprints)
-          .values({
-            saleId: "ffffffff-0000-4000-8000-000000000001",
-            printJobId: job!.id,
-            personId: PERSON,
-          }),
+        tx.insert(receiptReprints).values({
+          saleId: "ffffffff-0000-4000-8000-000000000001",
+          printJobId: job!.id,
+          personId: PERSON,
+        }),
       ),
     );
     expect(FOREIGN_KEY_VIOLATION).toContain((missing as { errcode: number }).errcode);
