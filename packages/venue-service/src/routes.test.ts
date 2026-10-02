@@ -1507,6 +1507,8 @@ describe("routing explanation route", () => {
       createProduct(tx, {
         catalogueId: fx.menuId,
         name: "Olives",
+        customerName: { en: "Marinated olives" },
+        kitchenName: "OLV",
         categoryId: fx.categoryId,
         pricingUnit: "each",
         unitPrice: "2.00",
