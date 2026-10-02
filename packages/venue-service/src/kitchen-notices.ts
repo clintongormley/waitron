@@ -38,6 +38,7 @@ export interface KitchenNotice {
   direction: KitchenNoticeDirection | null;
   /** On a `changed` notice, the extra taken off the dish. */
   cancelledExtra: string | null;
+  reroutedTo: string | null;
   createdAt: string;
 }
 
@@ -63,6 +64,8 @@ const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
  * it, as the engine's constraint error rather than an `AppError`. `direction` is for a `changed`
  * one only (`kitchen_notice.invalid` otherwise, or for a value outside the two), and so is
  * `cancelledExtra`, the extra taken off the dish (`kitchen_notice.invalid` otherwise).
+ * `reroutedTo` names the new station on a `rerouted` notice and is refused on every other kind
+ * (`kitchen_notice.invalid`).
  */
 export async function recordKitchenNotices(
   tx: Transaction,
@@ -73,6 +76,7 @@ export async function recordKitchenNotices(
   movedTo: string | null = null,
   direction: KitchenNoticeDirection | null = null,
   cancelledExtra: string | null = null,
+  reroutedTo: string | null = null,
 ): Promise<void> {
   if (
     direction !== null &&
@@ -82,6 +86,9 @@ export async function recordKitchenNotices(
   }
   if (cancelledExtra !== null && kind !== "changed") {
     throw new AppError("kitchen_notice.invalid", { field: "cancelledExtra" });
+  }
+  if ((kind === "rerouted") !== (reroutedTo !== null)) {
+    throw new AppError("kitchen_notice.invalid", { field: "reroutedTo" });
   }
   if (items.length === 0) return;
   const [order] = await tx
@@ -159,6 +166,7 @@ export async function recordKitchenNotices(
         movedTo,
         direction,
         cancelledExtra,
+        reroutedTo,
         createdAt,
       };
     }),
@@ -191,6 +199,7 @@ export async function listStationNotices(
       movedTo: kitchenNotices.movedTo,
       direction: kitchenNotices.direction,
       cancelledExtra: kitchenNotices.cancelledExtra,
+      reroutedTo: kitchenNotices.reroutedTo,
       createdAt: kitchenNotices.createdAt,
     })
     .from(kitchenNotices)

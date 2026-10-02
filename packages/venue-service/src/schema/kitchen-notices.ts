@@ -16,7 +16,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 
-export const kitchenNoticeKind = enumType(["recalled", "void", "changed", "moved"]);
+export const kitchenNoticeKind = enumType(["recalled", "void", "changed", "moved", "rerouted"]);
 
 export const KITCHEN_NOTICE_DIRECTIONS = ["added", "removed"] as const;
 const kitchenNoticeDirection = enumType(KITCHEN_NOTICE_DIRECTIONS);
@@ -46,6 +46,8 @@ export const kitchenNotices = table(
     direction: kitchenNoticeDirection("direction"),
     /** On a `changed` notice, the extra taken off the dish, as its kitchen paper printed it. */
     cancelledExtra: label("cancelled_extra"),
+    /** On a `rerouted` notice, the station the work now belongs to, by name as it was then. */
+    reroutedTo: label("rerouted_to"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     acknowledgedAt: tsString("acknowledged_at"),
   },
@@ -66,6 +68,10 @@ export const kitchenNotices = table(
     check("kitchen_notices_kind_ck", enumCheck(t.kind)),
     check("kitchen_notices_quantity_ck", sql`${t.quantity} > 0`),
     check("kitchen_notices_moved_to_ck", sql`${t.kind} = 'moved' or ${t.movedTo} is null`),
+    check(
+      "kitchen_notices_rerouted_to_ck",
+      sql`(${t.kind} = 'rerouted' and ${t.reroutedTo} is not null) or (${t.kind} <> 'rerouted' and ${t.reroutedTo} is null)`,
+    ),
     check("kitchen_notices_direction_ck", enumCheck(t.direction)),
     check(
       "kitchen_notices_direction_kind_ck",

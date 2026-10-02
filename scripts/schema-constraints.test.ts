@@ -408,6 +408,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "kitchen_notices_kind_ck",
   "kitchen_notices_moved_to_ck",
   "kitchen_notices_quantity_ck",
+  "kitchen_notices_rerouted_to_ck",
   "kitchen_stations_thresholds_ordered",
   "locations_invoice_locales_len",
   "management_account_actions_code_attempts_ck",
