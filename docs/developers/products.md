@@ -131,7 +131,10 @@ one-entry map under the venue's default content language. Nothing has fallen bac
 row is written, so the customer-to-staff fallback for an answer runs at RENDER time instead, in
 `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`): it takes the customer
 map when `nonBlankTranslations` says that map holds text in some language and the staff map
-otherwise, then resolves whichever it picked against the locale it was asked for. The kitchen half
+otherwise, then resolves whichever it picked against the locale it was asked for, then the venue's
+default content language — read from the staff map's one key, which both builders write under that
+language (`buildLineExtras`, and `optionSnapshotOf` in `apps/till/src/state/held-options.ts`) — then
+any language the map holds. The kitchen half
 does the same thing a function along, through `kitchenPresentationName`
 (`optionSnapshotLabels`, same file).
 

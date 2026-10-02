@@ -1026,8 +1026,12 @@ record's own value applies and its blank languages show no placeholder hint.
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
   would declare the record free of what the fallback contains.
 
-A name never shows a placeholder hint this way: a variant's names are its own, and a blank one falls back
-to the record's own staff name, which the catalogue owns.
+A name is not hinted from a parent this way: a variant's names are its own. In the editors of
+products, variants, options lists, options and extras lists, a blank kitchen name, and a blank
+customer-facing name in the venue's default content language, show the record's own Name as their
+placeholder (on a variant, the variant's Name); a blank customer-facing name in any other language
+shows the default language's customer-facing name, or Name while that is blank too. Each follows the
+field it copies as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`).
 
 ### Fold a long form into collapsible sections with summaries
 

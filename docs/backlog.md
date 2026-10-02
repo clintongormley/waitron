@@ -745,7 +745,18 @@ the section. The option window (`option-label-form.ts`, A170), the product edito
 (`product-editor.ts`) and the variant form (`variant-form.ts`) already kept the two apart and are
 unchanged.
 
-**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — OPEN.**
+**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — DONE.**
+Built in all five editors as the three bullets below ask, each hint following the field it copies
+as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`). Products and
+variants already fell back requested language → default language → Name (`resolveContentText`,
+`packages/shared/src/content-languages.ts`, through `toInvoiceLineDescriptions`), so their readers
+and the translation gap report are unchanged. An options list's and an option's names did not
+(an extras list's own name reaches no receipt): with default Spanish and an option named
+`{ es: "Grande", ca: "Gran" }`, `customerOptionSnapshotLabels` printed "Gran" for an English
+receipt, because it skipped the default and took the first stored language alphabetically. It now
+tries the default language, read from the frozen staff name's key, before any other (cases in
+`packages/catalogue/src/option-snapshot-labels.test.ts`); the receipt and the till's settled ticket
+both read through it.
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
 language name hint should be the name field, and the secondary languages should be the main
 language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while
@@ -1400,6 +1411,9 @@ name falls back only in the venue's default language, so decide with the owner w
 languages' fields show (blank, or the default-language name the reader falls back to). Read, not
 reproduced: "the first time" may mean the hint is missing only on a new variant; check an
 existing one too.
+A172 has since built the name hints — the kitchen and customer-facing names, in all five editors,
+on a new variant and an existing one — so what is left of A220 is the description hints and their
+checks.
 **Decided (owner, 2026-10-02):** a customer-name field in another language shows the
 default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
 (the owner's account of the menu; check it against the reader before relying on it). The kitchen
