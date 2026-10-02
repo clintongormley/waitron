@@ -138,7 +138,7 @@ it("finds a further screen by the nav search, and never the one not permitted", 
       .map((item) => item.dataset.test);
   async function search(term: string): Promise<void> {
     box.focus();
-    box.select();
+    box.shadowRoot!.querySelector("input")!.select();
     await userEvent.keyboard(term);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;

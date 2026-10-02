@@ -4440,7 +4440,7 @@ describe("the nav search", () => {
   async function search(el: DashboardApp, term: string): Promise<void> {
     const box = searchBox(el);
     box.focus();
-    box.select();
+    box.shadowRoot!.querySelector("input")!.select();
     await userEvent.keyboard(term === "" ? "{Backspace}" : term);
     await flush(el);
   }
@@ -4487,9 +4487,25 @@ describe("the nav search", () => {
     expect(box.type).toBe("search");
     expect(box.name).toBe("nav-search");
     expect(box.autocomplete).toBe("off");
-    expect(box.getAttribute("aria-label")).toBe("Search pages");
+    expect(box.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBe("Search pages");
     expect(box.placeholder).toBe("Search pages");
     expect(el.shadowRoot!.querySelector("nav")!.firstElementChild).toBe(box);
+  });
+
+  it("is the shared search field, named by its hidden label, and filters on its change", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    const box = el.shadowRoot!.querySelector("wt-input[data-test=nav-search]") as
+      | (HTMLElement & { type: string; label: string; hideLabel: boolean; placeholder: string })
+      | null;
+    expect(box!.type).toBe("search");
+    expect(box!.label).toBe(t("nav.search"));
+    expect(box!.hideLabel).toBe(true);
+    expect(box!.placeholder).toBe(t("nav.search"));
+    box!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "print" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
   });
 
   it("shows only the pages whose label holds the term, whatever its case", async () => {

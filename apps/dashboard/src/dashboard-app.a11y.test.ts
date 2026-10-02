@@ -231,7 +231,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         ["zzz", "Ninguna página coincide."],
       ]) {
         box.focus();
-        box.select();
+        box.shadowRoot!.querySelector("input")!.select();
         await userEvent.keyboard(term);
         await flush(el);
         expect(status.textContent!.trim()).toBe(message);
