@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { TabDef } from "../layout.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { chooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./tab-shell.js";
 import type { TillTabShell } from "./tab-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -107,20 +107,32 @@ describe("till-tab-shell", () => {
     expect(el.shadowRoot!.querySelector<HTMLElement>(".operator")!.textContent).toContain("Ana");
   });
 
-  it("places the shared language footer after the scrollable floor or table region", async () => {
+  it("places the language chooser in the bar, just before the operator's name", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,
       activeTabKey: "floor",
+      operatorName: "Ana",
       loadLocales: async () => [{ code: "es-ES", label: "Español" }],
     });
-    const shell = el.shadowRoot!.querySelector(".shell")!;
-    const footer = shell.querySelector("wt-language-footer")!;
-    expect(footer).not.toBeNull();
-    expect(footer.previousElementSibling).toBe(shell.querySelector(".region"));
-    expect(footer.getAttribute("active")).toBe(currentLocale());
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+    expect(chooser).not.toBeNull();
+    expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
+    expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
+    expect(chooser.getAttribute("active")).toBe(currentLocale());
   });
 
-  it("updates the footer's active language when the till locale changes", async () => {
+  it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs,
+      loadLocales: async () => [{ code: "es-ES", label: "Español" }],
+    });
+    const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
+    expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
+    expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
+  });
+
+  it("updates the chooser's active language when the till locale changes", async () => {
     setLocale("es-ES");
     try {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
@@ -129,7 +141,7 @@ describe("till-tab-shell", () => {
       });
       setLocale("en-GB");
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("wt-language-footer")!.getAttribute("active")).toBe(
+      expect(el.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active")).toBe(
         "en-GB",
       );
     } finally {
@@ -137,7 +149,7 @@ describe("till-tab-shell", () => {
     }
   });
 
-  it("lets one composed footer selection reach its parent", async () => {
+  it("lets one composed chooser selection reach its parent", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,
       activeTabKey: "counter",
@@ -150,7 +162,7 @@ describe("till-tab-shell", () => {
     el.addEventListener("wt-locale-selected", (e) =>
       details.push((e as CustomEvent<{ code: string }>).detail),
     );
-    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     chooser.dispatchEvent(
       new CustomEvent("wt-locale-selected", {
         detail: { code: "en-GB" },
@@ -166,7 +178,7 @@ describe("till-tab-shell", () => {
       tabs,
       activeTabKey: "counter",
     });
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
   });
 
   it("makes the body inert while a drill-in is slotted", async () => {
@@ -241,11 +253,19 @@ describe("till-tab-shell", () => {
   });
 });
 
-it("keeps the language chooser available on a kitchen display without operator chrome", async () => {
+it("keeps the language chooser on a kitchen display, at the top right on its own, above the body", async () => {
   const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
     kiosk: true,
     loadLocales: async () => [{ code: "en-GB", label: "English" }],
   });
   expect(el.shadowRoot!.querySelector("header")).toBeNull();
-  expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+  const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+  expect(chooser).not.toBeNull();
+  const own = chooser.getBoundingClientRect();
+  const shell = el.getBoundingClientRect();
+  const region = el.shadowRoot!.querySelector(".region")!.getBoundingClientRect();
+  expect(own.bottom).toBeLessThanOrEqual(region.top);
+  expect(own.top - shell.top).toBeLessThanOrEqual(32);
+  expect(shell.right - own.right).toBeLessThanOrEqual(32);
+  expect(own.left).toBeGreaterThan(shell.left + shell.width / 2);
 });

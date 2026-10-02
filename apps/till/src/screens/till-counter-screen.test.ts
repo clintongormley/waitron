@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
-import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
+import { chooserFaces, cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -463,7 +463,7 @@ describe("till-counter-screen", () => {
       venueDefault: "es-ES",
     });
     const { el } = await mount({ api: { getLocales } as unknown as TillApi });
-    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
     await vi.waitFor(() => {
       const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
@@ -495,29 +495,34 @@ describe("till-counter-screen", () => {
     expect(screen!.invoiceLocale).toBe("en");
   });
 
-  it("keeps the language chooser outside the header session row", async () => {
+  it("puts the language chooser in its own header, just before the operator's name", async () => {
     const { el } = await mount();
-    const session = el.shadowRoot!.querySelector(".session")!;
-    expect(session.querySelector("wt-language-footer")).toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+    expect(chooser).not.toBeNull();
+    expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector(".header .session"));
+    expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
   });
 
-  it("puts the shared language footer after the standalone counter body", async () => {
+  it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
+    setLocale("es-ES");
     const { el } = await mount();
-    const screen = el.shadowRoot!.querySelector(".screen")!;
-    const footer = screen.querySelector("wt-language-footer")!;
-    expect(footer).not.toBeNull();
-    expect(footer.previousElementSibling?.classList.contains("grid-body")).toBe(true);
-    expect(el.shadowRoot!.querySelector(".session wt-language-footer")).toBeNull();
+    const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
+    expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
+    expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
   });
 
-  it("updates the standalone counter footer when the till locale changes", async () => {
+  it("draws no language chooser when embedded (the shell owns it)", async () => {
+    const { el } = await mount({ embedded: true });
+    expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
+  });
+
+  it("updates the standalone counter's chooser when the till locale changes", async () => {
     setLocale("es-ES");
     try {
       const { el } = await mount();
       setLocale("en-GB");
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("wt-language-footer")!.getAttribute("active")).toBe(
+      expect(el.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active")).toBe(
         "en-GB",
       );
     } finally {
@@ -529,7 +534,7 @@ describe("till-counter-screen", () => {
     const { el } = await mount();
     const spy = vi.fn();
     el.addEventListener("wt-locale-selected", (e) => spy((e as CustomEvent).detail));
-    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     chooser.dispatchEvent(
       new CustomEvent("wt-locale-selected", {
         detail: { code: "en-GB" },

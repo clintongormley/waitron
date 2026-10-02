@@ -1123,14 +1123,21 @@ describe("till-app shell navigation", () => {
   });
 });
 
-/** The bottom edges of the till, the screen it shows, and that screen's language button. */
-function bottoms(el: TillApp, screen: Element) {
-  const footer = screen.shadowRoot!.querySelector("wt-language-footer")!;
+/** The bottom edges of the till and the screen it shows, and the box of that screen's language button. */
+function edgesOf(el: TillApp, screen: Element) {
+  const chooser = screen.shadowRoot!.querySelector("wt-language-chooser")!;
   return {
     app: el.getBoundingClientRect().bottom,
     screen: screen.getBoundingClientRect().bottom,
-    footer: footer.getBoundingClientRect().bottom,
+    chooser: chooser.getBoundingClientRect(),
   };
+}
+
+/** The language button is drawn, and lies vertically inside the page: neither above its top nor below its bottom. */
+function expectChooserOnPage(chooser: DOMRect, pageBox: DOMRect): void {
+  expect(chooser.height).toBeGreaterThan(0);
+  expect(chooser.top).toBeGreaterThanOrEqual(pageBox.top);
+  expect(chooser.bottom).toBeLessThanOrEqual(pageBox.bottom);
 }
 
 // The container stands in for the page: `index.html` gives the till one screen's height, less its own
@@ -1170,11 +1177,12 @@ describe("till-app fits the page it is given", () => {
     await flush(el);
 
     expect(banner(el)).not.toBeNull();
-    const pageBottom = host.getBoundingClientRect().bottom;
-    const edges = bottoms(el, shell(el)!);
+    const pageBox = host.getBoundingClientRect();
+    const pageBottom = pageBox.bottom;
+    const edges = edgesOf(el, shell(el)!);
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
-    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+    expectChooserOnPage(edges.chooser, pageBox);
   });
 
   it("keeps the whole page within the screen, its padding included, while a refusal banner shows", async () => {
@@ -1222,11 +1230,12 @@ describe("till-app fits the page it is given", () => {
     host.style.height = `${PAGE_HEIGHT}px`;
     await flush(el);
 
-    const pageBottom = host.getBoundingClientRect().bottom;
-    const edges = bottoms(el, lock(el)!);
+    const pageBox = host.getBoundingClientRect();
+    const pageBottom = pageBox.bottom;
+    const edges = edgesOf(el, lock(el)!);
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
-    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+    expectChooserOnPage(edges.chooser, pageBox);
   });
 
   it("keeps the join screen's language button on the page", async () => {
@@ -1237,11 +1246,12 @@ describe("till-app fits the page it is given", () => {
     await flush(el);
 
     const join = el.shadowRoot!.querySelector("till-enrol-screen")!;
-    const pageBottom = host.getBoundingClientRect().bottom;
-    const edges = bottoms(el, join);
+    const pageBox = host.getBoundingClientRect();
+    const pageBottom = pageBox.bottom;
+    const edges = edgesOf(el, join);
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
-    expect(edges.footer).toBeLessThanOrEqual(pageBottom);
+    expectChooserOnPage(edges.chooser, pageBox);
   });
 });
 

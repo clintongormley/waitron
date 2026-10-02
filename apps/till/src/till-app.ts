@@ -875,11 +875,9 @@ export class TillApp extends LitElement {
         min-height: 0;
       }
 
-      /* min-height: 0 drops each screen's own 100dvh minimum, so a short screen is no taller than the height left. */
       till-lock-screen,
       till-enrol-screen {
         flex: 1 0 auto;
-        min-height: 0;
       }
 
       .error {
@@ -896,8 +894,7 @@ export class TillApp extends LitElement {
         display: block;
       }
 
-      /* Over the page, above the language button: in the flow, its closing would move the floor under a
-         waiter's finger. */
+      /* Over the page: in the flow, its closing would move the floor under a waiter's finger. */
       .submitted-toast {
         position: fixed;
         inset-inline: var(--wt-space-3);

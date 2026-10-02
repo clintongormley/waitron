@@ -262,6 +262,9 @@ older build before using the new published document. What is left:
   those cards. Task 9 read the full-page image dimensions with `sips`; this does not measure card
   overflow. C130's entry below measured the header alone: with only Find a bill offered, 560 px in
   English and 602 px in Spanish; the Kitchen, Pass and My schedule switches widen it further.
+  The language chooser now sits in that bar too (A187), before the operator's name, so at 390 wide
+  it is mostly off screen until the bar fits: measured in English with no optional buttons, the bar
+  542 px wide and the chooser spanning 380 to 433 px.
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
   may never mark dishes ready on its screen. With that screen switched off, each send can raise
   the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
@@ -892,18 +895,13 @@ of three mockups):**
 failed state keeps its retry, reset and reload actions. `provision` in
 `apps/setup/src/api/client.ts` reports no intermediate steps.
 
-**The language chooser moves to the top bar, in every app (A187, owner 2026-10-02) — OPEN.** The
-owner: _"instead of having the language chooser at the bottom, let's move it to the header on all
-pages (not just in the setup)"_. This reverses the footer chosen on 2026-09-30 (C93, #933; the
-till's B18, #1007). **Decided (owner, 2026-10-02):** the chooser sits at the trailing end of the
-top bar — the setup wizard's card header beside the logo, the dashboard's banner before the alerts
-bell and account menu (signed out too), the till's bar before the person's name — and on a
-screen with no top bar, at the top right on its own. Which screens those are was not checked:
-every screen that places `wt-language-footer` today (the till's lock, enrolment and counter
-screens and the dashboard's sign-in screen among them) needs one or the other. It shows the full language name on wide screens and the short
-code ("EN") at phone width (the owner: "the short name on handhelds", read as phone-width screens);
-the open list names every language in full. `wt-language-footer` goes, and every page that places
-it (`grep -rln wt-language-footer apps packages`) moves to the new chooser.
+**The language chooser moves to the top bar, in every app (A187, owner 2026-10-02) — DONE.**
+`wt-language-chooser` sits at the trailing end of each app's top bar: the setup wizard's card
+header beside the logo, the dashboard's banner before the alerts bell and account menu (signed out
+too), and the till's bar before the operator's name. The till's sign-in and join screens and the
+kitchen display, which have no bar, hold it at the top right on their own. At 40rem wide or less it
+shows the short code ("EN") and keeps the full name for screen readers; its menu opens downwards
+and names every language in full. `wt-language-footer` is gone.
 
 **In a demo, the dashboard's top bar links to the email inbox (A188, owner 2026-10-02) — OPEN.**
 The setup wizard's done page already links to the demo's email inbox; the dashboard does not, so a
@@ -2616,12 +2614,23 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       language button stays on screen. The lock and join screens fill at least the height left; a
       staff list longer than the screen still makes the page scroll to reach the language button,
       as it did before. Before, the page was taller than the screen even with no banner, by the
-      body's padding and the demo strip.
+      body's padding and the demo strip. (Since A187, 2026-10-02, the language chooser is at the
+      top right of the lock screen.)
       Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
       a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
       `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
-      no longer has — the language button now sits in the tab shell's own footer. Removing the
-      space changes the screen's layout, so it is its own change.
+      no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
+      space changes the screen's layout, so it is its own change. Likewise the till's
+      `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
+      above the bottom edge, the room the old bottom-right language button (later the footer)
+      took; decide whether it should drop to the bottom edge. On the dashboard, the language
+      chooser's menu is now a native popover in the top layer (A187), so it paints over the alert
+      pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`, which hangs below the
+      banner at its trailing edge with `z-index: 40`, a stacking order the top layer ignores): where
+      the two overlap, an alert arriving while the menu is open is hidden under it, and its
+      countdown keeps running,
+      since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
+      or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a

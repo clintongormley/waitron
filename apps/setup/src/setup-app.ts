@@ -20,7 +20,7 @@ import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
-import "@waitron/ui/src/components/wt-language-footer.js";
+import "@waitron/ui/src/components/wt-language-chooser.js";
 import type {
   AdoptBody,
   ApiError,
@@ -334,30 +334,36 @@ export class SetupApp extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      /* A column at least one window tall, so a short page still ends with its footer at the
-         window's foot. */
+      /* Keeps the card's margins inside the wizard rather than collapsing into the page's. */
       :host {
-        display: flex;
-        flex-direction: column;
-        min-height: 100dvh;
-      }
-
-      main,
-      wt-language-footer {
-        box-sizing: border-box;
-        width: min(calc(var(--wt-space-6) * 22), calc(100% - 2 * var(--wt-modal-inline-margin)));
+        display: flow-root;
       }
 
       main {
-        margin: var(--wt-space-5) auto 0;
+        box-sizing: border-box;
+        width: min(calc(var(--wt-space-6) * 22), calc(100% - 2 * var(--wt-modal-inline-margin)));
+        margin: var(--wt-space-5) auto;
         padding: var(--wt-space-5) var(--wt-modal-inline-padding);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
         background: var(--wt-color-surface-raised);
       }
 
-      wt-language-footer {
-        margin: auto auto 0;
+      main > header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+      }
+
+      @media (max-width: 40rem) {
+        wt-language-chooser::part(name) {
+          display: none;
+        }
+
+        wt-language-chooser::part(code) {
+          display: inline;
+        }
       }
 
       .logo svg {
@@ -1109,37 +1115,37 @@ export class SetupApp extends LitElement {
   override render(): TemplateResult {
     // Listening on the container lets each screen talk back without the shell knowing which is mounted.
     return html`<main
-        @setup-defaults-requested=${(event: CustomEvent) => {
-          event.stopPropagation();
-          void this.#loadVenueDefaults();
-        }}
-        @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
-        @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
-        @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
-        @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
-        @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
-        @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
-          void this.#onRestoreRequested(e)}
-        @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
-          void this.#onBucketRestoreRequested(e)}
-        @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
-        @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
-          void this.#onConfigurationRequested(e)}
-        @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
-        @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
-          void this.#onResetRequested(e)}
-      >
-        <header>
-          <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
-            ${unsafeHTML(waitronLockup)}
-          </div>
-        </header>
-        ${this.#renderScreen()}
-      </main>
-      <wt-language-footer
-        .active=${currentLocale()}
-        @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
-      ></wt-language-footer>`;
+      @setup-defaults-requested=${(event: CustomEvent) => {
+        event.stopPropagation();
+        void this.#loadVenueDefaults();
+      }}
+      @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
+      @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
+      @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
+      @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
+      @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
+      @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
+        void this.#onRestoreRequested(e)}
+      @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
+        void this.#onBucketRestoreRequested(e)}
+      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
+      @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
+        void this.#onConfigurationRequested(e)}
+      @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
+      @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
+        void this.#onResetRequested(e)}
+    >
+      <header>
+        <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
+          ${unsafeHTML(waitronLockup)}
+        </div>
+        <wt-language-chooser
+          .active=${currentLocale()}
+          @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
+        ></wt-language-chooser>
+      </header>
+      ${this.#renderScreen()}
+    </main>`;
   }
 
   #renderScreen(): TemplateResult {

@@ -1,12 +1,13 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-language-footer.js";
+import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TillApi } from "../api/client.js";
+import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 
 const POLL_MS = 2_000;
 
@@ -24,25 +25,19 @@ const POLL_MS = 2_000;
 export class TillEnrolScreen extends LitElement {
   static override styles = [
     baseStyles,
+    languageChooserStyles,
     css`
       :host {
-        display: flex;
-        flex-direction: column;
-        min-height: 100dvh;
+        display: block;
       }
 
       /* A narrow reading column so the field + button stack rather than span a device edge-to-edge. */
       .screen {
         display: flex;
-        flex: 1;
         max-width: var(--till-enrol-max-width, 24rem);
         margin-inline: auto;
         flex-direction: column;
         gap: var(--wt-space-3);
-      }
-
-      wt-language-footer {
-        padding-inline: var(--wt-space-3);
       }
 
       .title {
@@ -150,6 +145,12 @@ export class TillEnrolScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
+      <div class="language-corner">
+        <wt-language-chooser
+          active=${currentLocale()}
+          .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+        ></wt-language-chooser>
+      </div>
       <section class="screen">
         ${
           this.phase === "waiting"
@@ -159,10 +160,6 @@ export class TillEnrolScreen extends LitElement {
               : this.#renderName()
         }
       </section>
-      <wt-language-footer
-        active=${currentLocale()}
-        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-      ></wt-language-footer>
     `;
   }
 

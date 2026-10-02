@@ -34,7 +34,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { LocaleChangeController } from "./state/locale-controller.js";
-import "@waitron/ui/src/components/wt-language-footer.js";
+import "@waitron/ui/src/components/wt-language-chooser.js";
 import "./screens/login-screen.js";
 import "./screens/profile-screen.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
@@ -248,20 +248,6 @@ export class DashboardApp extends LitElement {
         flex-direction: column;
         height: 100%;
         max-height: 100vh;
-      }
-
-      /* At least the page's height, so a short sign-in form still ends with its footer at the foot. */
-      .login-page {
-        display: flex;
-        flex-direction: column;
-        min-height: 100%;
-      }
-
-      .login-page > .body,
-      .login-page dashboard-login-screen {
-        display: flex;
-        flex-direction: column;
-        flex: 1 0 auto;
       }
 
       /* Two-column app chrome below the banner: a fixed-width sidebar beside the main column. */
@@ -495,11 +481,6 @@ export class DashboardApp extends LitElement {
         padding: var(--wt-space-4);
       }
 
-      .main > wt-language-footer {
-        margin-top: auto;
-        padding-inline: var(--wt-space-4);
-      }
-
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
          content row, below the banner. It leaves the flow and slides in when the layout gains
          the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
@@ -507,9 +488,10 @@ export class DashboardApp extends LitElement {
          constant that drives the narrow state); 48rem matches the existing repo precedent in
          apps/till/src/screens/till-counter-screen.ts:111. */
       @media (max-width: 48rem) {
-        /* A phone cannot fit the lockup, the legal name, the mode pill and both menus on one line, so
-           the name and pill take a second row and the menus stay at the trailing edge of the first.
-           The lockup's column is the one that shrinks, so the menus keep the first row. */
+        /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
+           one line, so the name and pill take a second row and the trailing controls stay at the
+           trailing edge of the first. The lockup's column is the one that shrinks, so the trailing
+           controls keep the first row. */
         .brand-banner {
           display: grid;
           grid-template-columns: auto minmax(0, max-content) 1fr auto;
@@ -563,6 +545,15 @@ export class DashboardApp extends LitElement {
         }
         .layout.drawer-open .sidebar {
           transform: translateX(0);
+        }
+      }
+
+      @media (max-width: 40rem) {
+        wt-language-chooser::part(name) {
+          display: none;
+        }
+        wt-language-chooser::part(code) {
+          display: inline;
         }
       }
     `,
@@ -646,7 +637,7 @@ export class DashboardApp extends LitElement {
       this.contentLanguageError = codeOf(error);
     },
   );
-  /** A stable field, so the footer's `loadLocales` property does not change on every render. */
+  /** A stable field, so the chooser's `loadLocales` property does not change on every render. */
   readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
   @state() private alerts: AlertView[] = [];
   @state() private alertsVisible = false;
@@ -1148,14 +1139,13 @@ export class DashboardApp extends LitElement {
   override render(): TemplateResult {
     if (this.screen === "login") {
       // The login controller repaints translated text without discarding credentials or account setup.
-      // Its chooser bubbles here so the shell can apply the transient pre-login language choice.
       return html`
-        <div class="login-page">
+        <div
+          class="login-page"
+          @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        >
           ${this.#banner(false, false)}
-          <div
-            class="body"
-            @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
-          >
+          <div class="body">
             <dashboard-login-screen
               .api=${this.api}
               .noticeCode=${this.sessionNoticeCode}
@@ -1234,10 +1224,6 @@ export class DashboardApp extends LitElement {
                     : nothing
               }
             </div>
-            <wt-language-footer
-              .active=${currentLocale()}
-              .loadLocales=${this.#loadLocales}
-            ></wt-language-footer>
           </div>
         </div>
         ${this.#renderProfileModal()}
@@ -1272,55 +1258,60 @@ export class DashboardApp extends LitElement {
           }
         </span>
       </div>
-      ${
-        authenticated
-          ? html`<div class="banner-actions">
-              ${
-                this.alertsVisible
-                  ? html`<dashboard-alerts-bell
-                      data-test="alerts-bell"
-                      .alerts=${this.alerts}
-                      .error=${this.alertError}
-                      .busyKey=${this.alertBusyKey}
-                      .canOpen=${this.#canOpenScreen}
-                      @wt-alert-handle=${(e: CustomEvent<{ incidentId: string; key: string }>) =>
-                        void this.#onAlertHandle(e)}
-                      @wt-alerts-see-all=${(e: Event) => {
-                        e.stopPropagation();
-                        this.#selectScreen("alerts");
-                      }}
-                      @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
-                        e.stopPropagation();
-                        this.#selectScreen(e.detail.screen);
-                      }}
-                    ></dashboard-alerts-bell>`
-                  : nothing
-              }
-              <wt-row-actions
-                icon="person"
-                align="end"
-                .iconSize=${"lg"}
-                label=${t("nav.account_menu")}
-                data-test="account-menu"
-              >
-                <wt-button
-                  variant="ghost"
-                  align="start"
-                  data-test="profile"
-                  @click=${() => this.#openProfile()}
-                  >${t("action.account_settings")}</wt-button
+      <div class="banner-actions">
+        <wt-language-chooser
+          data-test="language-chooser"
+          .active=${currentLocale()}
+          .loadLocales=${this.#loadLocales}
+        ></wt-language-chooser>
+        ${
+          authenticated
+            ? html`${
+                  this.alertsVisible
+                    ? html`<dashboard-alerts-bell
+                        data-test="alerts-bell"
+                        .alerts=${this.alerts}
+                        .error=${this.alertError}
+                        .busyKey=${this.alertBusyKey}
+                        .canOpen=${this.#canOpenScreen}
+                        @wt-alert-handle=${(e: CustomEvent<{ incidentId: string; key: string }>) =>
+                          void this.#onAlertHandle(e)}
+                        @wt-alerts-see-all=${(e: Event) => {
+                          e.stopPropagation();
+                          this.#selectScreen("alerts");
+                        }}
+                        @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
+                          e.stopPropagation();
+                          this.#selectScreen(e.detail.screen);
+                        }}
+                      ></dashboard-alerts-bell>`
+                    : nothing
+                }
+                <wt-row-actions
+                  icon="person"
+                  align="end"
+                  .iconSize=${"lg"}
+                  label=${t("nav.account_menu")}
+                  data-test="account-menu"
                 >
-                <wt-button
-                  variant="ghost"
-                  align="start"
-                  data-test="logout"
-                  @click=${() => void this.#onLogout()}
-                  >${t("action.logout")}</wt-button
-                >
-              </wt-row-actions>
-            </div>`
-          : nothing
-      }
+                  <wt-button
+                    variant="ghost"
+                    align="start"
+                    data-test="profile"
+                    @click=${() => this.#openProfile()}
+                    >${t("action.account_settings")}</wt-button
+                  >
+                  <wt-button
+                    variant="ghost"
+                    align="start"
+                    data-test="logout"
+                    @click=${() => void this.#onLogout()}
+                    >${t("action.logout")}</wt-button
+                  >
+                </wt-row-actions>`
+            : nothing
+        }
+      </div>
     </header>`;
   }
 

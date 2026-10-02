@@ -21,7 +21,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
@@ -32,7 +32,6 @@ import {
   readLoginPreference,
   prepareGoogleLoginPreference,
 } from "../login-preference.js";
-import "@waitron/ui/src/components/wt-language-footer.js";
 
 interface CompletedLogin {
   personId: string;
@@ -67,16 +66,10 @@ export class LoginScreen extends LitElement {
         display: block;
       }
 
-      .screen,
-      wt-language-footer {
+      .screen {
         width: 100%;
         max-width: 30rem;
         margin-inline: auto;
-      }
-
-      /* Where the app makes the host a page-tall column, this keeps the footer at its foot. */
-      wt-language-footer {
-        margin-top: auto;
       }
 
       .field {
@@ -965,16 +958,6 @@ export class LoginScreen extends LitElement {
       </div>`;
   }
 
-  /** A stable field, so the footer's `loadLocales` property does not change on every render. */
-  readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
-
-  #languageFooter() {
-    return html`<wt-language-footer
-      .active=${currentLocale()}
-      .loadLocales=${this.#loadLocales}
-    ></wt-language-footer>`;
-  }
-
   #privacyLink() {
     return this.privacyNoticeUrl === ""
       ? nothing
@@ -1132,7 +1115,6 @@ export class LoginScreen extends LitElement {
           }
           ${this.#privacyLink()}
         </div>
-        ${this.#languageFooter()}
       `;
     }
     const submitTarget =
@@ -1407,7 +1389,6 @@ export class LoginScreen extends LitElement {
         }
         ${this.#privacyLink()}
       </div>
-      ${this.#languageFooter()}
     `;
   }
 }

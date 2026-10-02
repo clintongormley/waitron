@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { commands } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { beforeEach, expect, vi, type Mock } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { normaliseDraftLines } from "@waitron/shared";
@@ -105,6 +105,38 @@ export function formatViolations(violations: axe.Result[]): string {
       return `${violation.id} [${violation.impact}]: ${violation.help}\n  targets: ${targets}`;
     })
     .join("\n\n");
+}
+
+/** The trigger's visible text and the name a screen reader hears, at one viewport width. */
+export interface ChooserFace {
+  shown: string[];
+  name: string | null;
+}
+
+/**
+ * What a `wt-language-chooser` trigger shows at 1280 and at 390 wide, restoring the viewport after.
+ */
+export async function chooserFaces(
+  chooser: Element,
+): Promise<{ wide: ChooserFace; phone: ChooserFace }> {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const faceAt = async (w: number): Promise<ChooserFace> => {
+    await page.viewport(w, 844);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const trigger = chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+    return {
+      shown: [...trigger.querySelectorAll<HTMLElement>("[part]")]
+        .filter((part) => getComputedStyle(part).display !== "none")
+        .map((part) => part.textContent!.trim()),
+      name: trigger.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
+    };
+  };
+  try {
+    return { wide: await faceAt(1280), phone: await faceAt(390) };
+  } finally {
+    await page.viewport(width, height);
+  }
 }
 
 /** Runs the full default axe ruleset against `context` and fails the test on any violation. */

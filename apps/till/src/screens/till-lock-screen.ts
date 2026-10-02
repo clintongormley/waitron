@@ -1,11 +1,12 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-language-footer.js";
+import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
+import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
 
@@ -44,22 +45,16 @@ export class TillLockScreen extends LitElement {
 
   static override styles = [
     baseStyles,
+    languageChooserStyles,
     css`
       :host {
-        display: flex;
-        flex-direction: column;
-        min-height: 100dvh;
+        display: block;
       }
 
       /* Cap the login form and centre it — a wide till never stretches the roster or pad edge to edge. */
       .screen {
-        flex: 1;
         max-width: 24rem;
         margin-inline: auto;
-      }
-
-      wt-language-footer {
-        padding-inline: var(--wt-space-3);
       }
 
       .heading {
@@ -298,6 +293,12 @@ export class TillLockScreen extends LitElement {
 
   override render() {
     return html`
+      <div class="language-corner">
+        <wt-language-chooser
+          active=${currentLocale()}
+          .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+        ></wt-language-chooser>
+      </div>
       <div class="screen">
         ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
         ${
@@ -314,10 +315,6 @@ export class TillLockScreen extends LitElement {
         }
       </div>
       ${this.#renderServers()}
-      <wt-language-footer
-        active=${currentLocale()}
-        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-      ></wt-language-footer>
     `;
   }
 

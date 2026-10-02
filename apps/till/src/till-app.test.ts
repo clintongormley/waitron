@@ -8685,7 +8685,36 @@ describe("till-app", () => {
       // The counter is still handed the app's api (threaded by the shell's tab body).
       expect(c.api).toBe(currentApi);
       // The shell owns the chooser while the counter stays embedded.
-      expect(shell(el)!.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
+      expect(shell(el)!.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
+    });
+
+    /** Opens a chooser by its trigger and picks `code` from the list, as a person does. */
+    async function pickLanguage(chooser: Element, code: string): Promise<void> {
+      chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+      await vi.waitFor(() => {
+        expect(chooser.shadowRoot!.querySelector(`[data-test="lang-${code}"]`)).not.toBeNull();
+      });
+      chooser.shadowRoot!.querySelector<HTMLElement>(`[data-test="lang-${code}"]`)!.click();
+    }
+
+    it("a pick from the bar's chooser saves the operator's language, then switches to it", async () => {
+      const putLocale = vi.fn().mockResolvedValue(undefined);
+      const { el } = await mountApp({ putLocale });
+      await toCounterAs(el, null);
+      expect(currentLocale()).toBe("es-ES");
+      await pickLanguage(shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!, "en-GB");
+      await flush(el);
+      expect(putLocale).toHaveBeenCalledWith("en-GB");
+      expect(currentLocale()).toBe("en-GB");
+    });
+
+    it("a pick from the lock screen's chooser switches the language without saving it", async () => {
+      const { el } = await mountApp();
+      await flush(el);
+      await pickLanguage(lock(el)!.shadowRoot!.querySelector("wt-language-chooser")!, "en-GB");
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      expect(currentApi.putLocale).not.toHaveBeenCalled();
     });
 
     it("does not revert the locale if the app disconnects mid-logout", async () => {
@@ -9002,7 +9031,7 @@ describe("till-app", () => {
   });
 });
 
-it("keeps the counter's language footer in view below its content", async () => {
+it("keeps the shell's language chooser in its bar, above the counter as it scrolls", async () => {
   const width = window.innerWidth;
   const height = window.innerHeight;
   await page.viewport(390, 900);
@@ -9011,15 +9040,21 @@ it("keeps the counter's language footer in view below its content", async () => 
     await toCounter(el);
     selectTab(el, "counter");
     await flush(el);
-    const footer = shell(el)!.shadowRoot!.querySelector("wt-language-footer")!;
-    const trigger = footer.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
-    expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
+    const chooser = shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!;
+    const trigger = chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+    const head = shell(el)!.shadowRoot!.querySelector<HTMLElement>("header")!;
     const body = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".body")!;
     body.scrollTop = body.scrollHeight;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(trigger.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      head.getBoundingClientRect().top,
+    );
+    expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      body.getBoundingClientRect().top,
+    );
     const hold = tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".hold")!;
     expect(hold.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      footer.getBoundingClientRect().top,
+      body.getBoundingClientRect().bottom,
     );
   } finally {
     await page.viewport(width, height);
@@ -9041,7 +9076,7 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
     });
     await flush(el);
     const screen = el.shadowRoot!.querySelector("till-lock-screen")!;
-    const chooser = screen.shadowRoot!.querySelector("wt-language-footer")!;
+    const chooser = screen.shadowRoot!.querySelector("wt-language-chooser")!;
     window.scrollTo(0, document.documentElement.scrollHeight);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const trigger = chooser
@@ -9058,12 +9093,12 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
     window.scrollTo(0, document.documentElement.scrollHeight);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const language = enrol
-      .shadowRoot!.querySelector("wt-language-footer")!
+      .shadowRoot!.querySelector("wt-language-chooser")!
       .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
       .getBoundingClientRect();
-    expect(
-      enrol.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.getBoundingClientRect().bottom,
-    ).toBeLessThanOrEqual(language.top);
+    expect(language.bottom).toBeLessThanOrEqual(
+      enrol.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.getBoundingClientRect().top,
+    );
   } finally {
     await page.viewport(width, height);
     window.scrollTo(0, 0);

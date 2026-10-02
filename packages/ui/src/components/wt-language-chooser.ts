@@ -10,47 +10,53 @@ export interface WtLocaleOption {
 }
 
 /**
- * A page footer holding the language chooser. It never changes the language itself: the parent
+ * The language chooser for an app's top bar. It never changes the language itself: the parent
  * sets `active` and decides what a pick means.
+ *
+ * The trigger draws the full name (`part="name"`) and the short code (`part="code"`, hidden). An
+ * app swaps them at phone width with its own `::part()` rules, because a primitive here may hold no
+ * literal breakpoint and a media query cannot read a token.
  *
  * The options are NATIVE `<button role="menuitemradio">` elements as direct children of the
  * `role="menu"` container, so the role and `aria-checked` land on the element a screen reader
  * reaches (a `wt-button` does not forward a role or `aria-checked` to its inner button).
  */
-@customElement("wt-language-footer")
-export class WtLanguageFooter extends LitElement {
+@customElement("wt-language-chooser")
+export class WtLanguageChooser extends LitElement {
   static override styles = [
     baseStyles,
     css`
       :host {
-        display: block;
-      }
-
-      footer {
-        display: flex;
-        justify-content: flex-end;
-        padding-block: var(--wt-space-3) max(var(--wt-space-3), env(safe-area-inset-bottom));
-        padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+        display: inline-block;
       }
 
       .chooser {
-        position: relative;
+        display: flex;
       }
 
+      .code {
+        display: none;
+      }
+
+      /* In the top layer, so no positioned content later in the page can paint over it. A manual
+         popover, because the chooser's own outside-press and Escape handling decide when it closes. */
       .menu {
-        position: absolute;
-        z-index: 1;
-        bottom: calc(100% + var(--wt-space-1));
-        inset-inline-end: 0;
-        max-width: calc(100vw - 2 * var(--wt-space-3));
-        min-width: 100%;
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        margin-block-start: var(--wt-space-1);
         padding: var(--wt-space-1);
-        display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
         background: var(--wt-color-surface);
+        color: var(--wt-color-text);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
+        box-shadow: var(--wt-shadow-2);
+      }
+
+      .menu:popover-open {
+        display: flex;
       }
 
       .option {
@@ -99,9 +105,19 @@ export class WtLanguageFooter extends LitElement {
 
   #listening = false;
 
+  #scrollTargets: EventTarget[] = [];
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#close();
+  }
+
+  /** Shown and placed in the same update that draws the menu: placed any later, its first frame is not. */
+  override updated(): void {
+    const menu = this.#menu();
+    if (menu === null) return;
+    if (!menu.matches(":popover-open")) menu.showPopover();
+    this.#place();
   }
 
   #toggle(): void {
@@ -149,6 +165,10 @@ export class WtLanguageFooter extends LitElement {
     this.#listening = false;
     document.removeEventListener("pointerdown", this.#onOutside, true);
     document.removeEventListener("focusin", this.#onOutside);
+    for (const target of this.#scrollTargets.splice(0)) {
+      target.removeEventListener("scroll", this.#place, true);
+    }
+    window.removeEventListener("resize", this.#place);
   }
 
   #listen(): void {
@@ -156,6 +176,41 @@ export class WtLanguageFooter extends LitElement {
     this.#listening = true;
     document.addEventListener("pointerdown", this.#onOutside, true);
     document.addEventListener("focusin", this.#onOutside);
+    // A scroll event does not leave its shadow root, so each root between here and the document
+    // is listened on as well as the window.
+    this.#scrollTargets = [window];
+    for (
+      let root = this.getRootNode();
+      root instanceof ShadowRoot;
+      root = root.host.getRootNode()
+    ) {
+      this.#scrollTargets.push(root);
+    }
+    for (const target of this.#scrollTargets) target.addEventListener("scroll", this.#place, true);
+    window.addEventListener("resize", this.#place);
+  }
+
+  /** Below the trigger, trailing edges aligned, and 8px clear of both sides of the viewport. */
+  #place = (): void => {
+    const menu = this.#menu();
+    if (menu === null) return;
+    const trigger = this.#trigger().getBoundingClientRect();
+    // A popover's default fit-content width would be measured against the left written by the
+    // previous placement, so after a resize the labels would wrap into the room that left allows.
+    menu.style.width = "max-content";
+    menu.style.minWidth = `${trigger.width}px`;
+    // From clientWidth rather than 100vw, which counts a scrollbar the clamp below must not.
+    const room = document.documentElement.clientWidth;
+    menu.style.maxWidth = `${room - 16}px`;
+    menu.style.top = `${trigger.bottom}px`;
+    const width = menu.getBoundingClientRect().width;
+    const wanted =
+      getComputedStyle(this).direction === "rtl" ? trigger.left : trigger.right - width;
+    menu.style.left = `${Math.max(8, Math.min(wanted, room - width - 8))}px`;
+  };
+
+  #menu(): HTMLElement | null {
+    return this.renderRoot.querySelector<HTMLElement>('[role="menu"]');
   }
 
   #onOutside = (event: Event): void => {
@@ -218,6 +273,10 @@ export class WtLanguageFooter extends LitElement {
     );
   }
 
+  #shortCode(code: string): string {
+    return code.split("-")[0]!.toUpperCase();
+  }
+
   #label(code: string): string {
     return (
       this.locales?.find((l) => l.code === code)?.label ??
@@ -227,46 +286,47 @@ export class WtLanguageFooter extends LitElement {
   }
 
   override render() {
+    const label = this.#label(this.active);
     return html`
-      <footer>
-        <div class="chooser" @keydown=${(event: KeyboardEvent) => this.#onKeydown(event)}>
-          <wt-button
-            variant="secondary"
-            data-test="lang-trigger"
-            aria-haspopup="menu"
-            aria-expanded=${this.open}
-            @click=${() => this.#toggle()}
-          >
-            ${this.#label(this.active)}
-          </wt-button>
-          ${
-            this.open && this.locales
-              ? html`<div class="menu" role="menu">
-                  ${this.locales.map(
-                    (l) => html`
-                      <button
-                        type="button"
-                        class="option"
-                        role="menuitemradio"
-                        aria-checked=${l.code === this.active}
-                        data-test=${`lang-${l.code}`}
-                        @click=${(event: Event) => this.#pick(event, l.code)}
-                      >
-                        ${l.label}
-                      </button>
-                    `,
-                  )}
-                </div>`
-              : nothing
-          }
-        </div>
-      </footer>
+      <div class="chooser" @keydown=${(event: KeyboardEvent) => this.#onKeydown(event)}>
+        <wt-button
+          variant="secondary"
+          data-test="lang-trigger"
+          aria-label=${label}
+          aria-haspopup="menu"
+          aria-expanded=${this.open}
+          @click=${() => this.#toggle()}
+        >
+          <span class="name" part="name">${label}</span>
+          <span class="code" part="code" aria-hidden="true">${this.#shortCode(this.active)}</span>
+        </wt-button>
+        ${
+          this.open && this.locales
+            ? html`<div class="menu" role="menu" popover="manual">
+                ${this.locales.map(
+                  (l) => html`
+                    <button
+                      type="button"
+                      class="option"
+                      role="menuitemradio"
+                      aria-checked=${l.code === this.active}
+                      data-test=${`lang-${l.code}`}
+                      @click=${(event: Event) => this.#pick(event, l.code)}
+                    >
+                      ${l.label}
+                    </button>
+                  `,
+                )}
+              </div>`
+            : nothing
+        }
+      </div>
     `;
   }
 }
 
 declare global {
   interface HTMLElementTagNameMap {
-    "wt-language-footer": WtLanguageFooter;
+    "wt-language-chooser": WtLanguageChooser;
   }
 }

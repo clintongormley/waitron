@@ -10,7 +10,6 @@ const mounted: HTMLElement[] = [];
 
 afterEach(() => {
   for (const host of mounted.splice(0)) host.remove();
-  document.scrollingElement!.scrollTop = 0;
   document.body.style.margin = "";
   setLocale("en-GB");
 });
@@ -54,10 +53,14 @@ const overlaps = (a: DOMRect, b: DOMRect) =>
 
 const INTERACTIVE = "button, a[href], input, select, textarea, wt-button, wt-card, [tabindex]";
 
-// A small phone's height (iPhone SE), short enough that every screen below scrolls.
+// A small phone's height (iPhone SE).
 const VIEWPORT_HEIGHT = 667;
 
-describe("the language chooser, with the page scrolled to the bottom", () => {
+type Chooser = HTMLElement & { updateComplete: Promise<unknown> };
+
+const chooserOf = (el: SetupApp) => el.shadowRoot!.querySelector<Chooser>("wt-language-chooser")!;
+
+describe("the language chooser in the card's header", () => {
   const cases = (["admin", "venue", "cert", "connect", "restore-bucket", "mode"] as const).flatMap(
     (screen) =>
       (["en-GB", "es-ES"] as const).flatMap((locale) =>
@@ -70,25 +73,53 @@ describe("the language chooser, with the page scrolled to the bottom", () => {
     async ({ screen, locale, width }) => {
       await page.viewport(width, VIEWPORT_HEIGHT);
       const el = await mountAt(screen, [locale]);
-      const scroller = document.scrollingElement!;
-      scroller.scrollTop = scroller.scrollHeight;
 
-      const trigger = el
-        .shadowRoot!.querySelector("wt-language-footer")!
+      const trigger = chooserOf(el)
         .shadowRoot!.querySelector("[data-test=lang-trigger]")!
         .getBoundingClientRect();
       const screenRoot = el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)!.shadowRoot!;
-      const covered = [...screenRoot.querySelectorAll<HTMLElement>(INTERACTIVE)]
+      const logo = el.shadowRoot!.querySelector("[data-test=setup-logo]")!;
+      const covered = [...screenRoot.querySelectorAll<HTMLElement>(INTERACTIVE), logo]
         .filter((node) => overlaps(trigger, node.getBoundingClientRect()))
         .map((node) => `${node.localName} "${node.textContent!.trim().slice(0, 40)}"`);
       expect(covered).toEqual([]);
     },
   );
 
-  it("is measured on a screen tall enough to scroll at phone width", async () => {
-    await page.viewport(390, VIEWPORT_HEIGHT);
-    await mountAt("admin", ["es-ES"]);
-    const scroller = document.scrollingElement!;
-    expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
-  });
+  it.each(cases)(
+    "opens its menu on screen and over the $screen screen ($locale, $width wide)",
+    async ({ screen, locale, width }) => {
+      await page.viewport(width, VIEWPORT_HEIGHT);
+      const el = await mountAt(screen, [locale]);
+      const chooser = chooserOf(el);
+      chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]")!.click();
+      await new Promise((resolve) => setTimeout(resolve));
+      await chooser.updateComplete;
+
+      const menu = chooser.shadowRoot!.querySelector<HTMLElement>("[role=menu]")!;
+      const box = menu.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+
+      const screenTop = el
+        .shadowRoot!.querySelector(`[data-test=screen-${screen}]`)!
+        .getBoundingClientRect().top;
+      const options = [...menu.querySelectorAll<HTMLElement>("[role=menuitemradio]")];
+      expect(options.length).toBeGreaterThan(1);
+      for (const option of options) {
+        const r = option.getBoundingClientRect();
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        expect(document.elementFromPoint(x, y)).toBe(el);
+        expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(chooser);
+        expect(chooser.shadowRoot!.elementFromPoint(x, y)).toBe(option);
+      }
+      const last = options.at(-1)!.getBoundingClientRect();
+      expect(last.top + last.height / 2, "the menu reaches over the screen below").toBeGreaterThan(
+        screenTop,
+      );
+    },
+  );
 });
