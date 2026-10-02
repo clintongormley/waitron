@@ -1132,6 +1132,25 @@ portion as well as the dish quantity, and the receipt's `perDishOptionQuantity` 
 and the kitchen ticket's `extraLabel` must print an amount, with the unit's abbreviation. The
 amounts reach a sale record, so this takes the full review path (risk trigger: fiscal invariants).
 
+**A menu's hours per location, and a publish date for a new version (A204, owner 2026-10-02) —
+OPEN, not designed.** The owner: _"we should be able to specify what times of of which days each
+menu is live in each location, and a publish date for a new version of a menu"_, and _"that can be
+a backlog item for now"_. Today publishing is immediate: `menu_publications` holds each menu's one
+live version (`packages/catalogue/src/schema/publication.ts`), and the SP18 row of the roadmap
+table below lists "menu schedule" as not done. **Wanted:**
+
+- per location, the days of the week and the times of day each menu is live (e.g. the lunch menu
+  Monday to Friday 13:00–16:00 at one location only);
+- a new version of a menu can be published with a future date and time, going live then rather
+  than at once, while the current version stays live until it does.
+
+Station opening hours (slice 3b, #1024) already store per-weekday intervals
+(`station_hours`, `packages/venue-service/src/schema/station-times.ts`); reuse that shape rather
+than invent a second one. Not looked into: how a till chooses its menus today, what a till shows
+for a menu outside its hours (an order already open on it, a held dish), the business day that
+ends after midnight (`when the day ends` in setup), and what a scheduled version does if a newer
+one is published before it goes live. Needs a brainstorm and spec before building.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
