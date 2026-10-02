@@ -1175,7 +1175,7 @@ expanded, on both Add and Edit, and can still be collapsed. Read as the single o
 the screenshots show; the options LIST form's section is left as it is — ask if both were meant.
 
 **A folded names section's line puts a colon after each field's name (A200, owner 2026-10-02) —
-OPEN.** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
+DONE.** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
 rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
 · ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
 line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
@@ -1185,8 +1185,8 @@ in the summary's usual muted text. (C, the field names in full-strength text rat
 the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give
 the primitive a way to take the parts (a slot, or name/value pairs) rather than building markup in
 each screen. Since A171 the line holds only the customer-facing names, so it has no "Kitchen:" part.
-(2026-10-02: `summaryFields`, built for A219, is that way; the product editor's Kitchen and
-Descriptors lines and `namesLine` still pass plain strings.)
+(2026-10-02: `summaryFields`, built for A219, is that way; `namesLine` and the product editor's
+Kitchen line now use it, and the Descriptors line uses `summaryRows`, built for this item.)
 
 **The product editor's folded sections follow the same pattern, with real values (owner,
 2026-10-02):** _"regarding products, i think we should include the field values not just the fact
@@ -1214,6 +1214,21 @@ that they're filled in, and we should show a thumbnail of the image too"_. Today
   target, a focus ring, and a name a screen reader reads ("Change photo" / "Add photo").
 
 LOOK at it at phone width, where a long English description leaves little room for the Spanish.
+
+**Built:** `wt-disclosure` gained `summaryRows` (one row per field, each cut with an ellipsis after
+its own number of lines). `namesLine` returns name and value pairs, so the extras and options lists'
+line reads "**EN:** Make it yours · **ES:** Añádele algo". The Kitchen line's labels are the field's
+own "Kitchen name" ("Nombre de cocina") and a new short "Course" ("Curso"). In the Descriptors rows
+only "Name:" and "Description:" are bold; the language codes are plain text, as the decision above
+writes them. The photo is the thumbnail form of `dashboard-image-upload` (`thumbnail`), beside Name
+and stopping where the other fields stop; it is named "Add photo" or "Change photo"; an inherited
+photo has a dashed border and the caption "The main product's photo" under the row. In the editor,
+Remove moved into the image library window's footer, shown when the product has a photo of its own;
+the variant form and the section details form keep today's photo control. With no
+`api` there is no photo and Name takes the whole row. A refused photo shows its reason under the
+photo and leaves Descriptors closed. Looked at, 2026-10-03, at 1280 and 390 wide in both themes and
+both languages: at 390 a long English description fills both of its lines, so the Spanish one does
+not show at all on the closed line.
 
 **Choosing a product in an extras list adds it at once (A201, owner 2026-10-02) — DONE.** The
 owner, on a screenshot of the extras list form's "Choose a product" dropdown beside an "Add

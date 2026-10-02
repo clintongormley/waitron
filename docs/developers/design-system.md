@@ -392,7 +392,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
-| `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `summaryFields` (`{ label, value }[]`; when it holds any, the closed line is these instead of `summary`: each value after its bold label and a colon, joined with a middot), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
+| `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `summaryFields` (`{ label, value }[]`; when it holds any, the closed line is these instead of `summary`: each value after its bold label and a colon, joined with a middot), `summaryRows` (`{ label, value, lines }[]`; when it holds any, it is used instead of both: one row per entry, the value after its bold label and a colon, each row cut with an ellipsis after its own `lines` lines, so a long value never widens the header), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
@@ -1086,8 +1086,10 @@ shows a product description today (the reader check in A220, `docs/backlog.md`).
   parent has not had reviewed, "Not yet reviewed" (`editor.allergens_unreviewed`) — never "None",
   which would claim a reviewed empty set. A variant's price in the variant table, where it has none of
   its own, is the product's price in the same grey italic. An image shows the fallback picture itself
-  (`dashboard-image-upload`'s `inheritedImage`) without a caption or Remove action; its alt text names
-  the main product's photo (`editor.inherited_image_alt`). A control whose empty state could also mean "none" (an allergen set,
+  (`dashboard-image-upload`'s `inheritedImage`) without a Remove action. In the variant form it has no
+  caption, and its alt text names the main product's photo (`editor.inherited_image_alt`); in the
+  product editor, where the photo is a thumbnail beside Name, it has a dashed border and that same
+  text as a caption under the row, which describes the photo button. A control whose empty state could also mean "none" (an allergen set,
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
   would declare the record free of what the fallback contains.
 
@@ -1111,15 +1113,20 @@ variant, and then folds too, with the base price and VAT on its closed line as n
 
 Three rules make the fold safe rather than merely tidy.
 
-**Every collapsed section carries a summary of what is inside it**, passed as `summary`, or as named
-values in `summaryFields`, so nothing a person has filled in becomes invisible. Build it from the
-values themselves, skipping the empty ones, joined with a middot: the Kitchen section reads `Café
-c/leche · Drinks` (kitchen name and course). An empty summary means an empty section, which is a
+**Every collapsed section carries a summary of what is inside it**, passed as `summary`, as named
+values in `summaryFields`, or as rows in `summaryRows`, so nothing a person has filled in becomes
+invisible. Build it from the values themselves, each after its field's name in bold, skipping the
+empty ones, joined with a middot: the Kitchen section reads "**Kitchen name:** Café c/leche ·
+**Course:** Drinks". The product editor's Descriptors section has one row per field, its languages
+side by side and only the field name bold — "**Name:** EN: Beef tenderloin · ES: Solomillo de
+ternera", cut after one line, then "**Description:** EN: … · ES: …", cut after two — so it stays two
+rows however many languages the venue has. An empty summary means an empty section, which is a
 useful signal in itself. A names section (the Options and Extras editors' "Customer-facing names")
-puts each language's customer-facing name after its upper-case code — `ES ¿Cómo la quiere hecha? ·
-EN How would you like it cooked?` — leaving blank names out, so a section with every name blank
-shows no line. It is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`). Those two
-editors keep the kitchen name out of the section, as a field of its own directly under Name.
+puts each language's customer-facing name after its upper-case code in bold — "**ES:** ¿Cómo la
+quiere hecha? · **EN:** How would you like it cooked?" — leaving blank names out, so a section with
+every name blank shows no line. It is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`)
+and passed as `summaryFields`. Those two editors keep the kitchen name out of the section, as a field
+of its own directly under Name.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
 stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the

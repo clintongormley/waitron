@@ -459,8 +459,9 @@ photo that exists was accepted.
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a summary of what is inside it, so nothing filled in is invisible while
-collapsed. Top to bottom: Name, Category, Available, Standalone ordering (absent on a variant's
-page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active),
+collapsed. Top to bottom: Name, with the photo beside it as a small button that opens the image
+library (absent when the editor is given no `api`), Category, Available, Standalone
+ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active),
 Variants, Modifiers, then Cancel and Save. An Inactive product's editor also opens with a line
 saying so, and offers Restore beside Save. Opened on a variant, the same form is the variant's own
 page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
