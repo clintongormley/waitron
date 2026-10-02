@@ -962,6 +962,41 @@ heading — and the spare width goes to the other columns. Its heading sets that
 "Acciones" is longer than "Actions": LOOK in both languages, and at phone width, where the column
 stays pinned at the screen's edge.
 
+**A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — OPEN.**
+The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to
+the right of the header, at the moment you don't see it"_. `wt-disclosure`
+(`packages/ui/src/components/wt-disclosure.ts`) lays its header out as a grid of `1fr auto`, so on a
+wide form the chevron sits at the far edge, away from the "Customer and kitchen names" heading it
+belongs to. **Wanted:** the chevron directly after the heading text. It is the shared primitive, so
+every collapsible section moves with it — the extras list form, the product editor and the content
+languages screen as well (`grep -rln wt-disclosure apps`); LOOK at each, and at phone width.
+
+**Clicking an option's row on the options list form opens that option (A197, owner 2026-10-02) —
+OPEN.** The owner: _"clicking on the options rows should open the edit page, like the previous
+screen"_ — the Modifiers screen's table, where a click anywhere on a row opens it (`wt-data-table`'s
+row activation). The options list form (`apps/dashboard/src/widgets/option-list-form.ts`) draws its
+own `<table>`, and an option opens only from its row menu. **Wanted:** a click on the row, or Enter
+on it, opens the option's edit form, while the drag handle, the Default radio and the row menu keep
+doing their own thing. The extras list form (`extra-list-form.ts`) draws the same kind of table;
+check it and give it the same if its rows open an editor.
+
+**The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — OPEN.** The
+owner, on two screenshots of the same three options, the Name column starting far to the right
+until one name is long enough to push it left: _"the drag handle column shouldn't auto-expand, so
+the Name column would start just to the left of it"_ (read as: just to the right of the handle).
+The form's table sets no column widths, so the browser shares the spare width among the handle,
+Default and menu columns. **Wanted:** the handle, Default and menu columns as narrow as their
+controls, and Name taking the rest. Same check on the extras list form's table. A195 asks the same
+of `wt-data-table`'s Actions column; one approach for both is welcome.
+
+**The option form opens with its names section expanded (A199, owner 2026-10-02) — OPEN.** The
+owner, on screenshots of "Add option": _"on the edit/add options page start with the names block
+expanded as there is very little else on this page"_. The single option's form
+(`apps/dashboard/src/widgets/option-label-form.ts`) holds only Name, the "Customer and kitchen names"
+section and Available, and its `wt-disclosure` starts closed. **Wanted:** the section opens
+expanded, on both Add and Edit, and can still be collapsed. Read as the single option's form, which
+the screenshots show; the options LIST form's section is left as it is — ask if both were meant.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
