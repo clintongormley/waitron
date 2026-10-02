@@ -4474,7 +4474,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `descriptions` (and `variant_descriptions`) and `working_order_id`. _(2026-10-02, C113: the
         Receipts page now changes a location's language, and refuses while an order could still
         write a line; that refusal can block indefinitely, so this trigger change is still wanted —
-        C113's entry under A8.)_
+        C113's entry under A8. Queued 2026-10-02 as lane C's C124.)_
       - A line outside any group that needs no kitchen, held, and first released after its bill was
         paid cannot be marked served: `sent_at` is its only record of release, and `stampSent`
         writes it only on an open bill, so the mark is refused `group.line_held`. Reproduced
@@ -8100,8 +8100,8 @@ ongoing overhaul listed at the top of Track A.
     tall on one grid (`packages/printing/src/escpos.ts:42`, `line()` at `:68`, which takes no size),
     and `apps/server/src/receipt-ticket.ts` uses no other way of drawing text — read, not checked on
     paper. Not changed here.
-- **One receipt language per location (C113, owner 2026-09-30) — done (2026-10-02, branch
-  `feat/receipt-language-per-location`).** The owner's decision: a receipt prints in ONE language,
+- **One receipt language per location (C113, owner 2026-09-30) — landed 2026-10-02 as #1014,
+  owner-approved.** The owner's decision: a receipt prints in ONE language,
   never two, with no choice at print time, and dish names print as they were saved.
   - The language is the first entry of the location's saved list (`locations.invoice_locales`),
     read in the transaction that files the sale (`readReceiptLanguage`,
@@ -8143,7 +8143,8 @@ ongoing overhaul listed at the top of Track A.
       no station took. A paid counter sale whose lines were all sent, a bill whose party has left
       and an abandoned bill do not. A never-served or never-sent line therefore blocks a change for
       as long as it stays. The real fix is a change to the order-line trigger, which is a migration
-      and was out of scope; the question is in the campaign's questions file.
+      and was out of scope. The owner asked for it on 2026-10-02: queued as lane C's C124 (narrow
+      both triggers, then narrow this refusal to the orders that can still trigger them).
     - After a change, a paid counter sale with one dish a station took and one it did not is not
       blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
       did before the change, and leaves the order's lines unchanged. No till screen calls that
@@ -8157,7 +8158,9 @@ ongoing overhaul listed at the top of Track A.
       en derivin», so a Catalan venue's slip is arguably covered.
     - **The translations need a native or official check before go-live.** Apart from the Catalan
       «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the
-      table was checked against a terminology source.
+      table was checked against a terminology source. The owner landed it as is on 2026-10-02
+      ("land, review words later"); a follow-up item that reviews the Catalan, Galician and Basque
+      words, and adds fuller translations, is being queued.
     - The provisioning command (`waitron-provision`) and the configuration import can still store
       two languages, or one no pack offers; the first entry is what prints. Neither holds Catalonia
       to Catalan: only the Receipts route and setup do.
