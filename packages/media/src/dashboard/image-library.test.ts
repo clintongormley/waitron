@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
 import type { ImageLibrary } from "./image-library.js";
 import { ImageApi, type LibraryImage } from "./client.js";
+import { MEDIA_STRINGS } from "./strings.js";
 
 const image: LibraryImage = {
   id: "one",
@@ -118,9 +119,7 @@ it("asks the server to sort names in the displayed content language", async () =
   el.api = new ImageApi(request as DashboardRequest);
   document.body.append(el);
   await el.updateComplete;
-  const sort = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-sort]")!;
-  sort.value = "name";
-  sort.dispatchEvent(new Event("change"));
+  await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=image-sort]")!, "name");
   await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("article")).toHaveLength(2));
   expect(
     [...el.shadowRoot!.querySelectorAll("article h2")].map((heading) => heading.textContent),
@@ -294,13 +293,82 @@ it("explains when a duplicate photo reuses the existing image and keeps its meta
   ).toBe("Pan");
 });
 
+type SortField = HTMLElement & {
+  label: string;
+  value: string;
+  search: string;
+  options: { value: string; label: string }[];
+};
+
+const ES = MEDIA_STRINGS.es;
+it.each([
+  {
+    locale: "en-GB",
+    sortLabel: "Sort by",
+    sorts: ["Relevance", "Date", "Name"],
+    orderLabel: "Order",
+    dates: ["Oldest first", "Newest first"],
+    names: ["A–Z", "Z–A"],
+  },
+  {
+    locale: "es",
+    sortLabel: ES["image.sort"],
+    sorts: [ES["image.relevance"], ES["image.date"], ES["image.name_sort"]],
+    orderLabel: ES["image.direction"],
+    dates: [ES["image.oldest_first"], ES["image.newest_first"]],
+    names: [ES["image.name_ascending"], ES["image.name_descending"]],
+  },
+])(
+  "draws the sort and its order as the shared dropdown, each showing the current choice ($locale)",
+  async ({ locale, sortLabel, sorts, orderLabel, dates, names }) => {
+    setLocale(locale);
+    await mount();
+    const sort = el.shadowRoot!.querySelector<SortField>("wt-combobox[name=image-sort]")!;
+    expect(sort).not.toBeNull();
+    expect(sort.label).toBe(sortLabel);
+    expect(sort.search).toBe("auto");
+    expect(sort.options).toEqual([
+      { value: "relevance", label: sorts[0] },
+      { value: "date", label: sorts[1] },
+      { value: "name", label: sorts[2] },
+    ]);
+    expect(sort.value).toBe("relevance");
+    await chooseOption(sort, "date");
+    await el.updateComplete;
+    const order = el.shadowRoot!.querySelector<SortField>("wt-combobox[name=image-direction]")!;
+    expect(order.label).toBe(orderLabel);
+    expect(order.search).toBe("auto");
+    expect(order.options).toEqual([
+      { value: "asc", label: dates[0] },
+      { value: "desc", label: dates[1] },
+    ]);
+    expect(order.value).toBe("desc");
+    await chooseOption(sort, "name");
+    await el.updateComplete;
+    expect(order.options.map((option) => option.label)).toEqual(names);
+    expect(order.value).toBe("asc");
+  },
+);
+
+it("keeps a sort or order change inside the library", async () => {
+  await mount();
+  const heard = vi.fn();
+  document.addEventListener("wt-change", heard);
+  try {
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=image-sort]")!, "date");
+    await el.updateComplete;
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=image-direction]")!, "asc");
+  } finally {
+    document.removeEventListener("wt-change", heard);
+  }
+  expect(heard).not.toHaveBeenCalled();
+});
+
 it("sends search and sort to the server", async () => {
   const client = await mount();
   field("image-search", "summer bread");
   await el.updateComplete;
-  const sort = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-sort]")!;
-  sort.value = "name";
-  sort.dispatchEvent(new Event("change"));
+  await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=image-sort]")!, "name");
   await vi.waitFor(() =>
     expect(client.listImages).toHaveBeenLastCalledWith({
       search: "summer bread",
@@ -342,9 +410,7 @@ it("changes the sort at once, with text typed but not yet searched, and does not
   vi.useFakeTimers();
   try {
     field("image-search", "chi");
-    const sort = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-sort]")!;
-    sort.value = "name";
-    sort.dispatchEvent(new Event("change"));
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=image-sort]")!, "name");
     await vi.advanceTimersByTimeAsync(0);
     expect(client.listImages).toHaveBeenCalledTimes(before + 1);
     expect(client.listImages).toHaveBeenLastCalledWith(
@@ -406,13 +472,12 @@ it.each([
   "offers both $sort directions and keeps relevance ranked in the picker=$picker library",
   async ({ sort, initial, reverse, picker }) => {
     const client = await mount(api(), picker);
-    expect(el.shadowRoot!.querySelector("select[name=image-direction]")).toBeNull();
-    const sorting = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-sort]")!;
-    sorting.value = sort;
-    sorting.dispatchEvent(new Event("change"));
+    expect(el.shadowRoot!.querySelector("[name=image-direction]")).toBeNull();
+    const sorting = el.shadowRoot!.querySelector<HTMLElement>("wt-combobox[name=image-sort]")!;
+    await chooseOption(sorting, sort);
     await el.updateComplete;
-    const direction = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "select[name=image-direction]",
+    const direction = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "wt-combobox[name=image-direction]",
     )!;
     expect(direction).not.toBeNull();
     expect(direction.value).toBe(initial);
@@ -421,17 +486,15 @@ it.each([
         expect.objectContaining({ sort, direction: initial, offset: 0 }),
       ),
     );
-    direction.value = reverse;
-    direction.dispatchEvent(new Event("change"));
+    await chooseOption(direction, reverse);
     await vi.waitFor(() =>
       expect(client.listImages).toHaveBeenLastCalledWith(
         expect.objectContaining({ sort, direction: reverse, offset: 0 }),
       ),
     );
-    sorting.value = "relevance";
-    sorting.dispatchEvent(new Event("change"));
+    await chooseOption(sorting, "relevance");
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("select[name=image-direction]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[name=image-direction]")).toBeNull();
     await vi.waitFor(() =>
       expect(client.listImages).toHaveBeenLastCalledWith({
         search: "",
