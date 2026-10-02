@@ -84,6 +84,31 @@ it("localises the refusals of changing a sent line in both languages", () => {
   );
 });
 
+it("explains station move refusals in English and Spanish", () => {
+  expect(codeMessage("ticket.not_sent", "en")).toBe(
+    "This dish has not gone to the kitchen yet. Choose where it is made before sending it",
+  );
+  expect(codeMessage("ticket.not_sent", "es")).toBe(
+    "Este plato aún no ha ido a cocina. Elige dónde se prepara antes de enviarlo",
+  );
+  expect(codeMessage("ticket.made_here", "en")).toBe(
+    "This dish is made here at the till, so it cannot be moved to a station",
+  );
+  expect(codeMessage("ticket.made_here", "es")).toBe(
+    "Este plato se prepara aquí en la caja, así que no se puede pasar a una estación",
+  );
+  expect(codeMessage("route.station_inactive", "en")).toBe(
+    "That station has been switched off. Choose another",
+  );
+  expect(codeMessage("route.station_inactive", "es")).toBe(
+    "Esa estación se ha desactivado. Elige otra",
+  );
+  expect(codeMessage("station.not_found", "en")).toBe(
+    "That station no longer exists. Choose another",
+  );
+  expect(codeMessage("station.not_found", "es")).toBe("Esa estación ya no existe. Elige otra");
+});
+
 it("says in both languages that a served quantity does not fit the line", () => {
   expect(codeMessage("tab.serve_quantity_invalid", "en")).toBe(
     "That quantity cannot be marked on this line. Check how many are left to serve, or how many were served",

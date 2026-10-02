@@ -554,6 +554,7 @@ export const en = {
   "move_station.now": "{station} (now)",
   "move_station.save": "Save",
   "move_station.move": "Move",
+  "table.move_station": "Move to station…",
   "move_station.refused.ticket.already_started":
     "The kitchen has started, finished or sent out this dish, so it stays where it is",
   "move_station.refused.working_order.not_open": "This order has been discarded",
@@ -1453,6 +1454,7 @@ export const es: Record<StringKey, string> = {
   "move_station.now": "{station} (ahora)",
   "move_station.save": "Guardar",
   "move_station.move": "Pasar",
+  "table.move_station": "Cambiar de estación…",
   "move_station.refused.ticket.already_started":
     "La cocina ya ha empezado, terminado o sacado este plato, así que se queda donde está",
   "move_station.refused.working_order.not_open": "Este pedido se ha descartado",
