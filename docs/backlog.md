@@ -1012,6 +1012,15 @@ form is kept. **First** reproduce it: the dashboard open on a few screens (a tab
 the Backups screen), restart the server, and note which ones stay stuck, and whether the live
 connection's return reaches them.
 
+**The Products screen's "Add a product" button is blue, like every other screen's Add button
+(A207, owner 2026-10-02) — OPEN.** The owner: _"on the product screen, the Add a product button is
+white, when on other screens it is blue"_. Its `wt-button` (`#renderAddProduct` in
+`apps/dashboard/src/screens/catalogue-screen.ts`) sets no `variant`, where the Staff, Menus and
+Purchases screens' Add buttons say `variant="primary"`. **Wanted:** it is the primary button, in
+the page's actions and in the empty table's box (A176) alike. Check every other screen's main Add
+button for the same omission (`grep -rn -A3 "<wt-button" apps/dashboard/src/screens`) and fix any
+found in the same change. LOOK in light and dark.
+
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — OPEN.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
 until one name is long enough to push it left: _"the drag handle column shouldn't auto-expand, so
