@@ -111,38 +111,38 @@ cases, the “a replay opens nothing more” sale and collect cases in
 `apps/server/src/bill-payments-api.test.ts`, each failed when the drawer was also opened on a replay
 (2026-10-01).
 
-## Only the drawer's own till opens it; a handheld does what a till does
+## A till opens its drawer only while it is set to; a handheld does what a till does
 
 The owner, 2026-10-01: _"A handheld should be able to do pretty much anything a till can do, it just
 depends on the permissions of the person using the handheld. But a cash register should only be
-opened by the device it is assigned to."_ (B29). A handheld places, collects and cancels like a till;
-the operator's permissions decide; none of the three checks a permission, only a signed-in
-operator. A drawer belongs to at most one register: the one its printer names under "Drawer opens
-at" (`printers.drawer_till_id`) while that register's receipts print on this printer, and none once
-they do not; with none named, the only register at the printer's location whose receipt printer it
-is, else none (`drawerOwnerOf`, `apps/server/src/receipt-print.ts`). The printers management API
-accepts a named register only when editing a printer, and only a register at the printer's location
-whose receipts print there; creating a printer accepts none. Setup copy (configuration transfer)
-leaves the named register behind (`packages/db/src/configuration-transfer.ts`). Every automatic
-opening (cash, a hand-keyed card's slip, a collect, a bill payment or refund) and the Open drawer
-button check ownership; a till that does not own the drawer is refused `drawer.not_owner`. The Open
-drawer route (`POST /api/drawer/open`) needs an enrolled device — with none it answers
-`device.unauthorized` — and reads that device's register; it refuses a handheld through
-`assertNotHandheld` and the device-capability check. The automatic paths open nothing on a handheld
-because each of their routes builds its configuration through the shared `deviceSaleCfg`
-(`apps/server/src/device-session.ts`), which allows a drawer only for a till form factor; a
-configuration that leaves `allowCashDrawer` unset allows one, so a new route that reaches a drawer
-and builds its configuration another way lets a
-handheld open its register's drawer, and nothing guards that. Regressions: the two-tills cases in
-`apps/server/src/receipt-print.test.ts` and `till-api.receipt.test.ts`, and the handheld-collect
-cases in `till-api.fiscal-sale-paths.test.ts`, which failed with a drawer opened before collect set
-the flag (2026-10-02).
+opened by the device it is assigned to."_ And 2026-10-02: _"When we add a printer with a drawer to a
+till, we can specify whether it should control the till or not. So even if the printer is shared
+between tills, any till that says it should control it, does."_ (B29). A handheld places, collects
+and cancels like a till; the operator's permissions decide; none of the three checks a permission,
+only a signed-in operator. A till opens its receipt printer's drawer only while its "Opens the cash
+drawer" setting (`tills.opens_drawer`) is on. It is on for a new till, so a one-till venue needs no
+step; a second till sharing the printer is switched off by hand on the Printing rules screen, which
+shows the switch only when the till's receipt printer has a drawer
+(`PATCH /management-api/tills/:id/opens-drawer`). Every automatic opening (cash, a hand-keyed
+card's slip, a collect, a bill payment or refund) and the Open drawer button read the setting
+through `resolveReceiptPrinter` (`apps/server/src/receipt-print.ts`); the button at a till switched
+off is refused `drawer.not_owner`. The Open drawer route (`POST /api/drawer/open`) needs an enrolled
+device — with none it answers `device.unauthorized` — and reads that device's register; it refuses
+a handheld through `assertNotHandheld` and the device-capability check. The automatic paths open
+nothing on a handheld because each of their routes builds its configuration through the shared
+`deviceSaleCfg` (`apps/server/src/device-session.ts`), which allows a drawer only for a till form
+factor; a configuration that leaves `allowCashDrawer` unset allows one, so a new route that reaches
+a drawer and builds its configuration another way lets a handheld open its register's drawer, and
+nothing guards that. Regressions: the shared-printer cases in `apps/server/src/receipt-print.test.ts`
+and `till-api.receipt.test.ts`, and the switched-off cases in `bill-payments-api.test.ts`, which
+failed with the switch check removed; and the handheld-collect cases in
+`till-api.fiscal-sale-paths.test.ts`, which failed with a drawer opened before collect set the flag
+(2026-10-02).
 
 One path is outside the rule: the dashboard's "Test open drawer" calibration,
 `POST /management-api/printers/:id/test-drawer` (`apps/server/src/print-api.ts`), opens any
 active printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no till
-and no ownership check. Whether
-it should be gated too is an open question for the owner (B29).
+and no per-till check. Whether it should be gated too is an open question for the owner (B29).
 
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 
