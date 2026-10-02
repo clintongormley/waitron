@@ -271,9 +271,9 @@ describe("venue operations screen", () => {
     en: {
       departments: "No departments yet.",
       hours: "No opening hours yet.",
-      zones: "No zones yet.",
+      zones: "No service zones yet.",
       tills: "No tills yet.",
-      "zone-menus": "No menus in this zone yet.",
+      "zone-menus": "No menus in this service zone yet.",
     },
     es: {
       departments: "Todavía no hay departamentos.",

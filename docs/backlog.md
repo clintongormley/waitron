@@ -804,8 +804,8 @@ greyed out (saving); it now waits until the list has reloaded.
 2026-10-01) — DONE (#PR).** Every `wt-data-table` on the dashboard and in the modules' screens now
 passes `tableNoMatches()` from `@waitron/dashboard-kit` as its no-matches sentence ("Nothing
 matches your search or filters." / "Nada coincide con tu búsqueda ni con tus filtros."), which is
-also the table's own English default; the per-screen `*.no_matches` strings and `orders.empty` are
-gone. A filter alone, with nothing searched, does show that sentence (a test pins it). The empty
+also the table's own English default; the tables' per-screen `*.no_matches` strings and
+`orders.empty` are gone. A filter alone, with nothing searched, does show that sentence (a test pins it). The empty
 sentences now read "No <things> yet." in both languages, and the Venue operations screen's five
 tables each name their own thing instead of sharing "No entries yet.". Kept as they were, because
 they answer a question rather than say nothing was made: the Alerts screen's two, the adjustment
@@ -1815,10 +1815,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   agent reports for a pair is a fixed phrase (`apps/print-agent/src/bluetooth-command.ts`). A
   follow-up could translate the known phrases into dashboard wording in both languages and keep the
   raw text as a detail; nothing here says what a given BlueZ error always means on a real printer.
-- **The printers table's empty message is the English "No matches" on a Spanish dashboard**, because
-  the screen sets no `noMatchesMessage` and `wt-data-table` falls back to English; and at phone
-  width a Bluetooth address breaks mid-group ("00:11:22:33:44:5" then "5"), from the device-details
-  width limit added on 2026-09-11.
+- **At phone width a Bluetooth address breaks mid-group** ("00:11:22:33:44:5" then "5"), because
+  of the width limit on the device details added on 2026-09-11.
 - **Left open by C109 (#960):** the edit dialog's Active switch can still switch a paired Bluetooth
   printer off without unpairing it. Leaving the Printers screen mid-calibration asks the server to
   switch the printer off; if that request fails nothing reports it and the printer stays on, and
