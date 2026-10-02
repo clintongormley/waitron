@@ -2532,7 +2532,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
     landing second, removes them and updates those cases (owner-approved), and checks an
     abandoned bill before Paid in `BILL_STATUS`, since the cancel settles the invoice. Open:
-    - **Done (B33, #1041; needs owner review): the PIN of
+    - **Done (B33, #1041, landed 2026-10-02): the PIN of
       someone holding `sale.rectify` (a supervisor, manager or admin) lets someone without it cancel and
       credit an invoiced order.** The cancel's
       body may carry `override: { personId, pin }`, checked as an unpaid departure, a bill refund
@@ -2551,6 +2551,13 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       override is still refused. Cases:
       `apps/server/src/cancel-invoiced-order.test.ts`, "cancelling an invoiced order on a
       supervisor's PIN". No till screen sends the PIN yet: that is B32's.
+    - **For the owner, from B33's review: the cancel checks the permission after its payment
+      refusals.** A bill holding a payment, or with a card payment in flight, is refused for that
+      before `sale.rectify` or an override is looked at — the order C126 built, which B33 kept. So
+      someone without the permission is told about the payment rather than "not permitted", and a
+      PIN sent with that request is neither checked nor counted. The drawer, refund and
+      unpaid-departure routes check the permission first. Moving it earlier changes who gets which
+      refusal; not decided.
     - **No till screen offers the cancel yet.** A "Cancel and credit" action on an invoiced, unpaid
       bill, offered to anyone signed in — someone without `sale.rectify` is asked for the PIN of
       someone who holds it — is queued as lane B's B32 (owner, 2026-10-02 ~12:05). The PIN
